@@ -26,6 +26,10 @@ struct GridKey {
     bool operator==(const GridKey& other) const noexcept {
         return x == other.x && y == other.y && z == other.z && layer == other.layer;
     }
+
+    bool operator!=(const GridKey& other) const noexcept {
+        return !(*this == other);
+    }
 };
 
 struct GridKeyHash {

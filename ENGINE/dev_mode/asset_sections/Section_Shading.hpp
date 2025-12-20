@@ -40,7 +40,7 @@ public:
 
         const ShadowMaskSettings settings = SanitizeShadowMaskSettings(info_->shadow_mask_settings);
 
-        shading_enabled_checkbox_ = std::make_unique<DMCheckbox>("Enable Shading", info_->is_shaded);
+        shading_enabled_checkbox_ = std::make_unique<DMCheckbox>("Enable Shading", info_->has_shading);
         auto shading_checkbox_widget = std::make_unique<CheckboxWidget>(shading_enabled_checkbox_.get());
         rows.push_back({ shading_checkbox_widget.get() });
         widgets_.push_back(std::move(shading_checkbox_widget));
@@ -112,7 +112,7 @@ public:
             return DockableCollapsible::handle_event(e);
         }
 
-        const bool was_shaded = info_->is_shaded;
+        const bool was_shaded = info_->has_shading;
         bool       used       = DockableCollapsible::handle_event(e);
         bool       shading_changed = false;
 
@@ -175,7 +175,7 @@ public:
         DockableCollapsible::render_content(r);
     }
 
-    bool shading_enabled() const { return info_ && info_->is_shaded; }
+    bool shading_enabled() const { return info_ && info_->has_shading; }
 
 private:
     class PreviewWidget : public Widget {

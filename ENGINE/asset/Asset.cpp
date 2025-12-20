@@ -96,9 +96,9 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
         }
         if (info) {
                 try {
-                        is_shaded = info->is_shaded;
+                        has_shading = info->has_shading;
                 } catch (...) {
-                        is_shaded = false;
+                        has_shading = false;
                 }
         }
         std::string start_id = info->start_animation.empty() ? std::string{"default"} : info->start_animation;
@@ -190,7 +190,7 @@ Asset::Asset(const Asset& o)
 , asset_children(o.asset_children)
 , scene_mask_lights(o.scene_mask_lights)
 , depth(o.depth)
-, is_shaded(o.is_shaded)
+, has_shading(o.has_shading)
 , dead(o.dead)
 , static_frame(o.static_frame)
 , needs_target(o.needs_target)
@@ -266,7 +266,7 @@ Asset& Asset::operator=(const Asset& o) {
         asset_children       = o.asset_children;
         scene_mask_lights    = o.scene_mask_lights;
 	depth                = o.depth;
-        is_shaded            = o.is_shaded;
+        has_shading            = o.has_shading;
 	dead                 = o.dead;
 	static_frame         = o.static_frame;
         needs_target        = o.needs_target;

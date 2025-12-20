@@ -112,7 +112,7 @@ public:
     void set_depth_effects_enabled(bool enabled);
     bool depth_effects_enabled() const { return depth_effects_enabled_; }
 
-    void focus_camera_on_asset(Asset* a, double zoom_factor = 0.8, int duration_steps = 25);
+    void focus_camera_on_asset(Asset* a, double height_factor = 0.8, int duration_steps = 25);
 
     void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, animation_editor::AnimationEditorWindow* host_to_toggle);
 
@@ -262,7 +262,7 @@ private:
     std::optional<float> last_audio_effect_max_distance_{};
     float max_asset_height_world_ = 0.0f;
     float max_asset_width_world_  = 0.0f;
-    float cached_zoom_level_      = 0.0f;
+    float cached_height_level_      = 0.0f;
     bool  max_asset_dimensions_dirty_ = true;
     std::vector<Asset*> visible_candidate_buffer_;
     std::uint64_t active_candidate_generation_ = 0;

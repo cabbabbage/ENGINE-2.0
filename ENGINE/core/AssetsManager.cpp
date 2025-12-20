@@ -226,11 +226,11 @@ Assets::Assets(AssetLibrary& library,
         last_player_pos_valid_ = false;
     }
 
-    double intro_zoom = camera_.default_zoom_for_room(intro_room);
-    if (!std::isfinite(intro_zoom) || intro_zoom <= 0.0) {
-        intro_zoom = 1.0;
+    double intro_height_scale = camera_.default_camera_height_for_room(intro_room);
+    if (!std::isfinite(intro_height_scale) || intro_height_scale <= 0.0) {
+        intro_height_scale = 1.0;
     }
-    camera_.set_scale(static_cast<float>(intro_zoom));
+    camera_.set_scale(static_cast<float>(intro_height_scale));
 
     if (!renderer) {
         vibble::log::error("[Assets] SceneRenderer not created: SDL_Renderer pointer is null.");
@@ -838,9 +838,9 @@ void Assets::update(const Input& input)
         touch_dev_active_state_version();
     }
 
-    const bool zoom_animation_active = camera_.is_zooming();
-    const bool camera_refresh_needed = room_changed || player_moved || zoom_animation_active;
-    camera_.update_zoom(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
+    const bool height_animation_active = camera_.is_height_animating();
+    const bool camera_refresh_needed = room_changed || player_moved || height_animation_active;
+    camera_.update_camera_height(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
 
     update_max_asset_dimensions();
 
@@ -961,16 +961,16 @@ void Assets::invalidate_max_asset_dimensions() {
 
 void Assets::update_max_asset_dimensions() {
     const float camera_scale = std::max(0.0001f, camera_.get_scale());
-    bool zoom_changed = cached_zoom_level_ <= 0.0f;
-    if (!zoom_changed && cached_zoom_level_ > 0.0f) {
-        const float delta = std::fabs(camera_scale - cached_zoom_level_) / std::max(cached_zoom_level_, 0.0001f);
-        zoom_changed = delta > 0.05f;
+    bool height_changed = cached_height_level_ <= 0.0f;
+    if (!height_changed && cached_height_level_ > 0.0f) {
+        const float delta = std::fabs(camera_scale - cached_height_level_) / std::max(cached_height_level_, 0.0001f);
+        height_changed = delta > 0.05f;
     }
-    if (!max_asset_dimensions_dirty_ && !zoom_changed) {
+    if (!max_asset_dimensions_dirty_ && !height_changed) {
         return;
     }
 
-    cached_zoom_level_ = camera_scale;
+    cached_height_level_ = camera_scale;
     max_asset_dimensions_dirty_ = false;
 
     float max_height = 0.0f;
@@ -1929,9 +1929,9 @@ void Assets::handle_sdl_event(const SDL_Event& e) {
     }
 }
 
-void Assets::focus_camera_on_asset(Asset* a, double zoom_factor, int duration_steps) {
+void Assets::focus_camera_on_asset(Asset* a, double height_factor, int duration_steps) {
     if (dev_controls_ && dev_controls_->is_enabled()) {
-        dev_controls_->focus_camera_on_asset(a, zoom_factor, duration_steps);
+        dev_controls_->focus_camera_on_asset(a, height_factor, duration_steps);
     }
 }
 

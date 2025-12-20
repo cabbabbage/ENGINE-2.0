@@ -212,6 +212,22 @@ namespace {
         double horizon_screen_y = 0.0;
     };
 
+    float resolve_pitch_degrees(const WarpedScreenGrid::RealismSettings& settings,
+                                double scale_value) {
+        HeightInterpolator interp(settings, scale_value);
+        constexpr double kMinPitch = 48.0;
+        constexpr double kMaxPitch = 82.0;
+        const double t = std::clamp(interp.t, 0.0, 1.0);
+        const double pitch_deg = lerp(kMaxPitch, kMinPitch, t);
+        return sanitize_pitch_degrees(static_cast<float>(pitch_deg));
+    }
+
+    float horizon_fade_for_height(double camera_height) {
+        const double safe_height = std::max(1.0, camera_height);
+        const double scaled = std::clamp(std::sqrt(safe_height) * 18.0, 60.0, 420.0);
+        return static_cast<float>(scaled);
+    }
+
     CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings,
                                    double aspect,
                                    int screen_width,
@@ -227,7 +243,7 @@ namespace {
             return state;
         }
 
-        const double pitch_deg = sanitize_pitch_degrees(kDefaultPitchDegrees);
+        const double pitch_deg = resolve_pitch_degrees(settings, clamped_scale);
         const double pitch_rad = signed_radians_from_degrees(pitch_deg);
         const double tan_pitch = std::tan(pitch_rad);
         if (!std::isfinite(tan_pitch) || std::abs(tan_pitch) < 1e-6) {
@@ -600,25 +616,6 @@ namespace {
         return static_cast<float>(screen_y);
     }
 
-    struct PerspectiveRange {
-        double near_distance = 0.0;
-        double far_distance  = 1.0;
-};
-
-    PerspectiveRange sanitize_perspective_range(const WarpedScreenGrid::RealismSettings& settings) {
-        double near_distance = static_cast<double>(settings.perspective_distance_at_scale_hundred);
-        double far_distance  = static_cast<double>(settings.perspective_distance_at_scale_zero);
-        if (!std::isfinite(near_distance)) near_distance = 0.0;
-        if (!std::isfinite(far_distance))  far_distance  = near_distance + 1.0;
-        if (std::fabs(far_distance - near_distance) < 1e-4) {
-            far_distance = near_distance + 1.0;
-        }
-        if (near_distance > far_distance) {
-            std::swap(near_distance, far_distance);
-        }
-        return PerspectiveRange{ near_distance, far_distance };
-    }
-
     double compute_floor_distance_measure(double screen_y, const WarpedScreenGrid::FloorDepthParams& params) {
         if (!params.enabled) {
             return 0.0;
@@ -633,67 +630,6 @@ namespace {
         const double ndc_y = params.horizon_ndc + (params.near_ndc - params.horizon_ndc) * t_screen;
         const double ndc_span = std::max(1e-4, std::abs(params.near_ndc - params.horizon_ndc));
         return (params.near_ndc - ndc_y) / ndc_span;
-    }
-
-    double calculate_reference_perspective_scale(
-        double screen_y,
-        const WarpedScreenGrid::FloorDepthParams& params,
-        const PerspectiveRange& range,
-        double height_factor)
-    {
-
-        const double min_y = std::min(params.horizon_screen_y, params.bottom_screen_y);
-        const double max_y = std::max(params.horizon_screen_y, params.bottom_screen_y);
-        const double denom = std::max(max_y - min_y, 1e-4);
-        double t = std::clamp((screen_y - min_y) / denom, 0.0, 1.0);
-
-        float pitch_deg = static_cast<float>(params.pitch_radians * (180.0 / PI_D));
-        if (!std::isfinite(pitch_deg)) pitch_deg = kDefaultPitchDegrees;
-        pitch_deg = std::clamp(pitch_deg, WarpedScreenGrid::kMinPitchDegrees, WarpedScreenGrid::kMaxPitchDegrees);
-
-        const float min_falloff = 1.0f;
-        const float max_falloff = 1.3f;
-        float pitch_norm = (pitch_deg - WarpedScreenGrid::kMinPitchDegrees) / (WarpedScreenGrid::kMaxPitchDegrees - WarpedScreenGrid::kMinPitchDegrees);
-        float falloff = max_falloff - (max_falloff - min_falloff) * pitch_norm;
-
-        const double s0 = 0.0;
-        const double s1 = 1.0;
-        const double s2 = 0.7;
-
-        const double a = -4.0 * (s1 - s0 - 0.5 * (s2 - s0));
-        const double b = (s2 - s0) - a;
-        const double c = s0;
-
-        double smooth_t = t * t * (3.0 - 2.0 * t);
-
-        double regressed = a * smooth_t * smooth_t + b * smooth_t + c;
-        regressed = std::clamp(regressed, 0.0, 2.0);
-        regressed = std::pow(regressed, falloff);
-
-        const double height_reduction = 1.0 - (height_factor * 0.3);
-
-        double final_scale = regressed * height_reduction;
-
-        return std::clamp(final_scale, 0.5, 2.0);
-    }
-
-    double interpolate_perspective_scale(double screen_y, double horizon_y, double bottom_y,
-                                         double horizon_scale, double bottom_scale) {
-
-        screen_y = std::clamp(screen_y, horizon_y, bottom_y);
-
-        const double range = std::max(1.0, bottom_y - horizon_y);
-        double t = (screen_y - horizon_y) / range;
-        t = std::clamp(t, 0.6, 2.0);
-
-        double smooth_t;
-        if (t < 0.5) {
-            smooth_t = 1.0 * t * t;
-        } else {
-            smooth_t = 1.0 - 2.0 * (1.0 - t) * (1.0 - t);
-        }
-
-        return horizon_scale + (bottom_scale - horizon_scale) * smooth_t;
     }
 
 }
@@ -1244,7 +1180,7 @@ SDL_FPoint WarpedScreenGrid::map_to_screen_f(SDL_FPoint world) const {
                                                 0.0,
                                                 screen_width_,
                                                 screen_height_,
-                                                settings_.horizon_fade_band_px);
+                                                horizon_fade_for_height(cam.camera_height));
     if (!proj.valid) {
         return SDL_FPoint{0.0f, 0.0f};
     }
@@ -1284,7 +1220,7 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
                                                 static_cast<double>(world_z),
                                                 screen_width_,
                                                 screen_height_,
-                                                settings_.horizon_fade_band_px);
+                                                horizon_fade_for_height(cam.camera_height));
     if (!proj.valid) {
         result.vertical_scale     = 0.0f;
         result.distance_scale     = 0.0f;
@@ -1304,200 +1240,33 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         return;
     }
 
-    const auto try_read_number = [&](const char* key, auto& target) -> bool {
+    float min_height = settings_.camera_height_min;
+    float max_height = settings_.camera_height_max;
+
+    auto read_height = [&](const char* key, float& target) {
         auto it = data.find(key);
-        if (it == data.end() || !it->is_number()) {
-            return false;
+        if (it != data.end() && it->is_number()) {
+            target = static_cast<float>(it->get<double>());
         }
-        if constexpr (std::is_integral_v<std::decay_t<decltype(target)>>) {
-            target = static_cast<std::decay_t<decltype(target)>>(std::lround(it->get<double>()));
-        } else {
-            target = static_cast<std::decay_t<decltype(target)>>(it->get<double>());
-        }
-        return true;
-};
+    };
 
-    const auto try_read_bool = [&](const char* key, bool& target) -> bool {
-        auto it = data.find(key);
-        if (it == data.end()) {
-            return false;
-        }
-        if (it->is_boolean()) {
-            target = it->get<bool>();
-            return true;
-        }
-        if (it->is_number_integer()) {
-            target = it->get<int>() != 0;
-            return true;
-        }
-        return false;
-};
+    read_height("height_in_key", min_height);
+    read_height("height_out_key", max_height);
 
-    const auto try_read_enum = [&](const char* key, auto& target, int min_value, int max_value) -> bool {
-        auto it = data.find(key);
-        if (it == data.end() || !it->is_number_integer()) {
-            return false;
-        }
-        const int raw = it->get<int>();
-        if (raw < min_value || raw > max_value) {
-            return false;
-        }
-        target = static_cast<std::decay_t<decltype(target)>>(raw);
-        return true;
-};
+    min_height = std::clamp(min_height, WarpedScreenGrid::kMinHeightAnchors, WarpedScreenGrid::kMaxHeightAnchors);
+    const float min_high = std::min(WarpedScreenGrid::kMaxHeightAnchors, min_height + 0.0001f);
+    max_height = std::clamp(max_height, min_high, WarpedScreenGrid::kMaxHeightAnchors);
 
-    try_read_bool("realism_enabled", realism_enabled_);
-
-    const std::array<std::pair<const char*, float*>, 17> float_fields{ {
-        { "extra_cull_margin", &settings_.extra_cull_margin },
-        { "camera_height_min", &settings_.camera_height_min },
-        { "camera_height_max", &settings_.camera_height_max },
-        { "base_height_px", &settings_.base_height_px },
-        { "min_visible_screen_ratio", &settings_.min_visible_screen_ratio },
-        { "parallax_smoothing_lerp_rate", &settings_.parallax_smoothing.lerp_rate },
-        { "parallax_smoothing_spring_frequency", &settings_.parallax_smoothing.spring_frequency },
-        { "parallax_smoothing_max_step", &settings_.parallax_smoothing.max_step },
-        { "parallax_smoothing_snap_threshold", &settings_.parallax_smoothing.snap_threshold },
-        { "scale_hysteresis_margin", &settings_.scale_variant_hysteresis_margin },
-        { "foreground_plane_screen_y", &settings_.foreground_plane_screen_y },
-        { "background_plane_screen_y", &settings_.background_plane_screen_y },
-        { "perspective_distance_at_scale_zero", &settings_.perspective_distance_at_scale_zero },
-        { "perspective_distance_at_scale_hundred", &settings_.perspective_distance_at_scale_hundred },
-        { "horizon_fade_band_px", &settings_.horizon_fade_band_px },
-        { "depth_near_world", &settings_.depth_near_world },
-        { "depth_far_world", &settings_.depth_far_world },
-    } };
-    for (const auto& [key, field] : float_fields) {
-        try_read_number(key, *field);
-    }
-
-    const std::array<std::pair<const char*, int*>, 3> int_fields{ {
-        { "render_quality_percent", &settings_.render_quality_percent },
-        { "foreground_texture_max_opacity", &settings_.foreground_texture_max_opacity },
-        { "background_texture_max_opacity", &settings_.background_texture_max_opacity }
-    } };
-    for (const auto& [key, field] : int_fields) {
-        try_read_number(key, *field);
-    }
-
-    try_read_enum("parallax_smoothing_method", settings_.parallax_smoothing.method, 0, 2);
-    if (!try_read_enum("texture_opacity_falloff_method", settings_.texture_opacity_falloff_method, 0, 4)) {
-        settings_.texture_opacity_falloff_method = BlurFalloffMethod::Linear;
-    }
-
-    settings_.foreground_texture_max_opacity =
-        std::clamp(settings_.foreground_texture_max_opacity, 0, 255);
-    settings_.background_texture_max_opacity =
-        std::clamp(settings_.background_texture_max_opacity, 0, 255);
-
-    if (!std::isfinite(settings_.foreground_plane_screen_y)) {
-        settings_.foreground_plane_screen_y = 1080.0f;
-    } else {
-        settings_.foreground_plane_screen_y =
-            std::clamp(settings_.foreground_plane_screen_y, 0.0f, 4000.0f);
-    }
-
-    if (!std::isfinite(settings_.background_plane_screen_y)) {
-        settings_.background_plane_screen_y = 0.0f;
-    } else {
-        settings_.background_plane_screen_y =
-            std::clamp(settings_.background_plane_screen_y, 0.0f, 4000.0f);
-    }
-
-    if (!std::isfinite(settings_.camera_height_min)) {
-        settings_.camera_height_min = 0.75f;
-    }
-
-    if (!std::isfinite(settings_.camera_height_max)) {
-        settings_.camera_height_max = std::max(settings_.camera_height_min + 0.25f, 1.0f);
-    }
-
-    if (!std::isfinite(settings_.base_height_px) || settings_.base_height_px <= 0.0f) {
-        settings_.base_height_px = 720.0f;
-    }
-
-    if (!std::isfinite(settings_.min_visible_screen_ratio) ||
-        settings_.min_visible_screen_ratio < 0.0f) {
-        settings_.min_visible_screen_ratio = 0.015f;
-    } else {
-        settings_.min_visible_screen_ratio =
-            std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
-    }
-
-    settings_.camera_height_min = std::clamp(settings_.camera_height_min, WarpedScreenGrid::kMinHeightAnchors, WarpedScreenGrid::kMaxHeightAnchors);
-    const float min_high = std::min(WarpedScreenGrid::kMaxHeightAnchors, settings_.camera_height_min + 0.0001f);
-    settings_.camera_height_max = std::clamp(settings_.camera_height_max, min_high, WarpedScreenGrid::kMaxHeightAnchors);
-
-    auto align_quality = [](int percent) {
-        constexpr int kOptions[] = {100, 75, 50, 25, 10};
-        int best = kOptions[0];
-        int best_diff = std::abs(percent - best);
-        for (int option : kOptions) {
-            const int diff = std::abs(percent - option);
-            if (diff < best_diff) {
-                best_diff = diff;
-                best = option;
-            }
-        }
-        return best;
-};
-
-    settings_.render_quality_percent = align_quality(settings_.render_quality_percent);
-
-    settings_.parallax_smoothing = sanitize_params(settings_.parallax_smoothing);
-    if (!std::isfinite(settings_.scale_variant_hysteresis_margin) ||
-        settings_.scale_variant_hysteresis_margin < 0.0f) {
-    settings_.scale_variant_hysteresis_margin = 0.05f;
-    }
-
-    try_read_bool("depth_enabled", depth_enabled_);
-    try_read_bool("depth_debug_logging", depth_debug_logging_);
-
-    recompute_current_view();
+    RealismSettings updated = settings_;
+    updated.camera_height_min = min_height;
+    updated.camera_height_max = max_height;
+    set_realism_settings(updated);
 }
 
 nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     nlohmann::json j = nlohmann::json::object();
-    j["realism_enabled"] = realism_enabled_;
-
-    const std::pair<const char*, float> float_fields[] = {
-        { "extra_cull_margin", settings_.extra_cull_margin },
-        { "camera_height_min", settings_.camera_height_min },
-        { "camera_height_max", settings_.camera_height_max },
-        { "perspective_distance_at_scale_zero", settings_.perspective_distance_at_scale_zero },
-        { "perspective_distance_at_scale_hundred", settings_.perspective_distance_at_scale_hundred },
-        { "base_height_px", settings_.base_height_px },
-        { "min_visible_screen_ratio", settings_.min_visible_screen_ratio },
-        { "scale_hysteresis_margin", settings_.scale_variant_hysteresis_margin },
-        { "parallax_smoothing_lerp_rate", settings_.parallax_smoothing.lerp_rate },
-        { "parallax_smoothing_spring_frequency", settings_.parallax_smoothing.spring_frequency },
-        { "parallax_smoothing_max_step", settings_.parallax_smoothing.max_step },
-        { "parallax_smoothing_snap_threshold", settings_.parallax_smoothing.snap_threshold },
-        { "foreground_plane_screen_y", settings_.foreground_plane_screen_y },
-        { "background_plane_screen_y", settings_.background_plane_screen_y },
-        { "horizon_fade_band_px", settings_.horizon_fade_band_px },
-        { "perspective_scale_gamma", settings_.perspective_scale_gamma },
-        { "depth_near_world", settings_.depth_near_world },
-        { "depth_far_world", settings_.depth_far_world }
-};
-    for (const auto& [key, value] : float_fields) {
-        j[key] = value;
-    }
-
-    const std::pair<const char*, int> int_fields[] = {
-        { "render_quality_percent", settings_.render_quality_percent },
-        { "parallax_smoothing_method", static_cast<int>(settings_.parallax_smoothing.method) },
-        { "foreground_texture_max_opacity", settings_.foreground_texture_max_opacity },
-        { "background_texture_max_opacity", settings_.background_texture_max_opacity },
-        { "texture_opacity_falloff_method", static_cast<int>(settings_.texture_opacity_falloff_method) }
-};
-    for (const auto& [key, value] : int_fields) {
-        j[key] = value;
-    }
-
-    j["depth_enabled"] = depth_enabled_;
-    j["depth_debug_logging"] = depth_debug_logging_;
-
+    j["height_in_key"] = settings_.camera_height_min;
+    j["height_out_key"] = settings_.camera_height_max;
     return j;
 }
 SDL_FPoint WarpedScreenGrid::get_view_center_f() const {
@@ -1718,7 +1487,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             static_cast<double>(gp->world_z()),
             screen_width_,
             screen_height_,
-            settings_.horizon_fade_band_px);
+            horizon_fade_for_height(cam_state.camera_height));
         if (!proj.valid) {
             continue;
         }
@@ -1886,7 +1655,7 @@ void WarpedScreenGrid::project_to_screen(world::GridPoint& point) const {
         static_cast<double>(point.world_z()),
         screen_width_,
         screen_height_,
-        settings_.horizon_fade_band_px);
+        horizon_fade_for_height(cam_state.camera_height));
 
     if (!proj.valid) {
         point.screen = SDL_FPoint{0.0f, 0.0f};

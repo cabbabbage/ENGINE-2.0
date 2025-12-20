@@ -57,15 +57,8 @@ public:
         BlurFalloffMethod texture_opacity_falloff_method = BlurFalloffMethod::Linear;
 
         float extra_cull_margin = 300.0f;
-
-        float perspective_distance_at_scale_zero   = 1.0f;
-        float perspective_distance_at_scale_hundred = 0.5f;
         float depth_near_world = 0.0f;
         float depth_far_world  = 5000.0f;
-
-        float horizon_fade_band_px = 150.0f;
-
-        float perspective_scale_gamma = 2.5f;
 
         camera_effects::ImageEffectSettings foreground_effects{};
         camera_effects::ImageEffectSettings background_effects{};
@@ -281,9 +274,6 @@ private:
     float runtime_depth_offset_px_ = 0.0f;
     FloorDepthParams runtime_floor_params_{};
     bool geometry_valid_ = false;
-
-    double perspective_distance_at_scale_zero_    = 1.0;
-    double perspective_distance_at_scale_hundred_ = 0.5;
 
     float player_center_offset_y_ = 0.0f;
 

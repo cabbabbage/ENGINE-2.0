@@ -1087,14 +1087,6 @@ void CameraUIPanel::build_ui() {
     cull_margin_slider_->set_tooltip("Extra margin below the screen for culling (for perspective/warping). Increase if assets pop in/out at the bottom edge.");
     cull_margin_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    perspective_zero_distance_slider_ = std::make_unique<FloatSliderWidget>( "Perspective Scale 0 Distance", -5000.0f, 5000.0f, 1.0f, defaults.perspective_distance_at_scale_zero, 0);
-    perspective_zero_distance_slider_->set_tooltip( "World-space distance at which perspective scale reaches 0 (far point).");
-    perspective_zero_distance_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    perspective_hundred_distance_slider_ = std::make_unique<FloatSliderWidget>( "Perspective Scale 100 Distance", -5000.0f, 5000.0f, 1.0f, defaults.perspective_distance_at_scale_hundred, 0);
-    perspective_hundred_distance_slider_->set_tooltip( "World-space distance at which perspective scale is 100 (near point).");
-    perspective_hundred_distance_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
     render_quality_slider_ = std::make_unique<DiscreteSliderWidget>("Render Quality (%)", std::vector<int>{100, 75, 50, 25, 10}, defaults.render_quality_percent);
     render_quality_slider_->set_tooltip("Trade fidelity for speed; lowers the number of sprites drawn each frame.");
     render_quality_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
@@ -1203,8 +1195,6 @@ void CameraUIPanel::rebuild_rows() {
     if (depth_section_expanded_) {
         if (height_in_keypoint_) rows.push_back({ height_in_keypoint_.get() });
         if (height_out_keypoint_) rows.push_back({ height_out_keypoint_.get() });
-        if (perspective_zero_distance_slider_) rows.push_back({ perspective_zero_distance_slider_.get() });
-        if (perspective_hundred_distance_slider_) rows.push_back({ perspective_hundred_distance_slider_.get() });
     }
 
     if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
@@ -1247,8 +1237,6 @@ void CameraUIPanel::apply_settings_if_needed() {
     changed = changed || differs(settings.camera_height_min, prev.camera_height_min) || differs(settings.camera_height_max, prev.camera_height_max);
     changed = changed || differs(settings.min_visible_screen_ratio, prev.min_visible_screen_ratio);
     changed = changed || differs(settings.extra_cull_margin, prev.extra_cull_margin);
-    changed = changed || differs(settings.perspective_distance_at_scale_zero, prev.perspective_distance_at_scale_zero);
-    changed = changed || differs(settings.perspective_distance_at_scale_hundred, prev.perspective_distance_at_scale_hundred);
     if (render_quality_slider_) {
         changed = changed || settings.render_quality_percent != prev.render_quality_percent;
     }
@@ -1337,12 +1325,6 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
     settings.camera_height_min = std::clamp(settings.camera_height_min, WarpedScreenGrid::kMinHeightAnchors, WarpedScreenGrid::kMaxHeightAnchors);
     const float min_high = std::min(WarpedScreenGrid::kMaxHeightAnchors, settings.camera_height_min + 0.0001f);
     settings.camera_height_max = std::clamp(settings.camera_height_max, min_high, WarpedScreenGrid::kMaxHeightAnchors);
-    if (perspective_zero_distance_slider_) {
-        settings.perspective_distance_at_scale_zero = std::clamp( perspective_zero_distance_slider_->value(), -5000.0f, 5000.0f);
-    }
-    if (perspective_hundred_distance_slider_) {
-        settings.perspective_distance_at_scale_hundred = std::clamp( perspective_hundred_distance_slider_->value(), -5000.0f, 5000.0f);
-    }
 
     auto slider_to_opacity = [](const FloatSliderWidget* slider) -> int {
         if (!slider) return 0;

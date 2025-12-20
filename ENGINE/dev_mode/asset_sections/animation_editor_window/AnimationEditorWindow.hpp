@@ -120,6 +120,11 @@ class AnimationEditorWindow {
     bool rebuild_animation_from_sources(const std::shared_ptr<AssetInfo>& info, const std::string& animation_id);
     bool rebuild_animation_via_pipeline(const std::shared_ptr<AssetInfo>& info, const std::string& animation_id);
     bool rebuild_all_animations_via_pipeline(const std::shared_ptr<AssetInfo>& info);
+    bool animation_wants_crop(const std::string& animation_id) const;
+    bool has_global_crop_frames() const;
+    std::filesystem::path resolved_asset_root_path() const;
+    std::vector<std::filesystem::path> numbered_frame_paths(const std::filesystem::path& folder) const;
+    void apply_global_cropping_to_asset_sources() const;
 
   private:
     bool visible_ = false;
@@ -138,6 +143,7 @@ class AnimationEditorWindow {
     std::unique_ptr<DMButton> controller_button_;
     std::unique_ptr<DMDropdown> speed_dropdown_;
     std::unique_ptr<DMCheckbox> crop_checkbox_;
+    std::unique_ptr<DMCheckbox> apply_to_all_checkbox_;
     SDL_Rect header_rect_{0, 0, 0, 0};
     SDL_Rect list_rect_{0, 0, 0, 0};
     SDL_Rect inspector_rect_{0, 0, 0, 0};
@@ -149,6 +155,7 @@ class AnimationEditorWindow {
     mutable bool layout_dirty_ = true;
     bool auto_save_pending_ = false;
     int auto_save_timer_frames_ = 0;
+    bool apply_to_all_mode_enabled_ = false;
     std::function<void()> on_document_saved_;
     std::function<void(const std::string&, const nlohmann::json&)> on_animation_properties_changed_;
     devmode::core::ManifestStore* manifest_store_ = nullptr;

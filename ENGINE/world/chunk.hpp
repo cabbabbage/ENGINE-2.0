@@ -5,7 +5,6 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <vector>
 
 #include "tiling/grid_tile.hpp"
@@ -29,21 +28,9 @@ struct Chunk {
 
     std::vector<GridTile> tiles;
 
-    struct LightingState {
-        bool      needs_update            = true;
-        float     static_strength         = 1.0f;
-        float     dynamic_strength        = 1.0f;
-        float     current_strength        = 1.0f;
-        bool      has_runtime_average     = false;
-        float     runtime_average_strength = 1.0f;
-        SDL_Color runtime_average_color{255, 255, 255, 255};
-    } lighting{};
-
     Chunk() = default;
     Chunk(int in_i, int in_j, int r, SDL_Rect bounds);
     ~Chunk();
-
-    void releaseLightingArtifacts();
     void releaseTileTextures();
 
     Chunk(const Chunk&) = delete;

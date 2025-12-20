@@ -764,6 +764,10 @@ DMCheckbox::DMCheckbox(const std::string& label, bool value)
 
 void DMCheckbox::set_rect(const SDL_Rect& r) { rect_ = r; }
 
+void DMCheckbox::set_label(const std::string& label) {
+    label_ = label;
+}
+
 void DMCheckbox::set_tooltip_state(DMWidgetTooltipState* state) {
     tooltip_state_ = state;
     if (tooltip_state_) {
@@ -2328,6 +2332,13 @@ void DMDropdown::set_selected(int idx) {
     }
     if (changed && on_selection_changed_) {
         on_selection_changed_(index_);
+    }
+}
+
+void DMDropdown::set_label(const std::string& label) {
+    label_ = label;
+    if (rect_.w > 0) {
+        set_rect(rect_);
     }
 }
 

@@ -111,6 +111,8 @@ public:
     const SDL_Rect& rect() const { return rect_; }
     void set_value(bool v) { value_ = v; }
     bool value() const { return value_; }
+    void set_label(const std::string& label);
+    const std::string& label() const { return label_; }
     void set_tooltip_state(DMWidgetTooltipState* state);
     bool handle_event(const SDL_Event& e);
     void render(SDL_Renderer* r) const;
@@ -323,6 +325,8 @@ class DMDropdown {
 public:
     DMDropdown(const std::string& label, const std::vector<std::string>& options, int idx = 0);
     ~DMDropdown();
+    void set_label(const std::string& label);
+    const std::string& label() const { return label_; }
     void set_rect(const SDL_Rect& r);
     const SDL_Rect& rect() const { return rect_; }
     int selected() const { return index_; }

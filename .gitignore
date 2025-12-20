@@ -10,7 +10,7 @@ vcpkg_installed/
 key.txt
 
 Demo and Tutorial.mp4
-
+*.exe
 # Visual Studio build output
 Debug/
 x64/

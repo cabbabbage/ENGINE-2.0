@@ -6,11 +6,13 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <utility>
 #include <vector>
 
 #include "asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+#include "utils/light_source.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "render/render.hpp"
 #include "world/world_grid.hpp"
@@ -63,22 +65,63 @@ LightMap::SampledBrightness LightMap::sample_lighting(int world_x,
     SampledBrightness result{};
     const auto weights = resolve_sampling_weights(static_weight, dynamic_weight);
 
-    const float base_component = 1.0f;
-    result.static_component = base_component;
-    result.dynamic_component = base_component;
-    result.has_color = false;
-    result.color = SDL_Color{255, 255, 255, 255};
-
-    const float total_weight = weights.first + weights.second;
-    if (total_weight <= 1e-6f) {
-        result.blended = base_component;
-    } else {
-        const float weighted_total = (base_component * weights.first + base_component * weights.second) / total_weight;
-        result.blended = std::clamp(weighted_total, 0.0f, 1.0f);
+    if (!assets_) {
+        result.static_component = result.dynamic_component = result.blended = 1.0f;
+        result.color = SDL_Color{255, 255, 255, 255};
+        result.has_color = false;
+        return result;
     }
 
-    (void)world_x;
-    (void)world_y;
+    world::WorldGrid& grid = assets_->world_grid();
+    // Broad phase: query lights near the sample point within a generous radius based on max light radius (fallback 512).
+    const float kFallbackRadius = 512.0f;
+    SDL_FRect query_bounds{
+        static_cast<float>(world_x) - kFallbackRadius,
+        static_cast<float>(world_y) - kFallbackRadius,
+        kFallbackRadius * 2.0f,
+        kFallbackRadius * 2.0f
+};
+
+    auto lights = grid.query_lights(query_bounds, std::numeric_limits<int>::min(), std::numeric_limits<int>::max(), /*skip_inactive_branches=*/true);
+    float max_component = 0.0f;
+    SDL_Color accum_color{0, 0, 0, 0};
+    int color_contribs = 0;
+
+    for (const auto& light : lights) {
+        if (!light.source || !light.point) continue;
+        const int radius_px = std::max(1, light.source->radius);
+        const float lx = static_cast<float>(light.point->world_x() + light.source->offset_x);
+        const float ly = static_cast<float>(light.point->world_y() + light.source->offset_y);
+        const float lz = static_cast<float>(light.point->world_z());
+        const float dx = static_cast<float>(world_x) - lx;
+        const float dy = static_cast<float>(world_y) - ly;
+        const float dz = 0.0f - lz; // sampling the floor unless future callers pass world_z
+        const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (dist > static_cast<float>(radius_px)) {
+            continue;
+        }
+        const float intensity = static_cast<float>(std::clamp(light.source->intensity, 0, 255)) / 255.0f;
+        const float falloff = 1.0f - (dist / static_cast<float>(radius_px));
+        const float contribution = std::clamp(intensity * falloff, 0.0f, 1.0f);
+        max_component = std::max(max_component, contribution);
+
+        auto accumulate_color = [&](Uint8 channel, float weight) -> Uint8 {
+            const int val = static_cast<int>(std::lround(static_cast<float>(channel) * weight * 255.0f));
+            return static_cast<Uint8>(std::clamp(val, 0, 255));
+};
+        accum_color.r = static_cast<Uint8>(std::min(255, static_cast<int>(accum_color.r) + accumulate_color(light.source->color.r, contribution)));
+        accum_color.g = static_cast<Uint8>(std::min(255, static_cast<int>(accum_color.g) + accumulate_color(light.source->color.g, contribution)));
+        accum_color.b = static_cast<Uint8>(std::min(255, static_cast<int>(accum_color.b) + accumulate_color(light.source->color.b, contribution)));
+        accum_color.a = 255;
+        ++color_contribs;
+    }
+
+    const float base_component = 1.0f;
+    result.static_component = std::clamp(base_component + max_component, 0.0f, 1.0f);
+    result.dynamic_component = result.static_component;
+    result.blended = result.static_component;
+    result.has_color = color_contribs > 0;
+    result.color = result.has_color ? accum_color : SDL_Color{255, 255, 255, 255};
     return result;
 }
 

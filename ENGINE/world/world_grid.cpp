@@ -5,6 +5,8 @@
 #include <limits>
 #include <optional>
 #include <string>
+#include <unordered_set>
+#include <utility>
 
 #include "asset/Asset.hpp"
 #include "render/warped_screen_grid.hpp"
@@ -34,6 +36,14 @@ SDL_Point world_point_for_asset(const Asset* asset) {
     return SDL_Point{asset->pos.x, asset->pos.y};
 }
 
+template <typename PointPtr>
+inline bool world_point_in_rect(const PointPtr* gp, const SDL_FRect& rect) {
+    if (!gp) return false;
+    const float x = static_cast<float>(gp->world_x());
+    const float y = static_cast<float>(gp->world_y());
+    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+}
+
 std::optional<GridPoint::ChildDirection> direction_from_parent(const GridPoint* parent, const GridPoint* child) {
     if (!parent) {
         return std::nullopt;
@@ -58,16 +68,12 @@ int WorldGrid::power_of_three(int exponent) {
 }
 
 int WorldGrid::max_resolution_layers() const {
-    const int fallback = std::max(0, grid_resolution_);
-    return (max_resolution_layers_ > 0) ? max_resolution_layers_ : fallback;
+    return (max_resolution_layers_ > 0) ? max_resolution_layers_ : kDefaultMaxLayers;
 }
 
 int WorldGrid::distance_for_layer(int layer) const {
     const int max_layers = max_resolution_layers();
-    if (layer < 0) {
-        return vibble::grid::delta(grid_resolution_);
-    }
-    const int clamped_layer = std::min(layer, max_layers);
+    const int clamped_layer = std::clamp(layer, 0, max_layers);
     const int exponent = std::max(0, max_layers - clamped_layer);
     const int dist = power_of_three(exponent);
     return dist;
@@ -75,9 +81,6 @@ int WorldGrid::distance_for_layer(int layer) const {
 
 int WorldGrid::grid_spacing_for_layer(int layer) const {
     const int dist = distance_for_layer(layer);
-    if (dist <= 0 || dist == std::numeric_limits<int>::max()) {
-        return vibble::grid::delta(grid_resolution_);
-    }
     return dist;
 }
 
@@ -132,9 +135,9 @@ GridId WorldGrid::make_point_id(int i, int j) const {
 }
 
 SDL_Point WorldGrid::grid_index_from_world(SDL_Point world) const {
-    const int spacing = grid_spacing_for_layer(default_resolution_layer());
+    int spacing = grid_spacing_for_layer(default_resolution_layer());
     if (spacing <= 0) {
-        return vibble::grid::world_to_grid_index(world, grid_resolution_, origin_);
+        spacing = 1;
     }
     const double fx = static_cast<double>(world.x - origin_.x) / static_cast<double>(spacing);
     const double fy = static_cast<double>(world.y - origin_.y) / static_cast<double>(spacing);
@@ -142,11 +145,6 @@ SDL_Point WorldGrid::grid_index_from_world(SDL_Point world) const {
         static_cast<int>(std::floor(fx)),
         static_cast<int>(std::floor(fy))
     };
-}
-
-GridId WorldGrid::point_id_from_world(SDL_Point world) const {
-    SDL_Point idx = grid_index_from_world(world);
-    return make_point_id(idx.x, idx.y);
 }
 
 GridKey WorldGrid::grid_key_from_world(SDL_Point world, int world_z, int layer) const {
@@ -179,17 +177,10 @@ GridPoint* WorldGrid::point_for_asset(const Asset* asset) {
         return nullptr;
     }
     auto key_it = asset_to_key_.find(const_cast<Asset*>(asset));
-    if (key_it != asset_to_key_.end()) {
-        if (GridPoint* gp = find_grid_point(key_it->second)) {
-            return gp;
-        }
-        vibble::log::warn("[WorldGrid] asset_to_key_ mapping missing GridPoint; falling back to legacy id (Phase 2 - 3d_refactor_plan.md).");
-    }
-    auto it = asset_to_point_.find(const_cast<Asset*>(asset));
-    if (it == asset_to_point_.end()) {
+    if (key_it == asset_to_key_.end()) {
         return nullptr;
     }
-    return point_for_id(it->second);
+    return find_grid_point_strict(key_it->second);
 }
 
 const GridPoint* WorldGrid::point_for_asset(const Asset* asset) const {
@@ -197,17 +188,10 @@ const GridPoint* WorldGrid::point_for_asset(const Asset* asset) const {
         return nullptr;
     }
     auto key_it = asset_to_key_.find(const_cast<Asset*>(asset));
-    if (key_it != asset_to_key_.end()) {
-        if (const GridPoint* gp = find_grid_point(key_it->second)) {
-            return gp;
-        }
-        vibble::log::warn("[WorldGrid] asset_to_key_ mapping missing GridPoint; falling back to legacy id (Phase 2 - 3d_refactor_plan.md).");
-    }
-    auto it = asset_to_point_.find(const_cast<Asset*>(asset));
-    if (it == asset_to_point_.end()) {
+    if (key_it == asset_to_key_.end()) {
         return nullptr;
     }
-    return point_for_id(it->second);
+    return find_grid_point_strict(key_it->second);
 }
 
 Asset* WorldGrid::create_asset_at_point(std::unique_ptr<Asset> a, int world_z, int resolution_layer) {
@@ -229,14 +213,13 @@ Asset* WorldGrid::remove_asset(Asset* a) {
     }
 
     bool removed_from_point = false;
-    auto point_lookup = asset_to_point_.find(a);
-    if (point_lookup != asset_to_point_.end()) {
-        auto point_it = points_.find(point_lookup->second);
-        if (point_it != points_.end()) {
-            remove_asset_from_point(a, point_it->second);
+    auto key_lookup = asset_to_key_.find(a);
+    if (key_lookup != asset_to_key_.end()) {
+        if (GridPoint* gp = find_grid_point_strict(key_lookup->second)) {
+            remove_asset_from_point(a, *gp);
+            removed_from_point = true;
         }
-        asset_to_point_.erase(point_lookup);
-        removed_from_point = true;
+        asset_to_key_.erase(key_lookup);
     }
 
     if (!removed_from_point) {
@@ -257,7 +240,6 @@ Asset* WorldGrid::remove_asset(Asset* a) {
         remove_from_chunk(a, it->second);
         residency_.erase(it);
     }
-    asset_to_key_.erase(a);
 
     prune_empty_points();
 
@@ -266,8 +248,8 @@ Asset* WorldGrid::remove_asset(Asset* a) {
 
 std::vector<Asset*> WorldGrid::all_assets() const {
     std::vector<Asset*> out;
-    out.reserve(asset_to_point_.size());
-    for (const auto& entry : asset_to_point_) {
+    out.reserve(asset_to_key_.size());
+    for (const auto& entry : asset_to_key_) {
         out.push_back(entry.first);
     }
     return out;
@@ -294,12 +276,9 @@ std::unique_ptr<Asset> WorldGrid::detach_asset_from_grid_point(Asset* a, GridPoi
     point.occupants.erase(it);
     point.invalidate_screen_data();
     if (clear_mapping) {
-        asset_to_point_.erase(a);
         asset_to_key_.erase(a);
     }
-    if (a->grid_id() == point.id) {
-        a->clear_grid_id();
-    }
+    a->clear_grid_id();
     SDL_assert(point.occupants.empty() || point.has_assets_or_active_children());
     const bool has_after = point.has_assets_or_active_children();
     if (!has_after) {
@@ -355,11 +334,14 @@ GridPoint& WorldGrid::ensure_point(SDL_Point grid_index, SDL_Point chunk_index, 
         parent);
 
     GridPoint& point = it->second;
+    if (inserted && parent == nullptr) {
+        add_root_id(id);
+    }
     if (!inserted) {
         const bool legacy_identity_mismatch =
             point.world_x() != canonical_world.x ||
             point.world_y() != canonical_world.y ||
-            point.world_z() != kDefaultWorldZ ||
+            point.world_z() != world_z ||
             point.resolution_layer() != resolution_layer ||
             point.grid_index.x != grid_index.x ||
             point.grid_index.y != grid_index.y ||
@@ -377,7 +359,7 @@ GridPoint& WorldGrid::ensure_point(SDL_Point grid_index, SDL_Point chunk_index, 
 }
 
 GridPoint& WorldGrid::ensure_child(GridPoint& parent, GridPoint::ChildDirection dir, const GridKey& child_key, Chunk* owning_chunk) {
-    GridPoint& child = find_or_create_grid_point(child_key, owning_chunk);
+    GridPoint& child = find_or_create_grid_point(child_key, owning_chunk, &parent);
     if (child.parent() != &parent && child.parent() != nullptr) {
         vibble::log::warn("[WorldGrid] ensure_child parent mismatch; Map Grid must keep hierarchy links consistent during migration (Phase 2 - 3d_refactor_plan.md).");
     }
@@ -409,14 +391,7 @@ GridPoint* WorldGrid::find_grid_point(const GridKey& key) {
     if (it != key_to_id_.end()) {
         return point_for_id(it->second);
     }
-    // Compatibility: collapse to legacy (i, j) id; warn if z/layer diverge from defaults.
-    const SDL_Point world{key.x, key.y};
-    const GridId legacy_id = point_id_from_world(world);
-    GridPoint* gp = point_for_id(legacy_id);
-    if (gp && (gp->world_z() != key.z || gp->resolution_layer() != key.layer)) {
-        vibble::log::warn("[WorldGrid] find_grid_point key mismatch between new identity and legacy id; collapsing to legacy id during migration (Phase 2 - 3d_refactor_plan.md).");
-    }
-    return gp;
+    return nullptr;
 }
 
 const GridPoint* WorldGrid::find_grid_point(const GridKey& key) const {
@@ -424,16 +399,26 @@ const GridPoint* WorldGrid::find_grid_point(const GridKey& key) const {
     if (it != key_to_id_.end()) {
         return point_for_id(it->second);
     }
-    const SDL_Point world{key.x, key.y};
-    const GridId legacy_id = point_id_from_world(world);
-    const GridPoint* gp = point_for_id(legacy_id);
-    if (gp && (gp->world_z() != key.z || gp->resolution_layer() != key.layer)) {
-        vibble::log::warn("[WorldGrid] find_grid_point (const) key mismatch between new identity and legacy id; collapsing to legacy id during migration (Phase 2 - 3d_refactor_plan.md).");
-    }
-    return gp;
+    return nullptr;
 }
 
-GridPoint& WorldGrid::find_or_create_grid_point(const GridKey& key, Chunk* owning_chunk) {
+GridPoint* WorldGrid::find_grid_point_strict(const GridKey& key) {
+    auto it = key_to_id_.find(key);
+    if (it == key_to_id_.end()) {
+        return nullptr;
+    }
+    return point_for_id(it->second);
+}
+
+const GridPoint* WorldGrid::find_grid_point_strict(const GridKey& key) const {
+    auto it = key_to_id_.find(key);
+    if (it == key_to_id_.end()) {
+        return nullptr;
+    }
+    return point_for_id(it->second);
+}
+
+GridPoint& WorldGrid::find_or_create_grid_point(const GridKey& key, Chunk* owning_chunk, GridPoint* parent) {
     if (GridPoint* existing = find_grid_point(key)) {
         return *existing;
     }
@@ -446,7 +431,7 @@ GridPoint& WorldGrid::find_or_create_grid_point(const GridKey& key, Chunk* ownin
         chunk_idx.x = grid_floor_div(world.x - origin_.x, chunk_step);
         chunk_idx.y = grid_floor_div(world.y - origin_.y, chunk_step);
     }
-    GridPoint& point = ensure_point(grid_idx, chunk_idx, owning_chunk, nullptr, key.z, key.layer);
+    GridPoint& point = ensure_point(grid_idx, chunk_idx, owning_chunk, parent, key.z, key.layer);
 
     const bool identity_mismatch = (point.world_z() != key.z) || (point.resolution_layer() != key.layer);
     if (identity_mismatch) {
@@ -465,70 +450,212 @@ void WorldGrid::debug_validate_keys_and_masks() const {
             vibble::log::warn("[WorldGrid] Key mismatch for point id=" + std::to_string(gp.id) +
                               " identity=" + gp.debug_identity_and_mask());
         }
-        // Legacy compatibility check: ensure legacy GridId maps back to same point
-        auto legacy_lookup = points_.find(entry.first);
-        if (legacy_lookup == points_.end()) {
-            vibble::log::warn("[WorldGrid] Legacy GridId missing for point id=" + std::to_string(gp.id));
+    }
+}
+
+namespace {
+template <typename PointPtr>
+std::vector<PointPtr*> gather_roots(const std::unordered_map<GridId, GridPoint>& points,
+                                    const std::vector<GridId>& root_ids) {
+    std::vector<PointPtr*> out;
+    if (!root_ids.empty()) {
+        out.reserve(root_ids.size());
+        for (GridId id : root_ids) {
+            auto it = points.find(id);
+            if (it != points.end()) {
+                out.push_back(const_cast<PointPtr*>(&it->second));
+            }
         }
-    }
-}
-
-std::vector<GridPoint*> WorldGrid::all_grid_points() {
-    std::vector<GridPoint*> out;
-    out.reserve(points_.size());
-    for (auto& entry : points_) {
-        out.push_back(&entry.second);
-    }
-    return out;
-}
-
-std::vector<const GridPoint*> WorldGrid::all_grid_points() const {
-    std::vector<const GridPoint*> out;
-    out.reserve(points_.size());
-    for (const auto& entry : points_) {
-        out.push_back(&entry.second);
-    }
-    return out;
-}
-
-std::vector<GridPoint*> WorldGrid::grid_points_for_layer(int layer) {
-    std::vector<GridPoint*> out;
-    for (auto& entry : points_) {
-        if (entry.second.resolution_layer() == layer) {
-            out.push_back(&entry.second);
+    } else {
+        out.reserve(points.size());
+        for (const auto& entry : points) {
+            if (entry.second.parent() == nullptr) {
+                out.push_back(const_cast<PointPtr*>(&entry.second));
+            }
         }
     }
     return out;
 }
-
-std::vector<const GridPoint*> WorldGrid::grid_points_for_layer(int layer) const {
-    std::vector<const GridPoint*> out;
-    for (const auto& entry : points_) {
-        if (entry.second.resolution_layer() == layer) {
-            out.push_back(&entry.second);
-        }
-    }
-    return out;
 }
 
-std::vector<GridPoint*> WorldGrid::grid_points_for_world_z(int world_z) {
-    std::vector<GridPoint*> out;
-    for (auto& entry : points_) {
-        if (entry.second.world_z() == world_z) {
-            out.push_back(&entry.second);
+std::vector<GridPoint*> WorldGrid::query_region(const SDL_FRect& world_bounds,
+                                                int min_layer,
+                                                int max_layer,
+                                                int min_world_z,
+                                                int max_world_z,
+                                                bool skip_inactive_branches,
+                                                bool include_empty_nodes,
+                                                RegionMetrics* metrics) {
+    const int safe_min_layer = std::max(0, std::min(min_layer, max_layer));
+    const int safe_max_layer = std::max(safe_min_layer, max_layer);
+    const int safe_min_z = std::min(min_world_z, max_world_z);
+    const int safe_max_z = std::max(min_world_z, max_world_z);
+
+    std::vector<GridPoint*> result;
+    std::unordered_set<GridId> visited;
+    std::vector<GridPoint*> stack = gather_roots<GridPoint>(points_, roots_);
+
+    auto push_child = [&](GridPoint* parent, GridPoint::ChildDirection dir) {
+        GridPoint* child = parent ? parent->child(dir) : nullptr;
+        if (!child) {
+            return;
         }
+        if (skip_inactive_branches && !parent->child_active(dir)) {
+            if (metrics) ++metrics->branches_skipped;
+            return;
+        }
+        stack.push_back(child);
+    };
+
+    while (!stack.empty()) {
+        GridPoint* node = stack.back();
+        stack.pop_back();
+        if (!node) continue;
+        if (!visited.insert(node->id).second) {
+            continue;
+        }
+
+        if (skip_inactive_branches && !node->has_assets_or_active_children()) {
+            if (metrics) ++metrics->branches_skipped;
+            continue;
+        }
+        if (metrics) ++metrics->nodes_visited;
+
+        const bool in_layer = node->resolution_layer() >= safe_min_layer && node->resolution_layer() <= safe_max_layer;
+        const bool in_z     = node->world_z() >= safe_min_z && node->world_z() <= safe_max_z;
+        const bool in_bounds = world_point_in_rect(node, world_bounds);
+        const bool include_node = in_layer && in_z && in_bounds && (include_empty_nodes || !node->occupants.empty());
+        if (include_node) {
+            result.push_back(node);
+        }
+
+        push_child(node, GridPoint::ChildDirection::XNeg);
+        push_child(node, GridPoint::ChildDirection::XPos);
+        push_child(node, GridPoint::ChildDirection::YNeg);
+        push_child(node, GridPoint::ChildDirection::YPos);
+        push_child(node, GridPoint::ChildDirection::ZNeg);
+        push_child(node, GridPoint::ChildDirection::ZPos);
     }
-    return out;
+
+    return result;
 }
 
-std::vector<const GridPoint*> WorldGrid::grid_points_for_world_z(int world_z) const {
-    std::vector<const GridPoint*> out;
-    for (const auto& entry : points_) {
-        if (entry.second.world_z() == world_z) {
-            out.push_back(&entry.second);
+std::vector<const GridPoint*> WorldGrid::query_region(const SDL_FRect& world_bounds,
+                                                      int min_layer,
+                                                      int max_layer,
+                                                      int min_world_z,
+                                                      int max_world_z,
+                                                      bool skip_inactive_branches,
+                                                      bool include_empty_nodes,
+                                                      RegionMetrics* metrics) const {
+    const int safe_min_layer = std::max(0, std::min(min_layer, max_layer));
+    const int safe_max_layer = std::max(safe_min_layer, max_layer);
+    const int safe_min_z = std::min(min_world_z, max_world_z);
+    const int safe_max_z = std::max(min_world_z, max_world_z);
+
+    std::vector<const GridPoint*> result;
+    std::unordered_set<GridId> visited;
+    std::vector<const GridPoint*> stack = gather_roots<const GridPoint>(points_, roots_);
+
+    auto push_child = [&](const GridPoint* parent, GridPoint::ChildDirection dir) {
+        const GridPoint* child = parent ? parent->child(dir) : nullptr;
+        if (!child) {
+            return;
+        }
+        if (skip_inactive_branches && !parent->child_active(dir)) {
+            if (metrics) ++metrics->branches_skipped;
+            return;
+        }
+        stack.push_back(child);
+    };
+
+    while (!stack.empty()) {
+        const GridPoint* node = stack.back();
+        stack.pop_back();
+        if (!node) continue;
+        if (!visited.insert(node->id).second) {
+            continue;
+        }
+
+        if (skip_inactive_branches && !node->has_assets_or_active_children()) {
+            if (metrics) ++metrics->branches_skipped;
+            continue;
+        }
+        if (metrics) ++metrics->nodes_visited;
+
+        const bool in_layer = node->resolution_layer() >= safe_min_layer && node->resolution_layer() <= safe_max_layer;
+        const bool in_z     = node->world_z() >= safe_min_z && node->world_z() <= safe_max_z;
+        const bool in_bounds = world_point_in_rect(node, world_bounds);
+        const bool include_node = in_layer && in_z && in_bounds && (include_empty_nodes || !node->occupants.empty());
+        if (include_node) {
+            result.push_back(node);
+        }
+
+        push_child(node, GridPoint::ChildDirection::XNeg);
+        push_child(node, GridPoint::ChildDirection::XPos);
+        push_child(node, GridPoint::ChildDirection::YNeg);
+        push_child(node, GridPoint::ChildDirection::YPos);
+        push_child(node, GridPoint::ChildDirection::ZNeg);
+        push_child(node, GridPoint::ChildDirection::ZPos);
+    }
+
+    return result;
+}
+
+std::vector<WorldGrid::LightInstance> WorldGrid::query_lights(const SDL_FRect& world_bounds,
+                                                             int min_world_z,
+                                                             int max_world_z,
+                                                             bool skip_inactive_branches) {
+    std::vector<LightInstance> results;
+    RegionMetrics metrics{};
+    auto points = query_region(world_bounds,
+                               0,
+                               max_resolution_layers(),
+                               min_world_z,
+                               max_world_z,
+                               skip_inactive_branches,
+                               /*include_empty_nodes=*/false,
+                               &metrics);
+    for (GridPoint* gp : points) {
+        if (!gp) continue;
+        for (const auto& occ : gp->occupants) {
+            Asset* asset = occ.get();
+            if (!asset || !asset->info) continue;
+            if (asset->info->light_sources.empty()) continue;
+            for (const auto& light : asset->info->light_sources) {
+                results.push_back(LightInstance{gp, asset, &light});
+            }
         }
     }
-    return out;
+    return results;
+}
+
+std::vector<WorldGrid::LightInstance> WorldGrid::query_lights(const SDL_FRect& world_bounds,
+                                                             int min_world_z,
+                                                             int max_world_z,
+                                                             bool skip_inactive_branches) const {
+    std::vector<LightInstance> results;
+    RegionMetrics metrics{};
+    auto points = query_region(world_bounds,
+                               0,
+                               max_resolution_layers(),
+                               min_world_z,
+                               max_world_z,
+                               skip_inactive_branches,
+                               /*include_empty_nodes=*/false,
+                               &metrics);
+    for (const GridPoint* gp : points) {
+        if (!gp) continue;
+        for (const auto& occ : gp->occupants) {
+            Asset* asset = occ.get();
+            if (!asset || !asset->info) continue;
+            if (asset->info->light_sources.empty()) continue;
+            for (const auto& light : asset->info->light_sources) {
+                results.push_back(LightInstance{gp, asset, &light});
+            }
+        }
+    }
+    return results;
 }
 
 std::unique_ptr<Asset> WorldGrid::extract_from_point(Asset* a, GridPoint& point) {
@@ -552,19 +679,35 @@ void WorldGrid::bind_asset_to_point(Asset* a, GridPoint& point) {
     if (!a) {
         return;
     }
-    asset_to_point_[a] = point.id;
     GridKey key{point.world_x(), point.world_y(), point.world_z(), point.resolution_layer()};
     asset_to_key_[a] = key;
-    a->set_grid_id(point.id);
+    a->clear_grid_id();
 }
 
 void WorldGrid::prune_empty_points() {
     for (auto it = points_.begin(); it != points_.end(); ) {
         if (!it->second.has_assets_or_active_children()) {
+            GridPoint& gp = it->second;
+            GridKey key{gp.world_x(), gp.world_y(), gp.world_z(), gp.resolution_layer()};
+            key_to_id_.erase(key);
+            remove_root_id(it->first);
             it = points_.erase(it);
         } else {
             ++it;
         }
+    }
+}
+
+void WorldGrid::add_root_id(GridId id) {
+    if (std::find(roots_.begin(), roots_.end(), id) == roots_.end()) {
+        roots_.push_back(id);
+    }
+}
+
+void WorldGrid::remove_root_id(GridId id) {
+    auto it = std::remove(roots_.begin(), roots_.end(), id);
+    if (it != roots_.end()) {
+        roots_.erase(it, roots_.end());
     }
 }
 
@@ -580,24 +723,15 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
 
     const SDL_Point world_pos = world_point_for_asset(raw);
     const SDL_Point grid_index = grid_index_from_world(world_pos);
-    const GridId new_point_id = make_point_id(grid_index.x, grid_index.y);
     const GridKey new_key = grid_key_from_world(world_pos, world_z, (resolution_layer >= 0 ? resolution_layer : default_resolution_layer()));
 
-    auto existing_point_it = asset_to_point_.find(raw);
-    if (existing_point_it != asset_to_point_.end() && existing_point_it->second != new_point_id) {
-        auto point_it = points_.find(existing_point_it->second);
-        if (point_it != points_.end()) {
-            remove_asset_from_point(raw, point_it->second);
+    auto existing_key_it = asset_to_key_.find(raw);
+    if (existing_key_it != asset_to_key_.end() && existing_key_it->second != new_key) {
+        if (GridPoint* existing_point = find_grid_point_strict(existing_key_it->second)) {
+            remove_asset_from_point(raw, *existing_point);
         }
-        asset_to_point_.erase(existing_point_it);
-        asset_to_key_.erase(raw);
+        asset_to_key_.erase(existing_key_it);
         prune_empty_points();
-    } else {
-        auto existing_key_it = asset_to_key_.find(raw);
-        if (existing_key_it != asset_to_key_.end() && existing_key_it->second != new_key) {
-            vibble::log::warn("[WorldGrid] Asset GridKey changed; clearing stale mapping (Phase 2 - 3d_refactor_plan.md).");
-            asset_to_key_.erase(existing_key_it);
-        }
     }
 
     const int i = grid_floor_div(world_pos.x - origin_.x, chunk_step);
@@ -628,9 +762,6 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
 
     GridPoint& point = ensure_point(grid_index, chunk_index, &chunk, nullptr, new_key.z, new_key.layer);
     attach_asset_to_grid_point(std::move(a), raw, point);
-    if (point.resolution_layer() != default_resolution_layer()) {
-        vibble::log::warn("[WorldGrid] Asset bound to non-default resolution layer; ensure Asset::grid_id compatibility during migration (Phase 2 - 3d_refactor_plan.md).");
-    }
     return raw;
 }
 
@@ -707,21 +838,12 @@ Asset* WorldGrid::move_asset(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int
 
     const SDL_Point old_index = grid_index_from_world(old_pos);
     const SDL_Point new_index = grid_index_from_world(new_pos);
-    const GridId    new_point_id = make_point_id(new_index.x, new_index.y);
-    const GridId    old_point_id = make_point_id(old_index.x, old_index.y);
 
     std::unique_ptr<Asset> owned;
-    const bool point_changed = (new_point_id != old_point_id);
+    const bool point_changed = (old_pos.x != new_pos.x) || (old_pos.y != new_pos.y);
     if (point_changed) {
-        auto old_point_it = points_.find(old_point_id);
-        if (old_point_it != points_.end()) {
-            owned = detach_asset_from_grid_point(a, old_point_it->second, true);
-        }
-
-        if (!owned) {
-            if (GridPoint* existing_point = point_for_asset(a)) {
-                owned = detach_asset_from_grid_point(a, *existing_point, true);
-            }
+        if (GridPoint* existing_point = point_for_asset(a)) {
+            owned = detach_asset_from_grid_point(a, *existing_point, true);
         }
     }
 
@@ -758,8 +880,9 @@ void WorldGrid::rebuild_chunks() {
         entry.second.occupants.clear();
     }
     points_.clear();
-    asset_to_point_.clear();
     residency_.clear();
+    asset_to_key_.clear();
+    roots_.clear();
     chunks_.reset();
     invalidate_active_cache();
 
@@ -814,8 +937,6 @@ void WorldGrid::update_active_chunks(const SDL_Rect& camera_world, int margin_px
 }
 
 int WorldGrid::default_resolution_layer() const {
-    // Phase 1 (3d_refactor_plan.md): resolution_layer mirrors the current grid
-    // resolution (power of two) until the Map Grid adopts 3^n spacing.
     const int max_layers = max_resolution_layers();
     return std::clamp(grid_resolution_, 0, std::max(0, max_layers));
 }

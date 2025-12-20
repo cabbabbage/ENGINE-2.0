@@ -15,7 +15,7 @@ Backwards compatibility policy:
 - The final state should have everything on the new 3D GridPoint system, with no legacy 2D grid logic or duplicate path for core functionality.
 - If a legacy system can be kept as a thin adapter on top of the 3D grid without adding complexity, fine. If it fights the new design or forces duplicate logic, we delete it and refactor.
 
-Current baseline (Dec 2025): the engine uses `world::WorldGrid` (power of two spacing) with `world::GridPoint` nodes stored in an `unordered_map` keyed by 2D `(i, j)` plus `ChunkManager` for tiles. `WarpedScreenGrid` rebuilds flat lists of `GridPoint*` and assets each frame and sets per frame screen data directly on those nodes. There is no `world_z`, no hierarchy, and perspective is effectively disabled.
+Current baseline (Dec 2025): the engine uses a 3D-aware `world::WorldGrid` with `GridPoint` identity expressed as `(world_x, world_y, world_z, resolution_layer)` (`GridKey` backed by `key_to_id_`). Assets bind through this identity, Screen Grid rebuilds from Map Grid traversal, and legacy 2D identity is kept only for tile chunk bookkeeping. Perspective remains effectively disabled.
 
 The goal is to replace the current 2D grid and resolution system with a 3D hierarchy that:
 
@@ -39,10 +39,10 @@ The goal is to replace the current 2D grid and resolution system with a 3D hiera
 
 ### 1.2 Current engine snapshot
 
-- `ENGINE/world/grid_point.hpp`: flat 2D struct with `id`, `world` (`SDL_Point`), `grid_index`, `chunk_index`, `chunk*`, per frame camera fields (`screen`, `parallax_dx`, `vertical_scale`, `horizon_fade_alpha`, `perspective_scale`, `distance_to_camera`, `tilt_radians`, `on_screen`, `screen_data_valid/frame`), and `std::vector<Asset*> occupants` or an equivalent pointer container. No `world_z`, no hierarchy, no resolution layer.
-- `ENGINE/world/world_grid.cpp`: `WorldGrid` stores `GridPoint` in `points_` keyed by `(i, j)` (`GridId`), maps assets to points (`asset_to_point_`) and chunks (`residency_`), and uses `ChunkManager` with power of two spacing from `vibble::grid::delta`. Chunk tiles live in `Chunk::tiles` and are consumed by renderers.
-- `ENGINE/render/warped_screen_grid.cpp`: builds `warped_points_`, `visible_points_`, and `visible_assets_` each frame by iterating `world_grid.all_assets()`. Perspective code paths exist but are largely disabled (`kForceDepthPerspectiveDisabled = true`). Uses current per frame fields on `GridPoint` directly.
-- `ENGINE/core/AssetsManager.cpp`: `rebuild_active_from_screen_grid` reads `WarpedScreenGrid::grid_visible_points()` and sorts assets by `GridPoint::screen.y`. Dev controls consume the same lists. Asset lookup uses `Asset::grid_id` -> `WorldGrid::point_for_asset`.
+- `ENGINE/world/grid_point.hpp`: 3D identity fields (`world_x`, `world_y`, `world_z`, `resolution_layer`) with hierarchy links, per frame fields, branch masks, and occupants.
+- `ENGINE/world/world_grid.cpp`: `WorldGrid` owns `GridPoint`s keyed by `GridKey` (mapped through `key_to_id_`) with assets bound via `asset_to_key_`; chunk/tile bookkeeping remains 2D-only. Power-of-two spacing is confined to chunk sizing; GridPoint identity uses 3^n spacing helpers.
+- `ENGINE/render/warped_screen_grid.cpp`: rebuilds from Map Grid region queries (camera volume) and fills `warped_points_`, `visible_points_`, and `visible_assets_` by traversing active branches; no flat `all_assets()` scan.
+- `ENGINE/core/AssetsManager.cpp`: `rebuild_active_from_screen_grid` reads `WarpedScreenGrid::grid_visible_points()` and sorts assets by `GridPoint::screen.y`. Dev controls consume the same lists. Asset lookup flows through Screen Grid’s asset-to-point mapping instead of `Asset::grid_id`.
 - `ENGINE/render/render.cpp`: `SceneRenderer::render` calls `WarpedScreenGrid::rebuild_grid`, renders tiles from `ChunkManager`, and renders `active_assets` without grid traversal. `LightMap` is a stub that only mirrors active chunks.
 - `ENGINE/utils/map_grid_settings.*` and `ENGINE/utils/grid.*`: all spacing uses power of two deltas. `MapGridSettings` stores `resolution`, `r_chunk`, and jitter for the current grid.
 - `ENGINE/render/composite_asset_renderer.cpp`: consumes per frame projection data (`perspective_scale`, `distance_from_camera`), but today those fields are filled only with 2D data and no `world_z`.
@@ -57,9 +57,8 @@ Target:
 
 Current reality:
 
-- `GridPoint` has `id`, 2D positions, chunk indices, per frame camera fields, and `occupants` but no hierarchy, no `world_z`, and no branch mask. `screen_data_valid` is used as a per frame cache flag.
-- `chunk_index`, `grid_index`, and `chunk*` are used by `WorldGrid`, `ChunkManager`, `WarpedScreenGrid`, and `GridTileRenderer` and must stay valid during the migration.
-- For now, `GridPoint` identity is effectively defined both by the legacy `(grid_index, chunk_index)` and by any new `(world_x, world_y, world_z, resolution_layer)` fields we add. They must remain consistent until Cleanup.
+- `GridPoint` carries immutable 3D identity with hierarchy links, per frame camera fields, branch masks, and occupants. `chunk_index`/`chunk*` remain for tile ownership.
+- Legacy `GridId` remains as an internal storage key for the container; assets and traversal use `GridKey` and hierarchy pointers.
 
 ### 1.4 Resolution vs hierarchy
 
@@ -76,7 +75,7 @@ Target:
 
 Current reality:
 
-- `WorldGrid` uses power of two spacing (`vibble::grid::delta`) and `ChunkManager` to build chunks keyed by `(i, j)`; `GridPoint` identity is `(grid_index.x, grid_index.y)` only. `MapGridSettings` and related loaders assume power of two spacing. Chunks carry tiles for the renderer.
+- `WorldGrid` uses 3^n spacing for GridPoint identity; `ChunkManager` remains 2D indexed by `(i, j)` for tiles only. `MapGridSettings` and related loaders still contain power-of-two fields for tile chunks.
 - During migration, tile chunks remain 2D indexed by `(i, j)` and are associated with the relevant `GridPoint` hierarchy on the floor plane. Tiles do not become fully 3D; they are mapped onto the grid.
 
 ### 1.6 Screen Grid snapshot
@@ -87,8 +86,8 @@ Target:
 
 Current reality:
 
-- `WarpedScreenGrid::rebuild_grid` iterates all assets, projects their points to screen, fills `visible_points_` and `visible_assets_`, and tracks `active_chunks_`. There is no separate Screen Grid type or hierarchy; everything is a flat list keyed by `GridPoint::id` and vector indices.
-- Early versions of Screen Grid will likely focus on `world_z = 0` (floor plane) only. Higher `world_z` usage will come later as camera and lighting become fully 3D aware.
+- `WarpedScreenGrid::rebuild_grid` traverses Map Grid via region query and branch masks, populating per-frame fields and visible lists without legacy flat scans. It currently filters to `world_z = 0` until multi-z rendering is enabled.
+- Early versions of Screen Grid focus on `world_z = 0` (floor plane) only. Higher `world_z` usage will come later as camera and lighting become fully 3D aware.
 
 ### 1.7 Grid search model
 
@@ -98,7 +97,7 @@ Target:
 
 Current reality:
 
-- Lookups are by `(i, j)` `GridId` or the `asset_to_point_` map. Region queries and render loops scan all assets or visible lists. No branch masks exist yet.
+- Lookups and traversal are `GridKey`-based through branch-aware queries; legacy `GridId` is confined to internal storage for tiles. Region traversal replaces flat scans for Screen Grid and asset visibility.
 
 ---
 
@@ -120,6 +119,8 @@ Every Codex task related to this refactor should:
 
 The phases below describe the high level goal, how the phase fits into the refactor, and the detailed subtasks. Each individual Codex task should pick a small subset of these subtasks and implement them.
 
+Pre Phase 5 legacy removal (Phases 1-4): legacy 2D identity bridges have been removed for assets and Screen Grid; remaining legacy elements are tile-only and listed in the cleanup tasks.
+
 ---
 
 ### Phase 1 - Define 3D GridPoint core
@@ -128,19 +129,19 @@ The phases below describe the high level goal, how the phase fits into the refac
 Introduce the 3D `GridPoint` shape and helpers while keeping current 2D users working. This replaces the current flat layout with a canonical world identity, hierarchy pointers, per frame fields, asset lists, and branch masks.
 
 **Status (Dec 2025)**  
-- Identity fields (world_x, world_y, world_z, resolution_layer) and constructor are in place and wired through WorldGrid creation; legacy ids remain intact.  
+- Identity fields (world_x, world_y, world_z, resolution_layer) and constructor are in place and wired through WorldGrid creation; legacy ids remain only as internal storage for tile containers.  
 - Hierarchy pointers, direction helpers, and per-frame reset/frame stamping are implemented.  
 - Asset/branch tracking fields, branch bits, and `assets_here` alias are present; per-frame cache reset is invoked during Screen Grid rebuilds.  
-- Resolution layer defaults mirror current grid resolution; spacing helpers and distance fallback to legacy power-of-two spacing are available for migration.
+- `distance(layer)` and `grid_spacing_for_layer` now derive from 3^n spacing, so `grid_resolution_` simply drives the default layer until loaders migrate.  
 - Child allocation helpers exist; attach/detach propagation will be finalized in later phases as hierarchy and branch masks become authoritative.  
-- 3D GridKey mapping coexists with legacy GridId; lookups warn on legacy fallback.  
+- 3D GridKey mapping is canonical; legacy `GridId` lookups are no longer emitted and `GridId` now only backs the container storage.  
 - Identity/mask validation helpers exist; legacy identity usage is tracked in cleanup tasks.
 
 **Status (Phase 3 - Asset attachment and migration)**  
 - Asset spawn/move paths attach via 3D GridPoints (GridKey) with `world_z` and `resolution_layer` parameters (default `world_z = 0`, default layer).  
-- Asset bindings maintain both legacy `GridId` and 3D `GridKey`, preferring 3D for lookups; legacy fallbacks are logged.  
+- Asset bindings rely on 3D `GridKey` only; legacy `GridId` on assets is cleared and no longer used for lookup.  
 - Attach/detach flows invalidate per-frame data and update branch activity; hierarchy links are required for accurate masks.  
-- Remaining legacy caches (e.g., 2D grid residency) still exist and must be upgraded in cleanup phases.
+- Legacy 2D caches for asset identity have been removed; chunk residency remains tile-only.
 
 **How it fits**  
 Every phase depends on `GridPoint` being stable and consistent. Do this first, even if many fields are not yet used by callers.
@@ -198,38 +199,42 @@ Map Grid is the source of truth for world space. Screen Grid, renderer traversal
 **Key files**  
 `ENGINE/world/world_grid.hpp`, `ENGINE/world/world_grid.cpp`, `ENGINE/world/chunk_manager.*`, `ENGINE/world/chunk.*`, `ENGINE/utils/map_grid_settings.*`, `ENGINE/utils/grid.*`
 
+**Status (Phase 2 - Map Grid redesign)**  
+- `WorldGrid` owns `GridPoint`s indexed by `GridKey` via `key_to_id_` and tracks roots, branch masks, and 3^n spacing; `GridId` now only exists for `std::unordered_map` storage and chunk compatibility.  
+- Region queries, `query_region`, and `grid_points_for_*` already rely on `GridKey` and active branch masks; `find_or_create_grid_point` enforces the canonical identity while instrumentation logs mismatches.  
+- Chunk bookkeeping (`ChunkManager`, `grid_index`, `chunk_index`, `MapGridSettings` power-of-two fields) still uses 2D ids; migrating these adapters to the 3D model and/or retiring them is a Phase 10 cleanup task.
+
 **Subtasks**
 
 - Establish ownership and indexing  
-  - Introduce a Map Grid container (extend `WorldGrid` or wrap it) that owns all `GridPoint`s with `(x, y, z, layer)` identity.  
-  - Keep chunk bookkeeping (`ChunkManager`, `chunk_index`, `Chunk::tiles`) intact for renderers while nodes move to the new identity.  
-  - Document lifetime: nodes owned by Map Grid; Screen Grid holds references only.
+  - Ensure `WorldGrid` owns `GridPoint`s keyed by `GridKey` and maintains non-owning Screen Grid references; `key_to_id_` keeps lookups fast while `GridId` serves only as the map container key.  
+  - Keep `ChunkManager`, `chunk_index`, and `Chunk::tiles` for tile rendering, documenting that they are tile-only and do not define asset identity.  
+  - Record how `roots_`, `children_with_assets`, and branch masks describe lifetime so Screen Grid rebuilds can trust the hierarchy.
 
 - Upgrade spatial keys  
-  - Extend `GridId` (or add a new key type) to encode `(world_x, world_y, world_z, resolution_layer)` while keeping a compatibility path for current `(i, j)` ids.  
-  - Add `find_or_create_grid_point` and `find_grid_point` APIs that use the new key and map back to `Asset::grid_id` until Cleanup.  
-  - Add hashing helpers and tests to ensure stable keys across sessions.
+  - Keep `key_to_id_` authoritative for queries, remove any fallback to `GridId`, and audit callers (Assets, renderers, loaders) for leftover legacy lookups.  
+  - Surface hashing/validation helpers (`debug_validate_keys_and_masks`) to guarantee `GridKey` stability across sessions.  
+  - Treat any remaining 2D legacy lookup utilities (e.g., `point_for_id`, `point_id_from_world`) as Phase 10 cleanup candidates unless they serve tile-specific bookkeeping.
 
-- Support 3^n spacing alongside legacy spacing  
-  - Add `distance(layer)` helpers and store `max_layers` and origin on Map Grid.  
-  - Keep `grid_resolution_`, `r_chunk_`, and `vibble::grid::delta` working until all callers switch. Document the conversion path.  
-  - Add translators between `(i, j, grid_resolution_)` and `(world_x, world_y, resolution_layer)` for transition code.  
-  - Make it explicit that tile chunks remain 2D indexed by `(i, j)` and are simply associated with the floor plane `GridPoint` hierarchy during migration.
+- Support 3^n spacing  
+  - Use `distance(layer)`/`grid_spacing_for_layer` as the canonical spacing for `GridPoint` placement; keep `grid_resolution_` only to choose the default layer until loaders catch up.  
+  - Audit `MapGridSettings`, map loaders, and chunk/residency code for references to `grid_resolution_`, `r_chunk_`, or `vibble::grid::delta`, replacing them with `GridKey` aware settings or capping them as tile-only values.  
+  - Document the currently tile-only power-of-two fields so we can remove them in Phase 10 cleanup.
 
 - Child creation strategy  
-  - Add helpers to allocate children lazily with correct parent links and identity.  
-  - Ensure chunk and culling data stay coherent when children are created. `chunk_index` and `Chunk*` must remain valid for floor plane assets.  
-  - Add a prebuild option for tests or benchmarks to populate full trees down to `max_layers`.
+  - Maintain helpers that lazily allocate children with proper parent links and `GridKey` identity; ensure `ensure_child` logs if parent/child mismatches slip in.  
+  - Keep chunk and culling data coherent when children appear by updating `chunk_index` and `children_with_assets` consistently; add tests verifying lazy growth along each axis.  
+  - Provide instrumentation or benchmarks that can prebuild subtrees down to `max_layers` for diagnostics.
 
 - Branch tracking hooks  
-  - Add stub calls for branch activation and inactivation that will be filled in during Phase 5.  
-  - Ensure `prune_empty_points` and `rebuild_chunks` can coexist with hierarchical nodes.  
-  - Add instrumentation counters to verify branch propagation calls during attach and detach.
+  - Preserve propagation helpers so `attach_asset_to_hierarchy`/`detach_asset_from_hierarchy` drive branch masks; `prune_empty_points` already cleans up inactive nodes.  
+  - Ensure instrumentation counters exist for mask updates and branch bit flips; add debug asserts where masks should always match occupancy.  
+  - Track any remaining legacy mask assumptions (for example from chunk-based culling) and log them for Phase 5/10 cleanup.
 
 - Settings and loader compatibility  
-  - Update `MapGridSettings` read and write helpers to accept base 3 spacing while still honoring existing power of two fields in map JSON.  
-  - Add validation that warns when a map mixes power of two spacing with a requested `max_layers`.  
-  - Note clearly which settings are temporary compatibility shims that will be removed in Phase 10.
+  - Update loaders to emit `world_z` and `resolution_layer` defaults, clamp them, and call into the `GridKey`-based creation helpers.  
+  - Align `MapGridSettings` with the 3^n model, adding warnings when maps still mix in legacy power-of-two fields.  
+  - Keep a short migration checklist that references any loader or script that still writes chunk-focused spacing so we can revisit it in Phase 10.
 
 **Codex guidance**  
 Tasks modifying world grid behavior must reference Phase 2 and explain how they move logic toward `(x, y, z, layer)` identity without breaking chunked tile rendering.
@@ -265,9 +270,9 @@ Assets must live on `GridPoint`s for grid search, Screen Grid, and renderer trav
   - Add clamps and asserts to catch negative `world_z` or out of range `resolution_layer`.
 
 - Grid id and caches  
-  - Keep `asset_to_point_` and `Asset::grid_id` in sync with the new identity while `GridId` is upgraded.  
+  - Keep asset bindings in sync via `GridKey`/`asset_to_key_`; legacy `GridId` on assets is cleared and no longer used for lookup.  
   - Ensure cache invalidation (`screen_data_valid`) still fires on moves with new parameters.  
-  - Add debug utilities to print an asset’s bound `GridPoint` identity for dev tools.
+  - Add debug utilities to print an asset's bound `GridPoint` identity for dev tools.
 
 - Data migration safeguards  
   - Update JSON and map loaders to set `world_z` and `resolution_layer` defaults and clamp to valid ranges.  
@@ -285,9 +290,9 @@ Tasks that change how assets are spawned or moved must reference Phase 3 and con
 Build a per frame Screen Grid that references Map Grid nodes in the visible 3D volume and updates per frame camera fields, replacing the flat lists in `WarpedScreenGrid`.
 
 **Status (Phase 4 - Screen Grid reconstruction)**  
-- Screen Grid rebuild now traverses Map Grid nodes (`all_grid_points`) instead of the flat `all_assets` list and fills per frame fields each frame.  
-- Per frame state is reset with an explicit frame stamp during rebuild; visible points and assets are sourced from the traversal.  
-- Current traversal is intentionally restricted to `world_z = 0` until camera and culling handle multi-z slices; legacy `GridId` lookup (`id_to_index_`) remains as a compatibility bridge.
+- Screen Grid rebuild now queries Map Grid via branch-aware region traversal (camera volume, layer/z filters) instead of flat scans, and fills per frame fields each frame.  
+- Per frame state is reset with an explicit frame stamp during rebuild; visible points and assets are sourced only from the Screen Grid traversal.  
+- Current traversal is intentionally restricted to `world_z = 0` until camera and culling handle multi-z slices; per-frame asset lookup uses Screen Grid’s asset-to-point map (no `GridId` bridge).
 
 **How it fits**  
 Screen Grid is the runtime gateway between world space and rendering. Renderer and searches will start from Screen Grid roots.
@@ -316,18 +321,20 @@ Screen Grid is the runtime gateway between world space and rendering. Renderer a
 
 - Preserve current outputs for callers  
   - Keep `visible_points_` and `visible_assets_` compatible for `AssetsManager::rebuild_active_from_screen_grid`, but source them from the Screen Grid traversal rather than ad hoc vectors.  
-  - Maintain `id_to_index_` lookups until renderers stop using `Asset::grid_id` directly.  
+  - Maintain `grid_point_for_asset()` via a per-frame asset-to-point map; legacy `GridId` lookups are removed.  
   - Add a compatibility flag to fall back to legacy visible list generation for debugging only.
 
 - Retire flat screen grid code  
   - Remove or gate legacy flat rebuild paths once the Screen Grid traversal is stable and debuggable.  
   - Keep existing debug overlay hooks working with the new data structure.  
-  - Add metrics (counts, time) to detect regressions when switching to the new traversal.
+- Add metrics (counts, time) to detect regressions when switching to the new traversal.
 
 **Codex guidance**  
 Tasks touching screen grid or camera to screen mapping must reference Phase 4 and must not introduce new flat 2D only screen grid structures.
 
 ---
+
+Ready for Phase 5: core identity, asset attachment, and Screen Grid traversal now rely on 3D `GridKey` + hierarchy only; legacy GridId usage is constrained to tile storage. Multi-z Screen Grid traversal and further search optimizations will build on this 3D-first baseline.
 
 ### Phase 5 - Hierarchical search and active branch maintenance
 
@@ -339,6 +346,11 @@ This phase delivers the performance benefit of the hierarchy and underpins rende
 
 **Key files**  
 `ENGINE/world/grid_point.hpp`, `ENGINE/world/world_grid.cpp`, `ENGINE/render/warped_screen_grid.cpp`, any search utilities that currently scan all assets or points.
+
+**Status (Phase 5 - Hierarchical search and active branch maintenance)**  
+- Branch-aware exact lookup and region queries now traverse Map Grid using `GridKey`, skipping inactive branches via `active_child_mask`/`children_with_assets`.  
+- Screen Grid rebuild consumes the region query instead of flat scans; per-frame metrics record nodes visited and branches skipped.  
+- Legacy flat scan helpers remain as compatibility/debug paths only and are listed for Phase 10 cleanup.
 
 **Subtasks**
 
@@ -375,6 +387,10 @@ Tasks that add or modify grid search logic must reference Phase 5 and must not a
 **Goal**  
 Extend camera and NDC transforms to understand `world_z` and the new grid while keeping floor assets visually consistent.
 
+**Status (Phase 6 - Camera and transform integration)**  
+- Camera and Screen Grid projections read `world_z`; per-frame `distance_to_camera`, `on_screen`, and screen positions are derived from 3D identity.  
+- Depth-aware sorting uses 3D distance and `world_z`; flat camera is a dev-only toggle with debug logging of depth stats.
+
 **How it fits**  
 This connects the vertical dimension to perspective and parallax instead of fake offsets.
 
@@ -384,9 +400,9 @@ This connects the vertical dimension to perspective and parallax instead of fake
 **Subtasks**
 
 - Expose current 2D behavior  
-  - Make `kForceDepthPerspectiveDisabled` and related flags runtime settings and document current flat behavior.  
-  - Add debug toggles to compare legacy 2D projection versus new 3D projection.  
-  - Capture screenshots or metrics for before and after to verify no floor regressions.
+  - Replace the old hardcoded depth disable with runtime settings (`depth_enabled`, `flat_camera_debug`, `depth_debug_logging`) and document the default depth-aware behavior.  
+  - Add debug toggles that let devs compare legacy flat projections with the new 3D pipeline when needed.  
+  - Capture screenshots or metrics for before and after to verify no floor regressions while depth is enabled or temporarily disabled.
 
 - Accept `world_z` in projections  
   - Update projection and render effect helpers to take `(world_x, world_y, world_z)` and populate `GridPoint::distance_to_camera` accordingly.  
@@ -418,16 +434,21 @@ This changes how content is drawn and ties render cost to the hierarchical trave
 **Key files**  
 `ENGINE/render/render.cpp` (SceneRenderer), `ENGINE/core/AssetsManager.cpp` (active asset rebuild), `ENGINE/render/composite_asset_renderer.*`, `ENGINE/render/warped_screen_grid.*`, `ENGINE/render/grid_tile_renderer` paths that rely on chunks.
 
+**Status (Phase 7 - Renderer traversal and LOD)**  
+- Active assets now come exclusively from Screen Grid traversal (`grid_visible_points`) built from branch-aware Map Grid queries; render order uses `distance_to_camera` first, then `resolution_layer`, `world_z`, with `screen.y`/`z_index` as tie breakers.  
+- Composite renderer consumes `GridPoint` data (perspective scale, distance) per asset; SceneRenderer fetches screen positions from GridPoints instead of recomputing map-to-screen.  
+- Tile rendering remains chunk-based and 2D-only for culling/drawing; reuse of Screen Grid bounds for tiles is a noted cleanup item.
+
 **Subtasks**
 
 - Feed renderables from Screen Grid  
-  - Replace `Assets::rebuild_active_from_screen_grid` sorting logic with traversal of Screen Grid roots that skips empty or inactive nodes.  
+  - Ensure `AssetsManager` builds active assets by traversing Screen Grid nodes (branch-aware, `on_screen` only) instead of flat visible lists.  
   - Preserve dev filters and selection lists while swapping the source of truth.  
-  - Add a comparator that prefers `distance_from_camera` and `resolution_layer` before falling back to `z_index` and `screen.y`.
+  - Depth comparator should prioritize `distance_from_camera`, then `resolution_layer`, then `world_z`, using `screen.y`/`z_index` only as tie breakers.
 
 - Recursive traversal for drawing  
   - Add traversal helpers that, for each node: skip if no assets and `active_child_mask == 0`; draw assets when `on_screen`; then recurse into active children.  
-  - Keep `id_to_index_` and `grid_point_for_asset` working during the transition.  
+  - Keep `grid_point_for_asset` working via Screen Grid's per-frame asset map (no `GridId` dependency).  
   - Provide layer aware traversal so coarse layers can be skipped or aggregated for far distances.
 
 - Draw order and LOD  
@@ -454,6 +475,11 @@ Lighting is the first practical user of real height and validates the usefulness
 
 **Key files**  
 Light definitions on assets (`AssetInfo::light_sources`), `ENGINE/render/composite_asset_renderer.cpp` (light emission), `ENGINE/world/chunk.cpp` (`LightMap`), any runtime light queries.
+
+**Status (Phase 8 - Lighting and 3D usage)**  
+- Lights are gathered via branch-aware Map Grid queries (`query_lights`) using `GridKey`/`world_z`; LightMap sampling computes 3D attenuation (`dx/dy/dz`) from `GridPoint` identity.  
+- Asset-attached lights default to `world_z` from their owning GridPoint; floor lights keep `world_z = 0`.  
+- Lighting still uses a simple additive model (mask/dynamic brightness); advanced shadowing/volumetrics remain future work.
 
 **Subtasks**
 
@@ -487,6 +513,11 @@ Without good tools, the new system will be hard to debug. Dev controls and overl
 **Key files**  
 `ENGINE/dev_mode/dev_controls.*`, `ENGINE/core/AssetsManager.cpp` (dev_controls integration), `ENGINE/render/warped_screen_grid.*` overlays, any debug drawing in `SceneRenderer`.
 
+**Status (Phase 9 - Dev tools and debug UX)**  
+- Dev overlays render Screen Grid nodes (color-coded by `resolution_layer`, highlighted when branches/assets are active) directly from Map Grid traversal; per-frame metrics show nodes visited, branches skipped, depth culls, and z-range from `WarpedScreenGrid`.  
+- Picking uses Screen Grid (`pick_nearest_point`) to surface `(world_x, world_y, world_z, resolution_layer)` plus branch masks under the cursor; selection overlays read 3D identity rather than legacy 2D ids.  
+- Grid overlay toggle drives the 3D-aware overlay; multi-z slices will follow once camera/culling lift the current `world_z = 0` Screen Grid restriction.
+
 **Subtasks**
 
 - 3D grid overlays  
@@ -510,34 +541,16 @@ Dev tool tasks must reference Phase 9 and must build on Map Grid and Screen Grid
 
 ### Phase 10 - Cleanup and deprecation
 
-**Goal**  
-Remove obsolete 2D grid and power of two utilities once the new system is operational and call sites have been migrated. The goal is to end with a single 3D grid model and no legacy duplicates.
+**Status (Phase 10 - Cleanup and deprecation)**  
+- Power-of-two helpers are confined to tile-only code paths; Map Grid spacing (`MapGridSettings::spacing`) now uses 3^n defaults and `WorldGrid` defaults to 3^n spacing with no legacy id fallbacks.  
+- Flat scan helpers on WorldGrid (`all_grid_points`, `grid_points_for_layer/world_z`) have been removed; GridId remains only as the internal map key for storage/chunks.  
+- Default pipeline is 3D: assets, lights, camera, and renderer run on GridKey + Screen Grid traversal; depth toggles remain only as debug controls.
 
-**How it fits**  
-This ensures a single, consistent spatial model in the engine and stops technical debt from growing.
-
-**Key files**  
-`ENGINE/utils/grid.*`, `ENGINE/utils/map_grid_settings.*`, `ENGINE/world/world_grid.*`, `ENGINE/render/warped_screen_grid.*`, any compatibility shims added in earlier phases.
-
-**Subtasks**
-
-- Identify deprecated APIs  
-  - List power of two grid helpers, chunk centric utilities that duplicate Map Grid behavior, and flat Screen Grid rebuild paths.  
-  - Include hardcoded disables such as `kForceDepthPerspectiveDisabled` and any temporary compatibility flags.  
-  - Enumerate remaining uses of `grid_resolution_`, `r_chunk_`, and `vibble::grid::delta` in gameplay and rendering paths.
-
-- Remove or gate them  
-  - Delete unused code or guard remaining legacy paths with clear TODOs pointing to this phase and `3d_refactor_plan.md`.  
-  - Keep tile and chunk data only if still required by renderers, and note the migration plan.  
-  - If a piece of legacy 2D grid logic cannot be kept as a thin adapter on top of the 3D grid, remove it and refactor the caller to use the new system directly. No permanent dual grid systems.
-
-- Documentation and comments  
-  - Update design docs and inline comments to reference `GridPoint`, Map Grid, and Screen Grid as the canonical model.  
-  - Record any remaining technical debt with concrete owners and files.  
-  - Add a short done checklist confirming: no power of two only paths, no flat screen lists, `world_z` present on all assets and lights, and no core feature relies on a legacy 2D grid.
-
-**Codex guidance**  
-Cleanup tasks must reference Phase 10 and must not keep long term dependencies on legacy 2D grid paths. If a legacy helper survives, it should be a trivial adapter on top of the 3D grid, not a second system.
+**Remaining cleanup (debug/tile only)**  
+- Screen Grid currently clamps traversal to `world_z = 0`; lift once camera/culling support full multi-z rendering (`ENGINE/render/warped_screen_grid.cpp`).  
+- Tile chunk culling remains power-of-two/tile-only in `ENGINE/render/grid_tile_renderer.*`; keep gated to tiles.  
+- LightMap sampling assumes floor height with a fallback radius (`ENGINE/world/chunk.cpp`); extend to arbitrary `world_z` when ready.  
+- Debug flat camera toggle (`WarpedScreenGrid::flat_camera_debug`) remains for comparison and should be removed once depth is fully stable.
 
 ---
 
@@ -546,17 +559,15 @@ Cleanup tasks must reference Phase 10 and must not keep long term dependencies o
 - `GridPoint` becomes the single source of spatial truth with 3D identity, hierarchy pointers, per frame camera fields, and branch masks.
 - Map Grid owns and indexes all `GridPoint`s; Screen Grid is rebuilt per frame and references only the nodes relevant to the current camera.
 - Active branch masks and hierarchical search make queries, movement, and rendering fast while keeping current chunk and tile data working during migration.
-- Camera, renderer, and lighting adopt real `world_z` while keeping floor assets simple and backward compatible during rollout.
-- Dev tools must expose the hierarchy so the migration stays debuggable.
+- Screen Grid rebuilds now cap visible nodes with 3D distance checks (min/max `world_z`, depth culling) before supplying assets to the renderer; traversal is currently clamped to the floor plane until multi-z rendering is enabled.
+- Camera and renderer adopt real `world_z` (depth-enabled by default with debug toggles); lighting uses 3D GridPoint identity/queries for attenuation, with advanced shadowing/volumetrics still deferred.
+- Dev tools now surface Screen Grid/Map Grid nodes with 3D identity, branch masks, and per-frame traversal metrics via overlays and picking.
 - Backwards compatibility is valued, but the end goal is a single 3D grid based system with no permanent legacy 2D grid logic.
 
 Legacy cleanup tasks (track and remove when 3D identity is fully adopted):
-- Remove reliance on legacy `grid_index`/`chunk_index`/`GridId` once all callers use `GridKey` (Phase 10).
-- Remove temporary logging/compatibility paths that collapse 3D identity to legacy ids.
-- Finalize branch mask propagation and detach any legacy mask assumptions tied to 2D traversal.
-- Remove debug validation utilities added for migration once Phase 10 cleanup is underway.
-- Upgrade any remaining 2D-only caches (e.g., grid residency caches) to store `world_z` and `resolution_layer`, then remove the legacy forms.
-- Lift the temporary Screen Grid floor-only restriction once camera/culling support multi-z traversal; update `WarpedScreenGrid` to include higher `world_z` layers.
-- Replace `id_to_index_` GridId compatibility lookups with `GridKey`-backed indexing once renderers stop using `Asset::grid_id`; remove the legacy map in `WarpedScreenGrid`.
+- Screen Grid traversal currently clamps to `world_z = 0` in `ENGINE/render/warped_screen_grid.cpp`; lift once multi-z camera/culling is enabled.
+- Tile chunk culling remains power-of-two/tile-only in `ENGINE/render/grid_tile_renderer.*`; keep gated to tiles or replace when tile rendering migrates.
+- LightMap sampling assumes floor height with a fallback radius (`ENGINE/world/chunk.cpp`); extend to arbitrary `world_z` when ready.
+- Debug flat camera toggle (`WarpedScreenGrid::flat_camera_debug`) remains for comparison; remove once 3D depth is fully stable.
 
 Every Codex task involved in this refactor must reference this plan and state which phase it is implementing or supporting.

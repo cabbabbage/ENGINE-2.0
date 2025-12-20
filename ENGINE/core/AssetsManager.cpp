@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <limits>
 #include <cstdint>
 #include <cctype>
 #include <exception>
@@ -1279,26 +1280,13 @@ void Assets::register_pending_static_assets() {
 
 void Assets::rebuild_all_assets_from_grid() {
     all.clear();
-    std::vector<std::pair<world::GridId, Asset*>> collected;
-    collected.reserve(world_grid_.points().size());
-    for (const auto& entry : world_grid_.points()) {
-        const world::GridId id = entry.first;
-        const world::GridPoint& point = entry.second;
-        for (const auto& occ : point.occupants) {
-            if (occ) {
-                collected.emplace_back(id, occ.get());
-            }
-        }
-    }
+    auto collected = world_grid_.all_assets();
     std::sort(collected.begin(), collected.end(),
-              [](const auto& lhs, const auto& rhs) {
-                  if (lhs.first != rhs.first) return lhs.first < rhs.first;
-                  return lhs.second < rhs.second;
-              });
+              [](Asset* lhs, Asset* rhs) { return lhs < rhs; });
     all.reserve(collected.size());
-    for (const auto& pair : collected) {
-        if (pair.second) {
-            all.push_back(pair.second);
+    for (Asset* a : collected) {
+        if (a) {
+            all.push_back(a);
         }
     }
 }
@@ -1803,6 +1791,7 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
         sanitized.apply_to_json(section);
     }
 
+    world_grid_.set_grid_resolution(std::max(0, sanitized.resolution));
     world_grid_.set_chunk_resolution(std::max(0, sanitized.r_chunk));
 
     if (chunk_changed) {
@@ -2021,16 +2010,22 @@ void Assets::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& i
     }
 }
 void Assets::rebuild_active_from_screen_grid() {
-    active_points_.assign(camera_.grid_visible_points().begin(), camera_.grid_visible_points().end());
+    active_points_.clear();
+    active_assets.clear();
 
     std::unordered_set<Asset*> seen;
     visible_candidate_buffer_.clear();
-    visible_candidate_buffer_.reserve(active_points_.size() * 2);
+    visible_candidate_buffer_.reserve(camera_.get_visible_points().size() * 2);
 
-    for (world::GridPoint* point : camera_.grid_visible_points()) {
-        if (!point) {
+    // Screen Grid traversal: use per-frame visible nodes (already filtered by region + branch masks).
+    for (world::GridPoint* point : camera_.get_visible_points()) {
+        if (!point || !point->on_screen) {
             continue;
         }
+        if (!point->has_assets_or_active_children()) {
+            continue;
+        }
+        active_points_.push_back(point);
         for (const auto& occ : point->occupants) {
             Asset* asset = occ.get();
             if (asset && seen.insert(asset).second) {
@@ -2039,27 +2034,42 @@ void Assets::rebuild_active_from_screen_grid() {
         }
     }
 
-    std::sort(visible_candidate_buffer_.begin(),
-              visible_candidate_buffer_.end(),
-              [this](Asset* lhs, Asset* rhs) {
-                  if (lhs == rhs) {
-                      return false;
-                  }
-                  if (!lhs || !rhs) {
-                      return rhs != nullptr;
-                  }
-                  world::GridPoint* lp = camera_.grid_point_for_asset(lhs);
-                  world::GridPoint* rp = camera_.grid_point_for_asset(rhs);
-                  const float ly = lp ? lp->screen.y : 0.0f;
-                  const float ry = rp ? rp->screen.y : 0.0f;
-                  if (std::fabs(ly - ry) > 0.5f) {
-                      return ly < ry;
-                  }
-                  if (lhs->z_index != rhs->z_index) {
-                      return lhs->z_index < rhs->z_index;
-                  }
-                  return lhs < rhs;
-              });
+    auto depth_order = [this](Asset* lhs, Asset* rhs) {
+        if (lhs == rhs) {
+            return false;
+        }
+        if (!lhs || !rhs) {
+            return rhs != nullptr;
+        }
+        world::GridPoint* lp = camera_.grid_point_for_asset(lhs);
+        world::GridPoint* rp = camera_.grid_point_for_asset(rhs);
+        const float ld = lp ? lp->distance_to_camera : std::numeric_limits<float>::infinity();
+        const float rd = rp ? rp->distance_to_camera : std::numeric_limits<float>::infinity();
+        if (std::fabs(ld - rd) > 0.01f) {
+            return ld > rd; // draw farther first so nearer paint over
+        }
+        const int llayer = lp ? lp->resolution_layer() : 0;
+        const int rlayer = rp ? rp->resolution_layer() : 0;
+        if (llayer != rlayer) {
+            return llayer < rlayer; // coarser layers first
+        }
+        const int lz = lp ? lp->world_z() : 0;
+        const int rz = rp ? rp->world_z() : 0;
+        if (lz != rz) {
+            return lz < rz; // lower z first
+        }
+        const float ly = lp ? lp->screen.y : 0.0f;
+        const float ry = rp ? rp->screen.y : 0.0f;
+        if (std::fabs(ly - ry) > 0.5f) {
+            return ly < ry;
+        }
+        if (lhs->z_index != rhs->z_index) {
+            return lhs->z_index < rhs->z_index;
+        }
+        return lhs < rhs;
+    };
+
+    std::sort(visible_candidate_buffer_.begin(), visible_candidate_buffer_.end(), depth_order);
 
     active_assets.swap(visible_candidate_buffer_);
     visible_candidate_buffer_.clear();

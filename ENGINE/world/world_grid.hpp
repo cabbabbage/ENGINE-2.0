@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <vector>
 
+#include "utils/light_source.hpp"
 #include "utils/grid.hpp"
 #include "world/chunk_manager.hpp"
 #include "world/grid_point.hpp"
@@ -44,6 +45,17 @@ struct GridKeyHash {
 
 class WorldGrid {
 public:
+    struct LightInstance {
+        const GridPoint* point = nullptr;
+        Asset* asset = nullptr;
+        const LightSource* source = nullptr;
+    };
+
+    struct RegionMetrics {
+        std::uint32_t nodes_visited = 0;
+        std::uint32_t branches_skipped = 0;
+    };
+
     // Ownership/lifetime: WorldGrid is the Map Grid owner for all GridPoints across
     // (x, y, world_z, resolution_layer). Nodes are stored here for the life of the
     // grid and are not transferred to Screen Grid; Screen Grid only holds non-owning
@@ -94,7 +106,6 @@ public:
     std::vector<Asset*> all_assets() const;
 
     SDL_Point grid_index_from_world(SDL_Point world) const;
-    GridId point_id_from_world(SDL_Point world) const;
     GridKey grid_key_from_world(SDL_Point world, int world_z = 0, int layer = -1) const;
     const std::unordered_map<GridId, GridPoint>& points() const { return points_; }
     std::unordered_map<GridId, GridPoint>& points() { return points_; }
@@ -105,19 +116,40 @@ public:
     GridPoint& ensure_child(GridPoint& parent, SDL_Point grid_index, SDL_Point chunk_index, Chunk* owning_chunk = nullptr);
     GridPoint* find_grid_point(const GridKey& key);
     const GridPoint* find_grid_point(const GridKey& key) const;
-    GridPoint& find_or_create_grid_point(const GridKey& key, Chunk* owning_chunk = nullptr);
+    GridPoint* find_grid_point_strict(const GridKey& key);
+    const GridPoint* find_grid_point_strict(const GridKey& key) const;
+    GridPoint& find_or_create_grid_point(const GridKey& key, Chunk* owning_chunk = nullptr, GridPoint* parent = nullptr);
     GridKey grid_key_from_legacy(SDL_Point grid_index, int world_z = 0, int layer = -1) const;
     GridPoint& ensure_child(GridPoint& parent, GridPoint::ChildDirection dir, const GridKey& child_key, Chunk* owning_chunk = nullptr);
     void attach_asset_to_hierarchy(GridPoint& point);
     void detach_asset_from_hierarchy(GridPoint& point);
     static std::size_t hash_key(const GridKey& key);
     void debug_validate_keys_and_masks() const;
-    std::vector<GridPoint*> all_grid_points();
-    std::vector<const GridPoint*> all_grid_points() const;
-    std::vector<GridPoint*> grid_points_for_layer(int layer);
-    std::vector<const GridPoint*> grid_points_for_layer(int layer) const;
-    std::vector<GridPoint*> grid_points_for_world_z(int world_z);
-    std::vector<const GridPoint*> grid_points_for_world_z(int world_z) const;
+    std::vector<GridPoint*> query_region(const SDL_FRect& world_bounds,
+                                         int min_layer,
+                                         int max_layer,
+                                         int min_world_z,
+                                         int max_world_z,
+                                         bool skip_inactive_branches,
+                                         bool include_empty_nodes,
+                                         RegionMetrics* metrics = nullptr);
+    std::vector<const GridPoint*> query_region(const SDL_FRect& world_bounds,
+                                               int min_layer,
+                                               int max_layer,
+                                               int min_world_z,
+                                               int max_world_z,
+                                               bool skip_inactive_branches,
+                                               bool include_empty_nodes,
+                                               RegionMetrics* metrics = nullptr) const;
+    std::vector<LightInstance> query_lights(const SDL_FRect& world_bounds,
+                                            int min_world_z,
+                                            int max_world_z,
+                                            bool skip_inactive_branches);
+    std::vector<LightInstance> query_lights(const SDL_FRect& world_bounds,
+                                            int min_world_z,
+                                            int max_world_z,
+                                            bool skip_inactive_branches) const;
+    int max_resolution_layers() const;
 
 private:
     void remove_from_chunk(Asset* a, Chunk* c);
@@ -133,7 +165,6 @@ private:
     void prune_empty_points();
     std::unique_ptr<Asset> extract_from_point(Asset* a, GridPoint& point);
     int default_resolution_layer() const;
-    int max_resolution_layers() const;
     int grid_spacing_for_layer(int layer) const;
     int distance_for_layer(int layer) const;
     static int power_of_three(int exponent);
@@ -152,9 +183,12 @@ private:
     int      last_chunk_resolution_  = -1;
 
     std::unordered_map<GridId, GridPoint> points_;
-    std::unordered_map<Asset*, GridId> asset_to_point_;
     std::unordered_map<Asset*, GridKey> asset_to_key_;
     std::unordered_map<GridKey, GridId, GridKeyHash> key_to_id_;
+    std::vector<GridId> roots_;
+
+    void add_root_id(GridId id);
+    void remove_root_id(GridId id);
 };
 
 }

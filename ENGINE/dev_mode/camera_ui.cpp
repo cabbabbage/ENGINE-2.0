@@ -1234,12 +1234,10 @@ void CameraUIPanel::apply_settings_if_needed() {
     const bool reported_depthcue_enabled = depthcue_checkbox_
         ? depthcue_checkbox_->value() : last_depthcue_enabled_;
 
-    const bool effects_enabled = WarpedScreenGrid::kForceDepthPerspectiveDisabled
-        ? false
-        : reported_effects_enabled;
-    const bool depthcue_enabled = WarpedScreenGrid::kForceDepthPerspectiveDisabled
-        ? false
-        : reported_depthcue_enabled;
+    const bool depth_available = assets_ ? assets_->camera().depth_enabled() : true;
+    const bool flat_camera     = assets_ ? assets_->camera().flat_camera_debug() : false;
+    const bool effects_enabled = depth_available && !flat_camera && reported_effects_enabled;
+    const bool depthcue_enabled = depth_available && !flat_camera && reported_depthcue_enabled;
 
     auto differs = [](float a, float b) {
         return std::fabs(a - b) > 0.0001f;

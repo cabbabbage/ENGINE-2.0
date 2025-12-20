@@ -310,16 +310,20 @@ void SceneRenderer::render() {
             continue;
         }
 
-        composite_renderer_.update(asset, nullptr, flicker_time_seconds);
+        world::GridPoint* gp = cam.grid_point_for_asset(asset);
+        if (!gp || !gp->on_screen) {
+            continue;
+        }
 
-        SDL_Point world_pos{ asset->pos.x, asset->pos.y };
-        SDL_FPoint screen_base = cam.map_to_screen(world_pos);
+        composite_renderer_.update(asset, gp, flicker_time_seconds);
+
+        SDL_FPoint screen_base = gp->screen;
         if (!std::isfinite(screen_base.x) || !std::isfinite(screen_base.y)) {
             continue;
         }
 
-        const float perspective_scale = 1.0f;
-        const float vertical_scale    = 1.0f;
+        const float perspective_scale = gp->perspective_scale;
+        const float vertical_scale    = gp->vertical_scale;
 
         const int asset_world_x = asset->pos.x;
         const int asset_world_y = asset->pos.y;

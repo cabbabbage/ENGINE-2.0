@@ -7,6 +7,8 @@
 
 namespace vibble::grid {
 
+// Legacy power-of-two grid helpers (tile-only). Core Map Grid identity uses 3^n
+// spacing; these remain for chunk/tile math and dev tooling.
 constexpr int kMaxResolution = 30;
 
 constexpr int clamp_resolution(int r) noexcept {

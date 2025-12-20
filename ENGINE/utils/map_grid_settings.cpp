@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include <nlohmann/json.hpp>
 
@@ -12,10 +13,24 @@ namespace {
 constexpr int kMinResolution = 0;
 constexpr int kMaxResolution = vibble::grid::kMaxResolution;
 constexpr int kMinJitter = 0;
+
+int power_of_three(int exponent) {
+    if (exponent <= 0) {
+        return 1;
+    }
+    int result = 1;
+    for (int i = 0; i < exponent; ++i) {
+        if (result > std::numeric_limits<int>::max() / 3) {
+            return std::numeric_limits<int>::max();
+        }
+        result *= 3;
+    }
+    return result;
+}
 }
 
 MapGridSettings MapGridSettings::defaults() {
-    return MapGridSettings{0, 0, 0};
+    return MapGridSettings{6, 0, 0};
 }
 
 MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
@@ -76,11 +91,11 @@ void MapGridSettings::apply_to_json(nlohmann::json& obj) const {
     if (!obj.is_object()) {
         obj = nlohmann::json::object();
     }
-    obj["resolution"] = resolution;
-    obj["spacing"] = spacing();
+    obj["resolution"] = resolution; // 3^r spacing for Map Grid
+    obj["spacing"] = spacing();     // derived for clarity
     obj["jitter"] = jitter;
-    obj["r_chunk"] = r_chunk;
-    obj["chunk_size"] = chunk_size();
+    obj["r_chunk"] = r_chunk;       // tile-only
+    obj["chunk_size"] = chunk_size(); // tile-only
 }
 
 void ensure_map_grid_settings(nlohmann::json& map_info) {
@@ -116,7 +131,8 @@ SDL_Point apply_map_grid_jitter(const MapGridSettings& settings,
 }
 
 int MapGridSettings::spacing() const {
-    return vibble::grid::delta(resolution);
+    const int clamped = std::clamp(resolution, kMinResolution, kMaxResolution);
+    return power_of_three(clamped);
 }
 
 int MapGridSettings::chunk_size() const {

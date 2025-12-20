@@ -670,9 +670,9 @@ namespace {
         regressed = std::clamp(regressed, 0.0, 2.0);
         regressed = std::pow(regressed, falloff);
 
-        const double zoom_reduction = 1.0 - (height_factor * 0.3);
+        const double height_reduction = 1.0 - (height_factor * 0.3);
 
-        double final_scale = regressed * zoom_reduction;
+        double final_scale = regressed * height_reduction;
 
         return std::clamp(final_scale, 0.5, 2.0);
     }
@@ -859,14 +859,14 @@ void WarpedScreenGrid::animate_height_to_scale(double target_scale, int duration
     }
     duration_steps = std::max(1, duration_steps);
 
-    const bool currently_zooming = height_animating_ && steps_total_ > 0;
-    bool restart_zoom = !currently_zooming || steps_total_ != duration_steps;
+    const bool currently_animating = height_animating_ && steps_total_ > 0;
+    bool restart_height = !currently_animating || steps_total_ != duration_steps;
 
-    if (!restart_zoom && std::fabs(clamped - target_scale_) > SCALE_EPS) {
-        restart_zoom = true;
+    if (!restart_height && std::fabs(clamped - target_scale_) > SCALE_EPS) {
+        restart_height = true;
     }
 
-    if (restart_zoom) {
+    if (restart_height) {
         start_scale_ = scale_;
         steps_total_ = duration_steps;
         steps_done_  = 0;

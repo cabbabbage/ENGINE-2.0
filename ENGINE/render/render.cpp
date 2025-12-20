@@ -232,6 +232,7 @@ void SceneRenderer::render() {
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
     cam.rebuild_grid(grid, assets_->frame_delta_seconds());
+    assets_->rebuild_active_from_screen_grid();
 
     SDL_SetRenderTarget(renderer_, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);

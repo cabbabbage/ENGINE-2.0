@@ -757,27 +757,27 @@ void WarpedScreenGrid::update_geometry_cache(const CameraGeometry& g) {
     }
 }
 
-WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_zoom)
+WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_view)
 {
     screen_width_  = screen_width;
     screen_height_ = screen_height;
     aspect_        = (screen_height_ > 0) ? static_cast<double>(screen_width_) / static_cast<double>(screen_height_) : 1.0;
 
-    Area      adjusted_start = convert_area_to_aspect(starting_zoom);
+    Area      adjusted_start = convert_area_to_aspect(starting_view);
     SDL_Point start_center   = adjusted_start.get_center();
 
-    base_zoom_    = make_rect_area("base_zoom", start_center, screen_width_, screen_height_, adjusted_start.resolution());
+    base_view_    = make_rect_area("base_view", start_center, screen_width_, screen_height_, adjusted_start.resolution());
     current_view_ = adjusted_start;
     screen_center_ = start_center;
     screen_center_initialized_ = true;
     pan_offset_x_ = 0.0;
     pan_offset_y_ = 0.0;
 
-    const int base_w = width_from_area(base_zoom_);
+    const int base_w = width_from_area(base_view_);
     const int curr_w = width_from_area(current_view_);
     scale_ = (base_w > 0) ? static_cast<float>(static_cast<double>(curr_w) / static_cast<double>(base_w)) : 1.0f;
 
-    zooming_     = false;
+    height_animating_     = false;
     steps_total_ = 0;
     steps_done_  = 0;
     start_scale_ = scale_;

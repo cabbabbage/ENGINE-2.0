@@ -247,8 +247,6 @@ void SceneRenderer::render() {
     }
 
     const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
-    const float inv_scale = 1.0f / std::max(0.000001f, cam.get_scale());
-
     struct ScreenRenderData {
         SDL_Rect  rect{};
         SDL_Point center{};
@@ -258,7 +256,9 @@ void SceneRenderer::render() {
     auto build_screen_render_data = [&](const RenderObject& obj,
                                         const SDL_FPoint& base,
                                         int asset_world_x,
-                                        int asset_world_y) -> std::optional<ScreenRenderData> {
+                                        int asset_world_y,
+                                        float distance_scale,
+                                        float vertical_scale) -> std::optional<ScreenRenderData> {
         if (!obj.texture) {
             return std::nullopt;
         }
@@ -272,8 +272,8 @@ void SceneRenderer::render() {
         const int offset_x = obj.screen_rect.x - asset_world_x;
         const int offset_y = obj.screen_rect.y - asset_world_y;
 
-        const double scaled_width  = static_cast<double>(raw_width)  * static_cast<double>(inv_scale);
-        const double scaled_height = static_cast<double>(raw_height) * static_cast<double>(inv_scale);
+        const double scaled_width  = static_cast<double>(raw_width)  * static_cast<double>(distance_scale);
+        const double scaled_height = static_cast<double>(raw_height) * static_cast<double>(distance_scale) * static_cast<double>(vertical_scale);
 
         if (!std::isfinite(scaled_width) || !std::isfinite(scaled_height)) {
             return std::nullopt;
@@ -283,12 +283,15 @@ void SceneRenderer::render() {
         const int screen_h = std::max(1, static_cast<int>(std::lround(scaled_height)));
 
         SDL_Rect screen_rect{
-            static_cast<int>(std::lround(base.x + static_cast<double>(offset_x) * static_cast<double>(inv_scale) - scaled_width * 0.5)), static_cast<int>(std::lround(base.y + static_cast<double>(offset_y) * static_cast<double>(inv_scale) - scaled_height)), screen_w, screen_h };
+            static_cast<int>(std::lround(base.x + static_cast<double>(offset_x) * static_cast<double>(distance_scale) - scaled_width * 0.5)),
+            static_cast<int>(std::lround(base.y + static_cast<double>(offset_y) * static_cast<double>(distance_scale) - scaled_height)),
+            screen_w,
+            screen_h };
 
         SDL_Point center = obj.center;
         if (obj.use_custom_center) {
-            center.x = static_cast<int>(std::lround(static_cast<double>(center.x) * static_cast<double>(inv_scale)));
-            center.y = static_cast<int>(std::lround(static_cast<double>(center.y) * static_cast<double>(inv_scale)));
+            center.x = static_cast<int>(std::lround(static_cast<double>(center.x) * static_cast<double>(distance_scale)));
+            center.y = static_cast<int>(std::lround(static_cast<double>(center.y) * static_cast<double>(distance_scale) * static_cast<double>(vertical_scale)));
         }
 
         ScreenRenderData data;
@@ -323,15 +326,15 @@ void SceneRenderer::render() {
             continue;
         }
 
-        const float perspective_scale = gp->perspective_scale;
-        const float vertical_scale    = gp->vertical_scale;
+        const float perspective_scale = std::max(0.0001f, gp->perspective_scale);
+        const float vertical_scale    = std::max(0.0001f, gp->vertical_scale);
 
         const int asset_world_x = asset->pos.x;
         const int asset_world_y = asset->pos.y;
 
         if (dark_mask_enabled_ && !asset->scene_mask_lights.empty()) {
             for (const RenderObject& mask_obj : asset->scene_mask_lights) {
-                auto screen_data = build_screen_render_data(mask_obj, screen_base, asset_world_x, asset_world_y);
+                auto screen_data = build_screen_render_data(mask_obj, screen_base, asset_world_x, asset_world_y, perspective_scale, vertical_scale);
                 if (!screen_data) {
                     continue;
                 }
@@ -345,14 +348,16 @@ void SceneRenderer::render() {
         }
 
         for (const RenderObject& obj : asset->render_package) {
-            auto screen_data = build_screen_render_data(obj, screen_base, asset_world_x, asset_world_y);
+            auto screen_data = build_screen_render_data(obj, screen_base, asset_world_x, asset_world_y, perspective_scale, vertical_scale);
             if (!screen_data) {
                 continue;
             }
 
             SDL_SetTextureBlendMode(obj.texture, obj.blend_mode);
 
-            Uint8 final_alpha = obj.color_mod.a;
+            const float horizon_alpha = std::clamp(gp->horizon_fade_alpha, 0.0f, 1.0f);
+            const int   adjusted_alpha = static_cast<int>(std::lround(static_cast<float>(obj.color_mod.a) * horizon_alpha));
+            Uint8 final_alpha = static_cast<Uint8>(std::clamp(adjusted_alpha, 0, 255));
 
             SDL_SetTextureColorMod(obj.texture, obj.color_mod.r, obj.color_mod.g, obj.color_mod.b);
             SDL_SetTextureAlphaMod(obj.texture, final_alpha);

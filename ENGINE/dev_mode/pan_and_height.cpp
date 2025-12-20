@@ -1,4 +1,4 @@
-#include "dev_mode/pan_and_zoom.hpp"
+#include "pan_and_height.hpp"
 
 #include "render/warped_screen_grid.hpp"
 #include "utils/input.hpp"
@@ -6,20 +6,20 @@
 #include <algorithm>
 #include <cmath>
 
-void PanAndZoom::set_zoom_scale_factor(double factor) {
-    zoom_scale_factor_ = (factor > 0.0) ? factor : 1.0;
+void PanAndHeight::set_height_scale_factor(double factor) {
+    height_scale_factor_ = (factor > 0.0) ? factor : 1.0;
 }
 
-void PanAndZoom::handle_input(WarpedScreenGrid& cam, const Input& input, bool pan_blocked) {
+void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool pan_blocked) {
     const SDL_Point mouse{ input.getX(), input.getY() };
     const int wheel_y = input.getScrollY();
     if (wheel_y != 0) {
 
-        const double step = (zoom_scale_factor_ > 0.0) ? zoom_scale_factor_ : 1.0;
+        const double step = (height_scale_factor_ > 0.0) ? height_scale_factor_ : 1.0;
         const int ticks = std::abs(wheel_y);
-        const bool zoom_in = (wheel_y < 0);
+        const bool height_increase = (wheel_y < 0);
         const double mag = std::pow(step, ticks);
-        const double eff = zoom_in ? mag : (1.0 / mag);
+        const double eff = height_increase ? mag : (1.0 / mag);
         const int dur = 10;
 
         const double base_scale = std::max(0.0001, static_cast<double>(cam.get_scale()));
@@ -90,7 +90,7 @@ void PanAndZoom::handle_input(WarpedScreenGrid& cam, const Input& input, bool pa
     cam.set_screen_center(new_center);
 }
 
-void PanAndZoom::cancel(WarpedScreenGrid& cam) {
+void PanAndHeight::cancel(WarpedScreenGrid& cam) {
     pan_drag_pending_ = false;
     if (!panning_) {
         return;

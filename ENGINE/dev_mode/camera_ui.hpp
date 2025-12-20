@@ -18,7 +18,7 @@ class FloatSliderWidget;
 class SectionToggleWidget;
 class DiscreteSliderWidget;
 class PitchDialWidget;
-class ZoomKeyPointWidget;
+class HeightKeyPointWidget;
 
 class CameraUIPanel : public DockableCollapsible {
 public:
@@ -74,8 +74,8 @@ private:
     std::unique_ptr<SectionToggleWidget> depth_section_header_;
     std::unique_ptr<SectionToggleWidget> depthcue_section_header_;
 
-    std::unique_ptr<ZoomKeyPointWidget> zoom_in_keypoint_;
-    std::unique_ptr<ZoomKeyPointWidget> zoom_out_keypoint_;
+    std::unique_ptr<HeightKeyPointWidget> height_in_keypoint_;
+    std::unique_ptr<HeightKeyPointWidget> height_out_keypoint_;
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> cull_margin_slider_;
     std::unique_ptr<FloatSliderWidget> perspective_zero_distance_slider_;
@@ -92,8 +92,8 @@ private:
     std::unique_ptr<DiscreteSliderWidget> render_quality_slider_;
     bool visibility_section_expanded_ = true;
     bool depth_section_expanded_ = true;
-    bool zoom_in_settings_expanded_ = true;
-    bool zoom_out_settings_expanded_ = false;
+    bool height_in_settings_expanded_ = true;
+    bool height_out_settings_expanded_ = false;
     bool depthcue_section_expanded_ = false;
     bool applying_settings_ = false;
 

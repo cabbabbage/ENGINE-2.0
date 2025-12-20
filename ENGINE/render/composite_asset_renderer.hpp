@@ -18,7 +18,7 @@ public:
     void update(Asset* asset, const world::GridPoint* gp, float flicker_time_seconds = 0.0f);
 
 private:
-    void regenerate_package(Asset* asset, const world::GridPoint* gp, float flicker_time_seconds, float package_scale, float perspective_scale);
+    void regenerate_package(Asset* asset, const world::GridPoint* gp, float flicker_time_seconds, float package_scale);
     void calculate_local_bounds(Asset* asset);
 
     SDL_Renderer* renderer_;

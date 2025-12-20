@@ -27,12 +27,7 @@ void CompositeAssetRenderer::update(Asset* asset,
         combined_scale = 1.0f;
     }
 
-    float perspective_scale = 1.0f;
-    if (asset->info && asset->info->apply_distance_scaling && gp) {
-        perspective_scale = std::max(0.0001f, gp->perspective_scale);
-    }
-
-    float package_scale = combined_scale * perspective_scale;
+    float package_scale = combined_scale;
     if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
         package_scale = 1.0f;
     }
@@ -42,7 +37,7 @@ void CompositeAssetRenderer::update(Asset* asset,
     }
 
     if (asset->is_composite_dirty()) {
-        regenerate_package(asset, gp, flicker_time_seconds, package_scale, perspective_scale);
+        regenerate_package(asset, gp, flicker_time_seconds, package_scale);
     } else {
         asset->composite_scale_ = package_scale;
     }
@@ -51,8 +46,8 @@ void CompositeAssetRenderer::update(Asset* asset,
 void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                                 const world::GridPoint* gp,
                                                 float flicker_time_seconds,
-                                                float package_scale,
-                                                float perspective_scale) {
+                                                float package_scale) {
+    (void)gp;
     if (!renderer_ || !asset) return;
 
     asset->render_package.clear();
@@ -181,7 +176,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
 
         float child_base_scale = (slot.info && std::isfinite(slot.info->scale_factor) && slot.info->scale_factor > 0.0f) ? slot.info->scale_factor : 1.0f;
 
-        float child_current_scale = child_base_scale * perspective_scale;
+        float child_current_scale = child_base_scale;
 
         float camera_scale = 1.0f;
         if (assets_) {
@@ -217,7 +212,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         int tex_h = 0;
         SDL_QueryTexture(tex, nullptr, nullptr, &tex_w, &tex_h);
 
-        const float base_adjustment = child_remaining_adjustment / std::max(0.0001f, perspective_scale);
+        const float base_adjustment = child_remaining_adjustment;
         int final_w = static_cast<int>(std::lround(static_cast<float>(tex_w) * base_adjustment));
         int final_h = static_cast<int>(std::lround(static_cast<float>(tex_h) * base_adjustment));
         final_w = std::max(1, final_w);
@@ -279,8 +274,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         if (!std::isfinite(remainder) || remainder <= 0.0f) {
             remainder = 1.0f;
         }
-        const float perspective_denominator = std::max(0.0001f, perspective_scale);
-        const float base_adjustment = remainder / perspective_denominator;
+        const float base_adjustment = remainder;
         int final_w = static_cast<int>(std::lround(static_cast<float>(w) * base_adjustment));
         int final_h = static_cast<int>(std::lround(static_cast<float>(h) * base_adjustment));
         final_w = std::max(1, final_w);
@@ -293,10 +287,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             final_h
 };
         add_render_object(base_tex, dest_rect, SDL_Color{255, 255, 255, 255}, SDL_BLENDMODE_BLEND, false);
-    }
-
-    if (gp) {
-
     }
 
     for (const auto& child_attachment : asset->animation_children()) {

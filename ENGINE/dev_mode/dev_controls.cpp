@@ -2161,13 +2161,13 @@ Asset* DevControls::get_hovered_asset() const {
     return room_editor_->get_hovered_asset();
 }
 
-void DevControls::set_zoom_scale_factor(double factor) {
-    if (room_editor_) room_editor_->set_zoom_scale_factor(factor);
+void DevControls::set_height_scale_factor(double factor) {
+    if (room_editor_) room_editor_->set_height_scale_factor(factor);
 }
 
-double DevControls::get_zoom_scale_factor() const {
+double DevControls::get_height_scale_factor() const {
     if (!room_editor_) return 1.0;
-    return room_editor_->get_zoom_scale_factor();
+    return room_editor_->get_height_scale_factor();
 }
 
 void DevControls::configure_header_button_sets() {

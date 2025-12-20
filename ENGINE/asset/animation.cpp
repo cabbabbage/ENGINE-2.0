@@ -168,7 +168,7 @@ bool Animation::rebuild_frame(int frame_index,
 
         SDL_Texture* mask_tex = nullptr;
         int mask_w = 0, mask_h = 0;
-        if (info.is_shaded) {
+        if (info.has_shading) {
             mask_tex = load_texture_from_path(renderer, paths.mask / (std::to_string(idx) + ".png"), mask_w, mask_h);
             if (mask_tex) {
                 apply_scale_mode(mask_tex, info);

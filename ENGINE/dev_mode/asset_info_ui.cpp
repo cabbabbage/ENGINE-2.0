@@ -1746,7 +1746,7 @@ void AssetInfoUI::notify_light_sources_modified(bool purge_light_cache) {
             asset->info->is_light_source = info_->is_light_source;
             asset->info->moving_asset = info_->moving_asset;
         }
-        asset->is_shaded = info_->is_shaded;
+        asset->has_shading = info_->has_shading;
         asset->mark_composite_dirty();
         asset->clear_render_caches();
         if (assets_) {
@@ -1854,12 +1854,12 @@ void AssetInfoUI::sync_target_shading_settings() {
         if (!asset->info) {
             return;
         }
-        asset->info->set_shading_enabled(info_->is_shaded);
+        asset->info->set_shading_enabled(info_->has_shading);
         asset->info->set_shadow_mask_settings(info_->shadow_mask_settings);
         asset->info->set_shading_parallax_amount(info_->shading_parallax_amount);
         asset->info->set_shading_screen_brightness_multiplier(info_->shading_screen_brightness_multiplier);
         asset->info->set_shading_opacity_multiplier(info_->shading_opacity_multiplier);
-        asset->is_shaded = info_->is_shaded;
+        asset->has_shading = info_->has_shading;
         asset->clear_render_caches();
     });
 

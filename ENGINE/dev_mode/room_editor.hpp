@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-#include "dev_mode/pan_and_zoom.hpp"
+#include "dev_mode/pan_and_height.hpp"
 
 class Asset;
 class Input;
@@ -110,8 +110,8 @@ public:
     const std::vector<Asset*>& get_highlighted_assets() const { return highlighted_assets_; }
     Asset* get_hovered_asset() const { return hovered_asset_; }
 
-    void set_zoom_scale_factor(double factor);
-    double get_zoom_scale_factor() const { return zoom_scale_factor_; }
+    void set_height_scale_factor(double factor);
+    double get_height_scale_factor() const { return height_scale_factor_; }
 
     bool is_spawn_group_panel_visible() const;
 
@@ -274,8 +274,7 @@ private:
     void mark_spatial_index_dirty() const;
     bool ensure_spatial_index(const WarpedScreenGrid& cam) const;
     bool camera_state_changed(const WarpedScreenGrid& cam) const;
-    float compute_reference_screen_height(const WarpedScreenGrid& cam, float inv_scale) const;
-    bool compute_asset_screen_bounds(const WarpedScreenGrid& cam, float reference_height, float inv_scale, Asset* asset, SDL_Rect& out_rect, int& out_screen_y) const;
+    bool compute_asset_screen_bounds(const WarpedScreenGrid& cam, Asset* asset, SDL_Rect& out_rect, int& out_screen_y) const;
     void rebuild_spatial_index(const WarpedScreenGrid& cam) const;
     void insert_asset_entry(Asset* asset, const SDL_Rect& rect, int screen_y) const;
     void add_asset_to_cell(Asset* asset, int cell_x, int cell_y, std::vector<int64_t>& cell_keys) const;
@@ -385,8 +384,8 @@ private:
 };
     std::unordered_map<Room*, LabelCacheEntry> label_cache_;
 
-    double zoom_scale_factor_ = 1.1;
-    PanAndZoom pan_zoom_;
+    double height_scale_factor_ = 1.1;
+    PanAndHeight pan_height_;
     std::unordered_set<std::string> room_spawn_ids_;
     void rebuild_room_spawn_id_cache();
     bool is_room_spawn_id(const std::string& spawn_id) const;
@@ -406,8 +405,6 @@ private:
     mutable SDL_Point cached_camera_center_{0, 0};
     mutable bool cached_camera_parallax_enabled_ = false;
     mutable bool cached_camera_realism_enabled_ = false;
-    mutable float cached_reference_screen_height_ = 1.0f;
-    mutable bool cached_reference_height_valid_ = false;
     mutable std::unordered_map<Asset*, AssetSpatialEntry> asset_bounds_cache_;
     mutable std::unordered_map<int64_t, std::vector<Asset*>> spatial_grid_;
 };

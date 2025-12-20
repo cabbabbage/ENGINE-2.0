@@ -705,17 +705,17 @@ private:
     mutable bool icon_load_attempted_ = false;
 };
 
-class ZoomKeyPointWidget : public Widget {
+class HeightKeyPointWidget : public Widget {
 public:
     struct Values {
-        float zoom = 1.0f;
+        float height = 1.0f;
 };
 
-    ZoomKeyPointWidget(std::string label, const Values& values, bool expanded, float zoom_min, float zoom_max)
+    HeightKeyPointWidget(std::string label, const Values& values, bool expanded, float height_min, float height_max)
         : label_(std::move(label)),
           expanded_(expanded),
-          zoom_min_(zoom_min),
-          zoom_max_(zoom_max) {
+          height_min_(height_min),
+          height_max_(height_max) {
         header_toggle_ = std::make_unique<SectionToggleWidget>(label_, expanded_);
         if (header_toggle_) {
             header_toggle_->set_on_toggle([this](bool v) {
@@ -726,27 +726,27 @@ public:
                 }
             });
         }
-        set_zoom_button_ = std::make_unique<DMButton>("Set Zoom", &DMStyles::SecondaryButton(), 120, DMButton::height());
+        set_height_button_ = std::make_unique<DMButton>("Set Height", &DMStyles::SecondaryButton(), 120, DMButton::height());
 
-        zoom_slider_ = std::make_unique<FloatSliderWidget>( "Zoom", zoom_min_, zoom_max_, 0.01f, values.zoom, 2);
-        if (zoom_slider_) {
-            zoom_slider_->set_tooltip("Zoom anchor for this key point.");
-            zoom_slider_->set_on_value_changed([this](float) { notify_change(); });
+        height_slider_ = std::make_unique<FloatSliderWidget>( "Camera Height", height_min_, height_max_, 0.01f, values.height, 2);
+        if (height_slider_) {
+            height_slider_->set_tooltip("Camera height anchor for this key point.");
+            height_slider_->set_on_value_changed([this](float) { notify_change(); });
         }
     }
 
     void set_on_value_changed(std::function<void()> cb) { on_change_ = std::move(cb); }
     void set_on_expanded_changed(std::function<void(bool)> cb) { on_expanded_changed_ = std::move(cb); }
-    void set_on_set_zoom(std::function<void(float)> cb) { on_set_zoom_ = std::move(cb); }
+    void set_on_set_height(std::function<void(float)> cb) { on_set_height_ = std::move(cb); }
 
     void set_values(const Values& values) {
-        if (zoom_slider_) zoom_slider_->set_value(values.zoom);
+        if (height_slider_) height_slider_->set_value(values.height);
         layout_children();
     }
 
     Values values() const {
         Values v{};
-        v.zoom = zoom_slider_ ? zoom_slider_->value() : 1.0f;
+        v.height = height_slider_ ? height_slider_->value() : 1.0f;
         return v;
     }
 
@@ -778,8 +778,8 @@ public:
             auto add_height = [&](const Widget* wgt) {
                 if (!wgt) return;
                 height += wgt->height_for_width(width) + gap;
-};
-            add_height(zoom_slider_.get());
+            };
+            add_height(height_slider_.get());
         }
         return height;
     }
@@ -793,9 +793,9 @@ public:
             }
             return true;
         }
-        if (set_zoom_button_ && set_zoom_button_->handle_event(e)) {
-            if (on_set_zoom_) {
-                on_set_zoom_(zoom_slider_ ? zoom_slider_->value() : 1.0f);
+        if (set_height_button_ && set_height_button_->handle_event(e)) {
+            if (on_set_height_) {
+                on_set_height_(height_slider_ ? height_slider_->value() : 1.0f);
             }
             return true;
         }
@@ -809,15 +809,15 @@ public:
             if (!w) return false;
             return w->handle_event(e);
 };
-        used = handle_child(zoom_slider_.get()) || used;
+        used = handle_child(height_slider_.get()) || used;
         return used;
     }
 
     void render(SDL_Renderer* renderer) const override {
         if (header_toggle_) header_toggle_->render(renderer);
-        if (set_zoom_button_) set_zoom_button_->render(renderer);
+        if (set_height_button_) set_height_button_->render(renderer);
         if (!expanded_) return;
-        if (zoom_slider_) zoom_slider_->render(renderer);
+        if (height_slider_) height_slider_->render(renderer);
     }
 
     bool wants_full_row() const override { return true; }
@@ -836,16 +836,16 @@ private:
         int y = rect_.y;
 
         const int header_h = DMButton::height();
-        const int button_w = set_zoom_button_
-            ? std::min(width / 3, std::max(set_zoom_button_->preferred_width(), 110)) : 0;
+        const int button_w = set_height_button_
+            ? std::min(width / 3, std::max(set_height_button_->preferred_width(), 110)) : 0;
         const int toggle_w = std::max(0, width - button_w - (button_w > 0 ? gap : 0));
 
         if (header_toggle_) {
             header_toggle_->set_rect(SDL_Rect{ x, y, toggle_w, header_h });
         }
-        if (set_zoom_button_) {
+        if (set_height_button_) {
             const int btn_x = x + width - button_w;
-            set_zoom_button_->set_rect(SDL_Rect{ btn_x, y, button_w, header_h });
+            set_height_button_->set_rect(SDL_Rect{ btn_x, y, button_w, header_h });
         }
         y += header_h;
 
@@ -861,23 +861,23 @@ private:
             y += h + gap;
 };
 
-        place_child(zoom_slider_.get());
+        place_child(height_slider_.get());
     }
 
 private:
     std::string label_;
     bool expanded_ = true;
     SDL_Rect rect_{0, 0, 0, 0};
-    float zoom_min_ = 0.0f;
-    float zoom_max_ = 0.0f;
+    float height_min_ = 0.0f;
+    float height_max_ = 0.0f;
 
     std::unique_ptr<SectionToggleWidget> header_toggle_;
-    std::unique_ptr<DMButton> set_zoom_button_;
-    std::unique_ptr<FloatSliderWidget> zoom_slider_;
+    std::unique_ptr<DMButton> set_height_button_;
+    std::unique_ptr<FloatSliderWidget> height_slider_;
 
     std::function<void()> on_change_{};
     std::function<void(bool)> on_expanded_changed_{};
-    std::function<void(float)> on_set_zoom_{};
+    std::function<void(float)> on_set_height_{};
 };
 
 CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
@@ -1002,17 +1002,17 @@ void CameraUIPanel::sync_from_camera() {
     if (min_render_size_slider_) min_render_size_slider_->set_value(last_settings_.min_visible_screen_ratio);
     if (render_quality_slider_) render_quality_slider_->set_value(last_settings_.render_quality_percent);
     if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
-    if (zoom_in_keypoint_ || zoom_out_keypoint_) {
-        ZoomKeyPointWidget::Values min_values;
-        min_values.zoom = last_settings_.zoom_low;
-        if (zoom_in_keypoint_) {
-            zoom_in_keypoint_->set_values(min_values);
+    if (height_in_keypoint_ || height_out_keypoint_) {
+        HeightKeyPointWidget::Values min_values;
+        min_values.height = last_settings_.zoom_low;
+        if (height_in_keypoint_) {
+            height_in_keypoint_->set_values(min_values);
         }
 
-        ZoomKeyPointWidget::Values max_values;
-        max_values.zoom = last_settings_.zoom_high;
-        if (zoom_out_keypoint_) {
-            zoom_out_keypoint_->set_values(max_values);
+        HeightKeyPointWidget::Values max_values;
+        max_values.height = last_settings_.zoom_high;
+        if (height_out_keypoint_) {
+            height_out_keypoint_->set_values(max_values);
         }
     }
 
@@ -1100,31 +1100,31 @@ void CameraUIPanel::build_ui() {
     render_quality_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
     if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
 
-    ZoomKeyPointWidget::Values zoom_in_defaults;
-    zoom_in_defaults.zoom = defaults.zoom_low;
-    zoom_in_keypoint_ = std::make_unique<ZoomKeyPointWidget>( "Zoomed In Settings", zoom_in_defaults, zoom_in_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxZoomAnchors);
-    if (zoom_in_keypoint_) {
-        zoom_in_keypoint_->set_on_value_changed([this]() { on_control_value_changed(); });
-        zoom_in_keypoint_->set_on_expanded_changed([this](bool expanded) {
-            zoom_in_settings_expanded_ = expanded;
+    HeightKeyPointWidget::Values height_in_defaults;
+    height_in_defaults.height = defaults.zoom_low;
+    height_in_keypoint_ = std::make_unique<HeightKeyPointWidget>( "Lower Camera Height Settings", height_in_defaults, height_in_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxZoomAnchors);
+    if (height_in_keypoint_) {
+        height_in_keypoint_->set_on_value_changed([this]() { on_control_value_changed(); });
+        height_in_keypoint_->set_on_expanded_changed([this](bool expanded) {
+            height_in_settings_expanded_ = expanded;
             rebuild_rows();
         });
-        zoom_in_keypoint_->set_on_set_zoom([this](float target_zoom) {
-            snap_zoom_to_anchor(target_zoom, true);
+        height_in_keypoint_->set_on_set_height([this](float target_height) {
+            snap_height_to_anchor(target_height, true);
         });
     }
 
-    ZoomKeyPointWidget::Values zoom_out_defaults;
-    zoom_out_defaults.zoom = defaults.zoom_high;
-    zoom_out_keypoint_ = std::make_unique<ZoomKeyPointWidget>( "Zoomed Out Settings", zoom_out_defaults, zoom_out_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxZoomAnchors);
-    if (zoom_out_keypoint_) {
-        zoom_out_keypoint_->set_on_value_changed([this]() { on_control_value_changed(); });
-        zoom_out_keypoint_->set_on_expanded_changed([this](bool expanded) {
-            zoom_out_settings_expanded_ = expanded;
+    HeightKeyPointWidget::Values height_out_defaults;
+    height_out_defaults.height = defaults.zoom_high;
+    height_out_keypoint_ = std::make_unique<HeightKeyPointWidget>( "Greater Camera Height Settings", height_out_defaults, height_out_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxZoomAnchors);
+    if (height_out_keypoint_) {
+        height_out_keypoint_->set_on_value_changed([this]() { on_control_value_changed(); });
+        height_out_keypoint_->set_on_expanded_changed([this](bool expanded) {
+            height_out_settings_expanded_ = expanded;
             rebuild_rows();
         });
-        zoom_out_keypoint_->set_on_set_zoom([this](float target_zoom) {
-            snap_zoom_to_anchor(target_zoom, false);
+        height_out_keypoint_->set_on_set_height([this](float target_height) {
+            snap_height_to_anchor(target_height, false);
         });
     }
 
@@ -1166,12 +1166,12 @@ void CameraUIPanel::on_control_value_changed() {
     apply_settings_if_needed();
 }
 
-void CameraUIPanel::snap_zoom_to_anchor(float target_zoom, bool anchor_is_min_section) {
+void CameraUIPanel::snap_height_to_anchor(float target_height, bool anchor_is_min_section) {
     if (!assets_ || !is_visible()) return;
     (void)anchor_is_min_section;
 
     WarpedScreenGrid& cam = assets_->getView();
-    const float clamped_target = std::clamp(target_zoom, WarpedScreenGrid::kMinZoomAnchors, WarpedScreenGrid::kMaxZoomAnchors);
+    const float clamped_target = std::clamp(target_height, WarpedScreenGrid::kMinZoomAnchors, WarpedScreenGrid::kMaxZoomAnchors);
     SDL_Point focus = cam.get_screen_center();
     cam.set_manual_zoom_override(true);
     if (assets_->player) {
@@ -1201,8 +1201,8 @@ void CameraUIPanel::rebuild_rows() {
 
     if (depth_section_header_) rows.push_back({ depth_section_header_.get() });
     if (depth_section_expanded_) {
-        if (zoom_in_keypoint_) rows.push_back({ zoom_in_keypoint_.get() });
-        if (zoom_out_keypoint_) rows.push_back({ zoom_out_keypoint_.get() });
+        if (height_in_keypoint_) rows.push_back({ height_in_keypoint_.get() });
+        if (height_out_keypoint_) rows.push_back({ height_out_keypoint_.get() });
         if (perspective_zero_distance_slider_) rows.push_back({ perspective_zero_distance_slider_.get() });
         if (perspective_hundred_distance_slider_) rows.push_back({ perspective_hundred_distance_slider_.get() });
     }
@@ -1323,15 +1323,15 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
     if (min_render_size_slider_) settings.min_visible_screen_ratio = std::clamp(min_render_size_slider_->value(), 0.0f, 0.5f);
     if (render_quality_slider_) settings.render_quality_percent = render_quality_slider_->value();
     if (cull_margin_slider_) settings.extra_cull_margin = std::clamp(cull_margin_slider_->value(), 0.0f, 1000.0f);
-    ZoomKeyPointWidget::Values min_values{};
-    ZoomKeyPointWidget::Values max_values{};
-    if (zoom_in_keypoint_) {
-        min_values = zoom_in_keypoint_->values();
-        settings.zoom_low = min_values.zoom;
+    HeightKeyPointWidget::Values min_values{};
+    HeightKeyPointWidget::Values max_values{};
+    if (height_in_keypoint_) {
+        min_values = height_in_keypoint_->values();
+        settings.zoom_low = min_values.height;
     }
-    if (zoom_out_keypoint_) {
-        max_values = zoom_out_keypoint_->values();
-        settings.zoom_high = max_values.zoom;
+    if (height_out_keypoint_) {
+        max_values = height_out_keypoint_->values();
+        settings.zoom_high = max_values.height;
     }
 
     settings.zoom_low = std::clamp(settings.zoom_low, WarpedScreenGrid::kMinZoomAnchors, WarpedScreenGrid::kMaxZoomAnchors);

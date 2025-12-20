@@ -67,7 +67,7 @@ class AssetInfo {
     std::string start_animation;
     int z_threshold;
     bool passable;
-    bool is_shaded = false;
+    bool has_shading = false;
     ShadowMaskSettings shadow_mask_settings{};
     float shading_parallax_amount = 0.0f;
     float shading_screen_brightness_multiplier = 1.0f;

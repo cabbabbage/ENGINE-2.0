@@ -13,7 +13,7 @@
 #include <vector>
 #include <nlohmann/json.hpp>
 
-#include "dev_mode/pan_and_zoom.hpp"
+#include "dev_mode/pan_and_height.hpp"
 #include "animation_update/combat_geometry.hpp"
 
 #ifndef FRAME_EDITOR_ACCESS
@@ -235,7 +235,7 @@ FRAME_EDITOR_ACCESS:
     mutable std::vector<SDL_Rect> thumb_rects_;
     mutable std::vector<int> thumb_indices_;
 
-    mutable class PanAndZoom pan_zoom_;
+    mutable class PanAndHeight pan_height_;
     std::vector<std::string> child_assets_;
     mutable std::vector<AnimationChildMode> child_modes_;
     std::vector<ChildPreviewSlot> child_preview_slots_;

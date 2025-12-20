@@ -439,7 +439,7 @@ void FrameEditorSession::end() {
         cam.set_realism_enabled(prev_realism_enabled_);
         cam.set_parallax_enabled(prev_parallax_enabled_);
 
-        pan_zoom_.cancel(cam);
+        pan_height_.cancel(cam);
     }
 
     if (target_alive) {
@@ -504,7 +504,7 @@ void FrameEditorSession::update(const Input& input) {
         ensure_widgets();
         rebuild_layout();
         const bool pan_blocked = true;
-        pan_zoom_.handle_input(cam, input, pan_blocked);
+        pan_height_.handle_input(cam, input, pan_blocked);
     }
 
     update_asset_preview_frame();

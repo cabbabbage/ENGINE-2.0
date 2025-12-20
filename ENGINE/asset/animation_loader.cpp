@@ -884,7 +884,7 @@ void AnimationLoader::load(Animation& animation,
                 std::vector<std::vector<SDL_Surface*>> mask_surfaces(variant_count);
 
                 bool all_surfaces_loaded = true;
-                const bool needs_masks = info.is_shaded;
+                const bool needs_masks = info.has_shading;
                 for (std::size_t idx = 0; idx < variant_count; ++idx) {
                         const VariantLayerPaths& paths = variant_paths[idx];
                         std::vector<SDL_Surface*> loaded;
@@ -910,15 +910,17 @@ void AnimationLoader::load(Animation& animation,
                                 background_surfaces[idx] = std::move(bg_loaded);
                         }
 
-                        std::vector<SDL_Surface*> mask_loaded;
-                        if (CacheManager::load_surface_sequence(paths.mask_folder, frame_count, mask_loaded) &&
-                            static_cast<int>(mask_loaded.size()) == frame_count) {
-                                mask_surfaces[idx] = std::move(mask_loaded);
-                        } else if (needs_masks) {
-                                all_surfaces_loaded = false;
-                                std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                          << " missing masks for variant " << idx << " at " << paths.mask_folder << "\n";
-                                break;
+                        if (needs_masks) {
+                                std::vector<SDL_Surface*> mask_loaded;
+                                if (CacheManager::load_surface_sequence(paths.mask_folder, frame_count, mask_loaded) &&
+                                    static_cast<int>(mask_loaded.size()) == frame_count) {
+                                        mask_surfaces[idx] = std::move(mask_loaded);
+                                } else {
+                                        all_surfaces_loaded = false;
+                                        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
+                                                  << " missing masks for variant " << idx << " at " << paths.mask_folder << "\n";
+                                        break;
+                                }
                         }
                 }
 

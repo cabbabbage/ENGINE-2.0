@@ -871,7 +871,7 @@ void RoomEditor::update(const Input& input) {
     if (!should_enable_mouse_controls()) {
         enforce_mouse_controls_disabled();
         if (assets_) {
-            pan_zoom_.cancel(assets_->getView());
+            pan_height_.cancel(assets_->getView());
         }
         mouse_controls_enabled_last_frame_ = false;
         return;
@@ -882,7 +882,7 @@ void RoomEditor::update(const Input& input) {
     if (!ui_blocked || dragging_) {
         handle_mouse_input(input);
     } else if (assets_) {
-        pan_zoom_.cancel(assets_->getView());
+        pan_height_.cancel(assets_->getView());
     }
 
     update_highlighted_assets();
@@ -1719,11 +1719,8 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                     return true;
                 }
 
-                const float scale = std::max(kCameraScaleEpsilon, cam.get_scale());
-                const float inv_scale = 1.0f / scale;
-                const float ref_h = compute_reference_screen_height(cam, inv_scale);
                 int screen_y = 0;
-                return compute_asset_screen_bounds(cam, ref_h, inv_scale, asset, out_rect, screen_y);
+                return compute_asset_screen_bounds(cam, asset, out_rect, screen_y);
 };
 
             ensure_spatial_index(cam);
@@ -2283,9 +2280,9 @@ void RoomEditor::purge_asset(Asset* asset) {
     }
 }
 
-void RoomEditor::set_zoom_scale_factor(double factor) {
-    zoom_scale_factor_ = (factor > 0.0) ? factor : 1.0;
-    pan_zoom_.set_zoom_scale_factor(zoom_scale_factor_);
+void RoomEditor::set_height_scale_factor(double factor) {
+    height_scale_factor_ = (factor > 0.0) ? factor : 1.0;
+    pan_height_.set_height_scale_factor(height_scale_factor_);
 }
 
 bool RoomEditor::is_spawn_group_panel_visible() const {
@@ -2324,7 +2321,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const bool pointer_blocks_pan = dragging_ ||
                                     (shift_down && hit_before_pan && !hit_before_pan->spawn_id.empty() && (left_down || left_pressed_this_frame));
 
-    pan_zoom_.handle_input(cam, input, pointer_blocks_pan);
+    pan_height_.handle_input(cam, input, pointer_blocks_pan);
     if (std::fabs(cam.get_scale() - prev_scale) > 1e-6 ||
         cam.get_screen_center().x != prev_center.x ||
         cam.get_screen_center().y != prev_center.y) {
@@ -2552,8 +2549,6 @@ Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const 
 void RoomEditor::mark_spatial_index_dirty() const {
     spatial_index_dirty_ = true;
     cached_camera_state_valid_ = false;
-    cached_reference_height_valid_ = false;
-    cached_reference_screen_height_ = 1.0f;
     asset_bounds_cache_.clear();
     spatial_grid_.clear();
 }
@@ -2595,42 +2590,7 @@ bool RoomEditor::ensure_spatial_index(const WarpedScreenGrid& cam) const {
     return !spatial_index_dirty_;
 }
 
-float RoomEditor::compute_reference_screen_height(const WarpedScreenGrid& cam, float inv_scale) const {
-    float reference_screen_height = 1.0f;
-    Asset* player_asset = player_ ? player_ : (assets_ ? assets_->player : nullptr);
-    if (!player_asset) {
-        return reference_screen_height;
-    }
-
-    SDL_Texture* player_frame = player_asset->get_current_frame();
-    int pw = player_asset->cached_w;
-    int ph = player_asset->cached_h;
-    if ((pw == 0 || ph == 0) && player_frame) {
-        SDL_QueryTexture(player_frame, nullptr, nullptr, &pw, &ph);
-    }
-    if ((pw == 0 || ph == 0) && player_asset->info) {
-        pw = player_asset->info->original_canvas_width;
-        ph = player_asset->info->original_canvas_height;
-    }
-    if (pw != 0) player_asset->cached_w = pw;
-    if (ph != 0) player_asset->cached_h = ph;
-
-    float player_scale = 1.0f;
-    if (player_asset->info && std::isfinite(player_asset->info->scale_factor) && player_asset->info->scale_factor >= 0.0f) {
-        player_scale = player_asset->info->scale_factor;
-    }
-    if (ph > 0) {
-        reference_screen_height = static_cast<float>(ph) * player_scale * inv_scale;
-    }
-    if (reference_screen_height <= 0.0f) {
-        reference_screen_height = 1.0f;
-    }
-    return reference_screen_height;
-}
-
 bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
-                                             float reference_height,
-                                             float inv_scale,
                                              Asset* asset,
                                              SDL_Rect& out_rect,
                                              int& out_screen_y) const {
@@ -2662,39 +2622,32 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
 
     const float scaled_fw = static_cast<float>(fw) * base_scale;
     const float scaled_fh = static_cast<float>(fh) * base_scale;
-    const float base_sw = scaled_fw * inv_scale;
-    const float base_sh = scaled_fh * inv_scale;
 
-    const float world_x = static_cast<float>(asset->pos.x);
-    const float world_y = static_cast<float>(asset->pos.y);
-    const WarpedScreenGrid::RenderEffects effects =
-        cam.compute_render_effects(
-            SDL_Point{ static_cast<int>(std::lround(world_x)), static_cast<int>(std::lround(world_y)) },
-            base_sh,
-            reference_height,
-            WarpedScreenGrid::RenderSmoothingKey(asset));
-
-    const float scaled_sw = base_sw * effects.distance_scale;
-    const float scaled_sh = base_sh * effects.distance_scale;
-    const float final_visible_h = scaled_sh * effects.vertical_scale;
-
-    const int sw = std::max(1, static_cast<int>(std::lround(static_cast<double>(scaled_sw))));
-    const int sh = std::max(1, static_cast<int>(std::lround(static_cast<double>(final_visible_h))));
-    if (sw <= 0 || sh <= 0) return false;
-
-    SDL_Point world_point{
-        static_cast<int>(std::lround(world_x)), static_cast<int>(std::lround(world_y)) };
-    float center_x = effects.screen_position.x;
-    if (assets_) {
-
-        if (!(asset && assets_->player == asset)) {
-
-        }
+    auto* gp = cam.grid_point_for_asset(asset);
+    if (!gp || !gp->on_screen) {
+        return false;
     }
+
+    if (gp->perspective_scale <= 0.0f || gp->vertical_scale <= 0.0f) {
+        return false;
+    }
+
+    const float screen_width = scaled_fw * gp->perspective_scale;
+    const float screen_height = screen_width * gp->vertical_scale;
+    if (!std::isfinite(screen_width) || !std::isfinite(screen_height) ||
+        screen_width <= 0.0f || screen_height <= 0.0f) {
+        return false;
+    }
+
+    const int sw = std::max(1, static_cast<int>(std::lround(static_cast<double>(screen_width))));
+    const int sh = std::max(1, static_cast<int>(std::lround(static_cast<double>(screen_height))));
+
+    const float center_x = gp->screen.x;
+    const float center_y = gp->screen.y;
     const int   left     = static_cast<int>(std::lround(center_x - static_cast<float>(sw) * 0.5f));
-    const int   top      = static_cast<int>(std::lround(effects.screen_position.y)) - sh;
+    const int   top      = static_cast<int>(std::lround(center_y)) - sh;
     out_rect             = SDL_Rect{left, top, sw, sh};
-    out_screen_y         = static_cast<int>(std::lround(effects.screen_position.y));
+    out_screen_y         = static_cast<int>(std::lround(center_y));
     return true;
 }
 
@@ -2702,16 +2655,12 @@ void RoomEditor::rebuild_spatial_index(const WarpedScreenGrid& cam) const {
     asset_bounds_cache_.clear();
     spatial_grid_.clear();
 
-    const float scale = std::max(0.0001f, cam.get_scale());
-    const float inv_scale = 1.0f / scale;
-    const float reference_height = compute_reference_screen_height(cam, inv_scale);
-
     if (active_assets_) {
         for (Asset* asset : *active_assets_) {
             if (!asset) continue;
             SDL_Rect rect{0, 0, 0, 0};
             int screen_y = 0;
-            if (!compute_asset_screen_bounds(cam, reference_height, inv_scale, asset, rect, screen_y)) {
+            if (!compute_asset_screen_bounds(cam, asset, rect, screen_y)) {
                 continue;
             }
             insert_asset_entry(asset, rect, screen_y);
@@ -2723,8 +2672,6 @@ void RoomEditor::rebuild_spatial_index(const WarpedScreenGrid& cam) const {
     cached_camera_parallax_enabled_ = cam.parallax_enabled();
     cached_camera_realism_enabled_ = cam.realism_enabled();
     cached_camera_state_valid_ = true;
-    cached_reference_screen_height_ = reference_height;
-    cached_reference_height_valid_ = true;
     spatial_index_dirty_ = false;
 }
 
@@ -2783,17 +2730,15 @@ void RoomEditor::remove_asset_from_spatial_index(Asset* asset) const {
 
 void RoomEditor::refresh_asset_spatial_entry(const WarpedScreenGrid& cam, Asset* asset) const {
     if (!asset) return;
-    if (spatial_index_dirty_ || !cached_camera_state_valid_ || !cached_reference_height_valid_) {
+    if (spatial_index_dirty_ || !cached_camera_state_valid_) {
         return;
     }
 
     remove_asset_from_spatial_index(asset);
 
-    const float scale = std::max(0.0001f, cam.get_scale());
-    const float inv_scale = 1.0f / scale;
     SDL_Rect rect{0, 0, 0, 0};
     int screen_y = 0;
-    if (!compute_asset_screen_bounds(cam, cached_reference_screen_height_, inv_scale, asset, rect, screen_y)) {
+    if (!compute_asset_screen_bounds(cam, asset, rect, screen_y)) {
         return;
     }
     insert_asset_entry(asset, rect, screen_y);
@@ -2804,7 +2749,7 @@ void RoomEditor::refresh_spatial_entries_for_dragged_assets() {
         return;
     }
     const WarpedScreenGrid& cam = assets_->getView();
-    if (spatial_index_dirty_ || !cached_camera_state_valid_ || !cached_reference_height_valid_) {
+    if (spatial_index_dirty_ || !cached_camera_state_valid_) {
         return;
     }
 
@@ -2874,10 +2819,6 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
         return nullptr;
     }
 
-    const float scale = std::max(0.0001f, cam.get_scale());
-    const float inv_scale = 1.0f / scale;
-    const float reference_height = compute_reference_screen_height(cam, inv_scale);
-
     Asset* best = nullptr;
     int best_bottom = std::numeric_limits<int>::max();
     int best_top = std::numeric_limits<int>::max();
@@ -2921,7 +2862,7 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
 
         SDL_Rect rect{0, 0, 0, 0};
         int screen_y = 0;
-        if (!compute_asset_screen_bounds(cam, reference_height, inv_scale, asset, rect, screen_y)) {
+        if (!compute_asset_screen_bounds(cam, asset, rect, screen_y)) {
             continue;
         }
 

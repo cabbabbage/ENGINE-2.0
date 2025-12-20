@@ -1337,16 +1337,13 @@ bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rec
     bool      have_sprite_rect = false;
 
     if (auto* gp = camera_.grid_point_for_asset(asset)) {
-        const float zoom = std::max(0.000001f, camera_.get_scale());
-        const float inv_scale = 1.0f / zoom;
-
         const float distance_scale = (asset->info->apply_distance_scaling) ? gp->perspective_scale : 1.0f;
         const float vertical_scale = (asset->info->apply_vertical_scaling) ? gp->vertical_scale : 1.0f;
 
-        const float center_x = gp->screen.x + (world_center_x - world_x) * inv_scale * distance_scale;
-        const float center_y = gp->screen.y + (world_center_y - world_y) * inv_scale;
+        const float center_x = gp->screen.x + (world_center_x - world_x) * distance_scale;
+        const float center_y = gp->screen.y + (world_center_y - world_y) * distance_scale;
 
-        float width  = (scaled_half * 2.0f) * inv_scale * distance_scale;
+        float width  = (scaled_half * 2.0f) * distance_scale;
         float height = width * vertical_scale;
 
         if (std::isfinite(center_x) && std::isfinite(center_y) &&

@@ -254,7 +254,7 @@ class Asset {
     std::vector<Asset*> asset_children;
     const std::vector<AnimationChildAttachment>& animation_children() const { return animation_children_; }
     int depth = 0;
-    bool is_shaded = false;
+    bool has_shading = false;
     bool dead = false;
     bool static_frame = true;
     bool needs_target = false;

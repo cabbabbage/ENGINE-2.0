@@ -110,8 +110,8 @@ public:
     const std::vector<Asset*>& get_highlighted_assets() const;
     Asset* get_hovered_asset() const;
 
-    void set_zoom_scale_factor(double factor);
-    double get_zoom_scale_factor() const;
+    void set_height_scale_factor(double factor);
+    double get_height_scale_factor() const;
 
     void filter_active_assets(std::vector<Asset*>& assets) const;
 

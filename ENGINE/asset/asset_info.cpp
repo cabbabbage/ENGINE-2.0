@@ -767,7 +767,7 @@ AssetInfo::AssetInfo(const std::string &asset_folder_name)
     : AssetInfo(asset_folder_name, nlohmann::json::object()) {}
 
 AssetInfo::AssetInfo(const std::string& asset_folder_name, const nlohmann::json& metadata)
-: is_shaded(false)
+: has_shading(false)
 , is_light_source(false) {
         nlohmann::json data = metadata.is_object() ? metadata : nlohmann::json::object();
 
@@ -841,7 +841,7 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
                         tillable = info_json_.value("tileable", false);
                 }
         }
-        is_shaded = data.value("has_shading", false);
+        has_shading = data.value("has_shading", false);
         min_same_type_distance = data.value("min_same_type_distance", 0);
         min_distance_all = data.value("min_distance_all", 0);
         flipable = data.value("can_invert", false);
@@ -1278,7 +1278,7 @@ void AssetInfo::set_shadow_mask_settings(const ShadowMaskSettings& settings) {
 }
 
 void AssetInfo::set_shading_enabled(bool enabled) {
-        is_shaded = enabled;
+        has_shading = enabled;
         is_light_source = enabled || !light_sources.empty();
         if (!info_json_.is_object()) {
                 info_json_ = nlohmann::json::object();
@@ -2073,4 +2073,3 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
         load_single(pending.first, pending.second);
     }
 }
-

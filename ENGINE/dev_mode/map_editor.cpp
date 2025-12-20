@@ -129,7 +129,7 @@ void MapEditor::update(const Input& input) {
     const bool left_down = input.isDown(Input::LEFT);
     const bool left_pressed = input.wasPressed(Input::LEFT);
     const bool pan_blocked = pointer_over_ui || (shift_down && hit != nullptr && (left_down || left_pressed));
-    pan_zoom_.handle_input(*cam, input, pan_blocked);
+    pan_height_.handle_input(*cam, input, pan_blocked);
 
     if (pointer_over_ui) {
         return;

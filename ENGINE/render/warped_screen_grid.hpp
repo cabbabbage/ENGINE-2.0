@@ -21,8 +21,8 @@ namespace world {
 class WarpedScreenGrid {
 public:
 
-    static constexpr float kMinZoomAnchors = 0.5f;
-    static constexpr float kMaxZoomAnchors = 20.0f;
+    static constexpr float kMinHeightAnchors = 0.5f;
+    static constexpr float kMaxHeightAnchors = 20.0f;
     static constexpr float kMinPitchDegrees = 0.0f;
     static constexpr float kMaxPitchDegrees = 150.0f;
 
@@ -38,8 +38,8 @@ public:
 
         float min_visible_screen_ratio     = 0.015f;
 
-        float zoom_low                     = 0.75f;
-        float zoom_high                    = 3.0f;
+        float camera_height_min            = 0.75f;
+        float camera_height_max            = 3.0f;
 
         float base_height_px               = 1000.0f;
 

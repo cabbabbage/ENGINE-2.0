@@ -1,0 +1,131 @@
+{
+    "dev": {
+        "asset_filter": {
+            "current_room": true,
+            "filters_expanded": false,
+            "initialized": true,
+            "map_assets": true,
+            "methods": {
+                "center": true,
+                "childrandom": false,
+                "edge": true,
+                "exact": true,
+                "exact_position": false,
+                "percent": false,
+                "perimeter": true,
+                "random": true
+            },
+            "render_dark_mask": false,
+            "types": {
+                "area": false,
+                "boundary": false,
+                "enemy": true,
+                "npc": false,
+                "object": true,
+                "player": true,
+                "texture": false
+            }
+        },
+        "grid": {
+            "cell_size_px": 8.0,
+            "overlay": {
+                "enabled": true,
+                "r": 3.0
+            },
+            "snap": {
+                "enabled": true
+            }
+        }
+    },
+    "dev_ui": {
+        "camera": {
+            "background_texture_max_opacity": 0.0,
+            "depthcue_enabled": true,
+            "foreground_texture_max_opacity": 0.0
+        },
+        "lighting": {
+            "map_panel": {
+                "reactive": {
+                    "frame_blend_falloff_frames": 15.0,
+                    "opacity_sensitivity_percent": 100.0,
+                    "virtual_light_map": {
+                        "grid_subdivide": 1.0,
+                        "horizontal_falloff": 1.9900000095367432,
+                        "max_offset_x": 93.93000030517578,
+                        "max_offset_y": 6.46999979019165,
+                        "max_scale_percent": 95.0,
+                        "min_scale_percent": 18.0,
+                        "parallax_percent": 4.03000020980835,
+                        "search_radius": 3.0,
+                        "shadow_scale": 1.3600000143051147,
+                        "vertical_falloff": 1.909999966621399
+                    }
+                },
+                "update_map_light": false
+            },
+            "shadow_panel": {
+                "render_shadows": true
+            }
+        },
+        "lock": {
+            "asset_info": {
+                "animation_children": false,
+                "basic": false,
+                "lighting": false
+            },
+            "camera": {
+                "controls": false
+            },
+            "lighting": {
+                "map_panel": false,
+                "shadow_panel": false
+            },
+            "map_assets": {
+                "candidates": false
+            }
+        }
+    },
+    "render": {
+        "smoothing": {
+            "asset": {
+                "alpha": {
+                    "lerp_rate": 8.0,
+                    "max_step": 2.0,
+                    "method": 1.0,
+                    "snap_threshold": 0.009999999776482582,
+                    "spring_frequency": 0.0
+                },
+                "scale": {
+                    "lerp_rate": 12.0,
+                    "max_step": 8.0,
+                    "method": 1.0,
+                    "snap_threshold": 0.0010000000474974513,
+                    "spring_frequency": 0.0
+                },
+                "translation": {
+                    "lerp_rate": 0.0,
+                    "max_step": 6000.0,
+                    "method": 2.0,
+                    "snap_threshold": 0.10000000149011612,
+                    "spring_frequency": 6.0
+                }
+            },
+            "camera": {
+                "center": {
+                    "lerp_rate": 0.0,
+                    "max_step": 8000.0,
+                    "method": 2.0,
+                    "snap_threshold": 0.25,
+                    "spring_frequency": 5.0
+                },
+                "zoom": {
+                    "lerp_rate": 0.0,
+                    "max_step": 4.0,
+                    "method": 2.0,
+                    "snap_threshold": 0.0005000000237487257,
+                    "spring_frequency": 4.0
+                }
+            }
+        }
+    }
+}

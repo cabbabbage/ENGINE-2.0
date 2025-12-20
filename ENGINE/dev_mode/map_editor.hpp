@@ -1,0 +1,94 @@
+#pragma once
+
+#include <SDL.h>
+#include <SDL_ttf.h>
+
+#include <functional>
+#include <utility>
+#include <vector>
+
+#include "dev_mode/pan_and_zoom.hpp"
+
+class Assets;
+class Input;
+class Room;
+class WarpedScreenGrid;
+
+class MapEditor {
+public:
+    explicit MapEditor(Assets* owner);
+    ~MapEditor();
+
+    void set_input(Input* input);
+    void set_rooms(std::vector<Room*>* rooms);
+    void set_screen_dimensions(int width, int height);
+    void set_ui_blocker(std::function<bool(int, int)> blocker);
+
+    void set_label_safe_area_provider(std::function<SDL_Rect()> provider);
+    void set_camera_override_for_testing(WarpedScreenGrid* camera_override);
+
+    void enter();
+    void exit(bool focus_player, bool restore_previous_state = true);
+
+    void set_enabled(bool enabled);
+    bool is_enabled() const { return enabled_; }
+
+    void update(const Input& input);
+    void render(SDL_Renderer* renderer);
+
+    Room* consume_selected_room();
+    void focus_on_room(Room* room);
+
+private:
+    void ensure_font();
+    void release_font();
+    bool compute_bounds();
+    void apply_camera_to_bounds();
+    void restore_camera_state(bool focus_player, bool restore_previous_state);
+    Room* hit_test_room(SDL_Point map_point) const;
+    void render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint desired_center);
+    SDL_Rect label_background_rect(const SDL_Surface* surface, SDL_FPoint desired_center) const;
+    SDL_Rect resolve_edge_overlap(SDL_Rect rect, SDL_FPoint desired_center);
+    SDL_Rect resolve_horizontal_edge_overlap(SDL_Rect rect, float desired_center_x, bool top_edge);
+    SDL_Rect resolve_vertical_edge_overlap(SDL_Rect rect, float desired_center_y, bool left_edge);
+    static bool rects_overlap(const SDL_Rect& a, const SDL_Rect& b);
+    Room* find_spawn_room() const;
+    WarpedScreenGrid* active_camera() const;
+    SDL_Rect effective_label_bounds() const;
+
+private:
+    Assets* assets_ = nullptr;
+    Input* input_ = nullptr;
+    std::vector<Room*>* rooms_ = nullptr;
+    std::function<bool(int, int)> ui_blocker_;
+    std::function<SDL_Rect()> label_safe_area_provider_{};
+
+    int screen_w_ = 0;
+    int screen_h_ = 0;
+
+    bool enabled_ = false;
+
+    struct Bounds {
+        int min_x = 0;
+        int min_y = 0;
+        int max_x = 0;
+        int max_y = 0;
+};
+
+    bool has_bounds_ = false;
+    Bounds bounds_{};
+
+    bool prev_manual_override_ = false;
+    bool prev_focus_override_ = false;
+    SDL_Point prev_focus_point_{0, 0};
+    bool has_entry_center_ = false;
+    SDL_Point entry_center_{0, 0};
+
+    TTF_Font* label_font_ = nullptr;
+
+    Room* pending_selection_ = nullptr;
+    PanAndZoom pan_zoom_;
+    std::vector<std::pair<Room*, SDL_Rect>> label_rects_;
+    WarpedScreenGrid* camera_override_for_testing_ = nullptr;
+    mutable SDL_Rect active_label_bounds_{0,0,0,0};
+};

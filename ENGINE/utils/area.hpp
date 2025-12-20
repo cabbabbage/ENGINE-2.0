@@ -1,0 +1,92 @@
+#pragma once
+
+#include <vector>
+#include <string>
+#include <tuple>
+#include <optional>
+#include <SDL.h>
+
+#include "utils/grid.hpp"
+
+class Area {
+
+	public:
+    using Point = SDL_Point;
+
+        public:
+    SDL_Point pos{0, 0};
+
+	public:
+    Area() : Area("default_area", 0) {}
+    explicit Area(const std::string& name, int resolution = 0);
+    Area(const std::string& name, const std::vector<Point>& pts, int resolution = 0);
+    Area(const std::string& name, SDL_Point center, int w, int h, const std::string& geometry, int edge_smoothness, int map_width, int map_height, int resolution = 0);
+    Area(const std::string& name, const std::string& json_path, float scale);
+    Area(const std::string& name, const Area& base, SDL_Renderer* renderer, int window_w = 0, int window_h = 0);
+    Area(const std::string& name, SDL_Texture* background, SDL_Renderer* renderer, int window_w = 0, int window_h = 0);
+
+	public:
+    void apply_offset(int dx, int dy);
+    void align(SDL_Point target);
+    std::tuple<int, int, int, int> get_bounds() const;
+    void generate_circle(SDL_Point center, int radius, int edge_smoothness, int map_width, int map_height);
+    void generate_square(SDL_Point center, int w, int h, int edge_smoothness, int map_width, int map_height);
+    void generate_point(SDL_Point center, int map_width, int map_height);
+    void contract(int inset);
+    double get_area() const;
+    const std::vector<Point>& get_points() const;
+    void union_with(const Area& other);
+    bool contains_point(const Point& pt) const;
+    bool intersects(const Area& other) const;
+    void update_geometry_data();
+    Point random_point_within() const;
+    Point get_center() const;
+    double get_size() const;
+    int resolution() const { return resolution_; }
+    void set_resolution(int r);
+
+	public:
+    const std::string& get_name() const { return area_name_; }
+    void set_name(const std::string& n) { area_name_ = n; }
+    const std::string& get_type() const { return area_type_; }
+    void set_type(const std::string& t) { area_type_ = t; }
+    SDL_Texture* get_texture() const;
+    void set_cached_texture(SDL_Texture* texture);
+    void create_area_texture(SDL_Renderer* renderer);
+
+    int width() const { auto [minx, miny, maxx, maxy] = get_bounds(); return maxx - minx; }
+    int height() const { auto [minx, miny, maxx, maxy] = get_bounds(); return maxy - miny; }
+
+	public:
+    void flip_horizontal(std::optional<int> axis_x = std::nullopt);
+    void scale(float factor);
+
+	private:
+    std::vector<Point> points;
+    std::string area_name_;
+    std::string area_type_ = "other";
+    int center_x = 0;
+    int center_y = 0;
+    double area_size = 0.0;
+    SDL_Texture* texture_ = nullptr;
+    mutable int min_x_ = 0;
+    mutable int min_y_ = 0;
+    mutable int max_x_ = 0;
+    mutable int max_y_ = 0;
+    mutable bool bounds_valid_ = false;
+    int resolution_ = 0;
+
+    bool apply_resolution_to_points();
+};
+
+inline int width_from_area(const Area& a) {
+    int minx, miny, maxx, maxy;
+    std::tie(minx, miny, maxx, maxy) = a.get_bounds();
+    return maxx - minx;
+}
+
+inline int height_from_area(const Area& a) {
+    int minx, miny, maxx, maxy;
+    std::tie(minx, miny, maxx, maxy) = a.get_bounds();
+    return maxy - miny;
+}

@@ -639,7 +639,7 @@ namespace {
         double screen_y,
         const WarpedScreenGrid::FloorDepthParams& params,
         const PerspectiveRange& range,
-        double zoom_factor)
+        double height_factor)
     {
 
         const double min_y = std::min(params.horizon_screen_y, params.bottom_screen_y);
@@ -670,7 +670,7 @@ namespace {
         regressed = std::clamp(regressed, 0.0, 2.0);
         regressed = std::pow(regressed, falloff);
 
-        const double zoom_reduction = 1.0 - (zoom_factor * 0.3);
+        const double zoom_reduction = 1.0 - (height_factor * 0.3);
 
         double final_scale = regressed * zoom_reduction;
 
@@ -795,9 +795,9 @@ WarpedScreenGrid::~WarpedScreenGrid() = default;
 
 void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
     settings_ = settings;
-    settings_.zoom_low = std::clamp(settings_.zoom_low, WarpedScreenGrid::kMinZoomAnchors, WarpedScreenGrid::kMaxZoomAnchors);
-    const float min_high = std::min(WarpedScreenGrid::kMaxZoomAnchors, settings_.zoom_low + 0.0001f);
-    settings_.zoom_high = std::clamp(settings_.zoom_high, min_high, WarpedScreenGrid::kMaxZoomAnchors);
+    settings_.camera_height_min = std::clamp(settings_.camera_height_min, WarpedScreenGrid::kMinHeightAnchors, WarpedScreenGrid::kMaxHeightAnchors);
+    const float min_high = std::min(WarpedScreenGrid::kMaxHeightAnchors, settings_.camera_height_min + 0.0001f);
+    settings_.camera_height_max = std::clamp(settings_.camera_height_max, min_high, WarpedScreenGrid::kMaxHeightAnchors);
     if (!std::isfinite(settings_.base_height_px) || settings_.base_height_px <= 0.0f) {
         settings_.base_height_px = 720.0f;
     }
@@ -836,9 +836,9 @@ void WarpedScreenGrid::set_screen_center(SDL_Point p, bool snap_immediately) {
 }
 
 void WarpedScreenGrid::set_scale(float s) {
-    const double clamped = clamp_zoom_scale(static_cast<double>(s));
+    const double clamped = clamp_height_scale(static_cast<double>(s));
     scale_ = static_cast<float>(clamped);
-    zooming_     = false;
+    height_animating_     = false;
     steps_total_ = 0;
     steps_done_  = 0;
     start_scale_ = scale_;
@@ -851,15 +851,15 @@ float WarpedScreenGrid::get_scale() const {
     return smoothed_scale_;
 }
 
-void WarpedScreenGrid::zoom_to_scale(double target_scale, int duration_steps) {
-    double clamped = clamp_zoom_scale(target_scale);
+void WarpedScreenGrid::animate_height_to_scale(double target_scale, int duration_steps) {
+    double clamped = clamp_height_scale(target_scale);
     if (duration_steps <= 0) {
         set_scale(static_cast<float>(clamped));
         return;
     }
     duration_steps = std::max(1, duration_steps);
 
-    const bool currently_zooming = zooming_ && steps_total_ > 0;
+    const bool currently_zooming = height_animating_ && steps_total_ > 0;
     bool restart_zoom = !currently_zooming || steps_total_ != duration_steps;
 
     if (!restart_zoom && std::fabs(clamped - target_scale_) > SCALE_EPS) {
@@ -873,15 +873,15 @@ void WarpedScreenGrid::zoom_to_scale(double target_scale, int duration_steps) {
     }
 
     target_scale_ = clamped;
-    zooming_      = true;
+    height_animating_      = true;
 }
 
-void WarpedScreenGrid::zoom_to_area(const Area& target_area, int duration_steps) {
+void WarpedScreenGrid::frame_to_area(const Area& target_area, int duration_steps) {
     Area adjusted = convert_area_to_aspect(target_area);
-    const int base_w = std::max(1, width_from_area(base_zoom_));
+    const int base_w = std::max(1, width_from_area(base_view_));
     const int tgt_w  = std::max(1, width_from_area(adjusted));
     const double target = static_cast<double>(tgt_w) / static_cast<double>(base_w);
-    zoom_to_scale(target, duration_steps);
+    animate_height_to_scale(target, duration_steps);
 }
 
 void WarpedScreenGrid::update(float dt) {
@@ -889,7 +889,7 @@ void WarpedScreenGrid::update(float dt) {
         dt = 0.0f;
     }
 
-    if (zooming_) {
+    if (height_animating_) {
         ++steps_done_;
         double t = static_cast<double>(steps_done_) / static_cast<double>(std::max(1, steps_total_));
         t = std::clamp(t, 0.0, 1.0);
@@ -909,7 +909,7 @@ void WarpedScreenGrid::update(float dt) {
             if (pan_override_) {
                 set_screen_center(target_center_);
             }
-            zooming_      = false;
+            height_animating_      = false;
             pan_override_ = false;
             steps_total_  = 0;
             steps_done_   = 0;
@@ -923,7 +923,7 @@ void WarpedScreenGrid::update(float dt) {
 
     smoothed_center_.x = std::clamp(safe_sx, -1e8f, 1e8f);
     smoothed_center_.y = std::clamp(safe_sy, -1e8f, 1e8f);
-    smoothed_scale_ = static_cast<float>(std::clamp(static_cast<double>(safe_ss), 0.0001, static_cast<double>(WarpedScreenGrid::kMaxZoomAnchors)));
+    smoothed_scale_ = static_cast<float>(std::clamp(static_cast<double>(safe_ss), 0.0001, static_cast<double>(WarpedScreenGrid::kMaxHeightAnchors)));
 
     recompute_current_view();
 }
@@ -957,7 +957,7 @@ void WarpedScreenGrid::set_up_rooms(CurrentRoomFinder* finder) {
     }
 }
 
-void WarpedScreenGrid::update_zoom(Room* cur,
+void WarpedScreenGrid::update_camera_height(Room* cur,
                          CurrentRoomFinder* finder,
                          Asset* player,
                          bool refresh_requested,
@@ -978,7 +978,7 @@ void WarpedScreenGrid::update_zoom(Room* cur,
         }
     }
 
-    if (!refresh_requested && !zooming_) {
+    if (!refresh_requested && !height_animating_) {
         update(dt);
         return;
     }
@@ -993,7 +993,7 @@ void WarpedScreenGrid::update_zoom(Room* cur,
     update(dt);
 
     if (!cur) return;
-    if (manual_zoom_override_) {
+    if (manual_height_override_) {
         return;
     }
 
@@ -1005,7 +1005,7 @@ void WarpedScreenGrid::update_zoom(Room* cur,
 
     const double sa = compute_room_scale_from_area(cur);
     const double sb = compute_room_scale_from_area(neigh);
-    double target_zoom = sa;
+    double target_height_scale = sa;
 
     if (player && cur && cur->room_area && neigh && neigh->room_area) {
         auto [ax, ay] = cur->room_area->get_center();
@@ -1022,14 +1022,14 @@ void WarpedScreenGrid::update_zoom(Room* cur,
         double t = (vlen2 > 0.0) ? ((wx * vx + wy * vy) / vlen2) : 0.0;
         t = std::clamp(t, 0.0, 1.0);
 
-        target_zoom = (sa * (1.0 - t)) + (sb * t);
+        target_height_scale = (sa * (1.0 - t)) + (sb * t);
     }
 
-    target_zoom = std::clamp( target_zoom, static_cast<double>(settings_.zoom_low), static_cast<double>(settings_.zoom_high) );
+    target_height_scale = std::clamp( target_height_scale, static_cast<double>(settings_.camera_height_min), static_cast<double>(settings_.camera_height_max) );
 
-    const bool idle = !zooming_;
-    if (idle || std::fabs(target_zoom - target_scale_) > SCALE_EPS) {
-        zoom_to_scale(target_zoom, 35);
+    const bool idle = !height_animating_;
+    if (idle || std::fabs(target_height_scale - target_scale_) > SCALE_EPS) {
+        animate_height_to_scale(target_height_scale, 35);
     }
 }
 
@@ -1104,17 +1104,17 @@ void WarpedScreenGrid::recompute_current_view() {
     update_geometry_cache(compute_geometry());
 }
 
-void WarpedScreenGrid::pan_and_zoom_to_point(SDL_Point world_pos, double zoom_scale_factor, int duration_steps) {
+void WarpedScreenGrid::pan_and_height_to_point(SDL_Point world_pos, double height_scale_factor, int duration_steps) {
     focus_override_ = true;
     focus_point_    = world_pos;
 
-    const double factor    = (zoom_scale_factor > 0.0) ? zoom_scale_factor : 1.0;
-    const double new_scale = clamp_zoom_scale(static_cast<double>(scale_) * factor);
+    const double factor    = (height_scale_factor > 0.0) ? height_scale_factor : 1.0;
+    const double new_scale = clamp_height_scale(static_cast<double>(scale_) * factor);
 
     if (duration_steps <= 0) {
-        manual_zoom_override_ = true;
+        manual_height_override_ = true;
         pan_override_         = false;
-        zooming_              = false;
+        height_animating_              = false;
         steps_total_          = 0;
         steps_done_           = 0;
         start_scale_          = new_scale;
@@ -1131,25 +1131,25 @@ void WarpedScreenGrid::pan_and_zoom_to_point(SDL_Point world_pos, double zoom_sc
     target_scale_  = new_scale;
     steps_total_   = std::max(1, duration_steps);
     steps_done_    = 0;
-    zooming_       = true;
+    height_animating_       = true;
     pan_override_  = true;
-    manual_zoom_override_ = true;
+    manual_height_override_ = true;
 }
 
-void WarpedScreenGrid::pan_and_zoom_to_asset(const Asset* a, double zoom_scale_factor, int duration_steps) {
+void WarpedScreenGrid::pan_and_height_to_asset(const Asset* a, double height_scale_factor, int duration_steps) {
     if (!a) return;
     SDL_Point target{ a->pos.x, a->pos.y };
-    pan_and_zoom_to_point(target, zoom_scale_factor, duration_steps);
+    pan_and_height_to_point(target, height_scale_factor, duration_steps);
 }
 
-void WarpedScreenGrid::animate_zoom_multiply(double factor, int duration_steps) {
+void WarpedScreenGrid::animate_height_multiply(double factor, int duration_steps) {
     if (factor <= 0.0) factor = 1.0;
-    const double new_scale = clamp_zoom_scale(static_cast<double>(scale_) * factor);
+    const double new_scale = clamp_height_scale(static_cast<double>(scale_) * factor);
 
     if (duration_steps <= 0) {
-        manual_zoom_override_ = true;
+        manual_height_override_ = true;
         pan_override_         = false;
-        zooming_              = false;
+        height_animating_              = false;
         steps_total_          = 0;
         steps_done_           = 0;
         start_scale_          = new_scale;
@@ -1167,18 +1167,18 @@ void WarpedScreenGrid::animate_zoom_multiply(double factor, int duration_steps) 
     target_scale_  = new_scale;
     steps_total_   = std::max(1, duration_steps);
     steps_done_    = 0;
-    zooming_       = true;
+    height_animating_       = true;
     pan_override_  = false;
-    manual_zoom_override_ = true;
+    manual_height_override_ = true;
 }
 
-void WarpedScreenGrid::animate_zoom_towards_point(double factor, SDL_Point screen_point, int duration_steps) {
+void WarpedScreenGrid::animate_height_towards_point(double factor, SDL_Point screen_point, int duration_steps) {
     if (factor <= 0.0) {
         factor = 1.0;
     }
 
-    const double current_scale = clamp_zoom_scale(static_cast<double>(scale_));
-    const double new_scale     = clamp_zoom_scale(current_scale * factor);
+    const double current_scale = clamp_height_scale(static_cast<double>(scale_));
+    const double new_scale     = clamp_height_scale(current_scale * factor);
 
     int minx = 0, miny = 0, maxx = 0, maxy = 0;
     std::tie(minx, miny, maxx, maxy) = current_view_.get_bounds();
@@ -1186,8 +1186,8 @@ void WarpedScreenGrid::animate_zoom_towards_point(double factor, SDL_Point scree
     const double world_x = static_cast<double>(minx) + static_cast<double>(screen_point.x) * current_scale;
     const double world_y = static_cast<double>(maxy) - static_cast<double>(screen_point.y) * current_scale;
 
-    const int base_w = std::max(1, width_from_area(base_zoom_));
-    const int base_h = std::max(1, height_from_area(base_zoom_));
+    const int base_w = std::max(1, width_from_area(base_view_));
+    const int base_h = std::max(1, height_from_area(base_view_));
 
     const double anchored_center_x =
         world_x - static_cast<double>(screen_point.x) * new_scale + (static_cast<double>(base_w) * new_scale) * 0.5;
@@ -1204,9 +1204,9 @@ void WarpedScreenGrid::animate_zoom_towards_point(double factor, SDL_Point scree
         static_cast<int>(std::lround(target_center_x)), static_cast<int>(std::lround(target_center_y)) };
 
     if (duration_steps <= 0) {
-        manual_zoom_override_ = true;
+        manual_height_override_ = true;
         pan_override_         = false;
-        zooming_              = false;
+        height_animating_              = false;
         steps_total_          = 0;
         steps_done_           = 0;
         start_scale_          = new_scale;
@@ -1225,9 +1225,9 @@ void WarpedScreenGrid::animate_zoom_towards_point(double factor, SDL_Point scree
     target_scale_  = new_scale;
     steps_total_   = std::max(1, duration_steps);
     steps_done_    = 0;
-    zooming_       = true;
+    height_animating_       = true;
     pan_override_  = true;
-    manual_zoom_override_ = true;
+    manual_height_override_ = true;
 }
 
 SDL_FPoint WarpedScreenGrid::map_to_screen(SDL_Point world) const {
@@ -1350,8 +1350,8 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
 
     const std::array<std::pair<const char*, float*>, 17> float_fields{ {
         { "extra_cull_margin", &settings_.extra_cull_margin },
-        { "zoom_low", &settings_.zoom_low },
-        { "zoom_high", &settings_.zoom_high },
+        { "camera_height_min", &settings_.camera_height_min },
+        { "camera_height_max", &settings_.camera_height_max },
         { "base_height_px", &settings_.base_height_px },
         { "min_visible_screen_ratio", &settings_.min_visible_screen_ratio },
         { "parallax_smoothing_lerp_rate", &settings_.parallax_smoothing.lerp_rate },
@@ -1404,12 +1404,12 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
             std::clamp(settings_.background_plane_screen_y, 0.0f, 4000.0f);
     }
 
-    if (!std::isfinite(settings_.zoom_low)) {
-        settings_.zoom_low = 0.75f;
+    if (!std::isfinite(settings_.camera_height_min)) {
+        settings_.camera_height_min = 0.75f;
     }
 
-    if (!std::isfinite(settings_.zoom_high)) {
-        settings_.zoom_high = std::max(settings_.zoom_low + 0.25f, 1.0f);
+    if (!std::isfinite(settings_.camera_height_max)) {
+        settings_.camera_height_max = std::max(settings_.camera_height_min + 0.25f, 1.0f);
     }
 
     if (!std::isfinite(settings_.base_height_px) || settings_.base_height_px <= 0.0f) {
@@ -1424,9 +1424,9 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
             std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
     }
 
-    settings_.zoom_low = std::clamp(settings_.zoom_low, WarpedScreenGrid::kMinZoomAnchors, WarpedScreenGrid::kMaxZoomAnchors);
-    const float min_high = std::min(WarpedScreenGrid::kMaxZoomAnchors, settings_.zoom_low + 0.0001f);
-    settings_.zoom_high = std::clamp(settings_.zoom_high, min_high, WarpedScreenGrid::kMaxZoomAnchors);
+    settings_.camera_height_min = std::clamp(settings_.camera_height_min, WarpedScreenGrid::kMinHeightAnchors, WarpedScreenGrid::kMaxHeightAnchors);
+    const float min_high = std::min(WarpedScreenGrid::kMaxHeightAnchors, settings_.camera_height_min + 0.0001f);
+    settings_.camera_height_max = std::clamp(settings_.camera_height_max, min_high, WarpedScreenGrid::kMaxHeightAnchors);
 
     auto align_quality = [](int percent) {
         constexpr int kOptions[] = {100, 75, 50, 25, 10};
@@ -1462,8 +1462,8 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
 
     const std::pair<const char*, float> float_fields[] = {
         { "extra_cull_margin", settings_.extra_cull_margin },
-        { "zoom_low", settings_.zoom_low },
-        { "zoom_high", settings_.zoom_high },
+        { "camera_height_min", settings_.camera_height_min },
+        { "camera_height_max", settings_.camera_height_max },
         { "perspective_distance_at_scale_zero", settings_.perspective_distance_at_scale_zero },
         { "perspective_distance_at_scale_hundred", settings_.perspective_distance_at_scale_hundred },
         { "base_height_px", settings_.base_height_px },
@@ -1538,7 +1538,7 @@ double WarpedScreenGrid::view_height_world() const {
 }
 
 double WarpedScreenGrid::view_height_for_scale(double scale_value) const {
-    const int base_h = std::max(1, height_from_area(base_zoom_));
+    const int base_h = std::max(1, height_from_area(base_view_));
     const double clamped_scale = std::max(0.0001, scale_value);
     return static_cast<double>(base_h) * clamped_scale;
 }
@@ -1548,8 +1548,8 @@ double WarpedScreenGrid::anchor_world_y() const {
     return static_cast<double>(smoothed_center_.y);
 }
 
-double WarpedScreenGrid::zoom_lerp_t_for_scale(double scale_value) const {
-    return ZoomInterpolator(settings_, scale_value).t;
+double WarpedScreenGrid::height_lerp_t_for_scale(double scale_value) const {
+    return HeightInterpolator(settings_, scale_value).t;
 }
 
 float WarpedScreenGrid::depth_offset_for_scale(double scale_value) const {
@@ -1859,19 +1859,19 @@ void WarpedScreenGrid::set_focus_override(SDL_Point focus) {
     focus_point_ = focus;
 }
 
-void WarpedScreenGrid::set_manual_zoom_override(bool enabled) {
-    manual_zoom_override_ = enabled;
+void WarpedScreenGrid::set_manual_height_override(bool enabled) {
+    manual_height_override_ = enabled;
 }
 
 void WarpedScreenGrid::clear_focus_override() {
     focus_override_ = false;
 }
 
-void WarpedScreenGrid::clear_manual_zoom_override() {
-    manual_zoom_override_ = false;
+void WarpedScreenGrid::clear_manual_height_override() {
+    manual_height_override_ = false;
 }
 
-double WarpedScreenGrid::default_zoom_for_room(const Room* room) const {
+double WarpedScreenGrid::default_camera_height_for_room(const Room* room) const {
     return compute_room_scale_from_area(room);
 }
 

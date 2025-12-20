@@ -18,10 +18,7 @@ Backwards compatibility policy:
 Current baseline (Dec 2025): the engine uses a 3D-aware `world::WorldGrid` with `GridPoint` identity expressed as `(world_x, world_y, world_z, resolution_layer)` (`GridKey` backed by `key_to_id_`). Assets bind through this identity, Screen Grid rebuilds from Map Grid traversal, and legacy 2D identity is kept only for tile chunk bookkeeping. Perspective remains effectively depth-aware with debug toggles.
 
 ## Remaining tasks
-- Lift the temporary `world_z = 0` restriction in `WarpedScreenGrid::rebuild_grid` so Screen Grid traversal and camera culling can consider multiple heights and layers.
-- Migrate tile chunk culling and chunk-based tile renders (`ENGINE/render/grid_tile_renderer.*`, chunk bookkeeping) from power-of-two (`r_chunk`, `vibble::grid::delta`) helpers into Map Grid/Screen Grid bounds or keep them explicitly gated as tile-only paths.
-- Extend `LightMap` sampling (`ENGINE/world/chunk.cpp`) to accept arbitrary `world_z`, configurable query radius, and 3D-aware accumulation, then remove the remaining floor-only sampling fallback.
-- Remove the dev-only flat camera toggle/logging (`WarpedScreenGrid::flat_camera_debug` and related settings) once the new depth pipeline is stable and well-tested.
+- None: Phase 10 cleanup items have been integrated. Tile chunk rendering remains explicitly tile-only until the tile system migrates to the 3D grid.
 
 The goal is to replace the current 2D grid and resolution system with a 3D hierarchy that:
 
@@ -296,7 +293,7 @@ Build a per frame Screen Grid that references Map Grid nodes in the visible 3D v
 **Status (Phase 4 - Screen Grid reconstruction)**  
 - Screen Grid rebuild now queries Map Grid via branch-aware region traversal (camera volume, layer/z filters) instead of flat scans, and fills per frame fields each frame.  
 - Per frame state is reset with an explicit frame stamp during rebuild; visible points and assets are sourced only from the Screen Grid traversal.  
-- Current traversal is intentionally restricted to `world_z = 0` until camera and culling handle multi-z slices; per-frame asset lookup uses Screen Grid’s asset-to-point map (no `GridId` bridge).
+- Traversal now respects `RealismSettings::depth_near_world`/`depth_far_world` for z-bounds; per-frame asset lookup uses Screen Grid's asset-to-point map (no `GridId` bridge).
 
 **How it fits**  
 Screen Grid is the runtime gateway between world space and rendering. Renderer and searches will start from Screen Grid roots.
@@ -393,7 +390,7 @@ Extend camera and NDC transforms to understand `world_z` and the new grid while 
 
 **Status (Phase 6 - Camera and transform integration)**  
 - Camera and Screen Grid projections read `world_z`; per-frame `distance_to_camera`, `on_screen`, and screen positions are derived from 3D identity.  
-- Depth-aware sorting uses 3D distance and `world_z`; flat camera is a dev-only toggle with debug logging of depth stats.
+- Depth-aware sorting uses 3D distance and `world_z`; depth can be toggled for debugging but the default pipeline is always 3D-aware.
 
 **How it fits**  
 This connects the vertical dimension to perspective and parallax instead of fake offsets.
@@ -404,7 +401,7 @@ This connects the vertical dimension to perspective and parallax instead of fake
 **Subtasks**
 
 - Expose current 2D behavior  
-  - Replace the old hardcoded depth disable with runtime settings (`depth_enabled`, `flat_camera_debug`, `depth_debug_logging`) and document the default depth-aware behavior.  
+  - Replace the old hardcoded depth disable with runtime settings (`depth_enabled`, `depth_debug_logging`) and document the default depth-aware behavior.  
   - Add debug toggles that let devs compare legacy flat projections with the new 3D pipeline when needed.  
   - Capture screenshots or metrics for before and after to verify no floor regressions while depth is enabled or temporarily disabled.
 
@@ -481,7 +478,7 @@ Lighting is the first practical user of real height and validates the usefulness
 Light definitions on assets (`AssetInfo::light_sources`), `ENGINE/render/composite_asset_renderer.cpp` (light emission), `ENGINE/world/chunk.cpp` (`LightMap`), any runtime light queries.
 
 **Status (Phase 8 - Lighting and 3D usage)**  
-- Lights are gathered via branch-aware Map Grid queries (`query_lights`) using `GridKey`/`world_z`; LightMap sampling computes 3D attenuation (`dx/dy/dz`) from `GridPoint` identity.  
+- Lights are gathered via branch-aware Map Grid queries (`query_lights`) using `GridKey`/`world_z`; LightMap sampling computes 3D attenuation (`dx/dy/dz`) from `GridPoint` identity with configurable query radius.  
 - Asset-attached lights default to `world_z` from their owning GridPoint; floor lights keep `world_z = 0`.  
 - Lighting still uses a simple additive model (mask/dynamic brightness); advanced shadowing/volumetrics remain future work.
 
@@ -551,10 +548,7 @@ Dev tool tasks must reference Phase 9 and must build on Map Grid and Screen Grid
 - Default pipeline is 3D: assets, lights, camera, and renderer run on GridKey + Screen Grid traversal; depth toggles remain only as debug controls.
 
 **Remaining cleanup (debug/tile only)**  
-- Screen Grid currently clamps traversal to `world_z = 0`; lift once camera/culling support full multi-z rendering (`ENGINE/render/warped_screen_grid.cpp`).  
-- Tile chunk culling remains power-of-two/tile-only in `ENGINE/render/grid_tile_renderer.*`; keep gated to tiles.  
-- LightMap sampling assumes floor height with a fallback radius (`ENGINE/world/chunk.cpp`); extend to arbitrary `world_z` when ready.  
-- Debug flat camera toggle (`WarpedScreenGrid::flat_camera_debug`) remains for comparison and should be removed once depth is fully stable.
+- Tile chunk culling remains power-of-two/tile-only in `ENGINE/render/grid_tile_renderer.*` and `ChunkManager`; keep gated to tiles or migrate when the tile system becomes 3D-aware.
 
 ---
 
@@ -563,15 +557,12 @@ Dev tool tasks must reference Phase 9 and must build on Map Grid and Screen Grid
 - `GridPoint` becomes the single source of spatial truth with 3D identity, hierarchy pointers, per frame camera fields, and branch masks.
 - Map Grid owns and indexes all `GridPoint`s; Screen Grid is rebuilt per frame and references only the nodes relevant to the current camera.
 - Active branch masks and hierarchical search make queries, movement, and rendering fast while keeping current chunk and tile data working during migration.
-- Screen Grid rebuilds now cap visible nodes with 3D distance checks (min/max `world_z`, depth culling) before supplying assets to the renderer; traversal is currently clamped to the floor plane until multi-z rendering is enabled.
+- Screen Grid rebuilds now cap visible nodes with 3D distance checks (min/max `world_z`, depth culling) before supplying assets to the renderer; traversal respects camera near/far z-bounds.
 - Camera and renderer adopt real `world_z` (depth-enabled by default with debug toggles); lighting uses 3D GridPoint identity/queries for attenuation, with advanced shadowing/volumetrics still deferred.
 - Dev tools now surface Screen Grid/Map Grid nodes with 3D identity, branch masks, and per-frame traversal metrics via overlays and picking.
 - Backwards compatibility is valued, but the end goal is a single 3D grid based system with no permanent legacy 2D grid logic.
 
 Legacy cleanup tasks (track and remove when 3D identity is fully adopted):
-- Screen Grid traversal currently clamps to `world_z = 0` in `ENGINE/render/warped_screen_grid.cpp`; lift once multi-z camera/culling is enabled.
-- Tile chunk culling remains power-of-two/tile-only in `ENGINE/render/grid_tile_renderer.*`; keep gated to tiles or replace when tile rendering migrates.
-- LightMap sampling assumes floor height with a fallback radius (`ENGINE/world/chunk.cpp`); extend to arbitrary `world_z` when ready.
-- Debug flat camera toggle (`WarpedScreenGrid::flat_camera_debug`) remains for comparison; remove once 3D depth is fully stable.
+- Tile chunk culling remains power-of-two/tile-only in `ENGINE/render/grid_tile_renderer.*` and `ChunkManager`; keep gated to tiles or migrate when tile rendering moves onto the 3D grid.
 
 Every Codex task involved in this refactor must reference this plan and state which phase it is implementing or supporting.

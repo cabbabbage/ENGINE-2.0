@@ -202,16 +202,14 @@ public:
     RealismSettings& get_settings() { return settings_; }
     const RealismSettings& realism_settings() const { return settings_; }
     RealismSettings& realism_settings() { return settings_; }
-    bool is_realism_enabled() const { return realism_enabled_ && depth_enabled_ && !flat_camera_debug_; }
+    bool is_realism_enabled() const { return realism_enabled_ && depth_enabled_; }
     bool realism_enabled() const { return is_realism_enabled(); }
     bool parallax_enabled() const { return is_realism_enabled(); }
     void set_realism_enabled(bool enabled) {
         realism_enabled_ = enabled;
     }
     void set_depth_enabled(bool enabled) { depth_enabled_ = enabled; }
-    bool depth_enabled() const { return depth_enabled_ && !flat_camera_debug_; }
-    void set_flat_camera_debug(bool enabled) { flat_camera_debug_ = enabled; }
-    bool flat_camera_debug() const { return flat_camera_debug_; }
+    bool depth_enabled() const { return depth_enabled_; }
     void set_depth_debug_logging(bool enabled) { depth_debug_logging_ = enabled; }
     bool depth_debug_logging() const { return depth_debug_logging_; }
     void set_parallax_enabled(bool enabled) { set_realism_enabled(enabled); }
@@ -303,6 +301,5 @@ private:
     SDL_Rect cached_world_rect_{0, 0, 0, 0};
     GridBounds bounds_{};
     bool depth_enabled_ = true;
-    bool flat_camera_debug_ = false;
     bool depth_debug_logging_ = false;
 };

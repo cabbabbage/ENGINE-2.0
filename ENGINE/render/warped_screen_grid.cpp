@@ -1280,7 +1280,6 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     }
 
     try_read_bool("depth_enabled", depth_enabled_);
-    try_read_bool("flat_camera_debug", flat_camera_debug_);
     try_read_bool("depth_debug_logging", depth_debug_logging_);
 
     recompute_current_view();
@@ -1326,7 +1325,6 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     }
 
     j["depth_enabled"] = depth_enabled_;
-    j["flat_camera_debug"] = flat_camera_debug_;
     j["depth_debug_logging"] = depth_debug_logging_;
 
     return j;
@@ -1480,12 +1478,14 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         static_cast<float>(std::max(0, maxy - miny))
 };
     world::WorldGrid::RegionMetrics region_metrics{};
+    const int min_world_z = static_cast<int>(std::floor(settings_.depth_near_world));
+    const int max_world_z = static_cast<int>(std::ceil(settings_.depth_far_world));
     std::vector<world::GridPoint*> grid_points = world_grid.query_region(
         world_bounds,
         0,
         world_grid.max_resolution_layers(),
-        /*min_world_z=*/0,
-        /*max_world_z=*/0, // TODO(Phase 6+): lift z restriction once camera/culling handle multi-z slices.
+        min_world_z,
+        max_world_z,
         /*skip_inactive_branches=*/true,
         /*include_empty_nodes=*/false,
         &region_metrics);

@@ -462,6 +462,9 @@ bool SceneRenderer::ensure_darkness_overlay() {
     if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return false;
     }
+    if (darkness_overlay_allocation_failed_) {
+        return false;
+    }
 
     if (darkness_overlay_texture_ &&
         (darkness_overlay_width_ != screen_width_ || darkness_overlay_height_ != screen_height_)) {
@@ -472,12 +475,14 @@ bool SceneRenderer::ensure_darkness_overlay() {
         SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, screen_width_, screen_height_);
         if (!texture) {
             vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate darkness overlay: "} + SDL_GetError());
+            darkness_overlay_allocation_failed_ = true;
             return false;
         }
         darkness_overlay_texture_ = texture;
         darkness_overlay_width_   = screen_width_;
         darkness_overlay_height_  = screen_height_;
         SDL_SetTextureBlendMode(darkness_overlay_texture_, SDL_BLENDMODE_BLEND);
+        darkness_overlay_allocation_failed_ = false;
     }
 
     return darkness_overlay_texture_ != nullptr;
@@ -490,6 +495,7 @@ void SceneRenderer::destroy_darkness_overlay() {
         darkness_overlay_width_   = 0;
         darkness_overlay_height_  = 0;
     }
+    darkness_overlay_allocation_failed_ = false;
 }
 
 bool SceneRenderer::ensure_sky_texture() {

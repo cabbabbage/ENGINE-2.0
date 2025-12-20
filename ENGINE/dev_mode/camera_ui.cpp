@@ -1236,9 +1236,8 @@ void CameraUIPanel::apply_settings_if_needed() {
         ? depthcue_checkbox_->value() : last_depthcue_enabled_;
 
     const bool depth_available = cam.depth_enabled();
-    const bool flat_camera     = cam.flat_camera_debug();
-    const bool effects_enabled = depth_available && !flat_camera && reported_effects_enabled;
-    const bool depthcue_enabled = depth_available && !flat_camera && reported_depthcue_enabled;
+    const bool effects_enabled = depth_available && reported_effects_enabled;
+    const bool depthcue_enabled = depth_available && reported_depthcue_enabled;
 
     auto differs = [](float a, float b) {
         return std::fabs(a - b) > 0.0001f;

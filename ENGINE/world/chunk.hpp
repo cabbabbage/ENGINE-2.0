@@ -56,10 +56,10 @@ public:
 
     void rebuild(SDL_Renderer* renderer);
     void update(SDL_Renderer* renderer, std::uint32_t delta_ms);
-    SampledBrightness sample_lighting(int world_x, int world_y, float static_weight  = 0.0f, float dynamic_weight = 1.0f) const;
-    SampledBrightness sample_lighting_bilinear(float world_x, float world_y, float static_weight  = 0.0f, float dynamic_weight = 1.0f) const;
-    float sample_brightness(int world_x, int world_y, float static_weight  = 0.0f, float dynamic_weight = 1.0f) const;
-    float sample_brightness_bilinear(float world_x, float world_y, float static_weight  = 0.0f, float dynamic_weight = 1.0f) const;
+    SampledBrightness sample_lighting(int world_x, int world_y, int world_z = 0, float static_weight  = 0.0f, float dynamic_weight = 1.0f, float query_radius = 512.0f) const;
+    SampledBrightness sample_lighting_bilinear(float world_x, float world_y, float world_z = 0.0f, float static_weight  = 0.0f, float dynamic_weight = 1.0f, float query_radius = 512.0f) const;
+    float sample_brightness(int world_x, int world_y, int world_z = 0, float static_weight  = 0.0f, float dynamic_weight = 1.0f, float query_radius = 512.0f) const;
+    float sample_brightness_bilinear(float world_x, float world_y, float world_z = 0.0f, float static_weight  = 0.0f, float dynamic_weight = 1.0f, float query_radius = 512.0f) const;
 
     void render_visible_chunks(SDL_Renderer* renderer, const SDL_Rect& view_rect) const;
     void render_visible_chunks(SDL_Renderer* renderer, const SDL_Rect& view_rect, float           alpha_multiplier, const SDL_Color& color_mod) const;

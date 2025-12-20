@@ -59,8 +59,10 @@ void LightMap::update(SDL_Renderer*, std::uint32_t) {
 
 LightMap::SampledBrightness LightMap::sample_lighting(int world_x,
                                                       int world_y,
+                                                      int world_z,
                                                       float static_weight,
-                                                      float dynamic_weight) const {
+                                                      float dynamic_weight,
+                                                      float query_radius) const {
     std::scoped_lock lock(mutex_);
     SampledBrightness result{};
     const auto weights = resolve_sampling_weights(static_weight, dynamic_weight);
@@ -73,8 +75,8 @@ LightMap::SampledBrightness LightMap::sample_lighting(int world_x,
     }
 
     world::WorldGrid& grid = assets_->world_grid();
-    // Broad phase: query lights near the sample point within a generous radius based on max light radius (fallback 512).
-    const float kFallbackRadius = 512.0f;
+    // Broad phase: query lights near the sample point within a generous radius based on max light radius.
+    const float kFallbackRadius = (query_radius > 0.0f) ? query_radius : 512.0f;
     SDL_FRect query_bounds{
         static_cast<float>(world_x) - kFallbackRadius,
         static_cast<float>(world_y) - kFallbackRadius,
@@ -95,7 +97,7 @@ LightMap::SampledBrightness LightMap::sample_lighting(int world_x,
         const float lz = static_cast<float>(light.point->world_z());
         const float dx = static_cast<float>(world_x) - lx;
         const float dy = static_cast<float>(world_y) - ly;
-        const float dz = 0.0f - lz; // sampling the floor unless future callers pass world_z
+        const float dz = static_cast<float>(world_z) - lz;
         const float dist = std::sqrt(dx * dx + dy * dy + dz * dz);
         if (dist > static_cast<float>(radius_px)) {
             continue;
@@ -127,23 +129,34 @@ LightMap::SampledBrightness LightMap::sample_lighting(int world_x,
 
 LightMap::SampledBrightness LightMap::sample_lighting_bilinear(float world_x,
                                                                float world_y,
+                                                               float world_z,
                                                                float static_weight,
-                                                               float dynamic_weight) const {
-    return sample_lighting(world_x, world_y, static_weight, dynamic_weight);
+                                                               float dynamic_weight,
+                                                               float query_radius) const {
+    return sample_lighting(static_cast<int>(std::lround(world_x)),
+                           static_cast<int>(std::lround(world_y)),
+                           static_cast<int>(std::lround(world_z)),
+                           static_weight,
+                           dynamic_weight,
+                           query_radius);
 }
 
 float LightMap::sample_brightness(int world_x,
                                   int world_y,
+                                  int world_z,
                                   float static_weight,
-                                  float dynamic_weight) const {
-    return sample_lighting(world_x, world_y, static_weight, dynamic_weight).blended;
+                                  float dynamic_weight,
+                                  float query_radius) const {
+    return sample_lighting(world_x, world_y, world_z, static_weight, dynamic_weight, query_radius).blended;
 }
 
 float LightMap::sample_brightness_bilinear(float world_x,
                                            float world_y,
+                                           float world_z,
                                            float static_weight,
-                                           float dynamic_weight) const {
-    return sample_lighting_bilinear(world_x, world_y, static_weight, dynamic_weight).blended;
+                                           float dynamic_weight,
+                                           float query_radius) const {
+    return sample_lighting_bilinear(world_x, world_y, world_z, static_weight, dynamic_weight, query_radius).blended;
 }
 
 void LightMap::render_visible_chunks(SDL_Renderer* renderer, const SDL_Rect& view_rect) const {

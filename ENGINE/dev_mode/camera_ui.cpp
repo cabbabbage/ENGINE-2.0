@@ -1228,18 +1228,16 @@ void CameraUIPanel::apply_settings_if_needed() {
         explicit ScopedApplyingGuard(bool& f) : flag(f) { flag = true; }
         ~ScopedApplyingGuard() { flag = false; }
     } guard(applying_settings_);
+    WarpedScreenGrid& cam = assets_->getView();
     WarpedScreenGrid::RealismSettings settings = read_settings_from_ui();
     const bool reported_effects_enabled = realism_enabled_checkbox_
         ? realism_enabled_checkbox_->value() : last_realism_enabled_;
     const bool reported_depthcue_enabled = depthcue_checkbox_
         ? depthcue_checkbox_->value() : last_depthcue_enabled_;
 
-    const bool effects_enabled = WarpedScreenGrid::kForceDepthPerspectiveDisabled
-        ? false
-        : reported_effects_enabled;
-    const bool depthcue_enabled = WarpedScreenGrid::kForceDepthPerspectiveDisabled
-        ? false
-        : reported_depthcue_enabled;
+    const bool depth_available = cam.depth_enabled();
+    const bool effects_enabled = depth_available && reported_effects_enabled;
+    const bool depthcue_enabled = depth_available && reported_depthcue_enabled;
 
     auto differs = [](float a, float b) {
         return std::fabs(a - b) > 0.0001f;

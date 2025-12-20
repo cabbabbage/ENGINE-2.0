@@ -111,6 +111,7 @@ private:
     std::uint64_t darkness_overlay_skipped_frames_  = 0;
     std::uint64_t darkness_overlay_rendered_frames_ = 0;
     bool          darkness_overlay_skip_logged_     = false;
+    bool          darkness_overlay_allocation_failed_ = false;
     std::filesystem::path sky_texture_path_;
     SDL_Texture*          sky_texture_       = nullptr;
     int                   sky_texture_width_ = 0;

@@ -983,12 +983,14 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
     SDL_Point world,
     float ,
     float ,
-    RenderSmoothingKey ) const
+    RenderSmoothingKey ,
+    int world_z) const
 {
     RenderEffects result;
 
     SDL_FPoint world_f{ static_cast<float>(world.x), static_cast<float>(world.y) };
     SDL_FPoint linear_screen = map_to_screen_f(world_f);
+    linear_screen.y -= static_cast<float>(world_z) * (1.0f / std::max(0.000001f, smoothed_scale_));
 
     result.screen_position = linear_screen;
     result.vertical_scale  = 1.0f;
@@ -1175,7 +1177,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
 
     try_read_bool("realism_enabled", realism_enabled_);
 
-    const std::array<std::pair<const char*, float*>, 15> float_fields{ {
+    const std::array<std::pair<const char*, float*>, 17> float_fields{ {
         { "extra_cull_margin", &settings_.extra_cull_margin },
         { "zoom_low", &settings_.zoom_low },
         { "zoom_high", &settings_.zoom_high },
@@ -1191,6 +1193,8 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
         { "perspective_distance_at_scale_zero", &settings_.perspective_distance_at_scale_zero },
         { "perspective_distance_at_scale_hundred", &settings_.perspective_distance_at_scale_hundred },
         { "horizon_fade_band_px", &settings_.horizon_fade_band_px },
+        { "depth_near_world", &settings_.depth_near_world },
+        { "depth_far_world", &settings_.depth_far_world },
     } };
     for (const auto& [key, field] : float_fields) {
         try_read_number(key, *field);
@@ -1272,8 +1276,11 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     settings_.parallax_smoothing = sanitize_params(settings_.parallax_smoothing);
     if (!std::isfinite(settings_.scale_variant_hysteresis_margin) ||
         settings_.scale_variant_hysteresis_margin < 0.0f) {
-        settings_.scale_variant_hysteresis_margin = 0.05f;
+    settings_.scale_variant_hysteresis_margin = 0.05f;
     }
+
+    try_read_bool("depth_enabled", depth_enabled_);
+    try_read_bool("depth_debug_logging", depth_debug_logging_);
 
     recompute_current_view();
 }
@@ -1298,7 +1305,9 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
         { "foreground_plane_screen_y", settings_.foreground_plane_screen_y },
         { "background_plane_screen_y", settings_.background_plane_screen_y },
         { "horizon_fade_band_px", settings_.horizon_fade_band_px },
-        { "perspective_scale_gamma", settings_.perspective_scale_gamma }
+        { "perspective_scale_gamma", settings_.perspective_scale_gamma },
+        { "depth_near_world", settings_.depth_near_world },
+        { "depth_far_world", settings_.depth_far_world }
 };
     for (const auto& [key, value] : float_fields) {
         j[key] = value;
@@ -1314,6 +1323,9 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     for (const auto& [key, value] : int_fields) {
         j[key] = value;
     }
+
+    j["depth_enabled"] = depth_enabled_;
+    j["depth_debug_logging"] = depth_debug_logging_;
 
     return j;
 }
@@ -1416,7 +1428,7 @@ void WarpedScreenGrid::clear_grid_state() {
     visible_assets_.clear();
     visible_points_.clear();
     active_chunks_.clear();
-    id_to_index_.clear();
+    asset_to_point_.clear();
     cached_world_rect_ = SDL_Rect{0, 0, 0, 0};
     bounds_ = GridBounds{};
 }
@@ -1453,12 +1465,35 @@ void WarpedScreenGrid::rebuild_grid_bounds() {
 }
 
 void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_seconds) {
+    (void)dt_seconds;
+    const std::uint64_t frame_stamp = ++frame_counter_;
     clear_grid_state();
 
-    std::vector<Asset*> assets = world_grid.all_assets();
-    warped_points_.reserve(assets.size());
-    visible_assets_.reserve(assets.size());
-    visible_points_.reserve(assets.size());
+    int minx, miny, maxx, maxy;
+    std::tie(minx, miny, maxx, maxy) = current_view_.get_bounds();
+    SDL_FRect world_bounds{
+        static_cast<float>(minx),
+        static_cast<float>(miny),
+        static_cast<float>(std::max(0, maxx - minx)),
+        static_cast<float>(std::max(0, maxy - miny))
+};
+    world::WorldGrid::RegionMetrics region_metrics{};
+    const int min_world_z = static_cast<int>(std::floor(settings_.depth_near_world));
+    const int max_world_z = static_cast<int>(std::ceil(settings_.depth_far_world));
+    std::vector<world::GridPoint*> grid_points = world_grid.query_region(
+        world_bounds,
+        0,
+        world_grid.max_resolution_layers(),
+        min_world_z,
+        max_world_z,
+        /*skip_inactive_branches=*/true,
+        /*include_empty_nodes=*/false,
+        &region_metrics);
+    last_nodes_visited_ = region_metrics.nodes_visited;
+    last_branches_skipped_ = region_metrics.branches_skipped;
+    warped_points_.reserve(grid_points.size());
+    visible_points_.reserve(grid_points.size());
+    visible_assets_.reserve(grid_points.size());
 
     const float inv_scale   = 1.0f / std::max(0.000001f, smoothed_scale_);
     const float screen_w    = static_cast<float>(screen_width_);
@@ -1466,9 +1501,16 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
 
     player_center_offset_y_ = 0.0f;
     Asset* player_asset = nullptr;
-    for (Asset* a : assets) {
-        if (a && a->info && a->info->type == "player") {
-            player_asset = a;
+    for (world::GridPoint* gp : grid_points) {
+        if (!gp) continue;
+        for (const auto& owned : gp->occupants) {
+            Asset* a = owned.get();
+            if (a && a->info && a->info->type == "player") {
+                player_asset = a;
+                break;
+            }
+        }
+        if (player_asset) {
             break;
         }
     }
@@ -1490,7 +1532,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         player_center_offset_y_ = screen_center_y - player_final_y;
     }
 
-    const bool perspective_disabled = WarpedScreenGrid::kForceDepthPerspectiveDisabled;
+    const bool perspective_disabled = !depth_enabled();
     const double raw_horizon_y = horizon_screen_y_for_scale();
     const bool horizon_valid = std::isfinite(raw_horizon_y);
     const float horizon_y = horizon_valid ? static_cast<float>(raw_horizon_y) : -screen_h;
@@ -1523,6 +1565,16 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
 };
     const float min_visible_px =
         screen_h * std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
+    int bounds_minx, bounds_miny, bounds_maxx, bounds_maxy;
+    std::tie(bounds_minx, bounds_miny, bounds_maxx, bounds_maxy) = current_view_.get_bounds();
+    const float cam_center_x = 0.5f * static_cast<float>(bounds_minx + bounds_maxx);
+    const float cam_center_y = 0.5f * static_cast<float>(bounds_miny + bounds_maxy);
+    const float camera_z = std::max(1.0f, settings_.base_height_px);
+    const float depth_near = std::max(0.0f, settings_.depth_near_world);
+    const float depth_far  = std::max(depth_near + 1.0f, settings_.depth_far_world);
+    last_min_world_z_ = std::numeric_limits<int>::max();
+    last_max_world_z_ = std::numeric_limits<int>::min();
+    last_depth_culled_ = 0;
 
 #if 0
 
@@ -1558,19 +1610,30 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         return !(ax1 < b.x || bx1 < a.x || ay1 < b.y || by1 < a.y);
 };
 
-    for (Asset* a : assets) {
-        if (!a) continue;
-        world::GridPoint* gp = world_grid.point_for_asset(a);
+    for (world::GridPoint* gp : grid_points) {
         if (!gp) continue;
+        gp->reset_frame_state(frame_stamp);
 
-        const SDL_Point world_pos{ gp->world.x, gp->world.y };
+        if (gp->occupants.empty()) {
+            continue;
+        }
+
+        Asset* primary_asset = nullptr;
+        for (const auto& owned : gp->occupants) {
+            if (owned) {
+                primary_asset = owned.get();
+                break;
+            }
+        }
+        if (!primary_asset) {
+            continue;
+        }
+
+        const SDL_Point world_pos{ gp->world_x(), gp->world_y() };
 
         SDL_FPoint linear_screen = map_to_screen(world_pos);
+        linear_screen.y -= static_cast<float>(gp->world_z()) * inv_scale;
         float warped_y = linear_screen.y;
-#if 0
-
-        warped_y = warp_floor_screen_y(static_cast<float>(world_pos.y), linear_screen.y);
-#endif
         SDL_FPoint screen_pos{linear_screen.x, warped_y};
 
         if (!std::isfinite(screen_pos.x) || !std::isfinite(screen_pos.y)) {
@@ -1578,15 +1641,15 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         }
 
         const float parallax_dx = 0.0f;
-        const RenderEffects effects = compute_render_effects( world_pos, 0.0f, settings_.base_height_px, RenderSmoothingKey(a));
+        const RenderEffects effects = compute_render_effects( world_pos, 0.0f, settings_.base_height_px, RenderSmoothingKey(primary_asset), gp->world_z());
 
-        float base_scale = a->smoothed_scale();
+        float base_scale = primary_asset->smoothed_scale();
         if (!std::isfinite(base_scale) || base_scale <= 0.0f) {
             base_scale = 1.0f;
         }
 
-        const int fw = (a && a->info) ? std::max(1, a->info->original_canvas_width) : 1;
-        const int fh = (a && a->info) ? std::max(1, a->info->original_canvas_height) : 1;
+        const int fw = (primary_asset && primary_asset->info) ? std::max(1, primary_asset->info->original_canvas_width) : 1;
+        const int fh = (primary_asset && primary_asset->info) ? std::max(1, primary_asset->info->original_canvas_height) : 1;
         const float base_sw = static_cast<float>(fw) * base_scale * inv_scale;
         const float base_sh = static_cast<float>(fh) * base_scale * inv_scale;
 
@@ -1603,62 +1666,46 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             approx_h
 };
 
+        const float dx = static_cast<float>(gp->world_x()) - cam_center_x;
+        const float dy = static_cast<float>(gp->world_y()) - cam_center_y;
+        const float dz = camera_z - static_cast<float>(gp->world_z());
+        const float distance_to_cam = std::sqrt(dx * dx + dy * dy + dz * dz);
+        const bool depth_ok = distance_to_cam >= depth_near && distance_to_cam <= depth_far;
         const bool intersects = rects_intersect(bounds, cull_rect);
         const bool has_alpha  = horizon_at_or_above_top || effects.horizon_fade_alpha > 0.001f;
-        const bool on_screen  = intersects && has_alpha;
+        const bool on_screen  = intersects && has_alpha && depth_ok;
+
+        last_min_world_z_ = std::min(last_min_world_z_, gp->world_z());
+        last_max_world_z_ = std::max(last_max_world_z_, gp->world_z());
+        if (!depth_ok) {
+            ++last_depth_culled_;
+        }
+
+        for (const auto& owned : gp->occupants) {
+            if (owned) {
+                asset_to_point_[owned.get()] = gp;
+            }
+        }
 
         gp->screen             = screen_pos;
         gp->parallax_dx        = parallax_dx;
         gp->vertical_scale     = effects.vertical_scale;
         gp->horizon_fade_alpha = effects.horizon_fade_alpha;
 
-        gp->perspective_scale  = 1.0f;
-        gp->distance_to_camera = 0.0f;
+        gp->perspective_scale  = camera_z / std::max(1.0f, distance_to_cam);
+        gp->distance_to_camera = distance_to_cam;
         gp->tilt_radians       = 0.0f;
         gp->on_screen          = on_screen;
+        gp->mark_screen_data_updated(frame_stamp);
 
-#if 0
-
-        const double perspective_scale_value = interpolate_perspective_scale( static_cast<double>(screen_pos.y), horizon_screen_y, bottom_screen_y, horizon_perspective_scale, bottom_perspective_scale);
-
-        gp->perspective_scale  = static_cast<float>(perspective_scale_value);
-        const double distance_measure = compute_floor_distance_measure(screen_pos.y, depth_params);
-        gp->distance_to_camera = static_cast<float>(distance_measure);
-        gp->tilt_radians       = runtime_pitch_rad_;
-
-        float fg_opacity = 0.0f;
-        float bg_opacity = 1.0f;
-
-        if (on_screen && !gp->occupants.empty()) {
-
-            float screen_y = screen_pos.y;
-            float fg_y = settings_.foreground_plane_screen_y;
-            float bg_y = settings_.background_plane_screen_y;
-
-            if (screen_y > fg_y) {
-                fg_opacity = 1.0f;
-            } else if (screen_y < bg_y) {
-                fg_opacity = 0.0f;
-            } else {
-                float range = fg_y - bg_y;
-                if (range > 0.001f) {
-                    fg_opacity = (screen_y - bg_y) / range;
-                }
-            }
-            fg_opacity = std::clamp(fg_opacity, 0.0f, 1.0f);
-            bg_opacity = 1.0f - fg_opacity;
-
-            fg_opacity *= (static_cast<float>(settings_.foreground_texture_max_opacity) / 255.0f);
-            bg_opacity *= (static_cast<float>(settings_.background_texture_max_opacity) / 255.0f);
-        }
-
-#endif
-
-        id_to_index_[gp->id] = warped_points_.size();
         warped_points_.push_back(gp);
         if (on_screen) {
-            visible_assets_.push_back(a);
             visible_points_.push_back(gp);
+            for (const auto& owned : gp->occupants) {
+                if (owned) {
+                    visible_assets_.push_back(owned.get());
+                }
+            }
         }
         if (gp->chunk) active_chunks_.push_back(gp->chunk);
     }
@@ -1666,6 +1713,18 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
     if (!active_chunks_.empty()) {
         std::sort(active_chunks_.begin(), active_chunks_.end());
         active_chunks_.erase(std::unique(active_chunks_.begin(), active_chunks_.end()), active_chunks_.end());
+    }
+
+    if (last_min_world_z_ == std::numeric_limits<int>::max()) {
+        last_min_world_z_ = 0;
+        last_max_world_z_ = 0;
+    }
+    if (depth_debug_logging_) {
+        vibble::log::debug("[WarpedScreenGrid] frame=" + std::to_string(frame_stamp) +
+                           " nodes=" + std::to_string(last_nodes_visited_) +
+                           " branches_skipped=" + std::to_string(last_branches_skipped_) +
+                           " depth_culled=" + std::to_string(last_depth_culled_) +
+                           " z_range=[" + std::to_string(last_min_world_z_) + "," + std::to_string(last_max_world_z_) + "]");
     }
 
     rebuild_grid_bounds();
@@ -1677,29 +1736,41 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
 
 world::GridPoint* WarpedScreenGrid::grid_point_for_asset(const Asset* asset) {
     if (!asset) return nullptr;
-    const std::uint64_t id = asset->grid_id();
-    auto it = id_to_index_.find(id);
-    if (it == id_to_index_.end()) return nullptr;
-    std::size_t idx = it->second;
-    if (idx >= warped_points_.size()) return nullptr;
-    return warped_points_[idx];
+    auto it = asset_to_point_.find(asset);
+    if (it != asset_to_point_.end()) {
+        return it->second;
+    }
+    return nullptr;
 }
 
 const world::GridPoint* WarpedScreenGrid::grid_point_for_asset(const Asset* asset) const {
     if (!asset) return nullptr;
-    const std::uint64_t id = asset->grid_id();
-    auto it = id_to_index_.find(id);
-    if (it == id_to_index_.end()) return nullptr;
-    std::size_t idx = it->second;
-    if (idx >= warped_points_.size()) return nullptr;
-    return warped_points_[idx];
+    auto it = asset_to_point_.find(asset);
+    if (it != asset_to_point_.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
+
+world::GridPoint* WarpedScreenGrid::pick_nearest_point(SDL_Point screen_pt, float max_distance_px) {
+    float best_dist2 = max_distance_px * max_distance_px;
+    world::GridPoint* best = nullptr;
+    for (world::GridPoint* gp : visible_points_) {
+        if (!gp) continue;
+        const float dx = gp->screen.x - static_cast<float>(screen_pt.x);
+        const float dy = gp->screen.y - static_cast<float>(screen_pt.y);
+        const float dist2 = dx * dx + dy * dy;
+        if (dist2 < best_dist2) {
+            best_dist2 = dist2;
+            best = gp;
+        }
+    }
+    return best;
 }
 
 WarpedScreenGrid::RenderSmoothingKey::RenderSmoothingKey(const Asset* asset, int frame)
     : asset_id(asset
-        ? (asset->grid_id() != 0
-            ? asset->grid_id()
-            : static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(asset)))
+        ? static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(asset))
         : 0),
       frame_index(frame) {}
 

@@ -4,6 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <cctype>
 #include <cstdio>
@@ -88,6 +89,18 @@ void dev_mode_trace(const std::string& message) {
 constexpr const char* kModeIdRoom = "room";
 constexpr const char* kModeIdMap = "map";
 constexpr int kPopupOutlineThickness = 1;
+
+int layer_spacing(int layer) {
+    if (layer <= 0) return 1;
+    int result = 1;
+    for (int i = 0; i < layer; ++i) {
+        if (result > std::numeric_limits<int>::max() / 3) {
+            return std::numeric_limits<int>::max();
+        }
+        result *= 3;
+    }
+    return result;
+}
 
 constexpr const char* kGridOverlayEnabledKey = "dev.grid.overlay.enabled";
 constexpr const char* kGridSnapEnabledKey    = "dev.grid.snap.enabled";
@@ -382,7 +395,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     } else {
         grid_overlay_resolution_r_ = 0;
     }
-    grid_cell_size_px_ = vibble::grid::delta(grid_overlay_resolution_r_);
+    grid_cell_size_px_ = layer_spacing(grid_overlay_resolution_r_);
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
     if (room_editor_) {
         room_editor_->set_manifest_store(&manifest_store_);
@@ -431,7 +444,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     map_grid_regen_cb_ = [this]() { this->regenerate_map_grid_assets(); };
     apply_header_suppression();
 
-    grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Grid Resolution (r)", 0, vibble::grid::kMaxResolution, grid_overlay_resolution_r_);
+    grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Grid Layer (3^r spacing)", 0, vibble::grid::kMaxResolution, grid_overlay_resolution_r_);
     grid_resolution_stepper_->set_on_change([this](int new_r){
         const int clamped_r = vibble::grid::clamp_resolution(new_r);
         if (clamped_r == grid_overlay_resolution_r_) {
@@ -661,7 +674,7 @@ void DevControls::set_map_info(nlohmann::json* map_info, MapLightPanel::SaveCall
 void DevControls::apply_overlay_grid_resolution(int resolution, bool user_override, bool update_stepper, bool update_footer) {
     const int clamped = vibble::grid::clamp_resolution(resolution);
     grid_overlay_resolution_r_ = clamped;
-    grid_cell_size_px_ = vibble::grid::delta(clamped);
+    grid_cell_size_px_ = layer_spacing(clamped);
     if (user_override) {
         grid_overlay_resolution_user_override_ = true;
         devmode::ui_settings::save_number(kGridOverlayResolutionKey, clamped);
@@ -1668,7 +1681,6 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
             SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
 
-            const world::WorldGrid& grid = assets_->world_grid();
             SDL_FPoint center_world_f = cam.get_view_center_f();
             SDL_Point depth_world{
                 static_cast<int>(std::lround(center_world_f.x)), static_cast<int>(std::lround(depth_params.base_world_y)) };
@@ -1709,6 +1721,108 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
         if (horizon_screen_y) {
             draw_labeled_line(*horizon_screen_y, SDL_Color{255, 140, 0, 220}, "Horizon");
+        }
+
+        SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
+        SDL_SetRenderDrawBlendMode(renderer, prev_mode);
+    }
+
+    if (renderer && assets_ && (grid_overlay_enabled_ || show_depth_guides)) {
+        WarpedScreenGrid& cam = assets_->getView();
+        const auto& warped_nodes = cam.get_warped_points();
+        const auto& visible_nodes = cam.get_visible_points();
+
+        SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
+        Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
+        SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
+        SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+        static const std::array<SDL_Color, 6> kLayerColors{
+            SDL_Color{245, 158, 66, 210},  // amber
+            SDL_Color{56, 189, 248, 210},  // cyan
+            SDL_Color{163, 230, 53, 210},  // green
+            SDL_Color{249, 115, 22, 210},  // orange
+            SDL_Color{94, 92, 255, 210},   // indigo
+            SDL_Color{248, 113, 113, 210}, // red
+        };
+        auto color_for_layer = [&](int layer, bool on_screen, bool active, bool has_assets) {
+            SDL_Color c = kLayerColors[static_cast<std::size_t>(std::abs(layer)) % kLayerColors.size()];
+            Uint8 base_alpha = on_screen ? 230 : 110;
+            if (!active && !has_assets) {
+                base_alpha = static_cast<Uint8>(std::max(30, static_cast<int>(base_alpha * 0.5f)));
+            }
+            if (has_assets) {
+                base_alpha = 255;
+            }
+            c.a = base_alpha;
+            return c;
+        };
+
+        auto draw_node = [&](const world::GridPoint* gp, bool highlight) {
+            if (!gp) return;
+            const float sx = gp->screen.x;
+            const float sy = gp->screen.y;
+            if (!std::isfinite(sx) || !std::isfinite(sy)) return;
+            const bool has_assets = !gp->occupants.empty();
+            const bool active_branch = gp->has_assets_or_active_children() || gp->active_child_mask != 0;
+            const SDL_Color fill = color_for_layer(gp->resolution_layer(), gp->on_screen, active_branch, has_assets);
+            const int size = has_assets ? 5 : 3;
+            SDL_Rect rect{
+                static_cast<int>(std::lround(sx)) - size / 2,
+                static_cast<int>(std::lround(sy)) - size / 2,
+                size,
+                size
+            };
+            SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
+            SDL_RenderFillRect(renderer, &rect);
+            if (gp->active_child_mask != 0 || highlight) {
+                SDL_Color outline = DMStyles::AccentButton().hover_bg;
+                outline.a = highlight ? 240 : 180;
+                SDL_SetRenderDrawColor(renderer, outline.r, outline.g, outline.b, outline.a);
+                SDL_RenderDrawRect(renderer, &rect);
+            }
+        };
+
+        for (const world::GridPoint* gp : warped_nodes) {
+            draw_node(gp, false);
+        }
+
+        world::GridPoint* hovered_point = nullptr;
+        SDL_Point mouse{input_ ? input_->getX() : 0, input_ ? input_->getY() : 0};
+        if (input_ && screen_w_ > 0 && screen_h_ > 0) {
+            hovered_point = cam.pick_nearest_point(mouse, 48.0f);
+        }
+        if (hovered_point) {
+            draw_node(hovered_point, true);
+        }
+
+        {
+            DMLabelStyle style = DMStyles::Label();
+            style.font_size = std::max(12, style.font_size - 2);
+            char buffer[256];
+            std::snprintf(buffer,
+                          sizeof(buffer),
+                          "Screen Grid: nodes=%zu visited=%u skipped=%u depth_culled=%u z=[%d,%d]",
+                          visible_nodes.size(),
+                          cam.last_nodes_visited(),
+                          cam.last_branches_skipped(),
+                          cam.last_depth_culled(),
+                          cam.last_min_world_z(),
+                          cam.last_max_world_z());
+            DrawLabelText(renderer, buffer, DMSpacing::panel_padding(), DMSpacing::panel_padding(), style);
+        }
+
+        if (hovered_point) {
+            DMLabelStyle style = DMStyles::Label();
+            style.font_size = std::max(12, style.font_size - 2);
+            style.color = DMStyles::AccentButton().text;
+            const std::string details = hovered_point->debug_identity_and_mask();
+            const int safe_width  = std::max(0, screen_w_ - 4 * DMSpacing::panel_padding());
+            const int safe_height = std::max(0, screen_h_ - style.font_size - DMSpacing::panel_padding());
+            const int text_x = std::clamp(mouse.x + DMSpacing::small_gap(), 0, safe_width);
+            const int text_y = std::clamp(mouse.y + DMSpacing::small_gap(), 0, safe_height);
+            DrawLabelText(renderer, details, text_x, text_y, style);
         }
 
         SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);

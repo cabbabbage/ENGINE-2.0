@@ -25,7 +25,6 @@ public:
     static constexpr float kMaxZoomAnchors = 20.0f;
     static constexpr float kMinPitchDegrees = 0.0f;
     static constexpr float kMaxPitchDegrees = 150.0f;
-    static constexpr bool kForceDepthPerspectiveDisabled = true;
 
     enum class BlurFalloffMethod {
         Linear = 0,
@@ -61,6 +60,8 @@ public:
 
         float perspective_distance_at_scale_zero   = 1.0f;
         float perspective_distance_at_scale_hundred = 0.5f;
+        float depth_near_world = 0.0f;
+        float depth_far_world  = 5000.0f;
 
         float horizon_fade_band_px = 150.0f;
 
@@ -156,7 +157,7 @@ public:
     SDL_FPoint map_to_screen_f(SDL_FPoint world) const;
     SDL_FPoint screen_to_map(SDL_Point screen) const;
 
-    RenderEffects compute_render_effects(SDL_Point world, float asset_screen_height, float reference_screen_height, RenderSmoothingKey smoothing_key) const;
+    RenderEffects compute_render_effects(SDL_Point world, float asset_screen_height, float reference_screen_height, RenderSmoothingKey smoothing_key, int world_z = 0) const;
 
     CameraGeometry compute_geometry() const;
     CameraGeometry compute_geometry_for_scale(double scale_value) const;
@@ -201,17 +202,16 @@ public:
     RealismSettings& get_settings() { return settings_; }
     const RealismSettings& realism_settings() const { return settings_; }
     RealismSettings& realism_settings() { return settings_; }
-    bool is_realism_enabled() const { return !kForceDepthPerspectiveDisabled && realism_enabled_; }
+    bool is_realism_enabled() const { return realism_enabled_ && depth_enabled_; }
     bool realism_enabled() const { return is_realism_enabled(); }
     bool parallax_enabled() const { return is_realism_enabled(); }
     void set_realism_enabled(bool enabled) {
-        if (kForceDepthPerspectiveDisabled) {
-            (void)enabled;
-            realism_enabled_ = false;
-        } else {
-            realism_enabled_ = enabled;
-        }
+        realism_enabled_ = enabled;
     }
+    void set_depth_enabled(bool enabled) { depth_enabled_ = enabled; }
+    bool depth_enabled() const { return depth_enabled_; }
+    void set_depth_debug_logging(bool enabled) { depth_debug_logging_ = enabled; }
+    bool depth_debug_logging() const { return depth_debug_logging_; }
     void set_parallax_enabled(bool enabled) { set_realism_enabled(enabled); }
     void set_render_areas_enabled(bool enabled) { render_areas_enabled_ = enabled; }
     const Area& get_current_view() const { return current_view_; }
@@ -225,6 +225,12 @@ public:
     const std::vector<world::Chunk*>& get_active_chunks() const { return active_chunks_; }
     const GridBounds& get_bounds() const { return bounds_; }
     const SDL_Rect& get_cached_world_rect() const { return cached_world_rect_; }
+    std::uint32_t last_nodes_visited() const { return last_nodes_visited_; }
+    std::uint32_t last_branches_skipped() const { return last_branches_skipped_; }
+    int last_min_world_z() const { return last_min_world_z_; }
+    int last_max_world_z() const { return last_max_world_z_; }
+    std::uint32_t last_depth_culled() const { return last_depth_culled_; }
+    world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
     Area convert_area_to_aspect(const Area& in) const;
 
 private:
@@ -285,7 +291,15 @@ private:
     std::vector<Asset*> visible_assets_;
     std::vector<world::GridPoint*> visible_points_;
     std::vector<world::Chunk*> active_chunks_;
-    std::unordered_map<std::uint64_t, std::size_t> id_to_index_;
+    std::unordered_map<const Asset*, world::GridPoint*> asset_to_point_;
+    std::uint64_t frame_counter_ = 0;
+    std::uint32_t last_nodes_visited_ = 0;
+    std::uint32_t last_branches_skipped_ = 0;
+    std::uint32_t last_depth_culled_ = 0;
+    int last_min_world_z_ = 0;
+    int last_max_world_z_ = 0;
     SDL_Rect cached_world_rect_{0, 0, 0, 0};
     GridBounds bounds_{};
+    bool depth_enabled_ = true;
+    bool depth_debug_logging_ = false;
 };

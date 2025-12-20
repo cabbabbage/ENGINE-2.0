@@ -232,6 +232,7 @@ void SceneRenderer::render() {
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
     cam.rebuild_grid(grid, assets_->frame_delta_seconds());
+    assets_->rebuild_active_from_screen_grid();
 
     SDL_SetRenderTarget(renderer_, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -310,16 +311,20 @@ void SceneRenderer::render() {
             continue;
         }
 
-        composite_renderer_.update(asset, nullptr, flicker_time_seconds);
+        world::GridPoint* gp = cam.grid_point_for_asset(asset);
+        if (!gp || !gp->on_screen) {
+            continue;
+        }
 
-        SDL_Point world_pos{ asset->pos.x, asset->pos.y };
-        SDL_FPoint screen_base = cam.map_to_screen(world_pos);
+        composite_renderer_.update(asset, gp, flicker_time_seconds);
+
+        SDL_FPoint screen_base = gp->screen;
         if (!std::isfinite(screen_base.x) || !std::isfinite(screen_base.y)) {
             continue;
         }
 
-        const float perspective_scale = 1.0f;
-        const float vertical_scale    = 1.0f;
+        const float perspective_scale = gp->perspective_scale;
+        const float vertical_scale    = gp->vertical_scale;
 
         const int asset_world_x = asset->pos.x;
         const int asset_world_y = asset->pos.y;
@@ -458,6 +463,9 @@ bool SceneRenderer::ensure_darkness_overlay() {
     if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return false;
     }
+    if (darkness_overlay_allocation_failed_) {
+        return false;
+    }
 
     if (darkness_overlay_texture_ &&
         (darkness_overlay_width_ != screen_width_ || darkness_overlay_height_ != screen_height_)) {
@@ -468,12 +476,14 @@ bool SceneRenderer::ensure_darkness_overlay() {
         SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, screen_width_, screen_height_);
         if (!texture) {
             vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate darkness overlay: "} + SDL_GetError());
+            darkness_overlay_allocation_failed_ = true;
             return false;
         }
         darkness_overlay_texture_ = texture;
         darkness_overlay_width_   = screen_width_;
         darkness_overlay_height_  = screen_height_;
         SDL_SetTextureBlendMode(darkness_overlay_texture_, SDL_BLENDMODE_BLEND);
+        darkness_overlay_allocation_failed_ = false;
     }
 
     return darkness_overlay_texture_ != nullptr;
@@ -486,6 +496,7 @@ void SceneRenderer::destroy_darkness_overlay() {
         darkness_overlay_width_   = 0;
         darkness_overlay_height_  = 0;
     }
+    darkness_overlay_allocation_failed_ = false;
 }
 
 bool SceneRenderer::ensure_sky_texture() {

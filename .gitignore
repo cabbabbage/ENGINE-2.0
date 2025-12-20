@@ -1,6 +1,7 @@
 # Ignore vcpkg installed packages and build artifacts
 vcpkg/
 build/
+cache
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
@@ -8,7 +9,7 @@ Makefile
 vcpkg/
 vcpkg_installed/
 key.txt
-
+release/
 Demo and Tutorial.mp4
 *.exe
 # Visual Studio build output
@@ -29,4 +30,4 @@ __pycache__/
 *.dll
 *.lib
 *.out
-ENGINE/engine.exe
+

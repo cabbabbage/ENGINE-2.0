@@ -2010,6 +2010,8 @@ void Assets::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& i
     }
 }
 void Assets::rebuild_active_from_screen_grid() {
+    std::unordered_set<Asset*> previous_active(active_assets.begin(), active_assets.end());
+
     active_points_.clear();
     active_assets.clear();
 
@@ -2102,4 +2104,14 @@ void Assets::rebuild_active_from_screen_grid() {
     active_moving_light_assets_ = std::move(new_moving_lights);
     active_assets_dirty_.store(false, std::memory_order_release);
     mark_non_player_update_buffer_dirty();
+
+    for (Asset* asset : active_assets) {
+        if (!asset) {
+            continue;
+        }
+        if (previous_active.find(asset) != previous_active.end()) {
+            continue;
+        }
+        asset->update_scale_values();
+    }
 }

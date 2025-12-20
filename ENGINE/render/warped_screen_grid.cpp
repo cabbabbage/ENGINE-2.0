@@ -33,15 +33,15 @@ namespace {
     constexpr double kHalfFovY  = PI_D / 4.0;
     constexpr double kBottomAngleLimit = (PI_D * 0.5) - 1e-3;
     constexpr float  kDefaultPitchDegrees   = 60.0f;
-    constexpr double kMinZoomRange = 1e-4;
+    constexpr double kMinHeightRange = 1e-4;
     constexpr double kMinPerspectiveScale   = 0.35;
     constexpr double kMaxPerspectiveScale   = 1.65;
-    struct ZoomInterpolator {
+    struct HeightInterpolator {
         double t = 0.0;
-        ZoomInterpolator(const WarpedScreenGrid::RealismSettings& settings, double scale_value) {
-            const double safe_low = std::max(static_cast<double>(WarpedScreenGrid::kMinZoomAnchors), static_cast<double>(settings.zoom_low));
-            const double safe_high = std::max(safe_low + kMinZoomRange, static_cast<double>(settings.zoom_high));
-            const double span = std::max(kMinZoomRange, safe_high - safe_low);
+        HeightInterpolator(const WarpedScreenGrid::RealismSettings& settings, double scale_value) {
+            const double safe_low = std::max(static_cast<double>(WarpedScreenGrid::kMinHeightAnchors), static_cast<double>(settings.camera_height_min));
+            const double safe_high = std::max(safe_low + kMinHeightRange, static_cast<double>(settings.camera_height_max));
+            const double span = std::max(kMinHeightRange, safe_high - safe_low);
             t = std::clamp((scale_value - safe_low) / span, 0.0, 1.0);
         }
 
@@ -149,8 +149,8 @@ namespace {
         return Area(name, corners, resolution);
     }
 
-    double clamp_zoom_scale(double value) {
-        return std::clamp( value, 0.0001, static_cast<double>(WarpedScreenGrid::kMaxZoomAnchors));
+    double clamp_height_scale(double value) {
+        return std::clamp( value, 0.0001, static_cast<double>(WarpedScreenGrid::kMaxHeightAnchors));
     }
 
     struct Vec3 {

@@ -210,6 +210,7 @@ namespace {
         double near_plane = 0.0;
         double far_plane  = 0.0;
         double horizon_screen_y = 0.0;
+        double meters_scale = 1.0;
     };
 
     float resolve_pitch_degrees(const WarpedScreenGrid::RealismSettings& settings,
@@ -228,7 +229,7 @@ namespace {
         return static_cast<float>(scaled);
     }
 
-    CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings,
+CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings,
                                    double aspect,
                                    int screen_width,
                                    int screen_height,
@@ -238,8 +239,9 @@ namespace {
 
         const double clamped_scale = std::max(0.0001, scale_value);
         const double base_height   = std::max(1.0, static_cast<double>(settings.base_height_px));
-        const double camera_height = base_height * clamped_scale;
-        if (!std::isfinite(camera_height) || camera_height <= 0.0) {
+        const double meters_scale = std::max(0.0001, static_cast<double>(settings.meters_per_100_world_px) / 100.0);
+        const double camera_height_meters = base_height * clamped_scale * meters_scale;
+        if (!std::isfinite(camera_height_meters) || camera_height_meters <= 0.0) {
             return state;
         }
 
@@ -250,25 +252,25 @@ namespace {
             return state;
         }
 
-        const double focus_depth = camera_height / tan_pitch;
-        const Vec3   camera_pos{
-            static_cast<double>(anchor_world.x),
-            static_cast<double>(anchor_world.y) - focus_depth,
-            camera_height
+        const double focus_depth_meters = camera_height_meters / tan_pitch;
+        const Vec3   camera_pos_meters{
+            static_cast<double>(anchor_world.x) * meters_scale,
+            static_cast<double>(anchor_world.y) * meters_scale - focus_depth_meters,
+            camera_height_meters
         };
-        const Vec3 target{
-            static_cast<double>(anchor_world.x),
-            static_cast<double>(anchor_world.y),
+        const Vec3 target_meters{
+            static_cast<double>(anchor_world.x) * meters_scale,
+            static_cast<double>(anchor_world.y) * meters_scale,
             0.0
         };
-        Vec3 forward = normalize(target - camera_pos);
+        Vec3 forward = normalize(target_meters - camera_pos_meters);
         const Vec3 up_world{0.0, 0.0, 1.0};
         Vec3 right = normalize(cross(forward, up_world));
         if (length(right) < 1e-6) {
             right = Vec3{1.0, 0.0, 0.0};
         }
         Vec3 up = normalize(cross(right, forward));
-        const double ref_depth = length(target - camera_pos);
+        const double ref_depth_meters = length(target_meters - camera_pos_meters);
 
         const double tan_half_fov_y = std::tan(kHalfFovY);
         const double tan_half_fov_x = tan_half_fov_y * std::max(1e-6, aspect);
@@ -278,18 +280,19 @@ namespace {
         const double screen_h    = std::max(1.0, static_cast<double>(screen_height));
         const double horizon_y   = screen_h * (0.5 - 0.5 * horizon_ndc);
 
-        state.valid           = std::isfinite(ref_depth) && ref_depth > 0.0;
-        state.position        = camera_pos;
+        state.valid           = std::isfinite(ref_depth_meters) && ref_depth_meters > 0.0;
+        state.position        = camera_pos_meters;
         state.forward         = forward;
         state.right           = right;
         state.up              = up;
-        state.camera_height   = camera_height;
-        state.focus_depth     = focus_depth;
-        state.reference_depth = ref_depth;
+        state.camera_height   = camera_height_meters;
+        state.focus_depth     = focus_depth_meters;
+        state.reference_depth = ref_depth_meters;
         state.tan_half_fov_y  = tan_half_fov_y;
         state.tan_half_fov_x  = tan_half_fov_x;
-        state.near_plane      = std::max(0.1, static_cast<double>(settings.depth_near_world));
-        state.far_plane       = std::max(state.near_plane + 1.0, static_cast<double>(settings.depth_far_world));
+        state.meters_scale    = meters_scale;
+        state.near_plane      = std::max(0.1, static_cast<double>(settings.depth_near_world) * meters_scale);
+        state.far_plane       = std::max(state.near_plane + 1.0, static_cast<double>(settings.depth_far_world) * meters_scale);
         state.horizon_screen_y = horizon_y;
         return state;
     }
@@ -305,9 +308,9 @@ namespace {
     };
 
     ProjectionResult project_world_point(const CameraState& cam,
-                                         double world_x,
-                                         double world_y,
-                                         double world_z,
+                                         double world_x_pixels,
+                                         double world_y_pixels,
+                                         double world_z_pixels,
                                          int screen_width,
                                          int screen_height,
                                          float horizon_band_px) {
@@ -316,14 +319,67 @@ namespace {
             return out;
         }
 
-        const Vec3 world{
-            static_cast<double>(world_x),
-            static_cast<double>(world_y),
-            static_cast<double>(world_z)
+        // Note: world coordinates are in pixels, but camera and projection are in meters
+        // This function assumes world coordinates are passed as pixels and converts them
+        // In this implementation, since camera is built with meters, we need to convert world to meters here
+        // But wait, the settings.meters_per_100_world_px is not passed here.
+        // Actually, since the CameraState already has positions in meters, we need to convert world pixels to meters using the scale.
+
+        // For now, assume world coordinates are pixels, and we need to scale them.
+        // But to avoid passing settings, let's assume the scale is 1 for now, and adjust later.
+
+        // Actually, the CameraState position is already in meters, so world must be in meters.
+        // So we need to convert input world_x_pixels etc to meters.
+
+        // But the function signature takes double world_x, etc, which are pixels.
+        // To fix, we need to pass the meters_scale.
+
+        // For now, assume meters_scale = 1.0, and adjust.
+
+        // Actually, since this is internal, and CameraState is built with meters_scale, we can assume world inputs are pixels, and convert here.
+        // But meters_scale is not in CameraState.
+
+        // Let's add meters_scale to CameraState.
+
+        // Update CameraState struct.
+
+        // Add double meters_scale = 1.0;
+
+        // Then in build_camera_state, state.meters_scale = meters_scale;
+
+        // Then here, const double meters_scale = cam.meters_scale;
+
+        // const Vec3 world_meters{
+        //     world_x_pixels * meters_scale,
+        //     world_y_pixels * meters_scale,
+        //     world_z_pixels * meters_scale
+        // };
+
+        // Then proceed.
+
+        // Yes.
+
+        // First, add to CameraState.
+
+        // In the struct:
+
+        // double meters_scale = 1.0;
+
+        // Then in build_camera_state:
+
+        // state.meters_scale = meters_scale;
+
+        // Then here:
+
+        const double meters_scale = cam.meters_scale;
+        const Vec3 world_meters{
+            world_x_pixels * meters_scale,
+            world_y_pixels * meters_scale,
+            world_z_pixels * meters_scale
         };
-        const Vec3 to_point = world - cam.position;
-        const double depth_along_forward = dot(to_point, cam.forward);
-        const double distance_to_camera  = length(to_point);
+        const Vec3 to_point_meters = world_meters - cam.position;
+        const double depth_along_forward = dot(to_point_meters, cam.forward);
+        const double distance_to_camera  = length(to_point_meters);
         if (depth_along_forward <= cam.near_plane ||
             distance_to_camera < cam.near_plane ||
             distance_to_camera > cam.far_plane ||
@@ -331,8 +387,8 @@ namespace {
             return out;
         }
 
-        const double cam_x = dot(to_point, cam.right);
-        const double cam_y = dot(to_point, cam.up);
+        const double cam_x = dot(to_point_meters, cam.right);
+        const double cam_y = dot(to_point_meters, cam.up);
 
         const double ndc_x = (cam_x / depth_along_forward) / cam.tan_half_fov_x;
         const double ndc_y = (cam_y / depth_along_forward) / cam.tan_half_fov_y;
@@ -1230,7 +1286,7 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
 
     result.screen_position   = proj.screen;
     result.vertical_scale    = proj.vertical_scale;
-    result.distance_scale    = proj.perspective_scale;
+    result.distance_scale    = cam.reference_depth / proj.distance;
     result.horizon_fade_alpha = proj.horizon_fade;
     return result;
 }
@@ -1665,6 +1721,7 @@ void WarpedScreenGrid::project_to_screen(world::GridPoint& point) const {
     }
 
     point.screen          = proj.screen;
+    point.screen.y        = screen_height_ - point.screen.y;
     point.parallax_dx     = 0.0f;
     point.vertical_scale  = proj.vertical_scale;
     point.perspective_scale = proj.perspective_scale;
@@ -1673,4 +1730,3 @@ void WarpedScreenGrid::project_to_screen(world::GridPoint& point) const {
     point.tilt_radians    = static_cast<float>(runtime_pitch_rad_);
     point.on_screen       = true;
 }
-

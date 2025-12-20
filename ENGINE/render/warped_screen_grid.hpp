@@ -50,6 +50,8 @@ public:
 
         float scale_variant_hysteresis_margin = 0.05f;
 
+        float meters_per_100_world_px         = 1.0f;
+
         int   foreground_texture_max_opacity  = 255;
         int   background_texture_max_opacity  = 255;
         float foreground_plane_screen_y       = 1080.0f;

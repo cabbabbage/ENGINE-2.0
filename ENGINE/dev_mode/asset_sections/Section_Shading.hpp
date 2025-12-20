@@ -130,6 +130,8 @@ public:
         }
 
         if (!expanded_) {
+            this->build ();
+
             return used || shading_changed;
         }
 

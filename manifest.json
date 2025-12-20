@@ -7424,8 +7424,8 @@
         }
       },
       "camera_settings": {
-        "height_in_key": 2.7799997329711914,
-        "height_out_key": 2.999999761581421
+        "height_in_key": 1.2200000286102295,
+        "height_out_key": 1.6699999570846558
       },
       "content_root": "MAPS/FORREST",
       "map_assets_data": {
@@ -7759,9 +7759,9 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            242,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 19,
@@ -7779,9 +7779,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            242,
-            242,
+            157,
             85,
+            242,
             255
           ],
           "edge_smoothness": 43,
@@ -7832,9 +7832,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            171,
+            204,
+            109,
+            31,
             255
           ],
           "edge_smoothness": 29,
@@ -7882,9 +7882,9 @@
         "spawn": {
           "curvyness": 2,
           "display_color": [
-            85,
-            242,
-            242,
+            125,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 101,

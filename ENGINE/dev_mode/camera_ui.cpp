@@ -1016,6 +1016,9 @@ void CameraUIPanel::sync_from_camera() {
         }
     }
 
+    if (meters_slider_) {
+        meters_slider_->set_value(last_settings_.meters_per_100_world_px);
+    }
     if (foreground_texture_opacity_slider_) {
         foreground_texture_opacity_slider_->set_value(static_cast<float>(last_settings_.foreground_texture_max_opacity));
     }
@@ -1091,6 +1094,10 @@ void CameraUIPanel::build_ui() {
     render_quality_slider_->set_tooltip("Trade fidelity for speed; lowers the number of sprites drawn each frame.");
     render_quality_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
     if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
+
+    meters_slider_ = std::make_unique<FloatSliderWidget>("Meters per 100 World Pixels", 0.01f, 1.00f, 0.01f, defaults.meters_per_100_world_px, 2);
+    meters_slider_->set_tooltip("Defines how many meters are represented by 100 world pixels, translating engine space into physical units.");
+    meters_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
     HeightKeyPointWidget::Values height_in_defaults;
     height_in_defaults.height = defaults.camera_height_min;
@@ -1193,6 +1200,7 @@ void CameraUIPanel::rebuild_rows() {
 
     if (depth_section_header_) rows.push_back({ depth_section_header_.get() });
     if (depth_section_expanded_) {
+        if (meters_slider_) rows.push_back({ meters_slider_.get() });
         if (height_in_keypoint_) rows.push_back({ height_in_keypoint_.get() });
         if (height_out_keypoint_) rows.push_back({ height_out_keypoint_.get() });
     }
@@ -1240,6 +1248,7 @@ void CameraUIPanel::apply_settings_if_needed() {
     if (render_quality_slider_) {
         changed = changed || settings.render_quality_percent != prev.render_quality_percent;
     }
+    changed = changed || differs(settings.meters_per_100_world_px, prev.meters_per_100_world_px);
     changed = changed || differs(settings.scale_variant_hysteresis_margin, prev.scale_variant_hysteresis_margin);
 
     changed = changed || (settings.foreground_texture_max_opacity != prev.foreground_texture_max_opacity);
@@ -1321,6 +1330,8 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
         max_values = height_out_keypoint_->values();
         settings.camera_height_max = max_values.height;
     }
+
+    if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
 
     settings.camera_height_min = std::clamp(settings.camera_height_min, WarpedScreenGrid::kMinHeightAnchors, WarpedScreenGrid::kMaxHeightAnchors);
     const float min_high = std::min(WarpedScreenGrid::kMaxHeightAnchors, settings.camera_height_min + 0.0001f);

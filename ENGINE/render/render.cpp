@@ -302,9 +302,16 @@ void SceneRenderer::render() {
 };
 
     const auto& active_assets = assets_->getActive();
+    std::vector<Asset*> sorted_assets(active_assets.begin(), active_assets.end());
+    std::sort(sorted_assets.begin(), sorted_assets.end(), [&](Asset* a, Asset* b) {
+        world::GridPoint* ga = cam.grid_point_for_asset(a);
+        world::GridPoint* gb = cam.grid_point_for_asset(b);
+        if (!ga || !gb) return ga > gb;
+        return ga->distance_to_camera > gb->distance_to_camera;
+    });
     std::vector<DarkMaskSprite> dark_mask_sprites;
-    dark_mask_sprites.reserve(std::max<std::size_t>(active_assets.size(), 8u));
-    for (Asset* asset : active_assets) {
+    dark_mask_sprites.reserve(std::max<std::size_t>(sorted_assets.size(), 8u));
+    for (Asset* asset : sorted_assets) {
         if (!asset || asset->is_hidden() || !asset->info) {
             continue;
         }
@@ -386,7 +393,7 @@ void SceneRenderer::render() {
         }};
 
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-        for (Asset* asset : active_assets) {
+        for (Asset* asset : sorted_assets) {
             if (!asset || asset->is_hidden() || !asset->info || !asset->anim_) {
                 continue;
             }

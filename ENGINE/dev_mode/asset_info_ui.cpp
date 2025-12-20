@@ -2080,7 +2080,7 @@ std::filesystem::path AssetInfoUI::resolve_mask_preview_frame_path() const {
 }
 
 bool AssetInfoUI::generate_mask_preview() {
-    if (!info_ || !info_->is_shaded) {
+    if (!info_ || !info_->has_shading) {
         destroy_mask_preview_texture();
         return false;
     }

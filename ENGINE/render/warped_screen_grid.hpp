@@ -123,28 +123,28 @@ public:
         explicit RenderSmoothingKey(const Asset* asset, int frame = 0);
 };
 
-    WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_zoom);
+    WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_view);
     ~WarpedScreenGrid();
 
     void set_scale(float s);
     float get_scale() const;
-    void zoom_to_scale(double target_scale, int duration_steps);
-    void zoom_to_area(const Area& target_area, int duration_steps);
-    void animate_zoom_multiply(double factor, int duration_steps);
-    void animate_zoom_towards_point(double factor, SDL_Point screen_point, int duration_steps);
+    void animate_height_to_scale(double target_scale, int duration_steps);
+    void frame_to_area(const Area& target_area, int duration_steps);
+    void animate_height_multiply(double factor, int duration_steps);
+    void animate_height_towards_point(double factor, SDL_Point screen_point, int duration_steps);
 
-    void pan_and_zoom_to_point(SDL_Point world_pos, double zoom_scale_factor, int duration_steps);
-    void pan_and_zoom_to_asset(const Asset* a, double zoom_scale_factor, int duration_steps);
+    void pan_and_height_to_point(SDL_Point world_pos, double height_scale_factor, int duration_steps);
+    void pan_and_height_to_asset(const Asset* a, double height_scale_factor, int duration_steps);
 
     void update(float dt);
-    void update_zoom(Room* cur, CurrentRoomFinder* finder, Asset* player, bool refresh_requested, float dt, bool dev_mode = false);
+    void update_camera_height(Room* cur, CurrentRoomFinder* finder, Asset* player, bool refresh_requested, float dt, bool dev_mode = false);
 
     void set_focus_override(SDL_Point focus);
-    void set_manual_zoom_override(bool enabled);
+    void set_manual_height_override(bool enabled);
     void clear_focus_override();
-    void clear_manual_zoom_override();
+    void clear_manual_height_override();
     bool has_focus_override() const { return focus_override_; }
-    bool is_manual_zoom_override() const { return manual_zoom_override_; }
+    bool is_manual_height_override() const { return manual_height_override_; }
     SDL_Point get_focus_override_point() const { return focus_point_; }
 
     void set_realism_settings(const RealismSettings& settings);
@@ -180,7 +180,7 @@ public:
     double view_height_world() const;
     double view_height_for_scale(double scale_value) const;
     double anchor_world_y() const;
-    double zoom_lerp_t_for_scale(double scale_value) const;
+    double height_lerp_t_for_scale(double scale_value) const;
     float depth_offset_for_scale(double scale_value) const;
     double horizon_screen_y_for_scale() const;
     double horizon_screen_y_for_scale_value(double scale_value) const;
@@ -216,8 +216,8 @@ public:
     void set_render_areas_enabled(bool enabled) { render_areas_enabled_ = enabled; }
     const Area& get_current_view() const { return current_view_; }
     const Area& get_camera_area() const { return current_view_; }
-    bool is_zooming() const { return zooming_; }
-    double default_zoom_for_room(const Room* room) const;
+    bool is_height_animating() const { return height_animating_; }
+    double default_camera_height_for_room(const Room* room) const;
     const std::vector<world::GridPoint*>& get_warped_points() const { return warped_points_; }
     const std::vector<Asset*>& get_visible_assets() const { return visible_assets_; }
     const std::vector<world::GridPoint*>& get_visible_points() const { return visible_points_; }
@@ -245,7 +245,7 @@ private:
     bool render_areas_enabled_ = false;
     RealismSettings settings_{};
 
-    Area base_zoom_;
+    Area base_view_;
     Area current_view_;
 
     SDL_Point screen_center_{0, 0};
@@ -256,7 +256,7 @@ private:
 
     float scale_ = 1.0f;
     float smoothed_scale_ = 1.0f;
-    bool zooming_ = false;
+    bool height_animating_ = false;
     int steps_total_ = 0;
     int steps_done_ = 0;
     double start_scale_ = 1.0;
@@ -267,7 +267,7 @@ private:
     bool pan_override_ = false;
     SDL_Point start_center_{0, 0};
     SDL_Point target_center_{0, 0};
-    bool manual_zoom_override_ = false;
+    bool manual_height_override_ = false;
 
     Room* starting_room_ = nullptr;
     double starting_area_ = 0.0;

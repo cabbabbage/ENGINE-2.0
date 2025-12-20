@@ -937,8 +937,8 @@ void WorldGrid::update_active_chunks(const SDL_Rect& camera_world, int margin_px
 }
 
 int WorldGrid::default_resolution_layer() const {
-    const int max_layers = max_resolution_layers();
-    return std::clamp(grid_resolution_, 0, std::max(0, max_layers));
+    // Finest available layer by default; grid_resolution_ is tile-only.
+    return max_resolution_layers();
 }
 
 void WorldGrid::set_grid_resolution(int r) {

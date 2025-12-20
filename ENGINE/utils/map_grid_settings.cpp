@@ -30,7 +30,7 @@ int power_of_three(int exponent) {
 }
 
 MapGridSettings MapGridSettings::defaults() {
-    return MapGridSettings{6, 0, 0};
+    return MapGridSettings{0, 0, 0};
 }
 
 MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
@@ -43,7 +43,7 @@ MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
             settings.resolution = (*obj)["resolution"].get<int>();
         } else if (obj->contains("spacing") && (*obj)["spacing"].is_number_integer()) {
             const int spacing = std::max(1, (*obj)["spacing"].get<int>());
-            const double log_value = std::log2(static_cast<double>(spacing));
+            const double log_value = std::log(static_cast<double>(spacing)) / std::log(3.0);
             settings.resolution = static_cast<int>(std::lround(log_value));
         }
     } catch (...) {

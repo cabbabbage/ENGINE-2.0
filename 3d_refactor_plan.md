@@ -15,7 +15,13 @@ Backwards compatibility policy:
 - The final state should have everything on the new 3D GridPoint system, with no legacy 2D grid logic or duplicate path for core functionality.
 - If a legacy system can be kept as a thin adapter on top of the 3D grid without adding complexity, fine. If it fights the new design or forces duplicate logic, we delete it and refactor.
 
-Current baseline (Dec 2025): the engine uses a 3D-aware `world::WorldGrid` with `GridPoint` identity expressed as `(world_x, world_y, world_z, resolution_layer)` (`GridKey` backed by `key_to_id_`). Assets bind through this identity, Screen Grid rebuilds from Map Grid traversal, and legacy 2D identity is kept only for tile chunk bookkeeping. Perspective remains effectively disabled.
+Current baseline (Dec 2025): the engine uses a 3D-aware `world::WorldGrid` with `GridPoint` identity expressed as `(world_x, world_y, world_z, resolution_layer)` (`GridKey` backed by `key_to_id_`). Assets bind through this identity, Screen Grid rebuilds from Map Grid traversal, and legacy 2D identity is kept only for tile chunk bookkeeping. Perspective remains effectively depth-aware with debug toggles.
+
+## Remaining tasks
+- Lift the temporary `world_z = 0` restriction in `WarpedScreenGrid::rebuild_grid` so Screen Grid traversal and camera culling can consider multiple heights and layers.
+- Migrate tile chunk culling and chunk-based tile renders (`ENGINE/render/grid_tile_renderer.*`, chunk bookkeeping) from power-of-two (`r_chunk`, `vibble::grid::delta`) helpers into Map Grid/Screen Grid bounds or keep them explicitly gated as tile-only paths.
+- Extend `LightMap` sampling (`ENGINE/world/chunk.cpp`) to accept arbitrary `world_z`, configurable query radius, and 3D-aware accumulation, then remove the remaining floor-only sampling fallback.
+- Remove the dev-only flat camera toggle/logging (`WarpedScreenGrid::flat_camera_debug` and related settings) once the new depth pipeline is stable and well-tested.
 
 The goal is to replace the current 2D grid and resolution system with a 3D hierarchy that:
 
@@ -40,12 +46,13 @@ The goal is to replace the current 2D grid and resolution system with a 3D hiera
 ### 1.2 Current engine snapshot
 
 - `ENGINE/world/grid_point.hpp`: 3D identity fields (`world_x`, `world_y`, `world_z`, `resolution_layer`) with hierarchy links, per frame fields, branch masks, and occupants.
-- `ENGINE/world/world_grid.cpp`: `WorldGrid` owns `GridPoint`s keyed by `GridKey` (mapped through `key_to_id_`) with assets bound via `asset_to_key_`; chunk/tile bookkeeping remains 2D-only. Power-of-two spacing is confined to chunk sizing; GridPoint identity uses 3^n spacing helpers.
-- `ENGINE/render/warped_screen_grid.cpp`: rebuilds from Map Grid region queries (camera volume) and fills `warped_points_`, `visible_points_`, and `visible_assets_` by traversing active branches; no flat `all_assets()` scan.
-- `ENGINE/core/AssetsManager.cpp`: `rebuild_active_from_screen_grid` reads `WarpedScreenGrid::grid_visible_points()` and sorts assets by `GridPoint::screen.y`. Dev controls consume the same lists. Asset lookup flows through Screen Grid’s asset-to-point mapping instead of `Asset::grid_id`.
-- `ENGINE/render/render.cpp`: `SceneRenderer::render` calls `WarpedScreenGrid::rebuild_grid`, renders tiles from `ChunkManager`, and renders `active_assets` without grid traversal. `LightMap` is a stub that only mirrors active chunks.
-- `ENGINE/utils/map_grid_settings.*` and `ENGINE/utils/grid.*`: all spacing uses power of two deltas. `MapGridSettings` stores `resolution`, `r_chunk`, and jitter for the current grid.
-- `ENGINE/render/composite_asset_renderer.cpp`: consumes per frame projection data (`perspective_scale`, `distance_from_camera`), but today those fields are filled only with 2D data and no `world_z`.
+- `ENGINE/world/world_grid.cpp`: `WorldGrid` owns `GridPoint`s keyed by `GridKey` (stored in `key_to_id_`), maps assets via `asset_to_key_`, tracks roots, and drives branch-aware `query_region`/`query_lights` traversals; `GridId` is now only the internal map key while chunk/tile bookkeeping uses legacy `(i,j)` indices.
+- `ENGINE/render/warped_screen_grid.cpp`: rebuilds from Map Grid region queries (camera volume, layer/z filters) and populates per frame `warped_points_`, `visible_points_`, and `visible_assets_` without flat `all_assets()` scans; traversal is currently limited to `world_z = 0`.
+- `ENGINE/core/AssetsManager.cpp`: `rebuild_active_from_screen_grid` consumes `WarpedScreenGrid::get_visible_points()`, filters `on_screen` nodes, and sorts assets by `distance_to_camera`, `resolution_layer`, `world_z`, with screen-space ties. Active overlays and filters continue to use this new list.
+- `ENGINE/render/render.cpp`: `SceneRenderer` drives rendering from `WarpedScreenGrid` data (screen positions, `perspective_scale`, `distance_to_camera`) throughout the composite and tile passes, removing any reliance on `Asset::grid_id`.
+- `ENGINE/world/chunk.cpp`: `LightMap` rebuilds query lights via `WorldGrid::query_lights`, samples the returned `LightInstance`s using full 3D `(dx,dy,dz)` distances, and still emits an additive brightness mask for now.
+- `ENGINE/utils/map_grid_settings.*` and `ENGINE/utils/grid.*`: Map Grid spacing defaults to powers of 3; legacy `r_chunk`/`vibble::grid::delta` helpers remain tile-only for chunk culling and dev tools.
+- `ENGINE/render/composite_asset_renderer.cpp`: consumes the per frame `GridPoint` camera fields so perspective, depth sorting, and parallax now come from Map Grid identity.
 
 ### 1.3 GridPoint snapshot (target vs current)
 
@@ -128,20 +135,11 @@ Pre Phase 5 legacy removal (Phases 1-4): legacy 2D identity bridges have been re
 **Goal**  
 Introduce the 3D `GridPoint` shape and helpers while keeping current 2D users working. This replaces the current flat layout with a canonical world identity, hierarchy pointers, per frame fields, asset lists, and branch masks.
 
-**Status (Dec 2025)**  
-- Identity fields (world_x, world_y, world_z, resolution_layer) and constructor are in place and wired through WorldGrid creation; legacy ids remain only as internal storage for tile containers.  
-- Hierarchy pointers, direction helpers, and per-frame reset/frame stamping are implemented.  
-- Asset/branch tracking fields, branch bits, and `assets_here` alias are present; per-frame cache reset is invoked during Screen Grid rebuilds.  
-- `distance(layer)` and `grid_spacing_for_layer` now derive from 3^n spacing, so `grid_resolution_` simply drives the default layer until loaders migrate.  
-- Child allocation helpers exist; attach/detach propagation will be finalized in later phases as hierarchy and branch masks become authoritative.  
-- 3D GridKey mapping is canonical; legacy `GridId` lookups are no longer emitted and `GridId` now only backs the container storage.  
-- Identity/mask validation helpers exist; legacy identity usage is tracked in cleanup tasks.
-
-**Status (Phase 3 - Asset attachment and migration)**  
-- Asset spawn/move paths attach via 3D GridPoints (GridKey) with `world_z` and `resolution_layer` parameters (default `world_z = 0`, default layer).  
-- Asset bindings rely on 3D `GridKey` only; legacy `GridId` on assets is cleared and no longer used for lookup.  
-- Attach/detach flows invalidate per-frame data and update branch activity; hierarchy links are required for accurate masks.  
-- Legacy 2D caches for asset identity have been removed; chunk residency remains tile-only.
+**Status (Phase 1 - Define 3D GridPoint core)**  
+- Immutable `GridKey` identity (`world_x`, `world_y`, `world_z`, `resolution_layer`) is constructed once per node; hierarchy pointers, branch bits, and six child links exist and start `nullptr` under Map Grid ownership.  
+- Per-frame camera fields are reset/invalidated every rebuild, and `GridPoint::frame_stamp` prevents stale data; branch/asset helpers (`children_with_assets`, `active_child_mask`, `assets_here`) are wired into constructor and mutators.  
+- Resolution helpers (`max_layers`, `distance(layer)`, `grid_spacing_for_layer`) now drive node placement; `grid_resolution_` only selects the default layer while loaders migrate.  
+- Identity validity helpers (`debug_identity_and_mask`, `debug_validate_keys_and_masks`) exist; `GridId` is now just the container key and is no longer exposed to gameplay paths.
 
 **How it fits**  
 Every phase depends on `GridPoint` being stable and consistent. Do this first, even if many fields are not yet used by callers.
@@ -203,6 +201,7 @@ Map Grid is the source of truth for world space. Screen Grid, renderer traversal
 - `WorldGrid` owns `GridPoint`s indexed by `GridKey` via `key_to_id_` and tracks roots, branch masks, and 3^n spacing; `GridId` now only exists for `std::unordered_map` storage and chunk compatibility.  
 - Region queries, `query_region`, and `grid_points_for_*` already rely on `GridKey` and active branch masks; `find_or_create_grid_point` enforces the canonical identity while instrumentation logs mismatches.  
 - Chunk bookkeeping (`ChunkManager`, `grid_index`, `chunk_index`, `MapGridSettings` power-of-two fields) still uses 2D ids; migrating these adapters to the 3D model and/or retiring them is a Phase 10 cleanup task.
+- Map grid spacing is now powered by `distance(layer)`/`max_layers`; `MapGridSettings::spacing()` reports a 3^n grid while `grid_resolution_`/`r_chunk` remain tile-only adapters described in the cleanup list.
 
 **Subtasks**
 
@@ -248,6 +247,11 @@ Move asset spawn and move logic to attach assets to `GridPoint`s in Map Grid wit
 
 **How it fits**  
 Assets must live on `GridPoint`s for grid search, Screen Grid, and renderer traversal to work. This phase connects gameplay content to the new spatial model.
+
+**Status (Phase 3 - Asset attachment and migration)**  
+- Assets register, move, and remove through `WorldGrid::attach_asset_to_grid_point`/`detach_asset_from_grid_point`, so `occupants`, branch masks, and per-frame invalidation stay synchronized.  
+- Asset bindings use `asset_to_key_`; `Asset::grid_id` is cleared and no longer used outside of rare compatibility code.  
+- Spawn and move helpers still default to floor layer (`world_z = 0`, default `resolution_layer`), and dev/UI flows supply the new `MapGridSettings::resolution` to `WorldGrid::set_grid_resolution`.
 
 **Key files**  
 `ENGINE/core/AssetsManager.*`, `ENGINE/world/world_grid.*`, `ENGINE/asset/Asset.hpp`, asset spawn and move helpers, any JSON or map loaders that currently set `grid_resolution` or z offsets.

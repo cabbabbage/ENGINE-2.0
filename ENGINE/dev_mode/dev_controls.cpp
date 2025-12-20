@@ -1728,7 +1728,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     }
 
     if (renderer && assets_ && (grid_overlay_enabled_ || show_depth_guides)) {
-        const WarpedScreenGrid& cam = assets_->getView();
+        WarpedScreenGrid& cam = assets_->getView();
         const auto& warped_nodes = cam.get_warped_points();
         const auto& visible_nodes = cam.get_visible_points();
 

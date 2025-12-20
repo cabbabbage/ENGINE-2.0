@@ -1177,7 +1177,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
 
     try_read_bool("realism_enabled", realism_enabled_);
 
-    const std::array<std::pair<const char*, float*>, 15> float_fields{ {
+    const std::array<std::pair<const char*, float*>, 17> float_fields{ {
         { "extra_cull_margin", &settings_.extra_cull_margin },
         { "zoom_low", &settings_.zoom_low },
         { "zoom_high", &settings_.zoom_high },

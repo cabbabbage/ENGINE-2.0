@@ -1294,7 +1294,7 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
         clamped_height = min_height;
     }
     if (std::fabs(clamped_height - current_height) > 1e-4f) {
-        cam.set_scale(clamped_height);
+        cam.animate_height_to_scale(clamped_height, 10);
     }
 
     if (assets_) {

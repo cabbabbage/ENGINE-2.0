@@ -286,6 +286,7 @@ private:
     std::vector<world::GridPoint*> visible_points_;
     std::vector<world::Chunk*> active_chunks_;
     std::unordered_map<std::uint64_t, std::size_t> id_to_index_;
+    std::uint64_t frame_counter_ = 0;
     SDL_Rect cached_world_rect_{0, 0, 0, 0};
     GridBounds bounds_{};
 };

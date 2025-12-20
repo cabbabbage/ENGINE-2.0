@@ -127,6 +127,21 @@ The phases below describe the high level goal, how the phase fits into the refac
 **Goal**  
 Introduce the 3D `GridPoint` shape and helpers while keeping current 2D users working. This replaces the current flat layout with a canonical world identity, hierarchy pointers, per frame fields, asset lists, and branch masks.
 
+**Status (Dec 2025)**  
+- Identity fields (world_x, world_y, world_z, resolution_layer) and constructor are in place and wired through WorldGrid creation; legacy ids remain intact.  
+- Hierarchy pointers, direction helpers, and per-frame reset/frame stamping are implemented.  
+- Asset/branch tracking fields, branch bits, and `assets_here` alias are present; per-frame cache reset is invoked during Screen Grid rebuilds.  
+- Resolution layer defaults mirror current grid resolution; spacing helpers and distance fallback to legacy power-of-two spacing are available for migration.
+- Child allocation helpers exist; attach/detach propagation will be finalized in later phases as hierarchy and branch masks become authoritative.  
+- 3D GridKey mapping coexists with legacy GridId; lookups warn on legacy fallback.  
+- Identity/mask validation helpers exist; legacy identity usage is tracked in cleanup tasks.
+
+**Status (Phase 3 - Asset attachment and migration)**  
+- Asset spawn/move paths attach via 3D GridPoints (GridKey) with `world_z` and `resolution_layer` parameters (default `world_z = 0`, default layer).  
+- Asset bindings maintain both legacy `GridId` and 3D `GridKey`, preferring 3D for lookups; legacy fallbacks are logged.  
+- Attach/detach flows invalidate per-frame data and update branch activity; hierarchy links are required for accurate masks.  
+- Remaining legacy caches (e.g., 2D grid residency) still exist and must be upgraded in cleanup phases.
+
 **How it fits**  
 Every phase depends on `GridPoint` being stable and consistent. Do this first, even if many fields are not yet used by callers.
 
@@ -268,6 +283,11 @@ Tasks that change how assets are spawned or moved must reference Phase 3 and con
 
 **Goal**  
 Build a per frame Screen Grid that references Map Grid nodes in the visible 3D volume and updates per frame camera fields, replacing the flat lists in `WarpedScreenGrid`.
+
+**Status (Phase 4 - Screen Grid reconstruction)**  
+- Screen Grid rebuild now traverses Map Grid nodes (`all_grid_points`) instead of the flat `all_assets` list and fills per frame fields each frame.  
+- Per frame state is reset with an explicit frame stamp during rebuild; visible points and assets are sourced from the traversal.  
+- Current traversal is intentionally restricted to `world_z = 0` until camera and culling handle multi-z slices; legacy `GridId` lookup (`id_to_index_`) remains as a compatibility bridge.
 
 **How it fits**  
 Screen Grid is the runtime gateway between world space and rendering. Renderer and searches will start from Screen Grid roots.
@@ -529,5 +549,14 @@ Cleanup tasks must reference Phase 10 and must not keep long term dependencies o
 - Camera, renderer, and lighting adopt real `world_z` while keeping floor assets simple and backward compatible during rollout.
 - Dev tools must expose the hierarchy so the migration stays debuggable.
 - Backwards compatibility is valued, but the end goal is a single 3D grid based system with no permanent legacy 2D grid logic.
+
+Legacy cleanup tasks (track and remove when 3D identity is fully adopted):
+- Remove reliance on legacy `grid_index`/`chunk_index`/`GridId` once all callers use `GridKey` (Phase 10).
+- Remove temporary logging/compatibility paths that collapse 3D identity to legacy ids.
+- Finalize branch mask propagation and detach any legacy mask assumptions tied to 2D traversal.
+- Remove debug validation utilities added for migration once Phase 10 cleanup is underway.
+- Upgrade any remaining 2D-only caches (e.g., grid residency caches) to store `world_z` and `resolution_layer`, then remove the legacy forms.
+- Lift the temporary Screen Grid floor-only restriction once camera/culling support multi-z traversal; update `WarpedScreenGrid` to include higher `world_z` layers.
+- Replace `id_to_index_` GridId compatibility lookups with `GridKey`-backed indexing once renderers stop using `Asset::grid_id`; remove the legacy map in `WarpedScreenGrid`.
 
 Every Codex task involved in this refactor must reference this plan and state which phase it is implementing or supporting.

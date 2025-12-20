@@ -1453,12 +1453,14 @@ void WarpedScreenGrid::rebuild_grid_bounds() {
 }
 
 void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_seconds) {
+    (void)dt_seconds;
+    const std::uint64_t frame_stamp = ++frame_counter_;
     clear_grid_state();
 
-    std::vector<Asset*> assets = world_grid.all_assets();
-    warped_points_.reserve(assets.size());
-    visible_assets_.reserve(assets.size());
-    visible_points_.reserve(assets.size());
+    std::vector<world::GridPoint*> grid_points = world_grid.all_grid_points();
+    warped_points_.reserve(grid_points.size());
+    visible_points_.reserve(grid_points.size());
+    visible_assets_.reserve(grid_points.size());
 
     const float inv_scale   = 1.0f / std::max(0.000001f, smoothed_scale_);
     const float screen_w    = static_cast<float>(screen_width_);
@@ -1466,9 +1468,16 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
 
     player_center_offset_y_ = 0.0f;
     Asset* player_asset = nullptr;
-    for (Asset* a : assets) {
-        if (a && a->info && a->info->type == "player") {
-            player_asset = a;
+    for (world::GridPoint* gp : grid_points) {
+        if (!gp) continue;
+        for (const auto& owned : gp->occupants) {
+            Asset* a = owned.get();
+            if (a && a->info && a->info->type == "player") {
+                player_asset = a;
+                break;
+            }
+        }
+        if (player_asset) {
             break;
         }
     }
@@ -1558,19 +1567,33 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         return !(ax1 < b.x || bx1 < a.x || ay1 < b.y || by1 < a.y);
 };
 
-    for (Asset* a : assets) {
-        if (!a) continue;
-        world::GridPoint* gp = world_grid.point_for_asset(a);
+    for (world::GridPoint* gp : grid_points) {
         if (!gp) continue;
+        gp->reset_frame_state(frame_stamp);
 
-        const SDL_Point world_pos{ gp->world.x, gp->world.y };
+        // Early Screen Grid integration is floor-only; higher z slices will be added with full 3D camera.
+        if (gp->world_z() != 0) {
+            continue;
+        }
+        if (gp->occupants.empty()) {
+            continue;
+        }
+
+        Asset* primary_asset = nullptr;
+        for (const auto& owned : gp->occupants) {
+            if (owned) {
+                primary_asset = owned.get();
+                break;
+            }
+        }
+        if (!primary_asset) {
+            continue;
+        }
+
+        const SDL_Point world_pos{ gp->world_x(), gp->world_y() };
 
         SDL_FPoint linear_screen = map_to_screen(world_pos);
         float warped_y = linear_screen.y;
-#if 0
-
-        warped_y = warp_floor_screen_y(static_cast<float>(world_pos.y), linear_screen.y);
-#endif
         SDL_FPoint screen_pos{linear_screen.x, warped_y};
 
         if (!std::isfinite(screen_pos.x) || !std::isfinite(screen_pos.y)) {
@@ -1578,15 +1601,15 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         }
 
         const float parallax_dx = 0.0f;
-        const RenderEffects effects = compute_render_effects( world_pos, 0.0f, settings_.base_height_px, RenderSmoothingKey(a));
+        const RenderEffects effects = compute_render_effects( world_pos, 0.0f, settings_.base_height_px, RenderSmoothingKey(primary_asset));
 
-        float base_scale = a->smoothed_scale();
+        float base_scale = primary_asset->smoothed_scale();
         if (!std::isfinite(base_scale) || base_scale <= 0.0f) {
             base_scale = 1.0f;
         }
 
-        const int fw = (a && a->info) ? std::max(1, a->info->original_canvas_width) : 1;
-        const int fh = (a && a->info) ? std::max(1, a->info->original_canvas_height) : 1;
+        const int fw = (primary_asset && primary_asset->info) ? std::max(1, primary_asset->info->original_canvas_width) : 1;
+        const int fh = (primary_asset && primary_asset->info) ? std::max(1, primary_asset->info->original_canvas_height) : 1;
         const float base_sw = static_cast<float>(fw) * base_scale * inv_scale;
         const float base_sh = static_cast<float>(fh) * base_scale * inv_scale;
 
@@ -1616,49 +1639,17 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         gp->distance_to_camera = 0.0f;
         gp->tilt_radians       = 0.0f;
         gp->on_screen          = on_screen;
-
-#if 0
-
-        const double perspective_scale_value = interpolate_perspective_scale( static_cast<double>(screen_pos.y), horizon_screen_y, bottom_screen_y, horizon_perspective_scale, bottom_perspective_scale);
-
-        gp->perspective_scale  = static_cast<float>(perspective_scale_value);
-        const double distance_measure = compute_floor_distance_measure(screen_pos.y, depth_params);
-        gp->distance_to_camera = static_cast<float>(distance_measure);
-        gp->tilt_radians       = runtime_pitch_rad_;
-
-        float fg_opacity = 0.0f;
-        float bg_opacity = 1.0f;
-
-        if (on_screen && !gp->occupants.empty()) {
-
-            float screen_y = screen_pos.y;
-            float fg_y = settings_.foreground_plane_screen_y;
-            float bg_y = settings_.background_plane_screen_y;
-
-            if (screen_y > fg_y) {
-                fg_opacity = 1.0f;
-            } else if (screen_y < bg_y) {
-                fg_opacity = 0.0f;
-            } else {
-                float range = fg_y - bg_y;
-                if (range > 0.001f) {
-                    fg_opacity = (screen_y - bg_y) / range;
-                }
-            }
-            fg_opacity = std::clamp(fg_opacity, 0.0f, 1.0f);
-            bg_opacity = 1.0f - fg_opacity;
-
-            fg_opacity *= (static_cast<float>(settings_.foreground_texture_max_opacity) / 255.0f);
-            bg_opacity *= (static_cast<float>(settings_.background_texture_max_opacity) / 255.0f);
-        }
-
-#endif
+        gp->mark_screen_data_updated(frame_stamp);
 
         id_to_index_[gp->id] = warped_points_.size();
         warped_points_.push_back(gp);
         if (on_screen) {
-            visible_assets_.push_back(a);
             visible_points_.push_back(gp);
+            for (const auto& owned : gp->occupants) {
+                if (owned) {
+                    visible_assets_.push_back(owned.get());
+                }
+            }
         }
         if (gp->chunk) active_chunks_.push_back(gp->chunk);
     }

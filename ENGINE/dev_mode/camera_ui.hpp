@@ -53,7 +53,7 @@ private:
     void apply_settings_to_camera(const WarpedScreenGrid::RealismSettings& settings, bool effects_enabled, bool depthcue_enabled);
     WarpedScreenGrid::RealismSettings read_settings_from_ui() const;
     void on_control_value_changed();
-    void snap_zoom_to_anchor(float target_zoom, bool anchor_is_min_section);
+    void snap_height_to_anchor(float target_height, bool anchor_is_min_section);
 
 private:
     Assets* assets_ = nullptr;

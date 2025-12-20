@@ -10,15 +10,8 @@
 
 namespace {
 
-int compute_center_arm(const WarpedScreenGrid& cam) {
-    double scale = cam.get_scale();
-    if (!std::isfinite(scale) || scale <= 0.0) {
-        scale = 1.0;
-    }
-    double inv_scale = 1.0 / scale;
-    int arm = static_cast<int>(std::lround(6.0 * inv_scale));
-    arm = std::clamp(arm, 4, 24);
-    return arm;
+int compute_center_arm(const WarpedScreenGrid&) {
+    return 6;
 }
 
 }

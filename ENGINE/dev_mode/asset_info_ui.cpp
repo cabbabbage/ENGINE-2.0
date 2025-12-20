@@ -807,40 +807,39 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
                 if (fw <= 0) fw = 1;
                 if (fh <= 0) fh = 1;
 
-                const float base_scale = (target_asset_->info && std::isfinite(target_asset_->info->scale_factor) && target_asset_->info->scale_factor > 0.0f) ? target_asset_->info->scale_factor : 1.0f;
-                const float scale = cam.get_scale();
-                const float inv_scale = (scale > 0.0f) ? (1.0f / scale) : 1.0f;
+                int base_w = fw;
+                int base_h = fh;
+                if (target_asset_->info) {
+                    if (target_asset_->info->original_canvas_width > 0) base_w = target_asset_->info->original_canvas_width;
+                    if (target_asset_->info->original_canvas_height > 0) base_h = target_asset_->info->original_canvas_height;
+                }
 
-                const float base_sw = static_cast<float>(fw) * base_scale * inv_scale;
-                const float base_sh = static_cast<float>(fh) * base_scale * inv_scale;
+                float package_scale = target_asset_->current_nearest_variant_scale * target_asset_->current_remaining_scale_adjustment;
+                if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
+                    package_scale = 1.0f;
+                }
 
-                const float ref_sh = compute_player_screen_height(cam);
-                const WarpedScreenGrid::RenderSmoothingKey smoothing_key = WarpedScreenGrid::RenderSmoothingKey(target_asset_);
-                WarpedScreenGrid::RenderEffects ef = cam.compute_render_effects(
-                    SDL_Point{ target_asset_->pos.x, target_asset_->pos.y },
-                    base_sh,
-                    ref_sh,
-                    smoothing_key);
-
-                SDL_Point world_point{ target_asset_->pos.x, target_asset_->pos.y };
-                float adjusted_cx = ef.screen_position.x;
-                if (assets_ && target_asset_) {
-
-                    if (!(assets_->player == target_asset_)) {
-
+                SDL_FPoint screen_pos = cam.map_to_screen(SDL_Point{ target_asset_->pos.x, target_asset_->pos.y });
+                float distance_scale = 1.0f;
+                float vertical_scale = 1.0f;
+                if (const auto* gp = cam.grid_point_for_asset(target_asset_)) {
+                    screen_pos = gp->screen;
+                    if (target_asset_->info) {
+                        distance_scale = target_asset_->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
+                        vertical_scale = target_asset_->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
                     }
                 }
-                const float distance_scale  = ef.distance_scale;
-                const float vertical_scale  = ef.vertical_scale;
+
+                const float base_sw = static_cast<float>(base_w) * package_scale;
+                const float base_sh = static_cast<float>(base_h) * package_scale;
 
                 const float width_px  = base_sw * distance_scale;
                 const float height_px = base_sh * distance_scale * vertical_scale;
 
-                out.cx = adjusted_cx;
-                out.cy = ef.screen_position.y;
-
-                out.sx = (fw > 0) ? (width_px  / static_cast<float>(fw)) : base_scale * inv_scale * distance_scale;
-                out.sy = (fh > 0) ? (height_px / static_cast<float>(fh)) : base_scale * inv_scale * distance_scale * vertical_scale;
+                out.cx = screen_pos.x;
+                out.cy = screen_pos.y;
+                out.sx = (base_w > 0) ? (width_px  / static_cast<float>(base_w)) : package_scale * distance_scale;
+                out.sy = (base_h > 0) ? (height_px / static_cast<float>(base_h)) : package_scale * distance_scale * vertical_scale;
                 return out;
 };
 
@@ -1241,11 +1240,21 @@ float AssetInfoUI::compute_player_screen_height(const WarpedScreenGrid& cam) con
     if (pw != 0) player_asset->cached_w = pw;
     if (ph != 0) player_asset->cached_h = ph;
 
-    float scale = cam.get_scale();
-    float inv_scale = (scale > 0.0f) ? (1.0f / scale) : 1.0f;
-    const float base_scale = (player_asset->info && std::isfinite(player_asset->info->scale_factor) && player_asset->info->scale_factor >= 0.0f) ? player_asset->info->scale_factor : 1.0f;
+    float package_scale = player_asset->current_nearest_variant_scale * player_asset->current_remaining_scale_adjustment;
+    if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
+        package_scale = 1.0f;
+    }
+
+    const world::GridPoint* gp = cam.grid_point_for_asset(player_asset);
+    float distance_scale = 1.0f;
+    float vertical_scale = 1.0f;
+    if (gp && player_asset->info) {
+        distance_scale = player_asset->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
+        vertical_scale = player_asset->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
+    }
+
     if (ph > 0) {
-        float screen_h = static_cast<float>(ph) * base_scale * inv_scale;
+        float screen_h = static_cast<float>(ph) * package_scale * distance_scale * vertical_scale;
         return screen_h > 0.0f ? screen_h : 1.0f;
     }
     return 1.0f;
@@ -1286,39 +1295,39 @@ void AssetInfoUI::render_world_overlay(SDL_Renderer* r, const WarpedScreenGrid& 
             if (fw <= 0) fw = 1;
             if (fh <= 0) fh = 1;
 
-            const float base_scale = (target_asset_->info && std::isfinite(target_asset_->info->scale_factor) && target_asset_->info->scale_factor > 0.0f) ? target_asset_->info->scale_factor : 1.0f;
-            const float scale = cam.get_scale();
-            const float inv_scale = (scale > 0.0f) ? (1.0f / scale) : 1.0f;
+            int base_w = fw;
+            int base_h = fh;
+            if (target_asset_->info) {
+                if (target_asset_->info->original_canvas_width > 0) base_w = target_asset_->info->original_canvas_width;
+                if (target_asset_->info->original_canvas_height > 0) base_h = target_asset_->info->original_canvas_height;
+            }
 
-            const float base_sw = static_cast<float>(fw) * base_scale * inv_scale;
-            const float base_sh = static_cast<float>(fh) * base_scale * inv_scale;
+            float package_scale = target_asset_->current_nearest_variant_scale * target_asset_->current_remaining_scale_adjustment;
+            if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
+                package_scale = 1.0f;
+            }
 
-            const float ref_sh = compute_player_screen_height(cam);
-            const WarpedScreenGrid::RenderSmoothingKey smoothing_key = WarpedScreenGrid::RenderSmoothingKey(target_asset_);
-            WarpedScreenGrid::RenderEffects ef = cam.compute_render_effects(
-                SDL_Point{ target_asset_->pos.x, target_asset_->pos.y },
-                base_sh,
-                ref_sh,
-                smoothing_key);
-
-            SDL_Point world_point{ target_asset_->pos.x, target_asset_->pos.y };
-            float adjusted_cx = ef.screen_position.x;
-            if (assets_ && target_asset_) {
-
-                if (!(assets_->player == target_asset_)) {
-
+            SDL_FPoint screen_pos = cam.map_to_screen(SDL_Point{ target_asset_->pos.x, target_asset_->pos.y });
+            float distance_scale = 1.0f;
+            float vertical_scale = 1.0f;
+            if (const auto* gp = cam.grid_point_for_asset(target_asset_)) {
+                screen_pos = gp->screen;
+                if (target_asset_->info) {
+                    distance_scale = target_asset_->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
+                    vertical_scale = target_asset_->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
                 }
             }
-            const float distance_scale  = ef.distance_scale;
-            const float vertical_scale  = ef.vertical_scale;
+
+            const float base_sw = static_cast<float>(base_w) * package_scale;
+            const float base_sh = static_cast<float>(base_h) * package_scale;
 
             const float width_px  = base_sw * distance_scale;
             const float height_px = base_sh * distance_scale * vertical_scale;
 
-            out.cx = adjusted_cx;
-            out.cy = ef.screen_position.y;
-            out.sx = (fw > 0) ? (width_px  / static_cast<float>(fw)) : base_scale * inv_scale * distance_scale;
-            out.sy = (fh > 0) ? (height_px / static_cast<float>(fh)) : base_scale * inv_scale * distance_scale * vertical_scale;
+            out.cx = screen_pos.x;
+            out.cy = screen_pos.y;
+            out.sx = (base_w > 0) ? (width_px  / static_cast<float>(base_w)) : package_scale * distance_scale;
+            out.sy = (base_h > 0) ? (height_px / static_cast<float>(base_h)) : package_scale * distance_scale * vertical_scale;
             return out;
         }();
 

@@ -73,7 +73,7 @@ void MapEditor::enter() {
     has_entry_center_ = false;
 
     if (WarpedScreenGrid* cam = active_camera()) {
-        prev_manual_override_ = cam->is_manual_zoom_override();
+        prev_manual_override_ = cam->is_manual_height_override();
         prev_focus_override_ = cam->has_focus_override();
         if (prev_focus_override_) {
             prev_focus_point_ = cam->get_focus_override_point();
@@ -82,7 +82,7 @@ void MapEditor::enter() {
         }
         entry_center_ = cam->get_screen_center();
         has_entry_center_ = true;
-        cam->set_manual_zoom_override(true);
+        cam->set_manual_height_override(true);
     }
 
     compute_bounds();
@@ -217,9 +217,9 @@ void MapEditor::focus_on_room(Room* room) {
     if (!cam) return;
 
     Area adjusted = cam->convert_area_to_aspect(*room->room_area);
-    cam->set_manual_zoom_override(true);
+    cam->set_manual_height_override(true);
     cam->set_focus_override(adjusted.get_center());
-    cam->zoom_to_area(adjusted, 0);
+    cam->frame_to_area(adjusted, 0);
 }
 
 void MapEditor::ensure_font() {
@@ -272,7 +272,7 @@ bool MapEditor::compute_bounds() {
 void MapEditor::apply_camera_to_bounds() {
     WarpedScreenGrid* cam = active_camera();
     if (!cam) return;
-    cam->set_manual_zoom_override(true);
+    cam->set_manual_height_override(true);
 
     Room* spawn_room = find_spawn_room();
     SDL_Point spawn_center{0, 0};
@@ -307,21 +307,21 @@ void MapEditor::apply_camera_to_bounds() {
 };
         Area area("map_bounds", pts, 3);
         cam->set_focus_override(center);
-        cam->zoom_to_area(area, 0);
+        cam->frame_to_area(area, 0);
     } else if (has_entry_center_) {
         cam->set_focus_override(entry_center_);
-        cam->zoom_to_scale(1.0, 0);
+        cam->animate_height_to_scale(1.0, 0);
     } else if (has_spawn_center) {
         cam->set_focus_override(spawn_center);
         if (spawn_room && spawn_room->room_area) {
             Area adjusted = cam->convert_area_to_aspect(*spawn_room->room_area);
-            cam->zoom_to_area(adjusted, 0);
+            cam->frame_to_area(adjusted, 0);
         } else {
-            cam->zoom_to_scale(1.0, 0);
+            cam->animate_height_to_scale(1.0, 0);
         }
     } else {
         cam->set_focus_override(SDL_Point{0, 0});
-        cam->zoom_to_scale(1.0, 0);
+        cam->animate_height_to_scale(1.0, 0);
     }
 }
 
@@ -341,7 +341,7 @@ void MapEditor::restore_camera_state(bool focus_player, bool restore_previous_st
 
     if (focus_player) {
         cam->clear_focus_override();
-        cam->set_manual_zoom_override(false);
+        cam->set_manual_height_override(false);
         return;
     }
 
@@ -349,7 +349,7 @@ void MapEditor::restore_camera_state(bool focus_player, bool restore_previous_st
         return;
     }
 
-    cam->set_manual_zoom_override(prev_manual_override_);
+    cam->set_manual_height_override(prev_manual_override_);
     if (prev_focus_override_) {
         cam->set_focus_override(prev_focus_point_);
     } else {

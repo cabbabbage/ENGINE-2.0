@@ -97,7 +97,7 @@ public:
     void set_map_light_panel_visible(bool visible);
     bool is_map_light_panel_visible() const;
 
-    void focus_camera_on_asset(Asset* asset, double zoom_factor = 0.8, int duration_steps = 0);
+    void focus_camera_on_asset(Asset* asset, double height_factor = 0.8, int duration_steps = 0);
 
     void reset_click_state();
     void clear_selection();
@@ -143,7 +143,7 @@ private:
     Room* choose_room(Room* preferred) const;
     bool is_pointer_over_dev_ui(int x, int y) const;
     void close_all_floating_panels();
-    void maybe_update_mode_from_zoom();
+    void maybe_update_mode_from_height();
     void open_regenerate_room_popup();
     bool is_modal_blocking_panels() const;
     void pulse_modal_header();

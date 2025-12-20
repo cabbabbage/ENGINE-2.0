@@ -24,18 +24,18 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool 
 
         const double base_scale = std::max(0.0001, static_cast<double>(cam.get_scale()));
         const double unclamped_target = base_scale * eff;
-        const double target_scale = std::clamp( unclamped_target, 0.0001, static_cast<double>(WarpedScreenGrid::kMaxZoomAnchors));
+        const double target_scale = std::clamp( unclamped_target, 0.0001, static_cast<double>(WarpedScreenGrid::kMaxHeightAnchors));
         const double adjusted_eff = target_scale / base_scale;
 
         if (std::abs(adjusted_eff - 1.0) > 1e-6) {
 
             if (panning_) {
-                cam.set_manual_zoom_override(true);
+                cam.set_manual_height_override(true);
                 cam.set_focus_override(cam.get_screen_center());
-                cam.animate_zoom_multiply(adjusted_eff, dur);
+                cam.animate_height_multiply(adjusted_eff, dur);
             } else {
 
-                cam.animate_zoom_towards_point(adjusted_eff, mouse, dur);
+                cam.animate_height_towards_point(adjusted_eff, mouse, dur);
             }
         }
     }
@@ -72,7 +72,7 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool 
         if (dx != 0 || dy != 0) {
             panning_ = true;
             pan_drag_pending_ = false;
-            cam.set_manual_zoom_override(true);
+            cam.set_manual_height_override(true);
             cam.set_focus_override(pan_start_center_);
         }
     }
@@ -96,6 +96,6 @@ void PanAndHeight::cancel(WarpedScreenGrid& cam) {
         return;
     }
     panning_ = false;
-    cam.set_manual_zoom_override(false);
+    cam.set_manual_height_override(false);
     cam.clear_focus_override();
 }

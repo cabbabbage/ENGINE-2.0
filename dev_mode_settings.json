@@ -118,7 +118,7 @@
                     "snap_threshold": 0.25,
                     "spring_frequency": 5.0
                 },
-                "zoom": {
+                "height": {
                     "lerp_rate": 0.0,
                     "max_step": 4.0,
                     "method": 2.0,

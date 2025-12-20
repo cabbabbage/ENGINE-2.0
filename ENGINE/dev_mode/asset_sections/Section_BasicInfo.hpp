@@ -236,6 +236,7 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
                                                     const Asset* target,
                                                     float reference_screen_height) const {
     if (!is_expanded() || !target || !target->info) return;
+    (void)reference_screen_height;
     Assets* assets = ui_ ? ui_->assets() : nullptr;
 
     SDL_Texture* tex = target->get_current_frame();
@@ -252,30 +253,43 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
     }
     if (fw == 0 || fh == 0) return;
 
-    float scale = cam.get_scale();
-    if (scale <= 0.0f) return;
-    float inv_scale = 1.0f / scale;
-    const float base_scale = (target->info && std::isfinite(target->info->scale_factor) && target->info->scale_factor >= 0.0f) ? target->info->scale_factor : 1.0f;
-    float base_sw = static_cast<float>(fw) * base_scale * inv_scale;
-    float base_sh = static_cast<float>(fh) * base_scale * inv_scale;
+    float package_scale = target->current_nearest_variant_scale * target->current_remaining_scale_adjustment;
+    if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
+        package_scale = 1.0f;
+    }
+
+    int base_w = fw;
+    int base_h = fh;
+    if (target->info) {
+        if (target->info->original_canvas_width > 0) base_w = target->info->original_canvas_width;
+        if (target->info->original_canvas_height > 0) base_h = target->info->original_canvas_height;
+    }
+
+    float base_sw = static_cast<float>(base_w) * package_scale;
+    float base_sh = static_cast<float>(base_h) * package_scale;
     if (base_sw <= 0.0f || base_sh <= 0.0f) return;
 
-    const auto effects = cam.compute_render_effects(
-        SDL_Point{target->pos.x, target->pos.y},
-        base_sh,
-        reference_screen_height <= 0.0f ? 1.0f : reference_screen_height,
-        WarpedScreenGrid::RenderSmoothingKey(target));
+    SDL_FPoint screen_pos = cam.map_to_screen(SDL_Point{target->pos.x, target->pos.y});
+    float distance_scale = 1.0f;
+    float vertical_scale = 1.0f;
+    if (auto* gp = cam.grid_point_for_asset(target)) {
+        screen_pos = gp->screen;
+        if (target->info) {
+            distance_scale = target->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
+            vertical_scale = target->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
+        }
+    }
 
-    float scaled_sw = base_sw * effects.distance_scale;
-    float scaled_sh = base_sh * effects.distance_scale;
-    float final_visible_h = scaled_sh * effects.vertical_scale;
+    float scaled_sw = base_sw * distance_scale;
+    float scaled_sh = base_sh * distance_scale;
+    float final_visible_h = scaled_sh * vertical_scale;
 
     int sw = std::max(1, static_cast<int>(std::round(scaled_sw)));
     int sh = std::max(1, static_cast<int>(std::round(final_visible_h)));
     if (sw <= 0 || sh <= 0) return;
 
         SDL_Point world_point{ target->pos.x, target->pos.y };
-        float center_x = effects.screen_position.x;
+        float center_x = screen_pos.x;
         if (assets) {
 
             if (!(assets->player == target)) {
@@ -283,7 +297,7 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
             }
         }
         const int   left     = static_cast<int>(std::lround(center_x - static_cast<float>(sw) * 0.5f));
-        const int   top      = static_cast<int>(std::lround(effects.screen_position.y)) - sh;
+        const int   top      = static_cast<int>(std::lround(screen_pos.y)) - sh;
     SDL_Rect bounds{ left, top, sw, sh };
 
     int z_world_y = target->pos.y + target->info->z_threshold;

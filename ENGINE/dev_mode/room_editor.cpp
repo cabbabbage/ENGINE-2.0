@@ -803,7 +803,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
     WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
     if (enabled_) {
         if (cam && !preserve_camera_state) {
-            cam->set_manual_zoom_override(false);
+            cam->set_manual_height_override(false);
         }
         close_asset_info_editor();
         ensure_room_configurator();
@@ -814,7 +814,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
         configure_shared_panel();
     } else {
         if (cam && !preserve_camera_state) {
-            cam->set_manual_zoom_override(false);
+            cam->set_manual_height_override(false);
             cam->clear_focus_override();
         }
         if (library_ui_) library_ui_->close();
@@ -1776,12 +1776,16 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             }
         }
         if (overlay && overlay->radius > 0.0) {
-            const double scale = std::max(0.0001, static_cast<double>(cam.get_scale()));
-            const double inv_scale = 1.0 / scale;
             SDL_FPoint screen_center_f = cam.map_to_screen(overlay->center);
             SDL_Point screen_center{static_cast<int>(std::lround(screen_center_f.x)),
                                     static_cast<int>(std::lround(screen_center_f.y))};
-            int radius_px = static_cast<int>(std::lround(overlay->radius * inv_scale));
+            SDL_FPoint edge_screen_f = cam.map_to_screen(SDL_Point{
+                overlay->center.x + static_cast<int>(std::lround(overlay->radius)),
+                overlay->center.y
+            });
+            const float dx = edge_screen_f.x - screen_center_f.x;
+            const float dy = edge_screen_f.y - screen_center_f.y;
+            int radius_px = static_cast<int>(std::lround(std::hypot(dx, dy)));
             radius_px = std::max(1, radius_px);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             const SDL_Color accent = DMStyles::AccentButton().hover_bg;
@@ -2144,7 +2148,7 @@ void RoomEditor::regenerate_room_from_template(Room* source_room) {
     save_current_room_assets_json();
 }
 
-void RoomEditor::focus_camera_on_asset(Asset* asset, double zoom_factor, int duration_steps) {
+void RoomEditor::focus_camera_on_asset(Asset* asset, double height_factor, int duration_steps) {
     if (!asset || !assets_) return;
 
     if (info_ui_ && info_ui_->is_visible()) {
@@ -2152,22 +2156,22 @@ void RoomEditor::focus_camera_on_asset(Asset* asset, double zoom_factor, int dur
     }
 
     WarpedScreenGrid& cam = assets_->getView();
-    cam.set_manual_zoom_override(true);
-    cam.pan_and_zoom_to_asset(asset, zoom_factor, duration_steps);
+    cam.set_manual_height_override(true);
+    cam.pan_and_height_to_asset(asset, height_factor, duration_steps);
     mark_spatial_index_dirty();
 }
 
-void RoomEditor::focus_camera_on_room_center(bool reframe_zoom) {
+void RoomEditor::focus_camera_on_room_center(bool reframe_height) {
     if (!enabled_ || !assets_) return;
     if (!current_room_ || !current_room_->room_area) return;
 
     WarpedScreenGrid& cam = assets_->getView();
     const SDL_Point center = current_room_->room_area->get_center();
-    cam.set_manual_zoom_override(true);
+    cam.set_manual_height_override(true);
     cam.set_focus_override(center);
 
-    if (reframe_zoom) {
-        cam.zoom_to_area(*current_room_->room_area, 0);
+    if (reframe_height) {
+        cam.frame_to_area(*current_room_->room_area, 0);
     }
     mark_spatial_index_dirty();
 }

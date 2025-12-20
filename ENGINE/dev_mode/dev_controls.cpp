@@ -905,7 +905,7 @@ void DevControls::set_enabled(bool enabled) {
             map_mode_ui_->set_header_mode(MapModeUI::HeaderMode::Room);
         }
         if (should_restore_camera && camera_ptr) {
-            camera_ptr->set_manual_zoom_override(true);
+            camera_ptr->set_manual_height_override(true);
             camera_ptr->set_focus_override(preserved_center);
             camera_ptr->set_screen_center(preserved_center);
             camera_ptr->set_scale(preserved_scale);
@@ -1109,7 +1109,7 @@ void DevControls::update(const Input& input) {
 
     if (render_suppression_in_progress_) {
         WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
-        const bool camera_idle = !cam || !cam->is_zooming();
+        const bool camera_idle = !cam || !cam->is_height_animating();
         if (camera_idle) {
             if (assets_) {
                 assets_->set_render_suppressed(false);
@@ -2114,9 +2114,9 @@ bool DevControls::is_room_config_open() const {
     return room_editor_->is_room_config_open();
 }
 
-void DevControls::focus_camera_on_asset(Asset* asset, double zoom_factor, int duration_steps) {
+void DevControls::focus_camera_on_asset(Asset* asset, double height_factor, int duration_steps) {
     if (!room_editor_) return;
-    room_editor_->focus_camera_on_asset(asset, zoom_factor, duration_steps);
+    room_editor_->focus_camera_on_asset(asset, height_factor, duration_steps);
 }
 
 void DevControls::reset_click_state() {
@@ -2440,7 +2440,7 @@ void DevControls::close_all_floating_panels() {
     sync_header_button_states();
 }
 
-void DevControls::maybe_update_mode_from_zoom() {}
+void DevControls::maybe_update_mode_from_height() {}
 
 bool DevControls::is_modal_blocking_panels() const {
     return room_editor_ && room_editor_->has_active_modal();
@@ -3210,10 +3210,10 @@ void DevControls::handle_map_selection() {
         if (cam && selected && selected->room_area) {
             const SDL_Point center = selected->room_area->get_center();
             const double current_scale = std::max(0.0001, static_cast<double>(cam->get_scale()));
-            const double target_scale  = cam->default_zoom_for_room(selected);
+            const double target_scale  = cam->default_camera_height_for_room(selected);
             const double factor = (target_scale > 0.0) ? (target_scale / current_scale) : 1.0;
             const int duration_steps = 30;
-            cam->pan_and_zoom_to_point(center, factor, duration_steps);
+            cam->pan_and_height_to_point(center, factor, duration_steps);
         }
     }
     if (is_trail_room(selected)) {

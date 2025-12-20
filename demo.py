@@ -11,9 +11,9 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 MAX_DEPTH = 4          # tree depth (0 = root only)
 BASE_SPACING = 1.0     # overall size of the structure in world units
 SCALE_BASE = 3.0       # geometric factor between levels
-FRAMES = 120           # total frames in the loop (zoom out then back in)
+FRAMES = 120           # total frames in the loop (pull camera higher then back in)
 FPS = 30               # playback framerate
-OUTPUT_FILE = "gridpoint_zoom.gif"
+OUTPUT_FILE = "gridpoint_height.gif"
 
 
 # -----------------------------
@@ -147,8 +147,8 @@ def scale_for_frame(frame_idx, frames=FRAMES, scale_base=SCALE_BASE):
     (frames - 1) show the same image.
 
     The simplest way:
-      - First half of frames: zoom out from scale 1 to 1 / scale_base.
-      - Second half: zoom back in from 1 / scale_base to 1.
+      - First half of frames: pull camera higher from scale 1 to 1 / scale_base.
+      - Second half: lower camera from 1 / scale_base back to 1.
 
     That gives:
       frame 0       -> scale = 1
@@ -161,10 +161,10 @@ def scale_for_frame(frame_idx, frames=FRAMES, scale_base=SCALE_BASE):
     t = frame_idx / float(frames - 1)  # in [0, 1]
 
     if t <= 0.5:
-        # zoom out
+        # pull camera higher
         u = t / 0.5          # in [0, 1]
     else:
-        # zoom in
+        # lower camera
         u = (1.0 - t) / 0.5  # in [0, 1]
 
     # u goes 0 -> 1 -> 0

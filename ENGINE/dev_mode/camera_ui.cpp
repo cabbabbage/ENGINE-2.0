@@ -1004,13 +1004,13 @@ void CameraUIPanel::sync_from_camera() {
     if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
     if (height_in_keypoint_ || height_out_keypoint_) {
         HeightKeyPointWidget::Values min_values;
-        min_values.height = last_settings_.zoom_low;
+        min_values.height = last_settings_.camera_height_min;
         if (height_in_keypoint_) {
             height_in_keypoint_->set_values(min_values);
         }
 
         HeightKeyPointWidget::Values max_values;
-        max_values.height = last_settings_.zoom_high;
+        max_values.height = last_settings_.camera_height_max;
         if (height_out_keypoint_) {
             height_out_keypoint_->set_values(max_values);
         }
@@ -1101,8 +1101,8 @@ void CameraUIPanel::build_ui() {
     if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
 
     HeightKeyPointWidget::Values height_in_defaults;
-    height_in_defaults.height = defaults.zoom_low;
-    height_in_keypoint_ = std::make_unique<HeightKeyPointWidget>( "Lower Camera Height Settings", height_in_defaults, height_in_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxZoomAnchors);
+    height_in_defaults.height = defaults.camera_height_min;
+    height_in_keypoint_ = std::make_unique<HeightKeyPointWidget>( "Lower Camera Height Settings", height_in_defaults, height_in_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxHeightAnchors);
     if (height_in_keypoint_) {
         height_in_keypoint_->set_on_value_changed([this]() { on_control_value_changed(); });
         height_in_keypoint_->set_on_expanded_changed([this](bool expanded) {
@@ -1115,8 +1115,8 @@ void CameraUIPanel::build_ui() {
     }
 
     HeightKeyPointWidget::Values height_out_defaults;
-    height_out_defaults.height = defaults.zoom_high;
-    height_out_keypoint_ = std::make_unique<HeightKeyPointWidget>( "Greater Camera Height Settings", height_out_defaults, height_out_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxZoomAnchors);
+    height_out_defaults.height = defaults.camera_height_max;
+    height_out_keypoint_ = std::make_unique<HeightKeyPointWidget>( "Greater Camera Height Settings", height_out_defaults, height_out_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxHeightAnchors);
     if (height_out_keypoint_) {
         height_out_keypoint_->set_on_value_changed([this]() { on_control_value_changed(); });
         height_out_keypoint_->set_on_expanded_changed([this](bool expanded) {
@@ -1171,9 +1171,9 @@ void CameraUIPanel::snap_height_to_anchor(float target_height, bool anchor_is_mi
     (void)anchor_is_min_section;
 
     WarpedScreenGrid& cam = assets_->getView();
-    const float clamped_target = std::clamp(target_height, WarpedScreenGrid::kMinZoomAnchors, WarpedScreenGrid::kMaxZoomAnchors);
+    const float clamped_target = std::clamp(target_height, WarpedScreenGrid::kMinHeightAnchors, WarpedScreenGrid::kMaxHeightAnchors);
     SDL_Point focus = cam.get_screen_center();
-    cam.set_manual_zoom_override(true);
+    cam.set_manual_height_override(true);
     if (assets_->player) {
         focus = SDL_Point{ assets_->player->pos.x, assets_->player->pos.y };
         cam.set_focus_override(focus);
@@ -1244,7 +1244,7 @@ void CameraUIPanel::apply_settings_if_needed() {
 };
     bool changed = (effects_enabled != last_realism_enabled_) || (depthcue_enabled != last_depthcue_enabled_);
     const WarpedScreenGrid::RealismSettings& prev = last_settings_;
-    changed = changed || differs(settings.zoom_low, prev.zoom_low) || differs(settings.zoom_high, prev.zoom_high);
+    changed = changed || differs(settings.camera_height_min, prev.camera_height_min) || differs(settings.camera_height_max, prev.camera_height_max);
     changed = changed || differs(settings.min_visible_screen_ratio, prev.min_visible_screen_ratio);
     changed = changed || differs(settings.extra_cull_margin, prev.extra_cull_margin);
     changed = changed || differs(settings.perspective_distance_at_scale_zero, prev.perspective_distance_at_scale_zero);
@@ -1283,18 +1283,18 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
 
     cam.update_geometry_cache(cam.compute_geometry());
 
-    const float kZoomGuard = 0.01f;
-    const float span = std::max(0.0002f, effective.zoom_high - effective.zoom_low);
-    const float guard = std::clamp(kZoomGuard, 0.0001f, span * 0.25f);
-    const float min_zoom = effective.zoom_low + guard;
-    const float max_zoom = effective.zoom_high - guard;
-    float current_zoom = cam.get_scale();
-    float clamped_zoom = std::clamp(current_zoom, min_zoom, max_zoom);
-    if (!std::isfinite(clamped_zoom)) {
-        clamped_zoom = min_zoom;
+    const float kHeightGuard = 0.01f;
+    const float span = std::max(0.0002f, effective.camera_height_max - effective.camera_height_min);
+    const float guard = std::clamp(kHeightGuard, 0.0001f, span * 0.25f);
+    const float min_height = effective.camera_height_min + guard;
+    const float max_height = effective.camera_height_max - guard;
+    float current_height = cam.get_scale();
+    float clamped_height = std::clamp(current_height, min_height, max_height);
+    if (!std::isfinite(clamped_height)) {
+        clamped_height = min_height;
     }
-    if (std::fabs(clamped_zoom - current_zoom) > 1e-4f) {
-        cam.set_scale(clamped_zoom);
+    if (std::fabs(clamped_height - current_height) > 1e-4f) {
+        cam.set_scale(clamped_height);
     }
 
     if (assets_) {
@@ -1327,16 +1327,16 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
     HeightKeyPointWidget::Values max_values{};
     if (height_in_keypoint_) {
         min_values = height_in_keypoint_->values();
-        settings.zoom_low = min_values.height;
+        settings.camera_height_min = min_values.height;
     }
     if (height_out_keypoint_) {
         max_values = height_out_keypoint_->values();
-        settings.zoom_high = max_values.height;
+        settings.camera_height_max = max_values.height;
     }
 
-    settings.zoom_low = std::clamp(settings.zoom_low, WarpedScreenGrid::kMinZoomAnchors, WarpedScreenGrid::kMaxZoomAnchors);
-    const float min_high = std::min(WarpedScreenGrid::kMaxZoomAnchors, settings.zoom_low + 0.0001f);
-    settings.zoom_high = std::clamp(settings.zoom_high, min_high, WarpedScreenGrid::kMaxZoomAnchors);
+    settings.camera_height_min = std::clamp(settings.camera_height_min, WarpedScreenGrid::kMinHeightAnchors, WarpedScreenGrid::kMaxHeightAnchors);
+    const float min_high = std::min(WarpedScreenGrid::kMaxHeightAnchors, settings.camera_height_min + 0.0001f);
+    settings.camera_height_max = std::clamp(settings.camera_height_max, min_high, WarpedScreenGrid::kMaxHeightAnchors);
     if (perspective_zero_distance_slider_) {
         settings.perspective_distance_at_scale_zero = std::clamp( perspective_zero_distance_slider_->value(), -5000.0f, 5000.0f);
     }

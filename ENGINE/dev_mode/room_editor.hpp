@@ -98,8 +98,8 @@ public:
     using RoomAssetsSavedCallback = std::function<void()>;
     void set_room_assets_saved_callback(RoomAssetsSavedCallback cb);
 
-    void focus_camera_on_asset(Asset* asset, double zoom_factor = 0.8, int duration_steps = 0);
-    void focus_camera_on_room_center(bool reframe_zoom = true);
+    void focus_camera_on_asset(Asset* asset, double height_factor = 0.8, int duration_steps = 0);
+    void focus_camera_on_room_center(bool reframe_height = true);
 
     void reset_click_state();
     void clear_selection();

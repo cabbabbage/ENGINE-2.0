@@ -15,7 +15,7 @@ struct CachedParams {
     TransformSmoothingParams asset_scale{};
     TransformSmoothingParams asset_alpha{};
     TransformSmoothingParams camera_center{};
-    TransformSmoothingParams camera_zoom{};
+    TransformSmoothingParams camera_height{};
     bool initialized = false;
 };
 
@@ -128,8 +128,8 @@ void ensure_loaded() {
             8000.0f,
             0.25f});
 
-    cached.camera_zoom = load_params(
-        "render.smoothing.camera.zoom",
+    cached.camera_height = load_params(
+        "render.smoothing.camera.height",
         TransformSmoothingParams{
             TransformSmoothingMethod::CriticallyDampedSpring,
             0.0f,
@@ -181,10 +181,10 @@ const TransformSmoothingParams& camera_center_params() {
     return cache().camera_center;
 }
 
-const TransformSmoothingParams& camera_zoom_params() {
+const TransformSmoothingParams& camera_height_params() {
     std::lock_guard<std::mutex> lock(cache_mutex());
     ensure_loaded();
-    return cache().camera_zoom;
+    return cache().camera_height;
 }
 
 void set_asset_translation_params(const TransformSmoothingParams& params) {
@@ -215,11 +215,11 @@ void set_camera_center_params(const TransformSmoothingParams& params) {
     store_params("render.smoothing.camera.center", cache().camera_center);
 }
 
-void set_camera_zoom_params(const TransformSmoothingParams& params) {
+void set_camera_height_params(const TransformSmoothingParams& params) {
     std::lock_guard<std::mutex> lock(cache_mutex());
     ensure_loaded();
-    cache().camera_zoom = sanitized(params);
-    store_params("render.smoothing.camera.zoom", cache().camera_zoom);
+    cache().camera_height = sanitized(params);
+    store_params("render.smoothing.camera.height", cache().camera_height);
 }
 
 void reload_from_settings() {

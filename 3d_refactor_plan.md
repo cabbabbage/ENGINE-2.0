@@ -311,13 +311,13 @@ Screen Grid is the runtime gateway between world space and rendering. Renderer a
 - Rebuild per frame from Map Grid  
   - Replace the `world_grid.all_assets()` loop with a query against Map Grid for nodes within the camera volume (use current cull rect logic as a fallback).  
   - Store the queried nodes as Screen Grid roots per layer or plane. Preserve `active_chunks_` for tile rendering.  
-  - Make the world volume computation explicit: camera center, zoom or scale, margin, and optional z slice bounds.  
+  - Make the world volume computation explicit: camera center, camera height or scale, margin, and optional z slice bounds.  
   - For early integration, restrict Screen Grid selection to `world_z = 0` and document this in the code and in dev controls.  
   - Add a debug path to log how many nodes per layer and per z slice are pulled each frame.
 
 - Update per frame camera fields  
   - Use `project_to_screen` or a new helper to set `screen`, `distance_from_camera`, `on_screen`, `parallax_dx`, and related fields on each referenced `GridPoint`.  
-  - Invalidate or reset per frame fields when camera or zoom changes, not only on asset movement.  
+  - Invalidate or reset per frame fields when camera or height changes, not only on asset movement.  
   - Ensure per frame stamps are written so stale nodes are not reused across frames.
 
 - Preserve current outputs for callers  

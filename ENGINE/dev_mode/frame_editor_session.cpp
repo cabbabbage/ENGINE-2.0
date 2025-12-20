@@ -1340,11 +1340,11 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         if (is_children_mode(mode_)) {
 
             if (auto* child = current_child_frame()) {
-                const float scale = attachment_scale();
-                const float inv_scale = (scale > 0.0001f) ? (1.0f / scale) : 1.0f;
+                const float attachment = attachment_scale();
+                const float screen_to_local = (attachment > 0.0001f) ? (1.0f / attachment) : 1.0f;
                 const float unflipped_x = target_->flipped ? -desired_rel.x : desired_rel.x;
-                child->dx = static_cast<float>(std::round(unflipped_x * inv_scale));
-                child->dy = static_cast<float>(std::round(desired_rel.y * inv_scale));
+                child->dx = static_cast<float>(std::round(unflipped_x * screen_to_local));
+                child->dy = static_cast<float>(std::round(desired_rel.y * screen_to_local));
                 child->has_data = true;
                 const bool should_smooth_child = smooth_enabled_ && selected_index_ > 0;
                 if (should_smooth_child) {
@@ -4427,21 +4427,30 @@ SDL_FRect FrameEditorSession::child_preview_rect(SDL_FPoint child_world,
     const float raw_w = static_cast<float>(texture_w) * scale;
     const float raw_h = static_cast<float>(texture_h) * scale;
     const WarpedScreenGrid& cam = assets_->getView();
-    const float inv_scale = 1.0f / std::max(0.000001f, cam.get_scale());
-    rect.w = raw_w * inv_scale;
-    rect.h = raw_h * inv_scale;
-    if (rect.w <= 0.0f || rect.h <= 0.0f) {
-        rect.w = rect.h = 0.0f;
-        return rect;
-    }
     SDL_FPoint screen_base = cam.map_to_screen_f(SDL_FPoint{
         static_cast<float>(target_->pos.x),
         static_cast<float>(target_->pos.y)
     });
+    float distance_scale = 1.0f;
+    float vertical_scale = 1.0f;
+    if (const auto* gp = cam.grid_point_for_asset(target_)) {
+        screen_base = gp->screen;
+        if (target_->info) {
+            distance_scale = target_->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
+            vertical_scale = target_->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
+        }
+    }
+
+    rect.w = raw_w * distance_scale;
+    rect.h = raw_h * distance_scale * vertical_scale;
+    if (rect.w <= 0.0f || rect.h <= 0.0f) {
+        rect.w = rect.h = 0.0f;
+        return rect;
+    }
     const float offset_x = child_world.x - static_cast<float>(target_->pos.x);
     const float offset_y = child_world.y - static_cast<float>(target_->pos.y);
-    rect.x = screen_base.x + offset_x * inv_scale - rect.w * 0.5f;
-    rect.y = screen_base.y + offset_y * inv_scale - rect.h;
+    rect.x = screen_base.x + offset_x * distance_scale - rect.w * 0.5f;
+    rect.y = screen_base.y + offset_y * distance_scale - rect.h;
     return rect;
 }
 

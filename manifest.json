@@ -7425,8 +7425,8 @@
         "render_quality_percent": 100,
         "scale_hysteresis_margin": 0.004999999888241291,
         "texture_opacity_falloff_method": 3,
-        "zoom_high": 8.529999732971191,
-        "zoom_low": 0.9399999976158142
+        "camera_height_max": 8.529999732971191,
+        "camera_height_min": 0.9399999976158142
       },
       "content_root": "MAPS/FORREST",
       "map_assets_data": {

@@ -27,16 +27,11 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool 
         const double adjusted_eff = target_scale / base_scale;
 
         if (std::abs(adjusted_eff - 1.0) > 1e-6) {
-
             cam.set_manual_height_override(true);
-            if (panning_) {
-                cam.set_manual_height_override(true);
-                cam.set_focus_override(cam.get_screen_center());
-                cam.animate_height_multiply(adjusted_eff);
-            } else {
-
-                cam.animate_height_towards_point(adjusted_eff, mouse);
-            }
+            const SDL_Point focus = cam.get_screen_center();
+            cam.set_focus_override(focus);
+            cam.set_screen_center(focus);
+            cam.animate_height_multiply(adjusted_eff);
         }
     }
 
@@ -73,6 +68,7 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool 
             panning_ = true;
             pan_drag_pending_ = false;
             cam.set_focus_override(pan_start_center_);
+            cam.set_screen_center(pan_start_center_);
         }
     }
 

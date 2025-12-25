@@ -164,6 +164,7 @@ namespace {
         Vec3   forward{};
         Vec3   right{};
         Vec3   up{};
+        SDL_FPoint anchor_world_px{0.0f, 0.0f};
         double camera_height = 0.0;
         double focus_depth   = 0.0;
         double reference_depth = 1.0;
@@ -208,8 +209,14 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         const double y_distance_pixels    = safe_params.y_distance_px;
 
         const double pitch_rad = static_cast<double>(tilt_deg) * PI_D / 180.0;
-        Vec3 anchor{ anchor_world.x, anchor_world.y, 0.0 };
-        Vec3 camera_pos{ anchor_world.x, anchor_world.y + y_distance_pixels, camera_height_pixels };
+        const double meters_scale_raw = std::max(1e-6, static_cast<double>(settings.meters_per_100_world_px));
+        const double meters_scale = meters_scale_raw / 100.0;
+        const Vec3 anchor{ 0.0, 0.0, 0.0 };
+        const Vec3 camera_pos{
+            0.0,
+            y_distance_pixels * meters_scale,
+            camera_height_pixels * meters_scale
+        };
 
         Vec3 to_anchor = anchor - camera_pos;
         Vec3 horiz_dir{ to_anchor.x, to_anchor.y, 0.0 };
@@ -248,6 +255,7 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         state.forward = forward;
         state.right = right;
         state.up = up;
+        state.anchor_world_px = anchor_world;
         state.camera_height = camera_height_pixels;
         state.focus_depth = std::max(1e-4, dist_horiz);
         state.reference_depth = std::max(1.0, state.focus_depth);
@@ -258,14 +266,23 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         state.far_plane  = 10000.0;
         state.tan_half_fov_y = std::tan(kHalfFovY);
         state.tan_half_fov_x = aspect * state.tan_half_fov_y;
-        state.horizon_screen_y = screen_height * 0.5 - (std::tan(pitch_rad) / state.tan_half_fov_y) * screen_height * 0.5;
-        const double meters_scale_raw = std::max(1e-6, static_cast<double>(settings.meters_per_100_world_px));
-        state.meters_scale = meters_scale_raw / 100.0;
+        const double tan_pitch = std::tan(pitch_rad);
+        const double horizon_ndc = (std::isfinite(tan_pitch) && std::isfinite(state.tan_half_fov_y))
+            ? (tan_pitch / state.tan_half_fov_y)
+            : 0.0;
+        const double to_anchor_depth = dot(to_anchor, forward);
+        const double to_anchor_up = dot(to_anchor, up);
+        const double anchor_ndc_y = (to_anchor_depth > 1e-6 && std::isfinite(to_anchor_depth))
+            ? (to_anchor_up / to_anchor_depth) / state.tan_half_fov_y
+            : 0.0;
+        state.focus_ndc_offset = std::isfinite(anchor_ndc_y) ? anchor_ndc_y : 0.0;
+        const double horizon_ndc_shifted = horizon_ndc - state.focus_ndc_offset;
+        state.horizon_screen_y = screen_height * 0.5 - horizon_ndc_shifted * screen_height * 0.5;
+        state.meters_scale = meters_scale;
         state.pitch_radians = pitch_rad;
         state.pitch_degrees = tilt_deg;
-        state.camera_world_y = camera_pos.y;
+        state.camera_world_y = anchor_world.y + y_distance_pixels;
         state.anchor_world_y = anchor_world.y;
-        state.focus_ndc_offset = 0.0;
 
         return state;
     }
@@ -293,10 +310,11 @@ struct ProjectionResult {
         }
 
         const double meters_scale = cam.meters_scale;
+        const double safe_scale = std::max(1e-6, meters_scale);
         const Vec3 world_meters{
-            world_x_pixels * meters_scale,
-            world_y_pixels * meters_scale,
-            world_z_pixels * meters_scale
+            (world_x_pixels - static_cast<double>(cam.anchor_world_px.x)) * safe_scale,
+            (world_y_pixels - static_cast<double>(cam.anchor_world_px.y)) * safe_scale,
+            world_z_pixels * safe_scale
         };
         const Vec3 to_point_meters = world_meters - cam.position;
         const double depth_along_forward = dot(to_point_meters, cam.forward);
@@ -312,7 +330,7 @@ struct ProjectionResult {
         const double cam_y = dot(to_point_meters, cam.up);
 
         const double ndc_x = (cam_x / depth_along_forward) / cam.tan_half_fov_x;
-        const double ndc_y = (cam_y / depth_along_forward) / cam.tan_half_fov_y;
+        const double ndc_y = (cam_y / depth_along_forward) / cam.tan_half_fov_y - cam.focus_ndc_offset;
 
         const double screen_x = (ndc_x * 0.5 + 0.5) * static_cast<double>(screen_width);
         const double screen_y = (0.5 - ndc_y * 0.5) * static_cast<double>(screen_height);
@@ -347,7 +365,7 @@ struct ProjectionResult {
         }
         Vec3 dir = cam.forward;
         dir = dir + cam.right * (ndc_x * cam.tan_half_fov_x);
-        dir = dir + cam.up * (ndc_y * cam.tan_half_fov_y);
+        dir = dir + cam.up * ((ndc_y + cam.focus_ndc_offset) * cam.tan_half_fov_y);
         dir = normalize(dir);
         if (std::abs(dir.z) < 1e-6) {
             return std::nullopt;
@@ -357,7 +375,11 @@ struct ProjectionResult {
             return std::nullopt;
         }
         const Vec3 hit = cam.position + dir * t;
-        return SDL_FPoint{ static_cast<float>(hit.x), static_cast<float>(hit.y) };
+        const double safe_scale = std::max(1e-6, cam.meters_scale);
+        return SDL_FPoint{
+            static_cast<float>(hit.x / safe_scale + static_cast<double>(cam.anchor_world_px.x)),
+            static_cast<float>(hit.y / safe_scale + static_cast<double>(cam.anchor_world_px.y))
+        };
     }
 
     double camera_height_from_scale(const WarpedScreenGrid::RealismSettings& settings, double scale_value) {
@@ -721,9 +743,15 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
 
     camera_.apply_room_targets(cur_params, neigh_params, t, refresh_requested, 20, dev_mode);
 
-    if (camera_.has_focus_override()) {
-        set_screen_center(camera_.state().focus_override);
-    } else if (player && !dev_mode) {
+    if (dev_mode) {
+        if (camera_.has_focus_override()) {
+            set_screen_center(camera_.state().focus_override);
+        } else if (player) {
+            set_screen_center(SDL_Point{ player->pos.x, player->pos.y }, false);
+        } else if (cur && cur->room_area) {
+            set_screen_center(cur->room_area->get_center());
+        }
+    } else if (player) {
         set_screen_center(SDL_Point{ player->pos.x, player->pos.y }, false);
     } else if (cur && cur->room_area) {
         set_screen_center(cur->room_area->get_center());

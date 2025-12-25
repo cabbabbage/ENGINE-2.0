@@ -7760,9 +7760,9 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            204,
-            116,
-            31,
+            242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 19,
@@ -7780,9 +7780,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            36,
-            169,
             242,
+            241,
+            36,
             255
           ],
           "edge_smoothness": 43,
@@ -7833,9 +7833,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            146,
-            85,
-            242,
+            31,
+            32,
+            204,
             255
           ],
           "edge_smoothness": 29,
@@ -7881,14 +7881,14 @@
           ]
         },
         "spawn": {
-          "camera_height_px": 508,
-          "camera_tilt_deg": 60.0,
-          "camera_y_distance_px": 135,
+          "camera_height_px": 1782,
+          "camera_tilt_deg": 152.0,
+          "camera_y_distance_px": -658,
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            242,
+            36,
+            145,
             255
           ],
           "edge_smoothness": 101,

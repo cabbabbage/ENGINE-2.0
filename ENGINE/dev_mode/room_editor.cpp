@@ -3412,6 +3412,11 @@ void RoomEditor::ensure_room_configurator() {
                 header_visibility_callback_(room_config_panel_visible_ || asset_info_panel_visible_);
             }
         });
+        room_cfg_ui_->set_on_camera_changed([this](Room* changed_room) {
+            if (assets_ && (!changed_room || changed_room == current_room_)) {
+                assets_->mark_camera_dirty();
+            }
+        });
         room_cfg_ui_->set_bounds(room_config_bounds_);
 
         room_cfg_ui_->set_work_area(FloatingPanelLayoutManager::instance().usableRect());

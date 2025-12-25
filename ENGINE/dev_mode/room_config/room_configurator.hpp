@@ -98,6 +98,7 @@ public:
 
     void refresh_camera_panel_widgets();
     void request_camera_live_update();
+    void set_on_camera_changed(std::function<void(Room*)> cb) { on_camera_changed_ = std::move(cb); }
 
 private:
     class devmode::core::ManifestStore* manifest_store_ = nullptr;
@@ -237,4 +238,5 @@ private:
     SpawnGroupConfig::ConfigureEntryCallback external_configure_entry_;
     std::function<std::string(const std::string&, const std::string&)> on_room_renamed_;
     std::function<void(bool)> header_visibility_controller_{};
+    std::function<void(Room*)> on_camera_changed_;
 };

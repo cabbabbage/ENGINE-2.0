@@ -2412,8 +2412,10 @@ void RoomConfigurator::request_camera_live_update() {
         room_->camera_y_distance_px = state_->camera_y_distance_px;
         state_->apply_to_json(room_->assets_data(), true);
         room_->save_assets_json();
+        if (on_camera_changed_) on_camera_changed_(room_);
     } else if (external_room_json_) {
         state_->apply_to_json(*external_room_json_, true);
         if (on_external_spawn_change_) on_external_spawn_change_();
+        if (on_camera_changed_) on_camera_changed_(nullptr);
     }
 }

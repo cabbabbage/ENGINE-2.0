@@ -409,6 +409,10 @@ void Assets::on_camera_settings_changed() {
     apply_camera_runtime_settings();
 }
 
+void Assets::mark_camera_dirty() {
+    camera_settings_dirty_ = true;
+}
+
 void Assets::reload_camera_settings() {
     load_camera_settings_from_json();
 }
@@ -827,8 +831,9 @@ void Assets::update(const Input& input)
     }
 
     const bool height_animation_active = false;
-    const bool camera_refresh_needed = room_changed || player_moved || height_animation_active;
+    const bool camera_refresh_needed = room_changed || player_moved || height_animation_active || camera_settings_dirty_;
     camera_.update_camera_height(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
+    camera_settings_dirty_ = false;
 
     update_max_asset_dimensions();
 

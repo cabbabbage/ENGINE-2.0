@@ -111,6 +111,8 @@ public:
     void apply_camera_runtime_settings();
     void set_depth_effects_enabled(bool enabled);
     bool depth_effects_enabled() const { return depth_effects_enabled_; }
+    // Force the camera to refresh from current room settings on next update.
+    void mark_camera_dirty();
 
     void focus_camera_on_asset(Asset* a, double height_factor = 0.8, int duration_steps = 25);
 
@@ -234,6 +236,7 @@ private:
     Room* current_room_ = nullptr;
     int num_groups_ = 40;
     bool dev_mode = false;
+    bool camera_settings_dirty_ = false;
     bool suppress_render_ = false;
 
     bool suppress_dev_renderer_ = false;

@@ -184,7 +184,8 @@ void CameraController::apply_room_targets(const CameraParams& cur,
     blended = camera_math::sanitize_camera_params(blended, fallback_height_px_);
 
     if (manual_height_override_ && dev_mode) {
-        blended.height_px = smoothed_.height_px;
+        // Preserve manual zoom adjustments (e.g., scroll wheel) instead of snapping back to the last applied height.
+        blended.height_px = animating_ ? target_.height_px : smoothed_.height_px;
     }
 
     const bool restart = refresh_requested || !animating_ || blended != target_;

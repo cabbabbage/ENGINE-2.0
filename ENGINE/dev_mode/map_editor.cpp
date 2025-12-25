@@ -219,7 +219,9 @@ void MapEditor::focus_on_room(Room* room) {
     Area adjusted = cam->convert_area_to_aspect(*room->room_area);
     cam->set_manual_height_override(true);
     cam->set_focus_override(adjusted.get_center());
-    cam->frame_to_area(adjusted, 0);
+    auto [minx, miny, maxx, maxy] = adjusted.get_bounds();
+    SDL_Rect rect{minx, miny, maxx - minx, maxy - miny};
+    cam->frame_to_area(rect);
 }
 
 void MapEditor::ensure_font() {
@@ -307,7 +309,9 @@ void MapEditor::apply_camera_to_bounds() {
 };
         Area area("map_bounds", pts, 3);
         cam->set_focus_override(center);
-        cam->frame_to_area(area, 0);
+        auto [minx, miny, maxx, maxy] = area.get_bounds();
+        SDL_Rect rect{minx, miny, maxx - minx, maxy - miny};
+        cam->frame_to_area(rect);
     } else if (has_entry_center_) {
         cam->set_focus_override(entry_center_);
         cam->animate_height_to_scale(1.0, 0);
@@ -315,7 +319,9 @@ void MapEditor::apply_camera_to_bounds() {
         cam->set_focus_override(spawn_center);
         if (spawn_room && spawn_room->room_area) {
             Area adjusted = cam->convert_area_to_aspect(*spawn_room->room_area);
-            cam->frame_to_area(adjusted, 0);
+            auto [minx, miny, maxx, maxy] = adjusted.get_bounds();
+            SDL_Rect rect{minx, miny, maxx - minx, maxy - miny};
+            cam->frame_to_area(rect);
         } else {
             cam->animate_height_to_scale(1.0, 0);
         }

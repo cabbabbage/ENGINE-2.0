@@ -909,7 +909,7 @@ void DevControls::set_enabled(bool enabled) {
             camera_ptr->set_focus_override(preserved_center);
             camera_ptr->set_screen_center(preserved_center);
             camera_ptr->set_scale(preserved_scale);
-            camera_ptr->update(0.0f);
+            camera_ptr->update();
         }
         if (camera_was_visible && camera_panel_) {
             camera_panel_->open();
@@ -1505,7 +1505,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
         SDL_FPoint top_left_world = cam.screen_to_map(SDL_Point{0, 0});
         SDL_FPoint bottom_right_world = cam.screen_to_map(SDL_Point{screen_w_, screen_h_});
-        const float cam_scale = std::max(0.0001f, cam.get_scale());
+        const float cam_scale = std::max(0.0001f, static_cast<float>(cam.get_scale()));
 
         int cell = std::max(1, grid_cell_size_px_);
         if (cell > 0) {
@@ -3213,7 +3213,7 @@ void DevControls::handle_map_selection() {
             const double target_scale  = cam->default_camera_height_for_room(selected);
             const double factor = (target_scale > 0.0) ? (target_scale / current_scale) : 1.0;
             const int duration_steps = 30;
-            cam->pan_and_height_to_point(center, factor, duration_steps);
+            cam->pan_and_height_to_point(center.x, factor);
         }
     }
     if (is_trail_room(selected)) {

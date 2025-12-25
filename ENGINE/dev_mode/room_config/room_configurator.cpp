@@ -112,11 +112,35 @@ std::optional<int> parse_int_from_text(const std::string& text) {
     }
 }
 
+std::optional<float> parse_float_from_text(const std::string& text) {
+    std::string trimmed = trim_copy_room_config(text);
+    if (trimmed.empty()) {
+        return std::nullopt;
+    }
+    try {
+        size_t consumed = 0;
+        float value = std::stof(trimmed, &consumed);
+        if (consumed != trimmed.size()) {
+            return std::nullopt;
+        }
+        return value;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 std::optional<int> read_text_box_value(DMTextBox* box) {
     if (!box) {
         return std::nullopt;
     }
     return parse_int_from_text(box->value());
+}
+
+std::optional<float> read_text_box_float(DMTextBox* box) {
+    if (!box) {
+        return std::nullopt;
+    }
+    return parse_float_from_text(box->value());
 }
 
 void sync_text_box_with_value(DMTextBox* box, int value) {
@@ -160,6 +184,11 @@ struct RoomConfigurator::State {
     bool is_spawn = false;
     bool is_boss = false;
     bool inherits_assets = false;
+
+    // Camera settings
+    int camera_height_px = 1000;
+    float camera_tilt_deg = 60.0f;
+    int camera_y_distance_px = 0;
 
     bool geometry_is_circle() const { return lowercase_copy(geometry) == "circle"; }
 
@@ -263,6 +292,21 @@ struct RoomConfigurator::State {
             is_boss = false;
             mutated = true;
         }
+        int clamped_height = std::clamp(camera_height_px, -2000, 2000);
+        if (clamped_height != camera_height_px) {
+            camera_height_px = clamped_height;
+            mutated = true;
+        }
+        float clamped_tilt = std::clamp(camera_tilt_deg, 0.0f, 359.0f);
+        if (std::fabs(clamped_tilt - camera_tilt_deg) > 1e-6f) {
+            camera_tilt_deg = clamped_tilt;
+            mutated = true;
+        }
+        int clamped_y_distance = std::clamp(camera_y_distance_px, -2000, 2000);
+        if (clamped_y_distance != camera_y_distance_px) {
+            camera_y_distance_px = clamped_y_distance;
+            mutated = true;
+        }
         return mutated;
     }
 
@@ -272,6 +316,11 @@ struct RoomConfigurator::State {
         const nlohmann::json& src = data.is_object() ? data : empty_object();
         name = src.value("name", src.value("room_name", std::string{}));
         geometry = src.value("geometry", geometry_options.empty() ? std::string{} : geometry_options.front());
+
+        // Camera settings
+        camera_height_px = std::clamp(src.value("camera_height_px", 1000), -2000, 2000);
+        camera_tilt_deg = std::clamp(src.value("camera_tilt_deg", 60.0f), 0.0f, 359.0f);
+        camera_y_distance_px = std::clamp(src.value("camera_y_distance_px", 0), -2000, 2000);
 
         if (auto value = read_json_int(src, "min_width")) {
             width_min = *value;
@@ -357,6 +406,11 @@ struct RoomConfigurator::State {
         } else {
             dest.erase("curvyness");
         }
+
+        // Camera settings
+        dest["camera_height_px"] = camera_height_px;
+        dest["camera_tilt_deg"] = camera_tilt_deg;
+        dest["camera_y_distance_px"] = camera_y_distance_px;
 
         if (geometry_is_circle()) {
             int min_r = std::max(0, radius_min);
@@ -682,6 +736,18 @@ void RoomConfigurator::ensure_base_panels() {
         }
 };
 
+
+    // Camera panel
+    if (!camera_panel_) {
+        camera_panel_ = std::make_unique<DockableCollapsible>("Camera Settings", false);
+        camera_panel_->set_floatable(false);
+        camera_panel_->set_show_header(true);
+        camera_panel_->set_close_button_enabled(false);
+        camera_panel_->set_scroll_enabled(false);
+        camera_panel_->set_row_gap(DMSpacing::item_gap());
+        camera_panel_->set_col_gap(DMSpacing::item_gap());
+        camera_panel_->set_padding(DMSpacing::panel_padding());
+    }
     const std::string geometry_title = is_trail_context_ ? "Trail Geometry" : "Room Geometry";
     const std::string tags_title = is_trail_context_ ? "Trail Tags" : "Room Tags";
     const std::string types_title = is_trail_context_ ? "Trail Types" : "Room Types";
@@ -696,6 +762,17 @@ void RoomConfigurator::refresh_base_panel_rows() {
     ordered_panel_bounds_.clear();
     spawn_config_bounds_.clear();
     add_spawn_bounds_ = SDL_Rect{0,0,0,0};
+
+    refresh_camera_panel_widgets();
+    if (camera_panel_) {
+        DockableCollapsible::Rows cam_rows;
+        cam_rows.push_back({camera_height_widget_.get()});
+        cam_rows.push_back({camera_tilt_widget_.get()});
+        cam_rows.push_back({camera_y_distance_widget_.get()});
+        camera_panel_->set_rows(cam_rows);
+        camera_panel_->set_visible(true);
+        ordered_base_panels_.push_back(camera_panel_.get());
+    }
 
     if (geometry_panel_) {
         DockableCollapsible::Rows rows;
@@ -1852,6 +1929,7 @@ bool RoomConfigurator::sync_state_from_widgets() {
     bool changed = false;
     bool rebuild_required = false;
     bool tags_changed = false;
+    bool camera_changed = false;
     const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
 
     if (tags_dirty_) {
@@ -1946,6 +2024,33 @@ bool RoomConfigurator::sync_state_from_widgets() {
         }
     }
 
+    if (camera_height_slider_) {
+        int sanitized = std::clamp(camera_height_slider_->value(), -2000, 2000);
+        if (sanitized != state_->camera_height_px) {
+            state_->camera_height_px = sanitized;
+            changed = true;
+            camera_changed = true;
+        }
+    }
+
+    if (camera_tilt_slider_) {
+        float clamped = static_cast<float>(std::clamp(camera_tilt_slider_->value(), 0, 359));
+        if (std::fabs(clamped - state_->camera_tilt_deg) > 1e-3f) {
+            state_->camera_tilt_deg = clamped;
+            changed = true;
+            camera_changed = true;
+        }
+    }
+
+    if (camera_y_distance_slider_) {
+        int sanitized = std::clamp(camera_y_distance_slider_->value(), -2000, 2000);
+        if (sanitized != state_->camera_y_distance_px) {
+            state_->camera_y_distance_px = sanitized;
+            changed = true;
+            camera_changed = true;
+        }
+    }
+
     if (radius_slider_) {
         int slider_min = radius_slider_->min_value();
         int slider_max = radius_slider_->max_value();
@@ -2013,6 +2118,26 @@ bool RoomConfigurator::sync_state_from_widgets() {
     sync_text_box_with_value(width_max_box_.get(), state_->width_max);
     sync_text_box_with_value(height_min_box_.get(), state_->height_min);
     sync_text_box_with_value(height_max_box_.get(), state_->height_max);
+    auto sync_float_box = [](DMTextBox* box, float value) {
+        if (!box || box->is_editing()) {
+            return;
+        }
+        std::stringstream ss;
+        ss << value;
+        const std::string desired = ss.str();
+        if (box->value() != desired) {
+            box->set_value(desired);
+        }
+    };
+    if (camera_height_slider_) {
+        camera_height_slider_->set_value(std::clamp(state_->camera_height_px, -2000, 2000));
+    }
+    if (camera_tilt_slider_) {
+        camera_tilt_slider_->set_value(std::clamp(static_cast<int>(std::lround(state_->camera_tilt_deg)), 0, 359));
+    }
+    if (camera_y_distance_slider_) {
+        camera_y_distance_slider_->set_value(std::clamp(state_->camera_y_distance_px, -2000, 2000));
+    }
     if (radius_slider_) {
         bool skip_slider_sync =
             radius_slider_->defer_commit_until_unfocus() && radius_slider_->has_pending_values();
@@ -2029,6 +2154,9 @@ bool RoomConfigurator::sync_state_from_widgets() {
             auto& root = live_room_json();
             state_->apply_to_json(root, allow_height);
             write_tags_to_json(root);
+            room_->camera_height_px = state_->camera_height_px;
+            room_->camera_tilt_deg = state_->camera_tilt_deg;
+            room_->camera_y_distance_px = state_->camera_y_distance_px;
             room_->save_assets_json();
             if (tags_changed) {
                 tag_utils::notify_tags_changed();
@@ -2037,6 +2165,9 @@ bool RoomConfigurator::sync_state_from_widgets() {
             auto& root = live_room_json();
             state_->apply_to_json(root, allow_height);
             write_tags_to_json(root);
+        }
+        if (camera_changed) {
+            request_camera_live_update();
         }
         if (on_external_spawn_change_) {
             on_external_spawn_change_();
@@ -2254,3 +2385,35 @@ void RoomConfigurator::request_rebuild() {
     deferred_rebuild_ = true;
 }
 
+void RoomConfigurator::refresh_camera_panel_widgets() {
+    const int height_value = std::clamp(state_->camera_height_px, -2000, 2000);
+    const int tilt_value = std::clamp(static_cast<int>(std::lround(state_->camera_tilt_deg)), 0, 359);
+    const int y_distance_value = std::clamp(state_->camera_y_distance_px, -2000, 2000);
+
+    const std::string height_label = is_trail_context_ ? "Trail Height (px)" : "Height (px)";
+    const std::string tilt_label   = is_trail_context_ ? "Trail Tilt (deg)" : "Tilt (deg)";
+    const std::string y_offset_label = is_trail_context_ ? "Trail Y Distance (px)" : "Y Distance (px)";
+
+    camera_height_slider_ = std::make_unique<DMSlider>(height_label, -2000, 2000, height_value);
+    camera_tilt_slider_ = std::make_unique<DMSlider>(tilt_label, 0, 359, tilt_value);
+    camera_y_distance_slider_ = std::make_unique<DMSlider>(y_offset_label, -2000, 2000, y_distance_value);
+
+    camera_height_widget_ = std::make_unique<SliderWidget>(camera_height_slider_.get());
+    camera_tilt_widget_ = std::make_unique<SliderWidget>(camera_tilt_slider_.get());
+    camera_y_distance_widget_ = std::make_unique<SliderWidget>(camera_y_distance_slider_.get());
+}
+
+void RoomConfigurator::request_camera_live_update() {
+    if (!state_) return;
+    // Save to room/external json and trigger camera update in dev mode
+    if (room_) {
+        room_->camera_height_px = state_->camera_height_px;
+        room_->camera_tilt_deg = state_->camera_tilt_deg;
+        room_->camera_y_distance_px = state_->camera_y_distance_px;
+        state_->apply_to_json(room_->assets_data(), true);
+        room_->save_assets_json();
+    } else if (external_room_json_) {
+        state_->apply_to_json(*external_room_json_, true);
+        if (on_external_spawn_change_) on_external_spawn_change_();
+    }
+}

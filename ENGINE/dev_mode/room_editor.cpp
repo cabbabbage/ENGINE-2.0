@@ -2157,7 +2157,8 @@ void RoomEditor::focus_camera_on_asset(Asset* asset, double height_factor, int d
 
     WarpedScreenGrid& cam = assets_->getView();
     cam.set_manual_height_override(true);
-    cam.pan_and_height_to_asset(asset, height_factor, duration_steps);
+    cam.set_focus_override(asset->pos);
+    cam.animate_height_to_scale(height_factor * 1000.0, duration_steps);
     mark_spatial_index_dirty();
 }
 
@@ -2171,7 +2172,7 @@ void RoomEditor::focus_camera_on_room_center(bool reframe_height) {
     cam.set_focus_override(center);
 
     if (reframe_height) {
-        cam.frame_to_area(*current_room_->room_area, 0);
+        cam.animate_height_to_scale(cam.default_camera_height_for_room(current_room_), 0);
     }
     mark_spatial_index_dirty();
 }

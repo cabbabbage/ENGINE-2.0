@@ -388,9 +388,9 @@ void Asset::update_scale_values() {
 
     float camera_scale = 1.0f;
     if (assets_) {
-        camera_scale = std::max(0.0001f, assets_->getView().get_scale());
+        camera_scale = 1.0f;
     } else if (window) {
-        camera_scale = std::max(0.0001f, window->get_scale());
+        camera_scale = 1.0f;
     }
 
     float desired_variant_scale = current_scale / camera_scale;

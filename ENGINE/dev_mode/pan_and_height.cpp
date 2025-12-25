@@ -20,22 +20,22 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool 
         const bool height_increase = (wheel_y < 0);
         const double mag = std::pow(step, ticks);
         const double eff = height_increase ? mag : (1.0 / mag);
-        const int dur = 10;
 
-        const double base_scale = std::max(0.0001, static_cast<double>(cam.get_scale()));
+        const double base_scale = std::max(1.0, static_cast<double>(cam.get_scale()));
         const double unclamped_target = base_scale * eff;
-        const double target_scale = std::clamp( unclamped_target, 0.0001, static_cast<double>(WarpedScreenGrid::kMaxHeightAnchors));
+        const double target_scale = std::clamp(unclamped_target, 1.0, 50000.0);
         const double adjusted_eff = target_scale / base_scale;
 
         if (std::abs(adjusted_eff - 1.0) > 1e-6) {
 
+            cam.set_manual_height_override(true);
             if (panning_) {
                 cam.set_manual_height_override(true);
                 cam.set_focus_override(cam.get_screen_center());
-                cam.animate_height_multiply(adjusted_eff, dur);
+                cam.animate_height_multiply(adjusted_eff);
             } else {
 
-                cam.animate_height_towards_point(adjusted_eff, mouse, dur);
+                cam.animate_height_towards_point(adjusted_eff, mouse);
             }
         }
     }

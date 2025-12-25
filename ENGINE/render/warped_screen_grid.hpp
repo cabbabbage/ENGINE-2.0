@@ -1,5 +1,6 @@
 #pragma once
 
+#include "render/camera_controller.hpp"
 #include "utils/transform_smoothing.hpp"
 #include "render/image_effect_settings.hpp"
 #include "utils/area.hpp"
@@ -38,8 +39,7 @@ public:
 
         float min_visible_screen_ratio     = 0.015f;
 
-        float camera_height_min            = 0.75f;
-        float camera_height_max            = 3.0f;
+
 
         float base_height_px               = 1000.0f;
 
@@ -121,26 +121,14 @@ public:
     WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_view);
     ~WarpedScreenGrid();
 
-    void set_scale(float s);
-    float get_scale() const;
-    void animate_height_to_scale(double target_scale, int duration_steps);
-    void frame_to_area(const Area& target_area, int duration_steps);
-    void animate_height_multiply(double factor, int duration_steps);
-    void animate_height_towards_point(double factor, SDL_Point screen_point, int duration_steps);
 
-    void pan_and_height_to_point(SDL_Point world_pos, double height_scale_factor, int duration_steps);
-    void pan_and_height_to_asset(const Asset* a, double height_scale_factor, int duration_steps);
-
-    void update(float dt);
     void update_camera_height(Room* cur, CurrentRoomFinder* finder, Asset* player, bool refresh_requested, float dt, bool dev_mode = false);
+    void animate_height_to_scale(double target_height_px, int steps = 10);
 
     void set_focus_override(SDL_Point focus);
-    void set_manual_height_override(bool enabled);
     void clear_focus_override();
-    void clear_manual_height_override();
-    bool has_focus_override() const { return focus_override_; }
-    bool is_manual_height_override() const { return manual_height_override_; }
-    SDL_Point get_focus_override_point() const { return focus_point_; }
+    bool has_focus_override() const { return camera_.has_focus_override(); }
+    SDL_Point get_focus_override_point() const { return camera_.state().focus_override; }
 
     void set_realism_settings(const RealismSettings& settings);
     void set_screen_center(SDL_Point p, bool snap_immediately = true);
@@ -181,8 +169,9 @@ public:
     double horizon_screen_y_for_scale_value(double scale_value) const;
     SDL_FPoint get_view_center_f() const;
     SDL_Point get_screen_center() const {
+        SDL_FPoint center = camera_.state().center;
         return SDL_Point{
-            static_cast<int>(smoothed_center_.x), static_cast<int>(smoothed_center_.y) };
+            static_cast<int>(center.x), static_cast<int>(center.y) };
     }
     void recompute_current_view();
 
@@ -211,7 +200,19 @@ public:
     void set_render_areas_enabled(bool enabled) { render_areas_enabled_ = enabled; }
     const Area& get_current_view() const { return current_view_; }
     const Area& get_camera_area() const { return current_view_; }
-    bool is_height_animating() const { return height_animating_; }
+
+    bool is_manual_height_override() const;
+    void set_manual_height_override(bool);
+    double get_scale() const;
+    void set_scale(double);
+    void update();
+    Area frame_to_area(const SDL_Rect& frame) const;
+    SDL_Point pan_and_height_to_point(double pan, double height) const;
+    void animate_height_multiply(double factor);
+    void animate_height_towards_point(double target_height, SDL_Point target_point);
+    bool is_height_animating() const;
+    SDL_Point pan_and_height_to_asset(double pan, double height, const Asset* asset) const;
+
     double default_camera_height_for_room(const Room* room) const;
     const std::vector<world::GridPoint*>& get_warped_points() const { return warped_points_; }
     const std::vector<Asset*>& get_visible_assets() const { return visible_assets_; }
@@ -227,8 +228,11 @@ public:
     std::uint32_t last_depth_culled() const { return last_depth_culled_; }
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
     Area convert_area_to_aspect(const Area& in) const;
+    const CameraController::State& camera_state() const { return camera_.state(); }
 
 private:
+    // --- Camera parameter state for explicit per-room camera ---
+
 
     double compute_room_scale_from_area(const Room* room) const;
 
@@ -240,29 +244,10 @@ private:
     bool render_areas_enabled_ = false;
     RealismSettings settings_{};
 
+    CameraController camera_;
+
     Area base_view_;
     Area current_view_;
-
-    SDL_Point screen_center_{0, 0};
-    SDL_FPoint smoothed_center_{0.0f, 0.0f};
-    bool screen_center_initialized_ = false;
-    double pan_offset_x_ = 0.0;
-    double pan_offset_y_ = 0.0;
-
-    float scale_ = 1.0f;
-    float smoothed_scale_ = 1.0f;
-    bool height_animating_ = false;
-    int steps_total_ = 0;
-    int steps_done_ = 0;
-    double start_scale_ = 1.0;
-    double target_scale_ = 1.0;
-
-    bool focus_override_ = false;
-    SDL_Point focus_point_{0, 0};
-    bool pan_override_ = false;
-    SDL_Point start_center_{0, 0};
-    SDL_Point target_center_{0, 0};
-    bool manual_height_override_ = false;
 
     Room* starting_room_ = nullptr;
     double starting_area_ = 0.0;
@@ -276,8 +261,6 @@ private:
     float runtime_depth_offset_px_ = 0.0f;
     FloorDepthParams runtime_floor_params_{};
     bool geometry_valid_ = false;
-
-    float player_center_offset_y_ = 0.0f;
 
     std::vector<world::GridPoint*> warped_points_;
     std::vector<Asset*> visible_assets_;

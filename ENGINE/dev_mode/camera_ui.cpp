@@ -705,180 +705,7 @@ private:
     mutable bool icon_load_attempted_ = false;
 };
 
-class HeightKeyPointWidget : public Widget {
-public:
-    struct Values {
-        float height = 1.0f;
-};
 
-    HeightKeyPointWidget(std::string label, const Values& values, bool expanded, float height_min, float height_max)
-        : label_(std::move(label)),
-          expanded_(expanded),
-          height_min_(height_min),
-          height_max_(height_max) {
-        header_toggle_ = std::make_unique<SectionToggleWidget>(label_, expanded_);
-        if (header_toggle_) {
-            header_toggle_->set_on_toggle([this](bool v) {
-                expanded_ = v;
-                layout_children();
-                if (on_expanded_changed_) {
-                    on_expanded_changed_(expanded_);
-                }
-            });
-        }
-        set_height_button_ = std::make_unique<DMButton>("Set Height", &DMStyles::SecondaryButton(), 120, DMButton::height());
-
-        height_slider_ = std::make_unique<FloatSliderWidget>( "Camera Height", height_min_, height_max_, 0.01f, values.height, 2);
-        if (height_slider_) {
-            height_slider_->set_tooltip("Camera height anchor for this key point.");
-            height_slider_->set_on_value_changed([this](float) { notify_change(); });
-        }
-    }
-
-    void set_on_value_changed(std::function<void()> cb) { on_change_ = std::move(cb); }
-    void set_on_expanded_changed(std::function<void(bool)> cb) { on_expanded_changed_ = std::move(cb); }
-    void set_on_set_height(std::function<void(float)> cb) { on_set_height_ = std::move(cb); }
-
-    void set_values(const Values& values) {
-        if (height_slider_) height_slider_->set_value(values.height);
-        layout_children();
-    }
-
-    Values values() const {
-        Values v{};
-        v.height = height_slider_ ? height_slider_->value() : 1.0f;
-        return v;
-    }
-
-    void set_expanded(bool expanded) {
-        if (expanded_ == expanded) return;
-        expanded_ = expanded;
-        if (header_toggle_) {
-            header_toggle_->set_expanded(expanded_);
-        }
-        layout_children();
-    }
-
-    bool expanded() const { return expanded_; }
-
-    void set_rect(const SDL_Rect& r) override {
-        rect_ = r;
-        layout_children();
-    }
-
-    const SDL_Rect& rect() const override { return rect_; }
-
-    int height_for_width(int w) const override {
-        const int width = std::max(1, w);
-        const int header_h = DMButton::height();
-        int height = header_h;
-        if (expanded_) {
-            const int gap = DMSpacing::item_gap();
-            height += gap;
-            auto add_height = [&](const Widget* wgt) {
-                if (!wgt) return;
-                height += wgt->height_for_width(width) + gap;
-            };
-            add_height(height_slider_.get());
-        }
-        return height;
-    }
-
-    bool handle_event(const SDL_Event& e) override {
-        if (header_toggle_ && header_toggle_->handle_event(e)) {
-            expanded_ = header_toggle_->expanded();
-            layout_children();
-            if (on_expanded_changed_) {
-                on_expanded_changed_(expanded_);
-            }
-            return true;
-        }
-        if (set_height_button_ && set_height_button_->handle_event(e)) {
-            if (on_set_height_) {
-                on_set_height_(height_slider_ ? height_slider_->value() : 1.0f);
-            }
-            return true;
-        }
-
-        if (!expanded_) {
-            return false;
-        }
-
-        bool used = false;
-        auto handle_child = [&](Widget* w) {
-            if (!w) return false;
-            return w->handle_event(e);
-};
-        used = handle_child(height_slider_.get()) || used;
-        return used;
-    }
-
-    void render(SDL_Renderer* renderer) const override {
-        if (header_toggle_) header_toggle_->render(renderer);
-        if (set_height_button_) set_height_button_->render(renderer);
-        if (!expanded_) return;
-        if (height_slider_) height_slider_->render(renderer);
-    }
-
-    bool wants_full_row() const override { return true; }
-
-private:
-    void notify_change() {
-        if (on_change_) {
-            on_change_();
-        }
-    }
-
-    void layout_children() {
-        const int gap = DMSpacing::item_gap();
-        const int width = std::max(1, rect_.w);
-        int x = rect_.x;
-        int y = rect_.y;
-
-        const int header_h = DMButton::height();
-        const int button_w = set_height_button_
-            ? std::min(width / 3, std::max(set_height_button_->preferred_width(), 110)) : 0;
-        const int toggle_w = std::max(0, width - button_w - (button_w > 0 ? gap : 0));
-
-        if (header_toggle_) {
-            header_toggle_->set_rect(SDL_Rect{ x, y, toggle_w, header_h });
-        }
-        if (set_height_button_) {
-            const int btn_x = x + width - button_w;
-            set_height_button_->set_rect(SDL_Rect{ btn_x, y, button_w, header_h });
-        }
-        y += header_h;
-
-        if (!expanded_) {
-            return;
-        }
-
-        y += gap;
-        auto place_child = [&](Widget* child) {
-            if (!child) return;
-            int h = child->height_for_width(width);
-            child->set_rect(SDL_Rect{ x, y, width, h });
-            y += h + gap;
-};
-
-        place_child(height_slider_.get());
-    }
-
-private:
-    std::string label_;
-    bool expanded_ = true;
-    SDL_Rect rect_{0, 0, 0, 0};
-    float height_min_ = 0.0f;
-    float height_max_ = 0.0f;
-
-    std::unique_ptr<SectionToggleWidget> header_toggle_;
-    std::unique_ptr<DMButton> set_height_button_;
-    std::unique_ptr<FloatSliderWidget> height_slider_;
-
-    std::function<void()> on_change_{};
-    std::function<void(bool)> on_expanded_changed_{};
-    std::function<void(float)> on_set_height_{};
-};
 
 CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
     : DockableCollapsible("Camera Settings", true, x, y),
@@ -1002,19 +829,6 @@ void CameraUIPanel::sync_from_camera() {
     if (min_render_size_slider_) min_render_size_slider_->set_value(last_settings_.min_visible_screen_ratio);
     if (render_quality_slider_) render_quality_slider_->set_value(last_settings_.render_quality_percent);
     if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
-    if (height_in_keypoint_ || height_out_keypoint_) {
-        HeightKeyPointWidget::Values min_values;
-        min_values.height = last_settings_.camera_height_min;
-        if (height_in_keypoint_) {
-            height_in_keypoint_->set_values(min_values);
-        }
-
-        HeightKeyPointWidget::Values max_values;
-        max_values.height = last_settings_.camera_height_max;
-        if (height_out_keypoint_) {
-            height_out_keypoint_->set_values(max_values);
-        }
-    }
 
     if (meters_slider_) {
         meters_slider_->set_value(last_settings_.meters_per_100_world_px);
@@ -1099,33 +913,7 @@ void CameraUIPanel::build_ui() {
     meters_slider_->set_tooltip("Defines how many meters are represented by 100 world pixels, translating engine space into physical units.");
     meters_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    HeightKeyPointWidget::Values height_in_defaults;
-    height_in_defaults.height = defaults.camera_height_min;
-    height_in_keypoint_ = std::make_unique<HeightKeyPointWidget>( "Lower Camera Height Settings", height_in_defaults, height_in_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxHeightAnchors);
-    if (height_in_keypoint_) {
-        height_in_keypoint_->set_on_value_changed([this]() { on_control_value_changed(); });
-        height_in_keypoint_->set_on_expanded_changed([this](bool expanded) {
-            height_in_settings_expanded_ = expanded;
-            rebuild_rows();
-        });
-        height_in_keypoint_->set_on_set_height([this](float target_height) {
-            snap_height_to_anchor(target_height, true);
-        });
-    }
 
-    HeightKeyPointWidget::Values height_out_defaults;
-    height_out_defaults.height = defaults.camera_height_max;
-    height_out_keypoint_ = std::make_unique<HeightKeyPointWidget>( "Greater Camera Height Settings", height_out_defaults, height_out_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxHeightAnchors);
-    if (height_out_keypoint_) {
-        height_out_keypoint_->set_on_value_changed([this]() { on_control_value_changed(); });
-        height_out_keypoint_->set_on_expanded_changed([this](bool expanded) {
-            height_out_settings_expanded_ = expanded;
-            rebuild_rows();
-        });
-        height_out_keypoint_->set_on_set_height([this](float target_height) {
-            snap_height_to_anchor(target_height, false);
-        });
-    }
 
     const int stored_fg_opacity = devmode::camera_prefs::load_foreground_texture_max_opacity();
     const int stored_bg_opacity = devmode::camera_prefs::load_background_texture_max_opacity();
@@ -1165,23 +953,7 @@ void CameraUIPanel::on_control_value_changed() {
     apply_settings_if_needed();
 }
 
-void CameraUIPanel::snap_height_to_anchor(float target_height, bool anchor_is_min_section) {
-    if (!assets_ || !is_visible()) return;
-    (void)anchor_is_min_section;
 
-    WarpedScreenGrid& cam = assets_->getView();
-    const float clamped_target = std::clamp(target_height, WarpedScreenGrid::kMinHeightAnchors, WarpedScreenGrid::kMaxHeightAnchors);
-    SDL_Point focus = cam.get_screen_center();
-    cam.set_manual_height_override(true);
-    if (assets_->player) {
-        focus = SDL_Point{ assets_->player->pos.x, assets_->player->pos.y };
-        cam.set_focus_override(focus);
-        cam.set_screen_center(focus);
-    }
-    cam.set_scale(clamped_target);
-    cam.recompute_current_view();
-    assets_->apply_camera_runtime_settings();
-}
 
 void CameraUIPanel::rebuild_rows() {
     Rows rows;
@@ -1201,8 +973,6 @@ void CameraUIPanel::rebuild_rows() {
     if (depth_section_header_) rows.push_back({ depth_section_header_.get() });
     if (depth_section_expanded_) {
         if (meters_slider_) rows.push_back({ meters_slider_.get() });
-        if (height_in_keypoint_) rows.push_back({ height_in_keypoint_.get() });
-        if (height_out_keypoint_) rows.push_back({ height_out_keypoint_.get() });
     }
 
     if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
@@ -1242,7 +1012,6 @@ void CameraUIPanel::apply_settings_if_needed() {
 };
     bool changed = (effects_enabled != last_realism_enabled_) || (depthcue_enabled != last_depthcue_enabled_);
     const WarpedScreenGrid::RealismSettings& prev = last_settings_;
-    changed = changed || differs(settings.camera_height_min, prev.camera_height_min) || differs(settings.camera_height_max, prev.camera_height_max);
     changed = changed || differs(settings.min_visible_screen_ratio, prev.min_visible_screen_ratio);
     changed = changed || differs(settings.extra_cull_margin, prev.extra_cull_margin);
     if (render_quality_slider_) {
@@ -1280,20 +1049,6 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
 
     cam.update_geometry_cache(cam.compute_geometry());
 
-    const float kHeightGuard = 0.01f;
-    const float span = std::max(0.0002f, effective.camera_height_max - effective.camera_height_min);
-    const float guard = std::clamp(kHeightGuard, 0.0001f, span * 0.25f);
-    const float min_height = effective.camera_height_min + guard;
-    const float max_height = effective.camera_height_max - guard;
-    float current_height = cam.get_scale();
-    float clamped_height = std::clamp(current_height, min_height, max_height);
-    if (!std::isfinite(clamped_height)) {
-        clamped_height = min_height;
-    }
-    if (std::fabs(clamped_height - current_height) > 1e-4f) {
-        cam.animate_height_to_scale(clamped_height, 10);
-    }
-
     if (assets_) {
         assets_->set_depth_effects_enabled(depthcue_enabled);
         assets_->apply_camera_runtime_settings();
@@ -1320,22 +1075,8 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
     if (min_render_size_slider_) settings.min_visible_screen_ratio = std::clamp(min_render_size_slider_->value(), 0.0f, 0.5f);
     if (render_quality_slider_) settings.render_quality_percent = render_quality_slider_->value();
     if (cull_margin_slider_) settings.extra_cull_margin = std::clamp(cull_margin_slider_->value(), 0.0f, 1000.0f);
-    HeightKeyPointWidget::Values min_values{};
-    HeightKeyPointWidget::Values max_values{};
-    if (height_in_keypoint_) {
-        min_values = height_in_keypoint_->values();
-        settings.camera_height_min = min_values.height;
-    }
-    if (height_out_keypoint_) {
-        max_values = height_out_keypoint_->values();
-        settings.camera_height_max = max_values.height;
-    }
 
     if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
-
-    settings.camera_height_min = std::clamp(settings.camera_height_min, WarpedScreenGrid::kMinHeightAnchors, WarpedScreenGrid::kMaxHeightAnchors);
-    const float min_high = std::min(WarpedScreenGrid::kMaxHeightAnchors, settings.camera_height_min + 0.0001f);
-    settings.camera_height_max = std::clamp(settings.camera_height_max, min_high, WarpedScreenGrid::kMaxHeightAnchors);
 
     auto slider_to_opacity = [](const FloatSliderWidget* slider) -> int {
         if (!slider) return 0;

@@ -192,7 +192,6 @@ Assets::Assets(AssetLibrary& library,
     }
 
     hydrate_map_info_sections();
-    load_camera_settings_from_json();
     depth_effects_enabled_ = devmode::camera_prefs::load_depthcue_enabled();
 
     InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_y, map_radius);
@@ -226,11 +225,7 @@ Assets::Assets(AssetLibrary& library,
         last_player_pos_valid_ = false;
     }
 
-    double intro_height_scale = camera_.default_camera_height_for_room(intro_room);
-    if (!std::isfinite(intro_height_scale) || intro_height_scale <= 0.0) {
-        intro_height_scale = 1.0;
-    }
-    camera_.set_scale(static_cast<float>(intro_height_scale));
+
 
     if (!renderer) {
         vibble::log::error("[Assets] SceneRenderer not created: SDL_Renderer pointer is null.");
@@ -396,29 +391,22 @@ void Assets::hydrate_map_info_sections() {
 }
 
 void Assets::load_camera_settings_from_json() {
-    if (!map_info_json_.is_object()) {
-        return;
+    // Camera parameters now come from per-room data; ignore manifest camera_settings.
+    if (map_info_json_.is_object()) {
+        map_info_json_["camera_settings"] = nlohmann::json::object();
     }
-    nlohmann::json& camera_settings = map_info_json_["camera_settings"];
-    if (!camera_settings.is_object()) {
-        camera_settings = nlohmann::json::object();
-    }
-    camera_.apply_camera_settings(camera_settings);
-    camera_settings = camera_.camera_settings_to_json();
     apply_camera_runtime_settings();
 }
 
 void Assets::write_camera_settings_to_json() {
-    if (!map_info_json_.is_object()) {
-        return;
+    // Skip writing camera settings back to manifest; preserve map_info_json_ shape for compatibility.
+    if (map_info_json_.is_object()) {
+        map_info_json_["camera_settings"] = nlohmann::json::object();
     }
-    map_info_json_["camera_settings"] = camera_.camera_settings_to_json();
 }
 
 void Assets::on_camera_settings_changed() {
     apply_camera_runtime_settings();
-    write_camera_settings_to_json();
-    save_map_info_json();
 }
 
 void Assets::reload_camera_settings() {
@@ -838,7 +826,7 @@ void Assets::update(const Input& input)
         touch_dev_active_state_version();
     }
 
-    const bool height_animation_active = camera_.is_height_animating();
+    const bool height_animation_active = false;
     const bool camera_refresh_needed = room_changed || player_moved || height_animation_active;
     camera_.update_camera_height(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
 
@@ -960,7 +948,7 @@ void Assets::invalidate_max_asset_dimensions() {
 }
 
 void Assets::update_max_asset_dimensions() {
-    const float camera_scale = std::max(0.0001f, camera_.get_scale());
+    const float camera_scale = 1.0f;
     bool height_changed = cached_height_level_ <= 0.0f;
     if (!height_changed && cached_height_level_ > 0.0f) {
         const float delta = std::fabs(camera_scale - cached_height_level_) / std::max(cached_height_level_, 0.0001f);

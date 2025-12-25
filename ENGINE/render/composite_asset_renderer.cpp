@@ -180,7 +180,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
 
         float camera_scale = 1.0f;
         if (assets_) {
-            camera_scale = std::max(0.0001f, assets_->getView().get_scale());
+            camera_scale = std::max(0.0001f, static_cast<float>(assets_->getView().get_scale()));
         }
 
         float child_desired_variant_scale = child_current_scale / camera_scale;

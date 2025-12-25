@@ -147,6 +147,14 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(
                 for (int attempts = 0; attempts < 1000 && !success; ++attempts) {
                         if (const auto* asset_ref = pick_random_asset()) {
                                 success = TrailGeometry::attempt_trail_connection( a, b, all_areas, manifest_context, asset_lib, trail_rooms, 1, asset_ref->data, asset_ref->name, map_assets_data, map_radius, testing, rng_, map_manifest, manifest_store, manifest_writer);
+                                       // Set camera parameters for the most recent trail room (if any)
+                                       if (!trail_rooms.empty()) {
+                                           auto& trail_room = trail_rooms.back();
+                                           const nlohmann::json& config = asset_ref->data ? *asset_ref->data : nlohmann::json::object();
+                                           trail_room->camera_height_px = std::max(1, config.value("camera_height_px", 1000));
+                                           trail_room->camera_tilt_deg = std::clamp(config.value("camera_tilt_deg", 60.0f), 0.0f, 150.0f);
+                                           trail_room->camera_y_distance_px = std::max(0, config.value("camera_y_distance_px", 0));
+                                       }
                         }
                 }
                 if (success) {

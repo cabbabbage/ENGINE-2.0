@@ -75,6 +75,9 @@ class Room {
     Point map_origin;
     double scale_ = 1.0;
     std::string room_name;
+    int camera_height_px = 1000;
+    float camera_tilt_deg = 60.0f;
+    int camera_y_distance_px = 0;
     std::string room_directory;
     std::string json_path;
     Room* parent = nullptr;
@@ -90,6 +93,7 @@ class Room {
     std::string type;
     nlohmann::json create_static_room_json(std::string name);
     nlohmann::json& assets_data();
+    const nlohmann::json& assets_data() const;
     void save_assets_json() const;
     bool is_spawn_room() const;
     SDL_Color display_color() const;

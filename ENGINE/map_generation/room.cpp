@@ -244,6 +244,10 @@ manifest_writer_(std::move(manifest_writer))
 
         inherits_map_assets_ = assets_json.value("inherits_map_assets", false);
 
+        camera_height_px = std::max(1, assets_json.value("camera_height_px", 1000));
+        camera_tilt_deg = std::clamp(assets_json.value("camera_tilt_deg", 60.0f), 0.0f, 150.0f);
+        camera_y_distance_px = std::max(0, assets_json.value("camera_y_distance_px", 0));
+
         load_named_areas_from_json();
         int map_radius_int = static_cast<int>(std::round(map_radius));
         if (map_radius_int < 0) map_radius_int = 0;
@@ -830,6 +834,14 @@ nlohmann::json& Room::assets_data() {
         return assets_json;
 }
 
+const nlohmann::json& Room::assets_data() const {
+        static const nlohmann::json kEmpty = nlohmann::json::object();
+        if (!assets_json.is_object()) {
+                return kEmpty;
+        }
+        return assets_json;
+}
+
 bool Room::is_spawn_room() const {
         return assets_json.value("is_spawn", false);
 }
@@ -928,6 +940,11 @@ void Room::set_manifest_store(devmode::core::ManifestStore* store,
 void Room::save_assets_json() const {
 
         const_cast<Room*>(this)->load_named_areas_from_json();
+
+        const_cast<Room*>(this)->assets_json["camera_height_px"] = camera_height_px;
+        const_cast<Room*>(this)->assets_json["camera_tilt_deg"] = camera_tilt_deg;
+        const_cast<Room*>(this)->assets_json["camera_y_distance_px"] = camera_y_distance_px;
+
         if (room_data_ptr_) {
                 *room_data_ptr_ = assets_json;
         }

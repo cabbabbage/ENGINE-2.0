@@ -18,7 +18,7 @@ class FloatSliderWidget;
 class SectionToggleWidget;
 class DiscreteSliderWidget;
 class PitchDialWidget;
-class HeightKeyPointWidget;
+
 
 class CameraUIPanel : public DockableCollapsible {
 public:
@@ -53,7 +53,6 @@ private:
     void apply_settings_to_camera(const WarpedScreenGrid::RealismSettings& settings, bool effects_enabled, bool depthcue_enabled);
     WarpedScreenGrid::RealismSettings read_settings_from_ui() const;
     void on_control_value_changed();
-    void snap_height_to_anchor(float target_height, bool anchor_is_min_section);
 
 private:
     Assets* assets_ = nullptr;
@@ -74,8 +73,6 @@ private:
     std::unique_ptr<SectionToggleWidget> depth_section_header_;
     std::unique_ptr<SectionToggleWidget> depthcue_section_header_;
 
-    std::unique_ptr<HeightKeyPointWidget> height_in_keypoint_;
-    std::unique_ptr<HeightKeyPointWidget> height_out_keypoint_;
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> cull_margin_slider_;
     std::unique_ptr<FloatSliderWidget> meters_slider_;
@@ -91,8 +88,6 @@ private:
     std::unique_ptr<DiscreteSliderWidget> render_quality_slider_;
     bool visibility_section_expanded_ = true;
     bool depth_section_expanded_ = true;
-    bool height_in_settings_expanded_ = true;
-    bool height_out_settings_expanded_ = false;
     bool depthcue_section_expanded_ = false;
     bool applying_settings_ = false;
 

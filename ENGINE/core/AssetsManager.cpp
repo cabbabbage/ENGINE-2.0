@@ -391,18 +391,21 @@ void Assets::hydrate_map_info_sections() {
 }
 
 void Assets::load_camera_settings_from_json() {
-    // Camera parameters now come from per-room data; ignore manifest camera_settings.
-    if (map_info_json_.is_object()) {
+    if (!map_info_json_.is_object()) {
+        return;
+    }
+    if (!map_info_json_.contains("camera_settings") || !map_info_json_["camera_settings"].is_object()) {
         map_info_json_["camera_settings"] = nlohmann::json::object();
     }
+    camera_.apply_camera_settings(map_info_json_["camera_settings"]);
     apply_camera_runtime_settings();
 }
 
 void Assets::write_camera_settings_to_json() {
-    // Skip writing camera settings back to manifest; preserve map_info_json_ shape for compatibility.
-    if (map_info_json_.is_object()) {
-        map_info_json_["camera_settings"] = nlohmann::json::object();
+    if (!map_info_json_.is_object()) {
+        return;
     }
+    map_info_json_["camera_settings"] = camera_.camera_settings_to_json();
 }
 
 void Assets::on_camera_settings_changed() {

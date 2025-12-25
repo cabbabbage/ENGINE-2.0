@@ -72,7 +72,6 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool 
         if (dx != 0 || dy != 0) {
             panning_ = true;
             pan_drag_pending_ = false;
-            cam.set_manual_height_override(true);
             cam.set_focus_override(pan_start_center_);
         }
     }

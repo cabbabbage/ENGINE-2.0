@@ -890,13 +890,124 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
 }
 
 void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
-    (void)data;
-    // Camera parameters now come solely from per-room data; manifest-driven overrides are ignored.
+    if (!data.is_object()) {
+        return;
+    }
+
+    auto read_float = [&](const char* key, float& target, float min_value, float max_value) {
+        auto it = data.find(key);
+        if (it == data.end() || !it->is_number()) {
+            return;
+        }
+        const float value = it->get<float>();
+        if (!std::isfinite(value)) {
+            return;
+        }
+        target = std::clamp(value, min_value, max_value);
+    };
+    auto read_int = [&](const char* key, int& target, int min_value, int max_value) {
+        auto it = data.find(key);
+        if (it == data.end() || !it->is_number_integer()) {
+            return;
+        }
+        const int value = it->get<int>();
+        target = std::clamp(value, min_value, max_value);
+    };
+    auto read_effect_settings = [&](const char* key, camera_effects::ImageEffectSettings& target) {
+        auto it = data.find(key);
+        if (it == data.end() || !it->is_object()) {
+            return;
+        }
+        const nlohmann::json& obj = *it;
+        if (obj.contains("contrast") && obj["contrast"].is_number()) {
+            target.contrast = obj["contrast"].get<float>();
+        }
+        if (obj.contains("brightness") && obj["brightness"].is_number()) {
+            target.brightness = obj["brightness"].get<float>();
+        }
+        if (obj.contains("blur") && obj["blur"].is_number()) {
+            target.blur = obj["blur"].get<float>();
+        }
+        if (obj.contains("saturation_red") && obj["saturation_red"].is_number()) {
+            target.saturation_red = obj["saturation_red"].get<float>();
+        }
+        if (obj.contains("saturation_green") && obj["saturation_green"].is_number()) {
+            target.saturation_green = obj["saturation_green"].get<float>();
+        }
+        if (obj.contains("saturation_blue") && obj["saturation_blue"].is_number()) {
+            target.saturation_blue = obj["saturation_blue"].get<float>();
+        }
+        if (obj.contains("hue") && obj["hue"].is_number()) {
+            target.hue = obj["hue"].get<float>();
+        }
+        camera_effects::ClampImageEffectSettings(target);
+    };
+
+    RealismSettings updated = settings_;
+    read_float("min_visible_screen_ratio", updated.min_visible_screen_ratio, 0.0f, 0.5f);
+    read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
+    read_int("render_quality_percent", updated.render_quality_percent, 10, 100);
+    read_float("meters_per_100_world_px", updated.meters_per_100_world_px, 0.01f, 1000.0f);
+    read_float("scale_variant_hysteresis_margin", updated.scale_variant_hysteresis_margin, 0.0f, 1.0f);
+    read_float("extra_cull_margin", updated.extra_cull_margin, 0.0f, 10000.0f);
+
+    read_int("foreground_texture_max_opacity", updated.foreground_texture_max_opacity, 0, 255);
+    read_int("background_texture_max_opacity", updated.background_texture_max_opacity, 0, 255);
+    read_float("foreground_plane_screen_y", updated.foreground_plane_screen_y, -10000.0f, 10000.0f);
+    read_float("background_plane_screen_y", updated.background_plane_screen_y, -10000.0f, 10000.0f);
+    int falloff = static_cast<int>(updated.texture_opacity_falloff_method);
+    read_int("texture_opacity_falloff_method", falloff, 0, 4);
+    updated.texture_opacity_falloff_method = static_cast<BlurFalloffMethod>(falloff);
+
+    int smoothing_method = static_cast<int>(updated.parallax_smoothing.method);
+    read_int("motion_smoothing_method", smoothing_method, 0, 2);
+    updated.parallax_smoothing.method = static_cast<TransformSmoothingMethod>(smoothing_method);
+    read_float("motion_smoothing_max_step", updated.parallax_smoothing.max_step, 0.0f, 100000.0f);
+    read_float("motion_smoothing_snap_threshold", updated.parallax_smoothing.snap_threshold, 0.0f, 100000.0f);
+    read_float("motion_smoothing_lerp_rate", updated.parallax_smoothing.lerp_rate, 0.0f, 1000.0f);
+    read_float("motion_smoothing_spring_frequency", updated.parallax_smoothing.spring_frequency, 0.0f, 1000.0f);
+
+    read_effect_settings("foreground_effects", updated.foreground_effects);
+    read_effect_settings("background_effects", updated.background_effects);
+
+    set_realism_settings(updated);
 }
 
 nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
-    // Persisting camera settings to manifest is disabled; keep an empty object for backward compatibility.
-    return nlohmann::json::object();
+    nlohmann::json result = nlohmann::json::object();
+    result["min_visible_screen_ratio"] = settings_.min_visible_screen_ratio;
+    result["base_height_px"] = settings_.base_height_px;
+    result["render_quality_percent"] = settings_.render_quality_percent;
+    result["meters_per_100_world_px"] = settings_.meters_per_100_world_px;
+    result["scale_variant_hysteresis_margin"] = settings_.scale_variant_hysteresis_margin;
+    result["extra_cull_margin"] = settings_.extra_cull_margin;
+
+    result["foreground_texture_max_opacity"] = settings_.foreground_texture_max_opacity;
+    result["background_texture_max_opacity"] = settings_.background_texture_max_opacity;
+    result["foreground_plane_screen_y"] = settings_.foreground_plane_screen_y;
+    result["background_plane_screen_y"] = settings_.background_plane_screen_y;
+    result["texture_opacity_falloff_method"] = static_cast<int>(settings_.texture_opacity_falloff_method);
+
+    result["motion_smoothing_method"] = static_cast<int>(settings_.parallax_smoothing.method);
+    result["motion_smoothing_max_step"] = settings_.parallax_smoothing.max_step;
+    result["motion_smoothing_snap_threshold"] = settings_.parallax_smoothing.snap_threshold;
+    result["motion_smoothing_lerp_rate"] = settings_.parallax_smoothing.lerp_rate;
+    result["motion_smoothing_spring_frequency"] = settings_.parallax_smoothing.spring_frequency;
+
+    auto write_effects = [](const camera_effects::ImageEffectSettings& settings) {
+        return nlohmann::json::object({
+            {"contrast", settings.contrast},
+            {"brightness", settings.brightness},
+            {"blur", settings.blur},
+            {"saturation_red", settings.saturation_red},
+            {"saturation_green", settings.saturation_green},
+            {"saturation_blue", settings.saturation_blue},
+            {"hue", settings.hue}
+        });
+    };
+    result["foreground_effects"] = write_effects(settings_.foreground_effects);
+    result["background_effects"] = write_effects(settings_.background_effects);
+    return result;
 }
 SDL_FPoint WarpedScreenGrid::get_view_center_f() const {
     const SDL_FPoint center = camera_.state().center;

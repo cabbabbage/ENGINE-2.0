@@ -743,6 +743,7 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
         dev_selected_room_ = room;
         return;
     }
+    const bool room_changed = (current_room_ != room);
     {
         std::ostringstream oss;
         oss << "[DevControls] set_current_room begin -> "
@@ -752,6 +753,12 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
     current_room_ = room;
 
     dev_selected_room_ = room;
+    if (room_changed && assets_) {
+        WarpedScreenGrid& cam = assets_->getView();
+        if (!cam.is_manual_height_override()) {
+            cam.clear_focus_override();
+        }
+    }
     if (regenerate_popup_) regenerate_popup_->close();
     if (room_editor_) {
         dev_mode_trace("[DevControls] set_current_room -> room_editor set_current_room");

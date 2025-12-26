@@ -167,7 +167,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                 int w, h;
                 SDL_QueryTexture(light_source.texture, nullptr, nullptr, &w, &h);
                 SDL_Rect dest_rect = {
-                    static_cast<int>(asset->pos.x + offset_x * package_scale), static_cast<int>(asset->pos.y + light_source.offset_y * package_scale), w, h };
+                    static_cast<int>(asset->pos.x + offset_x * package_scale), asset->pos.y, w, h };
                 SDL_RendererFlip light_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
 
                 add_render_object(light_source.texture, dest_rect, *light_color, SDL_BLENDMODE_ADD, true, 0.0, std::nullopt, light_flip);
@@ -334,7 +334,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                 int w, h;
                 SDL_QueryTexture(light_source.texture, nullptr, nullptr, &w, &h);
                 SDL_Rect dest_rect = {
-                    static_cast<int>(asset->pos.x + offset_x * package_scale), static_cast<int>(asset->pos.y + light_source.offset_y * package_scale), w, h };
+                    static_cast<int>(asset->pos.x + offset_x * package_scale), asset->pos.y, w, h };
                 SDL_RendererFlip light_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
 
                 add_render_object(light_source.texture, dest_rect, *light_color, SDL_BLENDMODE_ADD, true, 0.0, std::nullopt, light_flip);

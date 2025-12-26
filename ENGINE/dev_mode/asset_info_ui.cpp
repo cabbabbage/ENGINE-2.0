@@ -849,7 +849,7 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
                 int offx = light.offset_x;
                 if (target_asset_->flipped) offx = -offx;
                 const float cx = xform.cx + static_cast<float>(offx) * xform.sx;
-                const float cy = xform.cy + static_cast<float>(light.offset_y) * xform.sy;
+                const float cy = xform.cy;
                 return SDL_Point{ static_cast<int>(std::lround(cx)), static_cast<int>(std::lround(cy)) };
 };
 
@@ -902,19 +902,19 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
                 const float dy_screen = static_cast<float>(my) - xform.cy;
                 const float unflipped_x = (xform.sx != 0.0f) ? (dx_screen / xform.sx) : 0.0f;
                 const float new_off_x   = target_asset_->flipped ? -unflipped_x : unflipped_x;
-                const float new_off_y   = (xform.sy != 0.0f) ? (dy_screen / xform.sy) : 0.0f;
+                const float new_off_z   = (xform.sy != 0.0f) ? (dy_screen / xform.sy) : 0.0f;
                 const int final_off_x = static_cast<int>(std::lround(new_off_x));
-                const int final_off_y = static_cast<int>(std::lround(new_off_y));
-                if (L.offset_x == final_off_x && L.offset_y == final_off_y) {
+                const int final_off_z = static_cast<int>(std::lround(new_off_z));
+                if (L.offset_x == final_off_x && L.offset_z == final_off_z) {
                     set_light_hover(light_drag_index_);
                     return true;
                 }
                 L.offset_x = final_off_x;
-                L.offset_y = final_off_y;
+                L.offset_z = final_off_z;
 
                 info_->set_lighting(info_->light_sources);
                 if (lighting_section_) {
-                    lighting_section_->update_light_offsets(static_cast<std::size_t>(light_drag_index_), final_off_x, final_off_y);
+                    lighting_section_->update_light_offsets(static_cast<std::size_t>(light_drag_index_), final_off_x, final_off_z);
                 }
                 set_light_hover(light_drag_index_);
                 this->notify_light_sources_modified(false);
@@ -1353,7 +1353,7 @@ void AssetInfoUI::render_world_overlay(SDL_Renderer* r, const WarpedScreenGrid& 
                 offx = -offx;
             }
             const float cx = compute_light_transform.cx + static_cast<float>(offx) * compute_light_transform.sx;
-            const float cy = compute_light_transform.cy + static_cast<float>(light.offset_y) * compute_light_transform.sy;
+            const float cy = compute_light_transform.cy;
 
             const int ix = static_cast<int>(std::lround(cx));
             const int iy = static_cast<int>(std::lround(cy));

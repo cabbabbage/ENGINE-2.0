@@ -52,15 +52,34 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
             SDL_Point world_br{ tile.world_rect.x + tile.world_rect.w, tile.world_rect.y + tile.world_rect.h };
             SDL_Point world_bl{ tile.world_rect.x, tile.world_rect.y + tile.world_rect.h };
 
-            auto floor_warped_screen_position = [&](SDL_Point world_pos) -> SDL_FPoint {
-                auto effects = cam.compute_render_effects(world_pos, 0, 0, {});
-                return {std::floor(effects.screen_position.x), std::floor(effects.screen_position.y)};
-};
+            auto floor_project = [&](SDL_Point world_pos, SDL_FPoint& out) -> bool {
+                SDL_FPoint screen{};
+                if (!cam.project_world_point(SDL_FPoint{static_cast<float>(world_pos.x), static_cast<float>(world_pos.y)},
+                                             0.0f,
+                                             screen)) {
+                    return false;
+                }
+                if (!std::isfinite(screen.x) || !std::isfinite(screen.y)) {
+                    return false;
+                }
+                screen.y = cam.warp_floor_screen_y(static_cast<float>(world_pos.y), screen.y);
+                if (!std::isfinite(screen.y)) {
+                    return false;
+                }
+                out = SDL_FPoint{std::floor(screen.x), std::floor(screen.y)};
+                return true;
+            };
 
-            SDL_FPoint screen_tl = floor_warped_screen_position(world_tl);
-            SDL_FPoint screen_tr = floor_warped_screen_position(world_tr);
-            SDL_FPoint screen_br = floor_warped_screen_position(world_br);
-            SDL_FPoint screen_bl = floor_warped_screen_position(world_bl);
+            SDL_FPoint screen_tl{};
+            SDL_FPoint screen_tr{};
+            SDL_FPoint screen_br{};
+            SDL_FPoint screen_bl{};
+            if (!floor_project(world_tl, screen_tl) ||
+                !floor_project(world_tr, screen_tr) ||
+                !floor_project(world_br, screen_br) ||
+                !floor_project(world_bl, screen_bl)) {
+                continue;
+            }
 
             const float area_doubled =
                 (screen_tr.x - screen_tl.x) * (screen_bl.y - screen_tl.y) - (screen_bl.x - screen_tl.x) * (screen_tr.y - screen_tl.y);

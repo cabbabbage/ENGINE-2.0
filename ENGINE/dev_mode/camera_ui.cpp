@@ -718,6 +718,7 @@ CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
     set_close_button_on_left(false);
     set_floatable(true);
     build_ui();
+    apply_settings_if_needed();
     sync_from_camera();
 }
 
@@ -880,6 +881,11 @@ void CameraUIPanel::build_ui() {
     if (assets_) {
         defaults = assets_->getView().realism_settings();
     }
+    defaults.min_visible_screen_ratio = devmode::camera_prefs::load_min_visible_screen_ratio(defaults.min_visible_screen_ratio);
+    defaults.extra_cull_margin = devmode::camera_prefs::load_extra_cull_margin(defaults.extra_cull_margin);
+    defaults.meters_per_100_world_px = devmode::camera_prefs::load_meters_per_100_world_px(defaults.meters_per_100_world_px);
+    defaults.render_quality_percent = devmode::camera_prefs::load_render_quality_percent(defaults.render_quality_percent);
+    defaults.texture_warp_percent = devmode::camera_prefs::load_texture_warp_percent(defaults.texture_warp_percent);
 
     auto configure_section = [this](std::unique_ptr<SectionToggleWidget>& target,
                                     const std::string& label,
@@ -913,7 +919,6 @@ void CameraUIPanel::build_ui() {
     render_quality_slider_ = std::make_unique<DiscreteSliderWidget>("Render Quality (%)", std::vector<int>{100, 75, 50, 25, 10}, defaults.render_quality_percent);
     render_quality_slider_->set_tooltip("Trade fidelity for speed; lowers the number of sprites drawn each frame.");
     render_quality_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
-    if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
 
     meters_slider_ = std::make_unique<FloatSliderWidget>("Meters per 100 World Pixels", 0.01f, 1.00f, 0.01f, defaults.meters_per_100_world_px, 2);
     meters_slider_->set_tooltip("Defines how many meters are represented by 100 world pixels, translating engine space into physical units.");
@@ -1030,6 +1035,7 @@ void CameraUIPanel::apply_settings_if_needed() {
     }
     changed = changed || differs(settings.meters_per_100_world_px, prev.meters_per_100_world_px);
     changed = changed || differs(settings.scale_variant_hysteresis_margin, prev.scale_variant_hysteresis_margin);
+    changed = changed || differs(settings.texture_warp_percent, prev.texture_warp_percent);
 
     changed = changed || (settings.foreground_texture_max_opacity != prev.foreground_texture_max_opacity);
     changed = changed || (settings.background_texture_max_opacity != prev.background_texture_max_opacity);
@@ -1078,6 +1084,11 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
     }
     devmode::camera_prefs::save_foreground_texture_max_opacity(settings.foreground_texture_max_opacity);
     devmode::camera_prefs::save_background_texture_max_opacity(settings.background_texture_max_opacity);
+    devmode::camera_prefs::save_min_visible_screen_ratio(settings.min_visible_screen_ratio);
+    devmode::camera_prefs::save_extra_cull_margin(settings.extra_cull_margin);
+    devmode::camera_prefs::save_meters_per_100_world_px(settings.meters_per_100_world_px);
+    devmode::camera_prefs::save_render_quality_percent(settings.render_quality_percent);
+    devmode::camera_prefs::save_texture_warp_percent(settings.texture_warp_percent);
     last_depthcue_enabled_ = depthcue_enabled;
 }
 

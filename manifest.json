@@ -6290,7 +6290,7 @@
       "animations": {
         "default": {
           "child_timelines": [],
-          "crop_frames": false,
+          "crop_frames": true,
           "flipped_source": false,
           "frames": [
             {
@@ -7736,7 +7736,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726563,
+            "offset": 658.9600219726562,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }
@@ -7766,9 +7766,9 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 19,
@@ -7786,9 +7786,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            204,
-            116,
-            31,
+            242,
+            223,
+            36,
             255
           ],
           "edge_smoothness": 43,
@@ -7839,9 +7839,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            85,
             242,
-            150,
+            36,
+            224,
             255
           ],
           "edge_smoothness": 29,
@@ -7887,16 +7887,16 @@
           ]
         },
         "spawn": {
-          "camera_height_px": 1264,
-          "camera_pan_y_percent": 56,
-          "camera_tilt_deg": 76.0,
-          "camera_y_distance_px": -2000,
-          "camera_zoom_percent": 42,
+          "camera_height_px": -31,
+          "camera_pan_y_percent": 64,
+          "camera_tilt_deg": 61.0,
+          "camera_y_distance_px": -1440,
+          "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            36,
             242,
-            184,
+            36,
+            54,
             255
           ],
           "edge_smoothness": 101,

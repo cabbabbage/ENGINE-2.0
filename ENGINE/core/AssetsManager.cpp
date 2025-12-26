@@ -1340,10 +1340,11 @@ bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rec
         const float vertical_scale = (asset->info->apply_vertical_scaling) ? gp->vertical_scale : 1.0f;
 
         const float center_x = gp->screen.x + (world_center_x - world_x) * distance_scale;
-        const float center_y = gp->screen.y + (world_center_y - world_y) * distance_scale;
 
         float width  = (scaled_half * 2.0f) * distance_scale;
         float height = width * vertical_scale;
+        const float center_y = gp->screen.y +
+            ((world_center_y - world_y) * distance_scale - height * 0.5f);
 
         if (std::isfinite(center_x) && std::isfinite(center_y) &&
             std::isfinite(width) && std::isfinite(height) &&

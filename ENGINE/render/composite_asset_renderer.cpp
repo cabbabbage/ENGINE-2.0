@@ -47,7 +47,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                                 const world::GridPoint* gp,
                                                 float flicker_time_seconds,
                                                 float package_scale) {
-    (void)gp;
     if (!renderer_ || !asset) return;
 
     asset->render_package.clear();
@@ -244,6 +243,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
     }
 
     SDL_Texture* base_tex = nullptr;
+    SDL_Texture* fog_tex = nullptr;
 
     const Animation* anim_ptr = nullptr;
     if (asset->info) {
@@ -257,6 +257,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                     variant_idx = std::clamp(variant_idx, 0, static_cast<int>(variants.size()) - 1);
                     const FrameVariant& variant = variants[static_cast<std::size_t>(variant_idx)];
                     base_tex = variant.get_base_texture();
+                    fog_tex = variant.get_fog_texture();
                 }
             }
         }
@@ -286,6 +287,16 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             final_w,
             final_h
 };
+        float fog_alpha = 0.0f;
+        if (gp) {
+            const float horizon_alpha = std::clamp(gp->horizon_fade_alpha, 0.0f, 1.0f);
+            fog_alpha = std::clamp(1.0f - horizon_alpha, 0.0f, 1.0f);
+        }
+        if (fog_tex && fog_alpha > 0.0f) {
+            const int fog_alpha_int = static_cast<int>(std::lround(fog_alpha * 255.0f));
+            SDL_Color fog_color{255, 255, 255, static_cast<Uint8>(std::clamp(fog_alpha_int, 0, 255))};
+            add_render_object(fog_tex, dest_rect, fog_color, SDL_BLENDMODE_BLEND, false);
+        }
         add_render_object(base_tex, dest_rect, SDL_Color{255, 255, 255, 255}, SDL_BLENDMODE_BLEND, false);
     }
 

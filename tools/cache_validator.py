@@ -173,7 +173,7 @@ class CacheValidator:
             scale_dir = anim_cache_root / f"scale_{scale_pct}"
             if not scale_dir.is_dir():
                 return False
-            for variant in ("normal", "foreground", "background"):
+            for variant in ("normal", "foreground", "background", "fog"):
                 frame_path = scale_dir / variant / f"{output_idx}.png"
                 if not frame_path.is_file():
                     return False

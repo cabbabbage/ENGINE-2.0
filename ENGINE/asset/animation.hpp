@@ -37,6 +37,7 @@ public:
         std::vector<int> heights;
         std::vector<SDL_Texture*> foreground_textures;
         std::vector<SDL_Texture*> background_textures;
+        std::vector<SDL_Texture*> fog_textures;
         std::vector<SDL_Texture*> mask_textures;
         std::vector<int> mask_widths;
         std::vector<int> mask_heights;
@@ -47,6 +48,7 @@ public:
             heights.assign(variant_count, 0);
             foreground_textures.assign(variant_count, nullptr);
             background_textures.assign(variant_count, nullptr);
+            fog_textures.assign(variant_count, nullptr);
             mask_textures.assign(variant_count, nullptr);
             mask_widths.assign(variant_count, 0);
             mask_heights.assign(variant_count, 0);

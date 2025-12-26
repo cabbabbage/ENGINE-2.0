@@ -408,6 +408,7 @@
       "update_radius": 0
     },
     "Bench": {
+      "animation_children": [],
       "animations": {
         "default": {
           "locked": false,
@@ -418,9 +419,28 @@
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "SRC/assets/Bench",
       "asset_name": "Bench",
-      "start": "default"
+      "async_children": [],
+      "neighbor_search_distance": 500,
+      "shading_opacity_multiplier": 1.0,
+      "shading_parallax_amount": 0.0,
+      "shading_screen_brightness_multiplier": 1.0,
+      "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+      },
+      "size_settings": {
+        "scale_percentage": 26.0
+      },
+      "spawn_groups": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false
     },
     "Bush_1": {
       "animations": {
@@ -7760,9 +7780,9 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            36,
+            147,
+            242,
             255
           ],
           "edge_smoothness": 19,
@@ -7780,8 +7800,8 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            85,
-            242,
+            133,
+            36,
             242,
             255
           ],
@@ -7833,9 +7853,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            204,
-            135,
-            31,
+            36,
+            242,
+            131,
             255
           ],
           "edge_smoothness": 29,
@@ -7881,14 +7901,14 @@
           ]
         },
         "spawn": {
-          "camera_height_px": 93,
-          "camera_tilt_deg": 63.0,
-          "camera_y_distance_px": -933,
+          "camera_height_px": 342,
+          "camera_tilt_deg": 73.0,
+          "camera_y_distance_px": -269,
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            125,
+            31,
+            32,
+            204,
             255
           ],
           "edge_smoothness": 101,

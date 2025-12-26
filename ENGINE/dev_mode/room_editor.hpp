@@ -67,6 +67,9 @@ public:
     bool is_room_panel_blocking_point(int x, int y) const;
     bool is_room_ui_blocking_point(int x, int y) const;
     bool is_shift_key_down() const;
+    void set_camera_settings_lock(bool active);
+    void apply_camera_settings_lock(WarpedScreenGrid& cam);
+    SDL_Point camera_lock_target() const;
     void render_overlays(SDL_Renderer* renderer);
 
     void toggle_asset_library();
@@ -386,6 +389,15 @@ private:
 
     double height_scale_factor_ = 1.1;
     PanAndHeight pan_height_;
+    struct CameraLockState {
+        bool valid = false;
+        bool manual_height_override = false;
+        bool had_focus_override = false;
+        SDL_Point focus_point{0, 0};
+        SDL_Point screen_center{0, 0};
+    };
+    CameraLockState camera_lock_restore_{};
+    bool camera_settings_lock_active_ = false;
     std::unordered_set<std::string> room_spawn_ids_;
     void rebuild_room_spawn_id_cache();
     bool is_room_spawn_id(const std::string& spawn_id) const;

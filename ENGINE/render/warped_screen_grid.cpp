@@ -270,14 +270,8 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         const double horizon_ndc = (std::isfinite(tan_pitch) && std::isfinite(state.tan_half_fov_y))
             ? (tan_pitch / state.tan_half_fov_y)
             : 0.0;
-        const double to_anchor_depth = dot(to_anchor, forward);
-        const double to_anchor_up = dot(to_anchor, up);
-        const double anchor_ndc_y = (to_anchor_depth > 1e-6 && std::isfinite(to_anchor_depth))
-            ? (to_anchor_up / to_anchor_depth) / state.tan_half_fov_y
-            : 0.0;
-        state.focus_ndc_offset = std::isfinite(anchor_ndc_y) ? anchor_ndc_y : 0.0;
-        const double horizon_ndc_shifted = horizon_ndc - state.focus_ndc_offset;
-        state.horizon_screen_y = screen_height * 0.5 - horizon_ndc_shifted * screen_height * 0.5;
+        state.focus_ndc_offset = 0.0;
+        state.horizon_screen_y = screen_height * 0.5 - horizon_ndc * screen_height * 0.5;
         state.meters_scale = meters_scale;
         state.pitch_radians = pitch_rad;
         state.pitch_degrees = tilt_deg;
@@ -330,7 +324,7 @@ struct ProjectionResult {
         const double cam_y = dot(to_point_meters, cam.up);
 
         const double ndc_x = (cam_x / depth_along_forward) / cam.tan_half_fov_x;
-        const double ndc_y = (cam_y / depth_along_forward) / cam.tan_half_fov_y - cam.focus_ndc_offset;
+        const double ndc_y = (cam_y / depth_along_forward) / cam.tan_half_fov_y;
 
         const double screen_x = (ndc_x * 0.5 + 0.5) * static_cast<double>(screen_width);
         const double screen_y = (0.5 - ndc_y * 0.5) * static_cast<double>(screen_height);
@@ -365,7 +359,7 @@ struct ProjectionResult {
         }
         Vec3 dir = cam.forward;
         dir = dir + cam.right * (ndc_x * cam.tan_half_fov_x);
-        dir = dir + cam.up * ((ndc_y + cam.focus_ndc_offset) * cam.tan_half_fov_y);
+        dir = dir + cam.up * (ndc_y * cam.tan_half_fov_y);
         dir = normalize(dir);
         if (std::abs(dir.z) < 1e-6) {
             return std::nullopt;
@@ -978,6 +972,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("meters_per_100_world_px", updated.meters_per_100_world_px, 0.01f, 1000.0f);
     read_float("scale_variant_hysteresis_margin", updated.scale_variant_hysteresis_margin, 0.0f, 1.0f);
     read_float("extra_cull_margin", updated.extra_cull_margin, 0.0f, 10000.0f);
+    read_float("pre_horizon_lock_offset_px", updated.pre_horizon_lock_offset_px, 0.0f, 1000.0f);
 
     read_int("foreground_texture_max_opacity", updated.foreground_texture_max_opacity, 0, 255);
     read_int("background_texture_max_opacity", updated.background_texture_max_opacity, 0, 255);
@@ -1009,6 +1004,7 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["meters_per_100_world_px"] = settings_.meters_per_100_world_px;
     result["scale_variant_hysteresis_margin"] = settings_.scale_variant_hysteresis_margin;
     result["extra_cull_margin"] = settings_.extra_cull_margin;
+    result["pre_horizon_lock_offset_px"] = settings_.pre_horizon_lock_offset_px;
 
     result["foreground_texture_max_opacity"] = settings_.foreground_texture_max_opacity;
     result["background_texture_max_opacity"] = settings_.background_texture_max_opacity;
@@ -1222,6 +1218,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
     }
     const float depth_near = static_cast<float>(std::max(0.0, cam_state.near_plane));
     const float depth_far  = static_cast<float>(std::max(cam_state.near_plane + 1.0, cam_state.far_plane));
+    const float horizon_screen_y = static_cast<float>(cam_state.horizon_screen_y);
+    const float pre_horizon_screen_y = horizon_screen_y - std::max(0.0f, settings_.pre_horizon_lock_offset_px);
 
     const float margin_px    = std::max(0.0f, settings_.extra_cull_margin);
     const float cull_top = std::clamp(static_cast<float>(cam_state.horizon_screen_y) - margin_px, 0.0f, screen_h);
@@ -1247,6 +1245,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
 
     for (world::GridPoint* gp : grid_points) {
         if (!gp) continue;
+        const SDL_FPoint prev_screen = gp->screen;
+        const bool prev_screen_valid = gp->screen_data_valid &&
+                                       std::isfinite(prev_screen.x) &&
+                                       std::isfinite(prev_screen.y);
         gp->reset_frame_state(frame_stamp);
 
         if (gp->occupants.empty()) {
@@ -1282,6 +1284,19 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             continue;
         }
 
+        const bool projected_in_pre_horizon =
+            prev_screen_valid &&
+            std::isfinite(horizon_screen_y) &&
+            std::isfinite(pre_horizon_screen_y) &&
+            screen_pos.y >= pre_horizon_screen_y &&
+            screen_pos.y <= horizon_screen_y;
+        const bool prev_in_pre_horizon =
+            prev_screen_valid &&
+            prev_screen.y >= pre_horizon_screen_y &&
+            prev_screen.y <= horizon_screen_y;
+        const bool freeze_screen_position = projected_in_pre_horizon && prev_in_pre_horizon;
+        const SDL_FPoint screen_for_bounds = freeze_screen_position ? prev_screen : screen_pos;
+
         float base_scale = primary_asset->smoothed_scale();
         if (!std::isfinite(base_scale) || base_scale <= 0.0f) {
             base_scale = 1.0f;
@@ -1297,8 +1312,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         approx_h = std::isfinite(approx_h) && approx_h > 0.0f ? std::max(approx_h, min_size) : min_size;
 
         SDL_FRect bounds{
-            screen_pos.x - approx_w * 0.5f,
-            screen_pos.y - approx_h,
+            screen_for_bounds.x - approx_w * 0.5f,
+            screen_for_bounds.y - approx_h,
             approx_w,
             approx_h
 };
@@ -1321,7 +1336,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             }
         }
 
-        gp->screen             = screen_pos;
+        gp->screen             = screen_for_bounds;
         gp->parallax_dx        = 0.0f;
         gp->vertical_scale     = proj.vertical_scale;
         gp->horizon_fade_alpha = proj.horizon_fade;

@@ -46,7 +46,7 @@ CameraParams camera_math::sanitize_camera_params(const CameraParams& raw, double
     if (!std::isfinite(params.y_distance_px)) {
         params.y_distance_px = 0.0;
     }
-    params.y_distance_px = std::max(0.0, params.y_distance_px);
+    params.y_distance_px = std::clamp(params.y_distance_px, -100000.0, 100000.0);
     return params;
 }
 

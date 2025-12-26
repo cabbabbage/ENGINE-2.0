@@ -696,6 +696,7 @@ void RoomEditor::set_room_config_visible(bool visible) {
         room_cfg_ui_->open(current_room_);
     }
     room_config_dock_open_ = visible;
+    set_camera_settings_lock(visible);
     refresh_room_config_visibility();
 }
 
@@ -798,6 +799,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
         active_modal_ = ActiveModal::None;
         mouse_controls_enabled_last_frame_ = false;
         blocking_panel_visible_.fill(false);
+        set_camera_settings_lock(false);
     }
 
     WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
@@ -864,14 +866,15 @@ void RoomEditor::update(const Input& input) {
 
     handle_delete_shortcut(input);
 
+    WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
     const int mx = input.getX();
     const int my = input.getY();
     const bool ui_blocked = is_ui_blocking_input(mx, my);
 
     if (!should_enable_mouse_controls()) {
         enforce_mouse_controls_disabled();
-        if (assets_) {
-            pan_height_.cancel(assets_->getView());
+        if (cam && !camera_settings_lock_active_) {
+            pan_height_.cancel(*cam);
         }
         mouse_controls_enabled_last_frame_ = false;
         return;
@@ -881,8 +884,12 @@ void RoomEditor::update(const Input& input) {
 
     if (!ui_blocked || dragging_) {
         handle_mouse_input(input);
-    } else if (assets_) {
-        pan_height_.cancel(assets_->getView());
+    } else if (cam && !camera_settings_lock_active_) {
+        pan_height_.cancel(*cam);
+    }
+
+    if (camera_settings_lock_active_ && cam) {
+        apply_camera_settings_lock(*cam);
     }
 
     update_highlighted_assets();
@@ -890,6 +897,7 @@ void RoomEditor::update(const Input& input) {
 
 void RoomEditor::update_ui(const Input& input) {
     const bool config_visible_now = room_cfg_ui_ && room_cfg_ui_->visible();
+    set_camera_settings_lock(enabled_ && config_visible_now);
 
     if (!enabled_) {
         room_config_was_visible_ = config_visible_now;
@@ -1219,6 +1227,73 @@ bool RoomEditor::is_shift_key_down() const {
         return false;
     }
     return input_->isScancodeDown(SDL_SCANCODE_LSHIFT) || input_->isScancodeDown(SDL_SCANCODE_RSHIFT);
+}
+
+void RoomEditor::set_camera_settings_lock(bool active) {
+    if (camera_settings_lock_active_ == active) {
+        return;
+    }
+    camera_settings_lock_active_ = active;
+
+    WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
+    if (!cam) {
+        return;
+    }
+
+    if (camera_settings_lock_active_) {
+        camera_lock_restore_.valid = true;
+        camera_lock_restore_.manual_height_override = cam->is_manual_height_override();
+        camera_lock_restore_.had_focus_override = cam->has_focus_override();
+        if (camera_lock_restore_.had_focus_override) {
+            camera_lock_restore_.focus_point = cam->get_focus_override_point();
+        }
+        camera_lock_restore_.screen_center = cam->get_screen_center();
+        // Keep live camera updates while locked by clearing manual zoom overrides.
+        cam->set_manual_height_override(false);
+        apply_camera_settings_lock(*cam);
+    } else {
+        const SDL_Point previous_center = cam->get_screen_center();
+        if (camera_lock_restore_.valid) {
+            cam->set_manual_height_override(camera_lock_restore_.manual_height_override);
+            if (camera_lock_restore_.had_focus_override) {
+                cam->set_focus_override(camera_lock_restore_.focus_point);
+            } else {
+                cam->clear_focus_override();
+            }
+            cam->set_screen_center(camera_lock_restore_.screen_center);
+        } else {
+            cam->clear_focus_override();
+        }
+        const SDL_Point updated_center = cam->get_screen_center();
+        if (previous_center.x != updated_center.x || previous_center.y != updated_center.y) {
+            mark_spatial_index_dirty();
+        }
+        camera_lock_restore_ = CameraLockState{};
+    }
+}
+
+SDL_Point RoomEditor::camera_lock_target() const {
+    if (player_) {
+        return SDL_Point{player_->pos.x, player_->pos.y};
+    }
+    if (current_room_ && current_room_->room_area) {
+        auto c = current_room_->room_area->get_center();
+        return SDL_Point{c.x, c.y};
+    }
+    if (assets_) {
+        return assets_->getView().get_screen_center();
+    }
+    return SDL_Point{0, 0};
+}
+
+void RoomEditor::apply_camera_settings_lock(WarpedScreenGrid& cam) {
+    const SDL_Point previous_center = cam.get_screen_center();
+    SDL_Point target = camera_lock_target();
+    cam.set_focus_override(target);
+    cam.set_screen_center(target);
+    if (previous_center.x != target.x || previous_center.y != target.y) {
+        mark_spatial_index_dirty();
+    }
 }
 
 void RoomEditor::invalidate_label_cache(Room* room) {
@@ -2326,7 +2401,9 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const bool pointer_blocks_pan = dragging_ ||
                                     (shift_down && hit_before_pan && !hit_before_pan->spawn_id.empty() && (left_down || left_pressed_this_frame));
 
-    pan_height_.handle_input(cam, input, pointer_blocks_pan);
+    if (!camera_settings_lock_active_) {
+        pan_height_.handle_input(cam, input, pointer_blocks_pan);
+    }
     if (std::fabs(cam.get_scale() - prev_scale) > 1e-6 ||
         cam.get_screen_center().x != prev_center.x ||
         cam.get_screen_center().y != prev_center.y) {
@@ -3414,6 +3491,7 @@ void RoomEditor::ensure_room_configurator() {
         });
         room_cfg_ui_->set_on_camera_changed([this](Room* changed_room) {
             if (assets_ && (!changed_room || changed_room == current_room_)) {
+                assets_->getView().set_manual_height_override(false);
                 assets_->mark_camera_dirty();
             }
         });
@@ -3426,6 +3504,7 @@ void RoomEditor::ensure_room_configurator() {
                 clear_selection();
             }
             room_config_dock_open_ = false;
+            set_camera_settings_lock(false);
             update_spawn_group_config_anchor();
         });
         room_cfg_ui_->set_spawn_group_callbacks(

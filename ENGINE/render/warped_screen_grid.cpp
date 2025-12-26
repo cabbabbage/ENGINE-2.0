@@ -1238,6 +1238,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
     const float depth_far  = static_cast<float>(std::max(cam_state.near_plane + 1.0, cam_state.far_plane));
     const float horizon_screen_y = static_cast<float>(cam_state.horizon_screen_y);
     const float pre_horizon_screen_y = horizon_screen_y - std::max(0.0f, settings_.pre_horizon_lock_offset_px);
+    const float horizon_band = horizon_fade_for_height(cam_state.camera_height);
 
     const float margin_px    = std::max(0.0f, settings_.extra_cull_margin);
     const float cull_top = std::clamp(static_cast<float>(cam_state.horizon_screen_y) - margin_px, 0.0f, screen_h);
@@ -1259,7 +1260,24 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         const float bx1 = b.x + b.w;
         const float by1 = b.y + b.h;
         return !(ax1 < b.x || bx1 < a.x || ay1 < b.y || by1 < a.y);
-};
+    };
+    auto project_screen_point = [&](double world_x, double world_y, double world_z, SDL_FPoint& out) -> bool {
+        ProjectionResult projected = project_world_point(cam_state,
+                                                         world_x,
+                                                         world_y,
+                                                         world_z,
+                                                         screen_width_,
+                                                         screen_height_,
+                                                         horizon_band);
+        if (!projected.valid) {
+            return false;
+        }
+        if (!std::isfinite(projected.screen.x) || !std::isfinite(projected.screen.y)) {
+            return false;
+        }
+        out = projected.screen;
+        return true;
+    };
 
     for (world::GridPoint* gp : grid_points) {
         if (!gp) continue;
@@ -1292,7 +1310,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             static_cast<double>(gp->world_z()),
             screen_width_,
             screen_height_,
-            horizon_fade_for_height(cam_state.camera_height));
+            horizon_band);
         if (!proj.valid) {
             continue;
         }
@@ -1323,18 +1341,77 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         const int fw = (primary_asset && primary_asset->info) ? std::max(1, primary_asset->info->original_canvas_width) : 1;
         const int fh = (primary_asset && primary_asset->info) ? std::max(1, primary_asset->info->original_canvas_height) : 1;
 
-        float approx_w = static_cast<float>(fw) * base_scale * proj.perspective_scale;
-        float approx_h = static_cast<float>(fh) * base_scale * proj.perspective_scale * proj.vertical_scale;
-        const float min_size = std::max(1.0f, min_visible_px);
-        approx_w = std::isfinite(approx_w) && approx_w > 0.0f ? std::max(approx_w, min_size) : min_size;
-        approx_h = std::isfinite(approx_h) && approx_h > 0.0f ? std::max(approx_h, min_size) : min_size;
+        const float world_width = static_cast<float>(fw) * base_scale;
+        const float world_height = static_cast<float>(fh) * base_scale;
+        const float half_width = 0.5f * world_width;
 
-        SDL_FRect bounds{
-            screen_for_bounds.x - approx_w * 0.5f,
-            screen_for_bounds.y - approx_h,
-            approx_w,
-            approx_h
-};
+        bool have_projected_bounds = false;
+        float min_x = 0.0f;
+        float max_x = 0.0f;
+        float min_y = 0.0f;
+        float max_y = 0.0f;
+        auto expand_bounds = [&](const SDL_FPoint& pt) {
+            if (!have_projected_bounds) {
+                min_x = max_x = pt.x;
+                min_y = max_y = pt.y;
+                have_projected_bounds = true;
+                return;
+            }
+            min_x = std::min(min_x, pt.x);
+            max_x = std::max(max_x, pt.x);
+            min_y = std::min(min_y, pt.y);
+            max_y = std::max(max_y, pt.y);
+        };
+
+        if (world_width > 0.0f && world_height > 0.0f) {
+            SDL_FPoint corner{};
+            if (project_screen_point(world_pos.x - half_width, world_pos.y, 0.0, corner)) {
+                expand_bounds(corner);
+            }
+            if (project_screen_point(world_pos.x + half_width, world_pos.y, 0.0, corner)) {
+                expand_bounds(corner);
+            }
+            if (project_screen_point(world_pos.x - half_width, world_pos.y, world_height, corner)) {
+                expand_bounds(corner);
+            }
+            if (project_screen_point(world_pos.x + half_width, world_pos.y, world_height, corner)) {
+                expand_bounds(corner);
+            }
+        }
+
+        const float min_size = std::max(1.0f, min_visible_px);
+        SDL_FRect bounds{};
+        if (have_projected_bounds) {
+            float width = max_x - min_x;
+            float height = max_y - min_y;
+            if (!std::isfinite(width) || !std::isfinite(height) || width <= 0.0f || height <= 0.0f) {
+                have_projected_bounds = false;
+            } else {
+                width = std::max(width, min_size);
+                height = std::max(height, min_size);
+                const float center_x = (min_x + max_x) * 0.5f;
+                const float center_y = (min_y + max_y) * 0.5f;
+                bounds = SDL_FRect{
+                    center_x - width * 0.5f,
+                    center_y - height * 0.5f,
+                    width,
+                    height
+                };
+            }
+        }
+        if (!have_projected_bounds) {
+            float approx_w = static_cast<float>(fw) * base_scale * proj.perspective_scale;
+            float approx_h = static_cast<float>(fh) * base_scale * proj.perspective_scale * proj.vertical_scale;
+            approx_w = std::isfinite(approx_w) && approx_w > 0.0f ? std::max(approx_w, min_size) : min_size;
+            approx_h = std::isfinite(approx_h) && approx_h > 0.0f ? std::max(approx_h, min_size) : min_size;
+
+            bounds = SDL_FRect{
+                screen_for_bounds.x - approx_w * 0.5f,
+                screen_for_bounds.y - approx_h,
+                approx_w,
+                approx_h
+            };
+        }
 
         const float distance_to_cam = proj.distance;
         const bool depth_ok = distance_to_cam >= depth_near && distance_to_cam <= depth_far;

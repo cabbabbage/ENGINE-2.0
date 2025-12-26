@@ -291,7 +291,7 @@ struct ProjectionResult {
         float       forward_depth     = 0.0f;
     };
 
-    ProjectionResult project_world_point(const CameraState& cam,
+    ProjectionResult project_world_point_internal(const CameraState& cam,
                                          double world_x_pixels,
                                          double world_y_pixels,
                                          double world_z_pixels,
@@ -848,7 +848,7 @@ SDL_FPoint WarpedScreenGrid::map_to_screen_f(SDL_FPoint world) const {
     const CameraController::State& cam_settings = camera_.state();
     const CameraState cam = build_camera_state(
         settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params);
-    ProjectionResult proj = project_world_point(cam,
+    ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
                                                 static_cast<double>(world.y),
                                                 0.0,
@@ -865,7 +865,7 @@ bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_
     const CameraController::State& cam_settings = camera_.state();
     const CameraState cam = build_camera_state(
         settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params);
-    ProjectionResult proj = project_world_point(cam,
+    ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
                                                 static_cast<double>(world.y),
                                                 static_cast<double>(world_z),
@@ -908,7 +908,7 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
     const CameraController::State& cam_settings = camera_.state();
     const CameraState cam = build_camera_state(
         settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params);
-    ProjectionResult proj = project_world_point(cam,
+    ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
                                                 static_cast<double>(world.y),
                                                 static_cast<double>(world_z),
@@ -1262,7 +1262,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         return !(ax1 < b.x || bx1 < a.x || ay1 < b.y || by1 < a.y);
     };
     auto project_screen_point = [&](double world_x, double world_y, double world_z, SDL_FPoint& out) -> bool {
-        ProjectionResult projected = project_world_point(cam_state,
+        ProjectionResult projected = project_world_point_internal(cam_state,
                                                          world_x,
                                                          world_y,
                                                          world_z,
@@ -1303,7 +1303,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         }
 
         const SDL_Point world_pos{ gp->world_x(), gp->world_y() };
-        const ProjectionResult proj = project_world_point(
+        const ProjectionResult proj = project_world_point_internal(
             cam_state,
             static_cast<double>(world_pos.x),
             static_cast<double>(world_pos.y),
@@ -1539,7 +1539,7 @@ void WarpedScreenGrid::project_to_screen(world::GridPoint& point) const {
     const CameraController::State& cam_settings = camera_.state();
     const CameraState cam_state = build_camera_state(
         settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params);
-    const ProjectionResult proj = project_world_point(
+    const ProjectionResult proj = project_world_point_internal(
         cam_state,
         static_cast<double>(point.world_x()),
         static_cast<double>(point.world_y()),

@@ -9,34 +9,34 @@
           "flipped_source": true,
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "inherit_source_movement": false,
@@ -243,22 +243,22 @@
           "flipped_source": true,
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "inherit_source_movement": false,
@@ -319,27 +319,6 @@
           "frames": [
             {
               "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
             }
           ],
           "inherit_source_movement": false,
@@ -368,6 +347,7 @@
           "speed_multiplier": 1.0
         },
         "right": {
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -411,6 +391,11 @@
       "animation_children": [],
       "animations": {
         "default": {
+          "frames": [
+            {
+              "needs_rebuild": false
+            }
+          ],
           "locked": false,
           "loop": true,
           "source": {
@@ -423,6 +408,7 @@
       "asset_directory": "SRC/assets/Bench",
       "asset_name": "Bench",
       "async_children": [],
+      "lighting_info": [],
       "neighbor_search_distance": 500,
       "shading_opacity_multiplier": 1.0,
       "shading_parallax_amount": 0.0,
@@ -6071,7 +6057,7 @@
       "animations": {
         "default": {
           "child_timelines": [],
-          "crop_frames": false,
+          "crop_frames": true,
           "flipped_source": false,
           "frames": [
             {
@@ -7780,9 +7766,9 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            36,
-            147,
             242,
+            156,
+            36,
             255
           ],
           "edge_smoothness": 19,
@@ -7800,9 +7786,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            133,
-            36,
-            242,
+            31,
+            103,
+            204,
             255
           ],
           "edge_smoothness": 43,
@@ -7853,9 +7839,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            131,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 29,
@@ -7901,14 +7887,14 @@
           ]
         },
         "spawn": {
-          "camera_height_px": 342,
-          "camera_tilt_deg": 73.0,
-          "camera_y_distance_px": -269,
+          "camera_height_px": 715,
+          "camera_tilt_deg": 86.0,
+          "camera_y_distance_px": 1627,
           "curvyness": 2,
           "display_color": [
-            31,
-            32,
-            204,
+            36,
+            242,
+            46,
             255
           ],
           "edge_smoothness": 101,

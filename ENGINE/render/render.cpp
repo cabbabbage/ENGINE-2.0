@@ -152,18 +152,19 @@ bool build_warped_quad(const RenderObject& obj,
     const float anchor_y = static_cast<float>(rect.y);
     const float half_w = static_cast<float>(rect.w) * 0.5f;
     const float height = static_cast<float>(rect.h);
+    const float base_z = obj.world_z_offset;
 
     std::array<WorldCorner, 4> world = {{
-        WorldCorner{anchor_x - half_w, anchor_y, height},
-        WorldCorner{anchor_x + half_w, anchor_y, height},
-        WorldCorner{anchor_x + half_w, anchor_y, 0.0f},
-        WorldCorner{anchor_x - half_w, anchor_y, 0.0f}
+        WorldCorner{anchor_x - half_w, anchor_y, base_z + height},
+        WorldCorner{anchor_x + half_w, anchor_y, base_z + height},
+        WorldCorner{anchor_x + half_w, anchor_y, base_z},
+        WorldCorner{anchor_x - half_w, anchor_y, base_z}
     }};
 
     if (std::abs(obj.angle) > 0.001) {
         SDL_Point pivot = obj.use_custom_center ? obj.center : SDL_Point{rect.w / 2, rect.h / 2};
         const float pivot_x = anchor_x + static_cast<float>(pivot.x) - half_w;
-        const float pivot_z = height - static_cast<float>(pivot.y);
+        const float pivot_z = base_z + height - static_cast<float>(pivot.y);
         const float rad = static_cast<float>(obj.angle * (std::acos(-1.0) / 180.0));
         const float cos_a = std::cos(rad);
         const float sin_a = std::sin(rad);
@@ -185,9 +186,14 @@ bool build_warped_quad(const RenderObject& obj,
         projected[i] = screen;
     }
 
-    int tex_w = 0;
-    int tex_h = 0;
-    if (SDL_QueryTexture(obj.texture, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+    int tex_w = obj.texture_w;
+    int tex_h = obj.texture_h;
+    if (!obj.has_texture_size) {
+        if (SDL_QueryTexture(obj.texture, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+            return false;
+        }
+    }
+    if (tex_w <= 0 || tex_h <= 0) {
         return false;
     }
 

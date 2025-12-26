@@ -40,6 +40,10 @@ struct RenderObject {
     SDL_Point center{0, 0};
     bool use_custom_center = false;
     SDL_RendererFlip flip = SDL_FLIP_NONE;
+    int texture_w = 0;
+    int texture_h = 0;
+    bool has_texture_size = false;
+    float world_z_offset = 0.0f;
 };
 
 using RenderCompositePackage = std::vector<RenderObject>;

@@ -362,12 +362,8 @@ void SceneRenderer::render() {
 
             SDL_SetTextureBlendMode(obj.texture, obj.blend_mode);
 
-            const float horizon_alpha = std::clamp(gp->horizon_fade_alpha, 0.0f, 1.0f);
-            const int   adjusted_alpha = static_cast<int>(std::lround(static_cast<float>(obj.color_mod.a) * horizon_alpha));
-            Uint8 final_alpha = static_cast<Uint8>(std::clamp(adjusted_alpha, 0, 255));
-
             SDL_SetTextureColorMod(obj.texture, obj.color_mod.r, obj.color_mod.g, obj.color_mod.b);
-            SDL_SetTextureAlphaMod(obj.texture, final_alpha);
+            SDL_SetTextureAlphaMod(obj.texture, obj.color_mod.a);
 
             if (obj.angle != 0.0 || obj.use_custom_center || obj.flip != SDL_FLIP_NONE) {
                 const SDL_Point* center_ptr = screen_data->use_center ? &screen_data->center : nullptr;

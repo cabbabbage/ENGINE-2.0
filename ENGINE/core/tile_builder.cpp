@@ -19,6 +19,8 @@
 
 namespace {
 
+constexpr float kTileResolutionScale = 0.5f;
+
 struct ChunkTileAsset {
     Asset*       asset        = nullptr;
     SDL_Rect     sprite_world{0, 0, 0, 0};
@@ -49,13 +51,25 @@ static std::uint64_t chunk_key(int i, int j) {
     return (static_cast<std::uint64_t>(hi) << 32) | static_cast<std::uint64_t>(lo);
 }
 
+static int reduce_tile_step(int step) {
+    if (step <= 0) {
+        return 1;
+    }
+    const int scaled = static_cast<int>(std::lround(static_cast<double>(step) * kTileResolutionScale));
+    return std::max(1, scaled);
+}
+
+static int tile_step_from_settings(const MapGridSettings& settings) {
+    return reduce_tile_step(std::max(1, settings.spacing()));
+}
+
 static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset,
                                                                  const MapGridSettings& grid_settings) {
     if (!asset || !asset->info || !asset->info->tillable) {
         return std::nullopt;
     }
 
-    int step = grid_settings.spacing();
+    int step = tile_step_from_settings(grid_settings);
     if (step <= 0) {
         const int raw_w = std::max(1, asset->info->original_canvas_width);
         const int raw_h = std::max(1, asset->info->original_canvas_height);
@@ -63,7 +77,7 @@ static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* as
         if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
             scale = static_cast<double>(asset->info->scale_factor);
         }
-        step = std::max(1, static_cast<int>(std::lround(static_cast<double>(std::max(raw_w, raw_h)) * scale)));
+        step = reduce_tile_step(std::max(1, static_cast<int>(std::lround(static_cast<double>(std::max(raw_w, raw_h)) * scale))));
     }
     step = std::max(1, step);
 
@@ -193,7 +207,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
                       const std::vector<Asset*>& all_assets) {
     if (!renderer) return;
 
-    const int step       = std::max(1, settings.spacing());
+    const int step       = tile_step_from_settings(settings);
     const int chunk_step = 1 << std::clamp(grid.chunk_resolution(), 0, vibble::grid::kMaxResolution);
     if (chunk_step <= 0) {
         return;

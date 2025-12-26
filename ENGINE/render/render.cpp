@@ -107,6 +107,96 @@ inline float ticks_to_seconds(Uint64 ticks) {
     return static_cast<float>(ticks) * 0.001f;
 }
 
+struct WarpedQuad {
+    std::array<SDL_Vertex, 4> vertices{};
+};
+
+struct WorldCorner {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+};
+
+bool build_warped_quad(const RenderObject& obj,
+                       const WarpedScreenGrid& cam,
+                       WarpedQuad& quad) {
+    if (!obj.texture) {
+        return false;
+    }
+
+    const SDL_Rect& rect = obj.screen_rect;
+    if (rect.w <= 0 || rect.h <= 0) {
+        return false;
+    }
+
+    std::array<WorldCorner, 4> world = {{
+        WorldCorner{static_cast<float>(rect.x), static_cast<float>(rect.y), static_cast<float>(rect.h)},
+        WorldCorner{static_cast<float>(rect.x + rect.w), static_cast<float>(rect.y), static_cast<float>(rect.h)},
+        WorldCorner{static_cast<float>(rect.x + rect.w), static_cast<float>(rect.y), 0.0f},
+        WorldCorner{static_cast<float>(rect.x), static_cast<float>(rect.y), 0.0f}
+    }};
+
+    if (std::abs(obj.angle) > 0.001) {
+        SDL_Point pivot = obj.use_custom_center ? obj.center : SDL_Point{rect.w / 2, rect.h / 2};
+        const float pivot_x = static_cast<float>(rect.x + pivot.x);
+        const float pivot_z = static_cast<float>(rect.h - pivot.y);
+        const float rad = static_cast<float>(obj.angle * (std::acos(-1.0) / 180.0));
+        const float cos_a = std::cos(rad);
+        const float sin_a = std::sin(rad);
+
+        for (auto& corner : world) {
+            const float dx = corner.x - pivot_x;
+            const float dz = corner.z - pivot_z;
+            corner.x = pivot_x + dx * cos_a - dz * sin_a;
+            corner.z = pivot_z + dx * sin_a + dz * cos_a;
+        }
+    }
+
+    std::array<SDL_FPoint, 4> projected{};
+    for (size_t i = 0; i < world.size(); ++i) {
+        SDL_FPoint screen{};
+        if (!cam.project_world_point(SDL_FPoint{world[i].x, world[i].y}, world[i].z, screen)) {
+            return false;
+        }
+        projected[i] = screen;
+    }
+
+    int tex_w = 0;
+    int tex_h = 0;
+    if (SDL_QueryTexture(obj.texture, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+        return false;
+    }
+
+    const float padding_x = 0.5f / static_cast<float>(tex_w);
+    const float padding_y = 0.5f / static_cast<float>(tex_h);
+    float u0 = padding_x;
+    float u1 = 1.0f - padding_x;
+    float v0 = padding_y;
+    float v1 = 1.0f - padding_y;
+
+    if ((obj.flip & SDL_FLIP_HORIZONTAL) != 0) {
+        std::swap(u0, u1);
+    }
+    if ((obj.flip & SDL_FLIP_VERTICAL) != 0) {
+        std::swap(v0, v1);
+    }
+
+    const SDL_Color white{255, 255, 255, 255};
+    quad.vertices[0].position = projected[0];
+    quad.vertices[1].position = projected[1];
+    quad.vertices[2].position = projected[2];
+    quad.vertices[3].position = projected[3];
+    for (auto& vertex : quad.vertices) {
+        vertex.color = white;
+    }
+    quad.vertices[0].tex_coord = SDL_FPoint{u0, v0};
+    quad.vertices[1].tex_coord = SDL_FPoint{u1, v0};
+    quad.vertices[2].tex_coord = SDL_FPoint{u1, v1};
+    quad.vertices[3].tex_coord = SDL_FPoint{u0, v1};
+
+    return true;
+}
+
 }
 
 SceneRenderer::SceneRenderer(SDL_Renderer* renderer,
@@ -247,59 +337,7 @@ void SceneRenderer::render() {
     }
 
     const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
-    struct ScreenRenderData {
-        SDL_Rect  rect{};
-        SDL_Point center{};
-        bool      use_center = false;
-};
-
-    auto build_screen_render_data = [&](const RenderObject& obj,
-                                        const SDL_FPoint& base,
-                                        int asset_world_x,
-                                        int asset_world_y,
-                                        float distance_scale,
-                                        float vertical_scale) -> std::optional<ScreenRenderData> {
-        if (!obj.texture) {
-            return std::nullopt;
-        }
-
-        const int raw_width  = obj.screen_rect.w;
-        const int raw_height = obj.screen_rect.h;
-        if (raw_width <= 0 || raw_height <= 0) {
-            return std::nullopt;
-        }
-
-        const int offset_x = obj.screen_rect.x - asset_world_x;
-        const int offset_y = obj.screen_rect.y - asset_world_y;
-
-        const double scaled_width  = static_cast<double>(raw_width)  * static_cast<double>(distance_scale);
-        const double scaled_height = static_cast<double>(raw_height) * static_cast<double>(distance_scale) * static_cast<double>(vertical_scale);
-
-        if (!std::isfinite(scaled_width) || !std::isfinite(scaled_height)) {
-            return std::nullopt;
-        }
-
-        const int screen_w = std::max(1, static_cast<int>(std::lround(scaled_width)));
-        const int screen_h = std::max(1, static_cast<int>(std::lround(scaled_height)));
-
-        SDL_Rect screen_rect{
-            static_cast<int>(std::lround(base.x + static_cast<double>(offset_x) * static_cast<double>(distance_scale) - scaled_width * 0.5)),
-            static_cast<int>(std::lround(base.y + static_cast<double>(offset_y) * static_cast<double>(distance_scale) - scaled_height)),
-            screen_w,
-            screen_h };
-
-        SDL_Point center = obj.center;
-        if (obj.use_custom_center) {
-            center.x = static_cast<int>(std::lround(static_cast<double>(center.x) * static_cast<double>(distance_scale)));
-            center.y = static_cast<int>(std::lround(static_cast<double>(center.y) * static_cast<double>(distance_scale) * static_cast<double>(vertical_scale)));
-        }
-
-        ScreenRenderData data;
-        data.rect       = screen_rect;
-        data.center     = center;
-        data.use_center = obj.use_custom_center;
-        return data;
-};
+    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
     const auto& active_assets = assets_->getActive();
     std::vector<Asset*> sorted_assets(active_assets.begin(), active_assets.end());
@@ -328,35 +366,23 @@ void SceneRenderer::render() {
 
         composite_renderer_.update(asset, gp, flicker_time_seconds);
 
-        SDL_FPoint screen_base = gp->screen;
-        if (!std::isfinite(screen_base.x) || !std::isfinite(screen_base.y)) {
-            continue;
-        }
-
-        const float perspective_scale = std::max(0.0001f, gp->perspective_scale);
-        const float vertical_scale    = std::max(0.0001f, gp->vertical_scale);
-
-        const int asset_world_x = asset->pos.x;
-        const int asset_world_y = asset->pos.y;
-
         if (dark_mask_enabled_ && !asset->scene_mask_lights.empty()) {
             for (const RenderObject& mask_obj : asset->scene_mask_lights) {
-                auto screen_data = build_screen_render_data(mask_obj, screen_base, asset_world_x, asset_world_y, perspective_scale, vertical_scale);
-                if (!screen_data) {
+                WarpedQuad quad{};
+                if (!build_warped_quad(mask_obj, cam, quad)) {
                     continue;
                 }
                 DarkMaskSprite sprite;
-                sprite.texture     = mask_obj.texture;
-                sprite.screen_rect = screen_data->rect;
-                sprite.color_mod   = mask_obj.color_mod;
-                sprite.flip        = mask_obj.flip;
+                sprite.texture   = mask_obj.texture;
+                sprite.vertices  = quad.vertices;
+                sprite.color_mod = mask_obj.color_mod;
                 dark_mask_sprites.push_back(sprite);
             }
         }
 
         for (const RenderObject& obj : asset->render_package) {
-            auto screen_data = build_screen_render_data(obj, screen_base, asset_world_x, asset_world_y, perspective_scale, vertical_scale);
-            if (!screen_data) {
+            WarpedQuad quad{};
+            if (!build_warped_quad(obj, cam, quad)) {
                 continue;
             }
 
@@ -365,12 +391,7 @@ void SceneRenderer::render() {
             SDL_SetTextureColorMod(obj.texture, obj.color_mod.r, obj.color_mod.g, obj.color_mod.b);
             SDL_SetTextureAlphaMod(obj.texture, obj.color_mod.a);
 
-            if (obj.angle != 0.0 || obj.use_custom_center || obj.flip != SDL_FLIP_NONE) {
-                const SDL_Point* center_ptr = screen_data->use_center ? &screen_data->center : nullptr;
-                SDL_RenderCopyEx(renderer_, obj.texture, nullptr, &screen_data->rect, obj.angle, center_ptr, obj.flip);
-            } else {
-                SDL_RenderCopy(renderer_, obj.texture, nullptr, &screen_data->rect);
-            }
+            SDL_RenderGeometry(renderer_, obj.texture, quad.vertices.data(), 4, kQuadIndices, 6);
         }
     }
 
@@ -644,6 +665,7 @@ void SceneRenderer::render_dynamic_darkness_overlay(float map_light_opacity,
     if (!sprites.empty()) {
         SDL_BlendMode carve_mode = SDL_ComposeCustomBlendMode( SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD, SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
 
+        static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
         for (const DarkMaskSprite& sprite : sprites) {
             if (!sprite.texture) {
                 continue;
@@ -651,11 +673,7 @@ void SceneRenderer::render_dynamic_darkness_overlay(float map_light_opacity,
             SDL_SetTextureBlendMode(sprite.texture, carve_mode);
             SDL_SetTextureColorMod(sprite.texture, sprite.color_mod.r, sprite.color_mod.g, sprite.color_mod.b);
             SDL_SetTextureAlphaMod(sprite.texture, sprite.color_mod.a);
-            if (sprite.flip != SDL_FLIP_NONE) {
-                SDL_RenderCopyEx(renderer_, sprite.texture, nullptr, &sprite.screen_rect, 0.0, nullptr, sprite.flip);
-            } else {
-                SDL_RenderCopy(renderer_, sprite.texture, nullptr, &sprite.screen_rect);
-            }
+            SDL_RenderGeometry(renderer_, sprite.texture, sprite.vertices.data(), 4, kQuadIndices, 6);
         }
     }
 

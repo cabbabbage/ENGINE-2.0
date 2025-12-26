@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -60,9 +61,8 @@ public:
 private:
     struct DarkMaskSprite {
         SDL_Texture*    texture     = nullptr;
-        SDL_Rect        screen_rect{};
+        std::array<SDL_Vertex, 4> vertices{};
         SDL_Color       color_mod{255, 255, 255, 255};
-        SDL_RendererFlip flip       = SDL_FLIP_NONE;
 };
     struct PrevalidatedTag {};
 
@@ -123,4 +123,3 @@ private:
     int                   fog_texture_height_ = 0;
     bool                  fog_texture_failed_ = false;
 };
-

@@ -861,6 +861,24 @@ SDL_FPoint WarpedScreenGrid::map_to_screen_f(SDL_FPoint world) const {
     return proj.screen;
 }
 
+bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const {
+    const CameraController::State& cam_settings = camera_.state();
+    const CameraState cam = build_camera_state(
+        settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params);
+    ProjectionResult proj = project_world_point(cam,
+                                                static_cast<double>(world.x),
+                                                static_cast<double>(world.y),
+                                                static_cast<double>(world_z),
+                                                screen_width_,
+                                                screen_height_,
+                                                horizon_fade_for_height(cam.camera_height));
+    if (!proj.valid) {
+        return false;
+    }
+    out = proj.screen;
+    return true;
+}
+
 SDL_FPoint WarpedScreenGrid::screen_to_map(SDL_Point screen) const {
     const CameraController::State& cam_settings = camera_.state();
     const CameraState cam = build_camera_state(

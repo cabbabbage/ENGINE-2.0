@@ -139,6 +139,7 @@ public:
 
     SDL_FPoint map_to_screen(SDL_Point world) const;
     SDL_FPoint map_to_screen_f(SDL_FPoint world) const;
+    bool project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const;
     SDL_FPoint screen_to_map(SDL_Point screen) const;
 
     RenderEffects compute_render_effects(SDL_Point world, float asset_screen_height, float reference_screen_height, RenderSmoothingKey smoothing_key, int world_z = 0) const;

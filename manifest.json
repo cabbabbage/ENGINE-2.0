@@ -7515,7 +7515,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 8,
+            "grid_resolution": 7,
             "locked": false,
             "max_number": 100,
             "min_number": 100,
@@ -7767,7 +7767,7 @@
           "curvyness": 2,
           "display_color": [
             242,
-            156,
+            36,
             36,
             255
           ],
@@ -7786,9 +7786,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            31,
-            103,
-            204,
+            242,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 43,
@@ -7839,9 +7839,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            242,
+            166,
+            36,
             255
           ],
           "edge_smoothness": 29,
@@ -7888,13 +7888,13 @@
         },
         "spawn": {
           "camera_height_px": 715,
-          "camera_tilt_deg": 86.0,
-          "camera_y_distance_px": 1627,
+          "camera_tilt_deg": 49.0,
+          "camera_y_distance_px": -2000,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
             242,
-            46,
             255
           ],
           "edge_smoothness": 101,

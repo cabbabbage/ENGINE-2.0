@@ -10,6 +10,10 @@ namespace {
     }
 
     constexpr double PI_D = 3.14159265358979323846;
+    constexpr double kCameraHeightMinPx = 1.0;
+    constexpr double kCameraHeightMaxPx = 2000.0;
+    constexpr double kCameraYDistanceMinPx = 0.0;
+    constexpr double kCameraYDistanceMaxPx = 2000.0;
 
     double wrap_degrees_0_360(double raw_value) {
         if (!std::isfinite(raw_value)) {
@@ -37,16 +41,16 @@ float camera_math::sanitize_pitch_degrees(float raw_value, bool* clamped) {
 
 CameraParams camera_math::sanitize_camera_params(const CameraParams& raw, double fallback_height_px) {
     CameraParams params = raw;
-    const double safe_height = std::max(1.0, std::isfinite(fallback_height_px) ? fallback_height_px : 1000.0);
+    const double safe_height = std::max(kCameraHeightMinPx, std::isfinite(fallback_height_px) ? fallback_height_px : 1000.0);
     if (!std::isfinite(params.height_px) || params.height_px <= 0.0) {
         params.height_px = safe_height;
     }
-    params.height_px = std::max(1.0, params.height_px);
+    params.height_px = std::clamp(params.height_px, kCameraHeightMinPx, kCameraHeightMaxPx);
     params.tilt_deg = sanitize_pitch_degrees(static_cast<float>(params.tilt_deg));
     if (!std::isfinite(params.y_distance_px)) {
         params.y_distance_px = 0.0;
     }
-    params.y_distance_px = std::clamp(params.y_distance_px, -100000.0, 100000.0);
+    params.y_distance_px = std::clamp(params.y_distance_px, kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
     if (!std::isfinite(params.zoom_percent)) {
         params.zoom_percent = 0.0;
     }

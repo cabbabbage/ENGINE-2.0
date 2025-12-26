@@ -7,9 +7,15 @@ struct CameraParams {
     double height_px = 1000.0;
     double tilt_deg = 60.0;
     double y_distance_px = 0.0;
+    double zoom_percent = 0.0;
+    double pan_y_percent = 0.0;
 
     bool operator==(const CameraParams& o) const {
-        return height_px == o.height_px && tilt_deg == o.tilt_deg && y_distance_px == o.y_distance_px;
+        return height_px == o.height_px &&
+               tilt_deg == o.tilt_deg &&
+               y_distance_px == o.y_distance_px &&
+               zoom_percent == o.zoom_percent &&
+               pan_y_percent == o.pan_y_percent;
     }
     bool operator!=(const CameraParams& o) const { return !(*this == o); }
 };

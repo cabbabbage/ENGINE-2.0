@@ -205,6 +205,10 @@ private:
     std::unique_ptr<SliderWidget> camera_tilt_widget_;
     std::unique_ptr<DMSlider> camera_y_distance_slider_;
     std::unique_ptr<SliderWidget> camera_y_distance_widget_;
+    std::unique_ptr<DMSlider> camera_zoom_slider_;
+    std::unique_ptr<SliderWidget> camera_zoom_widget_;
+    std::unique_ptr<DMSlider> camera_pan_slider_;
+    std::unique_ptr<SliderWidget> camera_pan_widget_;
 
     std::unique_ptr<DockableCollapsible> camera_panel_;
     std::unique_ptr<DockableCollapsible> geometry_panel_;

@@ -47,6 +47,14 @@ CameraParams camera_math::sanitize_camera_params(const CameraParams& raw, double
         params.y_distance_px = 0.0;
     }
     params.y_distance_px = std::clamp(params.y_distance_px, -100000.0, 100000.0);
+    if (!std::isfinite(params.zoom_percent)) {
+        params.zoom_percent = 0.0;
+    }
+    params.zoom_percent = std::clamp(params.zoom_percent, 0.0, 100.0);
+    if (!std::isfinite(params.pan_y_percent)) {
+        params.pan_y_percent = 0.0;
+    }
+    params.pan_y_percent = std::clamp(params.pan_y_percent, -100.0, 100.0);
     return params;
 }
 
@@ -181,6 +189,8 @@ void CameraController::apply_room_targets(const CameraParams& cur,
     blended.height_px = lerp(cur_params.height_px, neigh_params.height_px, t);
     blended.tilt_deg = lerp(cur_params.tilt_deg, neigh_params.tilt_deg, t);
     blended.y_distance_px = lerp(cur_params.y_distance_px, neigh_params.y_distance_px, t);
+    blended.zoom_percent = lerp(cur_params.zoom_percent, neigh_params.zoom_percent, t);
+    blended.pan_y_percent = lerp(cur_params.pan_y_percent, neigh_params.pan_y_percent, t);
     blended = camera_math::sanitize_camera_params(blended, fallback_height_px_);
 
     if (manual_height_override_ && dev_mode) {
@@ -202,6 +212,8 @@ void CameraController::tick(float /*dt_seconds*/) {
         smoothed_.height_px = lerp(start_.height_px, target_.height_px, anim_t);
         smoothed_.tilt_deg = lerp(start_.tilt_deg, target_.tilt_deg, anim_t);
         smoothed_.y_distance_px = lerp(start_.y_distance_px, target_.y_distance_px, anim_t);
+        smoothed_.zoom_percent = lerp(start_.zoom_percent, target_.zoom_percent, anim_t);
+        smoothed_.pan_y_percent = lerp(start_.pan_y_percent, target_.pan_y_percent, anim_t);
         if (steps_done_ >= steps_total_) {
             smoothed_ = target_;
             animating_ = false;

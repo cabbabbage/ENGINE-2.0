@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "dev_mode/pan_and_height.hpp"
+#include "utils/input.hpp"
 
 class Asset;
 class Input;
@@ -167,7 +168,19 @@ private:
         bool       active    = false;
         double     edge_length = 0.0;
 };
+    struct CameraSettingsDragState {
+        enum class Mode {
+            None,
+            Tilt,
+            YOffset,
+            Pan,
+        };
+        Mode mode = Mode::None;
+        Input::Button button = Input::LEFT;
+        bool active = false;
+};
     void handle_mouse_input(const Input& input);
+    bool handle_camera_settings_mouse_controls(const Input& input);
     Asset* hit_test_asset(SDL_Point screen_point, SDL_Renderer* renderer) const;
     void update_hover_state(Asset* hit);
     void handle_click(const Input& input);
@@ -398,6 +411,7 @@ private:
     };
     CameraLockState camera_lock_restore_{};
     bool camera_settings_lock_active_ = false;
+    CameraSettingsDragState camera_settings_drag_{};
     std::unordered_set<std::string> room_spawn_ids_;
     void rebuild_room_spawn_id_cache();
     bool is_room_spawn_id(const std::string& spawn_id) const;

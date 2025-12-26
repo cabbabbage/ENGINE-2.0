@@ -833,6 +833,12 @@ void CameraUIPanel::sync_from_camera() {
     if (meters_slider_) {
         meters_slider_->set_value(last_settings_.meters_per_100_world_px);
     }
+    if (texture_warp_slider_) {
+        texture_warp_slider_->set_value(last_settings_.texture_warp_percent);
+    }
+    if (texture_warp_slider_) {
+        texture_warp_slider_->set_value(last_settings_.texture_warp_percent);
+    }
     if (foreground_texture_opacity_slider_) {
         foreground_texture_opacity_slider_->set_value(static_cast<float>(last_settings_.foreground_texture_max_opacity));
     }
@@ -913,6 +919,10 @@ void CameraUIPanel::build_ui() {
     meters_slider_->set_tooltip("Defines how many meters are represented by 100 world pixels, translating engine space into physical units.");
     meters_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
+    texture_warp_slider_ = std::make_unique<FloatSliderWidget>("Texture Perspective Warp (%)", 0.0f, 100.0f, 1.0f, defaults.texture_warp_percent, 0);
+    texture_warp_slider_->set_tooltip("Blend the perspective warp applied to textures. 0% = no warp (orthographic feel), 100% = full perspective scaling.");
+    texture_warp_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
 
 
     const int stored_fg_opacity = devmode::camera_prefs::load_foreground_texture_max_opacity();
@@ -973,6 +983,7 @@ void CameraUIPanel::rebuild_rows() {
     if (depth_section_header_) rows.push_back({ depth_section_header_.get() });
     if (depth_section_expanded_) {
         if (meters_slider_) rows.push_back({ meters_slider_.get() });
+        if (texture_warp_slider_) rows.push_back({ texture_warp_slider_.get() });
     }
 
     if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
@@ -1077,6 +1088,7 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
     if (cull_margin_slider_) settings.extra_cull_margin = std::clamp(cull_margin_slider_->value(), 0.0f, 1000.0f);
 
     if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
+    if (texture_warp_slider_) settings.texture_warp_percent = std::clamp(texture_warp_slider_->value(), 0.0f, 100.0f);
 
     auto slider_to_opacity = [](const FloatSliderWidget* slider) -> int {
         if (!slider) return 0;

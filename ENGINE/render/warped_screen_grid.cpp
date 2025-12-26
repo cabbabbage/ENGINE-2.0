@@ -183,6 +183,7 @@ namespace {
         double screen_zoom = 1.0;
         double inv_screen_zoom = 1.0;
         double screen_pan_y_px = 0.0;
+        double texture_warp = 1.0;
     };
 
     SDL_FPoint ndc_to_screen_point(const CameraState& cam,
@@ -257,6 +258,10 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         }
         state.inv_screen_zoom = 1.0 / state.screen_zoom;
         state.screen_pan_y_px = static_cast<double>(screen_height) * std::clamp(safe_params.pan_y_percent, -100.0, 100.0) * 0.01;
+        state.texture_warp = std::clamp(static_cast<double>(settings.texture_warp_percent), 0.0, 100.0) * 0.01;
+        if (!std::isfinite(state.texture_warp)) {
+            state.texture_warp = 1.0;
+        }
 
         Vec3 to_anchor = anchor - camera_pos;
         Vec3 horiz_dir{ to_anchor.x, to_anchor.y, 0.0 };
@@ -383,7 +388,9 @@ struct ProjectionResult {
 
         const float perspective = static_cast<float>(cam.reference_depth / std::max(depth_along_forward, 1e-4));
         const float zoom_scale = std::isfinite(cam.screen_zoom) && cam.screen_zoom > 0.0 ? static_cast<float>(cam.screen_zoom) : 1.0f;
-        const float vertical    = perspective;
+        const float warp_factor = std::clamp(static_cast<float>(cam.texture_warp), 0.0f, 1.0f);
+        const float warped_perspective = 1.0f + (perspective - 1.0f) * warp_factor;
+        const float vertical    = warped_perspective;
         const float effective_horizon_band_px = horizon_band_px * zoom_scale;
 
         float horizon_fade = 1.0f;
@@ -399,7 +406,7 @@ struct ProjectionResult {
 
         out.valid             = std::isfinite(screen_x) && std::isfinite(screen_y);
         out.screen            = SDL_FPoint{ static_cast<float>(screen_x), static_cast<float>(screen_y) };
-        out.perspective_scale = std::isfinite(perspective) ? perspective * zoom_scale : 1.0f;
+        out.perspective_scale = std::isfinite(warped_perspective) ? warped_perspective * zoom_scale : 1.0f;
         out.vertical_scale    = std::isfinite(vertical) ? vertical : 1.0f;
         out.horizon_fade      = horizon_fade;
         out.distance          = std::isfinite(distance_to_camera) ? static_cast<float>(distance_to_camera) : 0.0f;
@@ -1071,6 +1078,7 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     int falloff = static_cast<int>(updated.texture_opacity_falloff_method);
     read_int("texture_opacity_falloff_method", falloff, 0, 4);
     updated.texture_opacity_falloff_method = static_cast<BlurFalloffMethod>(falloff);
+    read_float("texture_warp_percent", updated.texture_warp_percent, 0.0f, 100.0f);
 
     int smoothing_method = static_cast<int>(updated.parallax_smoothing.method);
     read_int("motion_smoothing_method", smoothing_method, 0, 2);
@@ -1101,6 +1109,7 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["foreground_plane_screen_y"] = settings_.foreground_plane_screen_y;
     result["background_plane_screen_y"] = settings_.background_plane_screen_y;
     result["texture_opacity_falloff_method"] = static_cast<int>(settings_.texture_opacity_falloff_method);
+    result["texture_warp_percent"] = settings_.texture_warp_percent;
 
     result["motion_smoothing_method"] = static_cast<int>(settings_.parallax_smoothing.method);
     result["motion_smoothing_max_step"] = settings_.parallax_smoothing.max_step;

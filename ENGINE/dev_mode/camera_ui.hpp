@@ -76,6 +76,7 @@ private:
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> cull_margin_slider_;
     std::unique_ptr<FloatSliderWidget> meters_slider_;
+    std::unique_ptr<FloatSliderWidget> texture_warp_slider_;
 
     std::unique_ptr<FloatSliderWidget> foreground_texture_opacity_slider_;
     std::unique_ptr<FloatSliderWidget> background_texture_opacity_slider_;

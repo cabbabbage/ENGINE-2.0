@@ -58,6 +58,7 @@ public:
         float foreground_plane_screen_y       = 1080.0f;
         float background_plane_screen_y       = 0.0f;
         BlurFalloffMethod texture_opacity_falloff_method = BlurFalloffMethod::Linear;
+        float texture_warp_percent            = 100.0f;
 
         float extra_cull_margin = 300.0f;
         float depth_near_world = 0.0f;

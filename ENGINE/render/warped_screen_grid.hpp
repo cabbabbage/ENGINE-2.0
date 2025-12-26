@@ -6,6 +6,7 @@
 #include "utils/area.hpp"
 #include <SDL.h>
 #include <cstdint>
+#include <algorithm>
 #include <vector>
 #include <unordered_map>
 #include <nlohmann/json.hpp>
@@ -228,6 +229,8 @@ public:
     int last_min_world_z() const { return last_min_world_z_; }
     int last_max_world_z() const { return last_max_world_z_; }
     std::uint32_t last_depth_culled() const { return last_depth_culled_; }
+    void set_frustum_padding_world(float padding);
+    float frustum_padding_world() const { return frustum_padding_world_; }
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
     Area convert_area_to_aspect(const Area& in) const;
     const CameraController::State& camera_state() const { return camera_.state(); }
@@ -277,6 +280,7 @@ private:
     int last_max_world_z_ = 0;
     SDL_Rect cached_world_rect_{0, 0, 0, 0};
     GridBounds bounds_{};
+    float frustum_padding_world_ = 0.0f;
     bool depth_enabled_ = true;
     bool depth_debug_logging_ = false;
 };

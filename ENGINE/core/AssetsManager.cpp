@@ -999,6 +999,9 @@ void Assets::update_max_asset_dimensions() {
 
     max_asset_width_world_  = max_width;
     max_asset_height_world_ = max_height;
+
+    const float frustum_padding = std::max(max_asset_width_world_, max_asset_height_world_);
+    camera_.set_frustum_padding_world(frustum_padding);
 }
 
 SDL_Rect Assets::screen_world_rect() const {

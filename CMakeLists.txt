@@ -175,7 +175,12 @@ endif()
 
 # Faster relinks on MSVC Debug
 if(MSVC)
-    target_link_options(engine PRIVATE "$<$<CONFIG:Debug>:/INCREMENTAL>")
+    target_link_options(engine
+        PRIVATE
+            "$<$<CONFIG:Debug>:/INCREMENTAL>"
+            "$<$<CONFIG:RelWithDebInfo>:/DEBUG:FASTLINK>"
+            "$<$<CONFIG:RelWithDebInfo>:/INCREMENTAL:NO>"
+    )
 endif()
 
 # ------------------------------------------

@@ -1425,10 +1425,9 @@ bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rec
             }
 
             const float off_x = static_cast<float>(asset->flipped ? -light.offset_x : light.offset_x);
-            const float off_y = static_cast<float>(light.offset_y);
 
             const float cx = base_center_x + off_x * sx;
-            const float cy = base_center_y + off_y * sy;
+            const float cy = base_center_y;
 
             const float rx = std::max(1.0f, static_cast<float>(raw_radius) * sx);
             const float ry = std::max(1.0f, static_cast<float>(raw_radius) * sy);

@@ -1102,6 +1102,7 @@
       "update_radius": 0
     },
     "Casino": {
+      "animation_children": [],
       "animations": {
         "default": {
           "frames": [
@@ -1117,11 +1118,34 @@
           }
         }
       },
+      "anti_tags": [],
+      "apply_distance_scaling": false,
+      "apply_vertical_scaling": false,
       "asset_directory": "SRC/assets/Casino",
       "asset_name": "Casino",
       "asset_type": "object",
+      "async_children": [],
+      "can_invert": false,
       "lighting_info": [],
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "shading_opacity_multiplier": 1.0,
+      "shading_parallax_amount": 0.0,
+      "shading_screen_brightness_multiplier": 1.0,
+      "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+      },
+      "size_settings": {
+        "scale_percentage": 81.0
+      },
+      "spawn_groups": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "z_threshold": 275
     },
     "Critter": {
       "animation_children": [],
@@ -7736,7 +7760,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726562,
+            "offset": 658.9600219726563,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }
@@ -7766,8 +7790,8 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
+            37,
             242,
-            36,
             36,
             255
           ],
@@ -7786,8 +7810,8 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            242,
             223,
+            242,
             36,
             255
           ],
@@ -7839,8 +7863,8 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            242,
             36,
+            242,
             224,
             255
           ],
@@ -7887,16 +7911,16 @@
           ]
         },
         "spawn": {
-          "camera_height_px": -31,
-          "camera_pan_y_percent": 64,
-          "camera_tilt_deg": 61.0,
-          "camera_y_distance_px": -1440,
-          "camera_zoom_percent": 0,
+          "camera_height_px": 477,
+          "camera_pan_y_percent": 10,
+          "camera_tilt_deg": 31.0,
+          "camera_y_distance_px": -508,
+          "camera_zoom_percent": 27,
           "curvyness": 2,
           "display_color": [
+            37,
             242,
             36,
-            54,
             255
           ],
           "edge_smoothness": 101,

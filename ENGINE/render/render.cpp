@@ -148,17 +148,22 @@ bool build_warped_quad(const RenderObject& obj,
         return false;
     }
 
+    const float anchor_x = static_cast<float>(rect.x);
+    const float anchor_y = static_cast<float>(rect.y);
+    const float half_w = static_cast<float>(rect.w) * 0.5f;
+    const float height = static_cast<float>(rect.h);
+
     std::array<WorldCorner, 4> world = {{
-        WorldCorner{static_cast<float>(rect.x), static_cast<float>(rect.y), static_cast<float>(rect.h)},
-        WorldCorner{static_cast<float>(rect.x + rect.w), static_cast<float>(rect.y), static_cast<float>(rect.h)},
-        WorldCorner{static_cast<float>(rect.x + rect.w), static_cast<float>(rect.y), 0.0f},
-        WorldCorner{static_cast<float>(rect.x), static_cast<float>(rect.y), 0.0f}
+        WorldCorner{anchor_x - half_w, anchor_y, height},
+        WorldCorner{anchor_x + half_w, anchor_y, height},
+        WorldCorner{anchor_x + half_w, anchor_y, 0.0f},
+        WorldCorner{anchor_x - half_w, anchor_y, 0.0f}
     }};
 
     if (std::abs(obj.angle) > 0.001) {
         SDL_Point pivot = obj.use_custom_center ? obj.center : SDL_Point{rect.w / 2, rect.h / 2};
-        const float pivot_x = static_cast<float>(rect.x + pivot.x);
-        const float pivot_z = static_cast<float>(rect.h - pivot.y);
+        const float pivot_x = anchor_x + static_cast<float>(pivot.x) - half_w;
+        const float pivot_z = height - static_cast<float>(pivot.y);
         const float rad = static_cast<float>(obj.angle * (std::acos(-1.0) / 180.0));
         const float cos_a = std::cos(rad);
         const float sin_a = std::sin(rad);

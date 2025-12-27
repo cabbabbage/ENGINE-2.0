@@ -70,6 +70,11 @@ namespace {
 
 constexpr int kClipboardNudge = 16;
 constexpr float kCameraScaleEpsilon = 1e-4f;
+constexpr int kCameraHeightScrollStep = 25;
+constexpr int kCameraZoomScrollStep = 5;
+constexpr float kCameraTiltDegreesPerPixel = 0.2f;
+constexpr int kCameraYOffsetPerPixel = 2;
+constexpr float kCameraPanPercentPerPixel = 0.2f;
 
 int floor_div(int value, int divisor) {
     if (divisor == 0) {
@@ -1241,6 +1246,7 @@ void RoomEditor::set_camera_settings_lock(bool active) {
     }
 
     if (camera_settings_lock_active_) {
+        camera_settings_drag_ = CameraSettingsDragState{};
         camera_lock_restore_.valid = true;
         camera_lock_restore_.manual_height_override = cam->is_manual_height_override();
         camera_lock_restore_.had_focus_override = cam->has_focus_override();
@@ -1252,6 +1258,7 @@ void RoomEditor::set_camera_settings_lock(bool active) {
         cam->set_manual_height_override(false);
         apply_camera_settings_lock(*cam);
     } else {
+        camera_settings_drag_ = CameraSettingsDragState{};
         const SDL_Point previous_center = cam->get_screen_center();
         if (camera_lock_restore_.valid) {
             cam->set_manual_height_override(camera_lock_restore_.manual_height_override);
@@ -2365,6 +2372,82 @@ void RoomEditor::set_height_scale_factor(double factor) {
     pan_height_.set_height_scale_factor(height_scale_factor_);
 }
 
+bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
+    if (!camera_settings_lock_active_ || !room_cfg_ui_ || !room_cfg_ui_->camera_controls_enabled()) {
+        return false;
+    }
+
+    const bool shift_down =
+        input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+    bool consumed = false;
+    RoomConfigurator::CameraAdjustment adjustment{};
+
+    const int scroll_y = input.getScrollY();
+    if (scroll_y != 0) {
+        const int ticks = std::abs(scroll_y);
+        const int direction = (scroll_y < 0) ? 1 : -1;
+        if (shift_down) {
+            adjustment.zoom_delta_percent = direction * kCameraZoomScrollStep * ticks;
+        } else {
+            adjustment.height_delta_px = direction * kCameraHeightScrollStep * ticks;
+        }
+        consumed = true;
+    }
+
+    if (!camera_settings_drag_.active) {
+        if (input.wasPressed(Input::LEFT)) {
+            camera_settings_drag_.active = true;
+            camera_settings_drag_.button = Input::LEFT;
+            camera_settings_drag_.mode = shift_down ? CameraSettingsDragState::Mode::Pan
+                                                   : CameraSettingsDragState::Mode::Tilt;
+            consumed = true;
+        } else if (input.wasPressed(Input::RIGHT)) {
+            camera_settings_drag_.active = true;
+            camera_settings_drag_.button = Input::RIGHT;
+            camera_settings_drag_.mode = CameraSettingsDragState::Mode::YOffset;
+            consumed = true;
+        }
+    }
+
+    if (camera_settings_drag_.active) {
+        const bool button_down = input.isDown(camera_settings_drag_.button);
+        if (!button_down) {
+            camera_settings_drag_.active = false;
+            camera_settings_drag_.mode = CameraSettingsDragState::Mode::None;
+            consumed = true;
+        }
+    }
+
+    if (camera_settings_drag_.active) {
+        const int dy = input.getDY();
+        if (dy != 0) {
+            const float delta = -static_cast<float>(dy);
+            switch (camera_settings_drag_.mode) {
+                case CameraSettingsDragState::Mode::Tilt:
+                    adjustment.tilt_delta_deg = delta * kCameraTiltDegreesPerPixel;
+                    consumed = true;
+                    break;
+                case CameraSettingsDragState::Mode::YOffset:
+                    adjustment.y_distance_delta_px = static_cast<int>(std::lround(delta * kCameraYOffsetPerPixel));
+                    consumed = true;
+                    break;
+                case CameraSettingsDragState::Mode::Pan:
+                    adjustment.pan_delta_percent = delta * kCameraPanPercentPerPixel;
+                    consumed = true;
+                    break;
+                case CameraSettingsDragState::Mode::None:
+                    break;
+            }
+        }
+    }
+
+    if (consumed) {
+        room_cfg_ui_->apply_camera_adjustment(adjustment);
+    }
+
+    return consumed;
+}
+
 bool RoomEditor::is_spawn_group_panel_visible() const {
     return spawn_group_panel_ && spawn_group_panel_->is_visible();
 }
@@ -2385,6 +2468,10 @@ bool RoomEditor::any_blocking_panel_visible() const {
 
 void RoomEditor::handle_mouse_input(const Input& input) {
     if (!input_) return;
+
+    if (handle_camera_settings_mouse_controls(input)) {
+        return;
+    }
 
     WarpedScreenGrid& cam = assets_->getView();
     const float prev_scale = cam.get_scale();
@@ -3493,6 +3580,7 @@ void RoomEditor::ensure_room_configurator() {
             if (assets_ && (!changed_room || changed_room == current_room_)) {
                 assets_->getView().set_manual_height_override(false);
                 assets_->mark_camera_dirty();
+                mark_spatial_index_dirty();
             }
         });
         room_cfg_ui_->set_bounds(room_config_bounds_);

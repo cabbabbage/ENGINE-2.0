@@ -64,7 +64,7 @@ class LightDefinition:
     flicker_speed: int = 0
     flicker_smoothness: int = 100
     offset_x: int = 0
-    offset_y: int = 0
+    offset_z: int = 0
     color: Tuple[int, int, int] = (255, 255, 255)
     in_front: bool = False
     behind: bool = False
@@ -84,7 +84,8 @@ class LightDefinition:
             "flicker_speed": self.flicker_speed,
             "flicker_smoothness": self.flicker_smoothness,
             "offset_x": self.offset_x,
-            "offset_y": self.offset_y,
+            "offset_z": self.offset_z,
+            "offset_y": 0,
             "light_color": list(self.color),
             "in_front": self.in_front,
             "behind": self.behind,
@@ -128,7 +129,7 @@ def parse_light_entry(raw: Any) -> Optional[LightDefinition]:
         0, min(100, read_int(raw, "flicker_smoothness", 100))
     )
     offset_x = read_int(raw, "offset_x", 0)
-    offset_y = read_int(raw, "offset_y", 0)
+    offset_z = read_int(raw, "offset_z", read_int(raw, "offset_y", 0))
 
     color = (255, 255, 255)
     try:
@@ -149,7 +150,7 @@ def parse_light_entry(raw: Any) -> Optional[LightDefinition]:
         flicker_speed=flicker_speed,
         flicker_smoothness=flicker_smoothness,
         offset_x=offset_x,
-        offset_y=offset_y,
+        offset_z=offset_z,
         color=color,
         in_front=bool(raw.get("in_front", False)),
         behind=bool(raw.get("behind", False)),

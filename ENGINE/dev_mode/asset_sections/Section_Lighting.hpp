@@ -104,7 +104,7 @@ public:
                 place(r.s_flicker_speed, DMSlider::height());
                 place(r.s_flicker_smoothness, DMSlider::height());
                 place(r.s_offset_x,  DMSlider::height());
-                place(r.s_offset_y,  DMSlider::height());
+                place(r.s_offset_z,  DMSlider::height());
                 if (r.c_front) {
                     r.c_front->set_rect(SDL_Rect{ x, y - scroll_, maxw, DMCheckbox::height() });
                     y += DMCheckbox::height() + DMSpacing::item_gap();
@@ -133,7 +133,7 @@ public:
                 hide(r.s_flicker_speed);
                 hide(r.s_flicker_smoothness);
                 hide(r.s_offset_x);
-                hide(r.s_offset_y);
+                hide(r.s_offset_z);
                 hide(r.c_front);
                 hide(r.c_behind);
                 hide(r.c_dark_mask);
@@ -277,9 +277,9 @@ public:
                           [&]() { return r.light.offset_x; },
                           [&](int v) { r.light.offset_x = v; },
                           false);
-            handle_slider(r.s_offset_y,
-                          [&]() { return r.light.offset_y; },
-                          [&](int v) { r.light.offset_y = v; },
+            handle_slider(r.s_offset_z,
+                          [&]() { return r.light.offset_z; },
+                          [&](int v) { r.light.offset_z = v; },
                           false);
         }
         if (b_add_ && b_add_->handle_event(e)) {
@@ -338,7 +338,7 @@ public:
             if (rrow.s_flicker_speed)   rrow.s_flicker_speed->render(r);
             if (rrow.s_flicker_smoothness)   rrow.s_flicker_smoothness->render(r);
             if (rrow.s_offset_x)  rrow.s_offset_x->render(r);
-            if (rrow.s_offset_y)  rrow.s_offset_y->render(r);
+            if (rrow.s_offset_z)  rrow.s_offset_z->render(r);
             if (rrow.c_front)  rrow.c_front->render(r);
             if (rrow.c_behind) rrow.c_behind->render(r);
             if (rrow.c_dark_mask) rrow.c_dark_mask->render(r);
@@ -364,7 +364,7 @@ private:
         std::unique_ptr<DMSlider> s_flicker_speed;
         std::unique_ptr<DMSlider> s_flicker_smoothness;
         std::unique_ptr<DMSlider> s_offset_x;
-        std::unique_ptr<DMSlider> s_offset_y;
+        std::unique_ptr<DMSlider> s_offset_z;
         std::unique_ptr<DMCheckbox> c_front;
         std::unique_ptr<DMCheckbox> c_behind;
         std::unique_ptr<DMCheckbox> c_dark_mask;
@@ -388,7 +388,7 @@ private:
         r.s_flicker_smoothness =
             std::make_unique<DMSlider>("Flicker Smoothness", 0, 100, ls.flicker_smoothness);
         r.s_offset_x  = std::make_unique<DMSlider>("Offset X", -2000, 2000, ls.offset_x);
-        r.s_offset_y  = std::make_unique<DMSlider>("Offset Y", -2000, 2000, ls.offset_y);
+        r.s_offset_z  = std::make_unique<DMSlider>("Offset Z", -2000, 2000, ls.offset_z);
         r.c_front          = std::make_unique<DMCheckbox>("Render Texture In Front", ls.in_front);
         r.c_behind         = std::make_unique<DMCheckbox>("Render Texture Behind", ls.behind);
         r.c_dark_mask      = std::make_unique<DMCheckbox>("Render To Dark Mask", ls.render_to_dark_mask);
@@ -455,7 +455,7 @@ private:
         configure_normal_slider(r.s_flicker_speed);
         configure_normal_slider(r.s_flicker_smoothness);
         configure_normal_slider(r.s_offset_x);
-        configure_normal_slider(r.s_offset_y);
+        configure_normal_slider(r.s_offset_z);
     }
 
     void commit_to_info() {
@@ -608,7 +608,7 @@ public:
             if (r.s_flicker_speed)        r.s_flicker_speed->set_value(src.flicker_speed);
             if (r.s_flicker_smoothness)   r.s_flicker_smoothness->set_value(src.flicker_smoothness);
             if (r.s_offset_x)  r.s_offset_x->set_value(src.offset_x);
-            if (r.s_offset_y)  r.s_offset_y->set_value(src.offset_y);
+            if (r.s_offset_z)  r.s_offset_z->set_value(src.offset_z);
             if (r.c_front)           r.c_front->set_value(src.in_front);
             if (r.c_behind)          r.c_behind->set_value(src.behind);
             if (r.c_dark_mask)       r.c_dark_mask->set_value(src.render_to_dark_mask);
@@ -627,18 +627,18 @@ public:
         refresh_row_headers();
         refresh_highlight_state();
     }
-    void update_light_offsets(std::size_t index, int offset_x, int offset_y) {
+    void update_light_offsets(std::size_t index, int offset_x, int offset_z) {
         if (index >= rows_.size()) {
             return;
         }
         auto& row = rows_[index];
         row.light.offset_x = offset_x;
-        row.light.offset_y = offset_y;
+        row.light.offset_z = offset_z;
         if (row.s_offset_x) {
             row.s_offset_x->set_value(offset_x);
         }
-        if (row.s_offset_y) {
-            row.s_offset_y->set_value(offset_y);
+        if (row.s_offset_z) {
+            row.s_offset_z->set_value(offset_z);
         }
     }
     void update(const Input& input, int screen_w, int screen_h) override {

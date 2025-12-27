@@ -38,7 +38,7 @@ float LightFlickerCalculator::compute_multiplier(const LightSource& light, float
 
     std::uint32_t base = 0x811C9DC5u;
     base = mix(base, static_cast<std::uint32_t>(light.offset_x));
-    base = mix(base, static_cast<std::uint32_t>(light.offset_y));
+    base = mix(base, static_cast<std::uint32_t>(light.offset_z));
     base = mix(base, static_cast<std::uint32_t>(light.radius));
     base = mix(base, static_cast<std::uint32_t>(light.intensity));
     base = mix(base, static_cast<std::uint32_t>(light.fall_off));

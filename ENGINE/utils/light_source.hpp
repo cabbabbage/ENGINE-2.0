@@ -10,7 +10,7 @@ struct LightSource {
         int         flicker_speed    = 0;
         int         flicker_smoothness = 100;
         int         offset_x         = 0;
-        int         offset_y         = 0;
+        int         offset_z         = 0;
         SDL_Color   color            = {255, 255, 255, 255};
 
         bool        in_front            = false;

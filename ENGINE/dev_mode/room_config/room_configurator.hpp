@@ -99,6 +99,15 @@ public:
     void refresh_camera_panel_widgets();
     void request_camera_live_update();
     void set_on_camera_changed(std::function<void(Room*)> cb) { on_camera_changed_ = std::move(cb); }
+    bool camera_controls_enabled() const;
+    struct CameraAdjustment {
+        int height_delta_px = 0;
+        float tilt_delta_deg = 0.0f;
+        int y_distance_delta_px = 0;
+        int zoom_delta_percent = 0;
+        float pan_delta_percent = 0.0f;
+    };
+    bool apply_camera_adjustment(const CameraAdjustment& adjustment);
 
 private:
     class devmode::core::ManifestStore* manifest_store_ = nullptr;

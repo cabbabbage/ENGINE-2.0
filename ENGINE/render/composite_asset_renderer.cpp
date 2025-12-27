@@ -72,7 +72,9 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                  bool apply_scale = true,
                                  double angle = 0.0,
                                  std::optional<SDL_Point> center = std::nullopt,
-                                 SDL_RendererFlip flip = SDL_FLIP_NONE) {
+                                 SDL_RendererFlip flip = SDL_FLIP_NONE,
+                                 std::optional<SDL_Point> texture_size = std::nullopt,
+                                 float world_z_offset = 0.0f) {
         if (!tex) return;
         if (apply_scale) {
             rect.w = static_cast<int>(std::lround(static_cast<float>(rect.w) * package_scale));
@@ -86,21 +88,37 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         if (center.has_value()) {
             c = center.value();
             if (apply_scale) {
-                 c.x = static_cast<int>(std::lround(static_cast<float>(c.x) * package_scale));
-                 c.y = static_cast<int>(std::lround(static_cast<float>(c.y) * package_scale));
+                c.x = static_cast<int>(std::lround(static_cast<float>(c.x) * package_scale));
+                c.y = static_cast<int>(std::lround(static_cast<float>(c.y) * package_scale));
             }
             custom = true;
         }
-
-        asset->render_package.push_back({tex, rect, color, blend, angle, c, custom, flip});
-};
+        RenderObject obj{};
+        obj.texture = tex;
+        obj.screen_rect = rect;
+        obj.color_mod = color;
+        obj.blend_mode = blend;
+        obj.angle = angle;
+        obj.center = c;
+        obj.use_custom_center = custom;
+        obj.flip = flip;
+        if (texture_size.has_value()) {
+            obj.texture_w = texture_size->x;
+            obj.texture_h = texture_size->y;
+            obj.has_texture_size = (obj.texture_w > 0 && obj.texture_h > 0);
+        }
+        obj.world_z_offset = world_z_offset;
+        asset->render_package.push_back(obj);
+    };
 
     auto add_scene_mask_light = [&](SDL_Texture* tex,
                                     SDL_Rect rect,
                                     SDL_Color color = {255, 255, 255, 255},
                                     SDL_BlendMode blend = SDL_BLENDMODE_BLEND,
                                     bool apply_scale = true,
-                                    SDL_RendererFlip flip = SDL_FLIP_NONE) {
+                                    SDL_RendererFlip flip = SDL_FLIP_NONE,
+                                    std::optional<SDL_Point> texture_size = std::nullopt,
+                                    float world_z_offset = 0.0f) {
         if (!tex) return;
         if (apply_scale) {
             rect.w = static_cast<int>(std::lround(static_cast<float>(rect.w) * package_scale));
@@ -114,8 +132,14 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         obj.color_mod = color;
         obj.blend_mode = blend;
         obj.flip       = flip;
+        if (texture_size.has_value()) {
+            obj.texture_w = texture_size->x;
+            obj.texture_h = texture_size->y;
+            obj.has_texture_size = (obj.texture_w > 0 && obj.texture_h > 0);
+        }
+        obj.world_z_offset = world_z_offset;
         asset->scene_mask_lights.push_back(obj);
-};
+    };
 
     auto compute_light_color = [&](const LightSource& light) -> std::optional<SDL_Color> {
         const int raw_intensity = std::clamp(light.intensity, 0, 255);
@@ -166,14 +190,31 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
 
                 int w, h;
                 SDL_QueryTexture(light_source.texture, nullptr, nullptr, &w, &h);
+                const float light_z = static_cast<float>(light_source.offset_z) * package_scale;
                 SDL_Rect dest_rect = {
-                    static_cast<int>(asset->pos.x + offset_x * package_scale), static_cast<int>(asset->pos.y + light_source.offset_y * package_scale), w, h };
+                    static_cast<int>(asset->pos.x + offset_x * package_scale), asset->pos.y, w, h };
                 SDL_RendererFlip light_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
 
-                add_render_object(light_source.texture, dest_rect, *light_color, SDL_BLENDMODE_ADD, true, 0.0, std::nullopt, light_flip);
+                add_render_object(light_source.texture,
+                                  dest_rect,
+                                  *light_color,
+                                  SDL_BLENDMODE_ADD,
+                                  true,
+                                  0.0,
+                                  std::nullopt,
+                                  light_flip,
+                                  SDL_Point{w, h},
+                                  light_z);
 
                 if (light_source.render_to_dark_mask) {
-                    add_scene_mask_light(light_source.texture, dest_rect, *light_color, SDL_BLENDMODE_ADD, true, light_flip);
+                    add_scene_mask_light(light_source.texture,
+                                         dest_rect,
+                                         *light_color,
+                                         SDL_BLENDMODE_ADD,
+                                         true,
+                                         light_flip,
+                                         SDL_Point{w, h},
+                                         light_z);
                 }
             }
         }
@@ -243,7 +284,8 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                           false,
                           static_cast<double>(slot.rotation_degrees),
                           pivot,
-                          flip);
+                          flip,
+                          SDL_Point{tex_w, tex_h});
 };
 
     for (const auto& child_attachment : asset->animation_children()) {
@@ -306,9 +348,12 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         if (fog_tex && fog_alpha > 0.0f) {
             const int fog_alpha_int = static_cast<int>(std::lround(fog_alpha * 255.0f));
             SDL_Color fog_color{255, 255, 255, static_cast<Uint8>(std::clamp(fog_alpha_int, 0, 255))};
-            add_render_object(fog_tex, dest_rect, fog_color, SDL_BLENDMODE_BLEND, false);
+            int fog_w = 0;
+            int fog_h = 0;
+            SDL_QueryTexture(fog_tex, nullptr, nullptr, &fog_w, &fog_h);
+            add_render_object(fog_tex, dest_rect, fog_color, SDL_BLENDMODE_BLEND, false, 0.0, std::nullopt, SDL_FLIP_NONE, SDL_Point{fog_w, fog_h});
         }
-        add_render_object(base_tex, dest_rect, SDL_Color{255, 255, 255, 255}, SDL_BLENDMODE_BLEND, false);
+        add_render_object(base_tex, dest_rect, SDL_Color{255, 255, 255, 255}, SDL_BLENDMODE_BLEND, false, 0.0, std::nullopt, SDL_FLIP_NONE, SDL_Point{w, h});
     }
 
     for (const auto& child_attachment : asset->animation_children()) {
@@ -333,14 +378,31 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
 
                 int w, h;
                 SDL_QueryTexture(light_source.texture, nullptr, nullptr, &w, &h);
+                const float light_z = static_cast<float>(light_source.offset_z) * package_scale;
                 SDL_Rect dest_rect = {
-                    static_cast<int>(asset->pos.x + offset_x * package_scale), static_cast<int>(asset->pos.y + light_source.offset_y * package_scale), w, h };
+                    static_cast<int>(asset->pos.x + offset_x * package_scale), asset->pos.y, w, h };
                 SDL_RendererFlip light_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
 
-                add_render_object(light_source.texture, dest_rect, *light_color, SDL_BLENDMODE_ADD, true, 0.0, std::nullopt, light_flip);
+                add_render_object(light_source.texture,
+                                  dest_rect,
+                                  *light_color,
+                                  SDL_BLENDMODE_ADD,
+                                  true,
+                                  0.0,
+                                  std::nullopt,
+                                  light_flip,
+                                  SDL_Point{w, h},
+                                  light_z);
 
                 if (light_source.render_to_dark_mask) {
-                    add_scene_mask_light(light_source.texture, dest_rect, *light_color, SDL_BLENDMODE_ADD, true, light_flip);
+                    add_scene_mask_light(light_source.texture,
+                                         dest_rect,
+                                         *light_color,
+                                         SDL_BLENDMODE_ADD,
+                                         true,
+                                         light_flip,
+                                         SDL_Point{w, h},
+                                         light_z);
                 }
             }
         }

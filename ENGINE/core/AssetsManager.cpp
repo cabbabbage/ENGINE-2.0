@@ -563,13 +563,25 @@ void Assets::update_filtered_active_assets() {
     const std::uint64_t previous_hash = filtered_active_assets_hash_;
 
     if (dev_controls_ && dev_controls_->is_enabled()) {
+        const std::uint64_t active_hash = hash_active_asset_list(active_assets);
+        const std::uint64_t filter_version = dev_controls_->asset_filter_state_version();
+        if (active_hash == filtered_active_assets_source_hash_ &&
+            filter_version == filtered_active_assets_filter_version_) {
+            return;
+        }
+
         filtered_active_assets = active_assets;
         dev_controls_->filter_active_assets(filtered_active_assets);
+        filtered_active_assets_hash_ = hash_active_asset_list(filtered_active_assets);
+        filtered_active_assets_source_hash_ = active_hash;
+        filtered_active_assets_filter_version_ = filter_version;
     } else {
         filtered_active_assets.clear();
+        filtered_active_assets_hash_ = hash_active_asset_list(filtered_active_assets);
+        filtered_active_assets_source_hash_ = 0;
+        filtered_active_assets_filter_version_ = 0;
     }
 
-    filtered_active_assets_hash_ = hash_active_asset_list(filtered_active_assets);
     if (filtered_active_assets_hash_ != previous_hash) {
         touch_dev_active_state_version();
     }
@@ -882,6 +894,10 @@ void Assets::update(const Input& input)
 
     update_filtered_active_assets();
     if (dev_controls_ && dev_controls_->is_enabled()) {
+        const SDL_Point camera_center_before = camera_.get_screen_center();
+        const double camera_scale_before = camera_.get_scale();
+        const double camera_pitch_before = camera_.current_pitch_radians();
+
         dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
         sync_dev_controls_current_room(current_room_);
         dev_controls_->update(input);
@@ -889,10 +905,21 @@ void Assets::update(const Input& input)
         dev_controls_->update_ui(input);
 
         if (dev_mode && dev_controls_->mode() == DevControls::Mode::RoomEditor) {
-            camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_);
-            rebuild_active_from_screen_grid();
-            update_filtered_active_assets();
-            dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
+            const SDL_Point camera_center_after = camera_.get_screen_center();
+            const double camera_scale_after = camera_.get_scale();
+            const double camera_pitch_after = camera_.current_pitch_radians();
+            constexpr double kCameraEpsilon = 1e-4;
+            const bool camera_changed =
+                camera_center_before.x != camera_center_after.x ||
+                camera_center_before.y != camera_center_after.y ||
+                std::fabs(camera_scale_before - camera_scale_after) > kCameraEpsilon ||
+                std::fabs(camera_pitch_before - camera_pitch_after) > kCameraEpsilon;
+            if (camera_changed) {
+                camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_);
+                rebuild_active_from_screen_grid();
+                update_filtered_active_assets();
+                dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
+            }
         }
     }
 

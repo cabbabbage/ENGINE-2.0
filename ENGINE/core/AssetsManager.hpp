@@ -329,5 +329,7 @@ private:
     bool      last_player_pos_valid_ = false;
 
     std::vector<SDL_Rect> culled_debug_rects_;
+    std::uint64_t filtered_active_assets_source_hash_ = 0;
+    std::uint64_t filtered_active_assets_filter_version_ = 0;
 };
 #include "utils/map_grid_settings.hpp"

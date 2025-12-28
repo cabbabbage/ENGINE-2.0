@@ -84,6 +84,7 @@ public:
     void close_asset_info_editor();
     bool is_asset_info_editor_open() const;
     bool is_asset_info_lighting_section_expanded() const;
+    std::uint64_t asset_filter_state_version() const;
 
     void finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info);
 

@@ -177,7 +177,6 @@ int count_png_files(const std::string& folder) {
 
         std::error_code ec;
         if (!fs::exists(folder_path, ec) || ec) {
-                std::cout << "[Animation] count_png_files: folder does not exist: " << folder << "\n";
                 return 0;
         }
 
@@ -189,7 +188,6 @@ int count_png_files(const std::string& folder) {
                 ++count;
         }
 
-        std::cout << "[Animation] count_png_files: folder=" << folder << ", count=" << count << "\n";
         return count;
 }
 
@@ -403,9 +401,6 @@ VariantLayerPaths build_variant_layer_paths(const std::string& cache_folder,
         paths.background_folder = (scale_root / "background").string();
         paths.mask_folder       = (scale_root / "mask").string();
 
-        std::cout << "[Animation] build_variant_layer_paths idx=" << index
-                  << " scale=" << (index < steps.size() ? steps[index] : 0.0f) << " normal_folder=" << paths.normal_folder << "\n";
-
         return paths;
 }
 
@@ -506,12 +501,8 @@ void AnimationLoader::load(Animation& animation,
 
         const bool supports_depthcue_cache = false;
         bool effect_hash_mismatch = false;
-        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                  << " profile steps (pre-normalize): " << format_steps(animation.variant_steps_) << ", prefer_cached=" << (prefer_cached ? "true" : "false") << ", scaling_refresh_pending=" << (scaling_refresh_pending ? "true" : "false") << "\n";
         animation.variant_steps_ = info.scale_variants;
         render_pipeline::ScalingLogic::NormalizeVariantSteps(animation.variant_steps_);
-        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                  << " normalized profile steps: " << format_steps(animation.variant_steps_) << "\n";
 
         if (anim_json.contains("source")) {
                 const auto& s = anim_json["source"];
@@ -539,11 +530,8 @@ void AnimationLoader::load(Animation& animation,
                 auto it = info.animations.find(animation.source.name);
                 if (it != info.animations.end()) {
                         const Animation& src_anim = it->second;
-                        if (!src_anim.variant_steps_.empty()) {
+                if (!src_anim.variant_steps_.empty()) {
                                 animation.variant_steps_ = src_anim.variant_steps_;
-                                std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                          << " inherited variant_steps from source animation '" << animation.source.name
-                                          << "': " << format_steps(animation.variant_steps_) << "\n";
                         }
                 }
         }
@@ -791,29 +779,13 @@ void AnimationLoader::load(Animation& animation,
                                 opts.reverse_frames            = animation.reverse_source;
                                 opts.flip_movement_horizontal  = animation.flip_movement_horizontal;
                                 opts.flip_movement_vertical    = animation.flip_movement_vertical;
-                                std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                          << " cloning from source animation '" << animation.source.name << "'"
-                                          << " (flipH=" << opts.flip_horizontal
-                                          << ", flipV=" << opts.flip_vertical
-                                          << ", flipMoveH=" << opts.flip_movement_horizontal
-                                          << ", flipMoveV=" << opts.flip_movement_vertical
-                                          << ", reverse=" << opts.reverse_frames << ")\n";
 
                                 if (!AnimationCloner::Clone(src_anim, animation, opts, renderer, info)) {
-                                        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                                  << " failed to clone from source animation\n";
                                         flush_diagnostics();
                                         return;
                                 }
                                 reused_animation = true;
-                        } else {
-                                std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                          << " source animation '" << animation.source.name
-                                          << "' is not loaded yet; skipping copy for now\n";
                         }
-                } else {
-                        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                  << " missing source animation '" << animation.source.name << "'\n";
                 }
         } else if (animation.source.kind == "folder") {
 
@@ -826,10 +798,6 @@ void AnimationLoader::load(Animation& animation,
                         variant_count = 1;
                         info.scale_variants = animation.variant_steps_;
                 }
-
-                std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                          << " loading from cache_folder=" << cache_folder
-                          << " variant_count=" << variant_count << "\n";
 
                 std::vector<VariantLayerPaths> variant_paths;
                 variant_paths.reserve(variant_count);
@@ -859,21 +827,12 @@ void AnimationLoader::load(Animation& animation,
                                 frame_count = count_png_files(variant_paths[idx].normal_folder);
                                 if (frame_count > 0) {
                                         working_variant_idx = idx;
-                                        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                                  << " using variant " << idx << " (scale="
-                                                  << (idx < animation.variant_steps_.size() ? animation.variant_steps_[idx] : 0.0f) << ") to determine frame_count=" << frame_count << "\n";
                                         break;
                                 }
                         }
                 }
 
                 if (frame_count == 0) {
-                        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                  << " no cached frames found in any variant folder\n";
-                        for (std::size_t idx = 0; idx < variant_paths.size(); ++idx) {
-                                std::cout << "[AnimationLoader]   variant " << idx << " normal_folder="
-                                          << variant_paths[idx].normal_folder << "\n";
-                        }
                         flush_diagnostics();
                         return;
                 }
@@ -1244,16 +1203,7 @@ void AnimationLoader::load(Animation& animation,
                 origin_label = "animation '" + animation.source.name + "'";
         }
 
-        {
-                std::ostringstream oss;
-                oss << "[AnimationLoader] " << info.name << "::" << trigger
-                    << " -> " << animation.frames.size() << " frame(s)";
-                if (frame_width > 0 && frame_height > 0) {
-                        oss << " @ " << frame_width << "x" << frame_height;
-                }
-                oss << " from " << origin_label << " in " << std::fixed << std::setprecision(3) << elapsed_secs << "s";
-                vibble::log::debug(oss.str());
-        }
+        // Load completed
 
         resolve_inherited_movements(info);
         flush_diagnostics();

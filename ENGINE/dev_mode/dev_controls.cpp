@@ -2100,6 +2100,10 @@ bool DevControls::is_asset_info_lighting_section_expanded() const {
     return lighting_section_forces_dark_mask();
 }
 
+std::uint64_t DevControls::asset_filter_state_version() const {
+    return asset_filter_.state_version();
+}
+
 void DevControls::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info) {
     if (!can_use_room_editor_ui()) return;
     room_editor_->finalize_asset_drag(asset, info);

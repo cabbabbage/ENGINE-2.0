@@ -11,9 +11,6 @@ bool load_surface_sequence(const std::string& folder, int frame_count, std::vect
     surfaces.clear();
     surfaces.reserve(frame_count);
 
-    std::cout << "[CacheManager] load_surface_sequence: folder=" << folder
-              << " frame_count=" << frame_count << std::endl;
-
     for (int i = 0; i < frame_count; ++i) {
         std::string frame_path = folder + "/" + std::to_string(i) + ".png";
         SDL_Surface* surface = IMG_Load(frame_path.c_str());
@@ -30,7 +27,6 @@ bool load_surface_sequence(const std::string& folder, int frame_count, std::vect
         surfaces.push_back(surface);
     }
 
-    std::cout << "[CacheManager] Successfully loaded " << surfaces.size() << " surfaces from " << folder << std::endl;
     return true;
 }
 

@@ -7784,7 +7784,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726562,
+            "offset": 658.9600219726563,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }
@@ -7814,9 +7814,9 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 19,
@@ -7834,9 +7834,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            109,
+            242,
+            223,
+            36,
             255
           ],
           "edge_smoothness": 43,
@@ -7887,9 +7887,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            31,
-            125,
-            204,
+            242,
+            36,
+            224,
             255
           ],
           "edge_smoothness": 29,
@@ -7935,16 +7935,16 @@
           ]
         },
         "spawn": {
-          "camera_height_px": 918,
-          "camera_pan_y_percent": -11,
-          "camera_tilt_deg": 14.0,
-          "camera_y_distance_px": 642,
+          "camera_height_px": 1648,
+          "camera_pan_y_percent": -21,
+          "camera_tilt_deg": 75.0,
+          "camera_y_distance_px": 808,
           "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            36,
-            127,
             242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -8230,8 +8230,8 @@
                 }
               ],
               "display_name": "Fountain",
-              "dx": -932,
-              "dy": -1636,
+              "dx": -996,
+              "dy": -1412,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -8242,7 +8242,7 @@
               "origional_width": 6904,
               "position": "Exact",
               "priority": 9,
-              "resolution": 5,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-ceabf6bbb077"
@@ -8549,8 +8549,8 @@
                 }
               ],
               "display_name": "shop_1",
-              "dx": -1284,
-              "dy": -612,
+              "dx": -1860,
+              "dy": -868,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -8561,7 +8561,7 @@
               "origional_width": 6904,
               "position": "Exact",
               "priority": 20,
-              "resolution": 5,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-a93ee81a6431"

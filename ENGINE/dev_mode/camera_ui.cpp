@@ -840,6 +840,21 @@ void CameraUIPanel::sync_from_camera() {
     if (texture_warp_y_offset_slider_) {
         texture_warp_y_offset_slider_->set_value(last_settings_.texture_warp_y_offset_px);
     }
+    if (near_scale_start_slider_) {
+        near_scale_start_slider_->set_value(last_settings_.near_camera_scale_start_ratio);
+    }
+    if (near_scale_end_slider_) {
+        near_scale_end_slider_->set_value(last_settings_.near_camera_scale_end_ratio);
+    }
+    if (near_max_perspective_slider_) {
+        near_max_perspective_slider_->set_value(last_settings_.near_camera_max_perspective_scale);
+    }
+    if (near_fade_start_slider_) {
+        near_fade_start_slider_->set_value(last_settings_.near_camera_fade_start_ratio);
+    }
+    if (near_fade_end_slider_) {
+        near_fade_end_slider_->set_value(last_settings_.near_camera_fade_end_ratio);
+    }
     if (foreground_texture_opacity_slider_) {
         foreground_texture_opacity_slider_->set_value(static_cast<float>(last_settings_.foreground_texture_max_opacity));
     }
@@ -887,6 +902,11 @@ void CameraUIPanel::build_ui() {
     defaults.render_quality_percent = devmode::camera_prefs::load_render_quality_percent(defaults.render_quality_percent);
     defaults.texture_warp_percent = devmode::camera_prefs::load_texture_warp_percent(defaults.texture_warp_percent);
     defaults.texture_warp_y_offset_px = devmode::camera_prefs::load_texture_warp_y_offset_px(defaults.texture_warp_y_offset_px);
+    defaults.near_camera_scale_start_ratio = devmode::camera_prefs::load_near_camera_scale_start_ratio(defaults.near_camera_scale_start_ratio);
+    defaults.near_camera_scale_end_ratio = devmode::camera_prefs::load_near_camera_scale_end_ratio(defaults.near_camera_scale_end_ratio);
+    defaults.near_camera_max_perspective_scale = devmode::camera_prefs::load_near_camera_max_perspective_scale(defaults.near_camera_max_perspective_scale);
+    defaults.near_camera_fade_start_ratio = devmode::camera_prefs::load_near_camera_fade_start_ratio(defaults.near_camera_fade_start_ratio);
+    defaults.near_camera_fade_end_ratio = devmode::camera_prefs::load_near_camera_fade_end_ratio(defaults.near_camera_fade_end_ratio);
 
     auto configure_section = [this](std::unique_ptr<SectionToggleWidget>& target,
                                     const std::string& label,
@@ -932,6 +952,26 @@ void CameraUIPanel::build_ui() {
     texture_warp_y_offset_slider_ = std::make_unique<FloatSliderWidget>("Texture Warp Y Offset (px)", -2000.0f, 2000.0f, 1.0f, defaults.texture_warp_y_offset_px, 0);
     texture_warp_y_offset_slider_->set_tooltip("Offsets the Y coordinate used to compute texture warping without moving world positions.");
     texture_warp_y_offset_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+    near_scale_start_slider_ = std::make_unique<FloatSliderWidget>("Near Scale Start (screen ratio)", 0.0f, 2.0f, 0.01f, defaults.near_camera_scale_start_ratio, 2);
+    near_scale_start_slider_->set_tooltip("Screen-height ratio where near-camera perspective easing begins. Lower values push tapering closer to the camera.");
+    near_scale_start_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+    near_scale_end_slider_ = std::make_unique<FloatSliderWidget>("Near Scale End (screen ratio)", 0.0f, 2.0f, 0.01f, defaults.near_camera_scale_end_ratio, 2);
+    near_scale_end_slider_->set_tooltip("Screen-height ratio where near-camera perspective easing ends. Keep above the start ratio for a smooth transition.");
+    near_scale_end_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+    near_max_perspective_slider_ = std::make_unique<FloatSliderWidget>("Near Max Perspective Scale", 0.0f, 10.0f, 0.1f, defaults.near_camera_max_perspective_scale, 2);
+    near_max_perspective_slider_->set_tooltip("Caps the perspective scale when tapering near the camera to limit stretching.");
+    near_max_perspective_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+    near_fade_start_slider_ = std::make_unique<FloatSliderWidget>("Near Fade Start (screen ratio)", 0.0f, 2.0f, 0.01f, defaults.near_camera_fade_start_ratio, 2);
+    near_fade_start_slider_->set_tooltip("Screen-height ratio where bottom-of-screen fading starts near the camera.");
+    near_fade_start_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+    near_fade_end_slider_ = std::make_unique<FloatSliderWidget>("Near Fade End (screen ratio)", 0.0f, 2.0f, 0.01f, defaults.near_camera_fade_end_ratio, 2);
+    near_fade_end_slider_->set_tooltip("Screen-height ratio where bottom-of-screen fading reaches full strength near the camera.");
+    near_fade_end_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
 
 
@@ -995,6 +1035,11 @@ void CameraUIPanel::rebuild_rows() {
         if (meters_slider_) rows.push_back({ meters_slider_.get() });
         if (texture_warp_slider_) rows.push_back({ texture_warp_slider_.get() });
         if (texture_warp_y_offset_slider_) rows.push_back({ texture_warp_y_offset_slider_.get() });
+        if (near_scale_start_slider_) rows.push_back({ near_scale_start_slider_.get() });
+        if (near_scale_end_slider_) rows.push_back({ near_scale_end_slider_.get() });
+        if (near_max_perspective_slider_) rows.push_back({ near_max_perspective_slider_.get() });
+        if (near_fade_start_slider_) rows.push_back({ near_fade_start_slider_.get() });
+        if (near_fade_end_slider_) rows.push_back({ near_fade_end_slider_.get() });
     }
 
     if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
@@ -1043,6 +1088,11 @@ void CameraUIPanel::apply_settings_if_needed() {
     changed = changed || differs(settings.scale_variant_hysteresis_margin, prev.scale_variant_hysteresis_margin);
     changed = changed || differs(settings.texture_warp_percent, prev.texture_warp_percent);
     changed = changed || differs(settings.texture_warp_y_offset_px, prev.texture_warp_y_offset_px);
+    changed = changed || differs(settings.near_camera_scale_start_ratio, prev.near_camera_scale_start_ratio);
+    changed = changed || differs(settings.near_camera_scale_end_ratio, prev.near_camera_scale_end_ratio);
+    changed = changed || differs(settings.near_camera_max_perspective_scale, prev.near_camera_max_perspective_scale);
+    changed = changed || differs(settings.near_camera_fade_start_ratio, prev.near_camera_fade_start_ratio);
+    changed = changed || differs(settings.near_camera_fade_end_ratio, prev.near_camera_fade_end_ratio);
 
     changed = changed || (settings.foreground_texture_max_opacity != prev.foreground_texture_max_opacity);
     changed = changed || (settings.background_texture_max_opacity != prev.background_texture_max_opacity);
@@ -1097,6 +1147,11 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
     devmode::camera_prefs::save_render_quality_percent(settings.render_quality_percent);
     devmode::camera_prefs::save_texture_warp_percent(settings.texture_warp_percent);
     devmode::camera_prefs::save_texture_warp_y_offset_px(settings.texture_warp_y_offset_px);
+    devmode::camera_prefs::save_near_camera_scale_start_ratio(settings.near_camera_scale_start_ratio);
+    devmode::camera_prefs::save_near_camera_scale_end_ratio(settings.near_camera_scale_end_ratio);
+    devmode::camera_prefs::save_near_camera_max_perspective_scale(settings.near_camera_max_perspective_scale);
+    devmode::camera_prefs::save_near_camera_fade_start_ratio(settings.near_camera_fade_start_ratio);
+    devmode::camera_prefs::save_near_camera_fade_end_ratio(settings.near_camera_fade_end_ratio);
     last_depthcue_enabled_ = depthcue_enabled;
 }
 
@@ -1109,6 +1164,11 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
     if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
     if (texture_warp_slider_) settings.texture_warp_percent = std::clamp(texture_warp_slider_->value(), 0.0f, 100.0f);
     if (texture_warp_y_offset_slider_) settings.texture_warp_y_offset_px = std::clamp(texture_warp_y_offset_slider_->value(), -10000.0f, 10000.0f);
+    if (near_scale_start_slider_) settings.near_camera_scale_start_ratio = std::clamp(near_scale_start_slider_->value(), 0.0f, 2.0f);
+    if (near_scale_end_slider_) settings.near_camera_scale_end_ratio = std::clamp(near_scale_end_slider_->value(), 0.0f, 2.0f);
+    if (near_max_perspective_slider_) settings.near_camera_max_perspective_scale = std::clamp(near_max_perspective_slider_->value(), 0.0f, 100.0f);
+    if (near_fade_start_slider_) settings.near_camera_fade_start_ratio = std::clamp(near_fade_start_slider_->value(), 0.0f, 2.0f);
+    if (near_fade_end_slider_) settings.near_camera_fade_end_ratio = std::clamp(near_fade_end_slider_->value(), 0.0f, 2.0f);
 
     auto slider_to_opacity = [](const FloatSliderWidget* slider) -> int {
         if (!slider) return 0;

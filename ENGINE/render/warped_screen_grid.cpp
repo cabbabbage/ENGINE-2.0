@@ -186,6 +186,11 @@ namespace {
         double screen_pan_y_px = 0.0;
         double texture_warp = 1.0;
         double texture_warp_y_offset_px = 0.0;
+        float  near_camera_scale_start_ratio = 0.0f;
+        float  near_camera_scale_end_ratio = 0.0f;
+        float  near_camera_max_perspective_scale = 0.0f;
+        float  near_camera_fade_start_ratio = 0.0f;
+        float  near_camera_fade_end_ratio = 0.0f;
     };
 
     SDL_FPoint ndc_to_screen_point(const CameraState& cam,
@@ -287,6 +292,11 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         state.texture_warp_y_offset_px = std::isfinite(settings.texture_warp_y_offset_px)
             ? static_cast<double>(settings.texture_warp_y_offset_px)
             : 0.0;
+        state.near_camera_scale_start_ratio = settings.near_camera_scale_start_ratio;
+        state.near_camera_scale_end_ratio = settings.near_camera_scale_end_ratio;
+        state.near_camera_max_perspective_scale = settings.near_camera_max_perspective_scale;
+        state.near_camera_fade_start_ratio = settings.near_camera_fade_start_ratio;
+        state.near_camera_fade_end_ratio = settings.near_camera_fade_end_ratio;
 
         Vec3 to_anchor = anchor - camera_pos;
         Vec3 horiz_dir{ to_anchor.x, to_anchor.y, 0.0 };
@@ -358,6 +368,7 @@ struct ProjectionResult {
         float       perspective_scale = 1.0f;
         float       vertical_scale    = 1.0f;
         float       horizon_fade      = 1.0f;
+        float       near_camera_fade  = 1.0f;
         float       distance          = 0.0f;
         float       forward_depth     = 0.0f;
     };
@@ -414,7 +425,7 @@ struct ProjectionResult {
         const float perspective = static_cast<float>(cam.reference_depth / std::max(depth_along_forward, 1e-4));
         const float zoom_scale = std::isfinite(cam.screen_zoom) && cam.screen_zoom > 0.0 ? static_cast<float>(cam.screen_zoom) : 1.0f;
         const float warp_factor = std::clamp(static_cast<float>(cam.texture_warp), 0.0f, 1.0f);
-        const float warped_perspective = perspective;
+        float warped_perspective = perspective;
         float vertical = 1.0f;
         if (std::isfinite(screen_y)) {
             const double horizon = cam.horizon_screen_y;
@@ -438,11 +449,43 @@ struct ProjectionResult {
             }
         }
 
+        float near_camera_fade = 1.0f;
+        if (std::isfinite(screen_y) && screen_height > 0) {
+            const float screen_h = static_cast<float>(screen_height);
+            const float scale_start = cam.near_camera_scale_start_ratio * screen_h;
+            const float scale_end = cam.near_camera_scale_end_ratio * screen_h;
+            if (scale_end > scale_start && std::isfinite(scale_start) && std::isfinite(scale_end)) {
+                const float t = std::clamp(
+                    (static_cast<float>(screen_y) - scale_start) / (scale_end - scale_start),
+                    0.0f,
+                    1.0f);
+                if (t > 0.0f &&
+                    std::isfinite(cam.near_camera_max_perspective_scale) &&
+                    cam.near_camera_max_perspective_scale > 0.0f) {
+                    const float target_scale = std::min(warped_perspective, cam.near_camera_max_perspective_scale);
+                    const float smooth = t * t * (3.0f - 2.0f * t);
+                    warped_perspective = warped_perspective + (target_scale - warped_perspective) * smooth;
+                }
+            }
+
+            const float fade_start = cam.near_camera_fade_start_ratio * screen_h;
+            const float fade_end = cam.near_camera_fade_end_ratio * screen_h;
+            if (fade_end > fade_start && std::isfinite(fade_start) && std::isfinite(fade_end)) {
+                const float t = std::clamp(
+                    (static_cast<float>(screen_y) - fade_start) / (fade_end - fade_start),
+                    0.0f,
+                    1.0f);
+                const float fade_curve = t * t * t;
+                near_camera_fade = std::clamp(1.0f - fade_curve, 0.0f, 1.0f);
+            }
+        }
+
         out.valid             = std::isfinite(screen_x) && std::isfinite(screen_y);
         out.screen            = SDL_FPoint{ static_cast<float>(screen_x), static_cast<float>(screen_y) };
         out.perspective_scale = std::isfinite(warped_perspective) ? warped_perspective * zoom_scale : 1.0f;
         out.vertical_scale    = std::isfinite(vertical) ? vertical : 1.0f;
         out.horizon_fade      = horizon_fade;
+        out.near_camera_fade  = near_camera_fade;
         out.distance          = std::isfinite(distance_to_camera) ? static_cast<float>(distance_to_camera) : 0.0f;
         out.forward_depth     = static_cast<float>(depth_along_forward);
         return out;
@@ -793,6 +836,16 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
                settings_.parallax_smoothing.spring_frequency <= 0.0f) {
         settings_.parallax_smoothing.spring_frequency = 10.0f;
     }
+    settings_.near_camera_scale_start_ratio =
+        std::clamp(settings_.near_camera_scale_start_ratio, 0.0f, 2.0f);
+    settings_.near_camera_scale_end_ratio =
+        std::clamp(settings_.near_camera_scale_end_ratio, 0.0f, 2.0f);
+    settings_.near_camera_max_perspective_scale =
+        std::clamp(settings_.near_camera_max_perspective_scale, 0.0f, 100.0f);
+    settings_.near_camera_fade_start_ratio =
+        std::clamp(settings_.near_camera_fade_start_ratio, 0.0f, 2.0f);
+    settings_.near_camera_fade_end_ratio =
+        std::clamp(settings_.near_camera_fade_end_ratio, 0.0f, 2.0f);
 
     // No-op: geometry cache is obsolete.
 }
@@ -1082,7 +1135,7 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
     result.screen_position   = proj.screen;
     result.vertical_scale    = proj.vertical_scale;
     result.distance_scale    = cam.reference_depth / proj.distance;
-    result.horizon_fade_alpha = proj.horizon_fade;
+    result.horizon_fade_alpha = proj.horizon_fade * proj.near_camera_fade;
     return result;
 }
 
@@ -1148,6 +1201,11 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("scale_variant_hysteresis_margin", updated.scale_variant_hysteresis_margin, 0.0f, 1.0f);
     read_float("extra_cull_margin", updated.extra_cull_margin, 0.0f, 10000.0f);
     read_float("pre_horizon_lock_offset_px", updated.pre_horizon_lock_offset_px, 0.0f, 1000.0f);
+    read_float("near_camera_scale_start_ratio", updated.near_camera_scale_start_ratio, 0.0f, 2.0f);
+    read_float("near_camera_scale_end_ratio", updated.near_camera_scale_end_ratio, 0.0f, 2.0f);
+    read_float("near_camera_max_perspective_scale", updated.near_camera_max_perspective_scale, 0.0f, 100.0f);
+    read_float("near_camera_fade_start_ratio", updated.near_camera_fade_start_ratio, 0.0f, 2.0f);
+    read_float("near_camera_fade_end_ratio", updated.near_camera_fade_end_ratio, 0.0f, 2.0f);
 
     read_int("foreground_texture_max_opacity", updated.foreground_texture_max_opacity, 0, 255);
     read_int("background_texture_max_opacity", updated.background_texture_max_opacity, 0, 255);
@@ -1182,6 +1240,11 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["scale_variant_hysteresis_margin"] = settings_.scale_variant_hysteresis_margin;
     result["extra_cull_margin"] = settings_.extra_cull_margin;
     result["pre_horizon_lock_offset_px"] = settings_.pre_horizon_lock_offset_px;
+    result["near_camera_scale_start_ratio"] = settings_.near_camera_scale_start_ratio;
+    result["near_camera_scale_end_ratio"] = settings_.near_camera_scale_end_ratio;
+    result["near_camera_max_perspective_scale"] = settings_.near_camera_max_perspective_scale;
+    result["near_camera_fade_start_ratio"] = settings_.near_camera_fade_start_ratio;
+    result["near_camera_fade_end_ratio"] = settings_.near_camera_fade_end_ratio;
 
     result["foreground_texture_max_opacity"] = settings_.foreground_texture_max_opacity;
     result["background_texture_max_opacity"] = settings_.background_texture_max_opacity;
@@ -1736,6 +1799,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         gp->parallax_dx        = 0.0f;
         gp->vertical_scale     = proj.vertical_scale;
         gp->horizon_fade_alpha = proj.horizon_fade;
+        gp->near_camera_fade_alpha = proj.near_camera_fade;
 
         gp->perspective_scale  = proj.perspective_scale;
         gp->distance_to_camera = distance_to_cam;
@@ -1858,6 +1922,7 @@ void WarpedScreenGrid::project_to_screen(world::GridPoint& point) const {
     point.vertical_scale  = proj.vertical_scale;
     point.perspective_scale = proj.perspective_scale;
     point.horizon_fade_alpha = proj.horizon_fade;
+    point.near_camera_fade_alpha = proj.near_camera_fade;
     point.distance_to_camera = proj.distance;
     point.tilt_radians    = static_cast<float>(runtime_pitch_rad_);
     point.on_screen       = true;

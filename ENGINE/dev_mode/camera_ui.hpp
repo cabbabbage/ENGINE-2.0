@@ -78,6 +78,11 @@ private:
     std::unique_ptr<FloatSliderWidget> meters_slider_;
     std::unique_ptr<FloatSliderWidget> texture_warp_slider_;
     std::unique_ptr<FloatSliderWidget> texture_warp_y_offset_slider_;
+    std::unique_ptr<FloatSliderWidget> near_scale_start_slider_;
+    std::unique_ptr<FloatSliderWidget> near_scale_end_slider_;
+    std::unique_ptr<FloatSliderWidget> near_max_perspective_slider_;
+    std::unique_ptr<FloatSliderWidget> near_fade_start_slider_;
+    std::unique_ptr<FloatSliderWidget> near_fade_end_slider_;
 
     std::unique_ptr<FloatSliderWidget> foreground_texture_opacity_slider_;
     std::unique_ptr<FloatSliderWidget> background_texture_opacity_slider_;

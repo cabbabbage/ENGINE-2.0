@@ -499,6 +499,16 @@ void SceneRenderer::render() {
             vertical_scale = 1.0f;
         }
 
+        const float fade_alpha = std::clamp(gp->horizon_fade_alpha * gp->near_camera_fade_alpha, 0.0f, 1.0f);
+        auto apply_fade_alpha = [&](SDL_Color color) {
+            if (fade_alpha >= 0.999f) {
+                return color;
+            }
+            const int scaled = static_cast<int>(std::lround(static_cast<float>(color.a) * fade_alpha));
+            color.a = static_cast<Uint8>(std::clamp(scaled, 0, 255));
+            return color;
+        };
+
         if (dark_mask_enabled_ && !asset->scene_mask_lights.empty()) {
             for (const RenderObject& mask_obj : asset->scene_mask_lights) {
                 WarpedQuad quad{};
@@ -508,7 +518,7 @@ void SceneRenderer::render() {
                 DarkMaskSprite sprite;
                 sprite.texture   = mask_obj.texture;
                 sprite.vertices  = quad.vertices;
-                sprite.color_mod = mask_obj.color_mod;
+                sprite.color_mod = apply_fade_alpha(mask_obj.color_mod);
                 dark_mask_sprites.push_back(sprite);
             }
         }
@@ -519,10 +529,11 @@ void SceneRenderer::render() {
                 continue;
             }
 
+            const SDL_Color color_mod = apply_fade_alpha(obj.color_mod);
             SDL_SetTextureBlendMode(obj.texture, obj.blend_mode);
 
-            SDL_SetTextureColorMod(obj.texture, obj.color_mod.r, obj.color_mod.g, obj.color_mod.b);
-            SDL_SetTextureAlphaMod(obj.texture, obj.color_mod.a);
+            SDL_SetTextureColorMod(obj.texture, color_mod.r, color_mod.g, color_mod.b);
+            SDL_SetTextureAlphaMod(obj.texture, color_mod.a);
 
             SDL_RenderGeometry(renderer_, obj.texture, quad.vertices.data(), 4, kQuadIndices, 6);
         }

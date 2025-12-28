@@ -98,6 +98,7 @@ struct GridPoint {
     float      parallax_dx        = 0.0f;
     float      vertical_scale     = 1.0f;
     float      horizon_fade_alpha = 1.0f;
+    float      near_camera_fade_alpha = 1.0f;
     float      perspective_scale  = 1.0f;
     float      distance_to_camera = 0.0f;
     float      tilt_radians       = 0.0f;
@@ -111,6 +112,7 @@ struct GridPoint {
         parallax_dx        = 0.0f;
         vertical_scale     = 1.0f;
         horizon_fade_alpha = 1.0f;
+        near_camera_fade_alpha = 1.0f;
         perspective_scale  = 1.0f;
         distance_to_camera = 0.0f;
         tilt_radians       = 0.0f;

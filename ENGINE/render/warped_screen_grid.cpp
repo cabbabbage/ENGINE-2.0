@@ -610,6 +610,47 @@ struct ProjectionResult {
         return p;
     }
 
+    WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
+        int screen_width,
+        int screen_height,
+        const CameraState& cam,
+        bool realism_enabled) {
+        WarpedScreenGrid::FloorDepthParams p{};
+        if (!realism_enabled || !cam.valid) {
+            return p;
+        }
+
+        const double screen_h = std::max(1.0, static_cast<double>(screen_height));
+        constexpr double kMaxHorizonRatio = 0.45;
+        const double max_horizon = screen_h * kMaxHorizonRatio;
+        const double min_horizon = -screen_h * 4.0;
+
+        const double horizon_y_raw = std::isfinite(cam.horizon_screen_y) ? cam.horizon_screen_y : screen_h * 0.5;
+        const double horizon_y = std::clamp(horizon_y_raw, min_horizon, max_horizon);
+
+        double pitch_norm = cam.pitch_radians / (kHalfFovY * 2.0);
+        pitch_norm = std::clamp(pitch_norm, 0.0, 1.0);
+
+        const auto horizon_ndc = screen_to_ndc_point(cam, 0.0, horizon_y, screen_width, screen_height).second;
+        const auto bottom_ndc = screen_to_ndc_point(cam, 0.0, screen_h, screen_width, screen_height).second;
+
+        p.horizon_screen_y = horizon_y;
+        p.bottom_screen_y  = screen_h;
+        p.base_world_y     = cam.anchor_world_y;
+        p.camera_world_y   = cam.camera_world_y;
+        p.camera_height    = cam.camera_height;
+        p.pitch_radians    = cam.pitch_radians;
+        p.pitch_norm       = pitch_norm;
+        p.focus_depth      = cam.focus_depth;
+        p.focus_ndc_offset = cam.focus_ndc_offset;
+        p.horizon_ndc      = std::isfinite(horizon_ndc) ? horizon_ndc : 0.0;
+        p.near_ndc         = std::isfinite(bottom_ndc) ? bottom_ndc : -1.0;
+        p.ndc_scale        = 1.0;
+        p.strength         = 6.0;
+        p.enabled          = true;
+        return p;
+    }
+
     float warp_floor_screen_y_internal(
         float world_y,
         float linear_screen_y,
@@ -1173,13 +1214,17 @@ WarpedScreenGrid::FloorDepthParams WarpedScreenGrid::compute_floor_depth_params_
 }
 
 WarpedScreenGrid::FloorDepthParams WarpedScreenGrid::compute_floor_depth_params_for_scale(double scale_value) const {
-    const CameraGeometry geom = compute_geometry_for_scale(scale_value);
-    return compute_floor_depth_params_for_geometry(geom, scale_value);
+    CameraParams params = camera_.state().params;
+    params.height_px = scale_value;
+    const CameraState cam = build_camera_state(
+        settings_, aspect_, screen_width_, screen_height_, camera_.state().center, params);
+    return build_floor_params_from_camera_state(screen_width_, screen_height_, cam, realism_enabled_);
 }
 
 WarpedScreenGrid::FloorDepthParams WarpedScreenGrid::compute_floor_depth_params() const {
-    const CameraGeometry geom = compute_geometry();
-    return compute_floor_depth_params_for_geometry(geom, 1.0);
+    const CameraState cam = build_camera_state(
+        settings_, aspect_, screen_width_, screen_height_, camera_.state().center, camera_.state().params);
+    return build_floor_params_from_camera_state(screen_width_, screen_height_, cam, realism_enabled_);
 }
 
 float WarpedScreenGrid::warp_floor_screen_y(float world_y, float linear_screen_y) const {

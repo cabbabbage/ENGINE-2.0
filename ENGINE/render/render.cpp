@@ -29,6 +29,10 @@
 #include "world/world_grid.hpp"
 #include "map_generation/map_layers_geometry.hpp"
 
+namespace {
+bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points);
+}
+
 void GridTileRenderer::render(SDL_Renderer* renderer) {
     if (!renderer || !assets_) return;
     render(renderer, assets_->getView(), assets_->world_grid());
@@ -81,6 +85,13 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
                 !floor_project(world_bl, screen_bl)) {
                 continue;
             }
+
+            std::array<SDL_FPoint, 4> tile_points{screen_tl, screen_tr, screen_br, screen_bl};
+            enforce_trapezoid(tile_points);
+            screen_tl = tile_points[0];
+            screen_tr = tile_points[1];
+            screen_br = tile_points[2];
+            screen_bl = tile_points[3];
 
             const float area_doubled =
                 (screen_tr.x - screen_tl.x) * (screen_bl.y - screen_tl.y) - (screen_bl.x - screen_tl.x) * (screen_tr.y - screen_tl.y);
@@ -139,6 +150,77 @@ struct WarpedQuad {
     std::array<SDL_Vertex, 4> vertices{};
 };
 
+constexpr float kQuadEpsilon = 1e-5f;
+
+float cross(const SDL_FPoint& a, const SDL_FPoint& b, const SDL_FPoint& c) {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+bool on_segment(const SDL_FPoint& a, const SDL_FPoint& b, const SDL_FPoint& p) {
+    return p.x >= std::min(a.x, b.x) - kQuadEpsilon &&
+           p.x <= std::max(a.x, b.x) + kQuadEpsilon &&
+           p.y >= std::min(a.y, b.y) - kQuadEpsilon &&
+           p.y <= std::max(a.y, b.y) + kQuadEpsilon;
+}
+
+bool segments_intersect(const SDL_FPoint& a, const SDL_FPoint& b, const SDL_FPoint& c, const SDL_FPoint& d) {
+    const float d1 = cross(a, b, c);
+    const float d2 = cross(a, b, d);
+    const float d3 = cross(c, d, a);
+    const float d4 = cross(c, d, b);
+
+    const bool d1_zero = std::abs(d1) <= kQuadEpsilon;
+    const bool d2_zero = std::abs(d2) <= kQuadEpsilon;
+    const bool d3_zero = std::abs(d3) <= kQuadEpsilon;
+    const bool d4_zero = std::abs(d4) <= kQuadEpsilon;
+
+    if (((d1 > 0.0f && d2 < 0.0f) || (d1 < 0.0f && d2 > 0.0f)) &&
+        ((d3 > 0.0f && d4 < 0.0f) || (d3 < 0.0f && d4 > 0.0f))) {
+        return true;
+    }
+    if (d1_zero && on_segment(a, b, c)) return true;
+    if (d2_zero && on_segment(a, b, d)) return true;
+    if (d3_zero && on_segment(c, d, a)) return true;
+    if (d4_zero && on_segment(c, d, b)) return true;
+    return false;
+}
+
+bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points) {
+    if (!segments_intersect(points[0], points[1], points[2], points[3]) &&
+        !segments_intersect(points[1], points[2], points[3], points[0])) {
+        return false;
+    }
+
+    std::array<int, 4> indices{0, 1, 2, 3};
+    std::sort(indices.begin(), indices.end(), [&](int a, int b) {
+        if (points[a].y != points[b].y) {
+            return points[a].y < points[b].y;
+        }
+        return points[a].x < points[b].x;
+    });
+
+    int top_left = indices[0];
+    int top_right = indices[1];
+    int bottom_left = indices[2];
+    int bottom_right = indices[3];
+
+    if (points[top_left].x > points[top_right].x) {
+        std::swap(top_left, top_right);
+    }
+    if (points[bottom_left].x > points[bottom_right].x) {
+        std::swap(bottom_left, bottom_right);
+    }
+
+    const std::array<SDL_FPoint, 4> reordered{
+        points[top_left],
+        points[top_right],
+        points[bottom_right],
+        points[bottom_left]
+    };
+    points = reordered;
+    return true;
+}
+
 struct WorldCorner {
     float x = 0.0f;
     float y = 0.0f;
@@ -194,6 +276,7 @@ bool build_warped_quad(const RenderObject& obj,
         }
         projected[i] = screen;
     }
+    enforce_trapezoid(projected);
 
     int tex_w = obj.texture_w;
     int tex_h = obj.texture_h;

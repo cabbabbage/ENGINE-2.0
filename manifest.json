@@ -5985,7 +5985,31 @@
       "async_children": [],
       "can_invert": false,
       "has_shading": false,
-      "lighting_info": [],
+      "lighting_info": [
+        {
+          "behind": false,
+          "falloff": 50,
+          "flare": 0,
+          "flicker": 0,
+          "flicker_smoothness": 100,
+          "flicker_speed": 0,
+          "has_light_source": true,
+          "in_front": true,
+          "light_color": [
+            255,
+            255,
+            255
+          ],
+          "light_intensity": 255,
+          "offset_x": 0,
+          "offset_y": 0,
+          "offset_z": 0,
+          "radius": 64,
+          "render_front_and_back_to_asset_alpha_mask": false,
+          "render_to_dark_mask": true,
+          "needs_rebuild": false
+        }
+      ],
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
@@ -7760,7 +7784,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726563,
+            "offset": 658.9600219726562,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }

@@ -94,8 +94,13 @@ private:
     std::uint64_t frame_counter_ = 0;
 
     SDL_Texture* darkness_overlay_texture_ = nullptr;
+    // The screen dimensions used when the overlay texture was created.
     int          darkness_overlay_width_   = 0;
     int          darkness_overlay_height_  = 0;
+    // Actual texture dimensions (may be smaller when we fall back to a scaled buffer).
+    int          darkness_overlay_tex_width_  = 0;
+    int          darkness_overlay_tex_height_ = 0;
+    float        darkness_overlay_scale_used_ = 1.0f;
     float        map_light_opacity_        = kDefaultMapLightOpacity;
     SDL_Color    map_clear_color_{0, 128, 0, 255};
     bool         debug_auto_paths_ = true;

@@ -546,34 +546,77 @@ bool SceneRenderer::ensure_darkness_overlay() {
     }
 
     if (darkness_overlay_texture_ &&
-        (darkness_overlay_width_ != screen_width_ || darkness_overlay_height_ != screen_height_)) {
-        destroy_darkness_overlay();
+        darkness_overlay_width_ == screen_width_ &&
+        darkness_overlay_height_ == screen_height_) {
+        return true;
     }
 
-    if (!darkness_overlay_texture_) {
-        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, screen_width_, screen_height_);
+    // Screen size changed or no texture; rebuild.
+    destroy_darkness_overlay();
+
+    auto try_create = [&](int tex_w, int tex_h) -> SDL_Texture* {
+        tex_w = std::max(tex_w, 1);
+        tex_h = std::max(tex_h, 1);
+        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, tex_w, tex_h);
         if (!texture) {
-            vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate darkness overlay: "} + SDL_GetError());
-            darkness_overlay_allocation_failed_ = true;
-            return false;
+            return nullptr;
         }
-        darkness_overlay_texture_ = texture;
-        darkness_overlay_width_   = screen_width_;
-        darkness_overlay_height_  = screen_height_;
-        SDL_SetTextureBlendMode(darkness_overlay_texture_, SDL_BLENDMODE_BLEND);
-        darkness_overlay_allocation_failed_ = false;
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+        SDL_SetTextureScaleMode(texture, SDL_ScaleModeBest);
+#endif
+        return texture;
+    };
+
+    SDL_Texture* created = nullptr;
+    float        used_scale = 1.0f;
+
+    // Try full size first, then progressively lower resolution to avoid VRAM exhaustion on some drivers.
+    for (float scale : {1.0f, 0.75f, 0.5f, 0.25f}) {
+        const int tex_w = static_cast<int>(std::lround(static_cast<float>(screen_width_) * scale));
+        const int tex_h = static_cast<int>(std::lround(static_cast<float>(screen_height_) * scale));
+        created = try_create(tex_w, tex_h);
+        if (created) {
+            used_scale = scale;
+            break;
+        } else {
+            vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate darkness overlay ("} +
+                              std::to_string(tex_w) + "x" + std::to_string(tex_h) + "): " + SDL_GetError());
+        }
     }
 
-    return darkness_overlay_texture_ != nullptr;
+    if (!created) {
+        darkness_overlay_allocation_failed_ = true;
+        return false;
+    }
+
+    darkness_overlay_texture_      = created;
+    darkness_overlay_width_        = screen_width_;
+    darkness_overlay_height_       = screen_height_;
+    darkness_overlay_tex_width_    = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_width_) * used_scale)));
+    darkness_overlay_tex_height_   = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_height_) * used_scale)));
+    darkness_overlay_scale_used_   = used_scale;
+    darkness_overlay_allocation_failed_ = false;
+
+    if (used_scale < 0.999f) {
+        vibble::log::info(std::string{"[SceneRenderer] Darkness overlay using scaled buffer ("} +
+                          std::to_string(darkness_overlay_tex_width_) + "x" + std::to_string(darkness_overlay_tex_height_) +
+                          ", scale=" + std::to_string(used_scale) + ").");
+    }
+
+    return true;
 }
 
 void SceneRenderer::destroy_darkness_overlay() {
     if (darkness_overlay_texture_) {
         SDL_DestroyTexture(darkness_overlay_texture_);
         darkness_overlay_texture_ = nullptr;
-        darkness_overlay_width_   = 0;
-        darkness_overlay_height_  = 0;
     }
+    darkness_overlay_width_        = 0;
+    darkness_overlay_height_       = 0;
+    darkness_overlay_tex_width_    = 0;
+    darkness_overlay_tex_height_   = 0;
+    darkness_overlay_scale_used_   = 1.0f;
     darkness_overlay_allocation_failed_ = false;
 }
 

@@ -7760,7 +7760,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726562,
+            "offset": 658.9600219726563,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }
@@ -7790,9 +7790,9 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            37,
-            242,
-            36,
+            31,
+            204,
+            31,
             255
           ],
           "edge_smoothness": 19,
@@ -7810,9 +7810,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            223,
             242,
             36,
+            242,
             255
           ],
           "edge_smoothness": 43,
@@ -7863,9 +7863,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            36,
-            242,
-            224,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 29,
@@ -7912,15 +7912,15 @@
         },
         "spawn": {
           "camera_height_px": 477,
-          "camera_pan_y_percent": 10,
-          "camera_tilt_deg": 31.0,
-          "camera_y_distance_px": -508,
-          "camera_zoom_percent": 27,
+          "camera_pan_y_percent": 42,
+          "camera_tilt_deg": 48.0,
+          "camera_y_distance_px": 642,
+          "camera_zoom_percent": 62,
           "curvyness": 2,
           "display_color": [
-            37,
             242,
             36,
+            242,
             255
           ],
           "edge_smoothness": 101,

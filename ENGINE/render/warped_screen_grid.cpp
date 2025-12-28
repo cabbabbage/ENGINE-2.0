@@ -411,25 +411,20 @@ struct ProjectionResult {
         const double screen_x = screen_pt.x;
         const double screen_y = screen_pt.y;
 
-        double depth_for_warp = depth_along_forward;
-        const double warp_world_y = world_y_pixels + cam.texture_warp_y_offset_px;
-        if (cam.texture_warp_y_offset_px != 0.0 && std::isfinite(warp_world_y)) {
-            const Vec3 warp_world_meters{
-                (world_x_pixels - static_cast<double>(cam.anchor_world_px.x)) * safe_scale,
-                (warp_world_y - static_cast<double>(cam.anchor_world_px.y)) * safe_scale,
-                world_z_pixels * safe_scale
-            };
-            const Vec3 to_warp_point = warp_world_meters - cam.position;
-            const double warp_depth = dot(to_warp_point, cam.forward);
-            if (std::isfinite(warp_depth) && warp_depth > cam.near_plane) {
-                depth_for_warp = warp_depth;
-            }
-        }
-        const float perspective = static_cast<float>(cam.reference_depth / std::max(depth_for_warp, 1e-4));
+        const float perspective = static_cast<float>(cam.reference_depth / std::max(depth_along_forward, 1e-4));
         const float zoom_scale = std::isfinite(cam.screen_zoom) && cam.screen_zoom > 0.0 ? static_cast<float>(cam.screen_zoom) : 1.0f;
         const float warp_factor = std::clamp(static_cast<float>(cam.texture_warp), 0.0f, 1.0f);
-        const float warped_perspective = 1.0f + (perspective - 1.0f) * warp_factor;
-        const float vertical    = warped_perspective;
+        const float warped_perspective = perspective;
+        float vertical = 1.0f;
+        if (std::isfinite(screen_y)) {
+            const double horizon = cam.horizon_screen_y;
+            const double span = std::max(1.0, static_cast<double>(screen_height) - horizon);
+            const double adjusted_y = screen_y + cam.texture_warp_y_offset_px;
+            const double t_raw = (adjusted_y - horizon) / span;
+            const double t = std::clamp(t_raw, 0.0, 2.0);
+            vertical = 1.0f + static_cast<float>((t - 1.0) * warp_factor);
+        }
+        vertical = std::max(0.05f, vertical);
         const float effective_horizon_band_px = horizon_band_px * zoom_scale;
 
         float horizon_fade = 1.0f;

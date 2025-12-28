@@ -137,22 +137,22 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -393,7 +393,7 @@
         "default": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -435,40 +435,40 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -565,40 +565,40 @@
           "fps": 12,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -664,34 +664,34 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -760,7 +760,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -793,22 +793,22 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -977,40 +977,40 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -1107,7 +1107,7 @@
         "default": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -1210,40 +1210,40 @@
           "fps": 24,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -1319,76 +1319,76 @@
           "fps": 24,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -1512,40 +1512,40 @@
           "fps": 24,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -1680,40 +1680,40 @@
           "fps": 24,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -1877,40 +1877,40 @@
         "default": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -1951,7 +1951,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -1981,22 +1981,22 @@
         "Move Forward": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -2009,40 +2009,40 @@
         "Move Left": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -2411,34 +2411,34 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -2566,7 +2566,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -2614,22 +2614,22 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -2860,40 +2860,40 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -3066,7 +3066,40 @@
           "fps": 12,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3141,40 +3174,40 @@
           "fps": 12,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -3236,7 +3269,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3305,7 +3338,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3358,76 +3391,76 @@
           "fps": 24,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -3471,7 +3504,7 @@
           "fps": 12,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3532,7 +3565,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3706,22 +3739,22 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -4020,7 +4053,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -4158,7 +4191,28 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -4289,7 +4343,28 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -4512,22 +4587,22 @@
         "default": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -4551,7 +4626,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -4623,7 +4698,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -4727,7 +4802,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -4796,7 +4871,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -4851,7 +4926,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -4906,7 +4981,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -4961,7 +5036,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5016,7 +5091,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5070,7 +5145,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5134,22 +5209,22 @@
         "attack": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ]
         },
@@ -5158,7 +5233,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5188,56 +5263,56 @@
         "forward": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ]
         },
         "left": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ]
         }
@@ -5269,7 +5344,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5320,40 +5395,40 @@
         "default": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -5378,7 +5453,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5448,7 +5523,7 @@
           "fps": 24,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5516,7 +5591,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5582,7 +5657,7 @@
           "fps": 24,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5665,7 +5740,7 @@
           "fps": 24,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5750,7 +5825,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5805,7 +5880,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5875,7 +5950,7 @@
           "fps": 24,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -5967,7 +6042,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -6034,7 +6109,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -6089,7 +6164,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -6144,7 +6219,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -6199,7 +6274,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -6267,7 +6342,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -6336,7 +6411,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -6676,22 +6751,22 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -7108,7 +7183,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -7179,7 +7254,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -7218,7 +7293,7 @@
         "default": {
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "locked": false,
@@ -7242,7 +7317,7 @@
           "fps": 24,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -7327,7 +7402,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,

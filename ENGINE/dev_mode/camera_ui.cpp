@@ -837,8 +837,8 @@ void CameraUIPanel::sync_from_camera() {
     if (texture_warp_slider_) {
         texture_warp_slider_->set_value(last_settings_.texture_warp_percent);
     }
-    if (texture_warp_slider_) {
-        texture_warp_slider_->set_value(last_settings_.texture_warp_percent);
+    if (texture_warp_y_offset_slider_) {
+        texture_warp_y_offset_slider_->set_value(last_settings_.texture_warp_y_offset_px);
     }
     if (foreground_texture_opacity_slider_) {
         foreground_texture_opacity_slider_->set_value(static_cast<float>(last_settings_.foreground_texture_max_opacity));
@@ -886,6 +886,7 @@ void CameraUIPanel::build_ui() {
     defaults.meters_per_100_world_px = devmode::camera_prefs::load_meters_per_100_world_px(defaults.meters_per_100_world_px);
     defaults.render_quality_percent = devmode::camera_prefs::load_render_quality_percent(defaults.render_quality_percent);
     defaults.texture_warp_percent = devmode::camera_prefs::load_texture_warp_percent(defaults.texture_warp_percent);
+    defaults.texture_warp_y_offset_px = devmode::camera_prefs::load_texture_warp_y_offset_px(defaults.texture_warp_y_offset_px);
 
     auto configure_section = [this](std::unique_ptr<SectionToggleWidget>& target,
                                     const std::string& label,
@@ -927,6 +928,10 @@ void CameraUIPanel::build_ui() {
     texture_warp_slider_ = std::make_unique<FloatSliderWidget>("Texture Perspective Warp (%)", 0.0f, 100.0f, 1.0f, defaults.texture_warp_percent, 0);
     texture_warp_slider_->set_tooltip("Blend the perspective warp applied to textures. 0% = no warp (orthographic feel), 100% = full perspective scaling.");
     texture_warp_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+    texture_warp_y_offset_slider_ = std::make_unique<FloatSliderWidget>("Texture Warp Y Offset (px)", -2000.0f, 2000.0f, 1.0f, defaults.texture_warp_y_offset_px, 0);
+    texture_warp_y_offset_slider_->set_tooltip("Offsets the Y coordinate used to compute texture warping without moving world positions.");
+    texture_warp_y_offset_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
 
 
@@ -989,6 +994,7 @@ void CameraUIPanel::rebuild_rows() {
     if (depth_section_expanded_) {
         if (meters_slider_) rows.push_back({ meters_slider_.get() });
         if (texture_warp_slider_) rows.push_back({ texture_warp_slider_.get() });
+        if (texture_warp_y_offset_slider_) rows.push_back({ texture_warp_y_offset_slider_.get() });
     }
 
     if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
@@ -1036,6 +1042,7 @@ void CameraUIPanel::apply_settings_if_needed() {
     changed = changed || differs(settings.meters_per_100_world_px, prev.meters_per_100_world_px);
     changed = changed || differs(settings.scale_variant_hysteresis_margin, prev.scale_variant_hysteresis_margin);
     changed = changed || differs(settings.texture_warp_percent, prev.texture_warp_percent);
+    changed = changed || differs(settings.texture_warp_y_offset_px, prev.texture_warp_y_offset_px);
 
     changed = changed || (settings.foreground_texture_max_opacity != prev.foreground_texture_max_opacity);
     changed = changed || (settings.background_texture_max_opacity != prev.background_texture_max_opacity);
@@ -1089,6 +1096,7 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
     devmode::camera_prefs::save_meters_per_100_world_px(settings.meters_per_100_world_px);
     devmode::camera_prefs::save_render_quality_percent(settings.render_quality_percent);
     devmode::camera_prefs::save_texture_warp_percent(settings.texture_warp_percent);
+    devmode::camera_prefs::save_texture_warp_y_offset_px(settings.texture_warp_y_offset_px);
     last_depthcue_enabled_ = depthcue_enabled;
 }
 
@@ -1100,6 +1108,7 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
 
     if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
     if (texture_warp_slider_) settings.texture_warp_percent = std::clamp(texture_warp_slider_->value(), 0.0f, 100.0f);
+    if (texture_warp_y_offset_slider_) settings.texture_warp_y_offset_px = std::clamp(texture_warp_y_offset_slider_->value(), -10000.0f, 10000.0f);
 
     auto slider_to_opacity = [](const FloatSliderWidget* slider) -> int {
         if (!slider) return 0;

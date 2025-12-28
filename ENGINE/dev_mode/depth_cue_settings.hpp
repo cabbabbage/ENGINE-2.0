@@ -16,6 +16,7 @@ inline constexpr std::string_view kCullMarginSettingKey = "dev_ui.camera.extra_c
 inline constexpr std::string_view kMetersPer100WorldSettingKey = "dev_ui.camera.meters_per_100_world_px";
 inline constexpr std::string_view kRenderQualityPercentSettingKey = "dev_ui.camera.render_quality_percent";
 inline constexpr std::string_view kTextureWarpPercentSettingKey = "dev_ui.camera.texture_warp_percent";
+inline constexpr std::string_view kTextureWarpYOffsetSettingKey = "dev_ui.camera.texture_warp_y_offset_px";
 
 inline bool load_depthcue_enabled() {
     return devmode::ui_settings::load_bool(kDepthCueEnabledSettingKey, false);
@@ -87,6 +88,14 @@ inline float load_texture_warp_percent(float default_value) {
 
 inline void save_texture_warp_percent(float value) {
     devmode::ui_settings::save_number(kTextureWarpPercentSettingKey, value);
+}
+
+inline float load_texture_warp_y_offset_px(float default_value) {
+    return static_cast<float>(devmode::ui_settings::load_number(kTextureWarpYOffsetSettingKey, default_value));
+}
+
+inline void save_texture_warp_y_offset_px(float value) {
+    devmode::ui_settings::save_number(kTextureWarpYOffsetSettingKey, value);
 }
 
 }

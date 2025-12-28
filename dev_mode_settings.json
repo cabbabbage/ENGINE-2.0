@@ -46,7 +46,8 @@
             "meters_per_100_world_px": 0.9999999403953552,
             "min_visible_screen_ratio": 0.015000000596046448,
             "render_quality_percent": 100.0,
-            "texture_warp_percent": 22.0
+            "texture_warp_percent": 100.0,
+            "texture_warp_y_offset_px": -2000.0
         },
         "lighting": {
             "map_panel": {

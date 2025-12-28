@@ -6001,13 +6001,13 @@
             255
           ],
           "light_intensity": 255,
+          "needs_rebuild": false,
           "offset_x": 0,
           "offset_y": 0,
           "offset_z": 0,
           "radius": 64,
           "render_front_and_back_to_asset_alpha_mask": false,
-          "render_to_dark_mask": true,
-          "needs_rebuild": false
+          "render_to_dark_mask": true
         }
       ],
       "min_distance_all": 0,
@@ -7784,7 +7784,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726562,
+            "offset": 658.9600219726563,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }
@@ -7814,9 +7814,9 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 19,
@@ -7834,9 +7834,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            242,
-            36,
-            242,
+            31,
+            204,
+            109,
             255
           ],
           "edge_smoothness": 43,
@@ -7887,9 +7887,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
+            31,
+            125,
             204,
-            31,
-            31,
             255
           ],
           "edge_smoothness": 29,
@@ -7935,15 +7935,15 @@
           ]
         },
         "spawn": {
-          "camera_height_px": 477,
-          "camera_pan_y_percent": 42,
-          "camera_tilt_deg": 48.0,
+          "camera_height_px": 918,
+          "camera_pan_y_percent": -11,
+          "camera_tilt_deg": 14.0,
           "camera_y_distance_px": 642,
-          "camera_zoom_percent": 62,
+          "camera_zoom_percent": 2,
           "curvyness": 2,
           "display_color": [
-            242,
             36,
+            127,
             242,
             255
           ],

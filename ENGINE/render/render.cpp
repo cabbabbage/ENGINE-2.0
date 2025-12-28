@@ -185,9 +185,30 @@ bool segments_intersect(const SDL_FPoint& a, const SDL_FPoint& b, const SDL_FPoi
     return false;
 }
 
+bool is_convex_quad(const std::array<SDL_FPoint, 4>& points) {
+    float sign = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        const SDL_FPoint& a = points[i];
+        const SDL_FPoint& b = points[(i + 1) % 4];
+        const SDL_FPoint& c = points[(i + 2) % 4];
+        const float area = cross(a, b, c);
+        if (std::abs(area) <= kQuadEpsilon) {
+            continue;
+        }
+        if (sign == 0.0f) {
+            sign = area;
+        } else if ((sign > 0.0f) != (area > 0.0f)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points) {
-    if (!segments_intersect(points[0], points[1], points[2], points[3]) &&
-        !segments_intersect(points[1], points[2], points[3], points[0])) {
+    const bool intersects = segments_intersect(points[0], points[1], points[2], points[3]) ||
+        segments_intersect(points[1], points[2], points[3], points[0]);
+    const bool convex = is_convex_quad(points);
+    if (!intersects && convex) {
         return false;
     }
 

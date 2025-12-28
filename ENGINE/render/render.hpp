@@ -113,13 +113,14 @@ private:
     bool          darkness_overlay_skip_logged_     = false;
     bool          darkness_overlay_allocation_failed_ = false;
     std::filesystem::path sky_texture_path_;
+    double                map_radius_world_ = 0.0;
     SDL_Texture*          sky_texture_       = nullptr;
     int                   sky_texture_width_ = 0;
     int                   sky_texture_height_ = 0;
     bool                  sky_texture_failed_ = false;
-    std::filesystem::path fog_texture_path_;
-    SDL_Texture*          fog_texture_        = nullptr;
+    std::vector<SDL_Texture*> fog_textures_;
     int                   fog_texture_width_  = 0;
     int                   fog_texture_height_ = 0;
+    int                   fog_span_width_px_  = 0;
     bool                  fog_texture_failed_ = false;
 };

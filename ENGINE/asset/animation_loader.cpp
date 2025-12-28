@@ -389,7 +389,6 @@ struct VariantLayerPaths {
         std::string normal_folder;
         std::string foreground_folder;
         std::string background_folder;
-        std::string fog_folder;
         std::string mask_folder;
 };
 
@@ -402,7 +401,6 @@ VariantLayerPaths build_variant_layer_paths(const std::string& cache_folder,
         paths.normal_folder     = (scale_root / "normal").string();
         paths.foreground_folder = (scale_root / "foreground").string();
         paths.background_folder = (scale_root / "background").string();
-        paths.fog_folder        = (scale_root / "fog").string();
         paths.mask_folder       = (scale_root / "mask").string();
 
         std::cout << "[Animation] build_variant_layer_paths idx=" << index
@@ -883,7 +881,6 @@ void AnimationLoader::load(Animation& animation,
                 std::vector<std::vector<SDL_Surface*>> variant_surfaces(variant_count);
                 std::vector<std::vector<SDL_Surface*>> foreground_surfaces(variant_count);
                 std::vector<std::vector<SDL_Surface*>> background_surfaces(variant_count);
-                std::vector<std::vector<SDL_Surface*>> fog_surfaces(variant_count);
                 std::vector<std::vector<SDL_Surface*>> mask_surfaces(variant_count);
 
                 bool all_surfaces_loaded = true;
@@ -913,17 +910,6 @@ void AnimationLoader::load(Animation& animation,
                                 background_surfaces[idx] = std::move(bg_loaded);
                         }
 
-                        std::vector<SDL_Surface*> fog_loaded;
-                        if (CacheManager::load_surface_sequence(paths.fog_folder, frame_count, fog_loaded) &&
-                            static_cast<int>(fog_loaded.size()) == frame_count) {
-                                fog_surfaces[idx] = std::move(fog_loaded);
-                        } else {
-                                all_surfaces_loaded = false;
-                                std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                          << " missing fog for variant " << idx << " at " << paths.fog_folder << "\n";
-                                break;
-                        }
-
                         if (needs_masks) {
                                 std::vector<SDL_Surface*> mask_loaded;
                                 if (CacheManager::load_surface_sequence(paths.mask_folder, frame_count, mask_loaded) &&
@@ -944,7 +930,6 @@ void AnimationLoader::load(Animation& animation,
                         free_surface_lists(variant_surfaces);
                         free_surface_lists(foreground_surfaces);
                         free_surface_lists(background_surfaces);
-                        free_surface_lists(fog_surfaces);
                         free_surface_lists(mask_surfaces);
                         flush_diagnostics();
                         return;
@@ -1017,15 +1002,6 @@ void AnimationLoader::load(Animation& animation,
                                 }
                                 cache_entry.background_textures[variant_idx] = bg_tex;
 
-                                SDL_Texture* fog_tex = nullptr;
-                                if (frame_idx < fog_surfaces[variant_idx].size() && fog_surfaces[variant_idx][frame_idx]) {
-                                        fog_tex = CacheManager::surface_to_texture(renderer, fog_surfaces[variant_idx][frame_idx]);
-                                        if (fog_tex) {
-                                                apply_scale_mode(fog_tex, info);
-                                        }
-                                }
-                                cache_entry.fog_textures[variant_idx] = fog_tex;
-
                                 SDL_Texture* mask_tex = nullptr;
                                 if (frame_idx < mask_surfaces[variant_idx].size() && mask_surfaces[variant_idx][frame_idx]) {
                                         SDL_Surface* mask_surface = mask_surfaces[variant_idx][frame_idx];
@@ -1049,7 +1025,6 @@ void AnimationLoader::load(Animation& animation,
                 free_surface_lists(variant_surfaces);
                 free_surface_lists(foreground_surfaces);
                 free_surface_lists(background_surfaces);
-                free_surface_lists(fog_surfaces);
                 free_surface_lists(mask_surfaces);
 
                 if (animation.reverse_source && !animation.frame_cache_.empty()) {
@@ -1197,7 +1172,8 @@ void AnimationLoader::load(Animation& animation,
                                 FrameVariant variant;
                                 variant.varient = static_cast<int>(v);
                                 variant.base_texture = cache.textures[v];
-                                if (v < cache.fog_textures.size()) variant.fog_texture = cache.fog_textures[v];
+                                if (v < cache.foreground_textures.size()) variant.foreground_texture = cache.foreground_textures[v];
+                                if (v < cache.background_textures.size()) variant.background_texture = cache.background_textures[v];
                                 if (v < cache.mask_textures.size()) variant.shadow_mask_texture = cache.mask_textures[v];
                                 f.variants.push_back(variant);
                             }

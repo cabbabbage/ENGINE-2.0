@@ -45,7 +45,6 @@ struct VariantLayerPaths {
     std::filesystem::path normal;
     std::filesystem::path foreground;
     std::filesystem::path background;
-    std::filesystem::path fog;
     std::filesystem::path mask;
 };
 
@@ -58,7 +57,6 @@ VariantLayerPaths build_variant_paths(const std::string& cache_root,
     out.normal     = base / "normal";
     out.foreground = base / "foreground";
     out.background = base / "background";
-    out.fog        = base / "fog";
     out.mask       = base / "mask";
     return out;
 }
@@ -168,14 +166,6 @@ bool Animation::rebuild_frame(int frame_index,
             apply_scale_mode(bg_tex, info);
         }
 
-        int fog_w = 0, fog_h = 0;
-        SDL_Texture* fog_tex = load_texture_from_path(renderer, paths.fog / (std::to_string(idx) + ".png"), fog_w, fog_h);
-        if (fog_tex) {
-            apply_scale_mode(fog_tex, info);
-        } else {
-            success = false;
-        }
-
         SDL_Texture* mask_tex = nullptr;
         int mask_w = 0, mask_h = 0;
         if (info.has_shading) {
@@ -191,7 +181,6 @@ bool Animation::rebuild_frame(int frame_index,
         destroy_texture(cache_entry.textures[variant_idx]);
         destroy_texture(cache_entry.foreground_textures[variant_idx]);
         destroy_texture(cache_entry.background_textures[variant_idx]);
-        destroy_texture(cache_entry.fog_textures[variant_idx]);
         destroy_texture(cache_entry.mask_textures[variant_idx]);
 
         cache_entry.textures[variant_idx] = base_tex;
@@ -199,7 +188,6 @@ bool Animation::rebuild_frame(int frame_index,
         cache_entry.heights[variant_idx] = base_h;
         cache_entry.foreground_textures[variant_idx] = fg_tex;
         cache_entry.background_textures[variant_idx] = bg_tex;
-        cache_entry.fog_textures[variant_idx] = fog_tex;
         cache_entry.mask_textures[variant_idx] = mask_tex;
         cache_entry.mask_widths[variant_idx] = mask_w;
         cache_entry.mask_heights[variant_idx] = mask_h;
@@ -218,7 +206,6 @@ bool Animation::rebuild_frame(int frame_index,
             variant.base_texture = cache_entry.textures[v];
             variant.foreground_texture = (v < cache_entry.foreground_textures.size()) ? cache_entry.foreground_textures[v] : nullptr;
             variant.background_texture = (v < cache_entry.background_textures.size()) ? cache_entry.background_textures[v] : nullptr;
-            variant.fog_texture = (v < cache_entry.fog_textures.size()) ? cache_entry.fog_textures[v] : nullptr;
             variant.shadow_mask_texture = (v < cache_entry.mask_textures.size()) ? cache_entry.mask_textures[v] : nullptr;
             frame.variants.push_back(variant);
         }
@@ -264,12 +251,6 @@ void Animation::clear_texture_cache() {
             }
         }
         for (SDL_Texture*& tex : cache_entry.background_textures) {
-            if (tex) {
-                SDL_DestroyTexture(tex);
-                tex = nullptr;
-            }
-        }
-        for (SDL_Texture*& tex : cache_entry.fog_textures) {
             if (tex) {
                 SDL_DestroyTexture(tex);
                 tex = nullptr;
@@ -473,9 +454,6 @@ void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches,
                     if (v < cache.background_textures.size()) {
                         variant.background_texture = cache.background_textures[v];
                     }
-                    if (v < cache.fog_textures.size()) {
-                        variant.fog_texture = cache.fog_textures[v];
-                    }
                     if (v < cache.mask_textures.size()) variant.shadow_mask_texture = cache.mask_textures[v];
 
                     frame.variants.push_back(variant);
@@ -598,12 +576,6 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
             if (src_bg) {
                 SDL_Texture* dst_bg = clone_texture(src_bg, tex_w, tex_h, flip_flags);
                 dst_cache.background_textures[variant_idx] = dst_bg;
-            }
-
-            SDL_Texture* src_fog = (variant_idx < src_cache.fog_textures.size()) ? src_cache.fog_textures[variant_idx] : nullptr;
-            if (src_fog) {
-                SDL_Texture* dst_fog = clone_texture(src_fog, tex_w, tex_h, flip_flags);
-                dst_cache.fog_textures[variant_idx] = dst_fog;
             }
 
             SDL_Texture* src_mask = (variant_idx < src_cache.mask_textures.size()) ? src_cache.mask_textures[variant_idx] : nullptr;

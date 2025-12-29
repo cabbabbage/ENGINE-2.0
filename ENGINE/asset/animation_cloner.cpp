@@ -112,6 +112,7 @@ bool AnimationCloner::Clone(const Animation& source,
     dest.movment          = source.movment;
     dest.total_dx         = source.total_dx;
     dest.total_dy         = source.total_dy;
+    dest.total_dz         = source.total_dz;
     dest.child_asset_names_ = source.child_asset_names_;
     dest.audio_clip       = source.audio_clip;
 
@@ -184,10 +185,11 @@ bool AnimationCloner::Clone(const Animation& source,
             if (src_frame) {
                 dst_frame.dx       = opts.flip_movement_horizontal ? -src_frame->dx : src_frame->dx;
                 dst_frame.dy       = opts.flip_movement_vertical   ? -src_frame->dy : src_frame->dy;
+                dst_frame.dz       = src_frame->dz;
                 dst_frame.z_resort = src_frame->z_resort;
                 dst_frame.rgb      = src_frame->rgb;
             } else {
-                dst_frame.dx = dst_frame.dy = 0;
+                dst_frame.dx = dst_frame.dy = dst_frame.dz = 0;
                 dst_frame.z_resort = true;
                 dst_frame.rgb = SDL_Color{255, 255, 255, 255};
             }
@@ -228,13 +230,15 @@ bool AnimationCloner::Clone(const Animation& source,
 
     dest.total_dx = 0;
     dest.total_dy = 0;
+    dest.total_dz = 0;
     dest.movment = false;
     if (!dest.movement_paths_.empty()) {
         const auto& primary = dest.movement_paths_.front();
         for (const auto& f : primary) {
             dest.total_dx += f.dx;
             dest.total_dy += f.dy;
-            if (f.dx != 0 || f.dy != 0) {
+            dest.total_dz += f.dz;
+            if (f.dx != 0 || f.dy != 0 || f.dz != 0) {
                 dest.movment = true;
             }
         }

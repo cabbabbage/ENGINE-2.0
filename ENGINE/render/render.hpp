@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -60,9 +61,8 @@ public:
 private:
     struct DarkMaskSprite {
         SDL_Texture*    texture     = nullptr;
-        SDL_Rect        screen_rect{};
+        std::array<SDL_Vertex, 4> vertices{};
         SDL_Color       color_mod{255, 255, 255, 255};
-        SDL_RendererFlip flip       = SDL_FLIP_NONE;
 };
     struct PrevalidatedTag {};
 
@@ -76,9 +76,6 @@ private:
     bool ensure_sky_texture();
     void destroy_sky_texture();
     void render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled);
-    bool ensure_fog_texture();
-    void destroy_fog_texture();
-    void render_fog_layer(const WarpedScreenGrid& cam, const world::WorldGrid& grid, bool depth_effects_enabled);
 
     SDL_Renderer*  renderer_;
     Assets*        assets_;
@@ -94,8 +91,13 @@ private:
     std::uint64_t frame_counter_ = 0;
 
     SDL_Texture* darkness_overlay_texture_ = nullptr;
+    // The screen dimensions used when the overlay texture was created.
     int          darkness_overlay_width_   = 0;
     int          darkness_overlay_height_  = 0;
+    // Actual texture dimensions (may be smaller when we fall back to a scaled buffer).
+    int          darkness_overlay_tex_width_  = 0;
+    int          darkness_overlay_tex_height_ = 0;
+    float        darkness_overlay_scale_used_ = 1.0f;
     float        map_light_opacity_        = kDefaultMapLightOpacity;
     SDL_Color    map_clear_color_{0, 128, 0, 255};
     bool         debug_auto_paths_ = true;
@@ -113,14 +115,9 @@ private:
     bool          darkness_overlay_skip_logged_     = false;
     bool          darkness_overlay_allocation_failed_ = false;
     std::filesystem::path sky_texture_path_;
+    double                map_radius_world_ = 0.0;
     SDL_Texture*          sky_texture_       = nullptr;
     int                   sky_texture_width_ = 0;
     int                   sky_texture_height_ = 0;
     bool                  sky_texture_failed_ = false;
-    std::filesystem::path fog_texture_path_;
-    SDL_Texture*          fog_texture_        = nullptr;
-    int                   fog_texture_width_  = 0;
-    int                   fog_texture_height_ = 0;
-    bool                  fog_texture_failed_ = false;
 };
-

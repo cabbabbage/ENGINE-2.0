@@ -63,6 +63,7 @@ public:
     void set_enabled(bool enabled);
     bool is_enabled() const { return enabled_; }
     Mode mode() const { return mode_; }
+    void sync_camera_tilt_override();
 
     void set_camera_override_for_testing(WarpedScreenGrid* camera_override);
 
@@ -84,6 +85,7 @@ public:
     void close_asset_info_editor();
     bool is_asset_info_editor_open() const;
     bool is_asset_info_lighting_section_expanded() const;
+    std::uint64_t asset_filter_state_version() const;
 
     void finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info);
 
@@ -97,7 +99,7 @@ public:
     void set_map_light_panel_visible(bool visible);
     bool is_map_light_panel_visible() const;
 
-    void focus_camera_on_asset(Asset* asset, double zoom_factor = 0.8, int duration_steps = 0);
+    void focus_camera_on_asset(Asset* asset, double height_factor = 0.8, int duration_steps = 0);
 
     void reset_click_state();
     void clear_selection();
@@ -110,8 +112,8 @@ public:
     const std::vector<Asset*>& get_highlighted_assets() const;
     Asset* get_hovered_asset() const;
 
-    void set_zoom_scale_factor(double factor);
-    double get_zoom_scale_factor() const;
+    void set_height_scale_factor(double factor);
+    double get_height_scale_factor() const;
 
     void filter_active_assets(std::vector<Asset*>& assets) const;
 
@@ -143,7 +145,7 @@ private:
     Room* choose_room(Room* preferred) const;
     bool is_pointer_over_dev_ui(int x, int y) const;
     void close_all_floating_panels();
-    void maybe_update_mode_from_zoom();
+    void maybe_update_mode_from_height();
     void open_regenerate_room_popup();
     bool is_modal_blocking_panels() const;
     void pulse_modal_header();

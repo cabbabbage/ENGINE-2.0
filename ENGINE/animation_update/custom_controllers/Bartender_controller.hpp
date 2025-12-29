@@ -2,6 +2,7 @@
 #include "asset/asset_controller.hpp"
 
 #include <random>
+#include <SDL.h>
 
 class Assets;
 class Asset;
@@ -12,11 +13,12 @@ public:
     BartenderController(Assets* assets, Asset* self);
     ~BartenderController() override = default;
 
-    void init();
 
     void update(const Input& in) override;
 
 private:
+    SDL_Point get_random_point_in_room();
+
     Assets* assets_ = nullptr;
     Asset*  self_   = nullptr;
 

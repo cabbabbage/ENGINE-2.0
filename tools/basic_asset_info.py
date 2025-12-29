@@ -46,7 +46,7 @@ class Asset:
     size_variants: List[int] = field(default_factory=list)
     type: str = ""
     needs_regen: bool = True
-    is_shaded: bool = False
+    has_shading: bool = False
     shadow_mask_settings: Dict[str, Any] = field(default_factory=dict)
     source_fingerprint: Dict[str, Any] = field(default_factory=dict)
 
@@ -96,7 +96,7 @@ class Asset:
 
         self.src_path = str(cleaned_entry.get("asset_directory", ""))
         self.type = str(cleaned_entry.get("asset_type", ""))
-        self.is_shaded = bool(cleaned_entry.get("has_shading", False))
+        self.has_shading = bool(cleaned_entry.get("has_shading", False))
         if isinstance(cleaned_entry.get("shadow_mask_settings"), dict):
             self.shadow_mask_settings = dict(cleaned_entry.get("shadow_mask_settings"))
 

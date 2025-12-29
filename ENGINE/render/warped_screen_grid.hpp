@@ -1,10 +1,13 @@
 #pragma once
 
+#include "render/camera_controller.hpp"
 #include "utils/transform_smoothing.hpp"
 #include "render/image_effect_settings.hpp"
 #include "utils/area.hpp"
 #include <SDL.h>
 #include <cstdint>
+#include <algorithm>
+#include <optional>
 #include <vector>
 #include <unordered_map>
 #include <nlohmann/json.hpp>
@@ -21,8 +24,8 @@ namespace world {
 class WarpedScreenGrid {
 public:
 
-    static constexpr float kMinZoomAnchors = 0.5f;
-    static constexpr float kMaxZoomAnchors = 20.0f;
+    static constexpr float kMinHeightAnchors = 0.5f;
+    static constexpr float kMaxHeightAnchors = 20.0f;
     static constexpr float kMinPitchDegrees = 0.0f;
     static constexpr float kMaxPitchDegrees = 150.0f;
 
@@ -38,8 +41,7 @@ public:
 
         float min_visible_screen_ratio     = 0.015f;
 
-        float zoom_low                     = 0.75f;
-        float zoom_high                    = 3.0f;
+
 
         float base_height_px               = 1000.0f;
 
@@ -50,22 +52,22 @@ public:
 
         float scale_variant_hysteresis_margin = 0.05f;
 
+        float meters_per_100_world_px         = 1.0f;
+
         int   foreground_texture_max_opacity  = 255;
         int   background_texture_max_opacity  = 255;
         float foreground_plane_screen_y       = 1080.0f;
         float background_plane_screen_y       = 0.0f;
         BlurFalloffMethod texture_opacity_falloff_method = BlurFalloffMethod::Linear;
+        float texture_warp_percent            = 100.0f;
+        float texture_warp_y_offset_px        = 0.0f;
 
         float extra_cull_margin = 300.0f;
-
-        float perspective_distance_at_scale_zero   = 1.0f;
-        float perspective_distance_at_scale_hundred = 0.5f;
         float depth_near_world = 0.0f;
         float depth_far_world  = 5000.0f;
-
-        float horizon_fade_band_px = 150.0f;
-
-        float perspective_scale_gamma = 2.5f;
+        float pre_horizon_lock_offset_px = 80.0f;
+        float near_camera_max_perspective_scale = 4.0f;
+        float offscreen_fade_amount_px = 200.0f;
 
         camera_effects::ImageEffectSettings foreground_effects{};
         camera_effects::ImageEffectSettings background_effects{};
@@ -123,29 +125,17 @@ public:
         explicit RenderSmoothingKey(const Asset* asset, int frame = 0);
 };
 
-    WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_zoom);
+    WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_view);
     ~WarpedScreenGrid();
 
-    void set_scale(float s);
-    float get_scale() const;
-    void zoom_to_scale(double target_scale, int duration_steps);
-    void zoom_to_area(const Area& target_area, int duration_steps);
-    void animate_zoom_multiply(double factor, int duration_steps);
-    void animate_zoom_towards_point(double factor, SDL_Point screen_point, int duration_steps);
 
-    void pan_and_zoom_to_point(SDL_Point world_pos, double zoom_scale_factor, int duration_steps);
-    void pan_and_zoom_to_asset(const Asset* a, double zoom_scale_factor, int duration_steps);
-
-    void update(float dt);
-    void update_zoom(Room* cur, CurrentRoomFinder* finder, Asset* player, bool refresh_requested, float dt, bool dev_mode = false);
+    void update_camera_height(Room* cur, CurrentRoomFinder* finder, Asset* player, bool refresh_requested, float dt, bool dev_mode = false);
+    void animate_height_to_scale(double target_height_px, int steps = 10);
 
     void set_focus_override(SDL_Point focus);
-    void set_manual_zoom_override(bool enabled);
     void clear_focus_override();
-    void clear_manual_zoom_override();
-    bool has_focus_override() const { return focus_override_; }
-    bool is_manual_zoom_override() const { return manual_zoom_override_; }
-    SDL_Point get_focus_override_point() const { return focus_point_; }
+    bool has_focus_override() const { return camera_.has_focus_override(); }
+    SDL_Point get_focus_override_point() const { return camera_.state().focus_override; }
 
     void set_realism_settings(const RealismSettings& settings);
     void set_screen_center(SDL_Point p, bool snap_immediately = true);
@@ -155,6 +145,7 @@ public:
 
     SDL_FPoint map_to_screen(SDL_Point world) const;
     SDL_FPoint map_to_screen_f(SDL_FPoint world) const;
+    bool project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const;
     SDL_FPoint screen_to_map(SDL_Point screen) const;
 
     RenderEffects compute_render_effects(SDL_Point world, float asset_screen_height, float reference_screen_height, RenderSmoothingKey smoothing_key, int world_z = 0) const;
@@ -180,14 +171,15 @@ public:
     double view_height_world() const;
     double view_height_for_scale(double scale_value) const;
     double anchor_world_y() const;
-    double zoom_lerp_t_for_scale(double scale_value) const;
+    double height_lerp_t_for_scale(double scale_value) const;
     float depth_offset_for_scale(double scale_value) const;
     double horizon_screen_y_for_scale() const;
     double horizon_screen_y_for_scale_value(double scale_value) const;
     SDL_FPoint get_view_center_f() const;
     SDL_Point get_screen_center() const {
+        SDL_FPoint center = camera_.state().center;
         return SDL_Point{
-            static_cast<int>(smoothed_center_.x), static_cast<int>(smoothed_center_.y) };
+            static_cast<int>(center.x), static_cast<int>(center.y) };
     }
     void recompute_current_view();
 
@@ -216,8 +208,24 @@ public:
     void set_render_areas_enabled(bool enabled) { render_areas_enabled_ = enabled; }
     const Area& get_current_view() const { return current_view_; }
     const Area& get_camera_area() const { return current_view_; }
-    bool is_zooming() const { return zooming_; }
-    double default_zoom_for_room(const Room* room) const;
+
+    bool is_manual_height_override() const;
+    void set_manual_height_override(bool);
+    double get_scale() const;
+    void set_scale(double);
+    void update();
+    void set_tilt_override(std::optional<float> tilt_deg);
+    void clear_tilt_override();
+    bool has_tilt_override() const { return tilt_override_deg_.has_value(); }
+    float tilt_override_deg() const { return tilt_override_deg_.value_or(camera_math::kDefaultCameraTiltDeg); }
+    Area frame_to_area(const SDL_Rect& frame) const;
+    SDL_Point pan_and_height_to_point(double pan, double height) const;
+    void animate_height_multiply(double factor);
+    void animate_height_towards_point(double target_height, SDL_Point target_point);
+    bool is_height_animating() const;
+    SDL_Point pan_and_height_to_asset(double pan, double height, const Asset* asset) const;
+
+    double default_camera_height_for_room(const Room* room) const;
     const std::vector<world::GridPoint*>& get_warped_points() const { return warped_points_; }
     const std::vector<Asset*>& get_visible_assets() const { return visible_assets_; }
     const std::vector<world::GridPoint*>& get_visible_points() const { return visible_points_; }
@@ -230,10 +238,15 @@ public:
     int last_min_world_z() const { return last_min_world_z_; }
     int last_max_world_z() const { return last_max_world_z_; }
     std::uint32_t last_depth_culled() const { return last_depth_culled_; }
+    void set_frustum_padding_world(float padding);
+    float frustum_padding_world() const { return frustum_padding_world_; }
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
     Area convert_area_to_aspect(const Area& in) const;
+    const CameraController::State& camera_state() const { return camera_.state(); }
 
 private:
+    // --- Camera parameter state for explicit per-room camera ---
+
 
     double compute_room_scale_from_area(const Room* room) const;
 
@@ -245,29 +258,10 @@ private:
     bool render_areas_enabled_ = false;
     RealismSettings settings_{};
 
-    Area base_zoom_;
+    CameraController camera_;
+
+    Area base_view_;
     Area current_view_;
-
-    SDL_Point screen_center_{0, 0};
-    SDL_FPoint smoothed_center_{0.0f, 0.0f};
-    bool screen_center_initialized_ = false;
-    double pan_offset_x_ = 0.0;
-    double pan_offset_y_ = 0.0;
-
-    float scale_ = 1.0f;
-    float smoothed_scale_ = 1.0f;
-    bool zooming_ = false;
-    int steps_total_ = 0;
-    int steps_done_ = 0;
-    double start_scale_ = 1.0;
-    double target_scale_ = 1.0;
-
-    bool focus_override_ = false;
-    SDL_Point focus_point_{0, 0};
-    bool pan_override_ = false;
-    SDL_Point start_center_{0, 0};
-    SDL_Point target_center_{0, 0};
-    bool manual_zoom_override_ = false;
 
     Room* starting_room_ = nullptr;
     double starting_area_ = 0.0;
@@ -282,11 +276,6 @@ private:
     FloorDepthParams runtime_floor_params_{};
     bool geometry_valid_ = false;
 
-    double perspective_distance_at_scale_zero_    = 1.0;
-    double perspective_distance_at_scale_hundred_ = 0.5;
-
-    float player_center_offset_y_ = 0.0f;
-
     std::vector<world::GridPoint*> warped_points_;
     std::vector<Asset*> visible_assets_;
     std::vector<world::GridPoint*> visible_points_;
@@ -300,6 +289,8 @@ private:
     int last_max_world_z_ = 0;
     SDL_Rect cached_world_rect_{0, 0, 0, 0};
     GridBounds bounds_{};
+    float frustum_padding_world_ = 0.0f;
     bool depth_enabled_ = true;
     bool depth_debug_logging_ = false;
+    std::optional<float> tilt_override_deg_{};
 };

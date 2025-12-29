@@ -21,6 +21,7 @@
 #include <system_error>
 #include <utility>
 #include <unordered_set>
+#include <SDL.h>
 
 #include "dev_mode/core/manifest_store.hpp"
 #include "utils/grid.hpp"
@@ -64,6 +65,11 @@ AnimationChildFrameData parse_async_child_frame(const nlohmann::json& entry) {
     if (entry.is_object()) {
         try { data.dx = static_cast<int>(entry.value("dx", 0)); } catch (...) { data.dx = 0; }
         try { data.dy = static_cast<int>(entry.value("dy", 0)); } catch (...) { data.dy = 0; }
+        try { data.dz = static_cast<int>(entry.value("dz", 0)); } catch (...) { data.dz = 0; }
+        if (!entry.contains("dz")) {
+            data.dz = data.dy;
+            data.dy = 0;
+        }
         if (entry.contains("degree") && entry["degree"].is_number()) {
             try { data.degree = static_cast<float>(entry["degree"].get<double>()); } catch (...) { data.degree = 0.0f; }
         } else if (entry.contains("rotation") && entry["rotation"].is_number()) {
@@ -77,9 +83,18 @@ AnimationChildFrameData parse_async_child_frame(const nlohmann::json& entry) {
     if (entry.is_array() && !entry.empty()) {
         if (entry.size() >= 1 && entry[0].is_number()) { try { data.dx = entry[0].get<int>(); } catch (...) { data.dx = 0; } }
         if (entry.size() >= 2 && entry[1].is_number()) { try { data.dy = entry[1].get<int>(); } catch (...) { data.dy = 0; } }
-        if (entry.size() >= 3 && entry[2].is_number()) { try { data.degree = static_cast<float>(entry[2].get<double>()); } catch (...) { data.degree = 0.0f; } }
-        if (entry.size() >= 4) data.visible = read_bool(entry[3], true);
-        if (entry.size() >= 5) data.render_in_front = read_bool(entry[4], true);
+        if (entry.size() >= 6 && entry[2].is_number()) {
+            try { data.dz = entry[2].get<int>(); } catch (...) { data.dz = 0; }
+            if (entry.size() >= 4 && entry[3].is_number()) { try { data.degree = static_cast<float>(entry[3].get<double>()); } catch (...) { data.degree = 0.0f; } }
+            if (entry.size() >= 5) data.visible = read_bool(entry[4], true);
+            if (entry.size() >= 6) data.render_in_front = read_bool(entry[5], true);
+        } else {
+            if (entry.size() >= 3 && entry[2].is_number()) { try { data.degree = static_cast<float>(entry[2].get<double>()); } catch (...) { data.degree = 0.0f; } }
+            if (entry.size() >= 4) data.visible = read_bool(entry[3], true);
+            if (entry.size() >= 5) data.render_in_front = read_bool(entry[4], true);
+            data.dz = data.dy;
+            data.dy = 0;
+        }
     }
 
     return data;
@@ -93,6 +108,7 @@ nlohmann::json encode_async_child_frames(const std::vector<AnimationChildFrameDa
         nlohmann::json obj = nlohmann::json::object();
         obj["dx"] = frame.dx;
         obj["dy"] = frame.dy;
+        obj["dz"] = frame.dz;
         obj["degree"] = frame.degree;
         obj["visible"] = frame.visible;
         obj["render_in_front"] = frame.render_in_front;
@@ -256,6 +272,66 @@ bool regenerate_lights_via_python(const std::string& asset_name) {
         return false;
     }
 
+    return true;
+}
+
+float compute_light_fade_exponent(int fall_off) {
+    const float falloff_norm = std::clamp(static_cast<float>(fall_off) / 100.0f, 0.0f, 1.0f);
+    return 0.6f + 3.4f * falloff_norm;
+}
+
+bool build_fallback_light_texture(SDL_Renderer* renderer, LightSource& light) {
+    if (!renderer) {
+        return false;
+    }
+    const int radius = std::max(1, light.radius);
+    const int diameter = std::max(1, radius * 2);
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, diameter, diameter, 32, SDL_PIXELFORMAT_RGBA32);
+    if (!surface) {
+        return false;
+    }
+
+    if (SDL_LockSurface(surface) != 0) {
+        SDL_FreeSurface(surface);
+        return false;
+    }
+
+    const float center = static_cast<float>(diameter) * 0.5f;
+    const float radius_f = static_cast<float>(radius);
+    const float exponent = compute_light_fade_exponent(light.fall_off);
+    Uint32* pixels = static_cast<Uint32*>(surface->pixels);
+    const int pitch = surface->pitch / static_cast<int>(sizeof(Uint32));
+
+    for (int y = 0; y < diameter; ++y) {
+        for (int x = 0; x < diameter; ++x) {
+            const float dx = (static_cast<float>(x) + 0.5f) - center;
+            const float dy = (static_cast<float>(y) + 0.5f) - center;
+            const float dist = std::sqrt(dx * dx + dy * dy);
+            const float ratio = radius_f > 0.0f ? std::clamp(dist / radius_f, 0.0f, 1.0f) : 1.0f;
+            const float base = std::max(0.0f, 1.0f - ratio);
+            const float alpha_ratio = std::pow(base, exponent);
+            const Uint8 alpha = static_cast<Uint8>(std::clamp(static_cast<int>(std::lround(alpha_ratio * 255.0f)), 0, 255));
+            pixels[y * pitch + x] = SDL_MapRGBA(surface->format, 255, 255, 255, alpha);
+        }
+    }
+
+    SDL_UnlockSurface(surface);
+
+    SDL_Texture* texture = CacheManager::surface_to_texture(renderer, surface);
+    const int w = surface->w;
+    const int h = surface->h;
+    SDL_FreeSurface(surface);
+    if (!texture) {
+        return false;
+    }
+
+    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+    if (light.texture) {
+        SDL_DestroyTexture(light.texture);
+    }
+    light.texture = texture;
+    light.cached_w = w;
+    light.cached_h = h;
     return true;
 }
 
@@ -767,7 +843,7 @@ AssetInfo::AssetInfo(const std::string &asset_folder_name)
     : AssetInfo(asset_folder_name, nlohmann::json::object()) {}
 
 AssetInfo::AssetInfo(const std::string& asset_folder_name, const nlohmann::json& metadata)
-: is_shaded(false)
+: has_shading(false)
 , is_light_source(false) {
         nlohmann::json data = metadata.is_object() ? metadata : nlohmann::json::object();
 
@@ -841,7 +917,7 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
                         tillable = info_json_.value("tileable", false);
                 }
         }
-        is_shaded = data.value("has_shading", false);
+        has_shading = data.value("has_shading", false);
         min_same_type_distance = data.value("min_same_type_distance", 0);
         min_distance_all = data.value("min_distance_all", 0);
         flipable = data.value("can_invert", false);
@@ -959,7 +1035,9 @@ bool AssetInfo::ensure_light_textures(SDL_Renderer* renderer) {
     bool all_loaded = true;
     for (std::size_t i = 0; i < light_sources.size(); ++i) {
         if (!rebuild_light_texture(renderer, i)) {
-            all_loaded = false;
+            if (!build_fallback_light_texture(renderer, light_sources[i])) {
+                all_loaded = false;
+            }
         }
     }
     return all_loaded;
@@ -1278,7 +1356,7 @@ void AssetInfo::set_shadow_mask_settings(const ShadowMaskSettings& settings) {
 }
 
 void AssetInfo::set_shading_enabled(bool enabled) {
-        is_shaded = enabled;
+        has_shading = enabled;
         is_light_source = enabled || !light_sources.empty();
         if (!info_json_.is_object()) {
                 info_json_ = nlohmann::json::object();
@@ -1717,7 +1795,8 @@ void AssetInfo::set_lighting(const std::vector<LightSource>& lights) {
         j["flicker"] = l.flicker_speed;
         j["flare"] = l.flare;
         j["offset_x"] = l.offset_x;
-        j["offset_y"] = l.offset_y;
+        j["offset_z"] = l.offset_z;
+        j["offset_y"] = 0;
         j["light_color"] = { l.color.r, l.color.g, l.color.b };
         j["in_front"] = l.in_front;
         j["behind"] = l.behind;
@@ -2073,4 +2152,3 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
         load_single(pending.first, pending.second);
     }
 }
-

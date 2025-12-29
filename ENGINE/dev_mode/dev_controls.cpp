@@ -743,6 +743,7 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
         dev_selected_room_ = room;
         return;
     }
+    const bool room_changed = (current_room_ != room);
     {
         std::ostringstream oss;
         oss << "[DevControls] set_current_room begin -> "
@@ -752,6 +753,12 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
     current_room_ = room;
 
     dev_selected_room_ = room;
+    if (room_changed && assets_) {
+        WarpedScreenGrid& cam = assets_->getView();
+        if (!cam.is_manual_height_override()) {
+            cam.clear_focus_override();
+        }
+    }
     if (regenerate_popup_) regenerate_popup_->close();
     if (room_editor_) {
         dev_mode_trace("[DevControls] set_current_room -> room_editor set_current_room");
@@ -905,11 +912,11 @@ void DevControls::set_enabled(bool enabled) {
             map_mode_ui_->set_header_mode(MapModeUI::HeaderMode::Room);
         }
         if (should_restore_camera && camera_ptr) {
-            camera_ptr->set_manual_zoom_override(true);
+            camera_ptr->set_manual_height_override(true);
             camera_ptr->set_focus_override(preserved_center);
             camera_ptr->set_screen_center(preserved_center);
             camera_ptr->set_scale(preserved_scale);
-            camera_ptr->update(0.0f);
+            camera_ptr->update();
         }
         if (camera_was_visible && camera_panel_) {
             camera_panel_->open();
@@ -956,6 +963,33 @@ void DevControls::set_enabled(bool enabled) {
         dev_mode_trace(msg);
         std::cout << msg << "\n";
     }
+}
+
+void DevControls::sync_camera_tilt_override() {
+    if (!assets_) {
+        return;
+    }
+
+    WarpedScreenGrid& cam = assets_->getView();
+    if (!enabled_) {
+        cam.clear_tilt_override();
+        return;
+    }
+
+    if (frame_editor_session_ && frame_editor_session_->is_active()) {
+        const auto mode = frame_editor_session_->mode();
+        const float tilt_deg = (mode == FrameEditorSession::Mode::Movement) ? 90.0f : 0.0f;
+        cam.set_tilt_override(tilt_deg);
+        return;
+    }
+
+    const bool camera_settings_open = room_editor_ && room_editor_->is_camera_settings_open();
+    if (camera_settings_open) {
+        cam.clear_tilt_override();
+        return;
+    }
+
+    cam.set_tilt_override(45.0f);
 }
 
 void DevControls::update(const Input& input) {
@@ -1109,7 +1143,7 @@ void DevControls::update(const Input& input) {
 
     if (render_suppression_in_progress_) {
         WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
-        const bool camera_idle = !cam || !cam->is_zooming();
+        const bool camera_idle = !cam || !cam->is_height_animating();
         if (camera_idle) {
             if (assets_) {
                 assets_->set_render_suppressed(false);
@@ -1505,7 +1539,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
         SDL_FPoint top_left_world = cam.screen_to_map(SDL_Point{0, 0});
         SDL_FPoint bottom_right_world = cam.screen_to_map(SDL_Point{screen_w_, screen_h_});
-        const float cam_scale = std::max(0.0001f, cam.get_scale());
+        const float cam_scale = std::max(0.0001f, static_cast<float>(cam.get_scale()));
 
         int cell = std::max(1, grid_cell_size_px_);
         if (cell > 0) {
@@ -2093,6 +2127,10 @@ bool DevControls::is_asset_info_lighting_section_expanded() const {
     return lighting_section_forces_dark_mask();
 }
 
+std::uint64_t DevControls::asset_filter_state_version() const {
+    return asset_filter_.state_version();
+}
+
 void DevControls::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info) {
     if (!can_use_room_editor_ui()) return;
     room_editor_->finalize_asset_drag(asset, info);
@@ -2114,9 +2152,9 @@ bool DevControls::is_room_config_open() const {
     return room_editor_->is_room_config_open();
 }
 
-void DevControls::focus_camera_on_asset(Asset* asset, double zoom_factor, int duration_steps) {
+void DevControls::focus_camera_on_asset(Asset* asset, double height_factor, int duration_steps) {
     if (!room_editor_) return;
-    room_editor_->focus_camera_on_asset(asset, zoom_factor, duration_steps);
+    room_editor_->focus_camera_on_asset(asset, height_factor, duration_steps);
 }
 
 void DevControls::reset_click_state() {
@@ -2161,13 +2199,13 @@ Asset* DevControls::get_hovered_asset() const {
     return room_editor_->get_hovered_asset();
 }
 
-void DevControls::set_zoom_scale_factor(double factor) {
-    if (room_editor_) room_editor_->set_zoom_scale_factor(factor);
+void DevControls::set_height_scale_factor(double factor) {
+    if (room_editor_) room_editor_->set_height_scale_factor(factor);
 }
 
-double DevControls::get_zoom_scale_factor() const {
+double DevControls::get_height_scale_factor() const {
     if (!room_editor_) return 1.0;
-    return room_editor_->get_zoom_scale_factor();
+    return room_editor_->get_height_scale_factor();
 }
 
 void DevControls::configure_header_button_sets() {
@@ -2440,7 +2478,7 @@ void DevControls::close_all_floating_panels() {
     sync_header_button_states();
 }
 
-void DevControls::maybe_update_mode_from_zoom() {}
+void DevControls::maybe_update_mode_from_height() {}
 
 bool DevControls::is_modal_blocking_panels() const {
     return room_editor_ && room_editor_->has_active_modal();
@@ -3210,10 +3248,10 @@ void DevControls::handle_map_selection() {
         if (cam && selected && selected->room_area) {
             const SDL_Point center = selected->room_area->get_center();
             const double current_scale = std::max(0.0001, static_cast<double>(cam->get_scale()));
-            const double target_scale  = cam->default_zoom_for_room(selected);
+            const double target_scale  = cam->default_camera_height_for_room(selected);
             const double factor = (target_scale > 0.0) ? (target_scale / current_scale) : 1.0;
             const int duration_steps = 30;
-            cam->pan_and_zoom_to_point(center, factor, duration_steps);
+            cam->pan_and_height_to_point(center.x, factor);
         }
     }
     if (is_trail_room(selected)) {

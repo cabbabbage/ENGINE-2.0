@@ -96,9 +96,9 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
         }
         if (info) {
                 try {
-                        is_shaded = info->is_shaded;
+                        has_shading = info->has_shading;
                 } catch (...) {
-                        is_shaded = false;
+                        has_shading = false;
                 }
         }
         std::string start_id = info->start_animation.empty() ? std::string{"default"} : info->start_animation;
@@ -190,7 +190,7 @@ Asset::Asset(const Asset& o)
 , asset_children(o.asset_children)
 , scene_mask_lights(o.scene_mask_lights)
 , depth(o.depth)
-, is_shaded(o.is_shaded)
+, has_shading(o.has_shading)
 , dead(o.dead)
 , static_frame(o.static_frame)
 , needs_target(o.needs_target)
@@ -266,7 +266,7 @@ Asset& Asset::operator=(const Asset& o) {
         asset_children       = o.asset_children;
         scene_mask_lights    = o.scene_mask_lights;
 	depth                = o.depth;
-        is_shaded            = o.is_shaded;
+        has_shading            = o.has_shading;
 	dead                 = o.dead;
 	static_frame         = o.static_frame;
         needs_target        = o.needs_target;
@@ -388,9 +388,9 @@ void Asset::update_scale_values() {
 
     float camera_scale = 1.0f;
     if (assets_) {
-        camera_scale = std::max(0.0001f, assets_->getView().get_scale());
+        camera_scale = 1.0f;
     } else if (window) {
-        camera_scale = std::max(0.0001f, window->get_scale());
+        camera_scale = 1.0f;
     }
 
     float desired_variant_scale = current_scale / camera_scale;
@@ -450,8 +450,6 @@ void Asset::set_current_animation(const std::string& name)
 void Asset::update() {
     if (!info) return;
 
-    update_scale_values();
-
     SDL_Point previous_pos = pos;
 
     if (controller_ && assets_) {
@@ -459,6 +457,10 @@ void Asset::update() {
             controller_->update(*in);
         }
     }
+
+    const bool moved = (pos.x != previous_pos.x || pos.y != previous_pos.y);
+
+    update_scale_values();
 
     if (anim_) {
         auto iti = info->animations.find(current_animation);
@@ -510,14 +512,17 @@ void Asset::update() {
         }
     }
 
-    translation_smoothing_x_.reset(static_cast<float>(pos.x));
-    translation_smoothing_y_.reset(static_cast<float>(pos.y));
-
-    float scale_target = 1.0f;
-    if (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) {
-        scale_target = info->scale_factor;
+    translation_smoothing_x_.target = static_cast<float>(pos.x);
+    translation_smoothing_y_.target = static_cast<float>(pos.y);
+    if (assets_) {
+        translation_smoothing_x_.advance(assets_->frame_delta_seconds());
+        translation_smoothing_y_.advance(assets_->frame_delta_seconds());
     }
-    scale_smoothing_.reset(scale_target);
+
+    scale_smoothing_.target = current_scale;
+    if (assets_) {
+        scale_smoothing_.advance(assets_->frame_delta_seconds());
+    }
 
     const float alpha_target = hidden ? 0.0f : 1.0f;
     alpha_smoothing_.reset(alpha_target);
@@ -1118,7 +1123,9 @@ float Asset::smoothed_translation_x() const { return translation_smoothing_x_.va
 
 float Asset::smoothed_translation_y() const { return translation_smoothing_y_.value_for_render(); }
 
-float Asset::smoothed_scale() const { return scale_smoothing_.value_for_render(); }
+float Asset::smoothed_scale() const {
+    return scale_smoothing_.value_for_render();
+}
 
 float Asset::smoothed_alpha() const {
         float value = alpha_smoothing_.value_for_render();

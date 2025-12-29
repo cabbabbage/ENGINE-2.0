@@ -40,6 +40,10 @@ struct RenderObject {
     SDL_Point center{0, 0};
     bool use_custom_center = false;
     SDL_RendererFlip flip = SDL_FLIP_NONE;
+    int texture_w = 0;
+    int texture_h = 0;
+    bool has_texture_size = false;
+    float world_z_offset = 0.0f;
 };
 
 using RenderCompositePackage = std::vector<RenderObject>;
@@ -254,7 +258,7 @@ class Asset {
     std::vector<Asset*> asset_children;
     const std::vector<AnimationChildAttachment>& animation_children() const { return animation_children_; }
     int depth = 0;
-    bool is_shaded = false;
+    bool has_shading = false;
     bool dead = false;
     bool static_frame = true;
     bool needs_target = false;

@@ -10,6 +10,7 @@ struct FrameHitGeometry {
         std::string type;
         float center_x   = 0.0f;
         float center_y   = 0.0f;
+        float center_z   = 0.0f;
         float half_width = 0.0f;
         float half_height = 0.0f;
         float rotation_degrees = 0.0f;
@@ -42,11 +43,14 @@ struct FrameAttackGeometry {
         std::string type;
         float start_x = 0.0f;
         float start_y = 0.0f;
+        float start_z = 0.0f;
 
         float control_x = 0.0f;
         float control_y = 0.0f;
+        float control_z = 0.0f;
         float end_x   = 0.0f;
         float end_y   = 0.0f;
+        float end_z   = 0.0f;
         int   damage  = 0;
 };
 

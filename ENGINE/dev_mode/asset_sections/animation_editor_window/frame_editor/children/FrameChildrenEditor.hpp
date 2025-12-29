@@ -43,6 +43,7 @@ class FrameChildrenEditor {
         int child_index = -1;
         float dx = 0.0f;
         float dy = 0.0f;
+        float dz = 0.0f;
         float rotation = 0.0f;
         bool visible = true;
         bool render_in_front = true;
@@ -51,6 +52,7 @@ class FrameChildrenEditor {
     struct MovementFrame {
         float dx = 0.0f;
         float dy = 0.0f;
+        float dz = 0.0f;
         bool resort_z = false;
         std::vector<ChildFrame> children;
 };

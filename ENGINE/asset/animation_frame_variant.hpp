@@ -5,6 +5,7 @@ struct AnimationChildFrameData {
     int   child_index     = -1;
     int   dx              = 0;
     int   dy              = 0;
+    int   dz              = 0;
     float degree          = 0.0f;
     bool  render_in_front = true;
     bool  visible         = true;

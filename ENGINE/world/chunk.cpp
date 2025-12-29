@@ -93,8 +93,8 @@ LightMap::SampledBrightness LightMap::sample_lighting(int world_x,
         if (!light.source || !light.point) continue;
         const int radius_px = std::max(1, light.source->radius);
         const float lx = static_cast<float>(light.point->world_x() + light.source->offset_x);
-        const float ly = static_cast<float>(light.point->world_y() + light.source->offset_y);
-        const float lz = static_cast<float>(light.point->world_z());
+        const float ly = static_cast<float>(light.point->world_y());
+        const float lz = static_cast<float>(light.point->world_z() + light.source->offset_z);
         const float dx = static_cast<float>(world_x) - lx;
         const float dy = static_cast<float>(world_y) - ly;
         const float dz = static_cast<float>(world_z) - lz;
@@ -313,4 +313,3 @@ std::pair<float, float> LightMap::resolve_sampling_weights(float static_weight, 
 
     return {std::max(0.0f, effective_static), std::max(0.0f, effective_dynamic)};
 }
-

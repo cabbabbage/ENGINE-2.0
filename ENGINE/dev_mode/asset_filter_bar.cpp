@@ -668,6 +668,10 @@ void AssetFilterBar::sync_state_from_ui() {
 }
 
 void AssetFilterBar::notify_state_changed() {
+    ++state_version_;
+    if (state_version_ == 0) {
+        ++state_version_;
+    }
     if (on_state_changed_) {
         on_state_changed_();
     }

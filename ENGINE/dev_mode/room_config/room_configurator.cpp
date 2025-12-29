@@ -31,6 +31,16 @@ constexpr int kRadiusSliderInitialMax = 2000;
 constexpr int kRadiusSliderExpansionMargin = 64;
 constexpr int kRadiusSliderExpansionFactor = 2;
 constexpr int kRadiusSliderHardCap = 20000;
+constexpr int kCameraHeightMinPx = 1;
+constexpr int kCameraHeightMaxPx = 10000;
+constexpr float kCameraTiltMinDeg = 0.0f;
+constexpr float kCameraTiltMaxDeg = 150.0f;
+constexpr int kCameraYDistanceMinPx = 0;
+constexpr int kCameraYDistanceMaxPx = 2000;
+constexpr int kCameraZoomMinPercent = 0;
+constexpr int kCameraZoomMaxPercent = 100;
+constexpr int kCameraPanMinPercent = -100;
+constexpr int kCameraPanMaxPercent = 100;
 
 const nlohmann::json& empty_object() {
     static const nlohmann::json kEmpty = nlohmann::json::object();
@@ -112,11 +122,35 @@ std::optional<int> parse_int_from_text(const std::string& text) {
     }
 }
 
+std::optional<float> parse_float_from_text(const std::string& text) {
+    std::string trimmed = trim_copy_room_config(text);
+    if (trimmed.empty()) {
+        return std::nullopt;
+    }
+    try {
+        size_t consumed = 0;
+        float value = std::stof(trimmed, &consumed);
+        if (consumed != trimmed.size()) {
+            return std::nullopt;
+        }
+        return value;
+    } catch (...) {
+        return std::nullopt;
+    }
+}
+
 std::optional<int> read_text_box_value(DMTextBox* box) {
     if (!box) {
         return std::nullopt;
     }
     return parse_int_from_text(box->value());
+}
+
+std::optional<float> read_text_box_float(DMTextBox* box) {
+    if (!box) {
+        return std::nullopt;
+    }
+    return parse_float_from_text(box->value());
 }
 
 void sync_text_box_with_value(DMTextBox* box, int value) {
@@ -160,6 +194,13 @@ struct RoomConfigurator::State {
     bool is_spawn = false;
     bool is_boss = false;
     bool inherits_assets = false;
+
+    // Camera settings
+    int camera_height_px = 1000;
+    float camera_tilt_deg = 60.0f;
+    int camera_y_distance_px = 0;
+    int camera_zoom_percent = 0;
+    int camera_pan_y_percent = 0;
 
     bool geometry_is_circle() const { return lowercase_copy(geometry) == "circle"; }
 
@@ -263,6 +304,31 @@ struct RoomConfigurator::State {
             is_boss = false;
             mutated = true;
         }
+        int clamped_height = std::clamp(camera_height_px, kCameraHeightMinPx, kCameraHeightMaxPx);
+        if (clamped_height != camera_height_px) {
+            camera_height_px = clamped_height;
+            mutated = true;
+        }
+        float clamped_tilt = std::clamp(camera_tilt_deg, kCameraTiltMinDeg, kCameraTiltMaxDeg);
+        if (std::fabs(clamped_tilt - camera_tilt_deg) > 1e-6f) {
+            camera_tilt_deg = clamped_tilt;
+            mutated = true;
+        }
+        int clamped_y_distance = std::clamp(camera_y_distance_px, kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
+        if (clamped_y_distance != camera_y_distance_px) {
+            camera_y_distance_px = clamped_y_distance;
+            mutated = true;
+        }
+        int clamped_zoom = std::clamp(camera_zoom_percent, kCameraZoomMinPercent, kCameraZoomMaxPercent);
+        if (clamped_zoom != camera_zoom_percent) {
+            camera_zoom_percent = clamped_zoom;
+            mutated = true;
+        }
+        int clamped_pan = std::clamp(camera_pan_y_percent, kCameraPanMinPercent, kCameraPanMaxPercent);
+        if (clamped_pan != camera_pan_y_percent) {
+            camera_pan_y_percent = clamped_pan;
+            mutated = true;
+        }
         return mutated;
     }
 
@@ -272,6 +338,13 @@ struct RoomConfigurator::State {
         const nlohmann::json& src = data.is_object() ? data : empty_object();
         name = src.value("name", src.value("room_name", std::string{}));
         geometry = src.value("geometry", geometry_options.empty() ? std::string{} : geometry_options.front());
+
+        // Camera settings
+        camera_height_px = std::clamp(src.value("camera_height_px", 1000), kCameraHeightMinPx, kCameraHeightMaxPx);
+        camera_tilt_deg = std::clamp(src.value("camera_tilt_deg", 60.0f), kCameraTiltMinDeg, kCameraTiltMaxDeg);
+        camera_y_distance_px = std::clamp(src.value("camera_y_distance_px", 0), kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
+        camera_zoom_percent = std::clamp(src.value("camera_zoom_percent", 0), kCameraZoomMinPercent, kCameraZoomMaxPercent);
+        camera_pan_y_percent = std::clamp(src.value("camera_pan_y_percent", 0), kCameraPanMinPercent, kCameraPanMaxPercent);
 
         if (auto value = read_json_int(src, "min_width")) {
             width_min = *value;
@@ -357,6 +430,13 @@ struct RoomConfigurator::State {
         } else {
             dest.erase("curvyness");
         }
+
+        // Camera settings
+        dest["camera_height_px"] = camera_height_px;
+        dest["camera_tilt_deg"] = camera_tilt_deg;
+        dest["camera_y_distance_px"] = camera_y_distance_px;
+        dest["camera_zoom_percent"] = camera_zoom_percent;
+        dest["camera_pan_y_percent"] = camera_pan_y_percent;
 
         if (geometry_is_circle()) {
             int min_r = std::max(0, radius_min);
@@ -682,6 +762,18 @@ void RoomConfigurator::ensure_base_panels() {
         }
 };
 
+
+    // Camera panel
+    if (!camera_panel_) {
+        camera_panel_ = std::make_unique<DockableCollapsible>("Camera Settings", false);
+        camera_panel_->set_floatable(false);
+        camera_panel_->set_show_header(true);
+        camera_panel_->set_close_button_enabled(false);
+        camera_panel_->set_scroll_enabled(false);
+        camera_panel_->set_row_gap(DMSpacing::item_gap());
+        camera_panel_->set_col_gap(DMSpacing::item_gap());
+        camera_panel_->set_padding(DMSpacing::panel_padding());
+    }
     const std::string geometry_title = is_trail_context_ ? "Trail Geometry" : "Room Geometry";
     const std::string tags_title = is_trail_context_ ? "Trail Tags" : "Room Tags";
     const std::string types_title = is_trail_context_ ? "Trail Types" : "Room Types";
@@ -696,6 +788,19 @@ void RoomConfigurator::refresh_base_panel_rows() {
     ordered_panel_bounds_.clear();
     spawn_config_bounds_.clear();
     add_spawn_bounds_ = SDL_Rect{0,0,0,0};
+
+    refresh_camera_panel_widgets();
+    if (camera_panel_) {
+        DockableCollapsible::Rows cam_rows;
+        cam_rows.push_back({camera_height_widget_.get()});
+        cam_rows.push_back({camera_tilt_widget_.get()});
+        cam_rows.push_back({camera_y_distance_widget_.get()});
+        cam_rows.push_back({camera_zoom_widget_.get()});
+        cam_rows.push_back({camera_pan_widget_.get()});
+        camera_panel_->set_rows(cam_rows);
+        camera_panel_->set_visible(true);
+        ordered_base_panels_.push_back(camera_panel_.get());
+    }
 
     if (geometry_panel_) {
         DockableCollapsible::Rows rows;
@@ -1852,6 +1957,7 @@ bool RoomConfigurator::sync_state_from_widgets() {
     bool changed = false;
     bool rebuild_required = false;
     bool tags_changed = false;
+    bool camera_changed = false;
     const bool allow_height = !is_trail_context_ && kTrailsAllowIndependentDimensions;
 
     if (tags_dirty_) {
@@ -1946,6 +2052,53 @@ bool RoomConfigurator::sync_state_from_widgets() {
         }
     }
 
+    if (camera_height_slider_) {
+        int sanitized = std::clamp(camera_height_slider_->value(), kCameraHeightMinPx, kCameraHeightMaxPx);
+        if (sanitized != state_->camera_height_px) {
+            state_->camera_height_px = sanitized;
+            changed = true;
+            camera_changed = true;
+        }
+    }
+
+    if (camera_tilt_slider_) {
+        float clamped = static_cast<float>(std::clamp(camera_tilt_slider_->value(),
+                                                      static_cast<int>(kCameraTiltMinDeg),
+                                                      static_cast<int>(kCameraTiltMaxDeg)));
+        if (std::fabs(clamped - state_->camera_tilt_deg) > 1e-3f) {
+            state_->camera_tilt_deg = clamped;
+            changed = true;
+            camera_changed = true;
+        }
+    }
+
+    if (camera_y_distance_slider_) {
+        int sanitized = std::clamp(camera_y_distance_slider_->value(), kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
+        if (sanitized != state_->camera_y_distance_px) {
+            state_->camera_y_distance_px = sanitized;
+            changed = true;
+            camera_changed = true;
+        }
+    }
+
+    if (camera_zoom_slider_) {
+        int sanitized = std::clamp(camera_zoom_slider_->value(), kCameraZoomMinPercent, kCameraZoomMaxPercent);
+        if (sanitized != state_->camera_zoom_percent) {
+            state_->camera_zoom_percent = sanitized;
+            changed = true;
+            camera_changed = true;
+        }
+    }
+
+    if (camera_pan_slider_) {
+        int sanitized = std::clamp(camera_pan_slider_->value(), kCameraPanMinPercent, kCameraPanMaxPercent);
+        if (sanitized != state_->camera_pan_y_percent) {
+            state_->camera_pan_y_percent = sanitized;
+            changed = true;
+            camera_changed = true;
+        }
+    }
+
     if (radius_slider_) {
         int slider_min = radius_slider_->min_value();
         int slider_max = radius_slider_->max_value();
@@ -2013,6 +2166,34 @@ bool RoomConfigurator::sync_state_from_widgets() {
     sync_text_box_with_value(width_max_box_.get(), state_->width_max);
     sync_text_box_with_value(height_min_box_.get(), state_->height_min);
     sync_text_box_with_value(height_max_box_.get(), state_->height_max);
+    auto sync_float_box = [](DMTextBox* box, float value) {
+        if (!box || box->is_editing()) {
+            return;
+        }
+        std::stringstream ss;
+        ss << value;
+        const std::string desired = ss.str();
+        if (box->value() != desired) {
+            box->set_value(desired);
+        }
+    };
+    if (camera_height_slider_) {
+        camera_height_slider_->set_value(std::clamp(state_->camera_height_px, kCameraHeightMinPx, kCameraHeightMaxPx));
+    }
+    if (camera_tilt_slider_) {
+        camera_tilt_slider_->set_value(std::clamp(static_cast<int>(std::lround(state_->camera_tilt_deg)),
+                                                  static_cast<int>(kCameraTiltMinDeg),
+                                                  static_cast<int>(kCameraTiltMaxDeg)));
+    }
+    if (camera_y_distance_slider_) {
+        camera_y_distance_slider_->set_value(std::clamp(state_->camera_y_distance_px, kCameraYDistanceMinPx, kCameraYDistanceMaxPx));
+    }
+    if (camera_zoom_slider_) {
+        camera_zoom_slider_->set_value(std::clamp(state_->camera_zoom_percent, kCameraZoomMinPercent, kCameraZoomMaxPercent));
+    }
+    if (camera_pan_slider_) {
+        camera_pan_slider_->set_value(std::clamp(state_->camera_pan_y_percent, kCameraPanMinPercent, kCameraPanMaxPercent));
+    }
     if (radius_slider_) {
         bool skip_slider_sync =
             radius_slider_->defer_commit_until_unfocus() && radius_slider_->has_pending_values();
@@ -2029,6 +2210,11 @@ bool RoomConfigurator::sync_state_from_widgets() {
             auto& root = live_room_json();
             state_->apply_to_json(root, allow_height);
             write_tags_to_json(root);
+            room_->camera_height_px = state_->camera_height_px;
+            room_->camera_tilt_deg = state_->camera_tilt_deg;
+            room_->camera_y_distance_px = state_->camera_y_distance_px;
+            room_->camera_zoom_percent = state_->camera_zoom_percent;
+            room_->camera_pan_y_percent = state_->camera_pan_y_percent;
             room_->save_assets_json();
             if (tags_changed) {
                 tag_utils::notify_tags_changed();
@@ -2037,6 +2223,9 @@ bool RoomConfigurator::sync_state_from_widgets() {
             auto& root = live_room_json();
             state_->apply_to_json(root, allow_height);
             write_tags_to_json(root);
+        }
+        if (camera_changed) {
+            request_camera_live_update();
         }
         if (on_external_spawn_change_) {
             on_external_spawn_change_();
@@ -2254,3 +2443,120 @@ void RoomConfigurator::request_rebuild() {
     deferred_rebuild_ = true;
 }
 
+bool RoomConfigurator::camera_controls_enabled() const {
+    return visible() && camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_expanded();
+}
+
+void RoomConfigurator::refresh_camera_panel_widgets() {
+    const int height_value = std::clamp(state_->camera_height_px, kCameraHeightMinPx, kCameraHeightMaxPx);
+    const int tilt_value = std::clamp(static_cast<int>(std::lround(state_->camera_tilt_deg)),
+                                      static_cast<int>(kCameraTiltMinDeg),
+                                      static_cast<int>(kCameraTiltMaxDeg));
+    const int y_distance_value = std::clamp(state_->camera_y_distance_px, kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
+    const int zoom_value = std::clamp(state_->camera_zoom_percent, kCameraZoomMinPercent, kCameraZoomMaxPercent);
+    const int pan_value = std::clamp(state_->camera_pan_y_percent, kCameraPanMinPercent, kCameraPanMaxPercent);
+
+    const std::string height_label = is_trail_context_ ? "Trail Height (px)" : "Height (px)";
+    const std::string tilt_label   = is_trail_context_ ? "Trail Tilt (deg)" : "Tilt (deg)";
+    const std::string y_offset_label = is_trail_context_ ? "Trail Y Distance (px)" : "Y Distance (px)";
+    const std::string zoom_label = is_trail_context_ ? "Trail Zoom (%)" : "Zoom (%)";
+    const std::string pan_label = is_trail_context_ ? "Trail Pan Y (%)" : "Pan Up/Down (%)";
+
+    camera_height_slider_ = std::make_unique<DMSlider>(height_label, kCameraHeightMinPx, kCameraHeightMaxPx, height_value);
+    camera_tilt_slider_ = std::make_unique<DMSlider>(tilt_label,
+                                                     static_cast<int>(kCameraTiltMinDeg),
+                                                     static_cast<int>(kCameraTiltMaxDeg),
+                                                     tilt_value);
+    camera_y_distance_slider_ = std::make_unique<DMSlider>(y_offset_label, kCameraYDistanceMinPx, kCameraYDistanceMaxPx, y_distance_value);
+    camera_zoom_slider_ = std::make_unique<DMSlider>(zoom_label, kCameraZoomMinPercent, kCameraZoomMaxPercent, zoom_value);
+    camera_pan_slider_ = std::make_unique<DMSlider>(pan_label, kCameraPanMinPercent, kCameraPanMaxPercent, pan_value);
+
+    camera_height_widget_ = std::make_unique<SliderWidget>(camera_height_slider_.get());
+    camera_tilt_widget_ = std::make_unique<SliderWidget>(camera_tilt_slider_.get());
+    camera_y_distance_widget_ = std::make_unique<SliderWidget>(camera_y_distance_slider_.get());
+    camera_zoom_widget_ = std::make_unique<SliderWidget>(camera_zoom_slider_.get());
+    camera_pan_widget_ = std::make_unique<SliderWidget>(camera_pan_slider_.get());
+}
+
+bool RoomConfigurator::apply_camera_adjustment(const CameraAdjustment& adjustment) {
+    if (!state_) {
+        return false;
+    }
+
+    bool changed = false;
+    auto clamp_int = [&](int& value, int min_value, int max_value) {
+        int clamped = std::clamp(value, min_value, max_value);
+        if (clamped != value) {
+            value = clamped;
+        }
+    };
+
+    if (adjustment.height_delta_px != 0) {
+        state_->camera_height_px += adjustment.height_delta_px;
+        clamp_int(state_->camera_height_px, kCameraHeightMinPx, kCameraHeightMaxPx);
+        changed = true;
+    }
+    if (std::fabs(adjustment.tilt_delta_deg) > 1e-6f) {
+        state_->camera_tilt_deg += adjustment.tilt_delta_deg;
+        state_->camera_tilt_deg = std::clamp(state_->camera_tilt_deg, kCameraTiltMinDeg, kCameraTiltMaxDeg);
+        changed = true;
+    }
+    if (adjustment.y_distance_delta_px != 0) {
+        state_->camera_y_distance_px += adjustment.y_distance_delta_px;
+        clamp_int(state_->camera_y_distance_px, kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
+        changed = true;
+    }
+    if (adjustment.zoom_delta_percent != 0) {
+        state_->camera_zoom_percent += adjustment.zoom_delta_percent;
+        clamp_int(state_->camera_zoom_percent, kCameraZoomMinPercent, kCameraZoomMaxPercent);
+        changed = true;
+    }
+    if (std::fabs(adjustment.pan_delta_percent) > 1e-6f) {
+        state_->camera_pan_y_percent = static_cast<int>(
+            std::lround(static_cast<double>(state_->camera_pan_y_percent) + adjustment.pan_delta_percent));
+        clamp_int(state_->camera_pan_y_percent, kCameraPanMinPercent, kCameraPanMaxPercent);
+        changed = true;
+    }
+
+    if (!changed) {
+        return false;
+    }
+
+    if (camera_height_slider_) {
+        camera_height_slider_->set_value(state_->camera_height_px);
+    }
+    if (camera_tilt_slider_) {
+        camera_tilt_slider_->set_value(static_cast<int>(std::lround(state_->camera_tilt_deg)));
+    }
+    if (camera_y_distance_slider_) {
+        camera_y_distance_slider_->set_value(state_->camera_y_distance_px);
+    }
+    if (camera_zoom_slider_) {
+        camera_zoom_slider_->set_value(state_->camera_zoom_percent);
+    }
+    if (camera_pan_slider_) {
+        camera_pan_slider_->set_value(state_->camera_pan_y_percent);
+    }
+
+    request_camera_live_update();
+    return true;
+}
+
+void RoomConfigurator::request_camera_live_update() {
+    if (!state_) return;
+    // Save to room/external json and trigger camera update in dev mode
+    if (room_) {
+        room_->camera_height_px = state_->camera_height_px;
+        room_->camera_tilt_deg = state_->camera_tilt_deg;
+        room_->camera_y_distance_px = state_->camera_y_distance_px;
+        room_->camera_zoom_percent = state_->camera_zoom_percent;
+        room_->camera_pan_y_percent = state_->camera_pan_y_percent;
+        state_->apply_to_json(room_->assets_data(), true);
+        room_->save_assets_json();
+        if (on_camera_changed_) on_camera_changed_(room_);
+    } else if (external_room_json_) {
+        state_->apply_to_json(*external_room_json_, true);
+        if (on_external_spawn_change_) on_external_spawn_change_();
+        if (on_camera_changed_) on_camera_changed_(nullptr);
+    }
+}

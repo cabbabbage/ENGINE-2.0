@@ -54,12 +54,12 @@ class MainMenu {
         bool is_map = false;
 };
 
-    SDL_Texture* background_tex_ = nullptr;
     std::filesystem::path background_image_path_;
     std::vector<MenuEntry> buttons_;
     const nlohmann::json* maps_json_ = nullptr;
     std::unordered_map<std::string, const nlohmann::json*> map_lookup_;
     std::filesystem::path manifest_root_;
+    SDL_Texture* cached_bg_tex_ = nullptr;
     Uint64 animation_start_ticks_ = 0;
 
     std::filesystem::path resolve_manifest_path(const std::string& forward_path) const;

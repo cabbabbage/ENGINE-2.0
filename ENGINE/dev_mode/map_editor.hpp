@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "dev_mode/pan_and_zoom.hpp"
+#include "dev_mode/pan_and_height.hpp"
 
 class Assets;
 class Input;
@@ -87,7 +87,7 @@ private:
     TTF_Font* label_font_ = nullptr;
 
     Room* pending_selection_ = nullptr;
-    PanAndZoom pan_zoom_;
+    PanAndHeight pan_height_;
     std::vector<std::pair<Room*, SDL_Rect>> label_rects_;
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;
     mutable SDL_Rect active_label_bounds_{0,0,0,0};

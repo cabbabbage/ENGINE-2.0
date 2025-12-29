@@ -306,7 +306,8 @@ bool FrameChildrenEditor::handle_event(const SDL_Event& e) {
             if (auto* child = current_child()) {
                 float denom = (std::isfinite(offset_scale) && offset_scale > 0.0f) ? offset_scale : 1.0f;
                 child->dx = static_cast<float>(std::round((static_cast<float>(screen.x) - anchor_screen.x) / denom));
-                child->dy = static_cast<float>(std::round((static_cast<float>(screen.y) - anchor_screen.y) / denom));
+                child->dz = static_cast<float>(std::round((static_cast<float>(screen.y) - anchor_screen.y) / denom));
+                child->dy = 0.0f;
                 persist_changes();
                 refresh_tools_panel();
             }
@@ -400,6 +401,7 @@ void FrameChildrenEditor::reload_from_document() {
             if (entry.is_array()) {
                 if (!entry.empty() && entry[0].is_number()) frame.dx = static_cast<float>(entry[0].get<double>());
                 if (entry.size() > 1 && entry[1].is_number()) frame.dy = static_cast<float>(entry[1].get<double>());
+                frame.dz = 0.0f;
                 if (entry.size() > 2 && entry[2].is_boolean()) frame.resort_z = entry[2].get<bool>();
                 auto find_children_array = [](const nlohmann::json& arr) -> const nlohmann::json* {
                     if (!arr.is_array()) {
@@ -431,14 +433,29 @@ void FrameChildrenEditor::reload_from_document() {
                         if (child_entry.size() > 2 && child_entry[2].is_number()) {
                             child.dy = static_cast<float>(child_entry[2].get<double>());
                         }
-                        if (child_entry.size() > 3 && child_entry[3].is_number()) {
-                            child.rotation = static_cast<float>(child_entry[3].get<double>());
-                        }
-                        if (child_entry.size() > 4) {
-                            child.visible = is_true(child_entry[4], true);
-                        }
-                        if (child_entry.size() > 5) {
-                            child.render_in_front = is_true(child_entry[5], true);
+                        if (child_entry.size() > 3 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                            child.dz = static_cast<float>(child_entry[3].get<double>());
+                            if (child_entry.size() > 4 && child_entry[4].is_number()) {
+                                child.rotation = static_cast<float>(child_entry[4].get<double>());
+                            }
+                            if (child_entry.size() > 5) {
+                                child.visible = is_true(child_entry[5], true);
+                            }
+                            if (child_entry.size() > 6) {
+                                child.render_in_front = is_true(child_entry[6], true);
+                            }
+                        } else {
+                            if (child_entry.size() > 3 && child_entry[3].is_number()) {
+                                child.rotation = static_cast<float>(child_entry[3].get<double>());
+                            }
+                            if (child_entry.size() > 4) {
+                                child.visible = is_true(child_entry[4], true);
+                            }
+                            if (child_entry.size() > 5) {
+                                child.render_in_front = is_true(child_entry[5], true);
+                            }
+                            child.dz = child.dy;
+                            child.dy = 0.0f;
                         }
                         frame.children.push_back(child);
                     }
@@ -446,6 +463,7 @@ void FrameChildrenEditor::reload_from_document() {
             } else if (entry.is_object()) {
                 frame.dx = static_cast<float>(entry.value("dx", 0.0));
                 frame.dy = static_cast<float>(entry.value("dy", 0.0));
+                frame.dz = static_cast<float>(entry.value("dz", 0.0));
                 frame.resort_z = entry.value("resort_z", false);
                 if (entry.contains("children") && entry["children"].is_array()) {
                     for (const auto& child_entry : entry["children"]) {
@@ -455,6 +473,10 @@ void FrameChildrenEditor::reload_from_document() {
                             child.child_index = child_entry.value("child_index", -1);
                             child.dx = static_cast<float>(child_entry.value("dx", 0.0));
                             child.dy = static_cast<float>(child_entry.value("dy", 0.0));
+                            child.dz = static_cast<float>(child_entry.value("dz", child_entry.value("dy", 0.0)));
+                            if (!child_entry.contains("dz")) {
+                                child.dy = 0.0f;
+                            }
                             double deg = child_entry.value("degree", child_entry.value("rotation", 0.0));
                             child.rotation = static_cast<float>(deg);
                             child.visible = child_entry.value("visible", true);
@@ -467,14 +489,29 @@ void FrameChildrenEditor::reload_from_document() {
                             if (child_entry.size() > 2 && child_entry[2].is_number()) {
                                 child.dy = static_cast<float>(child_entry[2].get<double>());
                             }
-                            if (child_entry.size() > 3 && child_entry[3].is_number()) {
-                                child.rotation = static_cast<float>(child_entry[3].get<double>());
-                            }
-                            if (child_entry.size() > 4) {
-                                child.visible = is_true(child_entry[4], true);
-                            }
-                            if (child_entry.size() > 5) {
-                                child.render_in_front = is_true(child_entry[5], true);
+                            if (child_entry.size() > 3 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                                child.dz = static_cast<float>(child_entry[3].get<double>());
+                                if (child_entry.size() > 4 && child_entry[4].is_number()) {
+                                    child.rotation = static_cast<float>(child_entry[4].get<double>());
+                                }
+                                if (child_entry.size() > 5) {
+                                    child.visible = is_true(child_entry[5], true);
+                                }
+                                if (child_entry.size() > 6) {
+                                    child.render_in_front = is_true(child_entry[6], true);
+                                }
+                            } else {
+                                if (child_entry.size() > 3 && child_entry[3].is_number()) {
+                                    child.rotation = static_cast<float>(child_entry[3].get<double>());
+                                }
+                                if (child_entry.size() > 4) {
+                                    child.visible = is_true(child_entry[4], true);
+                                }
+                                if (child_entry.size() > 5) {
+                                    child.render_in_front = is_true(child_entry[5], true);
+                                }
+                                child.dz = child.dy;
+                                child.dy = 0.0f;
                             }
                         }
                         frame.children.push_back(child);
@@ -490,6 +527,7 @@ void FrameChildrenEditor::reload_from_document() {
     }
     frames_.front().dx = 0.0f;
     frames_.front().dy = 0.0f;
+    frames_.front().dz = 0.0f;
 
     ensure_child_vectors();
     apply_child_timelines_from_payload(payload);
@@ -675,6 +713,7 @@ FrameChildrenEditor::ChildFrame FrameChildrenEditor::child_frame_from_sample(con
     child.child_index = child_index;
     child.dx = 0.0f;
     child.dy = 0.0f;
+    child.dz = 0.0f;
     child.rotation = 0.0f;
     child.visible = false;
     child.render_in_front = true;
@@ -682,6 +721,12 @@ FrameChildrenEditor::ChildFrame FrameChildrenEditor::child_frame_from_sample(con
     if (sample.is_object()) {
         if (sample.contains("dx")) child.dx = static_cast<float>(read_int(sample["dx"], 0));
         if (sample.contains("dy")) child.dy = static_cast<float>(read_int(sample["dy"], 0));
+        if (sample.contains("dz")) {
+            child.dz = static_cast<float>(read_int(sample["dz"], 0));
+        } else {
+            child.dz = child.dy;
+            child.dy = 0.0f;
+        }
         if (sample.contains("degree")) {
             child.rotation = read_float(sample["degree"], 0.0f);
         } else if (sample.contains("rotation")) {
@@ -692,9 +737,18 @@ FrameChildrenEditor::ChildFrame FrameChildrenEditor::child_frame_from_sample(con
     } else if (sample.is_array()) {
         if (!sample.empty()) child.dx = static_cast<float>(read_int(sample[0], 0));
         if (sample.size() > 1) child.dy = static_cast<float>(read_int(sample[1], 0));
-        if (sample.size() > 2) child.rotation = read_float(sample[2], 0.0f);
-        if (sample.size() > 3) child.visible = read_bool(sample[3], child.visible);
-        if (sample.size() > 4) child.render_in_front = read_bool(sample[4], child.render_in_front);
+        if (sample.size() > 2 && sample.size() >= 6) {
+            child.dz = static_cast<float>(read_int(sample[2], 0));
+            if (sample.size() > 3) child.rotation = read_float(sample[3], 0.0f);
+            if (sample.size() > 4) child.visible = read_bool(sample[4], child.visible);
+            if (sample.size() > 5) child.render_in_front = read_bool(sample[5], child.render_in_front);
+        } else {
+            if (sample.size() > 2) child.rotation = read_float(sample[2], 0.0f);
+            if (sample.size() > 3) child.visible = read_bool(sample[3], child.visible);
+            if (sample.size() > 4) child.render_in_front = read_bool(sample[4], child.render_in_front);
+            child.dz = child.dy;
+            child.dy = 0.0f;
+        }
     }
     return child;
 }
@@ -703,6 +757,7 @@ nlohmann::json FrameChildrenEditor::child_frame_to_json(const ChildFrame& frame)
     nlohmann::json sample = nlohmann::json::object();
     sample["dx"] = static_cast<int>(std::lround(frame.dx));
     sample["dy"] = static_cast<int>(std::lround(frame.dy));
+    sample["dz"] = static_cast<int>(std::lround(frame.dz));
     sample["degree"] = static_cast<double>(frame.rotation);
     sample["visible"] = frame.visible;
     sample["render_in_front"] = frame.render_in_front;
@@ -1015,13 +1070,25 @@ void FrameChildrenEditor::persist_changes() {
         const auto& frame = frames_[i];
         int dx = static_cast<int>(std::lround(frame.dx));
         int dy = static_cast<int>(std::lround(frame.dy));
-        nlohmann::json entry = nlohmann::json::array({dx, dy});
-        if (frame.resort_z) {
-            entry.push_back(frame.resort_z);
+        nlohmann::json entry;
+        if (std::fabs(frame.dz) > 0.0001f) {
+            entry = nlohmann::json::object({
+                {"dx", dx},
+                {"dy", dy},
+                {"dz", static_cast<int>(std::lround(frame.dz))},
+                {"resort_z", frame.resort_z}
+            });
+        } else {
+            entry = nlohmann::json::array({dx, dy});
+            if (frame.resort_z) {
+                entry.push_back(frame.resort_z);
+            }
         }
         if (!child_ids_.empty()) {
-            while (entry.size() < 4) {
-                entry.push_back(nlohmann::json());
+            if (entry.is_array()) {
+                while (entry.size() < 4) {
+                    entry.push_back(nlohmann::json());
+                }
             }
             nlohmann::json child_entries = nlohmann::json::array();
             if (!frame.children.empty()) {
@@ -1034,13 +1101,18 @@ void FrameChildrenEditor::persist_changes() {
                     child_json.push_back(child.child_index);
                     child_json.push_back(static_cast<int>(std::lround(child.dx)));
                     child_json.push_back(static_cast<int>(std::lround(child.dy)));
+                    child_json.push_back(static_cast<int>(std::lround(child.dz)));
                     child_json.push_back(static_cast<double>(child.rotation));
                     child_json.push_back(child.visible);
                     child_json.push_back(child.render_in_front);
                     child_entries.push_back(std::move(child_json));
                 }
             }
-            entry.push_back(std::move(child_entries));
+            if (entry.is_array()) {
+                entry.push_back(std::move(child_entries));
+            } else {
+                entry["children"] = std::move(child_entries);
+            }
         }
         movement_json.push_back(std::move(entry));
     }
@@ -1183,7 +1255,7 @@ SDL_FPoint FrameChildrenEditor::child_screen_position(const ChildFrame& child,
                                                       float offset_scale) const {
     float scale = (std::isfinite(offset_scale) && offset_scale > 0.0f) ? offset_scale : 1.0f;
     return SDL_FPoint{anchor_screen.x + child.dx * scale,
-                      anchor_screen.y + child.dy * scale};
+                      anchor_screen.y + child.dz * scale};
 }
 
 int FrameChildrenEditor::hit_test_child(int x, int y) const {

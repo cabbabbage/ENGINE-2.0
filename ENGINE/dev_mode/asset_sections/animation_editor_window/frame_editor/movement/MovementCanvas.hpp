@@ -14,6 +14,7 @@ class PreviewProvider;
 struct MovementFrame {
     float dx = 0.0f;
     float dy = 0.0f;
+    float dz = 0.0f;
     bool resort_z = false;
 
 };
@@ -58,7 +59,7 @@ class MovementCanvas {
     void rebuild_path();
     void fit_view_to_content();
     void pan_view(float delta_x, float delta_y);
-    void apply_zoom(float scale_delta);
+    void apply_view_scale(float scale_delta);
     void apply_frame_move_from_base(int index, const SDL_FPoint& new_position, const std::vector<SDL_FPoint>& base_positions);
     void update_selection_from_mouse();
 
@@ -67,7 +68,7 @@ class MovementCanvas {
     std::vector<MovementFrame> frames_;
     std::vector<SDL_FPoint> positions_;
     float pixels_per_unit_ = 1.0f;
-    float zoom_ = 1.0f;
+    float view_scale_ = 1.0f;
     SDL_FPoint center_world_{0.0f, 0.0f};
     int selected_index_ = 0;
     int hovered_index_ = -1;

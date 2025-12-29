@@ -27,6 +27,11 @@
 #include "utils/log.hpp"
 #include "world/chunk.hpp"
 #include "world/world_grid.hpp"
+#include "map_generation/map_layers_geometry.hpp"
+
+namespace {
+bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points);
+}
 
 void GridTileRenderer::render(SDL_Renderer* renderer) {
     if (!renderer || !assets_) return;
@@ -52,15 +57,41 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
             SDL_Point world_br{ tile.world_rect.x + tile.world_rect.w, tile.world_rect.y + tile.world_rect.h };
             SDL_Point world_bl{ tile.world_rect.x, tile.world_rect.y + tile.world_rect.h };
 
-            auto floor_warped_screen_position = [&](SDL_Point world_pos) -> SDL_FPoint {
-                auto effects = cam.compute_render_effects(world_pos, 0, 0, {});
-                return {std::floor(effects.screen_position.x), std::floor(effects.screen_position.y)};
-};
+            auto floor_project = [&](SDL_Point world_pos, SDL_FPoint& out) -> bool {
+                SDL_FPoint screen{};
+                if (!cam.project_world_point(SDL_FPoint{static_cast<float>(world_pos.x), static_cast<float>(world_pos.y)},
+                                             0.0f,
+                                             screen)) {
+                    return false;
+                }
+                if (!std::isfinite(screen.x) || !std::isfinite(screen.y)) {
+                    return false;
+                }
+                screen.y = cam.warp_floor_screen_y(static_cast<float>(world_pos.y), screen.y);
+                if (!std::isfinite(screen.y)) {
+                    return false;
+                }
+                out = SDL_FPoint{std::floor(screen.x), std::floor(screen.y)};
+                return true;
+            };
 
-            SDL_FPoint screen_tl = floor_warped_screen_position(world_tl);
-            SDL_FPoint screen_tr = floor_warped_screen_position(world_tr);
-            SDL_FPoint screen_br = floor_warped_screen_position(world_br);
-            SDL_FPoint screen_bl = floor_warped_screen_position(world_bl);
+            SDL_FPoint screen_tl{};
+            SDL_FPoint screen_tr{};
+            SDL_FPoint screen_br{};
+            SDL_FPoint screen_bl{};
+            if (!floor_project(world_tl, screen_tl) ||
+                !floor_project(world_tr, screen_tr) ||
+                !floor_project(world_br, screen_br) ||
+                !floor_project(world_bl, screen_bl)) {
+                continue;
+            }
+
+            std::array<SDL_FPoint, 4> tile_points{screen_tl, screen_tr, screen_br, screen_bl};
+            enforce_trapezoid(tile_points);
+            screen_tl = tile_points[0];
+            screen_tr = tile_points[1];
+            screen_br = tile_points[2];
+            screen_bl = tile_points[3];
 
             const float area_doubled =
                 (screen_tr.x - screen_tl.x) * (screen_bl.y - screen_tl.y) - (screen_bl.x - screen_tl.x) * (screen_tr.y - screen_tl.y);
@@ -105,6 +136,188 @@ namespace {
 
 inline float ticks_to_seconds(Uint64 ticks) {
     return static_cast<float>(ticks) * 0.001f;
+}
+
+inline float smoothstep(float edge0, float edge1, float x) {
+    if (edge0 == edge1) {
+        return x < edge0 ? 0.0f : 1.0f;
+    }
+    const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+
+struct WarpedQuad {
+    std::array<SDL_Vertex, 4> vertices{};
+};
+
+constexpr float kQuadEpsilon = 1e-5f;
+
+float cross(const SDL_FPoint& a, const SDL_FPoint& b, const SDL_FPoint& c) {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
+
+bool on_segment(const SDL_FPoint& a, const SDL_FPoint& b, const SDL_FPoint& p) {
+    return p.x >= std::min(a.x, b.x) - kQuadEpsilon &&
+           p.x <= std::max(a.x, b.x) + kQuadEpsilon &&
+           p.y >= std::min(a.y, b.y) - kQuadEpsilon &&
+           p.y <= std::max(a.y, b.y) + kQuadEpsilon;
+}
+
+bool segments_intersect(const SDL_FPoint& a, const SDL_FPoint& b, const SDL_FPoint& c, const SDL_FPoint& d) {
+    const float d1 = cross(a, b, c);
+    const float d2 = cross(a, b, d);
+    const float d3 = cross(c, d, a);
+    const float d4 = cross(c, d, b);
+
+    const bool d1_zero = std::abs(d1) <= kQuadEpsilon;
+    const bool d2_zero = std::abs(d2) <= kQuadEpsilon;
+    const bool d3_zero = std::abs(d3) <= kQuadEpsilon;
+    const bool d4_zero = std::abs(d4) <= kQuadEpsilon;
+
+    if (((d1 > 0.0f && d2 < 0.0f) || (d1 < 0.0f && d2 > 0.0f)) &&
+        ((d3 > 0.0f && d4 < 0.0f) || (d3 < 0.0f && d4 > 0.0f))) {
+        return true;
+    }
+    if (d1_zero && on_segment(a, b, c)) return true;
+    if (d2_zero && on_segment(a, b, d)) return true;
+    if (d3_zero && on_segment(c, d, a)) return true;
+    if (d4_zero && on_segment(c, d, b)) return true;
+    return false;
+}
+
+bool is_convex_quad(const std::array<SDL_FPoint, 4>& points) {
+    float sign = 0.0f;
+    for (int i = 0; i < 4; ++i) {
+        const SDL_FPoint& a = points[i];
+        const SDL_FPoint& b = points[(i + 1) % 4];
+        const SDL_FPoint& c = points[(i + 2) % 4];
+        const float area = cross(a, b, c);
+        if (std::abs(area) <= kQuadEpsilon) {
+            continue;
+        }
+        if (sign == 0.0f) {
+            sign = area;
+        } else if ((sign > 0.0f) != (area > 0.0f)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points) {
+    const bool intersects = segments_intersect(points[0], points[1], points[2], points[3]) ||
+        segments_intersect(points[1], points[2], points[3], points[0]);
+    const bool convex = is_convex_quad(points);
+    if (!intersects && convex) {
+        return false;
+    }
+
+    std::array<int, 4> indices{0, 1, 2, 3};
+    std::sort(indices.begin(), indices.end(), [&](int a, int b) {
+        if (points[a].y != points[b].y) {
+            return points[a].y < points[b].y;
+        }
+        return points[a].x < points[b].x;
+    });
+
+    int top_left = indices[0];
+    int top_right = indices[1];
+    int bottom_left = indices[2];
+    int bottom_right = indices[3];
+
+    if (points[top_left].x > points[top_right].x) {
+        std::swap(top_left, top_right);
+    }
+    if (points[bottom_left].x > points[bottom_right].x) {
+        std::swap(bottom_left, bottom_right);
+    }
+
+    const std::array<SDL_FPoint, 4> reordered{
+        points[top_left],
+        points[top_right],
+        points[bottom_right],
+        points[bottom_left]
+    };
+    points = reordered;
+    return true;
+}
+
+bool project_world_point(const WarpedScreenGrid& cam,
+                         float world_x,
+                         float world_y,
+                         float world_z,
+                         SDL_FPoint& out) {
+    if (!cam.project_world_point(SDL_FPoint{world_x, world_y}, world_z, out)) {
+        return false;
+    }
+    return std::isfinite(out.x) && std::isfinite(out.y);
+}
+
+bool build_warped_quad(const RenderObject& obj,
+                       const WarpedScreenGrid& cam,
+                       WarpedQuad& quad) {
+    if (!obj.texture) {
+        return false;
+    }
+
+    const SDL_Rect& rect = obj.screen_rect;
+    if (rect.w <= 0 || rect.h <= 0) {
+        return false;
+    }
+    const float world_x = static_cast<float>(rect.x);
+    const float world_y = static_cast<float>(rect.y);
+    const float half_width = static_cast<float>(rect.w) * 0.5f;
+    const float height = static_cast<float>(rect.h);
+    const float base_z = obj.world_z_offset;
+    if (!(std::isfinite(world_x) && std::isfinite(world_y) && std::isfinite(half_width) && std::isfinite(height))) {
+        return false;
+    }
+
+    int tex_w = obj.texture_w;
+    int tex_h = obj.texture_h;
+    if (!obj.has_texture_size) {
+        if (SDL_QueryTexture(obj.texture, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+            return false;
+        }
+    }
+    if (tex_w <= 0 || tex_h <= 0) {
+        return false;
+    }
+
+    const float padding_x = 0.5f / static_cast<float>(tex_w);
+    const float padding_y = 0.5f / static_cast<float>(tex_h);
+    float u0 = padding_x;
+    float u1 = 1.0f - padding_x;
+    float v0 = padding_y;
+    float v1 = 1.0f - padding_y;
+
+    if ((obj.flip & SDL_FLIP_HORIZONTAL) != 0) {
+        std::swap(u0, u1);
+    }
+    if ((obj.flip & SDL_FLIP_VERTICAL) != 0) {
+        std::swap(v0, v1);
+    }
+
+    const SDL_Color white{255, 255, 255, 255};
+
+    SDL_FPoint base_screen{};
+    if (!project_world_point(cam, world_x, world_y, base_z, base_screen)) {
+        return false;
+    }
+
+    quad.vertices[0].position = SDL_FPoint{base_screen.x - half_width, base_screen.y - height};
+    quad.vertices[1].position = SDL_FPoint{base_screen.x + half_width, base_screen.y - height};
+    quad.vertices[2].position = SDL_FPoint{base_screen.x + half_width, base_screen.y};
+    quad.vertices[3].position = SDL_FPoint{base_screen.x - half_width, base_screen.y};
+    for (auto& vertex : quad.vertices) {
+        vertex.color = white;
+    }
+    quad.vertices[0].tex_coord = SDL_FPoint{u0, v0};
+    quad.vertices[1].tex_coord = SDL_FPoint{u1, v0};
+    quad.vertices[2].tex_coord = SDL_FPoint{u1, v1};
+    quad.vertices[3].tex_coord = SDL_FPoint{u0, v1};
+
+    return true;
 }
 
 }
@@ -188,6 +401,11 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
         map_clear_color_ = SDL_Color{69, 101, 74, 255};
     }
 
+    map_radius_world_ = map_layers::map_radius_from_map_info(map_manifest);
+    if (!std::isfinite(map_radius_world_) || map_radius_world_ <= 0.0) {
+        map_radius_world_ = static_cast<double>(std::max(screen_width_, screen_height_));
+    }
+
     vibble::log::debug(std::string{"[SceneRenderer] Initializing for map '"} + map_id +
                        "' with screen " + std::to_string(screen_width_) + "x" + std::to_string(screen_height_) + ".");
 
@@ -247,61 +465,19 @@ void SceneRenderer::render() {
     }
 
     const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
-    const float inv_scale = 1.0f / std::max(0.000001f, cam.get_scale());
-
-    struct ScreenRenderData {
-        SDL_Rect  rect{};
-        SDL_Point center{};
-        bool      use_center = false;
-};
-
-    auto build_screen_render_data = [&](const RenderObject& obj,
-                                        const SDL_FPoint& base,
-                                        int asset_world_x,
-                                        int asset_world_y) -> std::optional<ScreenRenderData> {
-        if (!obj.texture) {
-            return std::nullopt;
-        }
-
-        const int raw_width  = obj.screen_rect.w;
-        const int raw_height = obj.screen_rect.h;
-        if (raw_width <= 0 || raw_height <= 0) {
-            return std::nullopt;
-        }
-
-        const int offset_x = obj.screen_rect.x - asset_world_x;
-        const int offset_y = obj.screen_rect.y - asset_world_y;
-
-        const double scaled_width  = static_cast<double>(raw_width)  * static_cast<double>(inv_scale);
-        const double scaled_height = static_cast<double>(raw_height) * static_cast<double>(inv_scale);
-
-        if (!std::isfinite(scaled_width) || !std::isfinite(scaled_height)) {
-            return std::nullopt;
-        }
-
-        const int screen_w = std::max(1, static_cast<int>(std::lround(scaled_width)));
-        const int screen_h = std::max(1, static_cast<int>(std::lround(scaled_height)));
-
-        SDL_Rect screen_rect{
-            static_cast<int>(std::lround(base.x + static_cast<double>(offset_x) * static_cast<double>(inv_scale) - scaled_width * 0.5)), static_cast<int>(std::lround(base.y + static_cast<double>(offset_y) * static_cast<double>(inv_scale) - scaled_height)), screen_w, screen_h };
-
-        SDL_Point center = obj.center;
-        if (obj.use_custom_center) {
-            center.x = static_cast<int>(std::lround(static_cast<double>(center.x) * static_cast<double>(inv_scale)));
-            center.y = static_cast<int>(std::lround(static_cast<double>(center.y) * static_cast<double>(inv_scale)));
-        }
-
-        ScreenRenderData data;
-        data.rect       = screen_rect;
-        data.center     = center;
-        data.use_center = obj.use_custom_center;
-        return data;
-};
+    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
     const auto& active_assets = assets_->getActive();
+    std::vector<Asset*> sorted_assets(active_assets.begin(), active_assets.end());
+    std::sort(sorted_assets.begin(), sorted_assets.end(), [&](Asset* a, Asset* b) {
+        world::GridPoint* ga = cam.grid_point_for_asset(a);
+        world::GridPoint* gb = cam.grid_point_for_asset(b);
+        if (!ga || !gb) return ga > gb;
+        return ga->distance_to_camera > gb->distance_to_camera;
+    });
     std::vector<DarkMaskSprite> dark_mask_sprites;
-    dark_mask_sprites.reserve(std::max<std::size_t>(active_assets.size(), 8u));
-    for (Asset* asset : active_assets) {
+    dark_mask_sprites.reserve(std::max<std::size_t>(sorted_assets.size(), 8u));
+    for (Asset* asset : sorted_assets) {
         if (!asset || asset->is_hidden() || !asset->info) {
             continue;
         }
@@ -316,53 +492,45 @@ void SceneRenderer::render() {
             continue;
         }
 
-        composite_renderer_.update(asset, gp, flicker_time_seconds);
+        composite_renderer_.update(asset, flicker_time_seconds);
 
-        SDL_FPoint screen_base = gp->screen;
-        if (!std::isfinite(screen_base.x) || !std::isfinite(screen_base.y)) {
-            continue;
-        }
-
-        const float perspective_scale = gp->perspective_scale;
-        const float vertical_scale    = gp->vertical_scale;
-
-        const int asset_world_x = asset->pos.x;
-        const int asset_world_y = asset->pos.y;
+        const float fade_alpha = std::clamp(gp->horizon_fade_alpha * gp->near_camera_fade_alpha, 0.0f, 1.0f);
+        auto apply_fade_alpha = [&](SDL_Color color) {
+            if (fade_alpha >= 0.999f) {
+                return color;
+            }
+            const int scaled = static_cast<int>(std::lround(static_cast<float>(color.a) * fade_alpha));
+            color.a = static_cast<Uint8>(std::clamp(scaled, 0, 255));
+            return color;
+        };
 
         if (dark_mask_enabled_ && !asset->scene_mask_lights.empty()) {
             for (const RenderObject& mask_obj : asset->scene_mask_lights) {
-                auto screen_data = build_screen_render_data(mask_obj, screen_base, asset_world_x, asset_world_y);
-                if (!screen_data) {
+                WarpedQuad quad{};
+                if (!build_warped_quad(mask_obj, cam, quad)) {
                     continue;
                 }
                 DarkMaskSprite sprite;
-                sprite.texture     = mask_obj.texture;
-                sprite.screen_rect = screen_data->rect;
-                sprite.color_mod   = mask_obj.color_mod;
-                sprite.flip        = mask_obj.flip;
+                sprite.texture   = mask_obj.texture;
+                sprite.vertices  = quad.vertices;
+                sprite.color_mod = apply_fade_alpha(mask_obj.color_mod);
                 dark_mask_sprites.push_back(sprite);
             }
         }
 
         for (const RenderObject& obj : asset->render_package) {
-            auto screen_data = build_screen_render_data(obj, screen_base, asset_world_x, asset_world_y);
-            if (!screen_data) {
+            WarpedQuad quad{};
+            if (!build_warped_quad(obj, cam, quad)) {
                 continue;
             }
 
+            const SDL_Color color_mod = apply_fade_alpha(obj.color_mod);
             SDL_SetTextureBlendMode(obj.texture, obj.blend_mode);
 
-            Uint8 final_alpha = obj.color_mod.a;
+            SDL_SetTextureColorMod(obj.texture, color_mod.r, color_mod.g, color_mod.b);
+            SDL_SetTextureAlphaMod(obj.texture, color_mod.a);
 
-            SDL_SetTextureColorMod(obj.texture, obj.color_mod.r, obj.color_mod.g, obj.color_mod.b);
-            SDL_SetTextureAlphaMod(obj.texture, final_alpha);
-
-            if (obj.angle != 0.0 || obj.use_custom_center || obj.flip != SDL_FLIP_NONE) {
-                const SDL_Point* center_ptr = screen_data->use_center ? &screen_data->center : nullptr;
-                SDL_RenderCopyEx(renderer_, obj.texture, nullptr, &screen_data->rect, obj.angle, center_ptr, obj.flip);
-            } else {
-                SDL_RenderCopy(renderer_, obj.texture, nullptr, &screen_data->rect);
-            }
+            SDL_RenderGeometry(renderer_, obj.texture, quad.vertices.data(), 4, kQuadIndices, 6);
         }
     }
 
@@ -381,7 +549,7 @@ void SceneRenderer::render() {
         }};
 
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-        for (Asset* asset : active_assets) {
+        for (Asset* asset : sorted_assets) {
             if (!asset || asset->is_hidden() || !asset->info || !asset->anim_) {
                 continue;
             }
@@ -468,34 +636,77 @@ bool SceneRenderer::ensure_darkness_overlay() {
     }
 
     if (darkness_overlay_texture_ &&
-        (darkness_overlay_width_ != screen_width_ || darkness_overlay_height_ != screen_height_)) {
-        destroy_darkness_overlay();
+        darkness_overlay_width_ == screen_width_ &&
+        darkness_overlay_height_ == screen_height_) {
+        return true;
     }
 
-    if (!darkness_overlay_texture_) {
-        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, screen_width_, screen_height_);
+    // Screen size changed or no texture; rebuild.
+    destroy_darkness_overlay();
+
+    auto try_create = [&](int tex_w, int tex_h) -> SDL_Texture* {
+        tex_w = std::max(tex_w, 1);
+        tex_h = std::max(tex_h, 1);
+        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, tex_w, tex_h);
         if (!texture) {
-            vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate darkness overlay: "} + SDL_GetError());
-            darkness_overlay_allocation_failed_ = true;
-            return false;
+            return nullptr;
         }
-        darkness_overlay_texture_ = texture;
-        darkness_overlay_width_   = screen_width_;
-        darkness_overlay_height_  = screen_height_;
-        SDL_SetTextureBlendMode(darkness_overlay_texture_, SDL_BLENDMODE_BLEND);
-        darkness_overlay_allocation_failed_ = false;
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+        SDL_SetTextureScaleMode(texture, SDL_ScaleModeBest);
+#endif
+        return texture;
+    };
+
+    SDL_Texture* created = nullptr;
+    float        used_scale = 1.0f;
+
+    // Try full size first, then progressively lower resolution to avoid VRAM exhaustion on some drivers.
+    for (float scale : {1.0f, 0.75f, 0.5f, 0.25f}) {
+        const int tex_w = static_cast<int>(std::lround(static_cast<float>(screen_width_) * scale));
+        const int tex_h = static_cast<int>(std::lround(static_cast<float>(screen_height_) * scale));
+        created = try_create(tex_w, tex_h);
+        if (created) {
+            used_scale = scale;
+            break;
+        } else {
+            vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate darkness overlay ("} +
+                              std::to_string(tex_w) + "x" + std::to_string(tex_h) + "): " + SDL_GetError());
+        }
     }
 
-    return darkness_overlay_texture_ != nullptr;
+    if (!created) {
+        darkness_overlay_allocation_failed_ = true;
+        return false;
+    }
+
+    darkness_overlay_texture_      = created;
+    darkness_overlay_width_        = screen_width_;
+    darkness_overlay_height_       = screen_height_;
+    darkness_overlay_tex_width_    = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_width_) * used_scale)));
+    darkness_overlay_tex_height_   = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_height_) * used_scale)));
+    darkness_overlay_scale_used_   = used_scale;
+    darkness_overlay_allocation_failed_ = false;
+
+    if (used_scale < 0.999f) {
+        vibble::log::info(std::string{"[SceneRenderer] Darkness overlay using scaled buffer ("} +
+                          std::to_string(darkness_overlay_tex_width_) + "x" + std::to_string(darkness_overlay_tex_height_) +
+                          ", scale=" + std::to_string(used_scale) + ").");
+    }
+
+    return true;
 }
 
 void SceneRenderer::destroy_darkness_overlay() {
     if (darkness_overlay_texture_) {
         SDL_DestroyTexture(darkness_overlay_texture_);
         darkness_overlay_texture_ = nullptr;
-        darkness_overlay_width_   = 0;
-        darkness_overlay_height_  = 0;
     }
+    darkness_overlay_width_        = 0;
+    darkness_overlay_height_       = 0;
+    darkness_overlay_tex_width_    = 0;
+    darkness_overlay_tex_height_   = 0;
+    darkness_overlay_scale_used_   = 1.0f;
     darkness_overlay_allocation_failed_ = false;
 }
 
@@ -555,7 +766,15 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
         return;
     }
 
-    const double horizon_y = cam.horizon_screen_y_for_scale();
+    constexpr double kHalfFovY = 3.14159265358979323846 / 4.0;
+    const double pitch_rad = cam.current_pitch_radians();
+    const double tan_pitch = std::tan(pitch_rad);
+    const double tan_half_fov_y = std::tan(kHalfFovY);
+    const double horizon_ndc = (std::isfinite(tan_pitch) && std::isfinite(tan_half_fov_y) && tan_half_fov_y != 0.0)
+        ? (tan_pitch / tan_half_fov_y)
+        : 0.0;
+    const double horizon_y =
+        static_cast<double>(screen_height_) * 0.5 - horizon_ndc * static_cast<double>(screen_height_) * 0.5;
     if (!std::isfinite(horizon_y)) {
         return;
     }
@@ -573,21 +792,34 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
         return;
     }
 
-    const float target_w = static_cast<float>(screen_width_);
-    const float scale    = target_w / tex_w;
+    const float sky_visible_height =
+        std::clamp(static_cast<float>(horizon_y), 0.0f, static_cast<float>(screen_height_));
+    if (sky_visible_height <= 0.0f) {
+        return;
+    }
+    const float scale_x = static_cast<float>(screen_width_) / tex_w;
+    const float scale_y = sky_visible_height / tex_h;
+    const float scale   = std::max(scale_x, scale_y);
+    const float target_w = tex_w * scale;
     const float target_h = tex_h * scale;
     if (!std::isfinite(target_h) || target_h <= 0.0f || !std::isfinite(scale)) {
         return;
     }
 
     SDL_FRect dst{
-        0.0f,
+        (static_cast<float>(screen_width_) - target_w) * 0.5f,
         static_cast<float>(horizon_y) - target_h, target_w, target_h };
 
     SDL_SetTextureColorMod(sky_texture_, 255, 255, 255);
     SDL_SetTextureAlphaMod(sky_texture_, 255);
     SDL_RenderCopyF(renderer_, sky_texture_, nullptr, &dst);
 }
+
+
+
+
+
+
 
 void SceneRenderer::render_dynamic_darkness_overlay(float map_light_opacity,
                                                     const std::vector<DarkMaskSprite>& sprites) {
@@ -621,6 +853,7 @@ void SceneRenderer::render_dynamic_darkness_overlay(float map_light_opacity,
     if (!sprites.empty()) {
         SDL_BlendMode carve_mode = SDL_ComposeCustomBlendMode( SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD, SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
 
+        static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
         for (const DarkMaskSprite& sprite : sprites) {
             if (!sprite.texture) {
                 continue;
@@ -628,11 +861,7 @@ void SceneRenderer::render_dynamic_darkness_overlay(float map_light_opacity,
             SDL_SetTextureBlendMode(sprite.texture, carve_mode);
             SDL_SetTextureColorMod(sprite.texture, sprite.color_mod.r, sprite.color_mod.g, sprite.color_mod.b);
             SDL_SetTextureAlphaMod(sprite.texture, sprite.color_mod.a);
-            if (sprite.flip != SDL_FLIP_NONE) {
-                SDL_RenderCopyEx(renderer_, sprite.texture, nullptr, &sprite.screen_rect, 0.0, nullptr, sprite.flip);
-            } else {
-                SDL_RenderCopy(renderer_, sprite.texture, nullptr, &sprite.screen_rect);
-            }
+            SDL_RenderGeometry(renderer_, sprite.texture, sprite.vertices.data(), 4, kQuadIndices, 6);
         }
     }
 

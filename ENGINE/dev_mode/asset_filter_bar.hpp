@@ -32,6 +32,7 @@ public:
     void initialize();
 
     void set_state_changed_callback(StateChangedCallback cb);
+    std::uint64_t state_version() const { return state_version_; }
     void set_enabled(bool enabled);
     void set_screen_dimensions(int width, int height);
     void set_map_info(nlohmann::json* map_info);
@@ -132,6 +133,7 @@ private:
     std::unordered_set<std::string> map_spawn_ids_;
     std::unordered_set<std::string> room_spawn_ids_;
     StateChangedCallback on_state_changed_{};
+    std::uint64_t state_version_ = 1;
     struct ModeButtonEntry {
         ModeButtonConfig config;
         std::unique_ptr<class DMButton> button;

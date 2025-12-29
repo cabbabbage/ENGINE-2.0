@@ -50,7 +50,11 @@ void LightingLoader::load(AssetInfo& info, const json& data) {
                 light.flicker_speed      = std::clamp(read_int(l, "flicker_speed", 0), 0, 100);
                 light.flicker_smoothness = std::clamp(read_int(l, "flicker_smoothness", 0), 0, 100);
                 light.offset_x  = l.value("offset_x", light.offset_x);
-                light.offset_y  = l.value("offset_y", light.offset_y);
+                if (l.contains("offset_z")) {
+                        light.offset_z = l.value("offset_z", light.offset_z);
+                } else {
+                        light.offset_z = l.value("offset_y", light.offset_z);
+                }
                 light.color     = {255, 255, 255, 255};
                 try {
                     if (l.contains("light_color") && l["light_color"].is_array()) {

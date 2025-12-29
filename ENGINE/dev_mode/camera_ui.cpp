@@ -705,180 +705,7 @@ private:
     mutable bool icon_load_attempted_ = false;
 };
 
-class ZoomKeyPointWidget : public Widget {
-public:
-    struct Values {
-        float zoom = 1.0f;
-};
 
-    ZoomKeyPointWidget(std::string label, const Values& values, bool expanded, float zoom_min, float zoom_max)
-        : label_(std::move(label)),
-          expanded_(expanded),
-          zoom_min_(zoom_min),
-          zoom_max_(zoom_max) {
-        header_toggle_ = std::make_unique<SectionToggleWidget>(label_, expanded_);
-        if (header_toggle_) {
-            header_toggle_->set_on_toggle([this](bool v) {
-                expanded_ = v;
-                layout_children();
-                if (on_expanded_changed_) {
-                    on_expanded_changed_(expanded_);
-                }
-            });
-        }
-        set_zoom_button_ = std::make_unique<DMButton>("Set Zoom", &DMStyles::SecondaryButton(), 120, DMButton::height());
-
-        zoom_slider_ = std::make_unique<FloatSliderWidget>( "Zoom", zoom_min_, zoom_max_, 0.01f, values.zoom, 2);
-        if (zoom_slider_) {
-            zoom_slider_->set_tooltip("Zoom anchor for this key point.");
-            zoom_slider_->set_on_value_changed([this](float) { notify_change(); });
-        }
-    }
-
-    void set_on_value_changed(std::function<void()> cb) { on_change_ = std::move(cb); }
-    void set_on_expanded_changed(std::function<void(bool)> cb) { on_expanded_changed_ = std::move(cb); }
-    void set_on_set_zoom(std::function<void(float)> cb) { on_set_zoom_ = std::move(cb); }
-
-    void set_values(const Values& values) {
-        if (zoom_slider_) zoom_slider_->set_value(values.zoom);
-        layout_children();
-    }
-
-    Values values() const {
-        Values v{};
-        v.zoom = zoom_slider_ ? zoom_slider_->value() : 1.0f;
-        return v;
-    }
-
-    void set_expanded(bool expanded) {
-        if (expanded_ == expanded) return;
-        expanded_ = expanded;
-        if (header_toggle_) {
-            header_toggle_->set_expanded(expanded_);
-        }
-        layout_children();
-    }
-
-    bool expanded() const { return expanded_; }
-
-    void set_rect(const SDL_Rect& r) override {
-        rect_ = r;
-        layout_children();
-    }
-
-    const SDL_Rect& rect() const override { return rect_; }
-
-    int height_for_width(int w) const override {
-        const int width = std::max(1, w);
-        const int header_h = DMButton::height();
-        int height = header_h;
-        if (expanded_) {
-            const int gap = DMSpacing::item_gap();
-            height += gap;
-            auto add_height = [&](const Widget* wgt) {
-                if (!wgt) return;
-                height += wgt->height_for_width(width) + gap;
-};
-            add_height(zoom_slider_.get());
-        }
-        return height;
-    }
-
-    bool handle_event(const SDL_Event& e) override {
-        if (header_toggle_ && header_toggle_->handle_event(e)) {
-            expanded_ = header_toggle_->expanded();
-            layout_children();
-            if (on_expanded_changed_) {
-                on_expanded_changed_(expanded_);
-            }
-            return true;
-        }
-        if (set_zoom_button_ && set_zoom_button_->handle_event(e)) {
-            if (on_set_zoom_) {
-                on_set_zoom_(zoom_slider_ ? zoom_slider_->value() : 1.0f);
-            }
-            return true;
-        }
-
-        if (!expanded_) {
-            return false;
-        }
-
-        bool used = false;
-        auto handle_child = [&](Widget* w) {
-            if (!w) return false;
-            return w->handle_event(e);
-};
-        used = handle_child(zoom_slider_.get()) || used;
-        return used;
-    }
-
-    void render(SDL_Renderer* renderer) const override {
-        if (header_toggle_) header_toggle_->render(renderer);
-        if (set_zoom_button_) set_zoom_button_->render(renderer);
-        if (!expanded_) return;
-        if (zoom_slider_) zoom_slider_->render(renderer);
-    }
-
-    bool wants_full_row() const override { return true; }
-
-private:
-    void notify_change() {
-        if (on_change_) {
-            on_change_();
-        }
-    }
-
-    void layout_children() {
-        const int gap = DMSpacing::item_gap();
-        const int width = std::max(1, rect_.w);
-        int x = rect_.x;
-        int y = rect_.y;
-
-        const int header_h = DMButton::height();
-        const int button_w = set_zoom_button_
-            ? std::min(width / 3, std::max(set_zoom_button_->preferred_width(), 110)) : 0;
-        const int toggle_w = std::max(0, width - button_w - (button_w > 0 ? gap : 0));
-
-        if (header_toggle_) {
-            header_toggle_->set_rect(SDL_Rect{ x, y, toggle_w, header_h });
-        }
-        if (set_zoom_button_) {
-            const int btn_x = x + width - button_w;
-            set_zoom_button_->set_rect(SDL_Rect{ btn_x, y, button_w, header_h });
-        }
-        y += header_h;
-
-        if (!expanded_) {
-            return;
-        }
-
-        y += gap;
-        auto place_child = [&](Widget* child) {
-            if (!child) return;
-            int h = child->height_for_width(width);
-            child->set_rect(SDL_Rect{ x, y, width, h });
-            y += h + gap;
-};
-
-        place_child(zoom_slider_.get());
-    }
-
-private:
-    std::string label_;
-    bool expanded_ = true;
-    SDL_Rect rect_{0, 0, 0, 0};
-    float zoom_min_ = 0.0f;
-    float zoom_max_ = 0.0f;
-
-    std::unique_ptr<SectionToggleWidget> header_toggle_;
-    std::unique_ptr<DMButton> set_zoom_button_;
-    std::unique_ptr<FloatSliderWidget> zoom_slider_;
-
-    std::function<void()> on_change_{};
-    std::function<void(bool)> on_expanded_changed_{};
-    std::function<void(float)> on_set_zoom_{};
-};
 
 CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
     : DockableCollapsible("Camera Settings", true, x, y),
@@ -891,6 +718,7 @@ CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
     set_close_button_on_left(false);
     set_floatable(true);
     build_ui();
+    apply_settings_if_needed();
     sync_from_camera();
 }
 
@@ -1002,20 +830,22 @@ void CameraUIPanel::sync_from_camera() {
     if (min_render_size_slider_) min_render_size_slider_->set_value(last_settings_.min_visible_screen_ratio);
     if (render_quality_slider_) render_quality_slider_->set_value(last_settings_.render_quality_percent);
     if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
-    if (zoom_in_keypoint_ || zoom_out_keypoint_) {
-        ZoomKeyPointWidget::Values min_values;
-        min_values.zoom = last_settings_.zoom_low;
-        if (zoom_in_keypoint_) {
-            zoom_in_keypoint_->set_values(min_values);
-        }
 
-        ZoomKeyPointWidget::Values max_values;
-        max_values.zoom = last_settings_.zoom_high;
-        if (zoom_out_keypoint_) {
-            zoom_out_keypoint_->set_values(max_values);
-        }
+    if (meters_slider_) {
+        meters_slider_->set_value(last_settings_.meters_per_100_world_px);
     }
-
+    if (texture_warp_slider_) {
+        texture_warp_slider_->set_value(last_settings_.texture_warp_percent);
+    }
+    if (texture_warp_y_offset_slider_) {
+        texture_warp_y_offset_slider_->set_value(last_settings_.texture_warp_y_offset_px);
+    }
+    if (near_max_perspective_slider_) {
+        near_max_perspective_slider_->set_value(last_settings_.near_camera_max_perspective_scale);
+    }
+    if (offscreen_fade_amount_slider_) {
+        offscreen_fade_amount_slider_->set_value(last_settings_.offscreen_fade_amount_px);
+    }
     if (foreground_texture_opacity_slider_) {
         foreground_texture_opacity_slider_->set_value(static_cast<float>(last_settings_.foreground_texture_max_opacity));
     }
@@ -1057,6 +887,14 @@ void CameraUIPanel::build_ui() {
     if (assets_) {
         defaults = assets_->getView().realism_settings();
     }
+    defaults.min_visible_screen_ratio = devmode::camera_prefs::load_min_visible_screen_ratio(defaults.min_visible_screen_ratio);
+    defaults.extra_cull_margin = devmode::camera_prefs::load_extra_cull_margin(defaults.extra_cull_margin);
+    defaults.meters_per_100_world_px = devmode::camera_prefs::load_meters_per_100_world_px(defaults.meters_per_100_world_px);
+    defaults.render_quality_percent = devmode::camera_prefs::load_render_quality_percent(defaults.render_quality_percent);
+    defaults.texture_warp_percent = devmode::camera_prefs::load_texture_warp_percent(defaults.texture_warp_percent);
+    defaults.texture_warp_y_offset_px = devmode::camera_prefs::load_texture_warp_y_offset_px(defaults.texture_warp_y_offset_px);
+    defaults.near_camera_max_perspective_scale = devmode::camera_prefs::load_near_camera_max_perspective_scale(defaults.near_camera_max_perspective_scale);
+    defaults.offscreen_fade_amount_px = devmode::camera_prefs::load_offscreen_fade_amount_px(defaults.offscreen_fade_amount_px);
 
     auto configure_section = [this](std::unique_ptr<SectionToggleWidget>& target,
                                     const std::string& label,
@@ -1087,46 +925,31 @@ void CameraUIPanel::build_ui() {
     cull_margin_slider_->set_tooltip("Extra margin below the screen for culling (for perspective/warping). Increase if assets pop in/out at the bottom edge.");
     cull_margin_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    perspective_zero_distance_slider_ = std::make_unique<FloatSliderWidget>( "Perspective Scale 0 Distance", -5000.0f, 5000.0f, 1.0f, defaults.perspective_distance_at_scale_zero, 0);
-    perspective_zero_distance_slider_->set_tooltip( "World-space distance at which perspective scale reaches 0 (far point).");
-    perspective_zero_distance_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    perspective_hundred_distance_slider_ = std::make_unique<FloatSliderWidget>( "Perspective Scale 100 Distance", -5000.0f, 5000.0f, 1.0f, defaults.perspective_distance_at_scale_hundred, 0);
-    perspective_hundred_distance_slider_->set_tooltip( "World-space distance at which perspective scale is 100 (near point).");
-    perspective_hundred_distance_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
     render_quality_slider_ = std::make_unique<DiscreteSliderWidget>("Render Quality (%)", std::vector<int>{100, 75, 50, 25, 10}, defaults.render_quality_percent);
     render_quality_slider_->set_tooltip("Trade fidelity for speed; lowers the number of sprites drawn each frame.");
     render_quality_slider_->set_on_value_changed([this](int) { on_control_value_changed(); });
-    if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
 
-    ZoomKeyPointWidget::Values zoom_in_defaults;
-    zoom_in_defaults.zoom = defaults.zoom_low;
-    zoom_in_keypoint_ = std::make_unique<ZoomKeyPointWidget>( "Zoomed In Settings", zoom_in_defaults, zoom_in_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxZoomAnchors);
-    if (zoom_in_keypoint_) {
-        zoom_in_keypoint_->set_on_value_changed([this]() { on_control_value_changed(); });
-        zoom_in_keypoint_->set_on_expanded_changed([this](bool expanded) {
-            zoom_in_settings_expanded_ = expanded;
-            rebuild_rows();
-        });
-        zoom_in_keypoint_->set_on_set_zoom([this](float target_zoom) {
-            snap_zoom_to_anchor(target_zoom, true);
-        });
-    }
+    meters_slider_ = std::make_unique<FloatSliderWidget>("Meters per 100 World Pixels", 0.01f, 1.00f, 0.01f, defaults.meters_per_100_world_px, 2);
+    meters_slider_->set_tooltip("Defines how many meters are represented by 100 world pixels, translating engine space into physical units.");
+    meters_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    ZoomKeyPointWidget::Values zoom_out_defaults;
-    zoom_out_defaults.zoom = defaults.zoom_high;
-    zoom_out_keypoint_ = std::make_unique<ZoomKeyPointWidget>( "Zoomed Out Settings", zoom_out_defaults, zoom_out_settings_expanded_, 0.1f, WarpedScreenGrid::kMaxZoomAnchors);
-    if (zoom_out_keypoint_) {
-        zoom_out_keypoint_->set_on_value_changed([this]() { on_control_value_changed(); });
-        zoom_out_keypoint_->set_on_expanded_changed([this](bool expanded) {
-            zoom_out_settings_expanded_ = expanded;
-            rebuild_rows();
-        });
-        zoom_out_keypoint_->set_on_set_zoom([this](float target_zoom) {
-            snap_zoom_to_anchor(target_zoom, false);
-        });
-    }
+    texture_warp_slider_ = std::make_unique<FloatSliderWidget>("Texture Perspective Warp (%)", 0.0f, 100.0f, 1.0f, defaults.texture_warp_percent, 0);
+    texture_warp_slider_->set_tooltip("Blend the perspective warp applied to textures. 0% = no warp (orthographic feel), 100% = full perspective scaling.");
+    texture_warp_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+    texture_warp_y_offset_slider_ = std::make_unique<FloatSliderWidget>("Texture Warp Y Offset (px)", -2000.0f, 2000.0f, 1.0f, defaults.texture_warp_y_offset_px, 0);
+    texture_warp_y_offset_slider_->set_tooltip("Offsets the Y coordinate used to compute texture warping without moving world positions.");
+    texture_warp_y_offset_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+    near_max_perspective_slider_ = std::make_unique<FloatSliderWidget>("Near Max Perspective Scale", 0.0f, 10.0f, 0.1f, defaults.near_camera_max_perspective_scale, 2);
+    near_max_perspective_slider_->set_tooltip("Caps the perspective scale to limit stretching.");
+    near_max_perspective_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+    offscreen_fade_amount_slider_ = std::make_unique<FloatSliderWidget>("Offscreen Amount (px)", 0.0f, 1000.0f, 1.0f, defaults.offscreen_fade_amount_px, 0);
+    offscreen_fade_amount_slider_->set_tooltip("Distance below the bottom of the screen where assets fade from fully visible to fully transparent.");
+    offscreen_fade_amount_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+
 
     const int stored_fg_opacity = devmode::camera_prefs::load_foreground_texture_max_opacity();
     const int stored_bg_opacity = devmode::camera_prefs::load_background_texture_max_opacity();
@@ -1166,23 +989,7 @@ void CameraUIPanel::on_control_value_changed() {
     apply_settings_if_needed();
 }
 
-void CameraUIPanel::snap_zoom_to_anchor(float target_zoom, bool anchor_is_min_section) {
-    if (!assets_ || !is_visible()) return;
-    (void)anchor_is_min_section;
 
-    WarpedScreenGrid& cam = assets_->getView();
-    const float clamped_target = std::clamp(target_zoom, WarpedScreenGrid::kMinZoomAnchors, WarpedScreenGrid::kMaxZoomAnchors);
-    SDL_Point focus = cam.get_screen_center();
-    cam.set_manual_zoom_override(true);
-    if (assets_->player) {
-        focus = SDL_Point{ assets_->player->pos.x, assets_->player->pos.y };
-        cam.set_focus_override(focus);
-        cam.set_screen_center(focus);
-    }
-    cam.set_scale(clamped_target);
-    cam.recompute_current_view();
-    assets_->apply_camera_runtime_settings();
-}
 
 void CameraUIPanel::rebuild_rows() {
     Rows rows;
@@ -1201,10 +1008,11 @@ void CameraUIPanel::rebuild_rows() {
 
     if (depth_section_header_) rows.push_back({ depth_section_header_.get() });
     if (depth_section_expanded_) {
-        if (zoom_in_keypoint_) rows.push_back({ zoom_in_keypoint_.get() });
-        if (zoom_out_keypoint_) rows.push_back({ zoom_out_keypoint_.get() });
-        if (perspective_zero_distance_slider_) rows.push_back({ perspective_zero_distance_slider_.get() });
-        if (perspective_hundred_distance_slider_) rows.push_back({ perspective_hundred_distance_slider_.get() });
+        if (meters_slider_) rows.push_back({ meters_slider_.get() });
+        if (texture_warp_slider_) rows.push_back({ texture_warp_slider_.get() });
+        if (texture_warp_y_offset_slider_) rows.push_back({ texture_warp_y_offset_slider_.get() });
+        if (near_max_perspective_slider_) rows.push_back({ near_max_perspective_slider_.get() });
+        if (offscreen_fade_amount_slider_) rows.push_back({ offscreen_fade_amount_slider_.get() });
     }
 
     if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
@@ -1244,15 +1052,17 @@ void CameraUIPanel::apply_settings_if_needed() {
 };
     bool changed = (effects_enabled != last_realism_enabled_) || (depthcue_enabled != last_depthcue_enabled_);
     const WarpedScreenGrid::RealismSettings& prev = last_settings_;
-    changed = changed || differs(settings.zoom_low, prev.zoom_low) || differs(settings.zoom_high, prev.zoom_high);
     changed = changed || differs(settings.min_visible_screen_ratio, prev.min_visible_screen_ratio);
     changed = changed || differs(settings.extra_cull_margin, prev.extra_cull_margin);
-    changed = changed || differs(settings.perspective_distance_at_scale_zero, prev.perspective_distance_at_scale_zero);
-    changed = changed || differs(settings.perspective_distance_at_scale_hundred, prev.perspective_distance_at_scale_hundred);
     if (render_quality_slider_) {
         changed = changed || settings.render_quality_percent != prev.render_quality_percent;
     }
+    changed = changed || differs(settings.meters_per_100_world_px, prev.meters_per_100_world_px);
     changed = changed || differs(settings.scale_variant_hysteresis_margin, prev.scale_variant_hysteresis_margin);
+    changed = changed || differs(settings.texture_warp_percent, prev.texture_warp_percent);
+    changed = changed || differs(settings.texture_warp_y_offset_px, prev.texture_warp_y_offset_px);
+    changed = changed || differs(settings.near_camera_max_perspective_scale, prev.near_camera_max_perspective_scale);
+    changed = changed || differs(settings.offscreen_fade_amount_px, prev.offscreen_fade_amount_px);
 
     changed = changed || (settings.foreground_texture_max_opacity != prev.foreground_texture_max_opacity);
     changed = changed || (settings.background_texture_max_opacity != prev.background_texture_max_opacity);
@@ -1283,20 +1093,6 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
 
     cam.update_geometry_cache(cam.compute_geometry());
 
-    const float kZoomGuard = 0.01f;
-    const float span = std::max(0.0002f, effective.zoom_high - effective.zoom_low);
-    const float guard = std::clamp(kZoomGuard, 0.0001f, span * 0.25f);
-    const float min_zoom = effective.zoom_low + guard;
-    const float max_zoom = effective.zoom_high - guard;
-    float current_zoom = cam.get_scale();
-    float clamped_zoom = std::clamp(current_zoom, min_zoom, max_zoom);
-    if (!std::isfinite(clamped_zoom)) {
-        clamped_zoom = min_zoom;
-    }
-    if (std::fabs(clamped_zoom - current_zoom) > 1e-4f) {
-        cam.set_scale(clamped_zoom);
-    }
-
     if (assets_) {
         assets_->set_depth_effects_enabled(depthcue_enabled);
         assets_->apply_camera_runtime_settings();
@@ -1315,6 +1111,14 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
     }
     devmode::camera_prefs::save_foreground_texture_max_opacity(settings.foreground_texture_max_opacity);
     devmode::camera_prefs::save_background_texture_max_opacity(settings.background_texture_max_opacity);
+    devmode::camera_prefs::save_min_visible_screen_ratio(settings.min_visible_screen_ratio);
+    devmode::camera_prefs::save_extra_cull_margin(settings.extra_cull_margin);
+    devmode::camera_prefs::save_meters_per_100_world_px(settings.meters_per_100_world_px);
+    devmode::camera_prefs::save_render_quality_percent(settings.render_quality_percent);
+    devmode::camera_prefs::save_texture_warp_percent(settings.texture_warp_percent);
+    devmode::camera_prefs::save_texture_warp_y_offset_px(settings.texture_warp_y_offset_px);
+    devmode::camera_prefs::save_near_camera_max_perspective_scale(settings.near_camera_max_perspective_scale);
+    devmode::camera_prefs::save_offscreen_fade_amount_px(settings.offscreen_fade_amount_px);
     last_depthcue_enabled_ = depthcue_enabled;
 }
 
@@ -1323,26 +1127,12 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
     if (min_render_size_slider_) settings.min_visible_screen_ratio = std::clamp(min_render_size_slider_->value(), 0.0f, 0.5f);
     if (render_quality_slider_) settings.render_quality_percent = render_quality_slider_->value();
     if (cull_margin_slider_) settings.extra_cull_margin = std::clamp(cull_margin_slider_->value(), 0.0f, 1000.0f);
-    ZoomKeyPointWidget::Values min_values{};
-    ZoomKeyPointWidget::Values max_values{};
-    if (zoom_in_keypoint_) {
-        min_values = zoom_in_keypoint_->values();
-        settings.zoom_low = min_values.zoom;
-    }
-    if (zoom_out_keypoint_) {
-        max_values = zoom_out_keypoint_->values();
-        settings.zoom_high = max_values.zoom;
-    }
 
-    settings.zoom_low = std::clamp(settings.zoom_low, WarpedScreenGrid::kMinZoomAnchors, WarpedScreenGrid::kMaxZoomAnchors);
-    const float min_high = std::min(WarpedScreenGrid::kMaxZoomAnchors, settings.zoom_low + 0.0001f);
-    settings.zoom_high = std::clamp(settings.zoom_high, min_high, WarpedScreenGrid::kMaxZoomAnchors);
-    if (perspective_zero_distance_slider_) {
-        settings.perspective_distance_at_scale_zero = std::clamp( perspective_zero_distance_slider_->value(), -5000.0f, 5000.0f);
-    }
-    if (perspective_hundred_distance_slider_) {
-        settings.perspective_distance_at_scale_hundred = std::clamp( perspective_hundred_distance_slider_->value(), -5000.0f, 5000.0f);
-    }
+    if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
+    if (texture_warp_slider_) settings.texture_warp_percent = std::clamp(texture_warp_slider_->value(), 0.0f, 100.0f);
+    if (texture_warp_y_offset_slider_) settings.texture_warp_y_offset_px = std::clamp(texture_warp_y_offset_slider_->value(), -10000.0f, 10000.0f);
+    if (near_max_perspective_slider_) settings.near_camera_max_perspective_scale = std::clamp(near_max_perspective_slider_->value(), 0.0f, 100.0f);
+    if (offscreen_fade_amount_slider_) settings.offscreen_fade_amount_px = std::clamp(offscreen_fade_amount_slider_->value(), 0.0f, 1000.0f);
 
     auto slider_to_opacity = [](const FloatSliderWidget* slider) -> int {
         if (!slider) return 0;

@@ -95,6 +95,7 @@ public:
     int number_of_frames = 0;
     int total_dx = 0;
     int total_dy = 0;
+    int total_dz = 0;
     bool movment = false;
     bool rnd_start = false;
     std::string on_end_animation;

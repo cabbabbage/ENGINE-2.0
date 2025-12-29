@@ -36,41 +36,50 @@ MainMenu::MainMenu(SDL_Renderer* renderer,
                 std::cerr << "[MainMenu] Failed to determine project root: " << ex.what() << "\n";
                 manifest_root_ = fs::current_path();
         }
-        auto try_load_background = [&](const fs::path& candidate) -> bool {
+        // Determine background image path without loading texture
+        auto find_background_path = [&](const fs::path& candidate) -> bool {
                 if (candidate.empty()) return false;
                 try {
-                        if (!fs::exists(candidate)) {
-                                return false;
-                        }
-                        SDL_Texture* tex = loadTexture(candidate);
-                        if (tex) {
-                                background_tex_ = tex;
+                        if (fs::exists(candidate)) {
                                 background_image_path_ = fs::absolute(candidate);
                                 return true;
                         }
-                        std::cerr << "[MainMenu] Failed to load menu background texture: "
-                                  << candidate << "\n";
                 } catch (const std::exception& ex) {
                         std::cerr << "[MainMenu] Error accessing menu background at '"
                                   << candidate << "': " << ex.what() << "\n";
                 }
                 return false;
-};
+        };
 
-        if (!try_load_background(pick_loading_image())) {
+        if (!find_background_path(pick_loading_image())) {
                 const fs::path bg_folder = resolve_manifest_path("SRC/misc_content/backgrounds");
                 if (fs::exists(bg_folder) && fs::is_directory(bg_folder)) {
                         const fs::path fallback = firstImageIn(bg_folder);
-                        try_load_background(fallback);
+                        find_background_path(fallback);
+                }
+        }
+        // Cache the background texture
+        if (!background_image_path_.empty()) {
+                cached_bg_tex_ = loadTexture(background_image_path_);
+                if (!cached_bg_tex_) {
+                        const fs::path bg_folder = resolve_manifest_path("SRC/misc_content/backgrounds");
+                        const fs::path fallback = firstImageIn(bg_folder);
+                        if (!fallback.empty() && fallback != background_image_path_) {
+                                std::cerr << "[MainMenu] Falling back to smaller background: " << fallback << "\n";
+                                cached_bg_tex_ = loadTexture(fallback);
+                                if (cached_bg_tex_) {
+                                        background_image_path_ = fs::absolute(fallback);
+                                }
+                        }
                 }
         }
         buildButtons();
 }
 
 MainMenu::~MainMenu() {
-	if (background_tex_) {
-		SDL_DestroyTexture(background_tex_);
-		background_tex_ = nullptr;
+	if (cached_bg_tex_) {
+		SDL_DestroyTexture(cached_bg_tex_);
+		cached_bg_tex_ = nullptr;
 	}
 }
 
@@ -134,8 +143,8 @@ std::optional<MainMenu::Selection> MainMenu::handle_event(const SDL_Event& e) {
 }
 
 void MainMenu::render() {
-        if (background_tex_) {
-                renderAnimatedBackground(background_tex_);
+        if (cached_bg_tex_) {
+                renderAnimatedBackground(cached_bg_tex_);
         } else {
                 SDL_Color night = Styles::Night();
                 SDL_SetRenderDrawColor(renderer_, night.r, night.g, night.b, night.a);
@@ -152,31 +161,21 @@ void MainMenu::render() {
 
 void MainMenu::showLoadingScreen() {
 	SDL_SetRenderTarget(renderer_, nullptr);
-        SDL_Texture* bg = background_tex_;
-        bool temp_bg = false;
-        if (!bg && !background_image_path_.empty()) {
-                try {
-                        if (fs::exists(background_image_path_)) {
-                                bg = loadTexture(background_image_path_);
-                                temp_bg = (bg != nullptr);
-                        }
-                } catch (const std::exception& ex) {
-                        std::cerr << "[MainMenu] Error loading menu background for loading screen: "
-                                  << ex.what() << "\n";
-                }
-        }
+        SDL_Texture* bg = cached_bg_tex_;
         if (!bg) {
                 const fs::path bg_folder = resolve_manifest_path("SRC/misc_content/backgrounds");
                 const fs::path first = firstImageIn(bg_folder);
                 if (!first.empty()) {
                         bg = loadTexture(first);
-                        temp_bg = (bg != nullptr);
 		}
 	}
 	SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
 	SDL_RenderClear(renderer_);
         if (bg) {
                 renderAnimatedBackground(bg);
+                if (bg != cached_bg_tex_) {
+                        SDL_DestroyTexture(bg);
+                }
         }
 	drawVignette(110);
 	SDL_Texture* tarot = nullptr;
@@ -236,15 +235,65 @@ void MainMenu::showLoadingScreen() {
 	while (SDL_PollEvent(&ev)) {
 
 	}
-	if (temp_bg && bg) SDL_DestroyTexture(bg);
+	// Background texture already destroyed above
 }
 
 SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {
-	SDL_Texture* t = IMG_LoadTexture(renderer_, abs_utf8_path.c_str());
-	if (!t) {
-		std::cerr << "[MainMenu] IMG_LoadTexture failed: " << abs_utf8_path << " | " << IMG_GetError() << "\n";
-	}
-	return t;
+        SDL_Texture* tex = IMG_LoadTexture(renderer_, abs_utf8_path.c_str());
+        if (tex) return tex;
+
+        const std::string initial_error = IMG_GetError();
+        std::cerr << "[MainMenu] IMG_LoadTexture failed: " << abs_utf8_path << " | " << initial_error << "\n";
+
+        SDL_Surface* loaded = IMG_Load(abs_utf8_path.c_str());
+        if (!loaded) {
+                std::cerr << "[MainMenu] Fallback IMG_Load failed: " << abs_utf8_path << " | " << IMG_GetError() << "\n";
+                return nullptr;
+        }
+
+        // Clamp oversized textures to avoid D3D OUTOFVIDEOMEMORY errors.
+        const int max_dim = std::clamp(
+                static_cast<int>(std::max(screen_w_, screen_h_) * 1.2),
+                1024,
+                2048);
+        const int src_w = loaded->w;
+        const int src_h = loaded->h;
+        int target_w = src_w;
+        int target_h = src_h;
+        SDL_Surface* to_upload = loaded;
+        if (src_w > max_dim || src_h > max_dim) {
+                const double scale = static_cast<double>(max_dim) / static_cast<double>(std::max(src_w, src_h));
+                target_w = std::max(1, static_cast<int>(std::round(static_cast<double>(src_w) * scale)));
+                target_h = std::max(1, static_cast<int>(std::round(static_cast<double>(src_h) * scale)));
+                SDL_Surface* scaled = SDL_CreateRGBSurfaceWithFormat(0, target_w, target_h, 32, SDL_PIXELFORMAT_ARGB8888);
+                if (!scaled) {
+                        std::cerr << "[MainMenu] Failed to allocate scaled surface ("
+                                  << target_w << "x" << target_h << ") for " << abs_utf8_path
+                                  << " | " << SDL_GetError() << "\n";
+                        SDL_FreeSurface(loaded);
+                        return nullptr;
+                }
+                if (SDL_BlitScaled(loaded, nullptr, scaled, nullptr) != 0) {
+                        std::cerr << "[MainMenu] SDL_BlitScaled failed while downscaling "
+                                  << abs_utf8_path << " | " << SDL_GetError() << "\n";
+                        SDL_FreeSurface(loaded);
+                        SDL_FreeSurface(scaled);
+                        return nullptr;
+                }
+                SDL_FreeSurface(loaded);
+                to_upload = scaled;
+        }
+
+        tex = SDL_CreateTextureFromSurface(renderer_, to_upload);
+        if (!tex) {
+                std::cerr << "[MainMenu] SDL_CreateTextureFromSurface failed: " << abs_utf8_path
+                          << " | " << SDL_GetError() << "\n";
+        } else if (to_upload->w != src_w || to_upload->h != src_h) {
+                std::cerr << "[MainMenu] Loaded downscaled texture (" << to_upload->w << "x" << to_upload->h
+                          << ") after renderer failure for " << abs_utf8_path << "\n";
+        }
+        SDL_FreeSurface(to_upload);
+        return tex;
 }
 
 SDL_Texture* MainMenu::loadTexture(const fs::path& p) {

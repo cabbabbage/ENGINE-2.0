@@ -111,8 +111,10 @@ public:
     void apply_camera_runtime_settings();
     void set_depth_effects_enabled(bool enabled);
     bool depth_effects_enabled() const { return depth_effects_enabled_; }
+    // Force the camera to refresh from current room settings on next update.
+    void mark_camera_dirty();
 
-    void focus_camera_on_asset(Asset* a, double zoom_factor = 0.8, int duration_steps = 25);
+    void focus_camera_on_asset(Asset* a, double height_factor = 0.8, int duration_steps = 25);
 
     void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, animation_editor::AnimationEditorWindow* host_to_toggle);
 
@@ -234,6 +236,7 @@ private:
     Room* current_room_ = nullptr;
     int num_groups_ = 40;
     bool dev_mode = false;
+    bool camera_settings_dirty_ = false;
     bool suppress_render_ = false;
 
     bool suppress_dev_renderer_ = false;
@@ -262,7 +265,7 @@ private:
     std::optional<float> last_audio_effect_max_distance_{};
     float max_asset_height_world_ = 0.0f;
     float max_asset_width_world_  = 0.0f;
-    float cached_zoom_level_      = 0.0f;
+    float cached_height_level_      = 0.0f;
     bool  max_asset_dimensions_dirty_ = true;
     std::vector<Asset*> visible_candidate_buffer_;
     std::uint64_t active_candidate_generation_ = 0;
@@ -326,5 +329,7 @@ private:
     bool      last_player_pos_valid_ = false;
 
     std::vector<SDL_Rect> culled_debug_rects_;
+    std::uint64_t filtered_active_assets_source_hash_ = 0;
+    std::uint64_t filtered_active_assets_filter_version_ = 0;
 };
 #include "utils/map_grid_settings.hpp"

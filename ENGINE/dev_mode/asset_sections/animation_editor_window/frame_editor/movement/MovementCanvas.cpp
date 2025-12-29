@@ -15,8 +15,8 @@ namespace animation_editor {
 
 namespace {
 
-constexpr float kMinZoom = 0.125f;
-constexpr float kMaxZoom = 32.0f;
+constexpr float kMinViewScale = 0.125f;
+constexpr float kMaxViewScale = 32.0f;
 constexpr int kPointRadius = 6;
 constexpr int kHoverRadius = 12;
 constexpr int kMajorGridInterval = 32;
@@ -112,7 +112,7 @@ static SDL_FPoint interpolate_along_polyline(const std::vector<SDL_FPoint>& poly
 
 }
 
-MovementCanvas::MovementCanvas() : zoom_(16.0f) {}
+MovementCanvas::MovementCanvas() : view_scale_(16.0f) {}
 
 void MovementCanvas::set_bounds(const SDL_Rect& bounds) {
     bounds_ = bounds;
@@ -171,7 +171,7 @@ void MovementCanvas::render(SDL_Renderer* renderer) const {
         if (tex) {
             int tw = 0, th = 0;
             if (SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th) == 0 && tw > 0 && th > 0) {
-                const float scale = pixels_per_unit_ * zoom_;
+                const float scale = pixels_per_unit_ * view_scale_;
                 const float scale_factor = (base_scale_percentage_ <= 0.0f) ? 1.0f : (base_scale_percentage_ / 100.0f);
                 const float dst_w_px = static_cast<float>(tw) * scale_factor * scale;
                 const float dst_h_px = static_cast<float>(th) * scale_factor * scale;
@@ -254,7 +254,7 @@ void MovementCanvas::render_background(SDL_Renderer* renderer) const {
         if (tex) {
             int tw = 0, th = 0;
             if (SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th) == 0 && tw > 0 && th > 0) {
-                const float scale = pixels_per_unit_ * zoom_;
+                const float scale = pixels_per_unit_ * view_scale_;
                 const float scale_factor = (base_scale_percentage_ <= 0.0f) ? 1.0f : (base_scale_percentage_ / 100.0f);
                 const float dst_w_px = static_cast<float>(tw) * scale_factor * scale;
                 const float dst_h_px = static_cast<float>(th) * scale_factor * scale;
@@ -277,7 +277,7 @@ void MovementCanvas::render_pixel_grid(SDL_Renderer* renderer) const {
     if (!renderer) return;
     if (bounds_.w <= 0 || bounds_.h <= 0) return;
 
-    const float scale = pixels_per_unit_ * zoom_;
+    const float scale = pixels_per_unit_ * view_scale_;
     if (!std::isfinite(scale) || scale <= 0.0f) return;
 
     const SDL_FPoint center_px{bounds_.x + bounds_.w / 2.0f, bounds_.y + bounds_.h / 2.0f};
@@ -356,7 +356,7 @@ bool MovementCanvas::handle_event(const SDL_Event& e) {
             bool inside = within_bounds(e.motion.x, e.motion.y);
 
             if (dragging_frame_ && selected_index_ > 0) {
-                const float scale = pixels_per_unit_ * zoom_;
+                const float scale = pixels_per_unit_ * view_scale_;
                 SDL_Point current{e.motion.x, e.motion.y};
                 const float dx_units = (current.x - drag_last_mouse_.x) / scale;
                 const float dy_units = -(current.y - drag_last_mouse_.y) / scale;
@@ -447,7 +447,7 @@ bool MovementCanvas::handle_event(const SDL_Event& e) {
             }
 #endif
             if (wheel_y != 0) {
-                apply_zoom(static_cast<float>(wheel_y));
+                apply_view_scale(static_cast<float>(wheel_y));
                 return true;
             }
             return false;
@@ -479,10 +479,10 @@ void MovementCanvas::rebuild_path() {
 void MovementCanvas::fit_view_to_content() {
     if (positions_.empty() || bounds_.w <= 0 || bounds_.h <= 0) {
         center_world_ = SDL_FPoint{0.0f, 0.0f};
-        if (!std::isfinite(zoom_) || zoom_ <= 0.0f) {
-            zoom_ = 16.0f;
+        if (!std::isfinite(view_scale_) || view_scale_ <= 0.0f) {
+            view_scale_ = 16.0f;
         }
-        zoom_ = std::clamp(zoom_, kMinZoom, kMaxZoom);
+        view_scale_ = std::clamp(view_scale_, kMinViewScale, kMaxViewScale);
         return;
     }
 
@@ -499,10 +499,10 @@ void MovementCanvas::fit_view_to_content() {
 
     if (!std::isfinite(min_x) || !std::isfinite(min_y)) {
         center_world_ = SDL_FPoint{0.0f, 0.0f};
-        if (!std::isfinite(zoom_) || zoom_ <= 0.0f) {
-            zoom_ = 16.0f;
+        if (!std::isfinite(view_scale_) || view_scale_ <= 0.0f) {
+            view_scale_ = 16.0f;
         }
-        zoom_ = std::clamp(zoom_, kMinZoom, kMaxZoom);
+        view_scale_ = std::clamp(view_scale_, kMinViewScale, kMaxViewScale);
         return;
     }
 
@@ -517,26 +517,26 @@ void MovementCanvas::fit_view_to_content() {
 
     const float scale_x = bounds_.w / (total_extent_x * pixels_per_unit_);
     const float scale_y = bounds_.h / (total_extent_y * pixels_per_unit_);
-    const float fit_zoom = std::min(scale_x, scale_y);
-    if (std::isfinite(fit_zoom) && fit_zoom > 0.0f) {
-        zoom_ = std::clamp(fit_zoom, kMinZoom, kMaxZoom);
+    const float fit_view_scale = std::min(scale_x, scale_y);
+    if (std::isfinite(fit_view_scale) && fit_view_scale > 0.0f) {
+        view_scale_ = std::clamp(fit_view_scale, kMinViewScale, kMaxViewScale);
     } else {
-        zoom_ = std::clamp(zoom_, kMinZoom, kMaxZoom);
+        view_scale_ = std::clamp(view_scale_, kMinViewScale, kMaxViewScale);
     }
 }
 
 void MovementCanvas::pan_view(float delta_x, float delta_y) {
-    const float scale = pixels_per_unit_ * zoom_;
+    const float scale = pixels_per_unit_ * view_scale_;
     if (scale <= 0.0f) return;
     center_world_.x -= delta_x / scale;
     center_world_.y += delta_y / scale;
 }
 
-void MovementCanvas::apply_zoom(float scale_delta) {
+void MovementCanvas::apply_view_scale(float scale_delta) {
     if (scale_delta == 0.0f) return;
     const float factor = (scale_delta > 0.0f) ? 1.1f : (1.0f / 1.1f);
     SDL_FPoint anchor_world = screen_to_world(last_mouse_);
-    zoom_ = std::clamp(zoom_ * factor, kMinZoom, kMaxZoom);
+    view_scale_ = std::clamp(view_scale_ * factor, kMinViewScale, kMaxViewScale);
     SDL_FPoint new_anchor_world = screen_to_world(last_mouse_);
     center_world_.x += anchor_world.x - new_anchor_world.x;
     center_world_.y += anchor_world.y - new_anchor_world.y;
@@ -560,6 +560,7 @@ void MovementCanvas::apply_frame_move_from_base(int index, const SDL_FPoint& new
 
     frames_.front().dx = 0.0f;
     frames_.front().dy = 0.0f;
+    frames_.front().dz = 0.0f;
 
     if (!smoothing_enabled_) {
         SDL_FPoint prev_abs = base_positions[index - 1];
@@ -708,14 +709,14 @@ void MovementCanvas::update_selection_from_mouse() {
 }
 
 SDL_FPoint MovementCanvas::world_to_screen(const SDL_FPoint& world) const {
-    const float scale = pixels_per_unit_ * zoom_;
+    const float scale = pixels_per_unit_ * view_scale_;
     SDL_FPoint center_px{bounds_.x + bounds_.w / 2.0f, bounds_.y + bounds_.h / 2.0f};
     return SDL_FPoint{center_px.x + (world.x - center_world_.x) * scale,
                       center_px.y - (world.y - center_world_.y) * scale};
 }
 
 SDL_FPoint MovementCanvas::screen_to_world(SDL_Point screen) const {
-    const float scale = pixels_per_unit_ * zoom_;
+    const float scale = pixels_per_unit_ * view_scale_;
     SDL_FPoint center_px{bounds_.x + bounds_.w / 2.0f, bounds_.y + bounds_.h / 2.0f};
     if (scale <= 0.0f) {
         return center_world_;
@@ -725,7 +726,7 @@ SDL_FPoint MovementCanvas::screen_to_world(SDL_Point screen) const {
 }
 
 float MovementCanvas::screen_pixels_per_unit() const {
-    const float scale = pixels_per_unit_ * zoom_;
+    const float scale = pixels_per_unit_ * view_scale_;
     if (!std::isfinite(scale) || scale <= 0.0f) {
         return 1.0f;
     }

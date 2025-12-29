@@ -63,6 +63,7 @@ public:
     void end();
 
     bool is_active() const { return active_; }
+    Mode mode() const { return mode_; }
 
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
@@ -73,6 +74,7 @@ public:
 
 FRAME_EDITOR_ACCESS:
     bool target_is_alive() const;
+    void center_camera_origin();
 
     struct ChildFrame {
         int child_index = -1;

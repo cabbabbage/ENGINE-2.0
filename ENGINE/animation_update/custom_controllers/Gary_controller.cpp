@@ -16,7 +16,7 @@ SDL_Point GaryController::get_random_point_in_room() {
         return {0, 0};
     }
 
-    std::uniform_int_distribution<int> dist(-100, 100);
+    std::uniform_int_distribution<int> dist(-500, 500);
     int dx = dist(rng_);
     int dy = dist(rng_);
     return {self_->pos.x + dx, self_->pos.y + dy};
@@ -35,8 +35,9 @@ void GaryController::update(const Input&) {
     int distance_sq = (self_->pos.x - player->pos.x) * (self_->pos.x - player->pos.x) + (self_->pos.y - player->pos.y) * (self_->pos.y - player->pos.y);
 
     if (distance_sq <= 500) {
+        if (self_->needs_target) {
             self_->anim_->set_animation("default");
-       
+        }
     }
     else if (self_->needs_target) {
         self_->anim_->auto_move(get_random_point_in_room());

@@ -96,6 +96,7 @@ public:
     void open_room_config();
     void close_room_config();
     bool is_room_config_open() const;
+    bool is_camera_settings_open() const;
     void regenerate_room();
     void regenerate_room_from_template(Room* source_room);
 

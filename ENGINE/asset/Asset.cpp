@@ -1120,7 +1120,13 @@ float Asset::smoothed_translation_x() const { return translation_smoothing_x_.va
 
 float Asset::smoothed_translation_y() const { return translation_smoothing_y_.value_for_render(); }
 
-float Asset::smoothed_scale() const { return scale_smoothing_.value_for_render(); }
+float Asset::smoothed_scale() const {
+    if (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) {
+        return info->scale_factor;
+    } else {
+        return 1.0f;
+    }
+}
 
 float Asset::smoothed_alpha() const {
         float value = alpha_smoothing_.value_for_render();

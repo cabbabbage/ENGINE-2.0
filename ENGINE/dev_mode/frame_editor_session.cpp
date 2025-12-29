@@ -489,6 +489,16 @@ void FrameEditorSession::end() {
     }
 }
 
+void FrameEditorSession::center_camera_origin() {
+    if (!assets_ || !target_) {
+        return;
+    }
+    WarpedScreenGrid& cam = assets_->getView();
+    SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
+    cam.set_focus_override(anchor_world);
+    cam.set_screen_center(anchor_world);
+}
+
 void FrameEditorSession::update(const Input& input) {
     if (!active_) return;
 
@@ -505,6 +515,7 @@ void FrameEditorSession::update(const Input& input) {
         rebuild_layout();
         const bool pan_blocked = true;
         pan_height_.handle_input(cam, input, pan_blocked);
+        center_camera_origin();
     }
 
     update_asset_preview_frame();

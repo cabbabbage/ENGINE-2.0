@@ -890,6 +890,10 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         neigh_params.zoom_percent = neigh->camera_zoom_percent;
         neigh_params.pan_y_percent = neigh->camera_pan_y_percent;
     }
+    if (tilt_override_deg_) {
+        cur_params.tilt_deg = *tilt_override_deg_;
+        neigh_params.tilt_deg = *tilt_override_deg_;
+    }
     cur_params = camera_math::sanitize_camera_params(cur_params, fallback_height);
     neigh_params = camera_math::sanitize_camera_params(neigh_params, fallback_height);
 
@@ -1916,6 +1920,18 @@ void WarpedScreenGrid::set_scale(double s) {
     params.height_px = clamped;
     camera_.set_params(params);
     runtime_camera_height_ = camera_.current_height();
+}
+
+void WarpedScreenGrid::set_tilt_override(std::optional<float> tilt_deg) {
+    if (!tilt_deg.has_value() || !std::isfinite(*tilt_deg)) {
+        tilt_override_deg_.reset();
+        return;
+    }
+    tilt_override_deg_ = camera_math::sanitize_pitch_degrees(*tilt_deg);
+}
+
+void WarpedScreenGrid::clear_tilt_override() {
+    tilt_override_deg_.reset();
 }
 
 void WarpedScreenGrid::update() {

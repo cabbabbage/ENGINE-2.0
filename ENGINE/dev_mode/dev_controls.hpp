@@ -63,6 +63,7 @@ public:
     void set_enabled(bool enabled);
     bool is_enabled() const { return enabled_; }
     Mode mode() const { return mode_; }
+    void sync_camera_tilt_override();
 
     void set_camera_override_for_testing(WarpedScreenGrid* camera_override);
 

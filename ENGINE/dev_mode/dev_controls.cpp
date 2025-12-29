@@ -965,6 +965,33 @@ void DevControls::set_enabled(bool enabled) {
     }
 }
 
+void DevControls::sync_camera_tilt_override() {
+    if (!assets_) {
+        return;
+    }
+
+    WarpedScreenGrid& cam = assets_->getView();
+    if (!enabled_) {
+        cam.clear_tilt_override();
+        return;
+    }
+
+    if (frame_editor_session_ && frame_editor_session_->is_active()) {
+        const auto mode = frame_editor_session_->mode();
+        const float tilt_deg = (mode == FrameEditorSession::Mode::Movement) ? 90.0f : 0.0f;
+        cam.set_tilt_override(tilt_deg);
+        return;
+    }
+
+    const bool camera_settings_open = room_editor_ && room_editor_->is_camera_settings_open();
+    if (camera_settings_open) {
+        cam.clear_tilt_override();
+        return;
+    }
+
+    cam.set_tilt_override(45.0f);
+}
+
 void DevControls::update(const Input& input) {
     if (!enabled_) return;
     apply_dark_mask_visibility();

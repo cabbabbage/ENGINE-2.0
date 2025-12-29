@@ -847,6 +847,9 @@ void Assets::update(const Input& input)
 
     const bool height_animation_active = false;
     const bool camera_refresh_needed = room_changed || player_moved || height_animation_active || camera_settings_dirty_;
+    if (dev_controls_) {
+        dev_controls_->sync_camera_tilt_override();
+    }
     camera_.update_camera_height(current_room_, finder_, player, camera_refresh_needed, last_frame_dt_seconds_, dev_mode);
     camera_settings_dirty_ = false;
 

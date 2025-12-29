@@ -7,6 +7,7 @@
 #include <SDL.h>
 #include <cstdint>
 #include <algorithm>
+#include <optional>
 #include <vector>
 #include <unordered_map>
 #include <nlohmann/json.hpp>
@@ -213,6 +214,10 @@ public:
     double get_scale() const;
     void set_scale(double);
     void update();
+    void set_tilt_override(std::optional<float> tilt_deg);
+    void clear_tilt_override();
+    bool has_tilt_override() const { return tilt_override_deg_.has_value(); }
+    float tilt_override_deg() const { return tilt_override_deg_.value_or(camera_math::kDefaultCameraTiltDeg); }
     Area frame_to_area(const SDL_Rect& frame) const;
     SDL_Point pan_and_height_to_point(double pan, double height) const;
     void animate_height_multiply(double factor);
@@ -287,4 +292,5 @@ private:
     float frustum_padding_world_ = 0.0f;
     bool depth_enabled_ = true;
     bool depth_debug_logging_ = false;
+    std::optional<float> tilt_override_deg_{};
 };

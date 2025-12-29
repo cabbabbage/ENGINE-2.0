@@ -2178,6 +2178,10 @@ bool RoomEditor::is_room_config_open() const {
     return room_config_dock_open_;
 }
 
+bool RoomEditor::is_camera_settings_open() const {
+    return room_cfg_ui_ && room_cfg_ui_->camera_controls_enabled();
+}
+
 void RoomEditor::regenerate_room() {
     if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; regeneration skipped.");

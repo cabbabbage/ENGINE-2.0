@@ -21,12 +21,7 @@ void CompositeAssetRenderer::update(Asset* asset,
                                     float flicker_time_seconds) {
     if (!asset) return;
 
-    float combined_scale = asset->current_nearest_variant_scale * asset->current_remaining_scale_adjustment;
-    if (!std::isfinite(combined_scale) || combined_scale <= 0.0f) {
-        combined_scale = 1.0f;
-    }
-
-    float package_scale = combined_scale;
+    float package_scale = asset->smoothed_scale();
     if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
         package_scale = 1.0f;
     }
@@ -179,7 +174,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                 SDL_QueryTexture(light_source.texture, nullptr, nullptr, &w, &h);
                 const float light_z = static_cast<float>(light_source.offset_z) * package_scale;
                 SDL_Rect dest_rect = {
-                    static_cast<int>(asset->pos.x + offset_x * package_scale), asset->pos.y, w, h };
+                    static_cast<int>(std::lround(asset->smoothed_translation_x() + offset_x * package_scale)), static_cast<int>(std::lround(asset->smoothed_translation_y())), w, h };
                 SDL_RendererFlip light_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
 
                 add_render_object(light_source.texture,
@@ -318,8 +313,8 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         final_h = std::max(1, final_h);
 
         SDL_Rect dest_rect = {
-            asset->pos.x,
-            asset->pos.y,
+            static_cast<int>(std::lround(asset->smoothed_translation_x())),
+            static_cast<int>(std::lround(asset->smoothed_translation_y())),
             final_w,
             final_h
 };
@@ -350,7 +345,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                 SDL_QueryTexture(light_source.texture, nullptr, nullptr, &w, &h);
                 const float light_z = static_cast<float>(light_source.offset_z) * package_scale;
                 SDL_Rect dest_rect = {
-                    static_cast<int>(asset->pos.x + offset_x * package_scale), asset->pos.y, w, h };
+                    static_cast<int>(std::lround(asset->smoothed_translation_x() + offset_x * package_scale)), static_cast<int>(std::lround(asset->smoothed_translation_y())), w, h };
                 SDL_RendererFlip light_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
 
                 add_render_object(light_source.texture,

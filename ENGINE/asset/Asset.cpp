@@ -512,14 +512,17 @@ void Asset::update() {
         }
     }
 
-    translation_smoothing_x_.reset(static_cast<float>(pos.x));
-    translation_smoothing_y_.reset(static_cast<float>(pos.y));
-
-    float scale_target = 1.0f;
-    if (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) {
-        scale_target = info->scale_factor;
+    translation_smoothing_x_.target = static_cast<float>(pos.x);
+    translation_smoothing_y_.target = static_cast<float>(pos.y);
+    if (assets_) {
+        translation_smoothing_x_.advance(assets_->frame_delta_seconds());
+        translation_smoothing_y_.advance(assets_->frame_delta_seconds());
     }
-    scale_smoothing_.reset(scale_target);
+
+    scale_smoothing_.target = current_scale;
+    if (assets_) {
+        scale_smoothing_.advance(assets_->frame_delta_seconds());
+    }
 
     const float alpha_target = hidden ? 0.0f : 1.0f;
     alpha_smoothing_.reset(alpha_target);
@@ -1121,11 +1124,7 @@ float Asset::smoothed_translation_x() const { return translation_smoothing_x_.va
 float Asset::smoothed_translation_y() const { return translation_smoothing_y_.value_for_render(); }
 
 float Asset::smoothed_scale() const {
-    if (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) {
-        return info->scale_factor;
-    } else {
-        return 1.0f;
-    }
+    return scale_smoothing_.value_for_render();
 }
 
 float Asset::smoothed_alpha() const {

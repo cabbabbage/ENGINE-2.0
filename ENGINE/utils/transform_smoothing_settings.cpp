@@ -108,7 +108,7 @@ void ensure_loaded() {
             12.0f,
             0.0f,
             8.0f,
-            0.001f});
+            0.0f});
 
     cached.asset_alpha = load_params(
         "render.smoothing.asset.alpha",
@@ -229,4 +229,3 @@ void reload_from_settings() {
 }
 
 }
-

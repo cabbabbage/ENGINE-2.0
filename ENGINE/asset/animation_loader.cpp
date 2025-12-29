@@ -114,6 +114,7 @@ AnimationChildFrameData make_default_child_frame(int child_index) {
         sample.child_index = child_index;
         sample.dx = 0;
         sample.dy = 0;
+        sample.dz = 0;
         sample.degree = 0.0f;
         sample.visible = false;
         sample.render_in_front = true;
@@ -125,6 +126,11 @@ AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int
         if (node.is_object()) {
                 sample.dx = json_int(node.value("dx", 0), 0);
                 sample.dy = json_int(node.value("dy", 0), 0);
+                sample.dz = json_int(node.value("dz", 0), 0);
+                if (!node.contains("dz")) {
+                        sample.dz = sample.dy;
+                        sample.dy = 0;
+                }
                 if (node.contains("degree")) {
                         sample.degree = json_float(node["degree"], 0.0f);
                 } else if (node.contains("rotation")) {
@@ -139,14 +145,29 @@ AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int
                 if (node.size() > 1 && node[1].is_number()) {
                         sample.dy = json_int(node[1], 0);
                 }
-                if (node.size() > 2 && node[2].is_number()) {
-                        sample.degree = json_float(node[2], 0.0f);
-                }
-                if (node.size() > 3) {
-                        sample.visible = json_bool(node[3], sample.visible);
-                }
-                if (node.size() > 4) {
-                        sample.render_in_front = json_bool(node[4], sample.render_in_front);
+                if (node.size() > 2 && node[2].is_number() && node.size() >= 6) {
+                        sample.dz = json_int(node[2], 0);
+                        if (node.size() > 3 && node[3].is_number()) {
+                                sample.degree = json_float(node[3], 0.0f);
+                        }
+                        if (node.size() > 4) {
+                                sample.visible = json_bool(node[4], sample.visible);
+                        }
+                        if (node.size() > 5) {
+                                sample.render_in_front = json_bool(node[5], sample.render_in_front);
+                        }
+                } else {
+                        if (node.size() > 2 && node[2].is_number()) {
+                                sample.degree = json_float(node[2], 0.0f);
+                        }
+                        if (node.size() > 3) {
+                                sample.visible = json_bool(node[3], sample.visible);
+                        }
+                        if (node.size() > 4) {
+                                sample.render_in_front = json_bool(node[4], sample.render_in_front);
+                        }
+                        sample.dz = sample.dy;
+                        sample.dy = 0;
                 }
         }
         return sample;
@@ -244,7 +265,10 @@ void upsert_hit_box(animation_update::FrameHitGeometry& geometry,
         box.type = type;
         if (node.is_object()) {
                 box.center_x = read_float(node.value("center_x", 0.0f));
-                box.center_y = read_float(node.value("center_y", 0.0f));
+                const bool has_center_z = node.contains("center_z");
+                box.center_y = has_center_z ? read_float(node.value("center_y", 0.0f)) : 0.0f;
+                box.center_z = has_center_z ? read_float(node.value("center_z", 0.0f))
+                                            : read_float(node.value("center_y", 0.0f));
                 box.half_width = read_float(node.value("half_width", 0.0f));
                 box.half_height = read_float(node.value("half_height", 0.0f));
                 box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
@@ -254,7 +278,7 @@ void upsert_hit_box(animation_update::FrameHitGeometry& geometry,
         } else if (node.is_array()) {
                 const auto& arr = node;
                 if (!arr.empty())          box.center_x = read_float(arr[0]);
-                if (arr.size() > 1)        box.center_y = read_float(arr[1]);
+                if (arr.size() > 1)        box.center_z = read_float(arr[1]);
                 if (arr.size() > 2)        box.half_width = read_float(arr[2]);
                 if (arr.size() > 3)        box.half_height = read_float(arr[3]);
                 if (arr.size() > 4 && arr[4].is_number()) {
@@ -302,16 +326,28 @@ void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
         vec.type = type;
         if (node.is_object()) {
                 vec.start_x = read_float(node.value("start_x", 0.0f));
-                vec.start_y = read_float(node.value("start_y", 0.0f));
-                if (node.contains("control_x") || node.contains("control_y")) {
+                const bool has_start_z = node.contains("start_z");
+                vec.start_y = has_start_z ? read_float(node.value("start_y", 0.0f)) : 0.0f;
+                vec.start_z = has_start_z ? read_float(node.value("start_z", 0.0f))
+                                          : read_float(node.value("start_y", 0.0f));
+                const bool has_control = node.contains("control_x") || node.contains("control_y") || node.contains("control_z");
+                const bool has_control_z = node.contains("control_z");
+                if (has_control) {
                         vec.control_x = read_float(node.value("control_x", vec.start_x));
-                        vec.control_y = read_float(node.value("control_y", vec.start_y));
+                        vec.control_y = has_control_z ? read_float(node.value("control_y", vec.start_y)) : 0.0f;
+                        vec.control_z = has_control_z ? read_float(node.value("control_z", vec.start_z))
+                                                      : read_float(node.value("control_y", vec.start_z));
                 } else {
                         vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
-                        vec.control_y = (vec.start_y + read_float(node.value("end_y", 0.0f))) * 0.5f;
+                        const float fallback_end_z = read_float(node.value("end_z", read_float(node.value("end_y", 0.0f))));
+                        vec.control_y = 0.0f;
+                        vec.control_z = (vec.start_z + fallback_end_z) * 0.5f;
                 }
                 vec.end_x   = read_float(node.value("end_x", 0.0f));
-                vec.end_y   = read_float(node.value("end_y", 0.0f));
+                const bool has_end_z = node.contains("end_z");
+                vec.end_y   = has_end_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
+                vec.end_z   = has_end_z ? read_float(node.value("end_z", 0.0f))
+                                        : read_float(node.value("end_y", 0.0f));
                 vec.damage  = read_int(node.value("damage", 0));
                 if (node.contains("type") && node["type"].is_string()) {
                         vec.type = node["type"].get<std::string>();
@@ -319,11 +355,11 @@ void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
         } else if (node.is_array()) {
                 const auto& arr = node;
                 if (!arr.empty())      vec.start_x = read_float(arr[0]);
-                if (arr.size() > 1)    vec.start_y = read_float(arr[1]);
+                if (arr.size() > 1)    vec.start_z = read_float(arr[1]);
                 if (arr.size() > 2)    vec.end_x   = read_float(arr[2]);
-                if (arr.size() > 3)    vec.end_y   = read_float(arr[3]);
+                if (arr.size() > 3)    vec.end_z   = read_float(arr[3]);
                 vec.control_x = (vec.start_x + vec.end_x) * 0.5f;
-                vec.control_y = (vec.start_y + vec.end_y) * 0.5f;
+                vec.control_z = (vec.start_z + vec.end_z) * 0.5f;
                 if (arr.size() > 4)    vec.damage  = read_int(arr[4]);
         } else {
                 return;
@@ -598,6 +634,7 @@ void AnimationLoader::load(Animation& animation,
         }
         animation.total_dx = 0;
         animation.total_dy = 0;
+        animation.total_dz = 0;
         animation.movement_paths_.clear();
         animation.audio_clip = Animation::AudioClip{};
         bool movement_specified = false;
@@ -620,6 +657,7 @@ void AnimationLoader::load(Animation& animation,
                         if (mv.is_object()) {
                                 try { fm.dx = static_cast<int>(mv.value("dx", 0)); } catch (...) { fm.dx = 0; }
                                 try { fm.dy = static_cast<int>(mv.value("dy", 0)); } catch (...) { fm.dy = 0; }
+                                try { fm.dz = static_cast<int>(mv.value("dz", 0)); } catch (...) { fm.dz = 0; }
                                 fm.z_resort = mv.value("resort_z", false);
 
                                 fm.children.clear();
@@ -630,6 +668,11 @@ void AnimationLoader::load(Animation& animation,
                                                         child_data.child_index = child_entry.value("child_index", -1);
                                                         try { child_data.dx = static_cast<int>(child_entry.value("dx", 0)); } catch (...) { child_data.dx = 0; }
                                                         try { child_data.dy = static_cast<int>(child_entry.value("dy", 0)); } catch (...) { child_data.dy = 0; }
+                                                        try { child_data.dz = static_cast<int>(child_entry.value("dz", 0)); } catch (...) { child_data.dz = 0; }
+                                                        if (!child_entry.contains("dz")) {
+                                                                child_data.dz = child_data.dy;
+                                                                child_data.dy = 0;
+                                                        }
                                                         if (child_entry.contains("degree") && child_entry["degree"].is_number()) {
                                                                 try { child_data.degree = static_cast<float>(child_entry["degree"].get<double>()); } catch (...) { child_data.degree = 0.0f; }
                                                         } else if (child_entry.contains("rotation") && child_entry["rotation"].is_number()) {
@@ -641,14 +684,29 @@ void AnimationLoader::load(Animation& animation,
                                                         try { child_data.child_index = child_entry[0].get<int>(); } catch (...) { child_data.child_index = -1; }
                                                         if (child_entry.size() >= 2 && child_entry[1].is_number()) { try { child_data.dx = child_entry[1].get<int>(); } catch (...) { child_data.dx = 0; } }
                                                         if (child_entry.size() >= 3 && child_entry[2].is_number()) { try { child_data.dy = child_entry[2].get<int>(); } catch (...) { child_data.dy = 0; } }
-                                                        if (child_entry.size() >= 4 && child_entry[3].is_number()) { try { child_data.degree = static_cast<float>(child_entry[3].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
-                                                        if (child_entry.size() >= 5) {
-                                                                if (child_entry[4].is_boolean()) child_data.visible = child_entry[4].get<bool>();
-                                                                else if (child_entry[4].is_number_integer()) child_data.visible = child_entry[4].get<int>() != 0;
-                                                        }
-                                                        if (child_entry.size() >= 6) {
-                                                                if (child_entry[5].is_boolean()) child_data.render_in_front = child_entry[5].get<bool>();
-                                                                else if (child_entry[5].is_number_integer()) child_data.render_in_front = child_entry[5].get<int>() != 0;
+                                                        if (child_entry.size() >= 4 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                                                                try { child_data.dz = child_entry[3].get<int>(); } catch (...) { child_data.dz = 0; }
+                                                                if (child_entry.size() >= 5 && child_entry[4].is_number()) { try { child_data.degree = static_cast<float>(child_entry[4].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
+                                                                if (child_entry.size() >= 6) {
+                                                                        if (child_entry[5].is_boolean()) child_data.visible = child_entry[5].get<bool>();
+                                                                        else if (child_entry[5].is_number_integer()) child_data.visible = child_entry[5].get<int>() != 0;
+                                                                }
+                                                                if (child_entry.size() >= 7) {
+                                                                        if (child_entry[6].is_boolean()) child_data.render_in_front = child_entry[6].get<bool>();
+                                                                        else if (child_entry[6].is_number_integer()) child_data.render_in_front = child_entry[6].get<int>() != 0;
+                                                                }
+                                                        } else {
+                                                                if (child_entry.size() >= 4 && child_entry[3].is_number()) { try { child_data.degree = static_cast<float>(child_entry[3].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
+                                                                if (child_entry.size() >= 5) {
+                                                                        if (child_entry[4].is_boolean()) child_data.visible = child_entry[4].get<bool>();
+                                                                        else if (child_entry[4].is_number_integer()) child_data.visible = child_entry[4].get<int>() != 0;
+                                                                }
+                                                                if (child_entry.size() >= 6) {
+                                                                        if (child_entry[5].is_boolean()) child_data.render_in_front = child_entry[5].get<bool>();
+                                                                        else if (child_entry[5].is_number_integer()) child_data.render_in_front = child_entry[5].get<int>() != 0;
+                                                                }
+                                                                child_data.dz = child_data.dy;
+                                                                child_data.dy = 0;
                                                         }
                                                 } else {
                                                         continue;
@@ -660,7 +718,7 @@ void AnimationLoader::load(Animation& animation,
                                                 fm.children.push_back(child_data);
                                         }
                                 }
-                                if (fm.dx != 0 || fm.dy != 0 || mv.contains("resort_z")) specified = true;
+                                if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.contains("resort_z")) specified = true;
                                 dest.push_back(std::move(fm));
                                 continue;
                         }
@@ -668,6 +726,7 @@ void AnimationLoader::load(Animation& animation,
                         if (!mv.is_array() || mv.size() < 2) continue;
                         try { fm.dx = mv[0].get<int>(); } catch (...) { fm.dx = 0; }
                         try { fm.dy = mv[1].get<int>(); } catch (...) { fm.dy = 0; }
+                        fm.dz = 0;
                         if (mv.size() >= 3 && mv[2].is_boolean()) {
                                 fm.z_resort = mv[2].get<bool>();
                         }
@@ -702,14 +761,29 @@ void AnimationLoader::load(Animation& animation,
                                         try { child_data.child_index = child_entry[0].get<int>(); } catch (...) { child_data.child_index = -1; }
                                         if (child_entry.size() >= 2 && child_entry[1].is_number()) { try { child_data.dx = child_entry[1].get<int>(); } catch (...) { child_data.dx = 0; } }
                                         if (child_entry.size() >= 3 && child_entry[2].is_number()) { try { child_data.dy = child_entry[2].get<int>(); } catch (...) { child_data.dy = 0; } }
-                                        if (child_entry.size() >= 4 && child_entry[3].is_number()) { try { child_data.degree = static_cast<float>(child_entry[3].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
-                                        if (child_entry.size() >= 5) {
-                                                if (child_entry[4].is_boolean()) child_data.visible = child_entry[4].get<bool>();
-                                                else if (child_entry[4].is_number_integer()) child_data.visible = child_entry[4].get<int>() != 0;
-                                        }
-                                        if (child_entry.size() >= 6) {
-                                                if (child_entry[5].is_boolean()) child_data.render_in_front = child_entry[5].get<bool>();
-                                                else if (child_entry[5].is_number_integer()) child_data.render_in_front = child_entry[5].get<int>() != 0;
+                                        if (child_entry.size() >= 4 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                                                try { child_data.dz = child_entry[3].get<int>(); } catch (...) { child_data.dz = 0; }
+                                                if (child_entry.size() >= 5 && child_entry[4].is_number()) { try { child_data.degree = static_cast<float>(child_entry[4].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
+                                                if (child_entry.size() >= 6) {
+                                                        if (child_entry[5].is_boolean()) child_data.visible = child_entry[5].get<bool>();
+                                                        else if (child_entry[5].is_number_integer()) child_data.visible = child_entry[5].get<int>() != 0;
+                                                }
+                                                if (child_entry.size() >= 7) {
+                                                        if (child_entry[6].is_boolean()) child_data.render_in_front = child_entry[6].get<bool>();
+                                                        else if (child_entry[6].is_number_integer()) child_data.render_in_front = child_entry[6].get<int>() != 0;
+                                                }
+                                        } else {
+                                                if (child_entry.size() >= 4 && child_entry[3].is_number()) { try { child_data.degree = static_cast<float>(child_entry[3].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
+                                                if (child_entry.size() >= 5) {
+                                                        if (child_entry[4].is_boolean()) child_data.visible = child_entry[4].get<bool>();
+                                                        else if (child_entry[4].is_number_integer()) child_data.visible = child_entry[4].get<int>() != 0;
+                                                }
+                                                if (child_entry.size() >= 6) {
+                                                        if (child_entry[5].is_boolean()) child_data.render_in_front = child_entry[5].get<bool>();
+                                                        else if (child_entry[5].is_number_integer()) child_data.render_in_front = child_entry[5].get<int>() != 0;
+                                                }
+                                                child_data.dz = child_data.dy;
+                                                child_data.dy = 0;
                                         }
                                         if (child_data.child_index < 0 || child_data.child_index >= static_cast<int>(animation.child_asset_names_.size())) {
                                                 std::cout << "[AnimationLoader] Ignoring child entry with invalid index " << child_data.child_index << " for asset list size " << animation.child_asset_names_.size() << "\n";
@@ -721,7 +795,7 @@ void AnimationLoader::load(Animation& animation,
                         if (!fm.children.empty()) {
                                 std::cout << "[AnimationLoader] Parsed frame children: ";
                                 for (const auto& cd : fm.children) {
-                                        std::cout << "(idx=" << cd.child_index << ", dx=" << cd.dx << ", dy=" << cd.dy << ")";
+                                        std::cout << "(idx=" << cd.child_index << ", dx=" << cd.dx << ", dy=" << cd.dy << ", dz=" << cd.dz << ")";
                                         if (cd.child_index >= 0 && cd.child_index < static_cast<int>(animation.child_asset_names_.size())) {
                                                 std::cout << "->'" << animation.child_asset_names_[cd.child_index] << "' ";
                                         } else {
@@ -730,7 +804,7 @@ void AnimationLoader::load(Animation& animation,
                                 }
                                 std::cout << "\n";
                         }
-                        if (fm.dx != 0 || fm.dy != 0 || mv.size() >= 3) {
+                        if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.size() >= 3) {
                                 specified = true;
                         }
                         dest.push_back(std::move(fm));
@@ -1138,7 +1212,7 @@ void AnimationLoader::load(Animation& animation,
                             }
                         }
 
-                        if (f.dx != 0 || f.dy != 0) {
+                        if (f.dx != 0 || f.dy != 0 || f.dz != 0) {
                                 any_motion = true;
                         }
 
@@ -1152,12 +1226,14 @@ void AnimationLoader::load(Animation& animation,
 
         animation.total_dx = 0;
         animation.total_dy = 0;
+        animation.total_dz = 0;
         if (!animation.movement_paths_.empty()) {
                 const auto& primary = animation.movement_paths_.front();
                 for (const auto& frame : primary) {
                         animation.total_dx += frame.dx;
                         animation.total_dy += frame.dy;
-                        if (frame.dx != 0 || frame.dy != 0) {
+                        animation.total_dz += frame.dz;
+                        if (frame.dx != 0 || frame.dy != 0 || frame.dz != 0) {
                                 any_motion = true;
                         }
                 }

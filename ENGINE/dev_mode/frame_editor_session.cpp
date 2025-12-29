@@ -585,7 +585,7 @@ void FrameEditorSession::update(const Input& input) {
 };
         if (child) {
             sync_text_box(tb_child_dx_.get(), last_child_dx_text_, child->dx);
-            sync_text_box(tb_child_dy_.get(), last_child_dy_text_, child->dy);
+            sync_text_box(tb_child_dy_.get(), last_child_dy_text_, child->dz);
             if (tb_child_deg_ && !tb_child_deg_->is_editing()) {
                 std::ostringstream oss;
                 oss << std::fixed << std::setprecision(1) << child->degree;
@@ -1039,12 +1039,15 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_child_dy_) {
-                    float new_dy = parse_float(tb_child_dy_->value(), child->dy);
-                    if (!std::isnan(new_dy) && child->dy != new_dy) {
-                        child->dy = new_dy;
+                    float new_dz = parse_float(tb_child_dy_->value(), child->dz);
+                    if (!std::isnan(new_dz) && child->dz != new_dz) {
+                        child->dz = new_dz;
                         changed = true;
                         child_offset_changed = true;
                     }
+                }
+                if (child_offset_changed) {
+                    child->dy = 0.0f;
                 }
                 if (tb_child_deg_) {
                     float new_deg = parse_float(tb_child_deg_->value(), child->degree);
@@ -1123,9 +1126,10 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_hit_center_y_) {
-                    float value = parse_float(tb_hit_center_y_->value(), box->center_y);
-                    if (std::isfinite(value) && box->center_y != value) {
-                        box->center_y = value;
+                    float value = parse_float(tb_hit_center_y_->value(), box->center_z);
+                    if (std::isfinite(value) && box->center_z != value) {
+                        box->center_z = value;
+                        box->center_y = 0.0f;
                         changed = true;
                     }
                 }
@@ -1214,9 +1218,10 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_start_y_) {
-                    float value = parse_float(tb_attack_start_y_->value(), vec->start_y);
-                    if (std::isfinite(value) && vec->start_y != value) {
-                        vec->start_y = value;
+                    float value = parse_float(tb_attack_start_y_->value(), vec->start_z);
+                    if (std::isfinite(value) && vec->start_z != value) {
+                        vec->start_z = value;
+                        vec->start_y = 0.0f;
                         changed = true;
                     }
                 }
@@ -1228,9 +1233,10 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_control_y_) {
-                    float value = parse_float(tb_attack_control_y_->value(), vec->control_y);
-                    if (std::isfinite(value) && vec->control_y != value) {
-                        vec->control_y = value;
+                    float value = parse_float(tb_attack_control_y_->value(), vec->control_z);
+                    if (std::isfinite(value) && vec->control_z != value) {
+                        vec->control_z = value;
+                        vec->control_y = 0.0f;
                         changed = true;
                     }
                 }
@@ -1242,9 +1248,10 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_end_y_) {
-                    float value = parse_float(tb_attack_end_y_->value(), vec->end_y);
-                    if (std::isfinite(value) && vec->end_y != value) {
-                        vec->end_y = value;
+                    float value = parse_float(tb_attack_end_y_->value(), vec->end_z);
+                    if (std::isfinite(value) && vec->end_z != value) {
+                        vec->end_z = value;
+                        vec->end_y = 0.0f;
                         changed = true;
                     }
                 }
@@ -1344,7 +1351,8 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 const float screen_to_local = (attachment > 0.0001f) ? (1.0f / attachment) : 1.0f;
                 const float unflipped_x = target_->flipped ? -desired_rel.x : desired_rel.x;
                 child->dx = static_cast<float>(std::round(unflipped_x * screen_to_local));
-                child->dy = static_cast<float>(std::round(desired_rel.y * screen_to_local));
+                child->dz = static_cast<float>(std::round(desired_rel.y * screen_to_local));
+                child->dy = 0.0f;
                 child->has_data = true;
                 const bool should_smooth_child = smooth_enabled_ && selected_index_ > 0;
                 if (should_smooth_child) {
@@ -1456,11 +1464,11 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
             const auto& child = frame.children[i];
 
             const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
-            const float scaled_dy = static_cast<float>(child.dy) * base_adjustment;
+            const float scaled_dz = static_cast<float>(child.dz) * base_adjustment;
             const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
             SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{
                 dx_world + static_cast<float>(parent_base.x),
-                scaled_dy + static_cast<float>(parent_base.y)
+                scaled_dz + static_cast<float>(parent_base.y)
             });
             SDL_Point cp = round_point(screen);
             const int marker_r = (static_cast<int>(i) == selected_child_index_) ? 6 : 4;
@@ -1483,10 +1491,10 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
             const AnimationFrame* preview_frame = slot.frame;
 
             const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
-            const float scaled_dy = static_cast<float>(child.dy) * base_adjustment;
+            const float scaled_dz = static_cast<float>(child.dz) * base_adjustment;
             const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
             SDL_FPoint child_world{
-                static_cast<float>(parent_base.x) + dx_world, static_cast<float>(parent_base.y) + scaled_dy };
+                static_cast<float>(parent_base.x) + dx_world, static_cast<float>(parent_base.y) + scaled_dz };
             const FrameVariant* variant = (preview_anim && preview_frame) ? preview_anim->get_frame(preview_frame, variant_scale) : nullptr;
             SDL_Texture* tex = variant ? variant->get_base_texture() : slot.texture;
             if (!tex) continue;
@@ -1700,7 +1708,7 @@ void FrameEditorSession::ensure_widgets() const {
     if (!tb_total_dx_) tb_total_dx_ = std::make_unique<DMTextBox>("Total dX", "0");
     if (!tb_total_dy_) tb_total_dy_ = std::make_unique<DMTextBox>("Total dY", "0");
     if (!tb_child_dx_) tb_child_dx_ = std::make_unique<DMTextBox>("Child dX", "0");
-    if (!tb_child_dy_) tb_child_dy_ = std::make_unique<DMTextBox>("Child dY", "0");
+    if (!tb_child_dy_) tb_child_dy_ = std::make_unique<DMTextBox>("Child dZ", "0");
     if (!tb_child_deg_) tb_child_deg_ = std::make_unique<DMTextBox>("Rotation", "0");
     if (!cb_child_visible_) cb_child_visible_ = std::make_unique<DMCheckbox>("Visible", true);
     if (!cb_child_render_front_) cb_child_render_front_ = std::make_unique<DMCheckbox>("Render In Front", true);
@@ -1744,7 +1752,7 @@ void FrameEditorSession::ensure_widgets() const {
         btn_hitbox_copy_next_ = std::make_unique<DMButton>("Copy To Next", &header, 150, DMButton::height());
     }
     if (!tb_hit_center_x_) tb_hit_center_x_ = std::make_unique<DMTextBox>("Center X", "0");
-    if (!tb_hit_center_y_) tb_hit_center_y_ = std::make_unique<DMTextBox>("Center Y", "0");
+    if (!tb_hit_center_y_) tb_hit_center_y_ = std::make_unique<DMTextBox>("Center Z", "0");
     if (!tb_hit_width_) tb_hit_width_ = std::make_unique<DMTextBox>("Width", "0");
     if (!tb_hit_height_) tb_hit_height_ = std::make_unique<DMTextBox>("Height", "0");
     if (!tb_hit_rotation_) tb_hit_rotation_ = std::make_unique<DMTextBox>("Rotation", "0");
@@ -1771,11 +1779,11 @@ void FrameEditorSession::ensure_widgets() const {
         btn_attack_copy_next_ = std::make_unique<DMButton>("Copy To Next", &header, 150, DMButton::height());
     }
     if (!tb_attack_start_x_) tb_attack_start_x_ = std::make_unique<DMTextBox>("Start X", "0");
-    if (!tb_attack_start_y_) tb_attack_start_y_ = std::make_unique<DMTextBox>("Start Y", "0");
+    if (!tb_attack_start_y_) tb_attack_start_y_ = std::make_unique<DMTextBox>("Start Z", "0");
     if (!tb_attack_control_x_) tb_attack_control_x_ = std::make_unique<DMTextBox>("Control X", "0");
-    if (!tb_attack_control_y_) tb_attack_control_y_ = std::make_unique<DMTextBox>("Control Y", "0");
+    if (!tb_attack_control_y_) tb_attack_control_y_ = std::make_unique<DMTextBox>("Control Z", "0");
     if (!tb_attack_end_x_) tb_attack_end_x_ = std::make_unique<DMTextBox>("End X", "0");
-    if (!tb_attack_end_y_) tb_attack_end_y_ = std::make_unique<DMTextBox>("End Y", "0");
+    if (!tb_attack_end_y_) tb_attack_end_y_ = std::make_unique<DMTextBox>("End Z", "0");
     if (!tb_attack_damage_) tb_attack_damage_ = std::make_unique<DMTextBox>("Damage", "0");
     last_show_anim_value_ = show_animation_;
     last_show_child_value_ = show_child_;
@@ -2589,7 +2597,8 @@ animation_update::FrameHitGeometry::HitBox* FrameEditorSession::ensure_hit_box_f
     animation_update::FrameHitGeometry::HitBox box;
     box.type = type;
     box.center_x = 0.0f;
-    box.center_y = 40.0f;
+    box.center_y = 0.0f;
+    box.center_z = 40.0f;
     box.half_width = 40.0f;
     box.half_height = 60.0f;
     box.rotation_degrees = 0.0f;
@@ -2626,7 +2635,7 @@ void FrameEditorSession::refresh_hitbox_form() const {
 };
     if (box) {
         sync_field(tb_hit_center_x_.get(), last_hit_center_x_text_, std::to_string(static_cast<int>(std::lround(box->center_x))));
-        sync_field(tb_hit_center_y_.get(), last_hit_center_y_text_, std::to_string(static_cast<int>(std::lround(box->center_y))));
+        sync_field(tb_hit_center_y_.get(), last_hit_center_y_text_, std::to_string(static_cast<int>(std::lround(box->center_z))));
         sync_field(tb_hit_width_.get(), last_hit_width_text_, std::to_string(static_cast<int>(std::lround(box->half_width * 2.0f))));
         sync_field(tb_hit_height_.get(), last_hit_height_text_, std::to_string(static_cast<int>(std::lround(box->half_height * 2.0f))));
         if (tb_hit_rotation_ && !tb_hit_rotation_->is_editing()) {
@@ -2675,10 +2684,13 @@ animation_update::FrameAttackGeometry::Vector* FrameEditorSession::ensure_attack
     vec.type = type;
     vec.start_x = 0.0f;
     vec.start_y = 0.0f;
+    vec.start_z = 0.0f;
     vec.control_x = 0.0f;
     vec.control_y = 0.0f;
+    vec.control_z = 0.0f;
     vec.end_x = 0.0f;
     vec.end_y = 0.0f;
+    vec.end_z = 0.0f;
     vec.damage = 0;
     animation_update::FrameAttackGeometry::Vector& created = frame.attack.add_vector(type, vec);
     set_current_attack_vector_index(static_cast<int>(existing_count));
@@ -2744,11 +2756,11 @@ void FrameEditorSession::refresh_attack_form() const {
 };
     if (vec) {
         sync_field(tb_attack_start_x_.get(), last_attack_start_x_text_, std::to_string(static_cast<int>(std::lround(vec->start_x))));
-        sync_field(tb_attack_start_y_.get(), last_attack_start_y_text_, std::to_string(static_cast<int>(std::lround(vec->start_y))));
+        sync_field(tb_attack_start_y_.get(), last_attack_start_y_text_, std::to_string(static_cast<int>(std::lround(vec->start_z))));
         sync_field(tb_attack_control_x_.get(), last_attack_control_x_text_, std::to_string(static_cast<int>(std::lround(vec->control_x))));
-        sync_field(tb_attack_control_y_.get(), last_attack_control_y_text_, std::to_string(static_cast<int>(std::lround(vec->control_y))));
+        sync_field(tb_attack_control_y_.get(), last_attack_control_y_text_, std::to_string(static_cast<int>(std::lround(vec->control_z))));
         sync_field(tb_attack_end_x_.get(), last_attack_end_x_text_, std::to_string(static_cast<int>(std::lround(vec->end_x))));
-        sync_field(tb_attack_end_y_.get(), last_attack_end_y_text_, std::to_string(static_cast<int>(std::lround(vec->end_y))));
+        sync_field(tb_attack_end_y_.get(), last_attack_end_y_text_, std::to_string(static_cast<int>(std::lround(vec->end_z))));
         sync_field(tb_attack_damage_.get(), last_attack_damage_text_, std::to_string(vec->damage));
     } else {
         sync_field(tb_attack_start_x_.get(), last_attack_start_x_text_, "0");
@@ -2977,7 +2989,7 @@ bool FrameEditorSession::build_hitbox_visual(const animation_update::FrameHitGeo
         return cam.map_to_screen_f(world);
     };
 
-    SDL_FPoint center_local{box.center_x, box.center_y};
+    SDL_FPoint center_local{box.center_x, box.center_z};
     out.center = to_screen(center_local);
 
     std::array<SDL_FPoint, 4> local_corners = {
@@ -3164,7 +3176,7 @@ bool FrameEditorSession::begin_hitbox_drag(SDL_Point mouse) {
         return false;
     }
     hitbox_drag_grab_offset_.x = local_mouse.x - box->center_x;
-    hitbox_drag_grab_offset_.y = local_mouse.y - box->center_y;
+    hitbox_drag_grab_offset_.y = local_mouse.y - box->center_z;
     return true;
 }
 
@@ -3193,7 +3205,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
         };
     };
     SDL_FPoint delta{ local.x - hitbox_drag_start_box_.center_x,
-                      local.y - hitbox_drag_start_box_.center_y };
+                      local.y - hitbox_drag_start_box_.center_z };
     SDL_FPoint aligned = rotate_to_box(delta.x, delta.y);
     switch (active_hitbox_handle_) {
         case HitHandle::Move: {
@@ -3202,7 +3214,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
                 local.y - hitbox_drag_grab_offset_.y
 };
             box->center_x = new_center.x;
-            box->center_y = new_center.y;
+            box->center_z = new_center.y;
             break;
         }
         case HitHandle::Left:
@@ -3218,7 +3230,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
             const float center_offset = (right + left) * 0.5f;
             SDL_FPoint offset_world = rotate_to_world(SDL_FPoint{center_offset, 0.0f});
             box->center_x = hitbox_drag_start_box_.center_x + offset_world.x;
-            box->center_y = hitbox_drag_start_box_.center_y + offset_world.y;
+            box->center_z = hitbox_drag_start_box_.center_z + offset_world.y;
             box->half_width = width * 0.5f;
             break;
         }
@@ -3235,12 +3247,12 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
             const float center_offset = (top + bottom) * 0.5f;
             SDL_FPoint offset_world = rotate_to_world(SDL_FPoint{0.0f, center_offset});
             box->center_x = hitbox_drag_start_box_.center_x + offset_world.x;
-            box->center_y = hitbox_drag_start_box_.center_y + offset_world.y;
+            box->center_z = hitbox_drag_start_box_.center_z + offset_world.y;
             box->half_height = height * 0.5f;
             break;
         }
         case HitHandle::Rotate: {
-            SDL_FPoint rel{ local.x - box->center_x, local.y - box->center_y };
+            SDL_FPoint rel{ local.x - box->center_x, local.y - box->center_z };
             box->rotation_degrees = std::atan2(rel.y, rel.x) * kRadToDeg;
             break;
         }
@@ -3248,6 +3260,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
         default:
             break;
     }
+    box->center_y = 0.0f;
     refresh_hitbox_form();
 }
 
@@ -3270,9 +3283,9 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
     const WarpedScreenGrid& cam = assets_->getView();
     SDL_Point anchor = asset_anchor_world();
     const float scale = asset_local_scale();
-    auto to_screen = [&](float lx, float ly) -> SDL_FPoint {
+    auto to_screen = [&](float lx, float lz) -> SDL_FPoint {
         SDL_FPoint world{
-            static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - ly * scale };
+            static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - lz * scale };
         return cam.map_to_screen_f(world);
     };
 
@@ -3290,9 +3303,9 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
     for (const auto& vec : frame.attack.vectors) {
         if (vec.type != current_type) continue;
 
-        SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_y);
-        SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_y);
-        SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_y);
+        SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
+        SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
+        SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
 
         if (point_hit(start_screen, node_radius)) {
             clicked_vector_index = type_counter;
@@ -3318,9 +3331,9 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
         for (const auto& vec : frame.attack.vectors) {
             if (vec.type != current_type) continue;
 
-            SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_y);
-            SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_y);
-            SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_y);
+            SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
+            SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
+            SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
 
             for (int i = 0; i <= segments; ++i) {
                 const float t = static_cast<float>(i) / static_cast<float>(segments);
@@ -3385,31 +3398,34 @@ void FrameEditorSession::update_attack_drag(SDL_Point mouse) {
     switch (active_attack_handle_) {
         case AttackHandle::Start:
             vec->start_x = local.x;
-            vec->start_y = local.y;
+            vec->start_z = local.y;
             break;
         case AttackHandle::Control:
             vec->control_x = local.x;
-            vec->control_y = local.y;
+            vec->control_z = local.y;
             break;
         case AttackHandle::End:
             vec->end_x = local.x;
-            vec->end_y = local.y;
+            vec->end_z = local.y;
             break;
         case AttackHandle::Segment: {
             SDL_FPoint delta{ local.x - attack_drag_start_mouse_local_.x,
                               local.y - attack_drag_start_mouse_local_.y };
             vec->start_x = attack_drag_start_vector_.start_x + delta.x;
-            vec->start_y = attack_drag_start_vector_.start_y + delta.y;
+            vec->start_z = attack_drag_start_vector_.start_z + delta.y;
             vec->control_x = attack_drag_start_vector_.control_x + delta.x;
-            vec->control_y = attack_drag_start_vector_.control_y + delta.y;
+            vec->control_z = attack_drag_start_vector_.control_z + delta.y;
             vec->end_x = attack_drag_start_vector_.end_x + delta.x;
-            vec->end_y = attack_drag_start_vector_.end_y + delta.y;
+            vec->end_z = attack_drag_start_vector_.end_z + delta.y;
             break;
         }
         case AttackHandle::None:
         default:
             break;
     }
+    vec->start_y = 0.0f;
+    vec->control_y = 0.0f;
+    vec->end_y = 0.0f;
     refresh_attack_form();
 }
 
@@ -3620,7 +3636,7 @@ void FrameEditorSession::smooth_child_offsets(int child_index, int adjusted_inde
             continue;
         }
         const auto& child = children[child_index];
-        original[i] = SDL_FPoint{ child.dx, child.dy };
+        original[i] = SDL_FPoint{ child.dx, child.dz };
     }
     std::vector<SDL_FPoint> redistributed = original;
     if (curve_enabled_) {
@@ -3635,7 +3651,8 @@ void FrameEditorSession::smooth_child_offsets(int child_index, int adjusted_inde
         }
         auto& child = children[child_index];
         child.dx = static_cast<float>(std::round(redistributed[i].x));
-        child.dy = static_cast<float>(std::round(redistributed[i].y));
+        child.dz = static_cast<float>(std::round(redistributed[i].y));
+        child.dy = 0.0f;
         child.has_data = true;
     }
     persist_changes();
@@ -3724,6 +3741,7 @@ void FrameEditorSession::refresh_child_assets_from_document() {
                     child.child_index = idx;
                     child.dx = 0.0f;
                     child.dy = 0.0f;
+                    child.dz = 0.0f;
                     child.degree = 0.0f;
                     child.visible = true;
                     child.render_in_front = true;
@@ -3841,6 +3859,7 @@ void FrameEditorSession::hydrate_frames_from_animation() {
         if (!last_payload_loaded_) {
             dst.dx = static_cast<float>(src.dx);
             dst.dy = static_cast<float>(src.dy);
+            dst.dz = static_cast<float>(src.dz);
             dst.resort_z = src.z_resort;
         }
 
@@ -3861,6 +3880,7 @@ void FrameEditorSession::hydrate_frames_from_animation() {
                 child.child_index = child_src.child_index;
                 child.dx = static_cast<float>(child_src.dx);
                 child.dy = static_cast<float>(child_src.dy);
+                child.dz = static_cast<float>(child_src.dz);
                 child.degree = child_src.degree;
                 child.visible = child_src.visible;
                 child.render_in_front = child_src.render_in_front;
@@ -3914,6 +3934,7 @@ void FrameEditorSession::apply_frames_to_animation() {
             AnimationFrame& dst = path[i];
             dst.dx = static_cast<int>(std::lround(src.dx));
             dst.dy = static_cast<int>(std::lround(src.dy));
+            dst.dz = static_cast<int>(std::lround(src.dz));
             dst.z_resort = src.resort_z;
             dst.frame_index = static_cast<int>(i);
             dst.children.clear();
@@ -3927,6 +3948,7 @@ void FrameEditorSession::apply_frames_to_animation() {
                     child.child_index = child_src.child_index;
                     child.dx = static_cast<int>(std::lround(child_src.dx));
                     child.dy = static_cast<int>(std::lround(child_src.dy));
+                    child.dz = static_cast<int>(std::lround(child_src.dz));
                     child.degree = child_src.degree;
                     child.visible = child_src.visible;
                     child.render_in_front = child_src.render_in_front;
@@ -3956,11 +3978,13 @@ void FrameEditorSession::apply_frames_to_animation() {
             }
             anim->total_dx = 0;
             anim->total_dy = 0;
+            anim->total_dz = 0;
             anim->movment = false;
             for (const auto& frame : path) {
                 anim->total_dx += frame.dx;
                 anim->total_dy += frame.dy;
-                if (frame.dx != 0 || frame.dy != 0) {
+                anim->total_dz += frame.dz;
+                if (frame.dx != 0 || frame.dy != 0 || frame.dz != 0) {
                     anim->movment = true;
                 }
             }
@@ -4198,14 +4222,15 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
             const auto* box = f.hit.find_box(type);
             if (!box || box->is_empty() ||
                 !std::isfinite(box->center_x) || !std::isfinite(box->center_y) ||
-                !std::isfinite(box->half_width) || !std::isfinite(box->half_height) ||
-                !std::isfinite(box->rotation_degrees)) {
+                !std::isfinite(box->center_z) || !std::isfinite(box->half_width) ||
+                !std::isfinite(box->half_height) || !std::isfinite(box->rotation_degrees)) {
                 existing[type] = nullptr;
                 continue;
             }
             existing[type] = nlohmann::json{
                 {"center_x", box->center_x},
                 {"center_y", box->center_y},
+                {"center_z", box->center_z},
                 {"half_width", box->half_width},
                 {"half_height", box->half_height},
                 {"rotation", box->rotation_degrees},
@@ -4241,18 +4266,21 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
             nlohmann::json type_array = nlohmann::json::array();
             for (const auto& vec : f.attack.vectors) {
                 if (vec.type != type) continue;
-                if (!std::isfinite(vec.start_x) || !std::isfinite(vec.start_y) ||
-                    !std::isfinite(vec.end_x) || !std::isfinite(vec.end_y) ||
-                    !std::isfinite(vec.control_x) || !std::isfinite(vec.control_y)) {
+                if (!std::isfinite(vec.start_x) || !std::isfinite(vec.start_y) || !std::isfinite(vec.start_z) ||
+                    !std::isfinite(vec.end_x) || !std::isfinite(vec.end_y) || !std::isfinite(vec.end_z) ||
+                    !std::isfinite(vec.control_x) || !std::isfinite(vec.control_y) || !std::isfinite(vec.control_z)) {
                     continue;
                 }
                 type_array.push_back(nlohmann::json{
                     {"start_x", vec.start_x},
                     {"start_y", vec.start_y},
+                    {"start_z", vec.start_z},
                     {"control_x", vec.control_x},
                     {"control_y", vec.control_y},
+                    {"control_z", vec.control_z},
                     {"end_x", vec.end_x},
                     {"end_y", vec.end_y},
+                    {"end_z", vec.end_z},
                     {"damage", vec.damage},
                     {"type", vec.type}
                 });
@@ -4464,6 +4492,7 @@ AnimationChildFrameData FrameEditorSession::build_child_frame_descriptor(const M
     descriptor.child_index = static_cast<int>(child_index);
     descriptor.dx = 0;
     descriptor.dy = 0;
+    descriptor.dz = 0;
     descriptor.degree = 0.0f;
     descriptor.visible = false;
     descriptor.render_in_front = true;
@@ -4473,6 +4502,7 @@ AnimationChildFrameData FrameEditorSession::build_child_frame_descriptor(const M
             descriptor.child_index = (child.child_index >= 0) ? child.child_index : static_cast<int>(child_index);
             descriptor.dx = static_cast<int>(std::lround(child.dx));
             descriptor.dy = static_cast<int>(std::lround(child.dy));
+            descriptor.dz = static_cast<int>(std::lround(child.dz));
             descriptor.degree = child.degree;
             descriptor.visible = child.visible;
             descriptor.render_in_front = child.render_in_front;
@@ -4658,9 +4688,9 @@ void FrameEditorSession::render_attack_geometry(SDL_Renderer* renderer) const {
     const float scale = asset_local_scale();
     if (scale <= 0.0001f) return;
 
-    auto to_screen = [&](float lx, float ly) -> SDL_FPoint {
+    auto to_screen = [&](float lx, float lz) -> SDL_FPoint {
         SDL_FPoint world{
-            static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - ly * scale };
+            static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - lz * scale };
         return cam.map_to_screen_f(world);
     };
 
@@ -4673,9 +4703,9 @@ void FrameEditorSession::render_attack_geometry(SDL_Renderer* renderer) const {
             selected = (current_type_counter == selected_idx && selected_idx >= 0);
             ++current_type_counter;
         }
-        SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_y);
-        SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_y);
-        SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_y);
+        SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
+        SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
+        SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
 
         SDL_Color line_color = selected ? DMStyles::AccentButton().bg : DMStyles::HeaderButton().bg;
         SDL_SetRenderDrawColor(renderer, line_color.r, line_color.g, line_color.b, 220);

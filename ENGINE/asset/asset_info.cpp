@@ -65,6 +65,11 @@ AnimationChildFrameData parse_async_child_frame(const nlohmann::json& entry) {
     if (entry.is_object()) {
         try { data.dx = static_cast<int>(entry.value("dx", 0)); } catch (...) { data.dx = 0; }
         try { data.dy = static_cast<int>(entry.value("dy", 0)); } catch (...) { data.dy = 0; }
+        try { data.dz = static_cast<int>(entry.value("dz", 0)); } catch (...) { data.dz = 0; }
+        if (!entry.contains("dz")) {
+            data.dz = data.dy;
+            data.dy = 0;
+        }
         if (entry.contains("degree") && entry["degree"].is_number()) {
             try { data.degree = static_cast<float>(entry["degree"].get<double>()); } catch (...) { data.degree = 0.0f; }
         } else if (entry.contains("rotation") && entry["rotation"].is_number()) {
@@ -78,9 +83,18 @@ AnimationChildFrameData parse_async_child_frame(const nlohmann::json& entry) {
     if (entry.is_array() && !entry.empty()) {
         if (entry.size() >= 1 && entry[0].is_number()) { try { data.dx = entry[0].get<int>(); } catch (...) { data.dx = 0; } }
         if (entry.size() >= 2 && entry[1].is_number()) { try { data.dy = entry[1].get<int>(); } catch (...) { data.dy = 0; } }
-        if (entry.size() >= 3 && entry[2].is_number()) { try { data.degree = static_cast<float>(entry[2].get<double>()); } catch (...) { data.degree = 0.0f; } }
-        if (entry.size() >= 4) data.visible = read_bool(entry[3], true);
-        if (entry.size() >= 5) data.render_in_front = read_bool(entry[4], true);
+        if (entry.size() >= 6 && entry[2].is_number()) {
+            try { data.dz = entry[2].get<int>(); } catch (...) { data.dz = 0; }
+            if (entry.size() >= 4 && entry[3].is_number()) { try { data.degree = static_cast<float>(entry[3].get<double>()); } catch (...) { data.degree = 0.0f; } }
+            if (entry.size() >= 5) data.visible = read_bool(entry[4], true);
+            if (entry.size() >= 6) data.render_in_front = read_bool(entry[5], true);
+        } else {
+            if (entry.size() >= 3 && entry[2].is_number()) { try { data.degree = static_cast<float>(entry[2].get<double>()); } catch (...) { data.degree = 0.0f; } }
+            if (entry.size() >= 4) data.visible = read_bool(entry[3], true);
+            if (entry.size() >= 5) data.render_in_front = read_bool(entry[4], true);
+            data.dz = data.dy;
+            data.dy = 0;
+        }
     }
 
     return data;
@@ -94,6 +108,7 @@ nlohmann::json encode_async_child_frames(const std::vector<AnimationChildFrameDa
         nlohmann::json obj = nlohmann::json::object();
         obj["dx"] = frame.dx;
         obj["dy"] = frame.dy;
+        obj["dz"] = frame.dz;
         obj["degree"] = frame.degree;
         obj["visible"] = frame.visible;
         obj["render_in_front"] = frame.render_in_front;

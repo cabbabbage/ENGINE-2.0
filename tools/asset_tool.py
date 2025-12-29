@@ -17,7 +17,6 @@ from PIL import Image
 
 from apply_color_effects import ApplyEffects
 from effects import EffectsParser
-from generate_asset_fog import generate_fog_image
 from shadow_mask import ShadowMaskGenerator, ShadowMaskSettings
 
 
@@ -201,7 +200,6 @@ def process_frame_task(task):
           normal_path,
           fg_path,
           bg_path,
-          fog_path,
           fg_effects,
           bg_effects,
           mask_path,
@@ -221,7 +219,6 @@ def process_frame_task(task):
         normal_path,
         fg_path,
         bg_path,
-        fog_path,
         fg_effects,
         bg_effects,
         mask_path,
@@ -266,10 +263,6 @@ def process_frame_task(task):
             # Background
             bg_img = _APPLY_EFFECTS.apply_effects(img, bg_effects)
             bg_img.save(bg_path, "PNG", optimize=False)
-
-            if fog_path:
-                fog_img = generate_fog_image(img.width, img.height)
-                fog_img.save(fog_path, "PNG", optimize=False)
 
             if mask_settings is not None and mask_path:
                 mask_img = ShadowMaskGenerator.generate_mask_image(img, mask_settings)
@@ -466,13 +459,11 @@ class AssetTool:
                 normal_dir = scale_dir / "normal"
                 fg_dir = scale_dir / "foreground"
                 bg_dir = scale_dir / "background"
-                fog_dir = scale_dir / "fog"
                 mask_dir = scale_dir / "mask"
 
                 os.makedirs(normal_dir, exist_ok=True)
                 os.makedirs(fg_dir, exist_ok=True)
                 os.makedirs(bg_dir, exist_ok=True)
-                os.makedirs(fog_dir, exist_ok=True)
                 if mask_enabled:
                     os.makedirs(mask_dir, exist_ok=True)
                 else:
@@ -488,7 +479,6 @@ class AssetTool:
                     normal_path = str(normal_dir / f"{output_idx}.png")
                     fg_path = str(fg_dir / f"{output_idx}.png")
                     bg_path = str(bg_dir / f"{output_idx}.png")
-                    fog_path = str(fog_dir / f"{output_idx}.png")
                     mask_path = str(mask_dir / f"{output_idx}.png") if mask_enabled else None
 
                     tasks.append(
@@ -501,7 +491,6 @@ class AssetTool:
                             normal_path,
                             fg_path,
                             bg_path,
-                            fog_path,
                             fg_cfg,
                             bg_cfg,
                             mask_path,

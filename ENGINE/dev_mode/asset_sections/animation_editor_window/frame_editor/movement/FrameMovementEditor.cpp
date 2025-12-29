@@ -51,6 +51,7 @@ void sanitize_frames(std::vector<MovementFrame>& frames) {
     for (auto& frame : frames) {
         if (!std::isfinite(frame.dx)) frame.dx = 0.0f;
         if (!std::isfinite(frame.dy)) frame.dy = 0.0f;
+        if (!std::isfinite(frame.dz)) frame.dz = 0.0f;
     }
 }
 
@@ -69,12 +70,14 @@ std::vector<MovementFrame> parse_movement_frames(const nlohmann::json& payload) 
             if (entry.size() > 1 && entry[1].is_number()) {
                 frame.dy = entry[1].get<float>();
             }
+            frame.dz = 0.0f;
             if (entry.size() > 2 && entry[2].is_boolean()) {
                 frame.resort_z = entry[2].get<bool>();
             }
         } else if (entry.is_object()) {
             frame.dx = entry.value("dx", 0.0f);
             frame.dy = entry.value("dy", 0.0f);
+            frame.dz = entry.value("dz", 0.0f);
             frame.resort_z = entry.value("resort_z", false);
         }
         frames.push_back(frame);
@@ -92,9 +95,19 @@ nlohmann::json serialize_frames_to_json(const std::vector<MovementFrame>& frames
         const MovementFrame& frame = frames[i];
         int dx = static_cast<int>(std::lround(frame.dx));
         int dy = static_cast<int>(std::lround(frame.dy));
-        nlohmann::json entry = nlohmann::json::array({dx, dy});
-        if (frame.resort_z) {
-            entry.push_back(frame.resort_z);
+        nlohmann::json entry;
+        if (std::fabs(frame.dz) > 0.0001f) {
+            entry = nlohmann::json::object({
+                {"dx", dx},
+                {"dy", dy},
+                {"dz", static_cast<int>(std::lround(frame.dz))},
+                {"resort_z", frame.resort_z}
+            });
+        } else {
+            entry = nlohmann::json::array({dx, dy});
+            if (frame.resort_z) {
+                entry.push_back(frame.resort_z);
+            }
         }
         movement.push_back(entry);
     }
@@ -112,6 +125,7 @@ bool frames_equal(const std::vector<MovementFrame>& a, const std::vector<Movemen
         if (lhs.resort_z != rhs.resort_z) return false;
         if (std::fabs(lhs.dx - rhs.dx) > 0.001f) return false;
         if (std::fabs(lhs.dy - rhs.dy) > 0.001f) return false;
+        if (std::fabs(lhs.dz - rhs.dz) > 0.001f) return false;
     }
     return true;
 }
@@ -844,6 +858,7 @@ void FrameMovementEditor::smooth_frames() {
 
     frames_[0].dx = 0.0f;
     frames_[0].dy = 0.0f;
+    frames_[0].dz = 0.0f;
 
     int accum_x = 0;
     int accum_y = 0;

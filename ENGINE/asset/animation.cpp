@@ -329,6 +329,7 @@ void Animation::rebuild_child_timelines_from_frames() {
             sample.visible = false;
             sample.dx = 0;
             sample.dy = 0;
+            sample.dz = 0;
             sample.degree = 0.0f;
             return sample;
 };

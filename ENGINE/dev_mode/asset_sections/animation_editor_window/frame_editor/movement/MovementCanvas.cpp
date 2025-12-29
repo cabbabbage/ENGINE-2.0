@@ -560,6 +560,7 @@ void MovementCanvas::apply_frame_move_from_base(int index, const SDL_FPoint& new
 
     frames_.front().dx = 0.0f;
     frames_.front().dy = 0.0f;
+    frames_.front().dz = 0.0f;
 
     if (!smoothing_enabled_) {
         SDL_FPoint prev_abs = base_positions[index - 1];

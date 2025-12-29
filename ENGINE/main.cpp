@@ -566,9 +566,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         {"camera_height_min", 0.75},
         {"camera_height_max", 3.0},
         {"base_height_px", 720.0},
-        {"motion_smoothing_method", 1},
-        {"motion_smoothing_max_step", 8000.0},
-        {"motion_smoothing_snap_threshold", 0.25},
         {"min_visible_screen_ratio", 0.01}
     });
     map_info["map_grid_settings"] = nlohmann::json::object({

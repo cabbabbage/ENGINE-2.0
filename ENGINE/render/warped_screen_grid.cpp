@@ -26,7 +26,6 @@ T lerp(T a, T b, double t) {
 }
 
 namespace {
-    constexpr float  kMinTau    = 1e-4f;
     constexpr double PI_D       = 3.14159265358979323846;
     constexpr double kHalfFovY  = PI_D / 4.0;
     constexpr double kBottomAngleLimit = (PI_D * 0.5) - 1e-3;
@@ -66,39 +65,6 @@ namespace {
 
     double shortest_delta_degrees(double from_deg, double to_deg) {
         return std::remainder(to_deg - from_deg, 360.0);
-    }
-
-    TransformSmoothingParams sanitize_params(const TransformSmoothingParams& params) {
-        TransformSmoothingParams out = params;
-        if (!std::isfinite(out.lerp_rate) || out.lerp_rate < 0.0f) {
-            out.lerp_rate = 0.0f;
-        }
-        if (!std::isfinite(out.spring_frequency) || out.spring_frequency < 0.0f) {
-            out.spring_frequency = 0.0f;
-        }
-        if (!std::isfinite(out.max_step) || out.max_step < 0.0f) {
-            out.max_step = 0.0f;
-        }
-        if (!std::isfinite(out.snap_threshold) || out.snap_threshold < 0.0f) {
-            out.snap_threshold = 0.0f;
-        }
-        switch (out.method) {
-        case TransformSmoothingMethod::None:
-        case TransformSmoothingMethod::Lerp:
-        case TransformSmoothingMethod::CriticallyDampedSpring:
-            break;
-        default:
-            out.method = TransformSmoothingMethod::None;
-            break;
-        }
-        return out;
-    }
-
-    float rate_from_tau(float tau_seconds) {
-        if (!std::isfinite(tau_seconds) || tau_seconds <= kMinTau) {
-            return 0.0f;
-        }
-        return 1.0f / tau_seconds;
     }
 
     static inline Area make_rect_area(const std::string& name, SDL_Point center, int w, int h, int resolution) {
@@ -810,14 +776,6 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         settings_.base_height_px = 720.0f;
     }
     camera_.set_fallback_height(settings_.base_height_px);
-    settings_.parallax_smoothing = sanitize_params(settings_.parallax_smoothing);
-    if (settings_.parallax_smoothing.method == TransformSmoothingMethod::Lerp &&
-        settings_.parallax_smoothing.lerp_rate <= 0.0f) {
-        settings_.parallax_smoothing.lerp_rate = rate_from_tau(0.08f);
-    } else if (settings_.parallax_smoothing.method == TransformSmoothingMethod::CriticallyDampedSpring &&
-               settings_.parallax_smoothing.spring_frequency <= 0.0f) {
-        settings_.parallax_smoothing.spring_frequency = 10.0f;
-    }
     settings_.near_camera_max_perspective_scale =
         std::clamp(settings_.near_camera_max_perspective_scale, 0.0f, 100.0f);
     settings_.offscreen_fade_amount_px =
@@ -1194,14 +1152,6 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("texture_warp_percent", updated.texture_warp_percent, 0.0f, 100.0f);
     read_float("texture_warp_y_offset_px", updated.texture_warp_y_offset_px, -10000.0f, 10000.0f);
 
-    int smoothing_method = static_cast<int>(updated.parallax_smoothing.method);
-    read_int("motion_smoothing_method", smoothing_method, 0, 2);
-    updated.parallax_smoothing.method = static_cast<TransformSmoothingMethod>(smoothing_method);
-    read_float("motion_smoothing_max_step", updated.parallax_smoothing.max_step, 0.0f, 100000.0f);
-    read_float("motion_smoothing_snap_threshold", updated.parallax_smoothing.snap_threshold, 0.0f, 100000.0f);
-    read_float("motion_smoothing_lerp_rate", updated.parallax_smoothing.lerp_rate, 0.0f, 1000.0f);
-    read_float("motion_smoothing_spring_frequency", updated.parallax_smoothing.spring_frequency, 0.0f, 1000.0f);
-
     read_effect_settings("foreground_effects", updated.foreground_effects);
     read_effect_settings("background_effects", updated.background_effects);
 
@@ -1227,12 +1177,6 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["texture_opacity_falloff_method"] = static_cast<int>(settings_.texture_opacity_falloff_method);
     result["texture_warp_percent"] = settings_.texture_warp_percent;
     result["texture_warp_y_offset_px"] = settings_.texture_warp_y_offset_px;
-
-    result["motion_smoothing_method"] = static_cast<int>(settings_.parallax_smoothing.method);
-    result["motion_smoothing_max_step"] = settings_.parallax_smoothing.max_step;
-    result["motion_smoothing_snap_threshold"] = settings_.parallax_smoothing.snap_threshold;
-    result["motion_smoothing_lerp_rate"] = settings_.parallax_smoothing.lerp_rate;
-    result["motion_smoothing_spring_frequency"] = settings_.parallax_smoothing.spring_frequency;
 
     auto write_effects = [](const camera_effects::ImageEffectSettings& settings) {
         return nlohmann::json::object({

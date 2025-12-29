@@ -1,7 +1,6 @@
 #pragma once
 
 #include "render/camera_controller.hpp"
-#include "utils/transform_smoothing.hpp"
 #include "render/image_effect_settings.hpp"
 #include "utils/area.hpp"
 #include <SDL.h>
@@ -46,9 +45,6 @@ public:
         float base_height_px               = 1000.0f;
 
         int   render_quality_percent       = 100;
-
-        TransformSmoothingParams  parallax_smoothing{};
-        float parallax_smoothing_snap_threshold = 0.0f;
 
         float scale_variant_hysteresis_margin = 0.05f;
 

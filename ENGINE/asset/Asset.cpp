@@ -124,23 +124,8 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
                 }
         }
 
-        const bool is_player_asset = info && asset_types::canonicalize(info->type) == asset_types::player;
-        TransformSmoothingParams translation_params = transform_smoothing::asset_translation_params();
-        if (is_player_asset) {
-                translation_params.method = TransformSmoothingMethod::Lerp;
-                translation_params.lerp_rate = 100.0f;
-                translation_params.max_step = 0.0f;
-                translation_params.snap_threshold = 0.0f;
-        }
-        translation_smoothing_x_.set_params(translation_params);
-        translation_smoothing_y_.set_params(translation_params);
-        scale_smoothing_.set_params(transform_smoothing::asset_scale_params());
         alpha_smoothing_.set_params(transform_smoothing::asset_alpha_params());
 
-        translation_smoothing_x_.reset(static_cast<float>(pos.x));
-        translation_smoothing_y_.reset(static_cast<float>(pos.y));
-        const float initial_scale = (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) ? info->scale_factor : 1.0f;
-        scale_smoothing_.reset(initial_scale);
         alpha_smoothing_.reset(hidden ? 0.0f : 1.0f);
 
 }
@@ -234,9 +219,6 @@ Asset::Asset(const Asset& o)
         scale_variant_state_ = o.scale_variant_state_;
         cached_grid_residency_    = o.cached_grid_residency_;
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
-        translation_smoothing_x_  = o.translation_smoothing_x_;
-        translation_smoothing_y_  = o.translation_smoothing_y_;
-        scale_smoothing_          = o.scale_smoothing_;
         alpha_smoothing_          = o.alpha_smoothing_;
         animation_children_       = o.animation_children_;
         finalized_                = o.finalized_;
@@ -298,9 +280,6 @@ Asset& Asset::operator=(const Asset& o) {
         scale_variant_state_      = o.scale_variant_state_;
         cached_grid_residency_    = o.cached_grid_residency_;
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
-        translation_smoothing_x_  = o.translation_smoothing_x_;
-        translation_smoothing_y_  = o.translation_smoothing_y_;
-        scale_smoothing_          = o.scale_smoothing_;
         alpha_smoothing_          = o.alpha_smoothing_;
         animation_children_       = o.animation_children_;
         finalized_                = o.finalized_;
@@ -510,18 +489,6 @@ void Asset::update() {
                 assets_->notify_light_map_asset_moved(this);
             }
         }
-    }
-
-    translation_smoothing_x_.target = static_cast<float>(pos.x);
-    translation_smoothing_y_.target = static_cast<float>(pos.y);
-    if (assets_) {
-        translation_smoothing_x_.advance(assets_->frame_delta_seconds());
-        translation_smoothing_y_.advance(assets_->frame_delta_seconds());
-    }
-
-    scale_smoothing_.target = current_scale;
-    if (assets_) {
-        scale_smoothing_.advance(assets_->frame_delta_seconds());
     }
 
     const float alpha_target = hidden ? 0.0f : 1.0f;
@@ -1047,11 +1014,6 @@ void Asset::on_scale_factor_changed() {
         cast_shadow_cache_.height = 0;
         reset_mask_render_metadata();
 
-        float scale_target = 1.0f;
-        if (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) {
-                scale_target = info->scale_factor;
-        }
-        scale_smoothing_.reset(scale_target);
         mark_composite_dirty();
 
         if (!asset_children.empty() && info) {
@@ -1092,8 +1054,6 @@ void Asset::clear_grid_residency_cache() {
 }
 
 void Asset::sync_transform_to_position() {
-        translation_smoothing_x_.reset(static_cast<float>(pos.x));
-        translation_smoothing_y_.reset(static_cast<float>(pos.y));
 }
 
 bool Asset::has_grid_residency_cache() const {
@@ -1119,12 +1079,12 @@ void Asset::set_composite_texture(SDL_Texture* tex) {
     composite_texture_ = tex;
 }
 
-float Asset::smoothed_translation_x() const { return translation_smoothing_x_.value_for_render(); }
+float Asset::smoothed_translation_x() const { return static_cast<float>(pos.x); }
 
-float Asset::smoothed_translation_y() const { return translation_smoothing_y_.value_for_render(); }
+float Asset::smoothed_translation_y() const { return static_cast<float>(pos.y); }
 
 float Asset::smoothed_scale() const {
-    return scale_smoothing_.value_for_render();
+    return current_scale;
 }
 
 float Asset::smoothed_alpha() const {

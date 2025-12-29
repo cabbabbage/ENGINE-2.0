@@ -346,9 +346,6 @@ private:
     mutable RenderTextureCache cast_shadow_cache_{};
     mutable MaskRenderMetadata mask_render_metadata_{};
 
-    TransformSmoothingState translation_smoothing_x_{};
-    TransformSmoothingState translation_smoothing_y_{};
-    TransformSmoothingState scale_smoothing_{};
     TransformSmoothingState alpha_smoothing_{};
 
     const AnimationFrame* last_rendered_frame_ = nullptr;

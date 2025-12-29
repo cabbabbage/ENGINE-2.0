@@ -11,11 +11,7 @@ namespace transform_smoothing {
 namespace {
 
 struct CachedParams {
-    TransformSmoothingParams asset_translation{};
-    TransformSmoothingParams asset_scale{};
     TransformSmoothingParams asset_alpha{};
-    TransformSmoothingParams camera_center{};
-    TransformSmoothingParams camera_height{};
     bool initialized = false;
 };
 
@@ -92,24 +88,6 @@ void ensure_loaded() {
         return;
     }
 
-    cached.asset_translation = load_params(
-        "render.smoothing.asset.translation",
-        TransformSmoothingParams{
-            TransformSmoothingMethod::CriticallyDampedSpring,
-            0.0f,
-            6.0f,
-            6000.0f,
-            0.1f});
-
-    cached.asset_scale = load_params(
-        "render.smoothing.asset.scale",
-        TransformSmoothingParams{
-            TransformSmoothingMethod::Lerp,
-            12.0f,
-            0.0f,
-            8.0f,
-            0.0f});
-
     cached.asset_alpha = load_params(
         "render.smoothing.asset.alpha",
         TransformSmoothingParams{
@@ -118,24 +96,6 @@ void ensure_loaded() {
             0.0f,
             2.0f,
             0.01f});
-
-    cached.camera_center = load_params(
-        "render.smoothing.camera.center",
-        TransformSmoothingParams{
-            TransformSmoothingMethod::CriticallyDampedSpring,
-            0.0f,
-            5.0f,
-            8000.0f,
-            0.25f});
-
-    cached.camera_height = load_params(
-        "render.smoothing.camera.height",
-        TransformSmoothingParams{
-            TransformSmoothingMethod::CriticallyDampedSpring,
-            0.0f,
-            4.0f,
-            4.0f,
-            0.0005f});
 
     cached.initialized = true;
 }
@@ -157,48 +117,10 @@ void store_params(std::string_view prefix, const TransformSmoothingParams& param
 
 }
 
-const TransformSmoothingParams& asset_translation_params() {
-    std::lock_guard<std::mutex> lock(cache_mutex());
-    ensure_loaded();
-    return cache().asset_translation;
-}
-
-const TransformSmoothingParams& asset_scale_params() {
-    std::lock_guard<std::mutex> lock(cache_mutex());
-    ensure_loaded();
-    return cache().asset_scale;
-}
-
 const TransformSmoothingParams& asset_alpha_params() {
     std::lock_guard<std::mutex> lock(cache_mutex());
     ensure_loaded();
     return cache().asset_alpha;
-}
-
-const TransformSmoothingParams& camera_center_params() {
-    std::lock_guard<std::mutex> lock(cache_mutex());
-    ensure_loaded();
-    return cache().camera_center;
-}
-
-const TransformSmoothingParams& camera_height_params() {
-    std::lock_guard<std::mutex> lock(cache_mutex());
-    ensure_loaded();
-    return cache().camera_height;
-}
-
-void set_asset_translation_params(const TransformSmoothingParams& params) {
-    std::lock_guard<std::mutex> lock(cache_mutex());
-    ensure_loaded();
-    cache().asset_translation = sanitized(params);
-    store_params("render.smoothing.asset.translation", cache().asset_translation);
-}
-
-void set_asset_scale_params(const TransformSmoothingParams& params) {
-    std::lock_guard<std::mutex> lock(cache_mutex());
-    ensure_loaded();
-    cache().asset_scale = sanitized(params);
-    store_params("render.smoothing.asset.scale", cache().asset_scale);
 }
 
 void set_asset_alpha_params(const TransformSmoothingParams& params) {
@@ -206,20 +128,6 @@ void set_asset_alpha_params(const TransformSmoothingParams& params) {
     ensure_loaded();
     cache().asset_alpha = sanitized(params);
     store_params("render.smoothing.asset.alpha", cache().asset_alpha);
-}
-
-void set_camera_center_params(const TransformSmoothingParams& params) {
-    std::lock_guard<std::mutex> lock(cache_mutex());
-    ensure_loaded();
-    cache().camera_center = sanitized(params);
-    store_params("render.smoothing.camera.center", cache().camera_center);
-}
-
-void set_camera_height_params(const TransformSmoothingParams& params) {
-    std::lock_guard<std::mutex> lock(cache_mutex());
-    ensure_loaded();
-    cache().camera_height = sanitized(params);
-    store_params("render.smoothing.camera.height", cache().camera_height);
 }
 
 void reload_from_settings() {

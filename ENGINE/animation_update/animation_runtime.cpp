@@ -883,10 +883,6 @@ void AnimationRuntime::sync_child_assets() {
         TransformSmoothingParams snap{};
         snap.method = TransformSmoothingMethod::None;
         snap.snap_threshold = 0.0f;
-        child->translation_smoothing_x_.set_params(snap);
-        child->translation_smoothing_y_.set_params(snap);
-        child->translation_smoothing_x_.reset(static_cast<float>(child->pos.x));
-        child->translation_smoothing_y_.reset(static_cast<float>(child->pos.y));
         child->alpha_smoothing_.set_params(snap);
         child->alpha_smoothing_.reset(0.0f);
         child->render_package.clear();

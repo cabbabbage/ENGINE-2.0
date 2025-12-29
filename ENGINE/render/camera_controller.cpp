@@ -77,14 +77,9 @@ void CameraController::reset(const CameraParams& params, SDL_Point center, doubl
     smoothed_center_.x = static_cast<float>(center.x);
     smoothed_center_.y = static_cast<float>(center.y);
     smoothed_ = camera_math::sanitize_camera_params(params, fallback_height_px_);
-    start_ = smoothed_;
-    target_ = smoothed_;
     manual_scale_ = smoothed_.height_px;
     manual_height_override_ = false;
     focus_override_ = false;
-    animating_ = false;
-    steps_total_ = 0;
-    steps_done_ = 0;
     sync_state();
 }
 
@@ -145,19 +140,15 @@ bool CameraController::manual_height_override() const {
 
 void CameraController::set_params(const CameraParams& params) {
     smoothed_ = camera_math::sanitize_camera_params(params, fallback_height_px_);
-    start_ = smoothed_;
-    target_ = smoothed_;
-    animating_ = false;
-    steps_total_ = 0;
-    steps_done_ = 0;
     manual_scale_ = smoothed_.height_px;
     sync_state();
 }
 
 void CameraController::animate_height_to(double target_height_px, int steps) {
+    (void)steps;
     CameraParams target = smoothed_;
     target.height_px = target_height_px;
-    start_animation_to(target, steps);
+    set_params(target);
 }
 
 void CameraController::animate_height_multiply(double factor) {
@@ -165,8 +156,7 @@ void CameraController::animate_height_multiply(double factor) {
     manual_height_override_ = true;
     CameraParams target = smoothed_;
     target.height_px = smoothed_.height_px * factor;
-    start_animation_to(target, 10);
-    sync_state();
+    set_params(target);
 }
 
 void CameraController::animate_height_towards_point(double target_height_px, SDL_Point target_point) {
@@ -175,8 +165,7 @@ void CameraController::animate_height_towards_point(double target_height_px, SDL
     set_focus_override(target_point);
     CameraParams target = smoothed_;
     target.height_px = target_height_px;
-    start_animation_to(target, 10);
-    sync_state();
+    set_params(target);
 }
 
 void CameraController::apply_room_targets(const CameraParams& cur,
@@ -199,31 +188,14 @@ void CameraController::apply_room_targets(const CameraParams& cur,
 
     if (manual_height_override_ && dev_mode) {
         // Preserve manual zoom adjustments (e.g., scroll wheel) instead of snapping back to the last applied height.
-        blended.height_px = animating_ ? target_.height_px : smoothed_.height_px;
+        blended.height_px = smoothed_.height_px;
     }
-
-    const bool restart = refresh_requested || !animating_ || blended != target_;
-    if (restart) {
-        start_animation_to(blended, steps);
-    }
-    tick(0.0f);
+    (void)refresh_requested;
+    (void)steps;
+    set_params(blended);
 }
 
 void CameraController::tick(float /*dt_seconds*/) {
-    if (animating_) {
-        ++steps_done_;
-        double anim_t = std::clamp(static_cast<double>(steps_done_) / std::max(1.0, static_cast<double>(steps_total_)), 0.0, 1.0);
-        smoothed_.height_px = lerp(start_.height_px, target_.height_px, anim_t);
-        smoothed_.tilt_deg = lerp(start_.tilt_deg, target_.tilt_deg, anim_t);
-        smoothed_.y_distance_px = lerp(start_.y_distance_px, target_.y_distance_px, anim_t);
-        smoothed_.zoom_percent = lerp(start_.zoom_percent, target_.zoom_percent, anim_t);
-        smoothed_.pan_y_percent = lerp(start_.pan_y_percent, target_.pan_y_percent, anim_t);
-        if (steps_done_ >= steps_total_) {
-            smoothed_ = target_;
-            animating_ = false;
-        }
-    }
-
     smoothed_ = camera_math::sanitize_camera_params(smoothed_, fallback_height_px_);
     manual_scale_ = smoothed_.height_px;
     sync_state();
@@ -250,15 +222,7 @@ float CameraController::current_pitch_deg() const {
 }
 
 bool CameraController::is_animating() const {
-    return animating_;
-}
-
-void CameraController::start_animation_to(const CameraParams& target, int steps) {
-    start_ = smoothed_;
-    target_ = camera_math::sanitize_camera_params(target, fallback_height_px_);
-    steps_total_ = std::max(1, steps);
-    steps_done_ = 0;
-    animating_ = true;
+    return false;
 }
 
 void CameraController::sync_state() {

@@ -79,15 +79,9 @@ public:
     bool is_animating() const;
 
 private:
-    void start_animation_to(const CameraParams& target, int steps);
     void sync_state();
 
     CameraParams smoothed_{};
-    CameraParams start_{};
-    CameraParams target_{};
-    int steps_total_ = 0;
-    int steps_done_ = 0;
-    bool animating_ = false;
 
     SDL_Point screen_center_{0, 0};
     SDL_FPoint smoothed_center_{0.0f, 0.0f};

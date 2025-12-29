@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 SPEED_MULTIPLIERS = (0.25, 0.5, 1.0, 2.0, 4.0)
-ANIMATION_SCALE_PCTS = (100, 75, 50, 25, 10)
+ANIMATION_SCALE_PCTS = (75, 50, 25, 10)
 LIGHT_CACHE_VERSION = 3
 
 

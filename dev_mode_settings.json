@@ -43,7 +43,7 @@
             "depthcue_enabled": true,
             "extra_cull_margin": 300.0,
             "foreground_texture_max_opacity": 255.0,
-            "meters_per_100_world_px": 0.47999998927116394,
+            "meters_per_100_world_px": 0.25,
             "min_visible_screen_ratio": 0.015000000596046448,
             "near_camera_fade_end_ratio": 1.6699999570846558,
             "near_camera_fade_start_ratio": 0.550000011920929,
@@ -52,8 +52,8 @@
             "near_camera_scale_start_ratio": 0.12999999523162842,
             "offscreen_fade_amount_px": 204.0,
             "render_quality_percent": 100.0,
-            "texture_warp_percent": 100.0,
-            "texture_warp_y_offset_px": 0.0
+            "texture_warp_percent": 44.0,
+            "texture_warp_y_offset_px": -807.0
         },
         "lighting": {
             "map_panel": {

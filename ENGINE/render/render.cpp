@@ -300,24 +300,15 @@ bool build_warped_quad(const RenderObject& obj,
 
     const SDL_Color white{255, 255, 255, 255};
 
-    SDL_FPoint top_left{};
-    SDL_FPoint top_right{};
-    SDL_FPoint bottom_right{};
-    SDL_FPoint bottom_left{};
-    if (!project_world_point(cam, world_x - half_width, world_y, base_z + height, top_left) ||
-        !project_world_point(cam, world_x + half_width, world_y, base_z + height, top_right) ||
-        !project_world_point(cam, world_x + half_width, world_y, base_z, bottom_right) ||
-        !project_world_point(cam, world_x - half_width, world_y, base_z, bottom_left)) {
+    SDL_FPoint base_screen{};
+    if (!project_world_point(cam, world_x, world_y, base_z, base_screen)) {
         return false;
     }
 
-    std::array<SDL_FPoint, 4> points{top_left, top_right, bottom_right, bottom_left};
-    enforce_trapezoid(points);
-
-    quad.vertices[0].position = points[0];
-    quad.vertices[1].position = points[1];
-    quad.vertices[2].position = points[2];
-    quad.vertices[3].position = points[3];
+    quad.vertices[0].position = SDL_FPoint{base_screen.x - half_width, base_screen.y - height};
+    quad.vertices[1].position = SDL_FPoint{base_screen.x + half_width, base_screen.y - height};
+    quad.vertices[2].position = SDL_FPoint{base_screen.x + half_width, base_screen.y};
+    quad.vertices[3].position = SDL_FPoint{base_screen.x - half_width, base_screen.y};
     for (auto& vertex : quad.vertices) {
         vertex.color = white;
     }

@@ -19,6 +19,8 @@ GaryController::GaryController(Assets* assets, Asset* self)
 void GaryController::init() {
     if (!self_ || !self_->info || !self_->anim_) return;
 
+    self_->needs_target = true;
+
     const std::string default_anim{ animation_update::detail::kDefaultAnimation };
 
     auto it = self_->info->animations.find(default_anim);

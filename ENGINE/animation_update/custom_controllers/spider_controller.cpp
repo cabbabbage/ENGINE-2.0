@@ -28,6 +28,6 @@ void spiderController::update(const Input&) {
         }
     }
     else if (self_->needs_target) {
-        self_->anim_->auto_move(player);
+        self_->anim_->auto_move(player->pos);
     }
 }

@@ -69,7 +69,7 @@ public:
     bool debug_enabled() const;
 
     void auto_move(const std::vector<SDL_Point>& rel_checkpoints, int visited_thresh_px, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
-    void auto_move(SDL_Point rel_checkpoint, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
+    void auto_move(SDL_Point world_checkpoint, int visited_thresh_px = 0, std::optional<int> checkpoint_resolution = std::nullopt, bool override_non_locked = true);
     void auto_move(Asset* target_asset, int visited_thresh_px = 0, bool override_non_locked = true);
 
     int visit_threshold_px() const { return visited_thresh_; }

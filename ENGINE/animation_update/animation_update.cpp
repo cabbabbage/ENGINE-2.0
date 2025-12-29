@@ -240,11 +240,20 @@ AnimationUpdate::AnimationUpdate(Asset* self, Assets* assets)
     }
 }
 
-void AnimationUpdate::auto_move(SDL_Point rel_checkpoint,
+void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
                                 int visited_thresh_px,
                                 std::optional<int> checkpoint_resolution,
                                 bool override_non_locked) {
-    std::vector<SDL_Point> rel{ rel_checkpoint };
+    if (!self_) {
+        return;
+    }
+    SDL_Point delta{ world_checkpoint.x - self_->pos.x, world_checkpoint.y - self_->pos.y };
+    if (delta.x == 0 && delta.y == 0) {
+        self_->target_reached = true;
+        self_->needs_target = true;
+        return;
+    }
+    std::vector<SDL_Point> rel{ delta };
     auto_move(rel, visited_thresh_px, checkpoint_resolution, override_non_locked);
 }
 

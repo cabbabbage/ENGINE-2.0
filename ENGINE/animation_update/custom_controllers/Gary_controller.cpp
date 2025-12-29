@@ -40,6 +40,6 @@ void GaryController::update(const Input&) {
         }
     }
     else if (self_->needs_target) {
-        self_->anim_->auto_move(player);
+        self_->anim_->auto_move(get_random_point_in_room());
     }
 }

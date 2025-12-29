@@ -3040,9 +3040,12 @@
         }
       },
       "anti_tags": [],
+      "apply_distance_scaling": true,
+      "apply_vertical_scaling": true,
       "asset_directory": "SRC/assets/Gary",
       "asset_name": "Gary",
-      "asset_type": "object",
+      "asset_type": "enemy",
+      "async_children": [],
       "can_invert": false,
       "custom_controller_key": "Gary_controller",
       "has_shading": false,
@@ -3051,11 +3054,23 @@
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "render_radius": 0,
+      "shading_opacity_multiplier": 1.0,
+      "shading_parallax_amount": 0.0,
+      "shading_screen_brightness_multiplier": 1.0,
+      "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+      },
       "size_settings": {
         "scale_percentage": 100.0
       },
+      "spawn_groups": [],
       "start": "default",
       "tags": [],
+      "tillable": false,
       "update_radius": 0
     },
     "Grass_1": {
@@ -7784,7 +7799,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726563,
+            "offset": 658.9600219726562,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }
@@ -7814,7 +7829,7 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            138,
+            37,
             242,
             36,
             255
@@ -7834,9 +7849,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            110,
+            36,
+            242,
             255
           ],
           "edge_smoothness": 43,
@@ -7887,9 +7902,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            36,
-            153,
+            85,
             242,
+            160,
             255
           ],
           "edge_smoothness": 29,
@@ -7936,15 +7951,15 @@
         },
         "spawn": {
           "camera_height_px": 778,
-          "camera_pan_y_percent": -21,
+          "camera_pan_y_percent": -1,
           "camera_tilt_deg": 14.0,
           "camera_y_distance_px": 1446,
           "camera_zoom_percent": 1,
           "curvyness": 2,
           "display_color": [
-            224,
-            34,
-            34,
+            242,
+            85,
+            242,
             255
           ],
           "edge_smoothness": 101,

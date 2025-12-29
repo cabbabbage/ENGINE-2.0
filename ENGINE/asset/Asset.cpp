@@ -450,14 +450,19 @@ void Asset::set_current_animation(const std::string& name)
 void Asset::update() {
     if (!info) return;
 
-    update_scale_values();
-
     SDL_Point previous_pos = pos;
 
     if (controller_ && assets_) {
         if (Input* in = assets_->get_input()) {
             controller_->update(*in);
         }
+    }
+
+    const bool moved = (pos.x != previous_pos.x || pos.y != previous_pos.y);
+
+    // Only update scale for moving assets when they actually move
+    if (!info->moving_asset || moved) {
+        update_scale_values();
     }
 
     if (anim_) {

@@ -1,47 +1,47 @@
 #include "Bartender_controller.hpp"
-
-#include "animation_update/custom_controllers/controller_path_utils.hpp"
-#include "animation_update/custom_controllers/controller_visit_threshold.hpp"
 #include "asset/Asset.hpp"
-#include "asset/animation.hpp"
-#include "asset/asset_info.hpp"
-#include "animation_update/animation_update.hpp"
-#include "utils/range_util.hpp"
-#include <random>
-#include <string>
+#include "core/AssetsManager.hpp"
 
 BartenderController::BartenderController(Assets* assets, Asset* self)
-    : assets_(assets),
-      self_(self),
-      rng_(std::random_device{}()),
-      idle_range_(15, 45) {}
-
-void BartenderController::init() {
-    if (!self_ || !self_->info || !self_->anim_) return;
-
-    self_->needs_target = true;
-
-    const std::string default_anim{ animation_update::detail::kDefaultAnimation };
-
-    auto it = self_->info->animations.find(default_anim);
-    if (it != self_->info->animations.end() && !it->second.frames.empty()) {
-        self_->anim_->move(SDL_Point{0, 0}, default_anim);
+    : assets_(assets), self_(self) {
+    if (self_ && self_->anim_) {
+        self_->anim_->set_debug_enabled(false);
+        self_->needs_target = true;
     }
 }
 
-void BartenderController::update(const Input& ) {
-    if (!self_ || !self_->info || !self_->anim_) return;
+SDL_Point BartenderController::get_random_point_in_room() {
+    if (!assets_ || !self_) {
+        return {0, 0};
+    }
 
-    if (!self_->needs_target) {
+    const std::string& room_name = self_->owning_room_name();
+    for (Room* room : assets_->rooms()) {
+        if (room && room->room_name == room_name && room->room_area) {
+            return room->room_area->random_point_within();
+        }
+    }
+
+    return {0, 0};
+}
+
+void BartenderController::update(const Input&) {
+    if (!self_ || !self_->anim_ || !assets_) {
+        return;
+    }
+    Asset* player = assets_->player;
+
+    if (!player || player == self_ || player->dead || !player->active) {
         return;
     }
 
-    const int rest_ratio = idle_range_(rng_);
-    const auto path = controller_paths::idle_path(self_, rest_ratio);
-    if (path.empty()) {
-        return;
-    }
+    int distance_sq = (self_->pos.x - player->pos.x) * (self_->pos.x - player->pos.x) + (self_->pos.y - player->pos.y) * (self_->pos.y - player->pos.y);
 
-    const int visit_threshold = controller_utils::controller_visit_threshold(self_, path);
-    self_->anim_->auto_move(path, visit_threshold);
+    if (distance_sq <= 500) {
+            self_->anim_->set_animation("default");
+       
+    }
+    else if (self_->needs_target) {
+        self_->anim_->auto_move(get_random_point_in_room());
+    }
 }

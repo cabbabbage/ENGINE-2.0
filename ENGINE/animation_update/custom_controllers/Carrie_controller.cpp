@@ -4,6 +4,7 @@
 
 CarrieController::CarrieController(Assets* assets, Asset* self)
     : assets_(assets), self_(self) {
+    rng_ = std::mt19937(std::random_device{}());
     if (self_ && self_->anim_) {
         self_->anim_->set_debug_enabled(false);
         self_->needs_target = true;
@@ -11,18 +12,14 @@ CarrieController::CarrieController(Assets* assets, Asset* self)
 }
 
 SDL_Point CarrieController::get_random_point_in_room() {
-    if (!assets_ || !self_) {
+    if (!self_) {
         return {0, 0};
     }
 
-    const std::string& room_name = self_->owning_room_name();
-    for (Room* room : assets_->rooms()) {
-        if (room && room->room_name == room_name && room->room_area) {
-            return room->room_area->random_point_within();
-        }
-    }
-
-    return {0, 0};
+    std::uniform_int_distribution<int> dist(-100, 100);
+    int dx = dist(rng_);
+    int dy = dist(rng_);
+    return {self_->pos.x + dx, self_->pos.y + dy};
 }
 
 void CarrieController::update(const Input&) {

@@ -460,10 +460,7 @@ void Asset::update() {
 
     const bool moved = (pos.x != previous_pos.x || pos.y != previous_pos.y);
 
-    // Only update scale for moving assets when they actually move
-    if (!info->moving_asset || moved) {
-        update_scale_values();
-    }
+    update_scale_values();
 
     if (anim_) {
         auto iti = info->animations.find(current_animation);

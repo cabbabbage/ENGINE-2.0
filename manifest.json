@@ -7579,8 +7579,8 @@
         "chunk_size": 128,
         "jitter": 0,
         "r_chunk": 7,
-        "resolution": 7,
-        "spacing": 2187
+        "resolution": 4,
+        "spacing": 81
       },
       "map_layers": [
         {
@@ -7784,7 +7784,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726563,
+            "offset": 658.9600219726562,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }

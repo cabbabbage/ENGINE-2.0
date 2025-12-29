@@ -409,14 +409,11 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
         }
     }
     std::cout<<"[SceneRenderer] Init complete. Depth-cue warmup frames: "<<depthcue_warmup_frames_<<std::endl;
-
-    ensure_fog_texture();
 }
 
 SceneRenderer::~SceneRenderer() {
     destroy_darkness_overlay();
     destroy_sky_texture();
-    destroy_fog_texture();
     if (scene_composite_tex_) { SDL_DestroyTexture(scene_composite_tex_); scene_composite_tex_ = nullptr; }
     if (postprocess_tex_)     { SDL_DestroyTexture(postprocess_tex_);     postprocess_tex_     = nullptr; }
     if (blur_tex_)            { SDL_DestroyTexture(blur_tex_);            blur_tex_            = nullptr; }
@@ -538,8 +535,6 @@ void SceneRenderer::render() {
             SDL_RenderGeometry(renderer_, obj.texture, quad.vertices.data(), 4, kQuadIndices, 6);
         }
     }
-
-    render_fog_layer(cam, grid, depth_effects_enabled);
 
     if (dark_mask_enabled_) {
         render_dynamic_darkness_overlay(map_light_opacity_, dark_mask_sprites);
@@ -822,152 +817,11 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
     SDL_RenderCopyF(renderer_, sky_texture_, nullptr, &dst);
 }
 
-bool SceneRenderer::ensure_fog_texture() {
-    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
-        return false;
-    }
-    if (fog_texture_failed_) {
-        return false;
-    }
-    if (!fog_textures_.empty()) {
-        return true;
-    }
 
-    const double desired_span = (map_radius_world_ > 0.0)
-        ? std::clamp(map_radius_world_ * 2.0, 0.0, 50000.0)
-        : static_cast<double>(screen_width_ * 2);
-    fog_span_width_px_ = std::max(screen_width_, static_cast<int>(std::lround(desired_span)));
-    fog_texture_width_  = std::clamp(fog_span_width_px_ / 4, 512, 2048);
-    fog_texture_height_ = std::clamp(screen_height_ / 3, 128, 640);
 
-    auto make_layer = [&](int layer_index) -> SDL_Texture* {
-        SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormat(0, fog_texture_width_, fog_texture_height_, 32, SDL_PIXELFORMAT_RGBA8888);
-        if (!surf) {
-            return nullptr;
-        }
 
-        auto* pixels = static_cast<Uint32*>(surf->pixels);
-        const int pitch = surf->pitch / static_cast<int>(sizeof(Uint32));
-        const float layer_softness = 0.65f + 0.05f * static_cast<float>(layer_index);
 
-        for (int y = 0; y < fog_texture_height_; ++y) {
-            const float y_norm = (fog_texture_height_ > 1) ? static_cast<float>(y) / static_cast<float>(fog_texture_height_ - 1) : 0.0f;
-            const float fade_in  = smoothstep(0.02f, 0.15f + layer_softness * 0.05f, y_norm);
-            const float fade_out = 1.0f - smoothstep(0.72f - layer_softness * 0.05f, 0.98f, y_norm);
-            const float vertical = std::clamp(fade_in * fade_out, 0.0f, 1.0f);
 
-            for (int x = 0; x < fog_texture_width_; ++x) {
-                const float x_norm = (fog_texture_width_ > 1) ? static_cast<float>(x) / static_cast<float>(fog_texture_width_ - 1) : 0.0f;
-                float horizontal = 1.0f - std::abs(1.0f - 2.0f * x_norm);
-                horizontal = std::clamp(horizontal, 0.0f, 1.0f);
-                horizontal = horizontal * horizontal;
-
-                const float alpha_f = std::clamp(horizontal * vertical * (0.9f + 0.05f * layer_index), 0.0f, 1.0f);
-                const Uint8 a = static_cast<Uint8>(std::clamp(std::lround(alpha_f * 255.0f), 0L, 255L));
-                pixels[y * pitch + x] = SDL_MapRGBA(surf->format, 255, 255, 255, a);
-            }
-        }
-
-        SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer_, surf);
-        SDL_FreeSurface(surf);
-        if (!tex) {
-            return nullptr;
-        }
-        SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
-#if SDL_VERSION_ATLEAST(2, 0, 12)
-        SDL_SetTextureScaleMode(tex, SDL_ScaleModeBest);
-#endif
-        return tex;
-    };
-
-    fog_textures_.reserve(5);
-    for (int i = 0; i < 5; ++i) {
-        SDL_Texture* tex = make_layer(i);
-        if (!tex) {
-            destroy_fog_texture();
-            fog_texture_failed_ = true;
-            return false;
-        }
-        fog_textures_.push_back(tex);
-    }
-
-    return true;
-}
-
-void SceneRenderer::destroy_fog_texture() {
-    for (SDL_Texture* tex : fog_textures_) {
-        if (tex) {
-            SDL_DestroyTexture(tex);
-        }
-    }
-    fog_textures_.clear();
-    fog_texture_width_  = 0;
-    fog_texture_height_ = 0;
-    fog_span_width_px_  = 0;
-    fog_texture_failed_ = false;
-}
-
-void SceneRenderer::render_fog_layer(const WarpedScreenGrid& cam, const world::WorldGrid& grid, bool depth_effects_enabled) {
-    if (!depth_effects_enabled) {
-        return;
-    }
-    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
-        return;
-    }
-    (void)grid;
-    if (!ensure_fog_texture() || fog_textures_.empty()) {
-        return;
-    }
-
-    const auto params = cam.compute_floor_depth_params();
-    if (!params.enabled || !std::isfinite(params.horizon_screen_y)) {
-        return;
-    }
-
-    const float horizon_y = static_cast<float>(params.horizon_screen_y);
-    if (!std::isfinite(horizon_y) ||
-        horizon_y < -static_cast<float>(screen_height_) ||
-        horizon_y > static_cast<float>(screen_height_)) {
-        return;
-    }
-
-    const float bottom         = static_cast<float>(screen_height_);
-    const float visible_height = std::max(1.0f, bottom - horizon_y);
-    const float span_width     = static_cast<float>(std::max(fog_span_width_px_, screen_width_));
-    const float center_x       = static_cast<float>(screen_width_) * 0.5f;
-    const float pitch_factor   = std::clamp(static_cast<float>(params.pitch_norm), 0.0f, 1.0f);
-    const float perspective_boost = 0.7f + 0.6f * pitch_factor;
-
-    const std::size_t layer_count = fog_textures_.size();
-    for (std::size_t idx = 0; idx < layer_count; ++idx) {
-        SDL_Texture* tex = fog_textures_[idx];
-        if (!tex) {
-            continue;
-        }
-
-        const float depth_t = (static_cast<float>(idx) + 1.0f) / static_cast<float>(layer_count + 1);
-        const float eased_depth = std::pow(depth_t, 0.85f);
-        const float band_bottom = horizon_y + visible_height * eased_depth;
-        const float band_height = std::clamp(visible_height * (0.12f + 0.06f * (1.0f - depth_t)), 4.0f, visible_height);
-
-        SDL_FRect dst{
-            center_x - span_width * 0.5f,
-            band_bottom - band_height,
-            span_width,
-            band_height
-        };
-
-        float density = 0.22f + 0.55f * (1.0f - depth_t);
-        density *= perspective_boost;
-        const float distance_mix = 1.0f - std::clamp((band_bottom - horizon_y) / visible_height, 0.0f, 1.0f);
-        density *= distance_mix;
-        density = std::clamp(density, 0.0f, 1.0f);
-
-        SDL_SetTextureColorMod(tex, 255, 255, 255);
-        SDL_SetTextureAlphaMod(tex, static_cast<Uint8>(std::clamp(std::lround(density * 255.0f), 0L, 255L)));
-        SDL_RenderCopyF(renderer_, tex, nullptr, &dst);
-    }
-}
 
 void SceneRenderer::render_dynamic_darkness_overlay(float map_light_opacity,
                                                     const std::vector<DarkMaskSprite>& sprites) {

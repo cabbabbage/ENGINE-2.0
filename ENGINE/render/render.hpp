@@ -76,9 +76,6 @@ private:
     bool ensure_sky_texture();
     void destroy_sky_texture();
     void render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled);
-    bool ensure_fog_texture();
-    void destroy_fog_texture();
-    void render_fog_layer(const WarpedScreenGrid& cam, const world::WorldGrid& grid, bool depth_effects_enabled);
 
     SDL_Renderer*  renderer_;
     Assets*        assets_;
@@ -123,9 +120,4 @@ private:
     int                   sky_texture_width_ = 0;
     int                   sky_texture_height_ = 0;
     bool                  sky_texture_failed_ = false;
-    std::vector<SDL_Texture*> fog_textures_;
-    int                   fog_texture_width_  = 0;
-    int                   fog_texture_height_ = 0;
-    int                   fog_span_width_px_  = 0;
-    bool                  fog_texture_failed_ = false;
 };

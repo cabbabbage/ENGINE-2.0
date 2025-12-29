@@ -2047,6 +2047,10 @@ void Assets::rebuild_active_from_screen_grid() {
         if (!point || !point->on_screen) {
             continue;
         }
+        const float point_alpha = point->horizon_fade_alpha * point->near_camera_fade_alpha;
+        if (!std::isfinite(point_alpha) || point_alpha <= 0.0f) {
+            continue;
+        }
         if (!point->has_assets_or_active_children()) {
             continue;
         }

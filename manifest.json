@@ -7524,7 +7524,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 7,
+            "grid_resolution": 6,
             "locked": false,
             "max_number": 100,
             "min_number": 53,
@@ -7784,7 +7784,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726562,
+            "offset": 658.9600219726563,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }
@@ -7814,9 +7814,9 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            222,
+            36,
+            242,
             255
           ],
           "edge_smoothness": 19,
@@ -7834,9 +7834,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            242,
-            36,
-            242,
+            204,
+            31,
+            31,
             255
           ],
           "edge_smoothness": 43,
@@ -7887,9 +7887,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            85,
+            242,
+            238,
             255
           ],
           "edge_smoothness": 29,
@@ -7935,7 +7935,7 @@
           ]
         },
         "spawn": {
-          "camera_height_px": 7358,
+          "camera_height_px": 2000,
           "camera_pan_y_percent": -21,
           "camera_tilt_deg": 14.0,
           "camera_y_distance_px": 1446,
@@ -8201,8 +8201,8 @@
                 }
               ],
               "display_name": "Town_Hall",
-              "dx": -196,
-              "dy": -1796,
+              "dx": -4,
+              "dy": -1700,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -8213,7 +8213,7 @@
               "origional_width": 6904,
               "position": "Exact",
               "priority": 8,
-              "resolution": 5,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-0b47da4b1396"

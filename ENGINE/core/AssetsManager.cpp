@@ -1332,11 +1332,6 @@ bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rec
     if (!asset || !asset->info) {
         return false;
     }
-    const Asset::BoundsSquare& base = asset->base_bounds_local();
-    if (!base.valid()) {
-        return false;
-    }
-
     float world_x = asset->smoothed_translation_x();
     float world_y = asset->smoothed_translation_y();
     if (dev_mode) {
@@ -1349,78 +1344,44 @@ bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rec
         asset_scale = 1.0f;
     }
 
-    float local_center_x = base.center_x;
-    if (asset->flipped) {
-        local_center_x = -local_center_x;
-    }
-    const float local_center_y = base.center_y;
-    const float scaled_half    = base.half_size * asset_scale;
-
-    const float world_center_x = world_x + local_center_x * asset_scale;
-    const float world_center_y = world_y + local_center_y * asset_scale;
-
     SDL_FRect sprite_rect{0.0f, 0.0f, 0.0f, 0.0f};
     bool      have_sprite_rect = false;
-
-    if (auto* gp = camera_.grid_point_for_asset(asset)) {
-        const float distance_scale = (asset->info->apply_distance_scaling) ? gp->perspective_scale : 1.0f;
-        const float vertical_scale = (asset->info->apply_vertical_scaling) ? gp->vertical_scale : 1.0f;
-
-        const float center_x = gp->screen.x + (world_center_x - world_x) * distance_scale;
-
-        float width  = (scaled_half * 2.0f) * distance_scale;
-        float height = width * vertical_scale;
-        const float center_y = gp->screen.y +
-            ((world_center_y - world_y) * distance_scale - height * 0.5f);
-
-        if (std::isfinite(center_x) && std::isfinite(center_y) &&
-            std::isfinite(width) && std::isfinite(height) &&
-            width > 0.0f && height > 0.0f) {
-            sprite_rect = SDL_FRect{
-                center_x - width * 0.5f,
-                center_y - height * 0.5f,
-                width,
-                height
-};
-            have_sprite_rect = true;
+    const int base_w_px = std::max(1, asset->info->original_canvas_width);
+    const int base_h_px = std::max(1, asset->info->original_canvas_height);
+    const float width = static_cast<float>(base_w_px) * asset_scale;
+    const float height = static_cast<float>(base_h_px) * asset_scale;
+    const float half_width = width * 0.5f;
+    if (width > 0.0f && height > 0.0f) {
+        SDL_FPoint top_left{};
+        SDL_FPoint top_right{};
+        SDL_FPoint bottom_left{};
+        SDL_FPoint bottom_right{};
+        const float base_z = 0.0f;
+        const bool projected =
+            camera_.project_world_point(SDL_FPoint{world_x - half_width, world_y}, base_z + height, top_left) &&
+            camera_.project_world_point(SDL_FPoint{world_x + half_width, world_y}, base_z + height, top_right) &&
+            camera_.project_world_point(SDL_FPoint{world_x - half_width, world_y}, base_z, bottom_left) &&
+            camera_.project_world_point(SDL_FPoint{world_x + half_width, world_y}, base_z, bottom_right);
+        if (projected &&
+            std::isfinite(top_left.x) && std::isfinite(top_left.y) &&
+            std::isfinite(top_right.x) && std::isfinite(top_right.y) &&
+            std::isfinite(bottom_left.x) && std::isfinite(bottom_left.y) &&
+            std::isfinite(bottom_right.x) && std::isfinite(bottom_right.y)) {
+            const float left = std::min(top_left.x, bottom_left.x);
+            const float right = std::max(top_right.x, bottom_right.x);
+            const float top = std::min(top_left.y, top_right.y);
+            const float bottom = std::max(bottom_left.y, bottom_right.y);
+            const float rect_w = right - left;
+            const float rect_h = bottom - top;
+            if (rect_w > 0.0f && rect_h > 0.0f && std::isfinite(rect_w) && std::isfinite(rect_h)) {
+                sprite_rect = SDL_FRect{left, top, rect_w, rect_h};
+                have_sprite_rect = true;
+            }
         }
     }
 
     if (!have_sprite_rect) {
-        const SDL_Point world_center_point{
-            static_cast<int>(std::lround(world_center_x)), static_cast<int>(std::lround(world_center_y)) };
-
-        const float left_world   = world_center_x - scaled_half;
-        const float right_world  = world_center_x + scaled_half;
-        const float top_world    = world_center_y - scaled_half;
-        const float bottom_world = world_center_y + scaled_half;
-
-        SDL_FPoint top_left_screen = camera_.map_to_screen_f(SDL_FPoint{left_world, top_world});
-        SDL_FPoint bottom_right_screen = camera_.map_to_screen_f(SDL_FPoint{right_world, bottom_world});
-
-        top_left_screen.y = camera_.warp_floor_screen_y(top_world, top_left_screen.y);
-        bottom_right_screen.y = camera_.warp_floor_screen_y(bottom_world, bottom_right_screen.y);
-
-        const float left_screen   = std::min(top_left_screen.x, bottom_right_screen.x);
-        const float right_screen  = std::max(top_left_screen.x, bottom_right_screen.x);
-        const float top_screen    = std::min(top_left_screen.y, bottom_right_screen.y);
-        const float bottom_screen = std::max(top_left_screen.y, bottom_right_screen.y);
-        const float width  = right_screen - left_screen;
-        const float height = bottom_screen - top_screen;
-        if (!(width > 0.0f) || !(height > 0.0f)) {
-            return false;
-        }
-        if (!std::isfinite(left_screen) || !std::isfinite(top_screen) ||
-            !std::isfinite(width) || !std::isfinite(height)) {
-            return false;
-        }
-
-        sprite_rect = SDL_FRect{
-            left_screen,
-            top_screen,
-            width,
-            height
-};
+        return false;
     }
 
     SDL_FRect combined = sprite_rect;

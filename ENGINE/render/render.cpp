@@ -242,10 +242,19 @@ bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points) {
     return true;
 }
 
+bool project_world_point(const WarpedScreenGrid& cam,
+                         float world_x,
+                         float world_y,
+                         float world_z,
+                         SDL_FPoint& out) {
+    if (!cam.project_world_point(SDL_FPoint{world_x, world_y}, world_z, out)) {
+        return false;
+    }
+    return std::isfinite(out.x) && std::isfinite(out.y);
+}
+
 bool build_warped_quad(const RenderObject& obj,
-                       const world::GridPoint& gp,
-                       float distance_scale,
-                       float vertical_scale,
+                       const WarpedScreenGrid& cam,
                        WarpedQuad& quad) {
     if (!obj.texture) {
         return false;
@@ -255,20 +264,12 @@ bool build_warped_quad(const RenderObject& obj,
     if (rect.w <= 0 || rect.h <= 0) {
         return false;
     }
-
-    const float safe_distance_scale = std::isfinite(distance_scale) && distance_scale > 0.0f
-        ? distance_scale
-        : 1.0f;
-    const float safe_vertical_scale = std::isfinite(vertical_scale) && vertical_scale > 0.0f
-        ? vertical_scale
-        : 1.0f;
-
-    const float anchor_x = gp.screen.x + (static_cast<float>(rect.x) - static_cast<float>(gp.world_x())) * safe_distance_scale;
-    const float anchor_y = gp.screen.y + (static_cast<float>(rect.y) - static_cast<float>(gp.world_y())) * safe_distance_scale;
-    const float width = static_cast<float>(rect.w) * safe_distance_scale;
-    const float height = static_cast<float>(rect.h) * safe_distance_scale * safe_vertical_scale;
-    if (!(std::isfinite(anchor_x) && std::isfinite(anchor_y) &&
-          std::isfinite(width) && std::isfinite(height))) {
+    const float world_x = static_cast<float>(rect.x);
+    const float world_y = static_cast<float>(rect.y);
+    const float half_width = static_cast<float>(rect.w) * 0.5f;
+    const float height = static_cast<float>(rect.h);
+    const float base_z = obj.world_z_offset;
+    if (!(std::isfinite(world_x) && std::isfinite(world_y) && std::isfinite(half_width) && std::isfinite(height))) {
         return false;
     }
 
@@ -298,10 +299,25 @@ bool build_warped_quad(const RenderObject& obj,
     }
 
     const SDL_Color white{255, 255, 255, 255};
-    quad.vertices[0].position = SDL_FPoint{anchor_x - width * 0.5f, anchor_y - height};
-    quad.vertices[1].position = SDL_FPoint{anchor_x + width * 0.5f, anchor_y - height};
-    quad.vertices[2].position = SDL_FPoint{anchor_x + width * 0.5f, anchor_y};
-    quad.vertices[3].position = SDL_FPoint{anchor_x - width * 0.5f, anchor_y};
+
+    SDL_FPoint top_left{};
+    SDL_FPoint top_right{};
+    SDL_FPoint bottom_right{};
+    SDL_FPoint bottom_left{};
+    if (!project_world_point(cam, world_x - half_width, world_y, base_z + height, top_left) ||
+        !project_world_point(cam, world_x + half_width, world_y, base_z + height, top_right) ||
+        !project_world_point(cam, world_x + half_width, world_y, base_z, bottom_right) ||
+        !project_world_point(cam, world_x - half_width, world_y, base_z, bottom_left)) {
+        return false;
+    }
+
+    std::array<SDL_FPoint, 4> points{top_left, top_right, bottom_right, bottom_left};
+    enforce_trapezoid(points);
+
+    quad.vertices[0].position = points[0];
+    quad.vertices[1].position = points[1];
+    quad.vertices[2].position = points[2];
+    quad.vertices[3].position = points[3];
     for (auto& vertex : quad.vertices) {
         vertex.color = white;
     }
@@ -485,16 +501,7 @@ void SceneRenderer::render() {
             continue;
         }
 
-        composite_renderer_.update(asset, gp, flicker_time_seconds);
-
-        float distance_scale = asset->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
-        float vertical_scale = asset->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
-        if (!std::isfinite(distance_scale) || distance_scale <= 0.0f) {
-            distance_scale = 1.0f;
-        }
-        if (!std::isfinite(vertical_scale) || vertical_scale <= 0.0f) {
-            vertical_scale = 1.0f;
-        }
+        composite_renderer_.update(asset, flicker_time_seconds);
 
         const float fade_alpha = std::clamp(gp->horizon_fade_alpha * gp->near_camera_fade_alpha, 0.0f, 1.0f);
         auto apply_fade_alpha = [&](SDL_Color color) {
@@ -509,7 +516,7 @@ void SceneRenderer::render() {
         if (dark_mask_enabled_ && !asset->scene_mask_lights.empty()) {
             for (const RenderObject& mask_obj : asset->scene_mask_lights) {
                 WarpedQuad quad{};
-                if (!build_warped_quad(mask_obj, *gp, distance_scale, vertical_scale, quad)) {
+                if (!build_warped_quad(mask_obj, cam, quad)) {
                     continue;
                 }
                 DarkMaskSprite sprite;
@@ -522,7 +529,7 @@ void SceneRenderer::render() {
 
         for (const RenderObject& obj : asset->render_package) {
             WarpedQuad quad{};
-            if (!build_warped_quad(obj, *gp, distance_scale, vertical_scale, quad)) {
+            if (!build_warped_quad(obj, cam, quad)) {
                 continue;
             }
 

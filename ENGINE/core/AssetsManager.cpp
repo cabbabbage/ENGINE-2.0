@@ -2000,7 +2000,6 @@ void Assets::rebuild_active_from_screen_grid() {
     std::unordered_set<Asset*> previous_active(active_assets.begin(), active_assets.end());
 
     active_points_.clear();
-    active_assets.clear();
 
     std::unordered_set<Asset*> seen;
     visible_candidate_buffer_.clear();
@@ -2062,9 +2061,30 @@ void Assets::rebuild_active_from_screen_grid() {
         return lhs < rhs;
     };
 
-    std::sort(visible_candidate_buffer_.begin(), visible_candidate_buffer_.end(), depth_order);
+    std::unordered_set<Asset*> visible_set(visible_candidate_buffer_.begin(), visible_candidate_buffer_.end());
 
-    active_assets.swap(visible_candidate_buffer_);
+    active_assets.erase(std::remove_if(active_assets.begin(),
+                                       active_assets.end(),
+                                       [&](Asset* asset) {
+                                           return visible_set.find(asset) == visible_set.end();
+                                       }),
+                        active_assets.end());
+
+    std::unordered_set<Asset*> active_lookup(active_assets.begin(), active_assets.end());
+    for (Asset* asset : visible_candidate_buffer_) {
+        if (!asset) {
+            continue;
+        }
+        if (active_lookup.insert(asset).second) {
+            auto insert_pos = std::lower_bound(active_assets.begin(), active_assets.end(), asset, depth_order);
+            active_assets.insert(insert_pos, asset);
+        }
+    }
+
+    if (!std::is_sorted(active_assets.begin(), active_assets.end(), depth_order)) {
+        std::sort(active_assets.begin(), active_assets.end(), depth_order);
+    }
+
     visible_candidate_buffer_.clear();
 
     std::vector<Asset*> new_light_assets;

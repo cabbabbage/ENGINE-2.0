@@ -74,6 +74,7 @@ class AssetInfo {
     float shading_opacity_multiplier = 1.0f;
     int min_same_type_distance;
     int min_distance_all;
+    int starting_health = 100;
     float scale_factor;
     bool smooth_scaling = true;
     int original_canvas_width = 0;
@@ -128,6 +129,7 @@ class AssetInfo {
     void set_min_distance_all(int d);
     void set_neighbor_search_radius(int radius);
     void set_flipable(bool v);
+    void set_starting_health(int health);
     void set_scale_factor(float factor);
     void set_scale_percentage(float percent);
     void set_scale_filter(bool smooth);

@@ -40,6 +40,7 @@ class Section_BasicInfo : public DockableCollapsible {
     std::unique_ptr<DMCheckbox>  c_apply_distance_scaling_;
     std::unique_ptr<DMCheckbox>  c_apply_vertical_scaling_;
     std::unique_ptr<DMCheckbox>  c_tillable_;
+    std::unique_ptr<DMTextBox>   tb_starting_health_;
     std::unique_ptr<DMButton>    apply_btn_;
     std::vector<std::unique_ptr<Widget>> widgets_;
     std::vector<std::string> type_options_;
@@ -117,6 +118,11 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_z.get() });
     widgets_.push_back(std::move(w_z));
 
+    tb_starting_health_ = std::make_unique<DMTextBox>("Starting Health", std::to_string(info_->starting_health));
+    auto w_health = std::make_unique<TextBoxWidget>(tb_starting_health_.get());
+    rows.push_back({ w_health.get() });
+    widgets_.push_back(std::move(w_health));
+
     if (c_flipable_) {
         auto w_flip = std::make_unique<CheckboxWidget>(c_flipable_.get());
         rows.push_back({ w_flip.get() });
@@ -159,6 +165,7 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (dd_type_ && dd_type_->handle_event(e)) used = true;
         if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
         if (s_zindex_ && s_zindex_->handle_event(e)) used = true;
+        if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
     if (c_apply_distance_scaling_ && c_apply_distance_scaling_->handle_event(e)) used = true;
         if (c_apply_vertical_scaling_ && c_apply_vertical_scaling_->handle_event(e)) used = true;
@@ -190,6 +197,18 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         info_->set_z_threshold(s_zindex_->value());
         changed = true;
         z_changed = true;
+    }
+
+    if (tb_starting_health_ && !tb_starting_health_->value().empty()) {
+        try {
+            int new_health = std::stoi(tb_starting_health_->value());
+            if (info_->starting_health != new_health) {
+                info_->set_starting_health(new_health);
+                changed = true;
+            }
+        } catch (const std::exception&) {
+            // Invalid input, ignore
+        }
     }
 
     if (c_flipable_ && info_->flipable != c_flipable_->value()) {

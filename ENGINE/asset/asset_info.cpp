@@ -929,6 +929,7 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
         if (info_json_.is_object()) {
                 info_json_.erase("apply_parallax");
         }
+        starting_health = data.value("starting_health", starting_health);
 }
 
 bool AssetInfo::has_tag(const std::string &tag) const {
@@ -1108,6 +1109,11 @@ void AssetInfo::set_neighbor_search_radius(int radius) {
 void AssetInfo::set_flipable(bool v) {
         flipable = v;
         info_json_["can_invert"] = v;
+}
+
+void AssetInfo::set_starting_health(int health) {
+        starting_health = health;
+        info_json_["starting_health"] = health;
 }
 
 void AssetInfo::set_scale_factor(float factor) {

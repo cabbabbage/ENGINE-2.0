@@ -12,13 +12,13 @@
                 "exact": true,
                 "exact_position": false,
                 "percent": false,
-                "perimeter": true,
+                "perimeter": false,
                 "random": true
             },
             "render_dark_mask": false,
             "types": {
                 "area": false,
-                "boundary": true,
+                "boundary": false,
                 "enemy": true,
                 "npc": false,
                 "object": true,

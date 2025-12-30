@@ -267,6 +267,11 @@ bool RebuildQueueCoordinator::run_python_script(const fs::path& script,
 }
 
 bool RebuildQueueCoordinator::validate_manifest_cache(const std::string& command_prefix) const {
+    if (!fs::is_directory(cache_root_)) {
+        vibble::log::warn("[RebuildQueue] Cache root missing; queueing full asset/light rebuild.");
+        mark_all_frames_for_rebuild();
+        mark_all_lights_for_rebuild();
+    }
     const fs::path script = script_path(repo_root_, "cache_validator.py");
     return run_python_script(script, {"--manifest", manifest_path_.string()}, command_prefix);
 }

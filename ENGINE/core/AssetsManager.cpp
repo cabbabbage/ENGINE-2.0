@@ -218,6 +218,9 @@ Assets::Assets(AssetLibrary& library,
         }
     }
     camera_.set_screen_center(intro_center);
+    last_camera_center_for_grid_ = camera_.get_screen_center();
+    last_camera_scale_for_grid_ = camera_.get_scale();
+    last_camera_pitch_for_grid_ = camera_.current_pitch_radians();
     if (player) {
         last_known_player_pos_ = SDL_Point{player->pos.x, player->pos.y};
         last_player_pos_valid_ = true;
@@ -843,6 +846,7 @@ void Assets::update(const Input& input)
         moving_assets_for_grid_.clear();
         grid_registration_buffer_.clear();
         touch_dev_active_state_version();
+        mark_grid_dirty();
     }
 
     const bool height_animation_active = false;
@@ -859,35 +863,34 @@ void Assets::update(const Input& input)
 
     std::vector<Asset*> prev_static_lights = active_static_light_assets_;
     std::vector<Asset*> prev_moving_lights = active_moving_light_assets_;
-    camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_);
+    const bool grid_updated = maybe_rebuild_world_grid();
 
-    world_grid_.update_active_chunks(screen_world_rect(), 0);
-    rebuild_active_from_screen_grid();
+    if (grid_updated) {
+        const bool static_changed = (prev_static_lights != active_static_light_assets_);
+        const bool moving_changed = (prev_moving_lights != active_moving_light_assets_);
 
-    const bool static_changed = (prev_static_lights != active_static_light_assets_);
-    const bool moving_changed = (prev_moving_lights != active_moving_light_assets_);
-
-    if (static_changed) {
-        notify_light_map_static_assets_changed();
-    }
-
-    if (moving_changed) {
-        scratch_moving_light_lookup_.clear();
-        for (Asset* asset : active_moving_light_assets_) {
-            scratch_moving_light_lookup_.insert(asset);
-            if (active_moving_light_lookup_.find(asset) == active_moving_light_lookup_.end()) {
-                notify_light_map_asset_moved(asset);
-            }
+        if (static_changed) {
+            notify_light_map_static_assets_changed();
         }
 
-        for (Asset* asset : prev_moving_lights) {
-            if (scratch_moving_light_lookup_.find(asset) == scratch_moving_light_lookup_.end()) {
-                notify_light_map_asset_moved(asset);
+        if (moving_changed) {
+            scratch_moving_light_lookup_.clear();
+            for (Asset* asset : active_moving_light_assets_) {
+                scratch_moving_light_lookup_.insert(asset);
+                if (active_moving_light_lookup_.find(asset) == active_moving_light_lookup_.end()) {
+                    notify_light_map_asset_moved(asset);
+                }
             }
-        }
 
-        active_moving_light_lookup_.swap(scratch_moving_light_lookup_);
-        scratch_moving_light_lookup_.clear();
+            for (Asset* asset : prev_moving_lights) {
+                if (scratch_moving_light_lookup_.find(asset) == scratch_moving_light_lookup_.end()) {
+                    notify_light_map_asset_moved(asset);
+                }
+            }
+
+            active_moving_light_lookup_.swap(scratch_moving_light_lookup_);
+            scratch_moving_light_lookup_.clear();
+        }
     }
 
     mark_non_player_update_buffer_dirty();
@@ -897,32 +900,16 @@ void Assets::update(const Input& input)
 
     update_filtered_active_assets();
     if (dev_controls_ && dev_controls_->is_enabled()) {
-        const SDL_Point camera_center_before = camera_.get_screen_center();
-        const double camera_scale_before = camera_.get_scale();
-        const double camera_pitch_before = camera_.current_pitch_radians();
-
         dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
         sync_dev_controls_current_room(current_room_);
         dev_controls_->update(input);
 
         dev_controls_->update_ui(input);
 
-        if (dev_mode && dev_controls_->mode() == DevControls::Mode::RoomEditor) {
-            const SDL_Point camera_center_after = camera_.get_screen_center();
-            const double camera_scale_after = camera_.get_scale();
-            const double camera_pitch_after = camera_.current_pitch_radians();
-            constexpr double kCameraEpsilon = 1e-4;
-            const bool camera_changed =
-                camera_center_before.x != camera_center_after.x ||
-                camera_center_before.y != camera_center_after.y ||
-                std::fabs(camera_scale_before - camera_scale_after) > kCameraEpsilon ||
-                std::fabs(camera_pitch_before - camera_pitch_after) > kCameraEpsilon;
-            if (camera_changed) {
-                camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_);
-                rebuild_active_from_screen_grid();
-                update_filtered_active_assets();
-                dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
-            }
+        const bool grid_updated_after_dev_controls = maybe_rebuild_world_grid();
+        if (grid_updated_after_dev_controls) {
+            update_filtered_active_assets();
+            dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
         }
     }
 
@@ -1226,6 +1213,7 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     ensure_light_textures_loaded(raw);
 
     invalidate_max_asset_dimensions();
+    mark_grid_dirty();
     mark_active_assets_dirty();
     mark_non_player_update_buffer_dirty();
 
@@ -1296,11 +1284,43 @@ void Assets::track_asset_for_grid(Asset* asset) {
 
 }
 
+bool Assets::maybe_rebuild_world_grid() {
+    const SDL_Point current_center = camera_.get_screen_center();
+    const double current_scale = camera_.get_scale();
+    const double current_pitch = camera_.current_pitch_radians();
+    constexpr double kCameraGridEpsilon = 1e-4;
+    const bool camera_changed =
+        current_center.x != last_camera_center_for_grid_.x ||
+        current_center.y != last_camera_center_for_grid_.y ||
+        std::fabs(current_scale - last_camera_scale_for_grid_) > kCameraGridEpsilon ||
+        std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon;
+
+    camera_view_dirty_ = camera_view_dirty_ || camera_changed;
+    if (!grid_dirty_ && !camera_view_dirty_) {
+        return false;
+    }
+
+    camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_);
+    world_grid_.update_active_chunks(screen_world_rect(), 0);
+    rebuild_active_from_screen_grid();
+
+    grid_dirty_ = false;
+    camera_view_dirty_ = false;
+    last_camera_center_for_grid_ = current_center;
+    last_camera_scale_for_grid_ = current_scale;
+    last_camera_pitch_for_grid_ = current_pitch;
+    return true;
+}
+
 void Assets::untrack_asset_for_grid(Asset* asset) {
     if (!asset) {
         return;
     }
     (void)world_grid_.remove_asset(asset);
+}
+
+void Assets::mark_grid_dirty() {
+    grid_dirty_ = true;
 }
 
 void Assets::register_pending_static_assets() {
@@ -1493,6 +1513,7 @@ bool Assets::process_removals() {
     active_points_.clear();
     active_moving_light_lookup_.clear();
     scratch_moving_light_lookup_.clear();
+    mark_grid_dirty();
     mark_active_assets_dirty();
     mark_non_player_update_buffer_dirty();
 
@@ -1803,6 +1824,7 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
         update_max_asset_dimensions();
         world_grid_.update_active_chunks(screen_world_rect(), 0);
         force_shaded_assets_rerender();
+        mark_grid_dirty();
     }
 }
 

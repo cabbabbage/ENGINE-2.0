@@ -272,6 +272,11 @@ private:
 
     bool pending_initial_rebuild_ = false;
     bool logged_initial_rebuild_warning_ = false;
+    bool grid_dirty_ = true;
+    bool camera_view_dirty_ = true;
+    SDL_Point last_camera_center_for_grid_{0, 0};
+    double last_camera_scale_for_grid_ = 0.0;
+    double last_camera_pitch_for_grid_ = 0.0;
 
     struct GridMovementCommand {
         Asset* asset = nullptr;
@@ -280,6 +285,8 @@ private:
 };
 
     void track_asset_for_grid(Asset* asset);
+    bool maybe_rebuild_world_grid();
+    void mark_grid_dirty();
     void untrack_asset_for_grid(Asset* asset);
     void register_pending_static_assets();
     void rebuild_all_assets_from_grid();

@@ -163,8 +163,27 @@ private:
     void restore_filter_hidden_assets() const;
     void apply_dark_mask_visibility();
     bool lighting_section_forces_dark_mask() const;
+    void mark_layout_dirty();
+    void rebuild_layout_state();
+    void update_header_and_footer_bounds();
+    void ensure_layout_cache();
+    void mark_dirty(std::uint32_t flags);
+    bool has_dirty(std::uint32_t flags) const;
+    void clear_dirty(std::uint32_t flags);
 
 private:
+    enum class DirtyFlag : std::uint32_t {
+        None   = 0,
+        Layout = 1 << 0,
+    };
+
+    static constexpr std::uint32_t kDirtyLayout = static_cast<std::uint32_t>(DirtyFlag::Layout);
+
+    struct LayoutCache {
+        SDL_Rect usable_rect{0, 0, 0, 0};
+        bool valid = false;
+    };
+
     int map_radius_or_default() const;
     void remove_spawn_group_assets(const std::string& spawn_id);
     void integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& spawned);
@@ -241,6 +260,11 @@ private:
     Asset* frame_editor_asset_for_reopen_ = nullptr;
 
     bool render_suppression_in_progress_ = false;
+
+    std::uint32_t dirty_flags_ = kDirtyLayout;
+    LayoutCache layout_cache_;
+    SDL_Rect last_header_rect_{0, 0, 0, 0};
+    SDL_Rect last_footer_rect_{0, 0, 0, 0};
 
     enum class DepthCueDragState { None, Foreground, Background };
     DepthCueDragState depthcue_drag_state_ = DepthCueDragState::None;

@@ -64,7 +64,9 @@ private:
 };
 
     void ensure_items(AssetLibrary& lib);
-    void rebuild_rows();
+    void rebuild_rows_impl();
+    void mark_rows_dirty();
+    void ensure_rows_layout();
     void refresh_tiles(Assets& assets);
     bool matches_query(const AssetInfo& info, const std::string& query) const;
     bool matches_tag_query(const std::string& tag, const std::string& query) const;
@@ -110,6 +112,7 @@ private:
     std::string search_query_;
     bool search_error_active_ = false;
     bool filter_dirty_ = true;
+    bool layout_rows_dirty_ = true;
 
     struct AssetTileWidget;
     struct HashtagTileWidget;

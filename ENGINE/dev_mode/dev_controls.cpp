@@ -669,6 +669,8 @@ void DevControls::set_map_info(nlohmann::json* map_info, MapLightPanel::SaveCall
         apply_overlay_grid_resolution(grid_overlay_resolution_r_, false, true, true);
     }
     configure_header_button_sets();
+
+    mark_layout_dirty();
 }
 
 void DevControls::apply_overlay_grid_resolution(int resolution, bool user_override, bool update_stepper, bool update_footer) {
@@ -701,11 +703,14 @@ void DevControls::set_player(Asset* player) {
 }
 
 void DevControls::set_active_assets(std::vector<Asset*>& actives, std::uint64_t version) {
+    const bool assets_changed = (active_assets_ != &actives) || (active_assets_version_ != version);
     active_assets_ = &actives;
     active_assets_version_ = version;
     if (room_editor_) {
         room_editor_->set_active_assets(actives, version);
     }
+
+    if (assets_changed) mark_layout_dirty();
 }
 
 void DevControls::set_screen_dimensions(int width, int height) {
@@ -735,6 +740,8 @@ void DevControls::set_screen_dimensions(int width, int height) {
     if (map_mode_ui_) {
         map_mode_ui_->set_sliding_area_bounds(usable);
     }
+
+    mark_layout_dirty();
 }
 
 void DevControls::set_current_room(Room* room, bool force_refresh) {
@@ -773,6 +780,8 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
             footer->set_title(label);
         }
     }
+
+    mark_layout_dirty();
 
     dev_mode_trace("[DevControls] set_current_room complete");
 }
@@ -821,6 +830,8 @@ void DevControls::set_map_context(nlohmann::json* map_info, const std::string& m
     }
     asset_filter_.set_map_info(map_info_json_);
     configure_header_button_sets();
+
+    mark_layout_dirty();
 }
 
 bool DevControls::is_pointer_over_dev_ui(int x, int y) const {
@@ -956,6 +967,7 @@ void DevControls::set_enabled(bool enabled) {
     if (enabled_) {
         asset_filter_.ensure_layout();
     }
+    mark_layout_dirty();
     {
         std::ostringstream oss;
         oss << "[DevControls] set_enabled(" << (enabled ? "true" : "false") << ") done";
@@ -1041,10 +1053,6 @@ void DevControls::update(const Input& input) {
     if (regenerate_popup_ && regenerate_popup_->visible()) {
         regenerate_popup_->update(input);
     }
-    bool modal_hide = is_modal_blocking_panels();
-    modal_headers_hidden_ = modal_hide;
-    bool hide_headers = modal_hide;
-
     asset_filter_.set_enabled(enabled_);
     apply_header_suppression();
     if (map_mode_ui_) {
@@ -1064,49 +1072,16 @@ void DevControls::update(const Input& input) {
         }
     }
 
-    asset_filter_.ensure_layout();
-
-    SDL_Rect layout_rect = asset_filter_.layout_bounds();
-    SDL_Rect footer_rect{0, 0, 0, 0};
-    std::vector<SDL_Rect> sliding_rects;
-    if (map_mode_ui_) {
-        map_mode_ui_->collect_sliding_container_rects(sliding_rects);
-    }
-    if (layout_rect.w > 0 && layout_rect.h > 0) {
-        sliding_rects.push_back(layout_rect);
-    }
-    if (map_mode_ui_) {
-        DevFooterBar* footer = map_mode_ui_->get_footer_bar();
-        if (footer && footer->visible()) {
-            footer_rect = footer->rect();
-        }
-    }
-    modal_hide = is_modal_blocking_panels();
-
-    const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
-    hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open;
-    SDL_Rect header_rect = hide_headers ? SDL_Rect{0, 0, 0, 0} : asset_filter_.header_rect();
-    SDL_Rect usable_rect = FloatingPanelLayoutManager::instance().computeUsableRect(
-        SDL_Rect{0, 0, screen_w_, screen_h_},
-        header_rect,
-        footer_rect,
-        sliding_rects);
-    if (map_mode_ui_) {
-        map_mode_ui_->set_sliding_area_bounds(usable_rect);
-    }
+    ensure_layout_cache();
 
     if (room_editor_ && room_editor_->is_enabled()) {
         SDL_Point pointer{input.getX(), input.getY()};
         if (asset_filter_.contains_point(pointer.x, pointer.y)) {
             room_editor_->clear_highlighted_assets();
-        } else if (!hide_headers) {
-            DevFooterBar* footer = map_mode_ui_ ? map_mode_ui_->get_footer_bar() : nullptr;
-            if (footer && footer->visible()) {
-                const SDL_Rect& bar_rect = footer->rect();
-                if (bar_rect.w > 0 && bar_rect.h > 0 && SDL_PointInRect(&pointer, &bar_rect)) {
-                    room_editor_->clear_highlighted_assets();
-                }
-            }
+        } else if (last_header_rect_.w > 0 && last_header_rect_.h > 0 && SDL_PointInRect(&pointer, &last_header_rect_)) {
+            room_editor_->clear_highlighted_assets();
+        } else if (last_footer_rect_.w > 0 && last_footer_rect_.h > 0 && SDL_PointInRect(&pointer, &last_footer_rect_)) {
+            room_editor_->clear_highlighted_assets();
         }
     }
 
@@ -2498,6 +2473,84 @@ void DevControls::apply_header_suppression() {
     }
 }
 
+void DevControls::mark_dirty(std::uint32_t flags) {
+    dirty_flags_ |= flags;
+}
+
+bool DevControls::has_dirty(std::uint32_t flags) const {
+    return (dirty_flags_ & flags) != 0;
+}
+
+void DevControls::clear_dirty(std::uint32_t flags) {
+    dirty_flags_ &= ~flags;
+}
+
+void DevControls::mark_layout_dirty() {
+    mark_dirty(kDirtyLayout);
+    layout_cache_.valid = false;
+}
+
+void DevControls::update_header_and_footer_bounds() {
+    const bool modal_hide = is_modal_blocking_panels();
+    modal_headers_hidden_ = modal_hide;
+    const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
+    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open;
+    if (hide_headers) {
+        last_header_rect_ = SDL_Rect{0, 0, 0, 0};
+    } else {
+        last_header_rect_ = asset_filter_.header_rect();
+    }
+    if (map_mode_ui_) {
+        if (auto* footer = map_mode_ui_->get_footer_bar()) {
+            if (footer->visible()) {
+                last_footer_rect_ = footer->rect();
+            } else {
+                last_footer_rect_ = SDL_Rect{0, 0, 0, 0};
+            }
+        } else {
+            last_footer_rect_ = SDL_Rect{0, 0, 0, 0};
+        }
+    } else {
+        last_footer_rect_ = SDL_Rect{0, 0, 0, 0};
+    }
+}
+
+void DevControls::rebuild_layout_state() {
+    SDL_Rect layout_rect = asset_filter_.layout_bounds();
+
+    std::vector<SDL_Rect> sliding_rects;
+    if (map_mode_ui_) {
+        map_mode_ui_->collect_sliding_container_rects(sliding_rects);
+    }
+    if (layout_rect.w > 0 && layout_rect.h > 0) {
+        sliding_rects.push_back(layout_rect);
+    }
+
+    SDL_Rect bounds{0, 0, screen_w_, screen_h_};
+    SDL_Rect usable = FloatingPanelLayoutManager::instance().computeUsableRect(
+        bounds,
+        last_header_rect_,
+        last_footer_rect_,
+        sliding_rects);
+    layout_cache_.usable_rect = usable;
+    layout_cache_.valid = true;
+    if (map_mode_ui_) {
+        map_mode_ui_->set_sliding_area_bounds(usable);
+    }
+}
+
+void DevControls::ensure_layout_cache() {
+    const bool needs_rebuild = !layout_cache_.valid || has_dirty(kDirtyLayout);
+    if (needs_rebuild) {
+        asset_filter_.ensure_layout();
+        update_header_and_footer_bounds();
+        rebuild_layout_state();
+        clear_dirty(kDirtyLayout);
+    } else {
+        update_header_and_footer_bounds();
+    }
+}
+
 int DevControls::map_radius_or_default() const {
     if (!assets_) {
         return 1000;
@@ -2895,6 +2948,8 @@ void DevControls::set_mode(Mode new_mode) {
         break;
     }
     apply_camera_area_render_flag();
+
+    mark_layout_dirty();
 }
 
 void DevControls::restore_filter_hidden_assets() const {

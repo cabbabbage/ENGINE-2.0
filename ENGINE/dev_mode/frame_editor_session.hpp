@@ -46,6 +46,7 @@ struct ChildPreviewContext {
 class FrameEditorSession {
 public:
     enum class Mode { Movement, StaticChildren, AsyncChildren, AttackGeometry, HitGeometry };
+    enum class EditPlane { XY, XZ };
     static inline constexpr std::array<const char*, 3> kDamageTypeNames = {
         "projectile", "melee", "explosion"
 };
@@ -64,6 +65,7 @@ public:
 
     bool is_active() const { return active_; }
     Mode mode() const { return mode_; }
+    EditPlane edit_plane() const { return edit_plane_; }
 
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
@@ -124,6 +126,7 @@ FRAME_EDITOR_ACCESS:
     bool smooth_enabled_ = false;
     bool curve_enabled_ = false;
     int selected_child_index_ = 0;
+    EditPlane edit_plane_ = EditPlane::XZ;
 
     bool prev_realism_enabled_ = true;
     bool prev_parallax_enabled_ = true;
@@ -141,6 +144,7 @@ FRAME_EDITOR_ACCESS:
     mutable std::unique_ptr<DMButton> btn_children_;
     mutable std::unique_ptr<DMButton> btn_attack_geometry_;
     mutable std::unique_ptr<DMButton> btn_hit_geometry_;
+    mutable std::unique_ptr<DMButton> btn_plane_toggle_;
     mutable std::unique_ptr<DMButton> btn_prev_;
     mutable std::unique_ptr<DMButton> btn_next_;
     mutable std::unique_ptr<DMDropdown> dd_animation_select_;
@@ -426,6 +430,23 @@ FRAME_EDITOR_ACCESS:
     void update_attack_drag(SDL_Point mouse);
     void end_attack_drag(bool commit);
     float attachment_scale() const;
+    bool is_xy_plane() const;
+    const char* plane_axis_label() const;
+    const char* plane_button_label() const;
+    void toggle_edit_plane();
+    void update_plane_labels() const;
+    float movement_plane_delta(const MovementFrame& frame) const;
+    float& movement_plane_delta(MovementFrame& frame);
+    float child_plane_delta(const ChildFrame& child) const;
+    float& child_plane_delta(ChildFrame& child);
+    float hitbox_plane_center(const animation_update::FrameHitGeometry::HitBox& box) const;
+    float& hitbox_plane_center(animation_update::FrameHitGeometry::HitBox& box);
+    float attack_plane_start(const animation_update::FrameAttackGeometry::Vector& vec) const;
+    float& attack_plane_start(animation_update::FrameAttackGeometry::Vector& vec);
+    float attack_plane_control(const animation_update::FrameAttackGeometry::Vector& vec) const;
+    float& attack_plane_control(animation_update::FrameAttackGeometry::Vector& vec);
+    float attack_plane_end(const animation_update::FrameAttackGeometry::Vector& vec) const;
+    float& attack_plane_end(animation_update::FrameAttackGeometry::Vector& vec);
 
 FRAME_EDITOR_ACCESS:
     void render_directory_panel(SDL_Renderer* renderer);

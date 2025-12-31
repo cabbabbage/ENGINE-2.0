@@ -137,22 +137,22 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "hit_geometry": [
@@ -3082,39 +3082,6 @@
           "frames": [
             {
               "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3645,21 +3612,6 @@
           "frames": [
             {
               "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3726,27 +3678,6 @@
           "frames": [
             {
               "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3778,27 +3709,6 @@
           "crop_frames": true,
           "flipped_source": false,
           "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
             {
               "needs_rebuild": false
             }
@@ -6789,10 +6699,6 @@
                 "name": "Candle"
               },
               {
-                "chance": 196.65,
-                "name": "tex"
-              },
-              {
                 "chance": 7.649999999999999,
                 "name": "flower_red"
               }
@@ -7091,9 +6997,9 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            223,
-            242,
+            199,
             36,
+            242,
             255
           ],
           "edge_smoothness": 19,
@@ -7111,9 +7017,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            31,
-            204,
-            31,
+            85,
+            242,
+            156,
             255
           ],
           "edge_smoothness": 43,
@@ -7164,9 +7070,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            36,
-            143,
+            164,
             242,
+            36,
             255
           ],
           "edge_smoothness": 29,
@@ -7219,9 +7125,9 @@
           "camera_zoom_percent": 1,
           "curvyness": 2,
           "display_color": [
+            79,
+            31,
             204,
-            31,
-            31,
             255
           ],
           "edge_smoothness": 101,

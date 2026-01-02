@@ -76,11 +76,12 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool 
         return;
     }
 
-    const double scale = std::max(0.0001, static_cast<double>(cam.get_scale()));
     const int dx = mouse.x - pan_start_mouse_screen_.x;
     const int dy = mouse.y - pan_start_mouse_screen_.y;
     SDL_Point new_center{
-        static_cast<int>(std::lround(static_cast<double>(pan_start_center_.x) - static_cast<double>(dx) * scale)),  static_cast<int>(std::lround(static_cast<double>(pan_start_center_.y) - static_cast<double>(dy) * scale)) };
+        pan_start_center_.x - dx,
+        pan_start_center_.y - dy
+    };
     cam.set_focus_override(new_center);
     cam.set_screen_center(new_center);
 }

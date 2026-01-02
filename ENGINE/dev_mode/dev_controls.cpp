@@ -1813,18 +1813,20 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             SDL_FPoint center_world_f = cam.get_view_center_f();
             SDL_Point depth_world{
                 static_cast<int>(std::lround(center_world_f.x)), static_cast<int>(std::lround(depth_params.base_world_y)) };
-            SDL_FPoint depth_screen = floor_warped_screen_position(cam, depth_world);
-            const int y_line = static_cast<int>(std::lround(depth_screen.y));
+            SDL_FPoint depth_screen{};
+            if (try_floor_warped_screen_position(cam, depth_world, depth_screen)) {
+                const int y_line = static_cast<int>(std::lround(depth_screen.y));
 
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, 160, 210, 255, 200);
-            SDL_RenderDrawLine(renderer, 0, y_line, screen_w_, y_line);
-            const int marker_x = screen_w_ / 2;
-            SDL_RenderDrawLine(renderer, marker_x - 8, y_line, marker_x + 8, y_line);
-            DMLabelStyle style = DMStyles::Label();
-            style.color = SDL_Color{160, 210, 255, 200};
-            const int label_y = std::max(0, y_line - style.font_size - 2);
-            DrawLabelText(renderer, "Depth", marker_x + 12, label_y, style);
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(renderer, 160, 210, 255, 200);
+                SDL_RenderDrawLine(renderer, 0, y_line, screen_w_, y_line);
+                const int marker_x = screen_w_ / 2;
+                SDL_RenderDrawLine(renderer, marker_x - 8, y_line, marker_x + 8, y_line);
+                DMLabelStyle style = DMStyles::Label();
+                style.color = SDL_Color{160, 210, 255, 200};
+                const int label_y = std::max(0, y_line - style.font_size - 2);
+                DrawLabelText(renderer, "Depth", marker_x + 12, label_y, style);
+            }
 
             SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
             SDL_SetRenderDrawBlendMode(renderer, prev_mode);

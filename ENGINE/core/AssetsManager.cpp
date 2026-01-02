@@ -509,6 +509,7 @@ const AssetLibrary& Assets::library() const {
 
 void Assets::set_rooms(std::vector<Room*> rooms) {
     rooms_ = std::move(rooms);
+    mark_camera_dirty();
     notify_rooms_changed();
 }
 

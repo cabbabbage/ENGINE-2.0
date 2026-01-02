@@ -107,24 +107,114 @@ constexpr const char* kGridSnapEnabledKey    = "dev.grid.snap.enabled";
 constexpr const char* kGridCellSizePxKey     = "dev.grid.cell_size_px";
 constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
 
+struct SimpleLabelCacheKey {
+    std::string font_path;
+    int font_size = 0;
+    std::string text;
+    SDL_Color color{};
+
+    bool operator==(const SimpleLabelCacheKey& other) const {
+        return font_size == other.font_size
+            && font_path == other.font_path
+            && text == other.text
+            && color.r == other.color.r
+            && color.g == other.color.g
+            && color.b == other.color.b
+            && color.a == other.color.a;
+    }
+};
+
+struct SimpleLabelCacheKeyHash {
+    std::size_t operator()(const SimpleLabelCacheKey& key) const noexcept {
+        std::size_t h1 = std::hash<std::string>{}(key.font_path);
+        std::size_t h2 = std::hash<int>{}(key.font_size);
+        std::size_t h3 = std::hash<std::string>{}(key.text);
+        std::size_t h4 = (static_cast<std::size_t>(key.color.r) << 24)
+            | (static_cast<std::size_t>(key.color.g) << 16)
+            | (static_cast<std::size_t>(key.color.b) << 8)
+            | static_cast<std::size_t>(key.color.a);
+        std::size_t seed = h1 ^ (h2 + 0x9e3779b9 + (h1 << 6) + (h1 >> 2));
+        seed ^= (h3 + 0x9e3779b9 + (seed << 6) + (seed >> 2));
+        seed ^= (h4 + 0x9e3779b9 + (seed << 6) + (seed >> 2));
+        return seed;
+    }
+};
+
+struct SimpleLabelCacheEntry {
+    SDL_Texture* texture = nullptr;
+    SDL_Point size{0, 0};
+};
+
+class SimpleLabelCache {
+public:
+    void draw(SDL_Renderer* renderer, const DMLabelStyle& style, const std::string& text, int x, int y) {
+        if (!renderer || text.empty()) {
+            return;
+        }
+        if (renderer_ != renderer) {
+            clear();
+            renderer_ = renderer;
+        }
+
+        SimpleLabelCacheKey key{style.font_path, style.font_size, text, style.color};
+        auto it = cache_.find(key);
+        if (it == cache_.end()) {
+            SimpleLabelCacheEntry entry;
+            entry.texture = create_texture(renderer, style, text, &entry.size);
+            if (!entry.texture) {
+                return;
+            }
+            it = cache_.emplace(std::move(key), entry).first;
+        }
+
+        SDL_Rect dst{x, y, it->second.size.x, it->second.size.y};
+        SDL_RenderCopy(renderer, it->second.texture, nullptr, &dst);
+    }
+
+    void clear() {
+        for (auto& entry : cache_) {
+            if (entry.second.texture) {
+                SDL_DestroyTexture(entry.second.texture);
+            }
+        }
+        cache_.clear();
+        renderer_ = nullptr;
+    }
+
+private:
+    SDL_Texture* create_texture(SDL_Renderer* renderer,
+                                const DMLabelStyle& style,
+                                const std::string& text,
+                                SDL_Point* out_size) {
+        TTF_Font* font = DMFontCache::instance().get_font(style.font_path, style.font_size);
+        if (!font) {
+            return nullptr;
+        }
+        SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), style.color);
+        if (!surf) {
+            return nullptr;
+        }
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surf);
+        if (texture) {
+            if (out_size) {
+                *out_size = SDL_Point{surf->w, surf->h};
+            }
+        }
+        SDL_FreeSurface(surf);
+        return texture;
+    }
+
+    SDL_Renderer* renderer_ = nullptr;
+    std::unordered_map<SimpleLabelCacheKey, SimpleLabelCacheEntry, SimpleLabelCacheKeyHash> cache_;
+};
+
+SimpleLabelCache& simple_label_cache() {
+    static SimpleLabelCache cache;
+    return cache;
+}
+
 void draw_simple_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
-    if (!renderer) return;
-    const DMLabelStyle& style = DMStyles::Label();
-    TTF_Font* font = style.open_font();
-    if (!font) return;
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), style.color);
-    if (!surf) {
-        TTF_CloseFont(font);
-        return;
-    }
-    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
-    if (tex) {
-        SDL_Rect dst{x, y, surf->w, surf->h};
-        SDL_RenderCopy(renderer, tex, nullptr, &dst);
-        SDL_DestroyTexture(tex);
-    }
-    SDL_FreeSurface(surf);
-    TTF_CloseFont(font);
+    simple_label_cache().draw(renderer, DMStyles::Label(), text, x, y);
 }
 
 bool is_trail_room(const Room* room) {
@@ -629,6 +719,7 @@ DevControls::~DevControls() {
     restore_filter_hidden_assets();
     manifest_store_.flush();
     AssetInfo::set_manifest_store_provider({});
+    simple_label_cache().clear();
 }
 
 devmode::core::ManifestStore& DevControls::manifest_store() {

@@ -399,23 +399,38 @@ void SearchAssets::filter_assets() {
         } catch (...) {
         }
     }
-    buttons_.clear();
-    button_widgets_.clear();
-    DockableCollapsible::Rows rows;
-    rows.push_back({ query_widget_.get() });
-    for (const auto& r : results_) {
-        auto b = std::make_unique<DMButton>(r.label, &DMStyles::ListButton(), 200, DMButton::height());
-        auto bw = std::make_unique<ButtonWidget>(b.get(), [this, value = r.value, is_tag = r.is_tag]() {
+    if (buttons_.size() < results_.size()) {
+        size_t start = buttons_.size();
+        buttons_.reserve(results_.size());
+        button_widgets_.reserve(results_.size());
+        for (size_t i = start; i < results_.size(); ++i) {
+            auto b = std::make_unique<DMButton>("", &DMStyles::ListButton(), 200, DMButton::height());
+            auto bw = std::make_unique<ButtonWidget>(b.get());
+            buttons_.push_back(std::move(b));
+            button_widgets_.push_back(std::move(bw));
+        }
+    }
+    for (size_t i = 0; i < results_.size(); ++i) {
+        const auto& r = results_[i];
+        buttons_[i]->set_text(r.label);
+        button_widgets_[i]->set_on_click([this, value = r.value, is_tag = r.is_tag]() {
             std::string v = value;
             if (is_tag) v = "#" + v;
             if (cb_) cb_(v);
             close();
         });
-        buttons_.push_back(std::move(b));
-        button_widgets_.push_back(std::move(bw));
-        rows.push_back({ button_widgets_.back().get() });
     }
-    panel_->set_rows(rows);
+    bool row_count_changed = !rows_initialized_ || last_result_row_count_ != results_.size();
+    if (row_count_changed) {
+        DockableCollapsible::Rows rows;
+        rows.push_back({ query_widget_.get() });
+        for (size_t i = 0; i < results_.size(); ++i) {
+            rows.push_back({ button_widgets_[i].get() });
+        }
+        panel_->set_rows(rows);
+        last_result_row_count_ = results_.size();
+        rows_initialized_ = true;
+    }
     Input dummy;
     panel_->update(dummy, screen_w_, screen_h_);
 }

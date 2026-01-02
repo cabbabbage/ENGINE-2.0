@@ -137,22 +137,22 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             },
             {
-              "needs_rebuild": true
+              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -3082,6 +3082,39 @@
           "frames": [
             {
               "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3612,6 +3645,21 @@
           "frames": [
             {
               "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3678,6 +3726,27 @@
           "frames": [
             {
               "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -3709,6 +3778,27 @@
           "crop_frames": true,
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
             {
               "needs_rebuild": false
             }
@@ -6967,7 +7057,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726563,
+            "offset": 658.9600219726562,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }

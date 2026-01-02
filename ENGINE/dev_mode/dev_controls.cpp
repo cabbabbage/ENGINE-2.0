@@ -1511,8 +1511,9 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         SDL_Color minor{0, 255, 255, 48};
         SDL_Color major{0, 255, 255, 80};
 
-        SDL_FPoint top_left_world = cam.screen_to_map(SDL_Point{0, 0});
-        SDL_FPoint bottom_right_world = cam.screen_to_map(SDL_Point{screen_w_, screen_h_});
+        auto [view_min_x, view_min_y, view_max_x, view_max_y] = cam.get_current_view().get_bounds();
+        SDL_FPoint top_left_world{static_cast<float>(view_min_x), static_cast<float>(view_min_y)};
+        SDL_FPoint bottom_right_world{static_cast<float>(view_max_x), static_cast<float>(view_max_y)};
         const float cam_scale = std::max(0.0001f, static_cast<float>(cam.get_scale()));
 
         int cell = std::max(1, grid_cell_size_px_);

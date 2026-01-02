@@ -7,6 +7,7 @@ import math
 import multiprocessing
 import os
 import shutil
+import stat
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -174,6 +175,50 @@ def compute_crop_bounds(frame_paths: List[Path]) -> Optional[Dict[str, int]]:
         "width": int(base_w),
         "height": int(base_h),
     }
+
+
+def _ensure_writable(path: Path) -> None:
+    if not path.exists():
+        return
+    try:
+        path.chmod(path.stat().st_mode | stat.S_IWRITE)
+    except Exception:
+        pass
+
+
+def _best_effort_rmtree(target: Path) -> None:
+    """Attempt to delete a directory tree while tolerating permission issues."""
+    if not target.exists():
+        return
+    try:
+        shutil.rmtree(target)
+        return
+    except PermissionError:
+        LOGGER.warning("Permission denied while clearing cache '%s'; trying best-effort cleanup.", target)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        LOGGER.warning("Failed to remove cache '%s': %s; attempting best-effort cleanup.", target, exc)
+
+    for root, dirs, files in os.walk(target, topdown=False):
+        for name in files:
+            file_path = Path(root) / name
+            _ensure_writable(file_path)
+            try:
+                file_path.unlink()
+            except Exception as exc:
+                LOGGER.debug("Cleanup: failed to unlink %s: %s", file_path, exc)
+        for name in dirs:
+            dir_path = Path(root) / name
+            _ensure_writable(dir_path)
+            try:
+                dir_path.rmdir()
+            except Exception as exc:
+                LOGGER.debug("Cleanup: failed to rmdir %s: %s", dir_path, exc)
+
+    _ensure_writable(target)
+    try:
+        target.rmdir()
+    except Exception as exc:  # pragma: no cover - best-effort fallback
+        LOGGER.warning("Cleanup: unable to delete cache directory '%s'; stale files may remain: %s", target, exc)
 
 
 def scale_crop_bounds(bounds: Dict[str, int], scale_factor: float) -> Optional[Tuple[int, int, int, int]]:
@@ -445,8 +490,7 @@ class AssetTool:
                 )
 
             anim_cache_root = asset_cache_root / anim_id
-            if anim_cache_root.exists():
-                shutil.rmtree(anim_cache_root)
+            _best_effort_rmtree(anim_cache_root)
 
             had_errors = False
 

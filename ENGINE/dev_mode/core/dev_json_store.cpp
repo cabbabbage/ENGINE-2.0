@@ -221,6 +221,13 @@ struct DevJsonStore::Impl {
                 const nlohmann::json& data,
                 int indent) {
 #ifdef DEV_MODE_DISABLE_JSON_DEBOUNCE
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto it = digest_cache_.find(path);
+            if (it != digest_cache_.end() && it->second.valid && it->second.data == data) {
+                return;
+            }
+        }
         std::ostringstream errors;
         std::string payload = data.dump(indent);
         if (!write_file(path, payload, errors)) {
@@ -238,12 +245,28 @@ struct DevJsonStore::Impl {
         }
         log_info("[DevJsonStore] Wrote '" + path.string() + "' (synchronous)");
 #else
+        const auto now = std::chrono::steady_clock::now();
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto cache_it = digest_cache_.find(path);
+            if (cache_it != digest_cache_.end() && cache_it->second.valid && cache_it->second.data == data) {
+                return;
+            }
+            auto pending_it = pending_writes_.find(path);
+            if (pending_it != pending_writes_.end() && pending_it->second.data == data) {
+                pending_it->second.deadline = now + kDefaultDebounce;
+                pending_it->second.coalesce_count += 1;
+                cv_.notify_one();
+                return;
+            }
+        }
+
         PendingWrite pending;
         pending.path = path;
         pending.data = data;
         pending.serialized = data.dump(indent);
         pending.hash = std::hash<std::string>{}(pending.serialized);
-        pending.deadline = std::chrono::steady_clock::now() + kDefaultDebounce;
+        pending.deadline = now + kDefaultDebounce;
         pending.coalesce_count = 1;
 
         {

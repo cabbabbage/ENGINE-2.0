@@ -244,11 +244,46 @@ manifest_writer_(std::move(manifest_writer))
 
         inherits_map_assets_ = assets_json.value("inherits_map_assets", false);
 
-        camera_height_px = std::clamp(assets_json.value("camera_height_px", 1000), 1, 2000);
-        camera_tilt_deg = std::clamp(assets_json.value("camera_tilt_deg", 60.0f), 0.0f, 150.0f);
-        camera_y_distance_px = std::clamp(assets_json.value("camera_y_distance_px", 0), 0, 2000);
-        camera_zoom_percent = std::clamp(assets_json.value("camera_zoom_percent", 0), 0, 100);
-        camera_pan_y_percent = std::clamp(assets_json.value("camera_pan_y_percent", 0), -100, 100);
+        const nlohmann::json* map_camera_settings = nullptr;
+        if (map_info_root_ && map_info_root_->is_object()) {
+                auto it = map_info_root_->find("camera_settings");
+                if (it != map_info_root_->end() && it->is_object()) {
+                        map_camera_settings = &(*it);
+                }
+        }
+        auto read_number = [](const nlohmann::json* src, const char* key, double fallback) {
+                if (!src || !src->is_object()) {
+                        return fallback;
+                }
+                auto it = src->find(key);
+                if (it == src->end() || !it->is_number()) {
+                        return fallback;
+                }
+                const double value = it->get<double>();
+                if (!std::isfinite(value)) {
+                        return fallback;
+                }
+                return value;
+        };
+        const int default_camera_height =
+                std::clamp(static_cast<int>(std::lround(read_number(map_camera_settings, "camera_height_px", 1000.0))), 1, 2000);
+        const float default_camera_tilt = std::clamp(
+                static_cast<float>(read_number(map_camera_settings, "camera_tilt_deg", 60.0)), 0.0f, 150.0f);
+        const int default_camera_y_distance =
+                std::clamp(static_cast<int>(std::lround(read_number(map_camera_settings, "camera_y_distance_px", 0.0))), 0, 2000);
+
+        auto read_room_int = [&](const char* key, int fallback) {
+                return static_cast<int>(std::lround(read_number(&assets_json, key, static_cast<double>(fallback))));
+        };
+        auto read_room_float = [&](const char* key, float fallback) {
+                return static_cast<float>(read_number(&assets_json, key, static_cast<double>(fallback)));
+        };
+
+        camera_height_px = std::clamp(read_room_int("camera_height_px", default_camera_height), 1, 2000);
+        camera_tilt_deg = std::clamp(read_room_float("camera_tilt_deg", default_camera_tilt), 0.0f, 150.0f);
+        camera_y_distance_px = std::clamp(read_room_int("camera_y_distance_px", default_camera_y_distance), 0, 2000);
+        camera_zoom_percent = std::clamp(read_room_int("camera_zoom_percent", 0), 0, 100);
+        camera_pan_y_percent = std::clamp(read_room_int("camera_pan_y_percent", 0), -100, 100);
 
         load_named_areas_from_json();
         int map_radius_int = static_cast<int>(std::round(map_radius));

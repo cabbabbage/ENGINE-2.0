@@ -46,14 +46,6 @@
 
 namespace {
 
-void dev_mode_trace(const std::string& message) {
-    try {
-        vibble::log::debug(std::string{"[DevMode] "} + message);
-    } catch (...) {
-
-    }
-}
-
 std::uint64_t hash_active_asset_list(const std::vector<Asset*>& list) {
     std::uint64_t hash = static_cast<std::uint64_t>(list.size());
     constexpr std::uint64_t prime = 1469598103934665603ull;
@@ -580,6 +572,13 @@ void Assets::update_filtered_active_assets() {
         filtered_active_assets_source_hash_ = active_hash;
         filtered_active_assets_filter_version_ = filter_version;
     } else {
+        if (filtered_active_assets.empty() &&
+            filtered_active_assets_hash_ == 0 &&
+            filtered_active_assets_source_hash_ == 0 &&
+            filtered_active_assets_filter_version_ == 0) {
+            return;
+        }
+
         filtered_active_assets.clear();
         filtered_active_assets_hash_ = hash_active_asset_list(filtered_active_assets);
         filtered_active_assets_source_hash_ = 0;
@@ -615,25 +614,21 @@ void Assets::ensure_dev_controls() {
 
     const char* msg_create = "[Assets] Creating Dev Controls";
     std::cout << msg_create << "\n";
-    dev_mode_trace(msg_create);
 
     DevControls* created = nullptr;
     try {
         created = new DevControls(this, screen_width, screen_height);
     } catch (const std::exception& ex) {
         std::cout << "[Assets] Dev Controls constructor threw: " << ex.what() << "\n";
-        dev_mode_trace(std::string{"[Assets] Dev Controls constructor threw: "} + ex.what());
         created = nullptr;
     } catch (...) {
         std::cout << "[Assets] Dev Controls constructor threw unknown error\n";
-        dev_mode_trace("[Assets] Dev Controls constructor threw unknown error");
         created = nullptr;
     }
 
     if (!created) {
         const char* msg_fail = "[Assets] Failed to allocate Dev Controls";
         std::cout << msg_fail << "\n";
-        dev_mode_trace(msg_fail);
 
         suppress_dev_renderer_ = false;
         return;
@@ -642,39 +637,27 @@ void Assets::ensure_dev_controls() {
     dev_controls_ = created;
     const char* msg_constructed = "[Assets] Dev Controls constructed, wiring context";
     std::cout << msg_constructed << "\n";
-    dev_mode_trace(msg_constructed);
 
     try {
         reset_dev_controls_current_room_cache();
 
-        dev_mode_trace("[Assets] Dev Controls -> set_player");
         dev_controls_->set_player(player);
-        dev_mode_trace("[Assets] Dev Controls -> set_active_assets");
         dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
-        dev_mode_trace("[Assets] Dev Controls -> sync_current_room");
         sync_dev_controls_current_room(current_room_, true);
-        dev_mode_trace("[Assets] Dev Controls -> set_screen_dimensions");
         dev_controls_->set_screen_dimensions(screen_width, screen_height);
-        dev_mode_trace("[Assets] Dev Controls -> set_rooms");
         dev_controls_->set_rooms(&rooms_, rooms_generation_);
-        dev_mode_trace("[Assets] Dev Controls -> set_input");
         dev_controls_->set_input(input);
-        dev_mode_trace("[Assets] Dev Controls -> set_map_info");
         dev_controls_->set_map_info(&map_info_json_, [this]() { return on_map_light_changed(); });
-        dev_mode_trace("[Assets] Dev Controls -> set_map_context");
         dev_controls_->set_map_context(&map_info_json_, map_path_);
 
         suppress_dev_renderer_ = false;
-        dev_mode_trace("[Assets] Dev Controls wiring complete");
     } catch (const std::exception& ex) {
         std::cout << "[Assets] Failed to wire Dev Controls: " << ex.what() << "\n";
-        dev_mode_trace(std::string{"[Assets] Failed to wire Dev Controls: "} + ex.what());
 
         delete dev_controls_;
         dev_controls_ = nullptr;
     } catch (...) {
         std::cout << "[Assets] Failed to wire Dev Controls: unknown error\n";
-        dev_mode_trace("[Assets] Failed to wire Dev Controls: unknown error");
         delete dev_controls_;
         dev_controls_ = nullptr;
     }

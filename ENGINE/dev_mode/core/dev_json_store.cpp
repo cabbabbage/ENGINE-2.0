@@ -45,7 +45,6 @@ struct PendingWrite {
     std::string serialized;
     std::size_t hash{};
     std::chrono::steady_clock::time_point deadline;
-    std::size_t coalesce_count = 0;
 };
 
 void log_error(const std::string& message) {
@@ -243,7 +242,6 @@ struct DevJsonStore::Impl {
             std::lock_guard<std::mutex> lock(mutex_);
             digest_cache_[path] = DigestEntry{mtime, std::hash<std::string>{}(payload), data, true};
         }
-        log_info("[DevJsonStore] Wrote '" + path.string() + "' (synchronous)");
 #else
         const auto now = std::chrono::steady_clock::now();
         {
@@ -255,7 +253,6 @@ struct DevJsonStore::Impl {
             auto pending_it = pending_writes_.find(path);
             if (pending_it != pending_writes_.end() && pending_it->second.data == data) {
                 pending_it->second.deadline = now + kDefaultDebounce;
-                pending_it->second.coalesce_count += 1;
                 cv_.notify_one();
                 return;
             }
@@ -267,7 +264,6 @@ struct DevJsonStore::Impl {
         pending.serialized = data.dump(indent);
         pending.hash = std::hash<std::string>{}(pending.serialized);
         pending.deadline = now + kDefaultDebounce;
-        pending.coalesce_count = 1;
 
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -277,7 +273,6 @@ struct DevJsonStore::Impl {
                 it->second.serialized = pending.serialized;
                 it->second.hash = pending.hash;
                 it->second.deadline = pending.deadline;
-                it->second.coalesce_count += 1;
             } else {
                 pending_writes_.emplace(path, std::move(pending));
             }
@@ -385,7 +380,6 @@ struct DevJsonStore::Impl {
             nlohmann::json data;
             std::size_t hash{};
             std::filesystem::file_time_type mtime{};
-            std::size_t coalesce_count{};
             bool success = false;
 };
 
@@ -393,13 +387,11 @@ struct DevJsonStore::Impl {
         results.reserve(writes.size());
 
         std::ostringstream error_buffer;
-        std::vector<std::pair<std::string, std::size_t>> flushed_paths;
         for (auto& pending : writes) {
             Result result;
             result.path = pending.path;
             result.data = pending.data;
             result.hash = pending.hash;
-            result.coalesce_count = pending.coalesce_count;
 
             std::ostringstream local_errors;
             if (write_file(pending.path, pending.serialized, local_errors)) {
@@ -410,26 +402,11 @@ struct DevJsonStore::Impl {
                     error_buffer << "[DevJsonStore] last_write_time('" << pending.path.string() << "') failed after write: " << ec.message() << "\n";
                 }
                 result.success = true;
-                flushed_paths.emplace_back(pending.path.string(), pending.coalesce_count);
             } else {
                 error_buffer << local_errors.str();
             }
 
             results.push_back(std::move(result));
-        }
-
-        if (!flushed_paths.empty()) {
-            std::string message = "[DevJsonStore] Flushed " + std::to_string(flushed_paths.size()) + " JSON file(s): ";
-            for (size_t i = 0; i < flushed_paths.size(); ++i) {
-                message += flushed_paths[i].first;
-                message += " (coalesced: ";
-                message += std::to_string(flushed_paths[i].second);
-                message += ')';
-                if (i + 1 < flushed_paths.size()) {
-                    message += ", ";
-                }
-            }
-            log_info(message);
         }
 
         if (!error_buffer.str().empty()) {

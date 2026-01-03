@@ -80,12 +80,6 @@ namespace {
 
 using vibble::strings::to_lower_copy;
 
-void dev_mode_trace(const std::string& message) {
-    try {
-        vibble::log::debug(std::string{"[DevMode] "} + message);
-    } catch (...) {}
-}
-
 constexpr const char* kModeIdRoom = "room";
 constexpr const char* kModeIdMap = "map";
 constexpr int kPopupOutlineThickness = 1;
@@ -473,7 +467,6 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
       screen_w_(screen_w),
       screen_h_(screen_h) {
     const char* ctor_start = "[DevControls] ctor start";
-    dev_mode_trace(ctor_start);
     std::cout << ctor_start << "\n";
 
     grid_overlay_enabled_ = devmode::ui_settings::load_bool(kGridOverlayEnabledKey, false);
@@ -708,7 +701,6 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         sync_header_button_states();
     });
     const char* ctor_end = "[DevControls] ctor complete";
-    dev_mode_trace(ctor_end);
     std::cout << ctor_end << "\n";
     AssetInfo::set_manifest_store_provider([this]() -> devmode::core::ManifestStore* {
         return &manifest_store_;
@@ -846,7 +838,10 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
         std::ostringstream oss;
         oss << "[DevControls] set_current_room begin -> "
             << (room ? room->room_name : std::string("<null>"));
-        dev_mode_trace(oss.str());
+        const std::string msg = oss.str();
+        try {
+            vibble::log::debug(msg);
+        } catch (...) {}
     }
     current_room_ = room;
 
@@ -859,7 +854,9 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
     }
     if (regenerate_popup_) regenerate_popup_->close();
     if (room_editor_) {
-        dev_mode_trace("[DevControls] set_current_room -> room_editor set_current_room");
+        try {
+            vibble::log::debug("[DevControls] set_current_room -> room_editor set_current_room");
+        } catch (...) {}
         room_editor_->set_current_room(room);
     }
     asset_filter_.set_current_room(room);
@@ -874,7 +871,9 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
 
     mark_layout_dirty();
 
-    dev_mode_trace("[DevControls] set_current_room complete");
+    try {
+        vibble::log::debug("[DevControls] set_current_room complete");
+    } catch (...) {}
 }
 
 void DevControls::set_rooms(std::vector<Room*>* rooms, std::size_t generation) {
@@ -974,12 +973,10 @@ void DevControls::set_enabled(bool enabled) {
         std::ostringstream oss;
         oss << "[DevControls] set_enabled(" << (enabled ? "true" : "false") << ") begin";
         const std::string msg = oss.str();
-        dev_mode_trace(msg);
         std::cout << msg << "\n";
     }
     if (enabled == enabled_) {
         const char* msg = "[DevControls] set_enabled unchanged, exiting";
-        dev_mode_trace(msg);
         std::cout << msg << "\n";
         return;
     }
@@ -989,7 +986,6 @@ void DevControls::set_enabled(bool enabled) {
 
     if (enabled_) {
         const char* msg = "[DevControls] preparing enable flow";
-        dev_mode_trace(msg);
         std::cout << msg << "\n";
         WarpedScreenGrid* camera_ptr = assets_ ? &assets_->getView() : nullptr;
         SDL_Point preserved_center{0, 0};
@@ -1025,11 +1021,9 @@ void DevControls::set_enabled(bool enabled) {
         }
         apply_dark_mask_visibility();
         const char* msg_enable_done = "[DevControls] enable flow complete";
-        dev_mode_trace(msg_enable_done);
         std::cout << msg_enable_done << "\n";
     } else {
         const char* msg_disable = "[DevControls] preparing disable flow";
-        dev_mode_trace(msg_disable);
         std::cout << msg_disable << "\n";
         close_all_floating_panels();
         if (map_editor_ && map_editor_->is_enabled()) {
@@ -1050,7 +1044,6 @@ void DevControls::set_enabled(bool enabled) {
             assets_->set_render_dark_mask_enabled(true);
         }
         const char* msg_disable_done = "[DevControls] disable flow complete";
-        dev_mode_trace(msg_disable_done);
         std::cout << msg_disable_done << "\n";
     }
 
@@ -1063,7 +1056,6 @@ void DevControls::set_enabled(bool enabled) {
         std::ostringstream oss;
         oss << "[DevControls] set_enabled(" << (enabled ? "true" : "false") << ") done";
         const std::string msg = oss.str();
-        dev_mode_trace(msg);
         std::cout << msg << "\n";
     }
 }

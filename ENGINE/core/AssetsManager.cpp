@@ -890,9 +890,6 @@ void Assets::update(const Input& input)
         }
     }
 
-    mark_non_player_update_buffer_dirty();
-    rebuild_non_player_update_buffer_if_needed();
-
     update_audio_camera_metrics();
 
     if (dev_controls_ && dev_controls_->is_enabled()) {
@@ -910,20 +907,21 @@ void Assets::update(const Input& input)
         rebuild_active_assets_if_needed();
     }
 
+    bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
     const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
     std::uint64_t dev_filter_version = 0;
     if (dev_controls_enabled) {
         dev_filter_version = dev_controls_->asset_filter_state_version();
         if (!last_dev_controls_enabled_ || dev_filter_version != last_dev_filter_state_version_) {
-            needs_filtered_active_refresh_ = true;
+            needs_filtered_active_refresh = true;
         }
     } else if (last_dev_controls_enabled_) {
-        needs_filtered_active_refresh_ = true;
+        needs_filtered_active_refresh = true;
     }
     last_dev_controls_enabled_ = dev_controls_enabled;
     last_dev_filter_state_version_ = dev_controls_enabled ? dev_filter_version : 0;
 
-    if (needs_filtered_active_refresh_) {
+    if (needs_filtered_active_refresh) {
         needs_filtered_active_refresh_ = false;
         update_filtered_active_assets();
         if (dev_controls_enabled) {
@@ -2147,8 +2145,14 @@ void Assets::rebuild_active_from_screen_grid() {
     active_static_light_assets_ = std::move(new_static_lights);
     active_moving_light_assets_ = std::move(new_moving_lights);
     active_assets_dirty_.store(false, std::memory_order_release);
-    mark_non_player_update_buffer_dirty();
-    needs_filtered_active_refresh_ = true;
+    const bool active_changed =
+        previous_active.size() != active_assets.size() ||
+        std::any_of(active_assets.begin(), active_assets.end(),
+                    [&](Asset* asset) { return previous_active.find(asset) == previous_active.end(); });
+    if (active_changed) {
+        mark_non_player_update_buffer_dirty();
+        needs_filtered_active_refresh_ = true;
+    }
 
     for (Asset* asset : active_assets) {
         if (!asset) {

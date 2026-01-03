@@ -21,4 +21,6 @@ private:
     bool pan_drag_pending_ = false;
     SDL_Point pan_start_mouse_screen_{0, 0};
     SDL_Point pan_start_center_{0, 0};
+    SDL_Point last_pan_center_{0, 0};
+    bool has_last_pan_center_ = false;
 };

@@ -748,10 +748,6 @@ void Assets::update(const Input& input)
     if (process_removals()) {
         mark_active_assets_dirty();
         rebuild_active_assets_if_needed();
-        update_filtered_active_assets();
-        if (dev_controls_ && dev_controls_->is_enabled()) {
-            dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
-        }
     }
 
     Room* detected_room = finder_ ? finder_->getCurrentRoom() : nullptr;
@@ -899,28 +895,40 @@ void Assets::update(const Input& input)
 
     update_audio_camera_metrics();
 
-    update_filtered_active_assets();
     if (dev_controls_ && dev_controls_->is_enabled()) {
-        dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
         sync_dev_controls_current_room(current_room_);
         dev_controls_->update(input);
 
         dev_controls_->update_ui(input);
 
-        const bool grid_updated_after_dev_controls = maybe_rebuild_world_grid();
-        if (grid_updated_after_dev_controls) {
-            update_filtered_active_assets();
-            dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
-        }
+        maybe_rebuild_world_grid();
     }
 
     register_pending_static_assets();
     if (process_removals()) {
         mark_active_assets_dirty();
         rebuild_active_assets_if_needed();
+    }
+
+    const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
+    std::uint64_t dev_filter_version = 0;
+    if (dev_controls_enabled) {
+        dev_filter_version = dev_controls_->asset_filter_state_version();
+        if (!last_dev_controls_enabled_ || dev_filter_version != last_dev_filter_state_version_) {
+            needs_filtered_active_refresh_ = true;
+        }
+    } else if (last_dev_controls_enabled_) {
+        needs_filtered_active_refresh_ = true;
+    }
+    last_dev_controls_enabled_ = dev_controls_enabled;
+    last_dev_filter_state_version_ = dev_controls_enabled ? dev_filter_version : 0;
+
+    if (needs_filtered_active_refresh_) {
+        needs_filtered_active_refresh_ = false;
         update_filtered_active_assets();
-        if (dev_controls_ && dev_controls_->is_enabled()) {
+        if (dev_controls_enabled) {
             dev_controls_->set_active_assets(filtered_active_assets, dev_active_state_version_);
+            sync_dev_controls_current_room(current_room_);
         }
     }
 
@@ -1165,6 +1173,7 @@ void Assets::initialize_active_assets(SDL_Point ) {
     active_moving_light_assets_ = std::move(new_moving_lights);
     active_assets_dirty_.store(false, std::memory_order_release);
     mark_non_player_update_buffer_dirty();
+    needs_filtered_active_refresh_ = true;
 }
 
 void Assets::touch_dev_active_state_version() {
@@ -1176,6 +1185,7 @@ void Assets::touch_dev_active_state_version() {
 
 void Assets::mark_active_assets_dirty() {
     active_assets_dirty_.store(true, std::memory_order_release);
+    needs_filtered_active_refresh_ = true;
 }
 
 Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
@@ -2138,6 +2148,7 @@ void Assets::rebuild_active_from_screen_grid() {
     active_moving_light_assets_ = std::move(new_moving_lights);
     active_assets_dirty_.store(false, std::memory_order_release);
     mark_non_player_update_buffer_dirty();
+    needs_filtered_active_refresh_ = true;
 
     for (Asset* asset : active_assets) {
         if (!asset) {

@@ -338,5 +338,8 @@ private:
     std::vector<SDL_Rect> culled_debug_rects_;
     std::uint64_t filtered_active_assets_source_hash_ = 0;
     std::uint64_t filtered_active_assets_filter_version_ = 0;
+    bool needs_filtered_active_refresh_ = true;
+    bool last_dev_controls_enabled_ = false;
+    std::uint64_t last_dev_filter_state_version_ = 0;
 };
 #include "utils/map_grid_settings.hpp"

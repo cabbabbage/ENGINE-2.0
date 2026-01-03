@@ -916,17 +916,20 @@ void WorldGrid::update_active_chunks(const SDL_Rect& camera_world, int margin_px
 
     chunks_.clear_active();
     auto& active = chunks_.active();
-    const auto& storage = chunks_.storage();
-    active.reserve(storage.size());
-    for (const auto& chunk : storage) {
-        if (!chunk) {
-            continue;
-        }
-        if (chunk->world_bounds.w <= 0 || chunk->world_bounds.h <= 0) {
-            continue;
-        }
-        if (SDL_HasIntersection(&chunk->world_bounds, &expanded) == SDL_TRUE) {
-            active.push_back(chunk.get());
+    const int chunk_step = 1 << r_chunk_;
+    if (chunk_step > 0 && expanded.w > 0 && expanded.h > 0) {
+        const int min_i = grid_floor_div(expanded.x - origin_.x, chunk_step);
+        const int min_j = grid_floor_div(expanded.y - origin_.y, chunk_step);
+        const int max_i = grid_floor_div(expanded.x + expanded.w - 1 - origin_.x, chunk_step);
+        const int max_j = grid_floor_div(expanded.y + expanded.h - 1 - origin_.y, chunk_step);
+        if (max_i >= min_i && max_j >= min_j) {
+            for (int i = min_i; i <= max_i; ++i) {
+                for (int j = min_j; j <= max_j; ++j) {
+                    if (Chunk* chunk = chunks_.find(i, j)) {
+                        active.push_back(chunk);
+                    }
+                }
+            }
         }
     }
 

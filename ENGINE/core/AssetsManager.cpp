@@ -692,6 +692,7 @@ void Assets::set_input(Input* m) {
 
 void Assets::update(const Input& input)
 {
+    ++frame_id_;
     const std::uint64_t now_counter = SDL_GetPerformanceCounter();
     float dt = 1.0f / 60.0f;
     if (last_frame_counter_ != 0 && perf_counter_frequency_ > 0.0) {
@@ -841,13 +842,12 @@ void Assets::update(const Input& input)
 
     culled_debug_rects_.clear();
 
-    std::vector<Asset*> prev_static_lights = active_static_light_assets_;
-    std::vector<Asset*> prev_moving_lights = active_moving_light_assets_;
-    const bool grid_updated = maybe_rebuild_world_grid();
+    maybe_rebuild_world_grid();
 
-    if (grid_updated) {
-        const bool static_changed = (prev_static_lights != active_static_light_assets_);
-        const bool moving_changed = (prev_moving_lights != active_moving_light_assets_);
+    const std::uint64_t current_light_assets_version = light_assets_version_;
+    if (current_light_assets_version != last_seen_light_assets_version_) {
+        const bool static_changed = (last_static_light_assets_ != active_static_light_assets_);
+        const bool moving_changed = (last_moving_light_assets_ != active_moving_light_assets_);
 
         if (static_changed) {
             notify_light_map_static_assets_changed();
@@ -862,7 +862,7 @@ void Assets::update(const Input& input)
                 }
             }
 
-            for (Asset* asset : prev_moving_lights) {
+            for (Asset* asset : active_moving_light_lookup_) {
                 if (scratch_moving_light_lookup_.find(asset) == scratch_moving_light_lookup_.end()) {
                     notify_light_map_asset_moved(asset);
                 }
@@ -871,6 +871,10 @@ void Assets::update(const Input& input)
             active_moving_light_lookup_.swap(scratch_moving_light_lookup_);
             scratch_moving_light_lookup_.clear();
         }
+
+        last_static_light_assets_ = active_static_light_assets_;
+        last_moving_light_assets_ = active_moving_light_assets_;
+        last_seen_light_assets_version_ = current_light_assets_version;
     }
 
     update_audio_camera_metrics();
@@ -1285,9 +1289,17 @@ void Assets::initialize_active_assets(SDL_Point ) {
         }
     }
 
+    const bool light_assets_changed =
+        active_light_assets_ != new_light_assets ||
+        active_static_light_assets_ != new_static_lights ||
+        active_moving_light_assets_ != new_moving_lights;
+
     active_light_assets_        = std::move(new_light_assets);
     active_static_light_assets_ = std::move(new_static_lights);
     active_moving_light_assets_ = std::move(new_moving_lights);
+    if (light_assets_changed) {
+        ++light_assets_version_;
+    }
     active_assets_dirty_.store(false, std::memory_order_release);
     mark_non_player_update_buffer_dirty();
     needs_filtered_active_refresh_ = true;
@@ -1349,6 +1361,7 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
 }
 
 void Assets::rebuild_from_grid_state() {
+    ++frame_id_;
     rebuild_all_assets_from_grid();
     initialize_active_assets(camera_.get_screen_center());
     refresh_filtered_active_assets();
@@ -2175,11 +2188,14 @@ void Assets::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& i
     }
 }
 void Assets::rebuild_active_from_screen_grid() {
-    std::unordered_set<Asset*> previous_active(active_assets.begin(), active_assets.end());
+    const std::uint32_t current_frame_id = frame_id_;
+    const std::uint32_t previous_active_frame_id = last_active_rebuild_frame_id_;
+    bool active_changed = false;
+    std::vector<Asset*> newly_active_assets;
+    newly_active_assets.reserve(active_assets.size());
 
     active_points_.clear();
 
-    std::unordered_set<Asset*> seen;
     visible_candidate_buffer_.clear();
     visible_candidate_buffer_.reserve(camera_.get_visible_points().size() * 2);
 
@@ -2198,7 +2214,8 @@ void Assets::rebuild_active_from_screen_grid() {
         active_points_.push_back(point);
         for (const auto& occ : point->occupants) {
             Asset* asset = occ.get();
-            if (asset && seen.insert(asset).second) {
+            if (asset && asset->last_visible_frame_id != current_frame_id) {
+                asset->last_visible_frame_id = current_frame_id;
                 visible_candidate_buffer_.push_back(asset);
             }
         }
@@ -2239,24 +2256,44 @@ void Assets::rebuild_active_from_screen_grid() {
         return lhs < rhs;
     };
 
-    std::unordered_set<Asset*> visible_set(visible_candidate_buffer_.begin(), visible_candidate_buffer_.end());
-
     active_assets.erase(std::remove_if(active_assets.begin(),
                                        active_assets.end(),
                                        [&](Asset* asset) {
-                                           return visible_set.find(asset) == visible_set.end();
+                                           if (!asset) {
+                                               return true;
+                                           }
+                                           const bool is_visible = asset->last_visible_frame_id == current_frame_id;
+                                           if (!is_visible) {
+                                               if (asset->last_active_frame_id == previous_active_frame_id) {
+                                                   active_changed = true;
+                                               }
+                                               return true;
+                                           }
+                                           const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
+                                           if (!was_active) {
+                                               newly_active_assets.push_back(asset);
+                                               active_changed = true;
+                                           }
+                                           asset->last_active_frame_id = current_frame_id;
+                                           return false;
                                        }),
                         active_assets.end());
 
-    std::unordered_set<Asset*> active_lookup(active_assets.begin(), active_assets.end());
     for (Asset* asset : visible_candidate_buffer_) {
         if (!asset) {
             continue;
         }
-        if (active_lookup.insert(asset).second) {
-            auto insert_pos = std::lower_bound(active_assets.begin(), active_assets.end(), asset, depth_order);
-            active_assets.insert(insert_pos, asset);
+        if (asset->last_active_frame_id == current_frame_id) {
+            continue;
         }
+        const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
+        auto insert_pos = std::lower_bound(active_assets.begin(), active_assets.end(), asset, depth_order);
+        active_assets.insert(insert_pos, asset);
+        asset->last_active_frame_id = current_frame_id;
+        if (!was_active) {
+            newly_active_assets.push_back(asset);
+        }
+        active_changed = true;
     }
 
     if (!std::is_sorted(active_assets.begin(), active_assets.end(), depth_order)) {
@@ -2292,22 +2329,17 @@ void Assets::rebuild_active_from_screen_grid() {
     active_static_light_assets_ = std::move(new_static_lights);
     active_moving_light_assets_ = std::move(new_moving_lights);
     active_assets_dirty_.store(false, std::memory_order_release);
-    const bool active_changed =
-        previous_active.size() != active_assets.size() ||
-        std::any_of(active_assets.begin(), active_assets.end(),
-                    [&](Asset* asset) { return previous_active.find(asset) == previous_active.end(); });
     if (active_changed) {
         mark_non_player_update_buffer_dirty();
         needs_filtered_active_refresh_ = true;
     }
 
-    for (Asset* asset : active_assets) {
+    for (Asset* asset : newly_active_assets) {
         if (!asset) {
-            continue;
-        }
-        if (previous_active.find(asset) != previous_active.end()) {
             continue;
         }
         asset->update_scale_values();
     }
+
+    last_active_rebuild_frame_id_ = current_frame_id;
 }

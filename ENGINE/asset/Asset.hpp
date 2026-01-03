@@ -267,6 +267,8 @@ class Asset {
     int cached_h = 0;
     std::uint64_t last_render_frame_id = 0;
     std::uint64_t visibility_stamp = 0;
+    std::uint32_t last_visible_frame_id = 0;
+    std::uint32_t last_active_frame_id = 0;
     std::string spawn_id;
     std::string spawn_method;
     std::string owning_room_name_;

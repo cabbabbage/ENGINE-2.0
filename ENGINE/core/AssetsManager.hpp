@@ -231,6 +231,10 @@ private:
     std::vector<Asset*> active_moving_light_assets_;
     std::unordered_set<Asset*> active_moving_light_lookup_;
     std::unordered_set<Asset*> scratch_moving_light_lookup_;
+    std::vector<Asset*> last_static_light_assets_;
+    std::vector<Asset*> last_moving_light_assets_;
+    std::uint64_t light_assets_version_ = 0;
+    std::uint64_t last_seen_light_assets_version_ = 0;
     std::vector<Room*> rooms_;
     std::size_t rooms_generation_ = 0;
     Room* current_room_ = nullptr;
@@ -278,6 +282,8 @@ private:
     Asset* max_asset_height_holder_ = nullptr;
     std::vector<Asset*> visible_candidate_buffer_;
     std::uint64_t active_candidate_generation_ = 0;
+    std::uint32_t frame_id_ = 0;
+    std::uint32_t last_active_rebuild_frame_id_ = 0;
 
     bool pending_initial_rebuild_ = false;
     bool logged_initial_rebuild_warning_ = false;

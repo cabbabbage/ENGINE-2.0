@@ -337,23 +337,6 @@ GridPoint& WorldGrid::ensure_point(SDL_Point grid_index, SDL_Point chunk_index, 
     if (inserted && parent == nullptr) {
         add_root_id(id);
     }
-    if (!inserted) {
-        const bool legacy_identity_mismatch =
-            point.world_x() != canonical_world.x ||
-            point.world_y() != canonical_world.y ||
-            point.world_z() != world_z ||
-            point.resolution_layer() != resolution_layer ||
-            point.grid_index.x != grid_index.x ||
-            point.grid_index.y != grid_index.y ||
-            point.chunk_index.x != chunk_index.x ||
-            point.chunk_index.y != chunk_index.y;
-        if (legacy_identity_mismatch) {
-            vibble::log::warn("[WorldGrid] GridPoint identity mismatch between canonical and legacy fields; these must remain aligned during migration (Phase 1 - 3d_refactor_plan.md).");
-        }
-        // Legacy chunk bindings remain mutable during migration to keep renderers stable.
-        point.chunk_index = chunk_index;
-        point.chunk = owning_chunk;
-    }
     key_to_id_[canonical_key] = id;
     return point;
 }

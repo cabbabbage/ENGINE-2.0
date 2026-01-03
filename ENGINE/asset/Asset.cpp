@@ -1027,7 +1027,7 @@ void Asset::on_scale_factor_changed() {
                 }
         }
         if (assets_) {
-                assets_->invalidate_max_asset_dimensions();
+                assets_->queue_asset_dimension_update(this);
         }
 }
 

@@ -977,6 +977,108 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
 
 void Assets::invalidate_max_asset_dimensions() {
     max_asset_dimensions_dirty_ = true;
+    asset_dimension_update_queue_.clear();
+    asset_dimension_update_lookup_.clear();
+}
+
+void Assets::queue_asset_dimension_update(Asset* asset) {
+    if (!asset) {
+        return;
+    }
+    if (asset_dimension_update_lookup_.insert(asset).second) {
+        asset_dimension_update_queue_.push_back(asset);
+    }
+}
+
+void Assets::remove_asset_dimension_cache(Asset* asset) {
+    if (!asset) {
+        return;
+    }
+    asset_dimension_update_lookup_.erase(asset);
+    asset_dimension_update_queue_.erase(
+        std::remove(asset_dimension_update_queue_.begin(),
+                    asset_dimension_update_queue_.end(),
+                    asset),
+        asset_dimension_update_queue_.end());
+    auto it = asset_dimension_cache_.find(asset);
+    if (it == asset_dimension_cache_.end()) {
+        return;
+    }
+    const bool held_max_width = (max_asset_width_holder_ == asset);
+    const bool held_max_height = (max_asset_height_holder_ == asset);
+    asset_dimension_cache_.erase(it);
+    if (held_max_width || held_max_height) {
+        max_asset_dimensions_dirty_ = true;
+    }
+}
+
+bool Assets::compute_asset_dimension_cache(const Asset* asset,
+                                           float camera_scale,
+                                           AssetDimensionCache& out) const {
+    if (!asset || !asset->info) {
+        return false;
+    }
+    if (asset->info->tillable) {
+        return false;
+    }
+    float scale_factor = 1.0f;
+    if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
+        scale_factor = asset->info->scale_factor;
+    }
+    const float width =
+        static_cast<float>(std::max(1, asset->info->original_canvas_width)) * scale_factor * camera_scale;
+    const float height =
+        static_cast<float>(std::max(1, asset->info->original_canvas_height)) * scale_factor * camera_scale;
+    out.width = width;
+    out.height = height;
+    return width > 0.0f && height > 0.0f;
+}
+
+void Assets::finalize_max_asset_dimensions(float max_width, float max_height) {
+    if (max_width <= 0.0f) {
+        max_width = static_cast<float>(screen_width);
+    }
+    if (max_height <= 0.0f) {
+        max_height = static_cast<float>(screen_height);
+    }
+    max_asset_width_world_  = max_width;
+    max_asset_height_world_ = max_height;
+
+    const float frustum_padding = std::max(max_asset_width_world_, max_asset_height_world_);
+    camera_.set_frustum_padding_world(frustum_padding);
+}
+
+void Assets::rebuild_asset_dimension_cache(float camera_scale) {
+    max_asset_dimensions_dirty_ = false;
+    asset_dimension_cache_.clear();
+    asset_dimension_update_queue_.clear();
+    asset_dimension_update_lookup_.clear();
+    max_asset_width_holder_ = nullptr;
+    max_asset_height_holder_ = nullptr;
+
+    float max_width = 0.0f;
+    float max_height = 0.0f;
+    for (Asset* asset : all) {
+        if (!asset) {
+            continue;
+        }
+        AssetDimensionCache cache;
+        if (!compute_asset_dimension_cache(asset, camera_scale, cache)) {
+            continue;
+        }
+        asset_dimension_cache_.emplace(asset, cache);
+        if (!max_asset_width_holder_ || cache.width >= max_width) {
+            max_width = cache.width;
+            max_asset_width_holder_ = asset;
+        }
+        if (!max_asset_height_holder_ || cache.height >= max_height) {
+            max_height = cache.height;
+            max_asset_height_holder_ = asset;
+        }
+    }
+
+    cached_height_level_ = camera_scale;
+    finalize_max_asset_dimensions(max_width, max_height);
 }
 
 void Assets::update_max_asset_dimensions() {
@@ -986,46 +1088,80 @@ void Assets::update_max_asset_dimensions() {
         const float delta = std::fabs(camera_scale - cached_height_level_) / std::max(cached_height_level_, 0.0001f);
         height_changed = delta > 0.05f;
     }
-    if (!max_asset_dimensions_dirty_ && !height_changed) {
+    if (height_changed) {
+        max_asset_dimensions_dirty_ = true;
+    }
+
+    if (max_asset_dimensions_dirty_) {
+        rebuild_asset_dimension_cache(camera_scale);
         return;
     }
 
-    cached_height_level_ = camera_scale;
-    max_asset_dimensions_dirty_ = false;
+    if (asset_dimension_update_queue_.empty()) {
+        return;
+    }
 
-    float max_height = 0.0f;
-    float max_width  = 0.0f;
-    for (Asset* asset : all) {
-        if (!asset || !asset->info) {
+    bool max_changed = false;
+    bool requires_full_scan = false;
+    for (Asset* asset : asset_dimension_update_queue_) {
+        if (!asset) {
             continue;
         }
-        if (asset->info->tillable) {
+        auto it = asset_dimension_cache_.find(asset);
+        const bool had_cache = it != asset_dimension_cache_.end();
+        const float old_width = had_cache ? it->second.width : 0.0f;
+        const float old_height = had_cache ? it->second.height : 0.0f;
+
+        AssetDimensionCache updated;
+        if (!compute_asset_dimension_cache(asset, camera_scale, updated)) {
+            if (had_cache) {
+                const bool was_width_holder = (max_asset_width_holder_ == asset);
+                const bool was_height_holder = (max_asset_height_holder_ == asset);
+                asset_dimension_cache_.erase(it);
+                if (was_width_holder || was_height_holder) {
+                    requires_full_scan = true;
+                }
+            }
             continue;
         }
-        float scale_factor = 1.0f;
-        if (std::isfinite(asset->info->scale_factor) && asset->info->scale_factor > 0.0f) {
-            scale_factor = asset->info->scale_factor;
+
+        if (had_cache) {
+            if (max_asset_width_holder_ == asset && updated.width < old_width) {
+                requires_full_scan = true;
+            }
+            if (max_asset_height_holder_ == asset && updated.height < old_height) {
+                requires_full_scan = true;
+            }
         }
-        const float width =
-            static_cast<float>(std::max(1, asset->info->original_canvas_width)) * scale_factor * camera_scale;
-        const float height =
-            static_cast<float>(std::max(1, asset->info->original_canvas_height)) * scale_factor * camera_scale;
-        max_width  = std::max(max_width, width);
-        max_height = std::max(max_height, height);
+
+        if (requires_full_scan) {
+            break;
+        }
+
+        asset_dimension_cache_[asset] = updated;
+        if (!max_asset_width_holder_ || updated.width >= max_asset_width_world_) {
+            max_asset_width_world_ = updated.width;
+            max_asset_width_holder_ = asset;
+            max_changed = true;
+        }
+        if (!max_asset_height_holder_ || updated.height >= max_asset_height_world_) {
+            max_asset_height_world_ = updated.height;
+            max_asset_height_holder_ = asset;
+            max_changed = true;
+        }
     }
 
-    if (max_width <= 0.0f) {
-        max_width = static_cast<float>(screen_width);
-    }
-    if (max_height <= 0.0f) {
-        max_height = static_cast<float>(screen_height);
+    asset_dimension_update_queue_.clear();
+    asset_dimension_update_lookup_.clear();
+
+    if (requires_full_scan) {
+        rebuild_asset_dimension_cache(camera_scale);
+        return;
     }
 
-    max_asset_width_world_  = max_width;
-    max_asset_height_world_ = max_height;
-
-    const float frustum_padding = std::max(max_asset_width_world_, max_asset_height_world_);
-    camera_.set_frustum_padding_world(frustum_padding);
+    if (max_changed) {
+        finalize_max_asset_dimensions(max_asset_width_world_, max_asset_height_world_);
+    }
 }
 
 SDL_Rect Assets::screen_world_rect() const {
@@ -1221,7 +1357,7 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
 
     ensure_light_textures_loaded(raw);
 
-    invalidate_max_asset_dimensions();
+    queue_asset_dimension_update(raw);
     mark_grid_dirty();
     mark_active_assets_dirty();
     mark_non_player_update_buffer_dirty();
@@ -1342,11 +1478,34 @@ void Assets::rebuild_all_assets_from_grid() {
     std::sort(collected.begin(), collected.end(),
               [](Asset* lhs, Asset* rhs) { return lhs < rhs; });
     all.reserve(collected.size());
+    asset_dimension_cache_.clear();
+    asset_dimension_update_queue_.clear();
+    asset_dimension_update_lookup_.clear();
+    max_asset_width_holder_ = nullptr;
+    max_asset_height_holder_ = nullptr;
+    float max_width = 0.0f;
+    float max_height = 0.0f;
+    const float camera_scale = 1.0f;
     for (Asset* a : collected) {
         if (a) {
             all.push_back(a);
+            AssetDimensionCache cache;
+            if (compute_asset_dimension_cache(a, camera_scale, cache)) {
+                asset_dimension_cache_.emplace(a, cache);
+                if (!max_asset_width_holder_ || cache.width >= max_width) {
+                    max_width = cache.width;
+                    max_asset_width_holder_ = a;
+                }
+                if (!max_asset_height_holder_ || cache.height >= max_height) {
+                    max_height = cache.height;
+                    max_asset_height_holder_ = a;
+                }
+            }
         }
     }
+    cached_height_level_ = camera_scale;
+    max_asset_dimensions_dirty_ = false;
+    finalize_max_asset_dimensions(max_width, max_height);
 }
 
 bool Assets::rebuild_active_assets_if_needed() {
@@ -1494,6 +1653,8 @@ bool Assets::process_removals() {
             continue;
         }
 
+        remove_asset_dimension_cache(asset);
+
         const bool has_light_sources = asset->info && !asset->info->light_sources.empty();
         const bool moving_light      = has_light_sources && asset->info->moving_asset;
 
@@ -1530,7 +1691,10 @@ bool Assets::process_removals() {
         dev_controls_->clear_selection();
     }
 
-    invalidate_max_asset_dimensions();
+    if (max_asset_dimensions_dirty_) {
+        asset_dimension_update_queue_.clear();
+        asset_dimension_update_lookup_.clear();
+    }
 
     return true;
 }

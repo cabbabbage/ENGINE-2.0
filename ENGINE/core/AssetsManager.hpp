@@ -267,6 +267,15 @@ private:
     float max_asset_width_world_  = 0.0f;
     float cached_height_level_      = 0.0f;
     bool  max_asset_dimensions_dirty_ = true;
+    struct AssetDimensionCache {
+        float width = 0.0f;
+        float height = 0.0f;
+    };
+    std::unordered_map<Asset*, AssetDimensionCache> asset_dimension_cache_;
+    std::vector<Asset*> asset_dimension_update_queue_;
+    std::unordered_set<Asset*> asset_dimension_update_lookup_;
+    Asset* max_asset_width_holder_ = nullptr;
+    Asset* max_asset_height_holder_ = nullptr;
     std::vector<Asset*> visible_candidate_buffer_;
     std::uint64_t active_candidate_generation_ = 0;
 
@@ -323,6 +332,11 @@ private:
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();
     void invalidate_max_asset_dimensions();
+    void queue_asset_dimension_update(Asset* asset);
+    void remove_asset_dimension_cache(Asset* asset);
+    void rebuild_asset_dimension_cache(float camera_scale);
+    bool compute_asset_dimension_cache(const Asset* asset, float camera_scale, AssetDimensionCache& out) const;
+    void finalize_max_asset_dimensions(float max_width, float max_height);
     SDL_Rect screen_world_rect() const;
     int audio_effect_max_distance_world() const;
 

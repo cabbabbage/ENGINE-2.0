@@ -778,6 +778,9 @@ void DevControls::apply_overlay_grid_resolution(int resolution, bool user_overri
     if (frame_editor_session_ && frame_editor_session_->is_active()) {
         frame_editor_session_->set_snap_resolution(clamped);
     }
+    if (room_editor_) {
+        room_editor_->refresh_cursor_snap();
+    }
 }
 
 void DevControls::set_player(Asset* player) {

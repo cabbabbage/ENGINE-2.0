@@ -59,6 +59,31 @@
 #include <fstream>
 #include <SDL_log.h>
 
+namespace {
+
+SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
+    MapGridSettings settings;
+    settings.resolution = resolution;
+    const int spacing = settings.spacing();
+    if (spacing <= 0) {
+        return world;
+    }
+    auto snap_axis = [spacing](int value) -> int {
+        const long double ratio = static_cast<long double>(value) / static_cast<long double>(spacing);
+        const long long rounded = static_cast<long long>(std::llround(ratio));
+        const long long scaled = rounded * static_cast<long long>(spacing);
+        if (scaled > std::numeric_limits<int>::max()) {
+            return std::numeric_limits<int>::max();
+        }
+        if (scaled < std::numeric_limits<int>::min()) {
+            return std::numeric_limits<int>::min();
+        }
+        return static_cast<int>(scaled);
+    };
+    return SDL_Point{ snap_axis(world.x), snap_axis(world.y) };
+}
+
+}
 #include <nlohmann/json.hpp>
 #include "utils/log.hpp"
 
@@ -2504,9 +2529,11 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const SDL_FPoint world_f = cam.screen_to_map(screen_pt);
     SDL_Point world_pt{ (int)std::lround(world_f.x), (int)std::lround(world_f.y) };
 
+    last_raw_mouse_world_ = world_pt;
+    has_last_raw_mouse_world_ = true;
+
     cursor_snap_resolution_ = current_grid_resolution();
-    vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-    snapped_cursor_world_ = grid_service.snap_to_vertex(world_pt, cursor_snap_resolution_);
+    snapped_cursor_world_ = snap_world_point_to_overlay_grid(world_pt, cursor_snap_resolution_);
 
     Asset* hit = hit_test_asset(screen_pt, nullptr);
 
@@ -2763,12 +2790,90 @@ bool RoomEditor::ensure_spatial_index(const WarpedScreenGrid& cam) const {
     return !spatial_index_dirty_;
 }
 
+bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam,
+                                                     Asset* asset,
+                                                     SDL_Rect& out_rect) const {
+    if (!asset) {
+        return false;
+    }
+    if (asset->render_package.empty()) {
+        return false;
+    }
+
+    float min_x = std::numeric_limits<float>::infinity();
+    float min_y = std::numeric_limits<float>::infinity();
+    float max_x = -std::numeric_limits<float>::infinity();
+    float max_y = -std::numeric_limits<float>::infinity();
+    SDL_FPoint base_screen{};
+    bool have_bounds = false;
+
+    for (const auto& obj : asset->render_package) {
+        if (obj.screen_rect.w <= 0 || obj.screen_rect.h <= 0) {
+            continue;
+        }
+        SDL_FPoint world_point{ static_cast<float>(obj.screen_rect.x), static_cast<float>(obj.screen_rect.y) };
+        if (!cam.project_world_point(world_point, obj.world_z_offset, base_screen)) {
+            continue;
+        }
+        const float half_width = static_cast<float>(obj.screen_rect.w) * 0.5f;
+        const float height = static_cast<float>(obj.screen_rect.h);
+
+        if (!std::isfinite(base_screen.x) || !std::isfinite(base_screen.y)) {
+            continue;
+        }
+
+        const float left = base_screen.x - half_width;
+        const float right = base_screen.x + half_width;
+        const float top = base_screen.y - height;
+        const float bottom = base_screen.y;
+
+        if (!std::isfinite(left) || !std::isfinite(right) || !std::isfinite(top) || !std::isfinite(bottom)) {
+            continue;
+        }
+
+        min_x = std::min(min_x, left);
+        min_y = std::min(min_y, top);
+        max_x = std::max(max_x, right);
+        max_y = std::max(max_y, bottom);
+        have_bounds = true;
+    }
+
+    if (!have_bounds) {
+        return false;
+    }
+
+    const int left = static_cast<int>(std::floor(min_x));
+    const int top = static_cast<int>(std::floor(min_y));
+    const int right = static_cast<int>(std::ceil(max_x));
+    const int bottom = static_cast<int>(std::ceil(max_y));
+
+    const int width = std::max(1, right - left);
+    const int height = std::max(1, bottom - top);
+
+    out_rect = SDL_Rect{left, top, width, height};
+    return true;
+}
+
 bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
                                              Asset* asset,
                                              SDL_Rect& out_rect,
                                              int& out_screen_y) const {
     if (!asset) {
         return false;
+    }
+
+    auto* gp = cam.grid_point_for_asset(asset);
+    if (!gp || !gp->on_screen) {
+        return false;
+    }
+
+    if (gp->perspective_scale <= 0.0f || gp->vertical_scale <= 0.0f) {
+        return false;
+    }
+
+    if (compute_asset_render_package_bounds(cam, asset, out_rect)) {
+        out_screen_y = static_cast<int>(std::lround(gp->screen.y));
+        return true;
     }
 
     SDL_Texture* tex = asset->get_current_frame();
@@ -2795,15 +2900,6 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
 
     const float scaled_fw = static_cast<float>(fw) * base_scale;
     const float scaled_fh = static_cast<float>(fh) * base_scale;
-
-    auto* gp = cam.grid_point_for_asset(asset);
-    if (!gp || !gp->on_screen) {
-        return false;
-    }
-
-    if (gp->perspective_scale <= 0.0f || gp->vertical_scale <= 0.0f) {
-        return false;
-    }
 
     const float screen_width = scaled_fw * gp->perspective_scale;
     const float screen_height = screen_width * gp->vertical_scale;
@@ -4631,6 +4727,14 @@ int RoomEditor::current_grid_resolution() const {
     MapGridSettings settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     settings.clamp();
     return vibble::grid::clamp_resolution(settings.resolution);
+}
+
+void RoomEditor::refresh_cursor_snap() {
+    if (!has_last_raw_mouse_world_) {
+        return;
+    }
+    cursor_snap_resolution_ = current_grid_resolution();
+    snapped_cursor_world_ = snap_world_point_to_overlay_grid(last_raw_mouse_world_, cursor_snap_resolution_);
 }
 
 void RoomEditor::refresh_spawn_group_config_ui() {

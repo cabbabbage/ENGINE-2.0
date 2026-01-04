@@ -3687,12 +3687,39 @@
           "speed_multiplier": 1.0
         },
         "default": {
-          "child_timelines": [],
+          "attack_geometry": [
+            {
+              "explosion": [],
+              "melee": [
+                {
+                  "control_x": 1101.5701904296875,
+                  "control_y": 0.0,
+                  "control_z": 1748.0172119140625,
+                  "damage": 0,
+                  "end_x": 662.517578125,
+                  "end_y": 0.0,
+                  "end_z": 960.036376953125,
+                  "start_x": 179850.265625,
+                  "start_y": 0.0,
+                  "start_z": 557350.25,
+                  "type": "melee"
+                }
+              ],
+              "projectile": []
+            }
+          ],
           "crop_frames": true,
           "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
+            }
+          ],
+          "hit_geometry": [
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             }
           ],
           "inherit_source_movement": false,
@@ -7057,7 +7084,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726562,
+            "offset": 658.9600219726563,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }
@@ -7087,8 +7114,8 @@
         "bar": {
           "curvyness": 2,
           "display_color": [
-            31,
             204,
+            31,
             31,
             255
           ],
@@ -7107,9 +7134,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            36,
-            157,
+            128,
             242,
+            36,
             255
           ],
           "edge_smoothness": 43,
@@ -7160,9 +7187,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            191,
-            36,
             242,
+            36,
+            162,
             255
           ],
           "edge_smoothness": 29,
@@ -7208,16 +7235,16 @@
           ]
         },
         "spawn": {
-          "camera_height_px": 7400,
-          "camera_pan_y_percent": -21,
-          "camera_tilt_deg": 23.0,
+          "camera_height_px": 1813,
+          "camera_pan_y_percent": 7,
+          "camera_tilt_deg": 76.0,
           "camera_y_distance_px": 1446,
           "camera_zoom_percent": 1,
           "curvyness": 2,
           "display_color": [
-            204,
-            31,
-            31,
+            36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -7329,8 +7356,8 @@
                 }
               ],
               "display_name": "church",
-              "dx": 1148,
-              "dy": -196,
+              "dx": 1388,
+              "dy": -372,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -7341,7 +7368,7 @@
               "origional_width": 6904,
               "position": "Exact",
               "priority": 3,
-              "resolution": 5,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-0feef2a44e33"

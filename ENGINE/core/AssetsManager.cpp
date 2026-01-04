@@ -2226,7 +2226,7 @@ void Assets::rebuild_active_from_screen_grid() {
         if (!asset) {
             return std::numeric_limits<double>::infinity();
         }
-        return std::fabs(static_cast<double>(asset->pos.y) - anchor_world_y);
+        return anchor_world_y - static_cast<double>(asset->pos.y);
     };
     auto depth_order = [&distance_from_anchor](Asset* lhs, Asset* rhs) {
         if (lhs == rhs) {

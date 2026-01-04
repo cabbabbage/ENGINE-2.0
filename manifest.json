@@ -3613,7 +3613,8 @@
       "apply_vertical_scaling": true,
       "asset_directory": "SRC/assets/Tree_3",
       "asset_name": "Tree_3",
-      "asset_type": "object",
+      "asset_type": "boundary",
+      "async_children": [],
       "can_invert": false,
       "lighting_info": [],
       "neighbor_search_distance": 500,
@@ -3884,7 +3885,8 @@
       "start": "default",
       "tags": [],
       "tillable": false,
-      "update_radius": 0
+      "update_radius": 0,
+      "z_threshold": -320
     },
     "Vibble_attack_1": {
       "animations": {
@@ -4859,6 +4861,7 @@
       "asset_directory": "SRC/assets/church",
       "asset_name": "church",
       "asset_type": "object",
+      "async_children": [],
       "can_invert": false,
       "has_shading": false,
       "lighting_info": [],

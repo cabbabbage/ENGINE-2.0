@@ -4,7 +4,7 @@
             "current_room": true,
             "filters_expanded": false,
             "initialized": true,
-            "map_assets": true,
+            "map_assets": false,
             "methods": {
                 "center": true,
                 "childrandom": false,
@@ -41,7 +41,7 @@
         "camera": {
             "background_texture_max_opacity": 255.0,
             "depthcue_enabled": true,
-            "extra_cull_margin": 300.0,
+            "extra_cull_margin": 1000.0,
             "foreground_texture_max_opacity": 255.0,
             "meters_per_100_world_px": 0.25,
             "min_visible_screen_ratio": 0.015000000596046448,

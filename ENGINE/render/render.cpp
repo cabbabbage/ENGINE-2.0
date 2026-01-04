@@ -467,17 +467,10 @@ void SceneRenderer::render() {
     const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
-    const auto& active_assets = assets_->getActive();
-    std::vector<Asset*> sorted_assets(active_assets.begin(), active_assets.end());
-    std::sort(sorted_assets.begin(), sorted_assets.end(), [&](Asset* a, Asset* b) {
-        world::GridPoint* ga = cam.grid_point_for_asset(a);
-        world::GridPoint* gb = cam.grid_point_for_asset(b);
-        if (!ga || !gb) return ga > gb;
-        return ga->distance_to_camera > gb->distance_to_camera;
-    });
+    const auto& render_assets = assets_->getActive();
     std::vector<DarkMaskSprite> dark_mask_sprites;
-    dark_mask_sprites.reserve(std::max<std::size_t>(sorted_assets.size(), 8u));
-    for (Asset* asset : sorted_assets) {
+    dark_mask_sprites.reserve(std::max<std::size_t>(render_assets.size(), 8u));
+    for (Asset* asset : render_assets) {
         if (!asset || asset->is_hidden() || !asset->info) {
             continue;
         }
@@ -549,7 +542,7 @@ void SceneRenderer::render() {
         }};
 
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-        for (Asset* asset : sorted_assets) {
+        for (Asset* asset : render_assets) {
             if (!asset || asset->is_hidden() || !asset->info || !asset->anim_) {
                 continue;
             }

@@ -2221,37 +2221,24 @@ void Assets::rebuild_active_from_screen_grid() {
         }
     }
 
-    auto depth_order = [this](Asset* lhs, Asset* rhs) {
+    const double anchor_world_y = camera_.anchor_world_y();
+    const auto distance_from_anchor = [anchor_world_y](const Asset* asset) {
+        if (!asset) {
+            return std::numeric_limits<double>::infinity();
+        }
+        return std::fabs(static_cast<double>(asset->pos.y) - anchor_world_y);
+    };
+    auto depth_order = [&distance_from_anchor](Asset* lhs, Asset* rhs) {
         if (lhs == rhs) {
             return false;
         }
         if (!lhs || !rhs) {
             return rhs != nullptr;
         }
-        world::GridPoint* lp = camera_.grid_point_for_asset(lhs);
-        world::GridPoint* rp = camera_.grid_point_for_asset(rhs);
-        const float ld = lp ? lp->distance_to_camera : std::numeric_limits<float>::infinity();
-        const float rd = rp ? rp->distance_to_camera : std::numeric_limits<float>::infinity();
-        if (std::fabs(ld - rd) > 0.01f) {
-            return ld > rd; // draw farther first so nearer paint over
-        }
-        const int llayer = lp ? lp->resolution_layer() : 0;
-        const int rlayer = rp ? rp->resolution_layer() : 0;
-        if (llayer != rlayer) {
-            return llayer < rlayer; // coarser layers first
-        }
-        const int lz = lp ? lp->world_z() : 0;
-        const int rz = rp ? rp->world_z() : 0;
-        if (lz != rz) {
-            return lz < rz; // lower z first
-        }
-        const float ly = lp ? lp->screen.y : 0.0f;
-        const float ry = rp ? rp->screen.y : 0.0f;
-        if (std::fabs(ly - ry) > 0.5f) {
-            return ly < ry;
-        }
-        if (lhs->z_index != rhs->z_index) {
-            return lhs->z_index < rhs->z_index;
+        const double ld = distance_from_anchor(lhs);
+        const double rd = distance_from_anchor(rhs);
+        if (ld != rd) {
+            return ld > rd; // draw farther (larger Y-distance) first
         }
         return lhs < rhs;
     };

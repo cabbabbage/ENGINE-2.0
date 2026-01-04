@@ -76,7 +76,6 @@ inline bool send_attack_if_hit(Asset* attacker, Asset* target) {
         return false;
     }
 
-    attacker->update_neighbor_lists(false);
     const AssetList* neighbors = attacker->get_neighbors_list();
     if (neighbors && !detail::target_is_neighbor(neighbors, target)) {
         return false;

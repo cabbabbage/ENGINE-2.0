@@ -8,6 +8,8 @@
 
 #include <SDL.h>
 
+#include "asset/animation_frame.hpp"
+
 namespace animation_update {
 
 namespace {

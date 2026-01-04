@@ -20,6 +20,7 @@
 
 #include "asset_controller.hpp"
 #include "animation_update/animation_update.hpp"
+#include "animation_update/attack.hpp"
 #include "render/render.hpp"
 
 class WarpedScreenGrid;
@@ -181,7 +182,6 @@ class Asset {
 
     const ScaleVariantState& scale_variant_state() const { return scale_variant_state_; }
 
-    void set_z_offset(int z);
     void set_shading_group(int x);
     bool is_shading_group_set() const;
     int  get_shading_group() const;
@@ -248,8 +248,6 @@ class Asset {
     std::string current_animation;
     SDL_Point pos{0, 0};
     int grid_resolution = 0;
-    int z_index = 0;
-    int z_offset = 0;
     bool active = false;
     bool flipped = false;
     float distance_from_camera = 0.0f;
@@ -282,6 +280,10 @@ class Asset {
     void update_scale_values();
     SDL_Texture* get_current_variant_texture() const;
     void set_current_animation(const std::string& name);
+    // Queue an attack event for deferred controller handling.
+    void send_attack(const animation_update::Attack& attack);
+    // Drain and return queued attacks for this tick.
+    std::vector<animation_update::Attack> process_pending_attacks();
 
 public:
     static void SetFlipOverrideForSpawnId(const std::string& spawn_id, bool enabled, bool flipped);
@@ -303,7 +305,6 @@ private:
     bool selected = false;
     bool merged_from_neighbors_ = false;
     void set_flip();
-    void set_z_index();
 
     float frame_progress = 0.0f;
     int  shading_group = 0;
@@ -349,6 +350,9 @@ private:
     mutable MaskRenderMetadata mask_render_metadata_{};
 
     TransformSmoothingState alpha_smoothing_{};
+    // Protect the pending attack queue for thread-safe enqueue/dequeue.
+    std::mutex pending_attacks_mutex_;
+    std::vector<animation_update::Attack> pending_attacks_;
 
     const AnimationFrame* last_rendered_frame_ = nullptr;
 

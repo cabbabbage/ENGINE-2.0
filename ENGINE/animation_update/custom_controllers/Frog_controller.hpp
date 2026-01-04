@@ -17,6 +17,7 @@ public:
 
     ~FrogController() override = default;
     void update(const Input& in) override;
+    void process_pending_attacks(Asset& self) override;
 
 private:
     Assets* assets_ = nullptr;

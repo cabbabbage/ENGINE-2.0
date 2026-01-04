@@ -181,3 +181,7 @@ void VibbleController::Dash() {
     isDashing = true;
     dashEndTime = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>( std::chrono::duration<float>(dashingTime) );
 }
+
+void VibbleController::process_pending_attacks(Asset& self) {
+    (void)self.process_pending_attacks();
+}

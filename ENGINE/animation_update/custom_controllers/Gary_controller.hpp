@@ -15,6 +15,7 @@ public:
     
 
     void update(const Input& in) override;
+    void process_pending_attacks(Asset& self) override;
 
 private:
     SDL_Point get_random_point_in_room();

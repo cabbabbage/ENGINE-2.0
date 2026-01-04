@@ -2698,13 +2698,11 @@ Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const 
         int best_bottom = std::numeric_limits<int>::max();
         int best_top = std::numeric_limits<int>::max();
         int best_screen_y = std::numeric_limits<int>::max();
-        int best_z = std::numeric_limits<int>::min();
         int best_area = std::numeric_limits<int>::max();
 
         auto consider_candidate = [&](Asset* asset,
                                       const SDL_Rect& rect,
-                                      int screen_y,
-                                      int z_index) {
+                                      int screen_y) {
             if (!asset) return;
             if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) {
                 return;
@@ -2718,16 +2716,15 @@ Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const 
             const bool is_better =
                 !best ||
                 bottom < best_bottom ||
-                (bottom == best_bottom && top < best_top) || (bottom == best_bottom && top == best_top && screen_y < best_screen_y) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && z_index > best_z) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && z_index == best_z && area < best_area);
+                (bottom == best_bottom && top < best_top) || (bottom == best_bottom && top == best_top && screen_y < best_screen_y) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && area < best_area);
             if (is_better) {
                 best = asset;
                 best_bottom = bottom;
                 best_top = top;
                 best_screen_y = screen_y;
-                best_z = z_index;
                 best_area = area;
             }
-};
+        };
 
         for (Asset* asset : candidates) {
             auto bc = asset_bounds_cache_.find(asset);
@@ -2735,7 +2732,7 @@ Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const 
                 continue;
             }
             const AssetSpatialEntry& entry = bc->second;
-            consider_candidate(asset, entry.bounds, entry.screen_y, entry.z_index);
+            consider_candidate(asset, entry.bounds, entry.screen_y);
         }
 
         if (best) {
@@ -2952,7 +2949,6 @@ void RoomEditor::insert_asset_entry(Asset* asset, const SDL_Rect& rect, int scre
     AssetSpatialEntry entry;
     entry.bounds = rect;
     entry.screen_y = screen_y;
-    entry.z_index = asset->z_index;
 
     const int left = floor_div(rect.x, kSpatialCellSize);
     const int right = floor_div(rect.x + rect.w - 1, kSpatialCellSize);
@@ -3092,13 +3088,11 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
     int best_bottom = std::numeric_limits<int>::max();
     int best_top = std::numeric_limits<int>::max();
     int best_screen_y = std::numeric_limits<int>::max();
-    int best_z = std::numeric_limits<int>::min();
     int best_area = std::numeric_limits<int>::max();
 
     auto consider_candidate = [&](Asset* asset,
                                   const SDL_Rect& rect,
-                                  int screen_y,
-                                  int z_index) {
+                                  int screen_y) {
         if (!asset) return;
         if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) {
             return;
@@ -3112,13 +3106,12 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
         const bool is_better =
             !best ||
             bottom < best_bottom ||
-            (bottom == best_bottom && top < best_top) || (bottom == best_bottom && top == best_top && screen_y < best_screen_y) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && z_index > best_z) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && z_index == best_z && area < best_area);
+            (bottom == best_bottom && top < best_top) || (bottom == best_bottom && top == best_top && screen_y < best_screen_y) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && area < best_area);
         if (is_better) {
             best = asset;
             best_bottom = bottom;
             best_top = top;
             best_screen_y = screen_y;
-            best_z = z_index;
             best_area = area;
         }
 };
@@ -3135,7 +3128,7 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
             continue;
         }
 
-        consider_candidate(asset, rect, screen_y, asset->z_index);
+        consider_candidate(asset, rect, screen_y);
     }
 
     return best;

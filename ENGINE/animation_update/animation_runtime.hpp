@@ -41,7 +41,6 @@ public:
     vibble::grid::Grid& grid() const;
     bool path_blocked(SDL_Point from, SDL_Point to, const Asset* ignored, std::vector<const Asset*>* blockers = nullptr) const;
     bool handle_blocked_path(SDL_Point from, SDL_Point to, const std::vector<const Asset*>& blockers);
-    void refresh_z_index();
     void mark_progress_toward_checkpoints();
     bool advance(AnimationFrame*& frame);
     void switch_to(const std::string& anim_id, std::size_t path_index = 0);

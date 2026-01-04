@@ -4,8 +4,8 @@
 
 namespace LightUtils {
 	inline double calculate_static_alpha_percentage(const Asset* assetA, const Asset* assetB) {
-		const int asset_y       = assetA ? assetA->z_index : 0;
-		const int light_world_y = assetB ? assetB->z_index : 0;
+		const int asset_y       = assetA ? assetA->pos.y : 0;
+		const int light_world_y = assetB ? assetB->pos.y : 0;
 		constexpr int FADE_ABOVE = 180;
 		constexpr int FADE_BELOW = -30;
 		constexpr double MIN_OPACITY = 0.15;

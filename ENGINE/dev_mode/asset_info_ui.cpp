@@ -157,7 +157,6 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
                 target.erase("size_settings");
                 changed = true;
             }
-            changed |= copy_key("z_threshold");
             changed |= copy_key("can_invert");
 
             changed |= copy_key("tileable");
@@ -1406,22 +1405,6 @@ void AssetInfoUI::refresh_target_asset_scale() {
 
     if (assets_ && refreshed_any) {
 
-        assets_->mark_active_assets_dirty();
-    }
-}
-
-void AssetInfoUI::sync_target_z_threshold() {
-    if (!info_) return;
-
-    bool updated_any = apply_to_assets_with_info([&](Asset* asset) {
-        if (!asset->info) {
-            return;
-        }
-        asset->info->set_z_threshold(info_->z_threshold);
-        asset->set_z_index();
-    });
-
-    if (updated_any && assets_) {
         assets_->mark_active_assets_dirty();
     }
 }

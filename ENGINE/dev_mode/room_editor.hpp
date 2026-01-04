@@ -285,7 +285,6 @@ private:
     struct AssetSpatialEntry {
         SDL_Rect bounds{0, 0, 0, 0};
         int screen_y = std::numeric_limits<int>::min();
-        int z_index = std::numeric_limits<int>::min();
         std::vector<int64_t> cells;
 };
 

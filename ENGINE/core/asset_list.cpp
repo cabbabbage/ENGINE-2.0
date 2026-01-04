@@ -20,7 +20,6 @@ AssetList::AssetList(const std::vector<Asset*>& source_candidates,
                      const std::vector<std::string>& required_tags,
                      const std::vector<std::string>& top_bucket_tags,
                      const std::vector<std::string>& bottom_bucket_tags,
-                     SortMode sort_mode,
                      std::function<bool(const Asset*)> eligibility_filter)
     : source_candidates_(source_candidates),
       center_point_(list_center),
@@ -29,7 +28,6 @@ AssetList::AssetList(const std::vector<Asset*>& source_candidates,
       required_tags_(required_tags),
       top_bucket_tags_(top_bucket_tags),
       bottom_bucket_tags_(bottom_bucket_tags),
-      sort_mode_(sort_mode),
       eligibility_filter_(std::move(eligibility_filter)),
       previous_center_point_(list_center),
       previous_search_radius_(search_radius) {
@@ -42,7 +40,6 @@ AssetList::AssetList(const std::vector<Asset*>& source_candidates,
                      const std::vector<std::string>& required_tags,
                      const std::vector<std::string>& top_bucket_tags,
                      const std::vector<std::string>& bottom_bucket_tags,
-                     SortMode sort_mode,
                      std::function<bool(const Asset*)> eligibility_filter)
     : source_candidates_(source_candidates),
       center_point_(center_asset ? center_asset->pos : SDL_Point{0, 0}),
@@ -51,7 +48,6 @@ AssetList::AssetList(const std::vector<Asset*>& source_candidates,
       required_tags_(required_tags),
       top_bucket_tags_(top_bucket_tags),
       bottom_bucket_tags_(bottom_bucket_tags),
-      sort_mode_(sort_mode),
       eligibility_filter_(std::move(eligibility_filter)),
       previous_center_point_(resolve_center()),
       previous_search_radius_(search_radius) {
@@ -64,7 +60,6 @@ AssetList::AssetList(const AssetList& parent_list,
                      const std::vector<std::string>& required_tags,
                      const std::vector<std::string>& top_bucket_tags,
                      const std::vector<std::string>& bottom_bucket_tags,
-                     SortMode sort_mode,
                      std::function<bool(const Asset*)> eligibility_filter)
     : source_candidates_(parent_list.source_candidates_),
       center_point_(list_center),
@@ -73,7 +68,6 @@ AssetList::AssetList(const AssetList& parent_list,
       required_tags_(required_tags),
       top_bucket_tags_(top_bucket_tags),
       bottom_bucket_tags_(bottom_bucket_tags),
-      sort_mode_(sort_mode),
       eligibility_filter_(std::move(eligibility_filter)),
       previous_center_point_(list_center),
       previous_search_radius_(search_radius) {
@@ -86,7 +80,6 @@ AssetList::AssetList(const AssetList& parent_list,
                      const std::vector<std::string>& required_tags,
                      const std::vector<std::string>& top_bucket_tags,
                      const std::vector<std::string>& bottom_bucket_tags,
-                     SortMode sort_mode,
                      std::function<bool(const Asset*)> eligibility_filter)
     : source_candidates_(parent_list.source_candidates_),
       center_point_(center_asset ? center_asset->pos : SDL_Point{0, 0}),
@@ -95,7 +88,6 @@ AssetList::AssetList(const AssetList& parent_list,
       required_tags_(required_tags),
       top_bucket_tags_(top_bucket_tags),
       bottom_bucket_tags_(bottom_bucket_tags),
-      sort_mode_(sort_mode),
       eligibility_filter_(std::move(eligibility_filter)),
       previous_center_point_(resolve_center()),
       previous_search_radius_(search_radius) {
@@ -108,7 +100,6 @@ AssetList::AssetList(const AssetList& parent_list,
                      const std::vector<std::string>& required_tags,
                      const std::vector<std::string>& top_bucket_tags,
                      const std::vector<std::string>& bottom_bucket_tags,
-                     SortMode sort_mode,
                      std::function<bool(const Asset*)> eligibility_filter,
                      bool inherit_parent_view)
     : source_candidates_(parent_list.source_candidates_),
@@ -118,7 +109,6 @@ AssetList::AssetList(const AssetList& parent_list,
       required_tags_(required_tags),
       top_bucket_tags_(top_bucket_tags),
       bottom_bucket_tags_(bottom_bucket_tags),
-      sort_mode_(sort_mode),
       eligibility_filter_(std::move(eligibility_filter)),
       previous_center_point_(list_center),
       previous_search_radius_(search_radius),
@@ -133,7 +123,6 @@ AssetList::AssetList(const AssetList& parent_list,
                      const std::vector<std::string>& required_tags,
                      const std::vector<std::string>& top_bucket_tags,
                      const std::vector<std::string>& bottom_bucket_tags,
-                     SortMode sort_mode,
                      std::function<bool(const Asset*)> eligibility_filter,
                      bool inherit_parent_view)
     : source_candidates_(parent_list.source_candidates_),
@@ -143,7 +132,6 @@ AssetList::AssetList(const AssetList& parent_list,
       required_tags_(required_tags),
       top_bucket_tags_(top_bucket_tags),
       bottom_bucket_tags_(bottom_bucket_tags),
-      sort_mode_(sort_mode),
       eligibility_filter_(std::move(eligibility_filter)),
       previous_center_point_(resolve_center()),
       previous_search_radius_(search_radius),
@@ -194,14 +182,6 @@ void AssetList::set_center(Asset* a) {
 
 void AssetList::set_search_radius(int r) {
     search_radius_ = r;
-}
-
-void AssetList::set_sort_mode(SortMode m) {
-    sort_mode_ = m;
-    middle_section_dirty_ = true;
-    if (middle_section_dirty_) {
-        sort_middle_section();
-    }
 }
 
 void AssetList::set_tags(const std::vector<std::string>& required_tags,
@@ -491,33 +471,6 @@ bool AssetList::is_asset_eligible(const Asset* a) const {
 }
 
 void AssetList::sort_middle_section() {
-    switch (sort_mode_) {
-        case SortMode::Unsorted:
-            break;
-        case SortMode::ZIndexAsc:
-            std::sort(list_middle_sorted_.begin(), list_middle_sorted_.end(), [](const Asset* lhs, const Asset* rhs) {
-                if (lhs == nullptr || rhs == nullptr) {
-                    return rhs != nullptr;
-                }
-                if (lhs->z_index == rhs->z_index) {
-                    return lhs < rhs;
-                }
-                return lhs->z_index < rhs->z_index;
-            });
-            break;
-        case SortMode::ZIndexDesc:
-            std::sort(list_middle_sorted_.begin(), list_middle_sorted_.end(), [](const Asset* lhs, const Asset* rhs) {
-                if (lhs == nullptr || rhs == nullptr) {
-                    return lhs != nullptr;
-                }
-                if (lhs->z_index == rhs->z_index) {
-                    return lhs > rhs;
-                }
-                return lhs->z_index > rhs->z_index;
-            });
-            break;
-    }
-
     for (std::size_t i = 0; i < list_middle_sorted_.size(); ++i) {
         Asset* asset = list_middle_sorted_[i];
         if (asset) {

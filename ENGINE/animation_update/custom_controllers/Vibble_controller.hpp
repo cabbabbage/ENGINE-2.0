@@ -16,6 +16,7 @@ public:
     VibbleController(Asset* player);
     ~VibbleController() = default;
     void update(const Input& in) override;
+    void process_pending_attacks(Asset& self) override;
     int get_dx() const;
     int get_dy() const;
 

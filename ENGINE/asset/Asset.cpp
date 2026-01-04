@@ -77,15 +77,12 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , active(false)
 , pos(start_pos)
 , grid_resolution(vibble::grid::clamp_resolution(grid_resolution_))
-, z_index(0)
-, z_offset(0)
 , depth(depth_)
 , spawn_id(spawn_id_)
 , spawn_method(spawn_method_)
 , owning_room_name_(spawn_area.get_name())
 {
 	set_flip();
-	set_z_index();
 
         try {
                 if (info && asset_types::canonicalize(info->type) == asset_types::player) {
@@ -161,57 +158,55 @@ Asset::~Asset() {
 }
 
 Asset::Asset(const Asset& o)
-: parent(o.parent)
-, info(o.info)
-, current_animation(o.current_animation)
-, pos(o.pos)
-, grid_resolution(vibble::grid::clamp_resolution(o.grid_resolution))
-, z_index(o.z_index)
-, z_offset(o.z_offset)
-, active(o.active)
-, flipped(o.flipped)
-, distance_from_camera(o.distance_from_camera)
- , angle_from_camera(o.angle_from_camera)
-, asset_children(o.asset_children)
-, scene_mask_lights(o.scene_mask_lights)
-, depth(o.depth)
-, has_shading(o.has_shading)
-, dead(o.dead)
-, static_frame(o.static_frame)
-, needs_target(o.needs_target)
-, cached_w(o.cached_w)
-, cached_h(o.cached_h)
-, window(o.window)
-, highlighted(o.highlighted)
-, hidden(o.hidden)
-, selected(o.selected)
-, merged_from_neighbors_(o.merged_from_neighbors_)
-, current_frame(o.current_frame)
-, frame_progress(o.frame_progress)
-, shading_group(o.shading_group)
-, shading_group_set(o.shading_group_set)
-, assets_(o.assets_)
-, spawn_id(o.spawn_id)
-, spawn_method(o.spawn_method)
-, owning_room_name_(o.owning_room_name_)
-, controller_(nullptr)
-, tiling_info_(o.tiling_info_)
-, anim_(nullptr)
-, last_scaled_texture_(nullptr)
-, last_scaled_source_(nullptr)
-, last_scaled_w_(0)
-, last_scaled_h_(0)
-, last_scaled_camera_scale_(-1.0f)
-, last_scale_usage_()
-, last_rendered_frame_(nullptr)
-, scale_variant_state_(o.scale_variant_state_)
-, base_bounds_local_(o.base_bounds_local_)
-, grid_id_(o.grid_id_)
-, composite_texture_(nullptr)
-, composite_dirty_(true)
-, composite_rect_({0, 0, 0, 0})
-, animation_children_initialized_(o.animation_children_initialized_)
-, initializing_animation_children_(false)
+    : parent(o.parent)
+    , info(o.info)
+    , current_animation(o.current_animation)
+    , pos(o.pos)
+    , grid_resolution(vibble::grid::clamp_resolution(o.grid_resolution))
+    , active(o.active)
+    , flipped(o.flipped)
+    , distance_from_camera(o.distance_from_camera)
+    , angle_from_camera(o.angle_from_camera)
+    , asset_children(o.asset_children)
+    , scene_mask_lights(o.scene_mask_lights)
+    , depth(o.depth)
+    , has_shading(o.has_shading)
+    , dead(o.dead)
+    , static_frame(o.static_frame)
+    , needs_target(o.needs_target)
+    , cached_w(o.cached_w)
+    , cached_h(o.cached_h)
+    , window(o.window)
+    , highlighted(o.highlighted)
+    , hidden(o.hidden)
+    , selected(o.selected)
+    , merged_from_neighbors_(o.merged_from_neighbors_)
+    , current_frame(o.current_frame)
+    , frame_progress(o.frame_progress)
+    , shading_group(o.shading_group)
+    , shading_group_set(o.shading_group_set)
+    , assets_(o.assets_)
+    , spawn_id(o.spawn_id)
+    , spawn_method(o.spawn_method)
+    , owning_room_name_(o.owning_room_name_)
+    , controller_(nullptr)
+    , tiling_info_(o.tiling_info_)
+    , anim_(nullptr)
+    , last_scaled_texture_(nullptr)
+    , last_scaled_source_(nullptr)
+    , last_scaled_w_(0)
+    , last_scaled_h_(0)
+    , last_scaled_camera_scale_(-1.0f)
+    , last_scale_usage_()
+    , last_rendered_frame_(nullptr)
+    , scale_variant_state_(o.scale_variant_state_)
+    , base_bounds_local_(o.base_bounds_local_)
+    , grid_id_(o.grid_id_)
+    , composite_texture_(nullptr)
+    , composite_dirty_(true)
+    , composite_rect_({0, 0, 0, 0})
+    , animation_children_initialized_(o.animation_children_initialized_)
+    , initializing_animation_children_(false)
 {
 
         clear_render_caches();
@@ -239,8 +234,6 @@ Asset& Asset::operator=(const Asset& o) {
         current_animation    = o.current_animation;
     pos                  = o.pos;
     grid_resolution      = vibble::grid::clamp_resolution(o.grid_resolution);
-	z_index              = o.z_index;
-	z_offset             = o.z_offset;
 	active               = o.active;
         flipped              = o.flipped;
         distance_from_camera = o.distance_from_camera;
@@ -431,10 +424,13 @@ void Asset::update() {
 
     SDL_Point previous_pos = pos;
 
-    if (controller_ && assets_) {
-        if (Input* in = assets_->get_input()) {
-            controller_->update(*in);
+    if (controller_) {
+        if (assets_) {
+            if (Input* in = assets_->get_input()) {
+                controller_->update(*in);
+            }
         }
+        controller_->process_pending_attacks(*this);
     }
 
     const bool moved = (pos.x != previous_pos.x || pos.y != previous_pos.y);
@@ -527,7 +523,6 @@ void Asset::add_child(Asset* asset_child) {
         }
         asset_child->parent = this;
         if (!asset_child->get_assets()) asset_child->set_assets(this->assets_);
-        asset_child->set_z_index();
         asset_children.push_back(asset_child);
 }
 
@@ -689,8 +684,6 @@ void Asset::initialize_animation_children_recursive() {
                                 child->parent = this;
                                 child->depth = depth;
                                 child->grid_resolution = grid_resolution;
-                                child->set_z_offset(z_offset);
-                                child->set_z_index();
                                 child->set_hidden(true);
                                 if (std::find(asset_children.begin(), asset_children.end(), child) ==
                                     asset_children.end()) {
@@ -813,7 +806,6 @@ void Asset::update_neighbor_lists(bool force_update) {
         std::vector<std::string>{},
         std::vector<std::string>{},
         std::vector<std::string>{},
-        SortMode::ZIndexAsc,
         base_filter);
 
     if (neighbors) {
@@ -824,7 +816,6 @@ void Asset::update_neighbor_lists(bool force_update) {
             std::vector<std::string>{},
             std::vector<std::string>{},
             std::vector<std::string>{},
-            SortMode::ZIndexAsc,
             impassable_filter,
             true );
         impassable_naighbors = imp_child.get();
@@ -835,30 +826,6 @@ void Asset::update_neighbor_lists(bool force_update) {
 
     last_neighbor_origin_ = pos;
     neighbor_lists_initialized_ = true;
-}
-
-void Asset::set_z_index() {
-        int old_z = z_index;
-        try {
-                if (parent) {
-                        if (z_offset > 0)       z_index = parent->z_index + 1;
-                        else if (z_offset < 0)  z_index = parent->z_index - 1;
-                        else                    z_index = pos.y + info->z_threshold;
-                } else if (info) {
-                        z_index = pos.y + info->z_threshold;
-                }
-        } catch (const std::exception& e) {
-                std::cerr << "[Asset::set_z_index] Exception: " << e.what() << "\n";
-        }
-        if (assets_ && z_index != old_z) {
-                assets_->mark_active_assets_dirty();
-        }
-}
-
-void Asset::set_z_offset(int z) {
-	z_offset = z;
-	set_z_index();
-	std::cout << "Z offset set to " << z << " for asset " << info->name << "\n";
 }
 
 void Asset::set_flip() {
@@ -1054,6 +1021,18 @@ void Asset::clear_grid_residency_cache() {
 }
 
 void Asset::sync_transform_to_position() {
+}
+
+void Asset::send_attack(const animation_update::Attack& attack) {
+        std::lock_guard<std::mutex> lock(pending_attacks_mutex_);
+        pending_attacks_.push_back(attack);
+}
+
+std::vector<animation_update::Attack> Asset::process_pending_attacks() {
+        std::lock_guard<std::mutex> lock(pending_attacks_mutex_);
+        std::vector<animation_update::Attack> attacks;
+        attacks.swap(pending_attacks_);
+        return attacks;
 }
 
 bool Asset::has_grid_residency_cache() const {

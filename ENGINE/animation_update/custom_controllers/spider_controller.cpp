@@ -1,6 +1,9 @@
 #include "spider_controller.hpp"
+#include "animation_update/custom_controllers/attack_helpers.hpp"
 #include "asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+
+namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
 spiderController::spiderController(Assets* assets, Asset* self)
     : assets_(assets), self_(self) {
@@ -30,4 +33,10 @@ void spiderController::update(const Input&) {
     else if (self_->needs_target) {
         self_->anim_->auto_move(player->pos);
     }
+
+    attack_helpers::send_attack_if_hit(self_, player);
+}
+
+void spiderController::process_pending_attacks(Asset& self) {
+    (void)self.process_pending_attacks();
 }

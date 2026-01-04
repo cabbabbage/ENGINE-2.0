@@ -28,3 +28,7 @@ void DefaultController::update(const Input& ) {
 
 }
 
+void DefaultController::process_pending_attacks(Asset& ) {
+    // Default controller does not respond to attacks.
+}
+

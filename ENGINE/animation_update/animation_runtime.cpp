@@ -192,9 +192,6 @@ void AnimationRuntime::apply_pending_move() {
 
     if (final_position.x != self_->pos.x || final_position.y != self_->pos.y) {
         self_->pos = final_position;
-        if (req.resort_z) {
-            refresh_z_index();
-        }
         suppress_root_motion_frames_ = std::max(2, suppress_root_motion_frames_);
         if (planner_iface_) {
             planner_iface_->clear_movement_plan();
@@ -754,8 +751,6 @@ Asset* AnimationRuntime::spawn_child_asset(Asset::AnimationChildAttachment& slot
     child->parent = self_;
     child->depth = self_->depth;
     child->grid_resolution = self_->grid_resolution;
-    child->set_z_offset(self_->z_offset);
-    child->set_z_index();
     if (std::find(self_->asset_children.begin(), self_->asset_children.end(), child) ==
         self_->asset_children.end()) {
         self_->add_child(child);
@@ -878,8 +873,6 @@ void AnimationRuntime::sync_child_assets() {
         child->depth = self_->depth;
         child->flipped = self_->flipped;
         child->hidden = true;
-        child->z_offset = self_->z_offset + (slot.render_in_front ? 1 : -1);
-        child->set_z_index();
         TransformSmoothingParams snap{};
         snap.method = TransformSmoothingMethod::None;
         snap.snap_threshold = 0.0f;
@@ -1122,7 +1115,6 @@ bool AnimationRuntime::attempt_unstick(SDL_Point from,
         }
         if (moved) {
             self_->pos = candidate;
-            refresh_z_index();
             return true;
         }
     }
@@ -1331,8 +1323,3 @@ SDL_Point AnimationRuntime::convert_delta_to_world(SDL_Point delta, int resoluti
     return delta;
 }
 
-void AnimationRuntime::refresh_z_index() {
-    if (self_) {
-        self_->set_z_index();
-    }
-}

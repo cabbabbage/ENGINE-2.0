@@ -1332,12 +1332,6 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     Area spawn_area(owning_room,  0);
 
     int depth = 0;
-    try {
-        depth = info->z_threshold;
-    } catch (...) {
-        depth = 0;
-    }
-
     auto uptr = std::make_unique<Asset>(info, spawn_area, world_pos, depth, nullptr, std::string{}, std::string{}, map_grid_settings_.spacing());
     Asset* raw = uptr.get();
     if (!raw) {

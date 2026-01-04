@@ -130,11 +130,6 @@ Asset* SpawnContext::spawnAssetInternal(const std::string& name,
                         for (auto* child : kids) {
                                 if (!child || !child->info) continue;
                                 child->parent = raw;
-                                int z_offset = asset_child_info->z_offset;
-                                if (asset_child_info->placed_on_top_parent && z_offset <= 0) {
-                                        z_offset = 1;
-                                }
-                                child->set_z_offset(z_offset);
                                 child->set_hidden(false);
                                 child->set_owning_room_name(raw->owning_room_name());
 
@@ -144,8 +139,8 @@ Asset* SpawnContext::spawnAssetInternal(const std::string& name,
                                         if (asset_child_ptr && asset_child_ptr->info) {
                                                 std::ostringstream oss;
                                                 oss << "[Spawn] -> Child '" << asset_child_ptr->info->name
-                                                    << "' placed at (" << asset_child_ptr->pos.x << ", "
-                                                    << asset_child_ptr->pos.y << ") with z_offset " << asset_child_ptr->z_offset;
+                                                  << "' placed at (" << asset_child_ptr->pos.x << ", "
+                                                     << asset_child_ptr->pos.y << ")";
                                                 vibble::log::debug(oss.str());
                                         }
                                 }

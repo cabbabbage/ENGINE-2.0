@@ -18,7 +18,6 @@ void ChildLoader::load_children(AssetInfo& info,
             ChildInfo ci;
             ci.area_name = na.name;
             ci.placed_on_top_parent = na.attachment_is_on_top;
-            ci.z_offset = 0;
 
             info.asset_children.emplace_back(std::move(ci));
         }

@@ -35,7 +35,6 @@ class Section_BasicInfo : public DockableCollapsible {
 
     std::unique_ptr<DMDropdown>  dd_type_;
     std::unique_ptr<DMSlider>    s_scale_pct_;
-    std::unique_ptr<DMSlider>    s_zindex_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
     std::unique_ptr<DMCheckbox>  c_apply_distance_scaling_;
     std::unique_ptr<DMCheckbox>  c_apply_vertical_scaling_;
@@ -94,7 +93,6 @@ inline void Section_BasicInfo::build() {
     int pct = std::max(0, static_cast<int>(std::lround(info_->scale_factor * 100.0f)));
     s_scale_pct_ = std::make_unique<DMSlider>("Scale (%)", 1, 400, pct);
     s_scale_pct_->set_on_value_changed([this](int value) { this->on_scale_slider_value_changed(value); });
-    s_zindex_    = std::make_unique<DMSlider>("Z Index Offset", -1000, 1000, info_->z_threshold);
     if (!is_tiled_asset) {
         c_flipable_  = std::make_unique<DMCheckbox>("Flipable (can invert)", info_->flipable);
         c_apply_distance_scaling_ = std::make_unique<DMCheckbox>("Apply distance scaling", info_->apply_distance_scaling);
@@ -113,10 +111,6 @@ inline void Section_BasicInfo::build() {
     auto w_scale = std::make_unique<SliderWidget>(s_scale_pct_.get());
     rows.push_back({ w_scale.get() });
     widgets_.push_back(std::move(w_scale));
-
-    auto w_z = std::make_unique<SliderWidget>(s_zindex_.get());
-    rows.push_back({ w_z.get() });
-    widgets_.push_back(std::move(w_z));
 
     tb_starting_health_ = std::make_unique<DMTextBox>("Starting Health", std::to_string(info_->starting_health));
     auto w_health = std::make_unique<TextBoxWidget>(tb_starting_health_.get());
@@ -164,7 +158,6 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
     if (!used) {
         if (dd_type_ && dd_type_->handle_event(e)) used = true;
         if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
-        if (s_zindex_ && s_zindex_->handle_event(e)) used = true;
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
     if (c_apply_distance_scaling_ && c_apply_distance_scaling_->handle_event(e)) used = true;
@@ -174,7 +167,6 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
 
     bool changed = false;
     bool rebuild_needed = false;
-    bool z_changed = false;
     bool tile_changed = false;
     bool render_settings_changed = false;
     bool type_changed = false;
@@ -191,12 +183,6 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
             render_settings_changed = true;
             type_changed = true;
         }
-    }
-
-    if (s_zindex_ && info_->z_threshold != s_zindex_->value()) {
-        info_->set_z_threshold(s_zindex_->value());
-        changed = true;
-        z_changed = true;
     }
 
     if (tb_starting_health_ && !tb_starting_health_->value().empty()) {
@@ -239,8 +225,7 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
     if (changed) {
         (void)info_->commit_manifest();
         if (ui_) {
-            if (z_changed) ui_->sync_target_z_threshold();
-            if (tile_changed) ui_->sync_target_tiling_state();
+        if (tile_changed) ui_->sync_target_tiling_state();
             if (render_settings_changed) ui_->sync_target_basic_render_settings(type_changed);
         }
     }
@@ -319,14 +304,6 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
         const int   top      = static_cast<int>(std::lround(screen_pos.y)) - sh;
     SDL_Rect bounds{ left, top, sw, sh };
 
-    int z_world_y = target->pos.y + target->info->z_threshold;
-    SDL_FPoint z_screen_f = cam.map_to_screen(SDL_Point{target->pos.x, z_world_y});
-    const int z_line_y = static_cast<int>(std::lround(z_screen_f.y));
-
-    SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-    const SDL_Color accent = DMStyles::DeleteButton().hover_bg;
-    SDL_SetRenderDrawColor(r, accent.r, accent.g, accent.b, 200);
-    SDL_RenderDrawLine(r, bounds.x, z_line_y, bounds.x + bounds.w, z_line_y);
 }
 
 inline void Section_BasicInfo::on_scale_slider_value_changed(int new_value) {

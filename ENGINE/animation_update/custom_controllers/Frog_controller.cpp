@@ -1,9 +1,12 @@
 #include "Frog_controller.hpp"
+#include "animation_update/custom_controllers/attack_helpers.hpp"
 
 #include "animation_update/custom_controllers/controller_path_utils.hpp"
 #include "animation_update/custom_controllers/controller_visit_threshold.hpp"
 #include "asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
+
+namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
 FrogController::FrogController(Assets* assets, Asset* self)
     : assets_(assets), self_(self) {
@@ -37,8 +40,15 @@ void FrogController::update(const Input&) {
         }
         const int visit_threshold = controller_utils::controller_visit_threshold(self_, path);
         self_->anim_->auto_move(path, visit_threshold);
+        attack_helpers::send_attack_if_hit(self_, player);
         return;
     }
 
     self_->anim_->auto_move(player);
+
+    attack_helpers::send_attack_if_hit(self_, player);
+}
+
+void FrogController::process_pending_attacks(Asset& self) {
+    (void)self.process_pending_attacks();
 }

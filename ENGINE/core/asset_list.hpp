@@ -12,25 +12,19 @@
 
 class Asset;
 
-enum class SortMode {
-    Unsorted,
-    ZIndexAsc,
-    ZIndexDesc
-};
-
 class AssetList {
 public:
-    AssetList(const std::vector<Asset*>& source_candidates, SDL_Point list_center, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, SortMode sort_mode, std::function<bool(const Asset*)> eligibility_filter = nullptr);
+    AssetList(const std::vector<Asset*>& source_candidates, SDL_Point list_center, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, std::function<bool(const Asset*)> eligibility_filter = nullptr);
 
-    AssetList(const std::vector<Asset*>& source_candidates, Asset* center_asset, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, SortMode sort_mode, std::function<bool(const Asset*)> eligibility_filter = nullptr);
+    AssetList(const std::vector<Asset*>& source_candidates, Asset* center_asset, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, std::function<bool(const Asset*)> eligibility_filter = nullptr);
 
-    AssetList(const AssetList& parent_list, SDL_Point list_center, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, SortMode sort_mode, std::function<bool(const Asset*)> eligibility_filter = nullptr);
+    AssetList(const AssetList& parent_list, SDL_Point list_center, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, std::function<bool(const Asset*)> eligibility_filter = nullptr);
 
-    AssetList(const AssetList& parent_list, Asset* center_asset, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, SortMode sort_mode, std::function<bool(const Asset*)> eligibility_filter = nullptr);
+    AssetList(const AssetList& parent_list, Asset* center_asset, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, std::function<bool(const Asset*)> eligibility_filter = nullptr);
 
-    AssetList(const AssetList& parent_list, SDL_Point list_center, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, SortMode sort_mode, std::function<bool(const Asset*)> eligibility_filter, bool inherit_parent_view);
+    AssetList(const AssetList& parent_list, SDL_Point list_center, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, std::function<bool(const Asset*)> eligibility_filter, bool inherit_parent_view);
 
-    AssetList(const AssetList& parent_list, Asset* center_asset, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, SortMode sort_mode, std::function<bool(const Asset*)> eligibility_filter, bool inherit_parent_view);
+    AssetList(const AssetList& parent_list, Asset* center_asset, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, std::function<bool(const Asset*)> eligibility_filter, bool inherit_parent_view);
 
     void add_child(std::unique_ptr<AssetList> child);
     const std::vector<std::unique_ptr<AssetList>>& children() const;
@@ -43,7 +37,6 @@ public:
     void set_center(SDL_Point p);
     void set_center(Asset* a);
     void set_search_radius(int r);
-    void set_sort_mode(SortMode m);
     void set_tags(const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags);
 
     void update();
@@ -86,7 +79,6 @@ private:
     std::vector<std::string> required_tags_;
     std::vector<std::string> top_bucket_tags_;
     std::vector<std::string> bottom_bucket_tags_;
-    SortMode            sort_mode_ = SortMode::Unsorted;
 
     std::vector<Asset*> list_top_unsorted_;
     std::vector<Asset*> list_middle_sorted_;

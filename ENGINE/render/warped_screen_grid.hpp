@@ -58,7 +58,7 @@ public:
         float texture_warp_percent            = 100.0f;
         float texture_warp_y_offset_px        = 0.0f;
 
-        float extra_cull_margin = 300.0f;
+        float extra_cull_margin = 1000.0f;
         float depth_near_world = 0.0f;
         float depth_far_world  = 5000.0f;
         float pre_horizon_lock_offset_px = 80.0f;

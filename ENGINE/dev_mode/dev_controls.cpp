@@ -1584,11 +1584,16 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     const bool show_depth_guides = camera_panel_ && camera_panel_->is_depth_section_visible();
     std::optional<float> horizon_screen_y;
     std::optional<std::string> parallax_probe_label;
+    const WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
+    std::optional<WarpedScreenGrid::FloorDepthParams> floor_depth_params;
+    if (cam) {
+        floor_depth_params = cam->compute_floor_depth_params();
+    }
 
-        const bool need_grid_helpers = assets_ && (grid_overlay_enabled_ || show_depth_guides);
-        if (renderer && need_grid_helpers) {
-            const WarpedScreenGrid& cam = assets_->getView();
-            const WarpedScreenGrid::FloorDepthParams depth_params = cam.compute_floor_depth_params();
+    const bool need_grid_helpers = cam && (grid_overlay_enabled_ || show_depth_guides);
+    if (renderer && need_grid_helpers) {
+        const WarpedScreenGrid& view_cam = *cam;
+        const WarpedScreenGrid::FloorDepthParams& depth_params = *floor_depth_params;
             world::WorldGrid& grid = assets_->world_grid();
 
             auto parallax_offset = [&](SDL_Point w) { return 0.0f; };
@@ -1604,15 +1609,15 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         SDL_Color minor{0, 255, 255, 48};
         SDL_Color major{0, 255, 255, 80};
 
-        auto [view_min_x, view_min_y, view_max_x, view_max_y] = cam.get_current_view().get_bounds();
+        auto [view_min_x, view_min_y, view_max_x, view_max_y] = view_cam.get_current_view().get_bounds();
         SDL_FPoint top_left_world{static_cast<float>(view_min_x), static_cast<float>(view_min_y)};
         SDL_FPoint bottom_right_world{static_cast<float>(view_max_x), static_cast<float>(view_max_y)};
-        const float cam_scale = std::max(0.0001f, static_cast<float>(cam.get_scale()));
+        const float cam_scale = std::max(0.0001f, static_cast<float>(view_cam.get_scale()));
 
         int cell = std::max(1, grid_cell_size_px_);
         if (cell > 0) {
             const float world_padding = static_cast<float>(cell) * 4.0f;
-            const float depth_world_padding = cam_scale * std::max(0.0f, cam.current_depth_offset_px());
+            const float depth_world_padding = cam_scale * std::max(0.0f, view_cam.current_depth_offset_px());
             const float min_world_x = std::min(top_left_world.x, bottom_right_world.x) - world_padding;
             const float max_world_x = std::max(top_left_world.x, bottom_right_world.x) + world_padding;
             const float min_world_y = std::min(top_left_world.y, bottom_right_world.y) - world_padding - depth_world_padding * 0.5f;
@@ -1679,7 +1684,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                     SDL_Point world_point{
                         static_cast<int>(std::lround(x)), static_cast<int>(std::lround(wy)) };
                     SDL_FPoint screen{};
-                    if (!try_floor_warped_screen_position(cam, world_point, screen)) {
+                    if (!try_floor_warped_screen_position(view_cam, world_point, screen)) {
                         flush_polyline();
                         continue;
                     }
@@ -1707,7 +1712,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 SDL_Point sample_world{
                     static_cast<int>(std::lround(mid_world_x)), static_cast<int>(std::lround(y)) };
                 SDL_FPoint sample_screen{};
-                if (try_floor_warped_screen_position(cam, sample_world, sample_screen)) {
+                if (try_floor_warped_screen_position(view_cam, sample_world, sample_screen)) {
                     const float screen_y = sample_screen.y;
                     if (std::isfinite(screen_y)) {
                         highest_horizontal_screen_y = std::min(highest_horizontal_screen_y, screen_y);
@@ -1726,7 +1731,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                     SDL_Point world_point{
                         static_cast<int>(std::lround(wx)), static_cast<int>(std::lround(y)) };
                     SDL_FPoint screen{};
-                    if (!try_floor_warped_screen_position(cam, world_point, screen)) {
+                    if (!try_floor_warped_screen_position(view_cam, world_point, screen)) {
                         flush_polyline();
                         continue;
                     }
@@ -1755,11 +1760,11 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 horizon_screen_y = static_cast<float>(depth_params.horizon_screen_y);
             }
 
-            if (grid_overlay_enabled_ && cam.parallax_enabled()) {
+            if (grid_overlay_enabled_ && view_cam.parallax_enabled()) {
                 const int sample_dx = std::max(cell * 2, 64);
                 const int sample_dy = std::max(cell * 3, 96);
-                const SDL_FPoint view_center = cam.get_view_center_f();
-                const double anchor_y = cam.current_anchor_world_y();
+                const SDL_FPoint view_center = view_cam.get_view_center_f();
+                const double anchor_y = view_cam.current_anchor_world_y();
                 const int sample_x = static_cast<int>(std::lround( std::clamp(view_center.x + static_cast<float>(sample_dx), min_world_x, max_world_x)));
                 const double clamped_anchor_y = std::clamp(anchor_y, static_cast<double>(min_world_y), static_cast<double>(max_world_y));
                 const SDL_Point anchor_sample{
@@ -1796,38 +1801,6 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         DrawLabelText(renderer, *parallax_probe_label, text_x, text_y, style);
     }
 
-    if (renderer && camera_panel_ && camera_panel_->is_visible() && assets_) {
-        const WarpedScreenGrid& cam = assets_->getView();
-        const WarpedScreenGrid::FloorDepthParams depth_params = cam.compute_floor_depth_params();
-        if (depth_params.enabled) {
-            SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
-            SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
-            Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
-            SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
-
-            SDL_FPoint center_world_f = cam.get_view_center_f();
-            SDL_Point depth_world{
-                static_cast<int>(std::lround(center_world_f.x)), static_cast<int>(std::lround(depth_params.base_world_y)) };
-            SDL_FPoint depth_screen{};
-            if (try_floor_warped_screen_position(cam, depth_world, depth_screen)) {
-                const int y_line = static_cast<int>(std::lround(depth_screen.y));
-
-                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                SDL_SetRenderDrawColor(renderer, 160, 210, 255, 200);
-                SDL_RenderDrawLine(renderer, 0, y_line, screen_w_, y_line);
-                const int marker_x = screen_w_ / 2;
-                SDL_RenderDrawLine(renderer, marker_x - 8, y_line, marker_x + 8, y_line);
-                DMLabelStyle style = DMStyles::Label();
-                style.color = SDL_Color{160, 210, 255, 200};
-                const int label_y = std::max(0, y_line - style.font_size - 2);
-                DrawLabelText(renderer, "Depth", marker_x + 12, label_y, style);
-            }
-
-            SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
-            SDL_SetRenderDrawBlendMode(renderer, prev_mode);
-        }
-    }
-
     if (renderer && show_depth_guides) {
         SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
         SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
@@ -1835,18 +1808,33 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
         SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
 
-        auto draw_labeled_line = [&](float y, SDL_Color color, const char* label) {
-            const int yi = static_cast<int>(std::lround(y));
-            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-            SDL_RenderDrawLine(renderer, 0, yi, screen_w_, yi);
-            DMLabelStyle style = DMStyles::Label();
-            style.color = color;
-            const int label_y = std::max(0, yi - style.font_size - 2);
-            DrawLabelText(renderer, label, 8, label_y, style);
-};
-
-        if (horizon_screen_y) {
-            draw_labeled_line(*horizon_screen_y, SDL_Color{255, 140, 0, 220}, "Horizon");
+        if (cam && floor_depth_params && floor_depth_params->enabled) {
+            const WarpedScreenGrid::RealismSettings& settings = cam->realism_settings();
+            const float meters_per_100 = std::max(0.0001f, settings.meters_per_100_world_px);
+            const float pixels_per_world_unit = 100.0f / meters_per_100;
+            const float margin_world_units = std::max(0.0f, settings.extra_cull_margin);
+            const float margin_world_px = margin_world_units * pixels_per_world_unit;
+            const SDL_FPoint center_world_f = cam->get_view_center_f();
+            const float cos_pitch = std::max(0.0f, std::cos(static_cast<float>(floor_depth_params->pitch_radians)));
+            const float depth_offset_px = margin_world_px * cos_pitch;
+            SDL_Point cull_world{
+                static_cast<int>(std::lround(center_world_f.x)),
+                static_cast<int>(std::lround(center_world_f.y - depth_offset_px))
+            };
+            SDL_FPoint cull_screen{};
+            if (try_floor_warped_screen_position(*cam, cull_world, cull_screen)) {
+                const float clamped_y = std::clamp(cull_screen.y, 0.0f, static_cast<float>(screen_h_));
+                const int line_y = static_cast<int>(std::lround(clamped_y));
+                const SDL_Color cull_color{0, 255, 255, 220};
+                SDL_SetRenderDrawColor(renderer, cull_color.r, cull_color.g, cull_color.b, cull_color.a);
+                SDL_RenderDrawLine(renderer, 0, line_y, screen_w_, line_y);
+                const int marker_x = screen_w_ / 2;
+                SDL_RenderDrawLine(renderer, marker_x - 8, line_y, marker_x + 8, line_y);
+                DMLabelStyle style = DMStyles::Label();
+                style.color = cull_color;
+                const int label_y = std::max(0, line_y - style.font_size - 2);
+                DrawLabelText(renderer, "Cull Limit", marker_x + 12, label_y, style);
+            }
         }
 
         SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);

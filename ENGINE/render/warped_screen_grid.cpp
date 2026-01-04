@@ -1387,7 +1387,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
     const float pre_horizon_screen_y = horizon_screen_y - std::max(0.0f, settings_.pre_horizon_lock_offset_px);
     const float horizon_band = horizon_fade_for_height(cam_state.camera_height);
 
-    const float margin_px    = std::max(0.0f, settings_.extra_cull_margin);
+    const float world_margin_units = std::max(0.0f, settings_.extra_cull_margin);
+    const float meters_per_100 = std::max(0.0001f, settings_.meters_per_100_world_px);
+    const float pixels_per_world_unit = 100.0f / meters_per_100;
+    const float margin_px = world_margin_units * pixels_per_world_unit;
     const float cull_top = std::clamp(static_cast<float>(cam_state.horizon_screen_y) - margin_px, virtual_bounds.top, virtual_bounds.bottom);
     const SDL_FRect cull_rect{
         virtual_bounds.left - margin_px,

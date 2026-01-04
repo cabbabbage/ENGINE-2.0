@@ -921,8 +921,8 @@ void CameraUIPanel::build_ui() {
     min_render_size_slider_->set_tooltip("Cull sprites once their height drops below this fraction of the screen (0.01 = 1%).");
     min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    cull_margin_slider_ = std::make_unique<FloatSliderWidget>("Cull Margin (px)", 0.0f, 1000.0f, 1.0f, defaults.extra_cull_margin, 0);
-    cull_margin_slider_->set_tooltip("Extra margin below the screen for culling (for perspective/warping). Increase if assets pop in/out at the bottom edge.");
+    cull_margin_slider_ = std::make_unique<FloatSliderWidget>("Cull Depth (world units)", 0.0f, 5000.0f, 10.0f, defaults.extra_cull_margin, 0);
+    cull_margin_slider_->set_tooltip("Distance in world units from camera beyond which assets are culled for depth. Determines render depth range (not horizontal range).");
     cull_margin_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
     render_quality_slider_ = std::make_unique<DiscreteSliderWidget>("Render Quality (%)", std::vector<int>{100, 75, 50, 25, 10}, defaults.render_quality_percent);
@@ -1126,7 +1126,7 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
     WarpedScreenGrid::RealismSettings settings = last_settings_;
     if (min_render_size_slider_) settings.min_visible_screen_ratio = std::clamp(min_render_size_slider_->value(), 0.0f, 0.5f);
     if (render_quality_slider_) settings.render_quality_percent = render_quality_slider_->value();
-    if (cull_margin_slider_) settings.extra_cull_margin = std::clamp(cull_margin_slider_->value(), 0.0f, 1000.0f);
+    if (cull_margin_slider_) settings.extra_cull_margin = std::clamp(cull_margin_slider_->value(), 0.0f, 5000.0f);
 
     if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
     if (texture_warp_slider_) settings.texture_warp_percent = std::clamp(texture_warp_slider_->value(), 0.0f, 100.0f);

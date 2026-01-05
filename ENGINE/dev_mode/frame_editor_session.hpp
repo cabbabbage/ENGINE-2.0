@@ -127,6 +127,7 @@ FRAME_EDITOR_ACCESS:
     bool curve_enabled_ = false;
     int selected_child_index_ = 0;
     EditPlane edit_plane_ = EditPlane::XZ;
+    bool grid_overlay_enabled_ = true;
 
     bool prev_realism_enabled_ = true;
     bool prev_parallax_enabled_ = true;
@@ -621,7 +622,7 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         if (entry.is_array()) {
             if (!entry.empty() && entry[0].is_number()) f.dx = static_cast<float>(entry[0].get<double>());
             if (entry.size() > 1 && entry[1].is_number()) f.dy = static_cast<float>(entry[1].get<double>());
-            f.dz = 0.0f;
+            f.dz = f.dy;
             if (entry.size() > 2 && entry[2].is_boolean()) f.resort_z = entry[2].get<bool>();
 
             const nlohmann::json* children_json = nullptr;
@@ -696,7 +697,7 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         } else if (entry.is_object()) {
             f.dx = static_cast<float>(entry.value("dx", 0.0));
             f.dy = static_cast<float>(entry.value("dy", 0.0));
-            f.dz = static_cast<float>(entry.value("dz", 0.0));
+            f.dz = static_cast<float>(entry.value("dz", entry.value("dy", 0.0)));
             f.resort_z = entry.value("resort_z", false);
             if (entry.contains("children") && entry["children"].is_array()) {
                 for (const auto& child_entry : entry["children"]) {

@@ -8,6 +8,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <unordered_set>
 #include <unordered_map>
@@ -175,6 +176,99 @@ namespace {
             SDL_DestroyTexture(texture);
         }
         SDL_FreeSurface(surface);
+    }
+
+    int grid_step_for_resolution(int r) {
+        return vibble::grid::delta(vibble::grid::clamp_resolution(std::max(0, r)));
+    }
+
+    int floor_to_step(int value, int step) {
+        if (step <= 0) {
+            return value;
+        }
+        const double scaled = std::floor(static_cast<double>(value) / static_cast<double>(step));
+        return static_cast<int>(scaled * static_cast<double>(step));
+    }
+
+    int ceil_to_step(int value, int step) {
+        if (step <= 0) {
+            return value;
+        }
+        const double scaled = std::ceil(static_cast<double>(value) / static_cast<double>(step));
+        return static_cast<int>(scaled * static_cast<double>(step));
+    }
+
+    void render_plane_grid(SDL_Renderer* renderer,
+                           const WarpedScreenGrid& cam,
+                           SDL_Point anchor_world,
+                           int snap_resolution_r) {
+        if (!renderer) {
+            return;
+        }
+        const int step = grid_step_for_resolution(snap_resolution_r);
+        if (step <= 0) {
+            return;
+        }
+
+        auto [minx, miny, maxx, maxy] = cam.get_current_view().get_bounds();
+        if (minx == maxx || miny == maxy) {
+            return;
+        }
+
+        const int start_x = floor_to_step(minx, step);
+        const int end_x = ceil_to_step(maxx, step);
+        const int start_y = floor_to_step(miny, step);
+        const int end_y = ceil_to_step(maxy, step);
+        const int major_step = (step > 0 && step <= (std::numeric_limits<int>::max() / 4))
+                                   ? step * 4
+                                   : 0;
+
+        SDL_Color base = DMStyles::AccentButton().hover_bg;
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+        auto draw_line = [&](const SDL_FPoint& a, const SDL_FPoint& b, Uint8 alpha) {
+            SDL_Color color = devmode::utils::with_alpha(base, alpha);
+            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+            SDL_RenderDrawLine(renderer,
+                               static_cast<int>(std::lround(a.x)),
+                               static_cast<int>(std::lround(a.y)),
+                               static_cast<int>(std::lround(b.x)),
+                               static_cast<int>(std::lround(b.y)));
+        };
+
+        for (int x = start_x; x <= end_x; x += step) {
+            const bool major = (major_step > 0) && (x % major_step == 0);
+            SDL_FPoint a = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(x), static_cast<float>(miny)});
+            SDL_FPoint b = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(x), static_cast<float>(maxy)});
+            draw_line(a, b, major ? 55 : 22);
+        }
+        for (int y = start_y; y <= end_y; y += step) {
+            const bool major = (major_step > 0) && (y % major_step == 0);
+            SDL_FPoint a = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(minx), static_cast<float>(y)});
+            SDL_FPoint b = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(maxx), static_cast<float>(y)});
+            draw_line(a, b, major ? 55 : 22);
+        }
+
+        SDL_Color axis = devmode::utils::with_alpha(DMStyles::AccentButton().press_bg, 170);
+        SDL_SetRenderDrawColor(renderer, axis.r, axis.g, axis.b, axis.a);
+        if (anchor_world.x >= minx && anchor_world.x <= maxx) {
+            SDL_FPoint a = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(anchor_world.x), static_cast<float>(miny)});
+            SDL_FPoint b = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(anchor_world.x), static_cast<float>(maxy)});
+            SDL_RenderDrawLine(renderer,
+                               static_cast<int>(std::lround(a.x)),
+                               static_cast<int>(std::lround(a.y)),
+                               static_cast<int>(std::lround(b.x)),
+                               static_cast<int>(std::lround(b.y)));
+        }
+        if (anchor_world.y >= miny && anchor_world.y <= maxy) {
+            SDL_FPoint a = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(minx), static_cast<float>(anchor_world.y)});
+            SDL_FPoint b = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(maxx), static_cast<float>(anchor_world.y)});
+            SDL_RenderDrawLine(renderer,
+                               static_cast<int>(std::lround(a.x)),
+                               static_cast<int>(std::lround(a.y)),
+                               static_cast<int>(std::lround(b.x)),
+                               static_cast<int>(std::lround(b.y)));
+        }
     }
 
     const char* mode_display_name(FrameEditorSession::Mode mode) {
@@ -346,6 +440,7 @@ void FrameEditorSession::begin(Assets* assets,
     smooth_enabled_ = false;
     curve_enabled_ = false;
     edit_plane_ = EditPlane::XZ;
+    grid_overlay_enabled_ = true;
     selected_hitbox_type_index_ = 1;
     selected_attack_type_index_ = 1;
     selected_attack_vector_indices_.fill(-1);
@@ -365,6 +460,7 @@ void FrameEditorSession::begin(Assets* assets,
     cache_child_hidden_states();
 
     ensure_widgets();
+    update_plane_labels();
     refresh_hitbox_form();
     refresh_attack_form();
     refresh_hitbox_form();
@@ -1515,6 +1611,10 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
     const WarpedScreenGrid& cam = assets_->getView();
     SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
 
+    if (grid_overlay_enabled_ && (mode_ == Mode::Movement || is_children_mode(mode_))) {
+        render_plane_grid(renderer, cam, anchor_world, snap_resolution_r_);
+    }
+
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     const SDL_Color path_col = DMStyles::AccentButton().bg;
     SDL_SetRenderDrawColor(renderer, path_col.r, path_col.g, path_col.b, 205);
@@ -1765,7 +1865,7 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
 }
 
 void FrameEditorSession::set_grid_overlay_enabled_transient(bool enabled) {
-    (void)enabled;
+    grid_overlay_enabled_ = enabled;
 }
 
 void FrameEditorSession::set_snap_resolution(int r) {

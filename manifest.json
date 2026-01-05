@@ -3643,12 +3643,52 @@
       ],
       "animations": {
         "attack": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
+          "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
+          ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "attack"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "default": {
           "attack_geometry": [
@@ -3683,7 +3723,6 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
                   "render_in_front": true,
                   "visible": false
                 }
@@ -3700,7 +3739,6 @@
                   "degree": 0.0,
                   "dx": -20,
                   "dy": 0,
-                  "dz": -861,
                   "render_in_front": true,
                   "visible": true
                 }

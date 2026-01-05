@@ -4,6 +4,54 @@
         "Vibble_eyes"
     ],
     "animations": {
+        "attack": {
+            "child_timelines": [],
+            "crop_frames": false,
+            "flipped_source": false,
+            "frames": [
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                }
+            ],
+            "inherit_source_movement": false,
+            "locked": false,
+            "loop": true,
+            "movement": [
+                [
+                    0,
+                    0
+                ]
+            ],
+            "movement_total": {
+                "dx": 0,
+                "dy": 0
+            },
+            "number_of_frames": 1,
+            "on_end": "default",
+            "reverse_source": false,
+            "rnd_start": false,
+            "source": {
+                "kind": "folder",
+                "name": "",
+                "path": "attack"
+            },
+            "speed_multiplier": 1.0
+        },
         "default": {
             "attack_geometry": [
                 {
@@ -407,35 +455,8 @@
             "speed_multiplier": 1.0
         }
     },
-    "anti_tags": [],
     "asset_directory": "SRC/assets/Vibble",
     "asset_name": "Vibble",
     "asset_type": "player",
-    "async_children": [],
-    "can_invert": false,
-    "has_shading": false,
-    "lighting_info": [],
-    "min_distance_all": 0,
-    "min_same_type_distance": 0,
-    "neighbor_search_distance": 500,
-    "render_radius": 0,
-    "shading_opacity_multiplier": 1.0,
-    "shading_parallax_amount": 0.0,
-    "shading_screen_brightness_multiplier": 1.0,
-    "shadow_mask_settings": {
-        "alpha_multiplier": 1.0,
-        "blur_scale": 1.0,
-        "expansion_ratio": 0.800000011920929,
-        "falloff_exponent": 1.0499999523162842,
-        "falloff_start": 0.0
-    },
-    "size_settings": {
-        "scale_percentage": 96.0
-    },
-    "spawn_groups": [],
-    "start": "default",
-    "tags": [],
-    "tillable": false,
-    "update_radius": 0,
-    "z_threshold": -320
+    "start": "default"
 }

@@ -202,118 +202,6 @@ namespace {
         return static_cast<int>(scaled * static_cast<double>(step));
     }
 
-    void FrameEditorSession::render_plane_grid(SDL_Renderer* renderer,
-                           const WarpedScreenGrid& cam,
-                           SDL_Point anchor_world,
-                           FrameEditorSession::EditPlane plane,
-                           int snap_resolution_r,
-                           const FrameEditorSession::TextureMetrics& metrics) {
-        if (!renderer) {
-            return;
-        }
-        const int step = grid_step_for_resolution(snap_resolution_r);
-        if (step <= 0) {
-            return;
-        }
-
-        int minx = 0;
-        int maxx = 0;
-        int min_axis = 0;
-        int max_axis = 0;
-        if (plane == FrameEditorSession::EditPlane::XZ && metrics.width > 0 && metrics.height > 0) {
-            const int half_w = metrics.width / 2;
-            minx = anchor_world.x - half_w;
-            maxx = anchor_world.x + half_w;
-            min_axis = 0;
-            max_axis = metrics.height;
-        } else {
-            auto [view_minx, view_miny, view_maxx, view_maxy] = cam.get_current_view().get_bounds();
-            minx = view_minx;
-            maxx = view_maxx;
-            min_axis = view_miny;
-            max_axis = view_maxy;
-        }
-
-        if (minx == maxx || min_axis == max_axis) {
-            return;
-        }
-
-        const int start_x = floor_to_step(minx, step);
-        const int end_x = ceil_to_step(maxx, step);
-        const int start_axis = floor_to_step(min_axis, step);
-        const int end_axis = ceil_to_step(max_axis, step);
-        const int major_step = (step > 0 && step <= (std::numeric_limits<int>::max() / 4))
-                                   ? step * 4
-                                   : 0;
-
-        SDL_Color base = DMStyles::AccentButton().hover_bg;
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-        auto draw_line = [&](const SDL_FPoint& a, const SDL_FPoint& b, Uint8 alpha) {
-            SDL_Color color = devmode::utils::with_alpha(base, alpha);
-            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-            SDL_RenderDrawLine(renderer,
-                               static_cast<int>(std::lround(a.x)),
-                               static_cast<int>(std::lround(a.y)),
-                               static_cast<int>(std::lround(b.x)),
-                               static_cast<int>(std::lround(b.y)));
-        };
-
-        auto project_point = [&](float world_x, float axis) -> std::optional<SDL_FPoint> {
-            if (plane == FrameEditorSession::EditPlane::XZ) {
-                SDL_FPoint screen{};
-                if (!cam.project_world_point(SDL_FPoint{world_x, static_cast<float>(anchor_world.y)}, axis, screen)) {
-                    return std::nullopt;
-                }
-                return screen;
-            }
-            return cam.map_to_screen_f(SDL_FPoint{world_x, axis});
-        };
-
-        for (int x = start_x; x <= end_x; x += step) {
-            const bool major = (major_step > 0) && (x % major_step == 0);
-            auto a = project_point(static_cast<float>(x), static_cast<float>(start_axis));
-            auto b = project_point(static_cast<float>(x), static_cast<float>(end_axis));
-            if (a && b) {
-                draw_line(*a, *b, major ? 55 : 22);
-            }
-        }
-        for (int axis = start_axis; axis <= end_axis; axis += step) {
-            const bool major = (major_step > 0) && (axis % major_step == 0);
-            auto a = project_point(static_cast<float>(start_x), static_cast<float>(axis));
-            auto b = project_point(static_cast<float>(end_x), static_cast<float>(axis));
-            if (a && b) {
-                draw_line(*a, *b, major ? 55 : 22);
-            }
-        }
-
-        SDL_Color axis = devmode::utils::with_alpha(DMStyles::AccentButton().press_bg, 170);
-        SDL_SetRenderDrawColor(renderer, axis.r, axis.g, axis.b, axis.a);
-        if (anchor_world.x >= minx && anchor_world.x <= maxx) {
-            auto a = project_point(static_cast<float>(anchor_world.x), static_cast<float>(start_axis));
-            auto b = project_point(static_cast<float>(anchor_world.x), static_cast<float>(end_axis));
-            if (a && b) {
-                SDL_RenderDrawLine(renderer,
-                                   static_cast<int>(std::lround(a->x)),
-                                   static_cast<int>(std::lround(a->y)),
-                                   static_cast<int>(std::lround(b->x)),
-                                   static_cast<int>(std::lround(b->y)));
-            }
-        }
-        const int axis_world = (plane == FrameEditorSession::EditPlane::XZ) ? 0 : anchor_world.y;
-        if (axis_world >= min_axis && axis_world <= max_axis) {
-            auto a = project_point(static_cast<float>(start_x), static_cast<float>(axis_world));
-            auto b = project_point(static_cast<float>(end_x), static_cast<float>(axis_world));
-            if (a && b) {
-                SDL_RenderDrawLine(renderer,
-                                   static_cast<int>(std::lround(a->x)),
-                                   static_cast<int>(std::lround(a->y)),
-                                   static_cast<int>(std::lround(b->x)),
-                                   static_cast<int>(std::lround(b->y)));
-            }
-        }
-    }
-
     const char* mode_display_name(FrameEditorSession::Mode mode) {
         switch (mode) {
             case FrameEditorSession::Mode::Movement:        return "Movement";
@@ -328,6 +216,118 @@ namespace {
     bool is_children_mode(FrameEditorSession::Mode mode) {
         return mode == FrameEditorSession::Mode::StaticChildren ||
                mode == FrameEditorSession::Mode::AsyncChildren;
+    }
+}
+
+void FrameEditorSession::render_plane_grid(SDL_Renderer* renderer,
+                                           const WarpedScreenGrid& cam,
+                                           SDL_Point anchor_world,
+                                           FrameEditorSession::EditPlane plane,
+                                           int snap_resolution_r,
+                                           const FrameEditorSession::TextureMetrics& metrics) {
+    if (!renderer) {
+        return;
+    }
+    const int step = grid_step_for_resolution(snap_resolution_r);
+    if (step <= 0) {
+        return;
+    }
+
+    int minx = 0;
+    int maxx = 0;
+    int min_axis = 0;
+    int max_axis = 0;
+    if (plane == FrameEditorSession::EditPlane::XZ && metrics.width > 0 && metrics.height > 0) {
+        const int half_w = metrics.width / 2;
+        minx = anchor_world.x - half_w;
+        maxx = anchor_world.x + half_w;
+        min_axis = 0;
+        max_axis = metrics.height;
+    } else {
+        auto [view_minx, view_miny, view_maxx, view_maxy] = cam.get_current_view().get_bounds();
+        minx = view_minx;
+        maxx = view_maxx;
+        min_axis = view_miny;
+        max_axis = view_maxy;
+    }
+
+    if (minx == maxx || min_axis == max_axis) {
+        return;
+    }
+
+    const int start_x = floor_to_step(minx, step);
+    const int end_x = ceil_to_step(maxx, step);
+    const int start_axis = floor_to_step(min_axis, step);
+    const int end_axis = ceil_to_step(max_axis, step);
+    const int major_step = (step > 0 && step <= (std::numeric_limits<int>::max() / 4))
+                               ? step * 4
+                               : 0;
+
+    SDL_Color base = DMStyles::AccentButton().hover_bg;
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    auto draw_line = [&](const SDL_FPoint& a, const SDL_FPoint& b, Uint8 alpha) {
+        SDL_Color color = devmode::utils::with_alpha(base, alpha);
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        SDL_RenderDrawLine(renderer,
+                           static_cast<int>(std::lround(a.x)),
+                           static_cast<int>(std::lround(a.y)),
+                           static_cast<int>(std::lround(b.x)),
+                           static_cast<int>(std::lround(b.y)));
+    };
+
+    auto project_point = [&](float world_x, float axis) -> std::optional<SDL_FPoint> {
+        if (plane == FrameEditorSession::EditPlane::XZ) {
+            SDL_FPoint screen{};
+            if (!cam.project_world_point(SDL_FPoint{world_x, static_cast<float>(anchor_world.y)}, axis, screen)) {
+                return std::nullopt;
+            }
+            return screen;
+        }
+        return cam.map_to_screen_f(SDL_FPoint{world_x, axis});
+    };
+
+    for (int x = start_x; x <= end_x; x += step) {
+        const bool major = (major_step > 0) && (x % major_step == 0);
+        auto a = project_point(static_cast<float>(x), static_cast<float>(start_axis));
+        auto b = project_point(static_cast<float>(x), static_cast<float>(end_axis));
+        if (a && b) {
+            draw_line(*a, *b, major ? 55 : 22);
+        }
+    }
+    for (int axis = start_axis; axis <= end_axis; axis += step) {
+        const bool major = (major_step > 0) && (axis % major_step == 0);
+        auto a = project_point(static_cast<float>(start_x), static_cast<float>(axis));
+        auto b = project_point(static_cast<float>(end_x), static_cast<float>(axis));
+        if (a && b) {
+            draw_line(*a, *b, major ? 55 : 22);
+        }
+    }
+
+    SDL_Color axis = devmode::utils::with_alpha(DMStyles::AccentButton().press_bg, 170);
+    SDL_SetRenderDrawColor(renderer, axis.r, axis.g, axis.b, axis.a);
+    if (anchor_world.x >= minx && anchor_world.x <= maxx) {
+        auto a = project_point(static_cast<float>(anchor_world.x), static_cast<float>(start_axis));
+        auto b = project_point(static_cast<float>(anchor_world.x), static_cast<float>(end_axis));
+        if (a && b) {
+            SDL_RenderDrawLine(renderer,
+                               static_cast<int>(std::lround(a->x)),
+                               static_cast<int>(std::lround(a->y)),
+                               static_cast<int>(std::lround(b->x)),
+                               static_cast<int>(std::lround(b->y)));
+        }
+    }
+    const int axis_world = (plane == FrameEditorSession::EditPlane::XZ) ? 0 : anchor_world.y;
+    if (axis_world >= min_axis && axis_world <= max_axis) {
+        auto a = project_point(static_cast<float>(start_x), static_cast<float>(axis_world));
+        auto b = project_point(static_cast<float>(end_x), static_cast<float>(axis_world));
+        if (a && b) {
+            SDL_RenderDrawLine(renderer,
+                               static_cast<int>(std::lround(a->x)),
+                               static_cast<int>(std::lround(a->y)),
+                               static_cast<int>(std::lround(b->x)),
+                               static_cast<int>(std::lround(b->y)));
+        }
     }
 }
 

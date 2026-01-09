@@ -278,6 +278,9 @@ void ForegroundBackgroundEffectPanel::render_content(SDL_Renderer* renderer) con
     preview_->render(renderer);
 }
 
+
+
+
 void ForegroundBackgroundEffectPanel::build_ui() {
 
     fg_mode_button_ = std::make_unique<DMButton>("Foreground", &DMStyles::AccentButton(), 0, DMButton::height());

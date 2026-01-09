@@ -75,6 +75,7 @@ public:
 
     void set_snap_resolution(int r);
     void set_grid_overlay_enabled_transient(bool enabled);
+    bool should_render_asset(const Asset* asset) const;
 
 FRAME_EDITOR_ACCESS:
     bool target_is_alive() const;
@@ -100,7 +101,8 @@ FRAME_EDITOR_ACCESS:
                                         int screen_w,
                                         int screen_h) const;
     void apply_camera_defaults(EditPlane plane);
-    void handle_xz_scroll(WarpedScreenGrid& cam, const Input& input);
+    void handle_xz_scroll(WarpedScreenGrid& cam, int wheel_y);
+    void handle_xy_scroll(WarpedScreenGrid& cam, int wheel_y) const;
     static void render_plane_grid(SDL_Renderer* renderer,
                                   const WarpedScreenGrid& cam,
                                   SDL_Point anchor_world,
@@ -256,16 +258,23 @@ FRAME_EDITOR_ACCESS:
     mutable SDL_Rect nav_rect_{0,0,0,0};
     mutable SDL_Rect nav_drag_rect_{0,0,0,0};
     mutable std::vector<SDL_Rect> toolbox_widget_rects_;
+    mutable int toolbox_scroll_offset_ = 0;
+    mutable int toolbox_content_height_ = 0;
+    mutable bool toolbox_scrollbar_visible_ = false;
+    mutable SDL_Rect toolbox_scrollbar_track_{0,0,0,0};
+    mutable SDL_Rect toolbox_scrollbar_thumb_{0,0,0,0};
     SDL_Point dir_pos_{0, 0};
     SDL_Point toolbox_pos_{0, 0};
     SDL_Point nav_pos_{0, 0};
     bool dragging_dir_ = false;
     bool dragging_toolbox_ = false;
+    bool dragging_toolbox_scrollbar_ = false;
     bool dragging_nav_ = false;
     bool dragging_scrollbar_thumb_ = false;
     SDL_Point drag_offset_dir_{0, 0};
     SDL_Point drag_offset_toolbox_{0, 0};
     SDL_Point drag_offset_nav_{0, 0};
+    int toolbox_scrollbar_drag_offset_ = 0;
     int scrollbar_drag_offset_x_ = 0;
     mutable int scroll_offset_ = 0;
     mutable int thumb_content_width_ = 0;
@@ -277,6 +286,13 @@ FRAME_EDITOR_ACCESS:
     mutable std::vector<int> thumb_indices_;
 
     mutable class PanAndHeight pan_height_;
+    bool right_pan_active_ = false;
+    SDL_Point right_pan_start_mouse_{0, 0};
+    SDL_Point right_pan_start_center_{0, 0};
+    SDL_Point right_pan_last_center_{0, 0};
+    bool right_pan_has_last_center_ = false;
+    int pending_scroll_delta_ = 0;
+    bool hover_toolbox_ = false;
     std::vector<std::string> child_assets_;
     mutable std::vector<AnimationChildMode> child_modes_;
     std::vector<ChildPreviewSlot> child_preview_slots_;
@@ -320,6 +336,7 @@ FRAME_EDITOR_ACCESS:
     void ensure_widgets() const;
     void refresh_animation_dropdown() const;
     void rebuild_layout() const;
+    void render_toolbox(SDL_Renderer* renderer) const;
     void apply_current_mode_to_all_frames();
     void apply_frame_move_from_base(int index, SDL_FPoint desired_rel, const std::vector<SDL_FPoint>& base_rel);
     void redistribute_frames_from_middle_drag(int adjusted_index);

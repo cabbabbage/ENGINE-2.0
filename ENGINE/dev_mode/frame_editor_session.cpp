@@ -62,6 +62,9 @@ namespace {
     constexpr int kFrameFitIterations = 20;
     constexpr double kFrameFitMinHeight = 1.0;
     constexpr double kFrameFitMaxHeight = 100000.0;
+    constexpr int kToolboxScrollbarWidth = 8;
+    constexpr int kToolboxScrollbarPadding = 4;
+    constexpr double kToolboxHeightRatio = 0.6;
 
     int nav_header_height_px(bool has_dropdown) {
         return has_dropdown ? DMDropdown::height() : DMButton::height();
@@ -227,6 +230,9 @@ void FrameEditorSession::render_plane_grid(SDL_Renderer* renderer,
                                            const FrameEditorSession::TextureMetrics& metrics) {
     if (!renderer) {
         return;
+    }
+    if (plane == FrameEditorSession::EditPlane::XY) {
+        plane = FrameEditorSession::EditPlane::XZ;
     }
     const int step = grid_step_for_resolution(snap_resolution_r);
     if (step <= 0) {
@@ -926,8 +932,7 @@ void FrameEditorSession::apply_camera_defaults(EditPlane plane) {
     }
 }
 
-void FrameEditorSession::handle_xz_scroll(WarpedScreenGrid& cam, const Input& input) {
-    const int wheel_y = input.getScrollY();
+void FrameEditorSession::handle_xz_scroll(WarpedScreenGrid& cam, int wheel_y) {
     if (wheel_y == 0) {
         return;
     }
@@ -945,6 +950,30 @@ void FrameEditorSession::handle_xz_scroll(WarpedScreenGrid& cam, const Input& in
     cam.set_camera_y_distance(target);
 }
 
+void FrameEditorSession::handle_xy_scroll(WarpedScreenGrid& cam, int wheel_y) const {
+    if (wheel_y == 0) {
+        return;
+    }
+    const double step = 1.1;
+    const int ticks = std::abs(wheel_y);
+    const bool height_increase = (wheel_y < 0);
+    const double mag = std::pow(step, ticks);
+    const double eff = height_increase ? mag : (1.0 / mag);
+
+    const double base_scale = std::max(1.0, static_cast<double>(cam.get_scale()));
+    const double unclamped_target = base_scale * eff;
+    const double target_scale = std::clamp(unclamped_target, 1.0, 50000.0);
+    const double adjusted_eff = target_scale / base_scale;
+
+    if (std::abs(adjusted_eff - 1.0) > 1e-6) {
+        cam.set_manual_height_override(true);
+        const SDL_Point focus = cam.get_screen_center();
+        cam.set_focus_override(focus);
+        cam.set_screen_center(focus);
+        cam.animate_height_multiply(adjusted_eff);
+    }
+}
+
 void FrameEditorSession::update(const Input& input) {
     if (!active_) return;
 
@@ -959,16 +988,23 @@ void FrameEditorSession::update(const Input& input) {
 
         ensure_widgets();
         rebuild_layout();
-        const bool pan_blocked = true;
-        if (is_xy_plane()) {
-            pan_height_.handle_input(cam, input, pan_blocked);
+        const SDL_Point mouse{input.getX(), input.getY()};
+        hover_toolbox_ = toolbox_rect_.w > 0 && toolbox_rect_.h > 0 && SDL_PointInRect(&mouse, &toolbox_rect_);
+        const bool block_camera_controls = hover_toolbox_ || dragging_toolbox_scrollbar_;
+        int scroll_delta = 0;
+        if (pending_scroll_delta_ != 0) {
+            scroll_delta = pending_scroll_delta_;
+            pending_scroll_delta_ = 0;
         } else {
-            const double prev_height = cam.get_scale();
-            pan_height_.handle_input(cam, input, pan_blocked);
-            if (input.getScrollY() != 0) {
-                cam.set_scale(prev_height);
+            scroll_delta = input.getScrollY();
+        }
+
+        if (!block_camera_controls) {
+            if (is_xy_plane()) {
+                handle_xy_scroll(cam, scroll_delta);
+            } else {
+                handle_xz_scroll(cam, scroll_delta);
             }
-            handle_xz_scroll(cam, input);
         }
         center_camera_origin();
     }
@@ -1156,8 +1192,27 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         }
         return false;
 };
+    auto point_in_toolbox_scrollbar = [&](const SDL_Point& p) -> bool {
+        return toolbox_scrollbar_visible_ && SDL_PointInRect(&p, &toolbox_scrollbar_track_);
+};
+    auto update_toolbox_scrollbar_from_mouse = [&](int mouse_y) {
+        if (!toolbox_scrollbar_visible_) return;
+        const int thumb_h = toolbox_scrollbar_thumb_.h;
+        int track_min = toolbox_scrollbar_track_.y;
+        int track_max = toolbox_scrollbar_track_.y + toolbox_scrollbar_track_.h - thumb_h;
+        if (track_max < track_min) track_max = track_min;
+        int new_thumb_y = mouse_y - toolbox_scrollbar_drag_offset_;
+        new_thumb_y = std::clamp(new_thumb_y, track_min, track_max);
+        const float denom = static_cast<float>(track_max - track_min);
+        float ratio = 0.0f;
+        if (denom > 0.0f) {
+            ratio = static_cast<float>(new_thumb_y - track_min) / denom;
+        }
+        const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+        toolbox_scroll_offset_ = std::clamp(static_cast<int>(std::round(ratio * static_cast<float>(max_scroll))), 0, max_scroll);
+};
 
-    if (dragging_toolbox_ || dragging_nav_ || dragging_scrollbar_thumb_) {
+    if (dragging_toolbox_ || dragging_scrollbar_thumb_ || dragging_toolbox_scrollbar_) {
         if (e.type == SDL_MOUSEMOTION) {
             bool moved = false;
             if (dragging_toolbox_) {
@@ -1167,15 +1222,11 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 const int tool_h = toolbox_rect_.h;
                 clamp_panel_pos(toolbox_pos_.x, toolbox_pos_.y, tool_w, tool_h);
                 moved = true;
-            } else if (dragging_nav_) {
-                nav_pos_.x = e.motion.x - drag_offset_nav_.x;
-                nav_pos_.y = e.motion.y - drag_offset_nav_.y;
-                const int nav_w = nav_rect_.w;
-                const int nav_h = nav_rect_.h;
-                clamp_panel_pos(nav_pos_.x, nav_pos_.y, nav_w, nav_h);
-                moved = true;
             } else if (dragging_scrollbar_thumb_) {
                 update_scrollbar_from_mouse(e.motion.x);
+                moved = true;
+            } else if (dragging_toolbox_scrollbar_) {
+                update_toolbox_scrollbar_from_mouse(e.motion.y);
                 moved = true;
             }
             if (moved) {
@@ -1184,8 +1235,8 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             return true;
         } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
             dragging_toolbox_ = false;
-            dragging_nav_ = false;
             dragging_scrollbar_thumb_ = false;
+            dragging_toolbox_scrollbar_ = false;
             return true;
         }
     }
@@ -1199,6 +1250,87 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             rebuild_layout();
             return true;
         }
+        if (point_in_toolbox_scrollbar(p)) {
+            dragging_toolbox_scrollbar_ = true;
+            toolbox_scrollbar_drag_offset_ = std::clamp(p.y - toolbox_scrollbar_thumb_.y, 0, toolbox_scrollbar_thumb_.h);
+            update_toolbox_scrollbar_from_mouse(p.y);
+            rebuild_layout();
+            return true;
+        }
+    }
+
+    if (e.type == SDL_MOUSEWHEEL) {
+        SDL_Point p{0, 0};
+        SDL_GetMouseState(&p.x, &p.y);
+        if (toolbox_rect_.w > 0 && toolbox_rect_.h > 0 && SDL_PointInRect(&p, &toolbox_rect_)) {
+            const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+            if (max_scroll > 0) {
+                toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_ - e.wheel.y * 24, 0, max_scroll);
+                rebuild_layout();
+            }
+            return true;
+        }
+        pending_scroll_delta_ += e.wheel.y;
+        return true;
+    }
+
+    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_RIGHT) {
+        SDL_Point p{ e.button.x, e.button.y };
+        if (SDL_PointInRect(&p, &directory_rect_) || SDL_PointInRect(&p, &nav_rect_) || SDL_PointInRect(&p, &toolbox_rect_)) {
+            return true;
+        }
+        if (!assets_) {
+            return true;
+        }
+        WarpedScreenGrid& cam = assets_->getView();
+        right_pan_active_ = true;
+        right_pan_start_mouse_ = p;
+        right_pan_start_center_ = cam.get_screen_center();
+        right_pan_last_center_ = right_pan_start_center_;
+        right_pan_has_last_center_ = true;
+        return true;
+    }
+
+    if (e.type == SDL_MOUSEMOTION && right_pan_active_) {
+        if (!assets_) {
+            return true;
+        }
+        const bool right_down = (e.motion.state & SDL_BUTTON_RMASK) != 0;
+        if (!right_down) {
+            right_pan_active_ = false;
+            right_pan_has_last_center_ = false;
+            return true;
+        }
+        SDL_Point p{ e.motion.x, e.motion.y };
+        if (SDL_PointInRect(&p, &toolbox_rect_)) {
+            right_pan_active_ = false;
+            right_pan_has_last_center_ = false;
+            return true;
+        }
+        const int dx = p.x - right_pan_start_mouse_.x;
+        const int dy = p.y - right_pan_start_mouse_.y;
+        if (dx != 0 || dy != 0) {
+            WarpedScreenGrid& cam = assets_->getView();
+            SDL_Point new_center{
+                right_pan_start_center_.x - dx,
+                right_pan_start_center_.y - dy
+            };
+            if (!right_pan_has_last_center_ ||
+                new_center.x != right_pan_last_center_.x ||
+                new_center.y != right_pan_last_center_.y) {
+                cam.set_focus_override(new_center);
+                cam.set_screen_center(new_center);
+                right_pan_last_center_ = new_center;
+                right_pan_has_last_center_ = true;
+            }
+        }
+        return true;
+    }
+
+    if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_RIGHT) {
+        right_pan_active_ = false;
+        right_pan_has_last_center_ = false;
+        return true;
     }
 
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
@@ -1249,10 +1381,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             }
             if (!over_nav_ctrl) over_nav_ctrl = point_in_any_thumb(p);
             if (!over_nav_ctrl && point_in_scrollbar(p)) over_nav_ctrl = true;
-            const bool is_on_nav_handle = nav_drag_rect_.w > 0 && SDL_PointInRect(&p, &nav_drag_rect_);
-            if (is_on_nav_handle || !over_nav_ctrl) {
-                dragging_nav_ = true;
-                drag_offset_nav_ = SDL_Point{ p.x - nav_rect_.x, p.y - nav_rect_.y };
+            if (!over_nav_ctrl) {
                 return true;
             }
         }
@@ -1790,7 +1919,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
     if (handle_button(btn_next_, [this]() { this->select_frame(this->selected_index_ + 1); })) return true;
 
     if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-        if (dragging_dir_ || dragging_nav_ || dragging_scrollbar_thumb_) return true;
+        if (dragging_dir_ || dragging_scrollbar_thumb_) return true;
         SDL_Point p{e.button.x, e.button.y};
         for (size_t i = 0; i < thumb_rects_.size() && i < thumb_indices_.size(); ++i) {
             if (SDL_PointInRect(&p, &thumb_rects_[i])) {
@@ -2012,56 +2141,7 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
 
     render_navigation_panel(renderer);
 
-    if (mode_ == Mode::Movement && toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
-        dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-        if (cb_smooth_) cb_smooth_->render(renderer);
-        if (smooth_enabled_ && cb_curve_) cb_curve_->render(renderer);
-        if (cb_show_anim_) cb_show_anim_->render(renderer);
-        if (tb_total_dx_) tb_total_dx_->render(renderer);
-        if (tb_total_dy_) tb_total_dy_->render(renderer);
-        if (btn_apply_all_movement_) btn_apply_all_movement_->render(renderer);
-    } else if (is_children_mode(mode_) && toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
-        dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-
-        if (cb_smooth_) cb_smooth_->render(renderer);
-        if (smooth_enabled_ && cb_curve_) cb_curve_->render(renderer);
-        if (tb_total_dx_) tb_total_dx_->render(renderer);
-        if (tb_total_dy_) tb_total_dy_->render(renderer);
-        if (dd_child_select_) dd_child_select_->render(renderer);
-        if (cb_show_anim_) cb_show_anim_->render(renderer);
-        if (cb_show_child_) cb_show_child_->render(renderer);
-        if (tb_child_dx_) tb_child_dx_->render(renderer);
-        if (tb_child_dy_) tb_child_dy_->render(renderer);
-        if (tb_child_deg_) tb_child_deg_->render(renderer);
-        if (cb_child_visible_) cb_child_visible_->render(renderer);
-        if (cb_child_render_front_) cb_child_render_front_->render(renderer);
-        if (btn_apply_all_children_) btn_apply_all_children_->render(renderer);
-    } else if (mode_ == Mode::HitGeometry && toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
-        dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-        if (dd_hitbox_type_) dd_hitbox_type_->render(renderer);
-        if (btn_hitbox_add_remove_) btn_hitbox_add_remove_->render(renderer);
-        if (btn_hitbox_copy_next_) btn_hitbox_copy_next_->render(renderer);
-        if (tb_hit_center_x_) tb_hit_center_x_->render(renderer);
-        if (tb_hit_center_y_) tb_hit_center_y_->render(renderer);
-        if (tb_hit_width_) tb_hit_width_->render(renderer);
-        if (tb_hit_height_) tb_hit_height_->render(renderer);
-        if (tb_hit_rotation_) tb_hit_rotation_->render(renderer);
-        if (btn_apply_all_hit_) btn_apply_all_hit_->render(renderer);
-    } else if (mode_ == Mode::AttackGeometry && toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
-        dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-        if (dd_attack_type_) dd_attack_type_->render(renderer);
-        if (btn_attack_add_remove_) btn_attack_add_remove_->render(renderer);
-        if (btn_attack_delete_) btn_attack_delete_->render(renderer);
-        if (btn_attack_copy_next_) btn_attack_copy_next_->render(renderer);
-        if (tb_attack_start_x_) tb_attack_start_x_->render(renderer);
-        if (tb_attack_start_y_) tb_attack_start_y_->render(renderer);
-        if (tb_attack_control_x_) tb_attack_control_x_->render(renderer);
-        if (tb_attack_control_y_) tb_attack_control_y_->render(renderer);
-        if (tb_attack_end_x_) tb_attack_end_x_->render(renderer);
-        if (tb_attack_end_y_) tb_attack_end_y_->render(renderer);
-        if (tb_attack_damage_) tb_attack_damage_->render(renderer);
-        if (btn_apply_all_attack_) btn_apply_all_attack_->render(renderer);
-    }
+    render_toolbox(renderer);
 
     dm_draw::DrawBeveledRect(renderer, nav_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
     if (dd_animation_select_) {
@@ -2156,6 +2236,91 @@ void FrameEditorSession::render_navigation_panel(SDL_Renderer* renderer) const {
     if (stepper_grid_resolution_) stepper_grid_resolution_->render(renderer);
 }
 
+void FrameEditorSession::render_toolbox(SDL_Renderer* renderer) const {
+    if (!renderer || toolbox_rect_.w <= 0 || toolbox_rect_.h <= 0) {
+        return;
+    }
+    dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false,
+                             DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+
+    SDL_Rect prev_clip{};
+    SDL_RenderGetClipRect(renderer, &prev_clip);
+    const SDL_bool had_clip = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderSetClipRect(renderer, &toolbox_rect_);
+
+    auto render_if = [&](auto* widget) {
+        if (widget) widget->render(renderer);
+    };
+
+    if (mode_ == Mode::Movement) {
+        render_if(cb_smooth_.get());
+        if (smooth_enabled_) render_if(cb_curve_.get());
+        render_if(cb_show_anim_.get());
+        render_if(tb_total_dx_.get());
+        render_if(tb_total_dy_.get());
+        render_if(btn_apply_all_movement_.get());
+    } else if (is_children_mode(mode_)) {
+        render_if(cb_smooth_.get());
+        if (smooth_enabled_) render_if(cb_curve_.get());
+        render_if(tb_total_dx_.get());
+        render_if(tb_total_dy_.get());
+        render_if(dd_child_select_.get());
+        render_if(cb_show_anim_.get());
+        render_if(cb_show_child_.get());
+        render_if(tb_child_dx_.get());
+        render_if(tb_child_dy_.get());
+        render_if(tb_child_deg_.get());
+        render_if(cb_child_visible_.get());
+        render_if(cb_child_render_front_.get());
+        render_if(btn_apply_all_children_.get());
+        render_if(dd_child_mode_.get());
+        render_if(tb_child_name_.get());
+        render_if(btn_child_add_.get());
+        render_if(btn_child_remove_.get());
+    } else if (mode_ == Mode::HitGeometry) {
+        render_if(dd_hitbox_type_.get());
+        render_if(btn_hitbox_add_remove_.get());
+        render_if(btn_hitbox_copy_next_.get());
+        render_if(tb_hit_center_x_.get());
+        render_if(tb_hit_center_y_.get());
+        render_if(tb_hit_width_.get());
+        render_if(tb_hit_height_.get());
+        render_if(tb_hit_rotation_.get());
+        render_if(btn_apply_all_hit_.get());
+    } else if (mode_ == Mode::AttackGeometry) {
+        render_if(dd_attack_type_.get());
+        render_if(btn_attack_add_remove_.get());
+        render_if(btn_attack_delete_.get());
+        render_if(btn_attack_copy_next_.get());
+        render_if(tb_attack_start_x_.get());
+        render_if(tb_attack_start_y_.get());
+        render_if(tb_attack_control_x_.get());
+        render_if(tb_attack_control_y_.get());
+        render_if(tb_attack_end_x_.get());
+        render_if(tb_attack_end_y_.get());
+        render_if(tb_attack_damage_.get());
+        render_if(btn_apply_all_attack_.get());
+    }
+
+    if (had_clip == SDL_TRUE) {
+        SDL_RenderSetClipRect(renderer, &prev_clip);
+    } else {
+        SDL_RenderSetClipRect(renderer, nullptr);
+    }
+
+    if (toolbox_scrollbar_visible_) {
+        SDL_Color track = devmode::utils::with_alpha(DMStyles::PanelHeader(), 180);
+        SDL_SetRenderDrawColor(renderer, track.r, track.g, track.b, track.a);
+        SDL_RenderFillRect(renderer, &toolbox_scrollbar_track_);
+        SDL_Color thumb = DMStyles::AccentButton().bg;
+        SDL_SetRenderDrawColor(renderer, thumb.r, thumb.g, thumb.b, 220);
+        SDL_RenderFillRect(renderer, &toolbox_scrollbar_thumb_);
+        SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g, DMStyles::Border().b, 255);
+        SDL_RenderDrawRect(renderer, &toolbox_scrollbar_thumb_);
+    }
+}
+
 void FrameEditorSession::set_grid_overlay_enabled_transient(bool enabled) {
     grid_overlay_enabled_ = enabled;
     if (cb_grid_overlay_ && cb_grid_overlay_->value() != enabled) {
@@ -2163,11 +2328,28 @@ void FrameEditorSession::set_grid_overlay_enabled_transient(bool enabled) {
     }
 }
 
+bool FrameEditorSession::should_render_asset(const Asset* asset) const {
+    if (!asset || !target_) {
+        return false;
+    }
+    if (asset == target_) {
+        return true;
+    }
+    if (!show_child_ || child_assets_.empty() || !asset->info) {
+        return false;
+    }
+    const std::string& name = asset->info->name;
+    return std::find(child_assets_.begin(), child_assets_.end(), name) != child_assets_.end();
+}
+
 void FrameEditorSession::set_snap_resolution(int r) {
     snap_resolution_r_ = vibble::grid::clamp_resolution(std::max(0, r));
     snap_resolution_override_ = true;
     if (stepper_grid_resolution_ && stepper_grid_resolution_->value() != snap_resolution_r_) {
         stepper_grid_resolution_->set_value(snap_resolution_r_);
+    }
+    if (assets_) {
+        assets_->refresh_filtered_active_assets();
     }
     rebuild_layout();
 }
@@ -2339,8 +2521,10 @@ void FrameEditorSession::rebuild_layout() const {
     if (assets_->renderer()) {
         SDL_GetRendererOutputSize(assets_->renderer(), &screen_w, &screen_h);
     }
-    (void)screen_h;
     (void)cam;
+    const int max_toolbox_height = (screen_h > 0)
+        ? std::max(160, static_cast<int>(std::round(static_cast<double>(screen_h) * kToolboxHeightRatio)))
+        : std::numeric_limits<int>::max();
     DirectoryPanelMetrics dir_metrics = build_directory_panel_metrics();
     const int header_width = (screen_w > 0) ? screen_w : dir_metrics.width;
     directory_rect_ = SDL_Rect{ 0, 0, header_width, dir_metrics.height };
@@ -2448,13 +2632,18 @@ void FrameEditorSession::rebuild_layout() const {
         if (metrics.width <= 0 || metrics.height <= 0) {
             toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, 0, 0 };
             toolbox_drag_rect_ = SDL_Rect{ 0, 0, 0, 0 };
+            toolbox_content_height_ = 0;
         } else {
-            toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, metrics.width, metrics.height };
+            toolbox_content_height_ = metrics.height;
+            const int viewport_height = std::min(metrics.height, max_toolbox_height);
+            toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, metrics.width, viewport_height };
+            const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+            toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
             const int handle_height = std::max(0, metrics.drag_handle_height);
             const int drag_area_height = std::min(toolbox_rect_.h, handle_height + metrics.padding);
             toolbox_drag_rect_ = SDL_Rect{ toolbox_rect_.x, toolbox_rect_.y, toolbox_rect_.w, drag_area_height };
             int tx = toolbox_rect_.x + metrics.padding;
-            const int row_top = toolbox_rect_.y + metrics.padding + handle_height;
+            const int row_top = toolbox_rect_.y + metrics.padding + handle_height - toolbox_scroll_offset_;
             bool first = true;
             auto reserve = [&](int w) -> int {
                 if (w <= 0) return tx;
@@ -2520,13 +2709,18 @@ void FrameEditorSession::rebuild_layout() const {
         if (metrics.width <= 0 || metrics.height <= 0) {
             toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, 0, 0 };
             toolbox_drag_rect_ = SDL_Rect{ 0, 0, 0, 0 };
+            toolbox_content_height_ = 0;
         } else {
-            toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, metrics.width, metrics.height };
+            toolbox_content_height_ = metrics.height;
+            const int viewport_height = std::min(metrics.height, max_toolbox_height);
+            toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, metrics.width, viewport_height };
+            const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+            toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
             const int handle_height = std::max(0, metrics.drag_handle_height);
             const int drag_area_height = std::min(toolbox_rect_.h, handle_height + metrics.padding);
             toolbox_drag_rect_ = SDL_Rect{ toolbox_rect_.x, toolbox_rect_.y, toolbox_rect_.w, drag_area_height };
             const int content_width = std::max(0, toolbox_rect_.w - metrics.padding * 2);
-            int row_cursor = toolbox_rect_.y + metrics.padding + handle_height;
+            int row_cursor = toolbox_rect_.y + metrics.padding + handle_height - toolbox_scroll_offset_;
             bool have_previous_row = false;
             auto allocate_row = [&](int row_height) -> int {
                 if (row_height <= 0) return -1;
@@ -2691,11 +2885,12 @@ void FrameEditorSession::rebuild_layout() const {
         const int padding = DMSpacing::small_gap();
         const int gap = DMSpacing::small_gap();
         const int width = 360;
-        const int handle_height = DMSpacing::small_gap();
+        const int handle_height = 0;
         int content_y = padding + handle_height;
         const int inner_width = width - padding * 2;
+        const int scroll_offset = toolbox_scroll_offset_;
         auto place_row = [&](int height) -> SDL_Rect {
-            SDL_Rect r{ toolbox_pos_.x + padding, toolbox_pos_.y + content_y, inner_width, height };
+            SDL_Rect r{ toolbox_pos_.x + padding, toolbox_pos_.y + content_y - scroll_offset, inner_width, height };
             content_y += height + gap;
             return r;
 };
@@ -2745,17 +2940,22 @@ void FrameEditorSession::rebuild_layout() const {
             register_toolbox_widget(btn_apply_all_hit_.get());
         }
         int total_height = content_y > padding ? content_y - gap + padding : padding * 2;
-        toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, total_height };
-        toolbox_drag_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, std::min(total_height, handle_height + padding) };
+        toolbox_content_height_ = total_height;
+        const int viewport_height = std::min(total_height, max_toolbox_height);
+        toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, viewport_height };
+        toolbox_drag_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, std::min(viewport_height, handle_height + padding) };
+        const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+        toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
     } else if (mode_ == Mode::AttackGeometry) {
         const int padding = DMSpacing::small_gap();
         const int gap = DMSpacing::small_gap();
         const int width = 360;
-        const int handle_height = DMSpacing::small_gap();
+        const int handle_height = 0;
         int content_y = padding + handle_height;
         const int inner_width = width - padding * 2;
+        const int scroll_offset = toolbox_scroll_offset_;
         auto place_row = [&](int height) -> SDL_Rect {
-            SDL_Rect r{ toolbox_pos_.x + padding, toolbox_pos_.y + content_y, inner_width, height };
+            SDL_Rect r{ toolbox_pos_.x + padding, toolbox_pos_.y + content_y - scroll_offset, inner_width, height };
             content_y += height + gap;
             return r;
 };
@@ -2814,20 +3014,53 @@ void FrameEditorSession::rebuild_layout() const {
             register_toolbox_widget(btn_apply_all_attack_.get());
         }
         int total_height = content_y > padding ? content_y - gap + padding : padding * 2;
-        toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, total_height };
-        toolbox_drag_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, std::min(total_height, handle_height + padding) };
+        toolbox_content_height_ = total_height;
+        const int viewport_height = std::min(total_height, max_toolbox_height);
+        toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, viewport_height };
+        toolbox_drag_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, std::min(viewport_height, handle_height + padding) };
+        const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+        toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
     } else {
         toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, 0, 0 };
         toolbox_drag_rect_ = SDL_Rect{ 0, 0, 0, 0 };
+        toolbox_content_height_ = 0;
+    }
+
+    const int toolbox_max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+    toolbox_scrollbar_visible_ = toolbox_rect_.w > 0 && toolbox_rect_.h > 0 && toolbox_max_scroll > 0;
+    if (toolbox_scrollbar_visible_) {
+        const int track_height = std::max(0, toolbox_rect_.h - kToolboxScrollbarPadding * 2);
+        const int track_x = toolbox_rect_.x + toolbox_rect_.w - kToolboxScrollbarWidth - kToolboxScrollbarPadding;
+        const int track_y = toolbox_rect_.y + kToolboxScrollbarPadding;
+        toolbox_scrollbar_track_ = SDL_Rect{ track_x, track_y, kToolboxScrollbarWidth, track_height };
+        const float viewport_ratio = toolbox_content_height_ > 0
+            ? static_cast<float>(toolbox_rect_.h) / static_cast<float>(toolbox_content_height_)
+            : 1.0f;
+        int thumb_h = track_height > 0
+            ? std::max(18, static_cast<int>(std::round(static_cast<float>(track_height) * viewport_ratio)))
+            : track_height;
+        thumb_h = std::min(thumb_h, track_height);
+        int thumb_y = toolbox_scrollbar_track_.y;
+        if (toolbox_max_scroll > 0 && track_height > thumb_h) {
+            const float scroll_ratio = static_cast<float>(toolbox_scroll_offset_) / static_cast<float>(toolbox_max_scroll);
+            thumb_y += static_cast<int>(std::round(scroll_ratio * static_cast<float>(track_height - thumb_h)));
+        }
+        toolbox_scrollbar_thumb_ = SDL_Rect{ track_x, thumb_y, kToolboxScrollbarWidth, thumb_h };
+    } else {
+        toolbox_scrollbar_track_ = SDL_Rect{0, 0, 0, 0};
+        toolbox_scrollbar_thumb_ = SDL_Rect{0, 0, 0, 0};
+        if (toolbox_max_scroll <= 0) {
+            toolbox_scroll_offset_ = 0;
+        }
     }
 
     const int nav_w = 560;
     const int title_h = nav_header_height_px(dd_animation_select_ != nullptr);
     const int nav_vertical_padding = DMSpacing::small_gap() * 2;
-    const int nav_drag_handle_height = DMSpacing::small_gap() * 2;
+    const int nav_drag_handle_height = 0;
     const int nav_h = title_h + nav_vertical_padding + kNavPreviewHeight + kNavSliderGap + nav_drag_handle_height;
     nav_rect_ = SDL_Rect{ nav_pos_.x, nav_pos_.y, nav_w, nav_h };
-    nav_drag_rect_ = SDL_Rect{ nav_rect_.x, nav_rect_.y, nav_rect_.w, std::min(nav_rect_.h, nav_drag_handle_height) };
+    nav_drag_rect_ = SDL_Rect{ 0, 0, 0, 0 };
 
     const int thumb_h = std::max(1, nav_rect_.h - nav_drag_handle_height - nav_vertical_padding - title_h - kNavSliderGap);
     const int thumb_w = thumb_h;
@@ -2942,7 +3175,7 @@ FrameEditorSession::MovementToolboxMetrics FrameEditorSession::build_movement_to
     MovementToolboxMetrics metrics;
     metrics.padding = DMSpacing::small_gap();
     metrics.gap = DMSpacing::small_gap();
-    metrics.drag_handle_height = DMSpacing::small_gap();
+    metrics.drag_handle_height = 0;
     metrics.totals_width = kMovementTotalsFieldWidth;
     metrics.smooth_checkbox_width = cb_smooth_ ? std::max(kSmoothCheckboxMinWidth, cb_smooth_->preferred_width()) : 0;
     const bool curve_visible = smooth_enabled_ && cb_curve_;
@@ -2985,7 +3218,7 @@ FrameEditorSession::ChildrenToolboxMetrics FrameEditorSession::build_children_to
     ChildrenToolboxMetrics metrics;
     metrics.padding = DMSpacing::small_gap();
     metrics.gap = DMSpacing::small_gap();
-    metrics.drag_handle_height = DMSpacing::small_gap();
+    metrics.drag_handle_height = 0;
     metrics.textbox_width = kChildrenFieldWidth;
 
     metrics.totals_width = kMovementTotalsFieldWidth;

@@ -36,6 +36,20 @@ def clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
 
+def _find_repo_root(start_dir: Path) -> Path:
+    current = start_dir
+    while True:
+        candidate = current / "manifest.json"
+        if candidate.exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            raise FileNotFoundError(
+                f"manifest.json not found while searching upward from {start_dir}"
+            )
+        current = parent
+
+
 def light_signature(light: "LightDefinition") -> str:
     return (
         f"{light.radius}|"
@@ -406,7 +420,7 @@ def main() -> None:
     print_gpu_status(False)
 
     tools_dir = Path(__file__).resolve().parent
-    repo_root = tools_dir.parent
+    repo_root = _find_repo_root(tools_dir)
     manifest_path = str(repo_root / "manifest.json")
     cache_root = str(repo_root / "cache")
 

@@ -3723,7 +3723,6 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
                   "render_in_front": true,
                   "visible": false
                 }
@@ -3738,9 +3737,8 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": 0,
+                  "dx": -3,
                   "dy": 0,
-                  "dz": 376,
                   "render_in_front": true,
                   "visible": true
                 }
@@ -4118,7 +4116,7 @@
         "falloff_start": 0.0
       },
       "size_settings": {
-        "scale_percentage": 96.0
+        "scale_percentage": 25.0
       },
       "spawn_groups": [],
       "start": "default",
@@ -4204,6 +4202,7 @@
       "asset_directory": "SRC/assets/Vibble_eyes",
       "asset_name": "Vibble_eyes",
       "asset_type": "object",
+      "async_children": [],
       "lighting_info": [],
       "neighbor_search_distance": 500,
       "shading_opacity_multiplier": 1.0,
@@ -4217,7 +4216,7 @@
         "falloff_start": 0.0
       },
       "size_settings": {
-        "scale_percentage": 65.0
+        "scale_percentage": 15.0
       },
       "spawn_groups": [],
       "start": "default",
@@ -7327,7 +7326,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726563,
+            "offset": 658.9600219726562,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }

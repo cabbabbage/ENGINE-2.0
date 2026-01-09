@@ -59,6 +59,20 @@ def _closest_speed_multiplier(value: float) -> float:
     return best
 
 
+def _find_repo_root(start_dir: Path) -> Path:
+    current = start_dir
+    while True:
+        candidate = current / "manifest.json"
+        if candidate.exists():
+            return current
+        parent = current.parent
+        if parent == current:
+            raise FileNotFoundError(
+                f"manifest.json not found while searching upward from {start_dir}"
+            )
+        current = parent
+
+
 def read_speed_multiplier(anim_meta: Dict[str, object]) -> float:
     if not isinstance(anim_meta, dict):
         return 1.0
@@ -600,7 +614,7 @@ def main():
     print_gpu_status(detect_torch_gpu())
 
     tools_dir = Path(__file__).resolve().parent
-    repo_root = tools_dir.parent
+    repo_root = _find_repo_root(tools_dir)
     manifest_path = repo_root / "manifest.json"
     cache_root_path = repo_root / "cache"
 

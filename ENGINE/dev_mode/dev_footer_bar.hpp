@@ -39,6 +39,8 @@ public:
 
     void set_visible(bool visible) { visible_ = visible; }
     bool visible() const { return visible_; }
+    void set_input_enabled(bool enabled) { input_enabled_ = enabled; }
+    bool input_enabled() const { return input_enabled_; }
 
     void set_buttons(std::vector<Button> buttons);
     void activate_button(const std::string& id);
@@ -79,6 +81,7 @@ private:
     int height_ = 0;
     bool visible_ = true;
     bool show_title_ = true;
+    bool input_enabled_ = true;
 
     SDL_Rect rect_{0, 0, 0, 0};
     int title_width_ = 0;

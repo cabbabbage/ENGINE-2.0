@@ -173,7 +173,7 @@ void DevFooterBar::set_button_active_state(const std::string& id, bool active) {
 void DevFooterBar::update(const Input&) {}
 
 bool DevFooterBar::handle_event(const SDL_Event& e) {
-    if (!visible_) return false;
+    if (!visible_ || !input_enabled_) return false;
 
     const bool pointer_event =
         (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION);

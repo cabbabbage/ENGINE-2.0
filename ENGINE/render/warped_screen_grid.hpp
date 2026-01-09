@@ -209,6 +209,8 @@ public:
     void set_manual_height_override(bool);
     double get_scale() const;
     void set_scale(double);
+    double camera_y_distance() const;
+    void set_camera_y_distance(double distance);
     void update();
     void set_tilt_override(std::optional<float> tilt_deg);
     void clear_tilt_override();

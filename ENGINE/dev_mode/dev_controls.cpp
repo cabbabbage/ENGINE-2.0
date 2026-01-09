@@ -1582,6 +1582,9 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     };
 
     const bool show_depth_guides = camera_panel_ && camera_panel_->is_depth_section_visible();
+    const bool frame_editor_xz = frame_editor_session_ && frame_editor_session_->is_active() &&
+        frame_editor_session_->edit_plane() == FrameEditorSession::EditPlane::XZ;
+    const bool show_grid_overlay = grid_overlay_enabled_ && !frame_editor_xz;
     std::optional<float> horizon_screen_y;
     std::optional<std::string> parallax_probe_label;
     const WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
@@ -1590,7 +1593,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         floor_depth_params = cam->compute_floor_depth_params();
     }
 
-    const bool need_grid_helpers = cam && (grid_overlay_enabled_ || show_depth_guides);
+    const bool need_grid_helpers = cam && (show_grid_overlay || show_depth_guides);
     if (renderer && need_grid_helpers) {
         const WarpedScreenGrid& view_cam = *cam;
         const WarpedScreenGrid::FloorDepthParams& depth_params = *floor_depth_params;
@@ -1600,7 +1603,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
         SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
         Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
-        if (grid_overlay_enabled_) {
+        if (show_grid_overlay) {
             SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
@@ -1636,7 +1639,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             float best_horizon_x = 0.0f;
             const float screen_center_x = static_cast<float>(screen_w_) * 0.5f;
             auto draw_grid_polyline = [&](const std::vector<SDL_Point>& polyline, float line_value) {
-                if (!grid_overlay_enabled_ || polyline.size() < 2) {
+                if (!show_grid_overlay || polyline.size() < 2) {
                     return;
                 }
                 const bool is_major = (static_cast<long long>(std::llround(line_value)) % (cell * major_interval) == 0);
@@ -1743,7 +1746,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 flush_polyline();
             }
 
-            if (grid_overlay_enabled_ && horizon_screen_y) {
+            if (show_grid_overlay && horizon_screen_y) {
                 const float hy = *horizon_screen_y;
                 const bool already_at_horizon =
                     std::isfinite(highest_horizontal_screen_y) && std::fabs(highest_horizontal_screen_y - hy) < 0.5f;
@@ -1760,7 +1763,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 horizon_screen_y = static_cast<float>(depth_params.horizon_screen_y);
             }
 
-            if (grid_overlay_enabled_ && view_cam.parallax_enabled()) {
+            if (show_grid_overlay && view_cam.parallax_enabled()) {
                 const int sample_dx = std::max(cell * 2, 64);
                 const int sample_dy = std::max(cell * 3, 96);
                 const SDL_FPoint view_center = view_cam.get_view_center_f();
@@ -1788,13 +1791,13 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             }
         }
 
-        if (grid_overlay_enabled_) {
+        if (show_grid_overlay) {
             SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
             SDL_SetRenderDrawBlendMode(renderer, prev_mode);
         }
     }
 
-    if (renderer && grid_overlay_enabled_ && parallax_probe_label) {
+    if (renderer && show_grid_overlay && parallax_probe_label) {
         DMLabelStyle style = DMStyles::Label();
         const int text_x = DMSpacing::panel_padding();
         const int text_y = screen_h_ - style.font_size - DMSpacing::panel_padding();

@@ -1869,6 +1869,16 @@ void WarpedScreenGrid::set_scale(double s) {
     runtime_camera_height_ = camera_.current_height();
 }
 
+double WarpedScreenGrid::camera_y_distance() const {
+    return camera_.state().params.y_distance_px;
+}
+
+void WarpedScreenGrid::set_camera_y_distance(double distance) {
+    CameraParams params = camera_.state().params;
+    params.y_distance_px = distance;
+    camera_.set_params(params);
+}
+
 void WarpedScreenGrid::set_tilt_override(std::optional<float> tilt_deg) {
     if (!tilt_deg.has_value() || !std::isfinite(*tilt_deg)) {
         tilt_override_deg_.reset();

@@ -58,6 +58,10 @@ namespace {
     constexpr float kRadToDeg = 180.0f / static_cast<float>(M_PI);
     constexpr float kHitboxRotateHandleRadius = 12.0f;
     constexpr float kAttackNodeRadius = 12.0f;
+    constexpr float kFrameFitScreenRatio = 0.5f;
+    constexpr int kFrameFitIterations = 20;
+    constexpr double kFrameFitMinHeight = 1.0;
+    constexpr double kFrameFitMaxHeight = 100000.0;
 
     int nav_header_height_px(bool has_dropdown) {
         return has_dropdown ? DMDropdown::height() : DMButton::height();
@@ -198,10 +202,12 @@ namespace {
         return static_cast<int>(scaled * static_cast<double>(step));
     }
 
-    void render_plane_grid(SDL_Renderer* renderer,
+    void FrameEditorSession::render_plane_grid(SDL_Renderer* renderer,
                            const WarpedScreenGrid& cam,
                            SDL_Point anchor_world,
-                           int snap_resolution_r) {
+                           FrameEditorSession::EditPlane plane,
+                           int snap_resolution_r,
+                           const FrameEditorSession::TextureMetrics& metrics) {
         if (!renderer) {
             return;
         }
@@ -210,15 +216,32 @@ namespace {
             return;
         }
 
-        auto [minx, miny, maxx, maxy] = cam.get_current_view().get_bounds();
-        if (minx == maxx || miny == maxy) {
+        int minx = 0;
+        int maxx = 0;
+        int min_axis = 0;
+        int max_axis = 0;
+        if (plane == FrameEditorSession::EditPlane::XZ && metrics.width > 0 && metrics.height > 0) {
+            const int half_w = metrics.width / 2;
+            minx = anchor_world.x - half_w;
+            maxx = anchor_world.x + half_w;
+            min_axis = 0;
+            max_axis = metrics.height;
+        } else {
+            auto [view_minx, view_miny, view_maxx, view_maxy] = cam.get_current_view().get_bounds();
+            minx = view_minx;
+            maxx = view_maxx;
+            min_axis = view_miny;
+            max_axis = view_maxy;
+        }
+
+        if (minx == maxx || min_axis == max_axis) {
             return;
         }
 
         const int start_x = floor_to_step(minx, step);
         const int end_x = ceil_to_step(maxx, step);
-        const int start_y = floor_to_step(miny, step);
-        const int end_y = ceil_to_step(maxy, step);
+        const int start_axis = floor_to_step(min_axis, step);
+        const int end_axis = ceil_to_step(max_axis, step);
         const int major_step = (step > 0 && step <= (std::numeric_limits<int>::max() / 4))
                                    ? step * 4
                                    : 0;
@@ -236,38 +259,58 @@ namespace {
                                static_cast<int>(std::lround(b.y)));
         };
 
+        auto project_point = [&](float world_x, float axis) -> std::optional<SDL_FPoint> {
+            if (plane == FrameEditorSession::EditPlane::XZ) {
+                SDL_FPoint screen{};
+                if (!cam.project_world_point(SDL_FPoint{world_x, static_cast<float>(anchor_world.y)}, axis, screen)) {
+                    return std::nullopt;
+                }
+                return screen;
+            }
+            return cam.map_to_screen_f(SDL_FPoint{world_x, axis});
+        };
+
         for (int x = start_x; x <= end_x; x += step) {
             const bool major = (major_step > 0) && (x % major_step == 0);
-            SDL_FPoint a = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(x), static_cast<float>(miny)});
-            SDL_FPoint b = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(x), static_cast<float>(maxy)});
-            draw_line(a, b, major ? 55 : 22);
+            auto a = project_point(static_cast<float>(x), static_cast<float>(start_axis));
+            auto b = project_point(static_cast<float>(x), static_cast<float>(end_axis));
+            if (a && b) {
+                draw_line(*a, *b, major ? 55 : 22);
+            }
         }
-        for (int y = start_y; y <= end_y; y += step) {
-            const bool major = (major_step > 0) && (y % major_step == 0);
-            SDL_FPoint a = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(minx), static_cast<float>(y)});
-            SDL_FPoint b = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(maxx), static_cast<float>(y)});
-            draw_line(a, b, major ? 55 : 22);
+        for (int axis = start_axis; axis <= end_axis; axis += step) {
+            const bool major = (major_step > 0) && (axis % major_step == 0);
+            auto a = project_point(static_cast<float>(start_x), static_cast<float>(axis));
+            auto b = project_point(static_cast<float>(end_x), static_cast<float>(axis));
+            if (a && b) {
+                draw_line(*a, *b, major ? 55 : 22);
+            }
         }
 
         SDL_Color axis = devmode::utils::with_alpha(DMStyles::AccentButton().press_bg, 170);
         SDL_SetRenderDrawColor(renderer, axis.r, axis.g, axis.b, axis.a);
         if (anchor_world.x >= minx && anchor_world.x <= maxx) {
-            SDL_FPoint a = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(anchor_world.x), static_cast<float>(miny)});
-            SDL_FPoint b = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(anchor_world.x), static_cast<float>(maxy)});
-            SDL_RenderDrawLine(renderer,
-                               static_cast<int>(std::lround(a.x)),
-                               static_cast<int>(std::lround(a.y)),
-                               static_cast<int>(std::lround(b.x)),
-                               static_cast<int>(std::lround(b.y)));
+            auto a = project_point(static_cast<float>(anchor_world.x), static_cast<float>(start_axis));
+            auto b = project_point(static_cast<float>(anchor_world.x), static_cast<float>(end_axis));
+            if (a && b) {
+                SDL_RenderDrawLine(renderer,
+                                   static_cast<int>(std::lround(a->x)),
+                                   static_cast<int>(std::lround(a->y)),
+                                   static_cast<int>(std::lround(b->x)),
+                                   static_cast<int>(std::lround(b->y)));
+            }
         }
-        if (anchor_world.y >= miny && anchor_world.y <= maxy) {
-            SDL_FPoint a = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(minx), static_cast<float>(anchor_world.y)});
-            SDL_FPoint b = cam.map_to_screen_f(SDL_FPoint{static_cast<float>(maxx), static_cast<float>(anchor_world.y)});
-            SDL_RenderDrawLine(renderer,
-                               static_cast<int>(std::lround(a.x)),
-                               static_cast<int>(std::lround(a.y)),
-                               static_cast<int>(std::lround(b.x)),
-                               static_cast<int>(std::lround(b.y)));
+        const int axis_world = (plane == FrameEditorSession::EditPlane::XZ) ? 0 : anchor_world.y;
+        if (axis_world >= min_axis && axis_world <= max_axis) {
+            auto a = project_point(static_cast<float>(start_x), static_cast<float>(axis_world));
+            auto b = project_point(static_cast<float>(end_x), static_cast<float>(axis_world));
+            if (a && b) {
+                SDL_RenderDrawLine(renderer,
+                                   static_cast<int>(std::lround(a->x)),
+                                   static_cast<int>(std::lround(a->y)),
+                                   static_cast<int>(std::lround(b->x)),
+                                   static_cast<int>(std::lround(b->y)));
+            }
         }
     }
 
@@ -306,6 +349,7 @@ void FrameEditorSession::toggle_edit_plane() {
     end_attack_drag(false);
     update_plane_labels();
     rebuild_rel_positions();
+    apply_camera_defaults(edit_plane_);
     refresh_hitbox_form();
     refresh_attack_form();
     rebuild_layout();
@@ -464,6 +508,7 @@ void FrameEditorSession::begin(Assets* assets,
     refresh_hitbox_form();
     refresh_attack_form();
     refresh_hitbox_form();
+    apply_camera_defaults(edit_plane_);
 
     {
         int sw = 0, sh = 0;
@@ -680,6 +725,216 @@ void FrameEditorSession::center_camera_origin() {
     cam.set_screen_center(anchor_world);
 }
 
+FrameEditorSession::TextureMetrics FrameEditorSession::current_frame_texture_metrics(SDL_Renderer* renderer) const {
+    TextureMetrics metrics{};
+    if (!renderer || animation_id_.empty()) {
+        return metrics;
+    }
+    if (preview_) {
+        if (SDL_Texture* tex = preview_->get_frame_texture(renderer, animation_id_, selected_index_)) {
+            SDL_QueryTexture(tex, nullptr, nullptr, &metrics.width, &metrics.height);
+        }
+    }
+    if ((metrics.width <= 0 || metrics.height <= 0) && target_ && target_->info) {
+        auto it = target_->info->animations.find(animation_id_);
+        if (it != target_->info->animations.end() &&
+            selected_index_ >= 0 &&
+            selected_index_ < static_cast<int>(it->second.frames.size())) {
+            const AnimationFrame* frame = it->second.frames[static_cast<std::size_t>(selected_index_)];
+            const float variant_scale = std::max(0.0001f, target_->current_nearest_variant_scale);
+            if (const FrameVariant* variant = it->second.get_frame(frame, variant_scale)) {
+                if (SDL_Texture* tex = variant->get_base_texture()) {
+                    SDL_QueryTexture(tex, nullptr, nullptr, &metrics.width, &metrics.height);
+                }
+            }
+        }
+    }
+    if (metrics.width < 0) {
+        metrics.width = 0;
+    }
+    if (metrics.height < 0) {
+        metrics.height = 0;
+    }
+    return metrics;
+}
+
+bool FrameEditorSession::project_texture_bounds(const WarpedScreenGrid& cam,
+                                                SDL_Point anchor_world,
+                                                const TextureMetrics& metrics,
+                                                EditPlane plane,
+                                                SDL_FRect& out_bounds) const {
+    if (metrics.width <= 0 || metrics.height <= 0) {
+        return false;
+    }
+    const float half_w = static_cast<float>(metrics.width) * 0.5f;
+    const float left = static_cast<float>(anchor_world.x) - half_w;
+    const float right = static_cast<float>(anchor_world.x) + half_w;
+    const float bottom = static_cast<float>(anchor_world.y);
+    const float top = static_cast<float>(anchor_world.y) - static_cast<float>(metrics.height);
+
+    std::array<SDL_FPoint, 4> projected{};
+    if (plane == EditPlane::XZ) {
+        const float world_y = static_cast<float>(anchor_world.y);
+        const float top_z = static_cast<float>(metrics.height);
+        const float bottom_z = 0.0f;
+        std::array<std::pair<float, float>, 4> corners = {
+            std::pair<float, float>{left, bottom_z},
+            {right, bottom_z},
+            {right, top_z},
+            {left, top_z}
+        };
+        for (std::size_t i = 0; i < corners.size(); ++i) {
+            SDL_FPoint screen{};
+            if (!cam.project_world_point(SDL_FPoint{corners[i].first, world_y}, corners[i].second, screen)) {
+                return false;
+            }
+            projected[i] = screen;
+        }
+    } else {
+        projected = {
+            cam.map_to_screen_f(SDL_FPoint{left, top}),
+            cam.map_to_screen_f(SDL_FPoint{right, top}),
+            cam.map_to_screen_f(SDL_FPoint{right, bottom}),
+            cam.map_to_screen_f(SDL_FPoint{left, bottom})
+        };
+    }
+
+    float min_x = projected[0].x;
+    float max_x = projected[0].x;
+    float min_y = projected[0].y;
+    float max_y = projected[0].y;
+    for (const auto& p : projected) {
+        if (!std::isfinite(p.x) || !std::isfinite(p.y)) {
+            return false;
+        }
+        min_x = std::min(min_x, p.x);
+        max_x = std::max(max_x, p.x);
+        min_y = std::min(min_y, p.y);
+        max_y = std::max(max_y, p.y);
+    }
+    out_bounds.x = min_x;
+    out_bounds.y = min_y;
+    out_bounds.w = max_x - min_x;
+    out_bounds.h = max_y - min_y;
+    return (out_bounds.w > 0.0f && out_bounds.h > 0.0f);
+}
+
+double FrameEditorSession::fit_camera_height_for_xy(WarpedScreenGrid& cam,
+                                                    SDL_Point anchor_world,
+                                                    const TextureMetrics& metrics,
+                                                    int screen_w,
+                                                    int screen_h) const {
+    if (metrics.width <= 0 || metrics.height <= 0 || screen_w <= 0 || screen_h <= 0) {
+        return cam.get_scale();
+    }
+    const float target_w = static_cast<float>(screen_w) * kFrameFitScreenRatio;
+    const float target_h = static_cast<float>(screen_h) * kFrameFitScreenRatio;
+    double low = kFrameFitMinHeight;
+    double high = kFrameFitMaxHeight;
+    double best = cam.get_scale();
+    for (int i = 0; i < kFrameFitIterations; ++i) {
+        const double mid = (low + high) * 0.5;
+        cam.set_scale(mid);
+        SDL_FRect bounds{};
+        if (!project_texture_bounds(cam, anchor_world, metrics, EditPlane::XY, bounds)) {
+            break;
+        }
+        const bool fits = bounds.w <= target_w && bounds.h <= target_h;
+        if (fits) {
+            best = mid;
+            high = mid;
+        } else {
+            low = mid;
+        }
+    }
+    return best;
+}
+
+double FrameEditorSession::fit_camera_y_distance_for_xz(WarpedScreenGrid& cam,
+                                                        SDL_Point anchor_world,
+                                                        const TextureMetrics& metrics,
+                                                        int screen_w,
+                                                        int screen_h) const {
+    if (metrics.width <= 0 || metrics.height <= 0 || screen_w <= 0 || screen_h <= 0) {
+        return cam.camera_y_distance();
+    }
+    const float target_w = static_cast<float>(screen_w) * kFrameFitScreenRatio;
+    const float target_h = static_cast<float>(screen_h) * kFrameFitScreenRatio;
+    double low = 0.0;
+    double high = 2000.0;
+    double best = cam.camera_y_distance();
+    for (int i = 0; i < kFrameFitIterations; ++i) {
+        const double mid = (low + high) * 0.5;
+        cam.set_camera_y_distance(mid);
+        SDL_FRect bounds{};
+        if (!project_texture_bounds(cam, anchor_world, metrics, EditPlane::XZ, bounds)) {
+            break;
+        }
+        const bool fits = bounds.w <= target_w && bounds.h <= target_h;
+        if (fits) {
+            best = mid;
+            high = mid;
+        } else {
+            low = mid;
+        }
+    }
+    return best;
+}
+
+void FrameEditorSession::apply_camera_defaults(EditPlane plane) {
+    if (!assets_ || !target_) {
+        return;
+    }
+    WarpedScreenGrid& cam = assets_->getView();
+    pan_height_.cancel(cam);
+    cam.set_manual_height_override(true);
+
+    SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
+    cam.set_focus_override(anchor_world);
+    cam.set_screen_center(anchor_world);
+
+    SDL_Renderer* renderer = assets_->renderer();
+    TextureMetrics metrics = current_frame_texture_metrics(renderer);
+
+    int screen_w = 0;
+    int screen_h = 0;
+    if (renderer) {
+        SDL_GetRendererOutputSize(renderer, &screen_w, &screen_h);
+    }
+
+    if (plane == EditPlane::XY) {
+        cam.set_camera_y_distance(0.0);
+        const double height = fit_camera_height_for_xy(cam, anchor_world, metrics, screen_w, screen_h);
+        cam.set_scale(height);
+    } else {
+        const double base_height = (metrics.height > 0)
+            ? std::max(kFrameFitMinHeight, static_cast<double>(metrics.height) * 0.5)
+            : cam.get_scale();
+        cam.set_scale(base_height);
+        const double distance = fit_camera_y_distance_for_xz(cam, anchor_world, metrics, screen_w, screen_h);
+        cam.set_camera_y_distance(distance);
+    }
+}
+
+void FrameEditorSession::handle_xz_scroll(WarpedScreenGrid& cam, const Input& input) {
+    const int wheel_y = input.getScrollY();
+    if (wheel_y == 0) {
+        return;
+    }
+
+    const double step = 1.1;
+    const int ticks = std::abs(wheel_y);
+    const bool distance_increase = (wheel_y < 0);
+    const double mag = std::pow(step, ticks);
+    const double current = cam.camera_y_distance();
+    const double base = std::max(1.0, current);
+    double target = distance_increase ? base * mag : (base / mag);
+    if (!distance_increase && current <= 1.0) {
+        target = 0.0;
+    }
+    cam.set_camera_y_distance(target);
+}
+
 void FrameEditorSession::update(const Input& input) {
     if (!active_) return;
 
@@ -695,7 +950,16 @@ void FrameEditorSession::update(const Input& input) {
         ensure_widgets();
         rebuild_layout();
         const bool pan_blocked = true;
-        pan_height_.handle_input(cam, input, pan_blocked);
+        if (is_xy_plane()) {
+            pan_height_.handle_input(cam, input, pan_blocked);
+        } else {
+            const double prev_height = cam.get_scale();
+            pan_height_.handle_input(cam, input, pan_blocked);
+            if (input.getScrollY() != 0) {
+                cam.set_scale(prev_height);
+            }
+            handle_xz_scroll(cam, input);
+        }
         center_camera_origin();
     }
 
@@ -1612,7 +1876,8 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
     SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
 
     if (grid_overlay_enabled_ && (mode_ == Mode::Movement || is_children_mode(mode_))) {
-        render_plane_grid(renderer, cam, anchor_world, snap_resolution_r_);
+        TextureMetrics metrics = current_frame_texture_metrics(renderer);
+        render_plane_grid(renderer, cam, anchor_world, edit_plane_, snap_resolution_r_, metrics);
     }
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);

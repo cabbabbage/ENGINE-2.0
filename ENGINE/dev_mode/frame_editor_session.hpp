@@ -29,6 +29,7 @@ class Input;
 struct SDL_Renderer;
 class DMButton;
 class DMDropdown;
+class WarpedScreenGrid;
 struct AnimationChildFrameData;
 enum class AnimationChildMode;
 
@@ -77,6 +78,34 @@ public:
 FRAME_EDITOR_ACCESS:
     bool target_is_alive() const;
     void center_camera_origin();
+    struct TextureMetrics {
+        int width = 0;
+        int height = 0;
+    };
+    TextureMetrics current_frame_texture_metrics(SDL_Renderer* renderer) const;
+    bool project_texture_bounds(const WarpedScreenGrid& cam,
+                                SDL_Point anchor_world,
+                                const TextureMetrics& metrics,
+                                EditPlane plane,
+                                SDL_FRect& out_bounds) const;
+    double fit_camera_height_for_xy(WarpedScreenGrid& cam,
+                                    SDL_Point anchor_world,
+                                    const TextureMetrics& metrics,
+                                    int screen_w,
+                                    int screen_h) const;
+    double fit_camera_y_distance_for_xz(WarpedScreenGrid& cam,
+                                        SDL_Point anchor_world,
+                                        const TextureMetrics& metrics,
+                                        int screen_w,
+                                        int screen_h) const;
+    void apply_camera_defaults(EditPlane plane);
+    void handle_xz_scroll(WarpedScreenGrid& cam, const Input& input);
+    static void render_plane_grid(SDL_Renderer* renderer,
+                                  const WarpedScreenGrid& cam,
+                                  SDL_Point anchor_world,
+                                  EditPlane plane,
+                                  int snap_resolution_r,
+                                  const TextureMetrics& metrics);
 
     struct ChildFrame {
         int child_index = -1;

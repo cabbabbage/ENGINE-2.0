@@ -29,7 +29,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 - `SRC/`: Source art and `info.json` definitions; includes loading screen content.
 - `MAPS/`: Map layouts, rooms, and spawn data referenced by the manifest.
 - `content/`: Runtime content packs (e.g., `content/test`, `content/forrest`).
-- `tools/`: Helper scripts like `set_rebuild_values.py`, `asset_tool.py`, and `light_tool.py`.
+- `engine/tools/`: Helper scripts like `set_rebuild_values.py`, `asset_tool.py`, and `light_tool.py`.
 - `TESTS/`: Unit tests for core systems.
 - `vcpkg/`, `external/`: Dependency management and bundled libs.
 

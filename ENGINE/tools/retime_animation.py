@@ -3,7 +3,7 @@
 Retimes an animation by duplicating or dropping source frames.
 
 Usage:
-    python tools/retime_animation.py <asset_name> <animation_name> --mode {double,half}
+    python engine/tools/retime_animation.py <asset_name> <animation_name> --mode {double,half}
 
 Arguments:
     asset_name      Name of the asset (folder inside SRC/assets).

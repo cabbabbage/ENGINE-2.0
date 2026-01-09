@@ -971,7 +971,7 @@ void AssetInfo::generate_lights(SDL_Renderer* renderer) {
 
     clear_light_textures();
     std::cerr << "[AssetInfo] Missing light cache for '" << name
-              << "' after python regeneration; run tools/light_tool.py manually.\n";
+              << "' after python regeneration; run engine/tools/light_tool.py manually.\n";
 }
 
 bool AssetInfo::rebuild_light_texture(SDL_Renderer* renderer, std::size_t light_index) {

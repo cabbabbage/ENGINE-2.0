@@ -647,7 +647,7 @@ void ForegroundBackgroundEffectPanel::generate_preview_with_python(
         return;
     }
 
-    std::string python_cmd = "python tools/apply_color_effects.py";
+    std::string python_cmd = "python engine/tools/apply_color_effects.py";
     std::string output_path = "cache/preview_image.png";
 
     std::error_code ec;

@@ -237,12 +237,22 @@ void FrameEditorSession::render_plane_grid(SDL_Renderer* renderer,
     int maxx = 0;
     int min_axis = 0;
     int max_axis = 0;
-    if (plane == FrameEditorSession::EditPlane::XZ && metrics.width > 0 && metrics.height > 0) {
-        const int half_w = metrics.width / 2;
-        minx = anchor_world.x - half_w;
-        maxx = anchor_world.x + half_w;
-        min_axis = 0;
-        max_axis = metrics.height;
+    if (plane == FrameEditorSession::EditPlane::XZ) {
+        if (metrics.width > 0 && metrics.height > 0) {
+            const int half_w = metrics.width / 2;
+            minx = anchor_world.x - half_w;
+            maxx = anchor_world.x + half_w;
+            min_axis = 0;
+            max_axis = metrics.height;
+        } else {
+            auto [view_minx, view_miny, view_maxx, view_maxy] = cam.get_current_view().get_bounds();
+            minx = view_minx;
+            maxx = view_maxx;
+            const int view_span = std::max(1, view_maxy - view_miny);
+            const int half_span = view_span / 2;
+            min_axis = -half_span;
+            max_axis = half_span;
+        }
     } else {
         auto [view_minx, view_miny, view_maxx, view_maxy] = cam.get_current_view().get_bounds();
         minx = view_minx;

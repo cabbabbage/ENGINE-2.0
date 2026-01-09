@@ -3739,8 +3739,8 @@
                 {
                   "degree": 0.0,
                   "dx": 0,
-                  "dy": 376,
-                  "dz": -3574,
+                  "dy": 0,
+                  "dz": 376,
                   "render_in_front": true,
                   "visible": true
                 }

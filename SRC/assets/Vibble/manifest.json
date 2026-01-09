@@ -100,7 +100,7 @@
                         {
                             "degree": 0.0,
                             "dx": 0,
-                            "dy": 376,
+                            "dy": 0,
                             "render_in_front": true,
                             "visible": true
                         }

@@ -18,6 +18,7 @@ from PIL import Image
 
 from apply_color_effects import ApplyEffects
 from effects import EffectsParser
+from gpu_status import detect_torch_gpu, print_gpu_status
 from shadow_mask import ShadowMaskGenerator, ShadowMaskSettings
 
 
@@ -237,17 +238,18 @@ def process_frame_task(task):
 
     task is a tuple:
         (
-          frame_idx,
+          source_idx,
           src_path,
           target_w,
           target_h,
           crop_bounds,
-          normal_path,
-          fg_path,
-          bg_path,
+          output_indices,
+          normal_dir,
+          fg_dir,
+          bg_dir,
+          mask_dir,
           fg_effects,
           bg_effects,
-          mask_path,
           mask_settings,
         )
 
@@ -256,17 +258,18 @@ def process_frame_task(task):
     global _APPLY_EFFECTS
 
     (
-        frame_idx,
+        source_idx,
         src_path,
         target_w,
         target_h,
         crop_bounds,
-        normal_path,
-        fg_path,
-        bg_path,
+        output_indices,
+        normal_dir,
+        fg_dir,
+        bg_dir,
+        mask_dir,
         fg_effects,
         bg_effects,
-        mask_path,
         mask_settings,
     ) = task
 
@@ -298,24 +301,26 @@ def process_frame_task(task):
                 )
                 img = img.crop(crop_box)
 
-            # Save normal (dirs already created in parent)
-            img.save(normal_path, "PNG", optimize=False)
-
-            # Foreground
             fg_img = _APPLY_EFFECTS.apply_effects(img, fg_effects)
-            fg_img.save(fg_path, "PNG", optimize=False)
-
-            # Background
             bg_img = _APPLY_EFFECTS.apply_effects(img, bg_effects)
-            bg_img.save(bg_path, "PNG", optimize=False)
-
-            if mask_settings is not None and mask_path:
+            mask_img = None
+            if mask_settings is not None and mask_dir:
                 mask_img = ShadowMaskGenerator.generate_mask_image(img, mask_settings)
-                mask_img.save(mask_path, "PNG", optimize=False)
 
-        return f"Frame {frame_idx}: OK"
+            for output_idx in output_indices:
+                normal_path = os.path.join(normal_dir, f"{output_idx}.png")
+                fg_path = os.path.join(fg_dir, f"{output_idx}.png")
+                bg_path = os.path.join(bg_dir, f"{output_idx}.png")
+                img.save(normal_path, "PNG", optimize=False)
+                fg_img.save(fg_path, "PNG", optimize=False)
+                bg_img.save(bg_path, "PNG", optimize=False)
+                if mask_img is not None and mask_dir:
+                    mask_path = os.path.join(mask_dir, f"{output_idx}.png")
+                    mask_img.save(mask_path, "PNG", optimize=False)
+
+        return f"Frame {source_idx}: OK"
     except Exception as exc:
-        return f"Frame {frame_idx}: Error - {exc}"
+        return f"Frame {source_idx}: Error - {exc}"
 
 
 class AssetTool:
@@ -490,7 +495,9 @@ class AssetTool:
                 )
 
             anim_cache_root = asset_cache_root / anim_id
-            _best_effort_rmtree(anim_cache_root)
+            full_rebuild = len(flagged_frames) >= len(frame_paths)
+            if full_rebuild:
+                _best_effort_rmtree(anim_cache_root)
 
             had_errors = False
 
@@ -505,6 +512,29 @@ class AssetTool:
                 bg_dir = scale_dir / "background"
                 mask_dir = scale_dir / "mask"
 
+                flagged_sources = set(flagged_frames)
+                output_groups: Dict[int, List[int]] = {}
+                for output_idx, source_idx in enumerate(frame_sequence):
+                    if source_idx < 0 or source_idx >= len(frame_paths):
+                        continue
+                    needs_rebuild = source_idx in flagged_sources
+                    if not needs_rebuild:
+                        normal_path = normal_dir / f"{output_idx}.png"
+                        fg_path = fg_dir / f"{output_idx}.png"
+                        bg_path = bg_dir / f"{output_idx}.png"
+                        mask_path = mask_dir / f"{output_idx}.png"
+                        if not normal_path.exists() or not fg_path.exists() or not bg_path.exists():
+                            needs_rebuild = True
+                        elif mask_enabled and not mask_path.exists():
+                            needs_rebuild = True
+                    if needs_rebuild:
+                        output_groups.setdefault(source_idx, []).append(output_idx)
+
+                if not output_groups:
+                    if not mask_enabled and mask_dir.exists():
+                        shutil.rmtree(mask_dir, ignore_errors=True)
+                    continue
+
                 os.makedirs(normal_dir, exist_ok=True)
                 os.makedirs(fg_dir, exist_ok=True)
                 os.makedirs(bg_dir, exist_ok=True)
@@ -516,28 +546,22 @@ class AssetTool:
 
                 tasks = []
                 scaled_crop = scale_crop_bounds(crop_bounds, scale_factor) if crop_bounds else None
-                for output_idx, source_idx in enumerate(frame_sequence):
-                    if source_idx < 0 or source_idx >= len(frame_paths):
-                        continue
+                for source_idx, output_indices in output_groups.items():
                     src_path = str(frame_paths[source_idx])
-                    normal_path = str(normal_dir / f"{output_idx}.png")
-                    fg_path = str(fg_dir / f"{output_idx}.png")
-                    bg_path = str(bg_dir / f"{output_idx}.png")
-                    mask_path = str(mask_dir / f"{output_idx}.png") if mask_enabled else None
-
                     tasks.append(
                         (
-                            output_idx,
+                            source_idx,
                             src_path,
                             target_w,
                             target_h,
                             scaled_crop,
-                            normal_path,
-                            fg_path,
-                            bg_path,
+                            output_indices,
+                            str(normal_dir),
+                            str(fg_dir),
+                            str(bg_dir),
+                            str(mask_dir) if mask_enabled else None,
                             fg_cfg,
                             bg_cfg,
-                            mask_path,
                             mask_settings,
                         )
                     )
@@ -573,6 +597,8 @@ class AssetTool:
 
 
 def main():
+    print_gpu_status(detect_torch_gpu())
+
     tools_dir = Path(__file__).resolve().parent
     repo_root = tools_dir.parent
     manifest_path = repo_root / "manifest.json"

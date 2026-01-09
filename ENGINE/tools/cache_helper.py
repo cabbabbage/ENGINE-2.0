@@ -27,6 +27,7 @@ import os
 import sys
 from typing import Any
 
+from gpu_status import print_gpu_status
 
 def _configure_logger() -> logging.Logger:
     """Configure a simple logger for this module."""
@@ -186,6 +187,8 @@ if __name__ == "__main__":
     # Simple manual test:
     #   python cache_helper.py <json_path>
     # It will use a hard coded snippet and compare against the given file.
+    print_gpu_status(False)
+
     if len(sys.argv) < 2:
         print("Usage: python cache_helper.py <json_path>", file=sys.stderr)
         sys.exit(1)

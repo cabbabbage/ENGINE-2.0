@@ -1157,16 +1157,10 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         return false;
 };
 
-    if (dragging_dir_ || dragging_toolbox_ || dragging_nav_ || dragging_scrollbar_thumb_) {
+    if (dragging_toolbox_ || dragging_nav_ || dragging_scrollbar_thumb_) {
         if (e.type == SDL_MOUSEMOTION) {
             bool moved = false;
-            if (dragging_dir_) {
-                dir_pos_.x = e.motion.x - drag_offset_dir_.x;
-                dir_pos_.y = e.motion.y - drag_offset_dir_.y;
-                DirectoryPanelMetrics dir_metrics = build_directory_panel_metrics();
-                clamp_panel_pos(dir_pos_.x, dir_pos_.y, dir_metrics.width, dir_metrics.height);
-                moved = true;
-            } else if (dragging_toolbox_) {
+            if (dragging_toolbox_) {
                 toolbox_pos_.x = e.motion.x - drag_offset_toolbox_.x;
                 toolbox_pos_.y = e.motion.y - drag_offset_toolbox_.y;
                 const int tool_w = toolbox_rect_.w;
@@ -1189,7 +1183,6 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             }
             return true;
         } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-            dragging_dir_ = false;
             dragging_toolbox_ = false;
             dragging_nav_ = false;
             dragging_scrollbar_thumb_ = false;
@@ -1221,9 +1214,17 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 if (!b) continue; const SDL_Rect& r = b->rect();
                 if (SDL_PointInRect(&p, &r)) { over_button = true; break; }
             }
+            if (!over_button && cb_grid_overlay_) {
+                if (SDL_PointInRect(&p, &cb_grid_overlay_->rect())) {
+                    over_button = true;
+                }
+            }
+            if (!over_button && stepper_grid_resolution_) {
+                if (SDL_PointInRect(&p, &stepper_grid_resolution_->rect())) {
+                    over_button = true;
+                }
+            }
             if (!over_button) {
-                dragging_dir_ = true;
-                drag_offset_dir_ = SDL_Point{ p.x - directory_rect_.x, p.y - directory_rect_.y };
                 return true;
             }
         }
@@ -1297,6 +1298,14 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
     if (handle_button(btn_plane_toggle_, [this]() {
             this->toggle_edit_plane();
         })) return true;
+    if (cb_grid_overlay_ && cb_grid_overlay_->handle_event(e)) {
+        grid_overlay_enabled_ = cb_grid_overlay_->value();
+        return true;
+    }
+    if (stepper_grid_resolution_ && stepper_grid_resolution_->handle_event(e)) {
+        set_snap_resolution(stepper_grid_resolution_->value());
+        return true;
+    }
     if (mode_ == Mode::HitGeometry) {
         if (handle_button(btn_hitbox_add_remove_, [this]() {
                 const std::string type = this->current_hitbox_type();
@@ -1887,7 +1896,8 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
 
     if (grid_overlay_enabled_ && (mode_ == Mode::Movement || is_children_mode(mode_))) {
         TextureMetrics metrics = current_frame_texture_metrics(renderer);
-        render_plane_grid(renderer, cam, anchor_world, edit_plane_, snap_resolution_r_, metrics);
+        const EditPlane grid_plane = (edit_plane_ == EditPlane::XY) ? EditPlane::XZ : edit_plane_;
+        render_plane_grid(renderer, cam, anchor_world, grid_plane, snap_resolution_r_, metrics);
     }
 
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
@@ -2000,20 +2010,7 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
     ensure_widgets();
     rebuild_layout();
 
-    dm_draw::DrawBeveledRect(renderer, directory_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelHeader(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-    {
-        std::string mode_text = std::string("Mode: ") + mode_display_name(mode_);
-        if (pending_save_) {
-            mode_text.append(" *");
-        }
-        render_label(renderer, mode_text, directory_rect_.x + DMSpacing::small_gap(), directory_rect_.y + DMSpacing::small_gap());
-    }
-    if (btn_back_) btn_back_->render(renderer);
-    if (btn_movement_) btn_movement_->render(renderer);
-    if (btn_children_) btn_children_->render(renderer);
-    if (btn_attack_geometry_) btn_attack_geometry_->render(renderer);
-    if (btn_hit_geometry_) btn_hit_geometry_->render(renderer);
-    if (btn_plane_toggle_) btn_plane_toggle_->render(renderer);
+    render_navigation_panel(renderer);
 
     if (mode_ == Mode::Movement && toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
         dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
@@ -2139,13 +2136,40 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
     DMDropdown::render_active_options(renderer);
 }
 
+void FrameEditorSession::render_navigation_panel(SDL_Renderer* renderer) const {
+    if (!renderer) return;
+    dm_draw::DrawBeveledRect(renderer, directory_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelHeader(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+    {
+        std::string mode_text = std::string("Mode: ") + mode_display_name(mode_);
+        if (pending_save_) {
+            mode_text.append(" *");
+        }
+        render_label(renderer, mode_text, directory_rect_.x + DMSpacing::small_gap(), directory_rect_.y + DMSpacing::small_gap());
+    }
+    if (btn_back_) btn_back_->render(renderer);
+    if (btn_movement_) btn_movement_->render(renderer);
+    if (btn_children_) btn_children_->render(renderer);
+    if (btn_attack_geometry_) btn_attack_geometry_->render(renderer);
+    if (btn_hit_geometry_) btn_hit_geometry_->render(renderer);
+    if (btn_plane_toggle_) btn_plane_toggle_->render(renderer);
+    if (cb_grid_overlay_) cb_grid_overlay_->render(renderer);
+    if (stepper_grid_resolution_) stepper_grid_resolution_->render(renderer);
+}
+
 void FrameEditorSession::set_grid_overlay_enabled_transient(bool enabled) {
     grid_overlay_enabled_ = enabled;
+    if (cb_grid_overlay_ && cb_grid_overlay_->value() != enabled) {
+        cb_grid_overlay_->set_value(enabled);
+    }
 }
 
 void FrameEditorSession::set_snap_resolution(int r) {
     snap_resolution_r_ = vibble::grid::clamp_resolution(std::max(0, r));
     snap_resolution_override_ = true;
+    if (stepper_grid_resolution_ && stepper_grid_resolution_->value() != snap_resolution_r_) {
+        stepper_grid_resolution_->set_value(snap_resolution_r_);
+    }
+    rebuild_layout();
 }
 
 void FrameEditorSession::ensure_widgets() const {
@@ -2161,6 +2185,10 @@ void FrameEditorSession::ensure_widgets() const {
     if (!btn_prev_) btn_prev_ = std::make_unique<DMButton>("<", &header, 40, 40);
     if (!btn_next_) btn_next_ = std::make_unique<DMButton>(">", &header, 40, 40);
     if (!btn_plane_toggle_) btn_plane_toggle_ = std::make_unique<DMButton>(plane_button_label(), &header, 120, DMButton::height());
+    if (!cb_grid_overlay_) cb_grid_overlay_ = std::make_unique<DMCheckbox>("Show Grid", grid_overlay_enabled_);
+    if (!stepper_grid_resolution_) {
+        stepper_grid_resolution_ = std::make_unique<DMNumericStepper>("Grid Resolution (r)", 0, vibble::grid::kMaxResolution, snap_resolution_r_);
+    }
     refresh_animation_dropdown();
     if (!btn_apply_all_movement_) btn_apply_all_movement_ = std::make_unique<DMButton>("Apply To All Frames", &header, 180, DMButton::height());
     if (!btn_apply_all_children_) btn_apply_all_children_ = std::make_unique<DMButton>("Apply To All Frames", &header, 180, DMButton::height());
@@ -2182,6 +2210,12 @@ void FrameEditorSession::ensure_widgets() const {
     if (!tb_child_deg_) tb_child_deg_ = std::make_unique<DMTextBox>("Rotation", "0");
     if (!cb_child_visible_) cb_child_visible_ = std::make_unique<DMCheckbox>("Visible", true);
     if (!cb_child_render_front_) cb_child_render_front_ = std::make_unique<DMCheckbox>("Render In Front", true);
+    if (cb_grid_overlay_ && cb_grid_overlay_->value() != grid_overlay_enabled_) {
+        cb_grid_overlay_->set_value(grid_overlay_enabled_);
+    }
+    if (stepper_grid_resolution_ && stepper_grid_resolution_->value() != snap_resolution_r_) {
+        stepper_grid_resolution_->set_value(snap_resolution_r_);
+    }
     if (!dd_child_select_ || child_dropdown_options_cache_ != child_assets_) {
         child_dropdown_options_cache_ = child_assets_;
         int dropdown_index = selected_child_index_;
@@ -2300,11 +2334,16 @@ void FrameEditorSession::refresh_animation_dropdown() const {
 void FrameEditorSession::rebuild_layout() const {
     if (!assets_ || !target_) return;
     const WarpedScreenGrid& cam = assets_->getView();
-    const int screen_w = assets_->renderer() ? assets_->getView().get_camera_area().width() : 0;
-    (void)screen_w;
+    int screen_w = 0;
+    int screen_h = 0;
+    if (assets_->renderer()) {
+        SDL_GetRendererOutputSize(assets_->renderer(), &screen_w, &screen_h);
+    }
+    (void)screen_h;
     (void)cam;
     DirectoryPanelMetrics dir_metrics = build_directory_panel_metrics();
-    directory_rect_ = SDL_Rect{ dir_pos_.x, dir_pos_.y, dir_metrics.width, dir_metrics.height };
+    const int header_width = (screen_w > 0) ? screen_w : dir_metrics.width;
+    directory_rect_ = SDL_Rect{ 0, 0, header_width, dir_metrics.height };
     toolbox_widget_rects_.clear();
     const int dir_padding = DMSpacing::small_gap();
     const int button_gap = DMSpacing::small_gap();
@@ -2338,12 +2377,8 @@ void FrameEditorSession::rebuild_layout() const {
     accumulate_width(btn_attack_geometry_);
     accumulate_width(btn_hit_geometry_);
     accumulate_width(btn_plane_toggle_);
-    int y = directory_rect_.y + dir_metrics.top_padding;
+    int y = directory_rect_.y + (directory_rect_.h - DMButton::height()) / 2;
     int x = directory_rect_.x + dir_padding;
-    if (total_button_width > 0) {
-        const int centered_offset = (directory_rect_.w - total_button_width) / 2;
-        x = directory_rect_.x + std::max(dir_padding, centered_offset);
-    }
     bool first_button = true;
     auto place_button = [&](std::unique_ptr<DMButton>& btn, auto&& prepare) {
         if (!btn) return;
@@ -2374,6 +2409,39 @@ void FrameEditorSession::rebuild_layout() const {
         btn->set_style(&DMStyles::HeaderButton());
         btn->set_text(plane_button_label());
     });
+    if (cb_grid_overlay_ || stepper_grid_resolution_) {
+        const int header_gap = DMSpacing::small_gap();
+        const int right_limit = directory_rect_.x + directory_rect_.w - dir_padding;
+        const int checkbox_w = cb_grid_overlay_ ? std::max(cb_grid_overlay_->preferred_width(), DMCheckbox::height()) : 0;
+        const int stepper_w = stepper_grid_resolution_ ? 180 : 0;
+        int required = 0;
+        if (cb_grid_overlay_) required += checkbox_w;
+        if (stepper_grid_resolution_) required += stepper_w;
+        if (cb_grid_overlay_ && stepper_grid_resolution_) {
+            required += header_gap;
+        }
+        if (required > 0 && right_limit - required >= x) {
+            int cursor = right_limit;
+            if (stepper_grid_resolution_) {
+                cursor -= stepper_w;
+                const int stepper_y = directory_rect_.y + (directory_rect_.h - DMNumericStepper::height()) / 2;
+                stepper_grid_resolution_->set_rect(SDL_Rect{ cursor, stepper_y, stepper_w, DMNumericStepper::height() });
+                cursor -= header_gap;
+            }
+            if (cb_grid_overlay_) {
+                cursor -= checkbox_w;
+                const int checkbox_y = directory_rect_.y + (directory_rect_.h - DMCheckbox::height()) / 2;
+                cb_grid_overlay_->set_rect(SDL_Rect{ cursor, checkbox_y, checkbox_w, DMCheckbox::height() });
+            }
+        } else {
+            if (cb_grid_overlay_) {
+                cb_grid_overlay_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+            if (stepper_grid_resolution_) {
+                stepper_grid_resolution_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+        }
+    }
 
     if (mode_ == Mode::Movement) {
         MovementToolboxMetrics metrics = build_movement_toolbox_metrics();
@@ -2838,12 +2906,14 @@ void FrameEditorSession::rebuild_layout() const {
 FrameEditorSession::DirectoryPanelMetrics FrameEditorSession::build_directory_panel_metrics() const {
     DirectoryPanelMetrics metrics;
     const int padding = DMSpacing::small_gap();
-    const int drag_padding = DMSpacing::small_gap();
     const int vertical_padding = DMSpacing::small_gap();
     const int button_gap = DMSpacing::small_gap();
-    metrics.top_padding = padding + drag_padding + vertical_padding;
+    metrics.top_padding = padding + vertical_padding;
     const int bottom_padding = padding + vertical_padding;
-    metrics.height = metrics.top_padding + DMButton::height() + bottom_padding;
+    int row_height = DMButton::height();
+    row_height = std::max(row_height, DMCheckbox::height());
+    row_height = std::max(row_height, DMNumericStepper::height());
+    metrics.height = metrics.top_padding + row_height + bottom_padding;
 
     int row_width = 0;
     auto append_button = [&](const std::unique_ptr<DMButton>& btn) {

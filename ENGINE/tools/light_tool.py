@@ -4,14 +4,18 @@
 import json
 import logging
 import math
+import multiprocessing
 import os
 import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from PIL import Image
+import numpy as np
+
+from gpu_status import print_gpu_status
 
 LIGHT_CACHE_VERSION = 3
 
@@ -53,6 +57,24 @@ def lround(value: float) -> int:
     if value >= 0:
         return int(math.floor(value + 0.5))
     return int(math.ceil(value - 0.5))
+
+
+def _compute_alpha_payload(args: Tuple[int, int]) -> Tuple[Tuple[int, int], bytes, int]:
+    radius, fall_off = args
+    radius = max(1, int(radius))
+    diameter = max(1, radius * 2)
+    center = float(diameter) * 0.5
+    fade_exponent = compute_fade_exponent(int(fall_off))
+
+    grid = (np.arange(diameter, dtype=np.float32) + 0.5) - center
+    dx = grid.reshape(1, -1)
+    dy = grid.reshape(-1, 1)
+    dist = np.hypot(dx, dy)
+    ratio = np.clip(dist / float(radius), 0.0, 1.0)
+    base = np.maximum(0.0, 1.0 - ratio)
+    alpha = np.power(base, fade_exponent) * 255.0
+    alpha_u8 = np.clip(alpha, 0.0, 255.0).astype(np.uint8)
+    return (radius, int(fall_off)), alpha_u8.tobytes(), diameter
 
 
 @dataclass
@@ -162,29 +184,12 @@ def parse_light_entry(raw: Any) -> Optional[LightDefinition]:
 
 
 def build_light_image(light: LightDefinition) -> Image.Image:
-    radius = max(1, light.radius)
-    diameter = max(1, radius * 2)
-    center = float(diameter) * 0.5
-    fade_exponent = compute_fade_exponent(light.fall_off)
-    radius_f = float(radius)
-
-    img = Image.new("RGBA", (diameter, diameter))
-    pixels = img.load()
-
-    for y in range(diameter):
-        for x in range(diameter):
-            dx = (float(x) + 0.5) - center
-            dy = (float(y) + 0.5) - center
-            dist = math.hypot(dx, dy)
-            ratio = dist / radius_f if radius_f > 0.0 else 0.0
-            ratio = clamp(ratio, 0.0, 1.0)
-            base = max(0.0, 1.0 - ratio)
-            alpha_ratio = math.pow(base, fade_exponent)
-            alpha = lround(alpha_ratio * 255.0)
-            alpha = max(0, min(255, alpha))
-            pixels[x, y] = (255, 255, 255, alpha)
-
-    return img
+    key, alpha_bytes, diameter = _compute_alpha_payload((light.radius, light.fall_off))
+    alpha = np.frombuffer(alpha_bytes, dtype=np.uint8).reshape((diameter, diameter))
+    rgba = np.zeros((diameter, diameter, 4), dtype=np.uint8)
+    rgba[:, :, 0:3] = 255
+    rgba[:, :, 3] = alpha
+    return Image.fromarray(rgba, mode="RGBA")
 
 
 @dataclass
@@ -193,6 +198,7 @@ class LightAsset:
     lighting_entries: List[Dict[str, Any]]
     light_defs: List[LightDefinition]
     flagged_indices: List[int]
+    entry_to_light_index: Dict[int, int]
 
 
 class LightTool:
@@ -201,6 +207,7 @@ class LightTool:
         self.cache_root = Path(cache_root).absolute()
         self.manifest = self._load_manifest()
         self.any_failures = False
+        self.alpha_cache: Dict[Tuple[int, int], np.ndarray] = {}
 
     def _load_manifest(self) -> Dict[str, Any]:
         try:
@@ -249,11 +256,15 @@ class LightTool:
             if not flagged:
                 continue
             parsed_defs: List[LightDefinition] = []
-            for light_entry in entries:
+            entry_to_light_index: Dict[int, int] = {}
+            for idx, light_entry in enumerate(entries):
                 parsed = parse_light_entry(light_entry)
                 if parsed:
+                    entry_to_light_index[idx] = len(parsed_defs)
                     parsed_defs.append(parsed)
-            light_assets.append(LightAsset(name, entries, parsed_defs, flagged))
+            light_assets.append(
+                LightAsset(name, entries, parsed_defs, flagged, entry_to_light_index)
+            )
         return light_assets
 
     def _write_metadata(self, cache_dir: Path, signatures: List[str]) -> None:
@@ -263,6 +274,44 @@ class LightTool:
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, indent=2)
 
+    @staticmethod
+    def _read_metadata(cache_dir: Path) -> Optional[List[str]]:
+        meta_path = cache_dir / "metadata.json"
+        if not meta_path.exists():
+            return None
+        try:
+            payload = json.loads(meta_path.read_text())
+            if payload.get("version") != LIGHT_CACHE_VERSION:
+                return None
+            signatures = payload.get("signatures")
+            if not isinstance(signatures, list):
+                return None
+            return [str(sig) for sig in signatures]
+        except Exception:
+            return None
+
+    def _build_alpha_cache(self, assets: Iterable[LightAsset]) -> None:
+        keys: List[Tuple[int, int]] = []
+        for asset in assets:
+            for light in asset.light_defs:
+                key = (max(1, light.radius), int(light.fall_off))
+                keys.append(key)
+        unique_keys = sorted(set(keys))
+        if not unique_keys:
+            return
+        if len(unique_keys) == 1:
+            key = unique_keys[0]
+            _, alpha_bytes, diameter = _compute_alpha_payload(key)
+            alpha = np.frombuffer(alpha_bytes, dtype=np.uint8).reshape((diameter, diameter))
+            self.alpha_cache[key] = alpha
+            return
+
+        max_workers = max(1, min(len(unique_keys), (multiprocessing.cpu_count() or 1) - 1))
+        with multiprocessing.get_context("spawn").Pool(processes=max_workers) as pool:
+            for key, alpha_bytes, diameter in pool.map(_compute_alpha_payload, unique_keys):
+                alpha = np.frombuffer(alpha_bytes, dtype=np.uint8).reshape((diameter, diameter))
+                self.alpha_cache[key] = alpha
+
     def _clear_light_flags(self, asset: LightAsset) -> None:
         for idx in asset.flagged_indices:
             if 0 <= idx < len(asset.lighting_entries):
@@ -270,11 +319,11 @@ class LightTool:
 
     def generate_for_asset(self, asset: LightAsset) -> bool:
         cache_dir = self.cache_root / asset.name / "lights"
-        if cache_dir.exists():
-            shutil.rmtree(cache_dir)
         cache_dir.mkdir(parents=True, exist_ok=True)
 
         if not asset.light_defs:
+            if cache_dir.exists():
+                shutil.rmtree(cache_dir)
             LOGGER.info("[LightTool] %s has no lights; cleared cache directory.", asset.name)
             self._clear_light_flags(asset)
             return True
@@ -286,12 +335,41 @@ class LightTool:
             "" if len(asset.light_defs) == 1 else "s",
         )
 
-        signatures: List[str] = []
-        for idx, light in enumerate(asset.light_defs):
-            img = build_light_image(light)
+        signatures = [light.signature() for light in asset.light_defs]
+        cached_signatures = self._read_metadata(cache_dir)
+        full_rebuild = cached_signatures is None or len(cached_signatures) != len(signatures)
+
+        required_indices: List[int] = []
+        if full_rebuild:
+            if cache_dir.exists():
+                shutil.rmtree(cache_dir)
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            required_indices = list(range(len(asset.light_defs)))
+        else:
+            required_set = set()
+            for entry_idx in asset.flagged_indices:
+                light_idx = asset.entry_to_light_index.get(entry_idx)
+                if light_idx is not None:
+                    required_set.add(light_idx)
+            for idx in range(len(asset.light_defs)):
+                if not (cache_dir / f"light_{idx}.png").exists():
+                    required_set.add(idx)
+            required_indices = sorted(required_set)
+
+        for idx in required_indices:
+            light = asset.light_defs[idx]
+            key = (max(1, light.radius), int(light.fall_off))
+            alpha = self.alpha_cache.get(key)
+            if alpha is None:
+                img = build_light_image(light)
+            else:
+                h, w = alpha.shape
+                rgba = np.zeros((h, w, 4), dtype=np.uint8)
+                rgba[:, :, 0:3] = 255
+                rgba[:, :, 3] = alpha
+                img = Image.fromarray(rgba, mode="RGBA")
             target = cache_dir / f"light_{idx}.png"
             img.save(target, "PNG", optimize=False)
-            signatures.append(light.signature())
 
         self._write_metadata(cache_dir, signatures)
         self._clear_light_flags(asset)
@@ -301,6 +379,7 @@ class LightTool:
         assets = self._collect_assets()
         if not assets:
             return
+        self._build_alpha_cache(assets)
 
         manifest_changed = False
         for asset in assets:
@@ -324,6 +403,8 @@ class LightTool:
 
 
 def main() -> None:
+    print_gpu_status(False)
+
     tools_dir = Path(__file__).resolve().parent
     repo_root = tools_dir.parent
     manifest_path = str(repo_root / "manifest.json")

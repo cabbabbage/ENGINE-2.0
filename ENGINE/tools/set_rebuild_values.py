@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from gpu_status import print_gpu_status
 DEFAULT_MANIFEST = Path(__file__).resolve().parent.parent / "manifest.json"
 
 
@@ -194,6 +195,8 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    print_gpu_status(False)
+
     args = _parse_args()
     manifest_path = Path(args.manifest) if args.manifest else DEFAULT_MANIFEST
     setter = SetRebuildValues(manifest_path)

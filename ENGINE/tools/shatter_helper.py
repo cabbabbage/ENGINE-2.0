@@ -9,6 +9,7 @@ from tkinter import filedialog
 
 from PIL import Image
 
+from gpu_status import print_gpu_status
 
 # ------------------------------------------------------------
 # Config defaults
@@ -476,6 +477,8 @@ def ask_animation_settings(root: tk.Tk) -> Tuple[List[str], int, int]:
 # ------------------------------------------------------------
 
 def main():
+    print_gpu_status(False)
+
     root = tk.Tk()
     root.withdraw()
 

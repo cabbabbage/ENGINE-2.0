@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from gpu_status import print_gpu_status
 SPEED_MULTIPLIERS = (0.25, 0.5, 1.0, 2.0, 4.0)
 ANIMATION_SCALE_PCTS = (75, 50, 25, 10)
 LIGHT_CACHE_VERSION = 3
@@ -294,6 +295,8 @@ class CacheValidator:
 
 
 def main():
+    print_gpu_status(False)
+
     manifest_path = None
     for i, arg in enumerate(sys.argv):
         if arg == "--manifest" and i + 1 < len(sys.argv):

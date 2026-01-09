@@ -30,6 +30,7 @@ from dataclasses import dataclass, asdict
 from typing import Tuple, Dict, Any, Optional
 
 from cache_helper import compare_and_update_json
+from gpu_status import print_gpu_status
 
 
 @dataclass
@@ -238,6 +239,8 @@ class EffectsParser:
 if __name__ == "__main__":
     # Manual test:
     #   python parse_effects.py path/to/manifest.json [optional_cache_path]
+    print_gpu_status(False)
+
     if len(sys.argv) < 2:
         print(
             "Usage: python parse_effects.py <path_to_manifest.json> [cache_path]",

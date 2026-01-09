@@ -14,6 +14,8 @@ try:
 except ImportError:
     raise SystemExit("Pillow not installed. Run: pip install pillow")
 
+from gpu_status import print_gpu_status
+
 # Set to True if you want to re-save existing PNGs too
 CONVERT_PNG_TOO = False
 
@@ -23,6 +25,8 @@ IMAGE_EXTS = {
 }
 
 def main():
+    print_gpu_status(False)
+
     script_dir = Path(__file__).resolve().parent
     files = [p for p in script_dir.iterdir() if p.is_file()]
 

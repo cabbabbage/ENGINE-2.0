@@ -20,6 +20,7 @@ import tempfile
 from pathlib import Path
 from typing import List, Tuple
 
+from gpu_status import print_gpu_status
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 
@@ -298,6 +299,8 @@ def replace_frames(target_dir: Path, sources: List[Path]) -> None:
 
 
 def main() -> int:
+    print_gpu_status(False)
+
     args = parse_args()
     asset_dir = PROJECT_ROOT / "SRC" / "assets" / args.asset_name
     anim_dir = asset_dir / args.animation_name

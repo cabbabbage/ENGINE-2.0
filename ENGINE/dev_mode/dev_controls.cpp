@@ -1249,7 +1249,8 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     }
     const bool modal_hide_pre = is_modal_blocking_panels();
     const bool layers_panel_open_pre = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
-    const bool hide_headers_pre = modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre;
+    const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
+    const bool hide_headers_pre = modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre || frame_editor_active;
     header_rect = hide_headers_pre ? SDL_Rect{0, 0, 0, 0} : asset_filter_.header_rect();
     SDL_Rect usable_rect = FloatingPanelLayoutManager::instance().computeUsableRect(
         SDL_Rect{0, 0, screen_w_, screen_h_},
@@ -1273,7 +1274,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool modal_hide = is_modal_blocking_panels();
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     modal_headers_hidden_ = modal_hide;
-    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open;
+    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || frame_editor_active;
     asset_filter_.set_enabled(enabled_);
     asset_filter_.set_header_suppressed(hide_headers);
     apply_header_suppression();
@@ -1560,8 +1561,9 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     if (!enabled_) return;
 
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
+    const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
 
-    const bool hide_headers = modal_headers_hidden_ || sliding_headers_hidden_ || layers_panel_open;
+    const bool hide_headers = modal_headers_hidden_ || sliding_headers_hidden_ || layers_panel_open || frame_editor_active;
     asset_filter_.set_header_suppressed(hide_headers);
 
     if (!renderer) {
@@ -2037,7 +2039,9 @@ void DevControls::begin_frame_editor_session(Asset* asset,
         }
         this->frame_editor_prev_asset_info_open_ = false;
         this->frame_editor_asset_for_reopen_ = nullptr;
+        this->apply_header_suppression();
     });
+    apply_header_suppression();
 }
 
 void DevControls::end_frame_editor_session() {
@@ -2045,6 +2049,7 @@ void DevControls::end_frame_editor_session() {
         frame_editor_session_->end();
     }
     grid_overlay_enabled_ = frame_editor_prev_grid_overlay_;
+    apply_header_suppression();
 }
 
 bool DevControls::is_frame_editor_session_active() const {
@@ -2474,7 +2479,8 @@ void DevControls::pulse_modal_header() {
 void DevControls::apply_header_suppression() {
     if (map_mode_ui_) {
 
-        const bool modal_hide = is_modal_blocking_panels();
+        const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
+        const bool modal_hide = is_modal_blocking_panels() || frame_editor_active;
         map_mode_ui_->set_headers_suppressed(modal_hide);
         map_mode_ui_->set_dev_sliding_headers_hidden(sliding_headers_hidden_);
     }
@@ -2498,7 +2504,8 @@ void DevControls::mark_layout_dirty() {
 }
 
 void DevControls::update_header_and_footer_bounds() {
-    const bool modal_hide = is_modal_blocking_panels();
+    const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
+    const bool modal_hide = is_modal_blocking_panels() || frame_editor_active;
     modal_headers_hidden_ = modal_hide;
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open;

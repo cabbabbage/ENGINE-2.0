@@ -23,6 +23,7 @@ from typing import Dict, Optional, Tuple
 
 from PIL import Image
 
+from gpu_status import print_gpu_status
 
 def clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
@@ -343,6 +344,8 @@ def _parse_cli(argv) -> Tuple[Optional[Path], Optional[Path], Optional[ShadowMas
 
 
 def main(argv=None) -> int:
+    print_gpu_status(False)
+
     argv = argv or sys.argv
     input_path, output_path, settings, meta_path = _parse_cli(argv)
     if not input_path or not output_path or not settings:

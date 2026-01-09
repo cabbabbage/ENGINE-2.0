@@ -29,6 +29,7 @@ class Input;
 struct SDL_Renderer;
 class DMButton;
 class DMDropdown;
+class DMNumericStepper;
 class WarpedScreenGrid;
 struct AnimationChildFrameData;
 enum class AnimationChildMode;
@@ -178,6 +179,8 @@ FRAME_EDITOR_ACCESS:
     mutable std::unique_ptr<DMButton> btn_prev_;
     mutable std::unique_ptr<DMButton> btn_next_;
     mutable std::unique_ptr<DMDropdown> dd_animation_select_;
+    mutable std::unique_ptr<class DMCheckbox> cb_grid_overlay_;
+    mutable std::unique_ptr<DMNumericStepper> stepper_grid_resolution_;
 
     mutable std::unique_ptr<class DMButton> btn_apply_all_movement_;
     mutable std::unique_ptr<class DMButton> btn_apply_all_children_;
@@ -480,7 +483,7 @@ FRAME_EDITOR_ACCESS:
 
 FRAME_EDITOR_ACCESS:
     void render_directory_panel(SDL_Renderer* renderer);
-    void render_navigation_panel(SDL_Renderer* renderer);
+    void render_navigation_panel(SDL_Renderer* renderer) const;
     void render_toolbox(SDL_Renderer* renderer);
     void render_child_guides(SDL_Renderer* renderer, const WarpedScreenGrid& cam);
     void render_hitbox_guides(SDL_Renderer* renderer, const WarpedScreenGrid& cam);

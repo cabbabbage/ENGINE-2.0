@@ -2258,6 +2258,9 @@ bool AnimationEditorWindow::rebuild_animation_via_pipeline(const std::shared_ptr
 
     vibble::RebuildQueueCoordinator coordinator;
     coordinator.request_animation(info->name, animation_id);
+    if (!coordinator.has_pending_asset_work()) {
+        return true;
+    }
     if (!coordinator.run_asset_tool()) {
         set_status_message("asset_tool.py failed; see logs for details.", 240);
         return false;
@@ -2304,6 +2307,9 @@ bool AnimationEditorWindow::rebuild_all_animations_via_pipeline(const std::share
 
     vibble::RebuildQueueCoordinator coordinator;
     coordinator.request_asset(info->name);
+    if (!coordinator.has_pending_asset_work()) {
+        return true;
+    }
     if (!coordinator.run_asset_tool()) {
         set_status_message("asset_tool.py failed; see logs for details.", 240);
         return false;

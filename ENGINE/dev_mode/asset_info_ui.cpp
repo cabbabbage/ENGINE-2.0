@@ -3,9 +3,11 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <chrono>
 #include <cstddef>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <SDL_log.h>
 #include <stdexcept>
@@ -67,6 +69,63 @@ namespace asset_paths = devmode::asset_paths;
 namespace {
 
 using vibble::strings::to_lower_copy;
+
+std::optional<long long> file_mtime_ns(const std::filesystem::path& path) {
+    std::error_code ec;
+    const auto time = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+    const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
+    return static_cast<long long>(ns);
+}
+
+bool mask_preview_up_to_date(const std::filesystem::path& input_png,
+                             const std::filesystem::path& output_png,
+                             const std::filesystem::path& meta_path,
+                             const ShadowMaskSettings& settings) {
+    std::error_code ec;
+    if (!std::filesystem::exists(output_png, ec) || ec) {
+        return false;
+    }
+    if (!std::filesystem::exists(meta_path, ec) || ec) {
+        return false;
+    }
+    if (!std::filesystem::exists(input_png, ec) || ec) {
+        return false;
+    }
+
+    try {
+        const auto meta = nlohmann::json::parse(std::ifstream(meta_path));
+        if (!meta.is_object() || meta.value("version", 0) != 1) {
+            return false;
+        }
+
+        const auto file_size = static_cast<long long>(std::filesystem::file_size(input_png, ec));
+        if (ec) {
+            return false;
+        }
+        const auto mtime = file_mtime_ns(input_png);
+        if (!mtime.has_value()) {
+            return false;
+        }
+
+        nlohmann::json settings_json = {
+            {"expansion_ratio", settings.expansion_ratio},
+            {"blur_scale", settings.blur_scale},
+            {"falloff_start", settings.falloff_start},
+            {"falloff_exponent", settings.falloff_exponent},
+            {"alpha_multiplier", settings.alpha_multiplier},
+            {"chunk_resolution", settings.chunk_resolution},
+        };
+
+        return meta.value("input_size", -1) == file_size
+            && meta.value("input_mtime_ns", -1LL) == *mtime
+            && meta.value("settings", nlohmann::json::object()) == settings_json;
+    } catch (...) {
+        return false;
+    }
+}
 
 void configure_panel_for_container(DockableCollapsible* panel) {
     if (!panel) {
@@ -2104,6 +2163,10 @@ bool AssetInfoUI::generate_mask_preview() {
             std::cerr << "[AssetInfoUI] shadow_mask.py missing; cannot generate mask preview for "
                       << info_->name << "\n";
             return false;
+        }
+
+        if (mask_preview_up_to_date(input_png, output_png, meta_path, settings)) {
+            return load_mask_preview_texture(output_png);
         }
 
         std::ostringstream cmd;

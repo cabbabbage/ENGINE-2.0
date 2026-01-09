@@ -16,6 +16,7 @@ Where:
 
 from typing import Optional
 from effects import Effects
+from gpu_status import detect_torch_gpu, print_gpu_status
 
 import numpy as np
 from PIL import Image, ImageFilter
@@ -524,13 +525,15 @@ class ApplyEffects:
     # ---------- public API ----------
 
     def apply_effects(self, image: Image.Image, Effects_params: Effects) -> Image.Image:
-        if self.use_gpu and _TORCH_AVAILABLE:
+        if self.use_gpu and _TORCH_AVAILABLE and image.width * image.height >= 512 * 512:
             return self._apply_gpu(image, Effects_params)
         return self._apply_cpu(image, Effects_params)
 
 
 if __name__ == "__main__":
     import sys
+
+    print_gpu_status(detect_torch_gpu())
 
     if len(sys.argv) != 11:
         print(

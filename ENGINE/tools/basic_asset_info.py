@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from cache_helper import compare_and_update_json, stable_hash
+from gpu_status import print_gpu_status
 
 
 def _configure_logger() -> logging.Logger:
@@ -203,6 +204,8 @@ class Asset:
 
 
 if __name__ == "__main__":
+    print_gpu_status(False)
+
     if len(sys.argv) < 3:
         print(
             "Usage: python asset_info.py <asset_name> <path_to_manifest.json> [cache_dir]",

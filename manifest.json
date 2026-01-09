@@ -3723,6 +3723,7 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
+                  "dz": 0,
                   "render_in_front": true,
                   "visible": false
                 }
@@ -3739,6 +3740,7 @@
                   "degree": 0.0,
                   "dx": -20,
                   "dy": 0,
+                  "dz": 0,
                   "render_in_front": true,
                   "visible": true
                 }

@@ -279,7 +279,6 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                         for (auto* vertex : vertices) {
                                 if (!vertex) continue;
                                 SDL_Point spawn_pos{ vertex->world.x, vertex->world.y };
-                                spawn_pos = apply_map_grid_jitter(map_grid_settings_, spawn_pos, batch_ctx.rng(), area);
                                 bool placed = false;
                                 std::vector<double> attempt_weights = base_weights;
                                 const size_t max_candidate_attempts = queue_item.candidates.size();

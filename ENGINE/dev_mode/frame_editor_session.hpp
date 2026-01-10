@@ -37,7 +37,6 @@ enum class AnimationChildMode;
 namespace animation_editor {
 class AnimationDocument;
 class PreviewProvider;
-class AnimationEditorWindow;
 }
 
 struct ChildPreviewContext {
@@ -61,7 +60,7 @@ public:
                std::shared_ptr<animation_editor::AnimationDocument> document,
                std::shared_ptr<animation_editor::PreviewProvider> preview,
                const std::string& animation_id,
-               animation_editor::AnimationEditorWindow* host_to_toggle,
+               std::function<void(const std::string&)> on_host_closed,
                std::function<void()> on_end_callback = {});
     void end();
 
@@ -144,7 +143,7 @@ FRAME_EDITOR_ACCESS:
     Asset* target_ = nullptr;
     std::shared_ptr<animation_editor::AnimationDocument> document_;
     std::shared_ptr<animation_editor::PreviewProvider> preview_;
-    animation_editor::AnimationEditorWindow* host_ = nullptr;
+    std::function<void(const std::string&)> on_host_closed_{};
     std::function<void()> on_end_{};
 
     bool active_ = false;

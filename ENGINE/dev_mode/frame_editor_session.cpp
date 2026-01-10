@@ -26,7 +26,6 @@
 #include "dev_mode/core/dev_json_store.hpp"
 #include "dev_mode/core/manifest_store.hpp"
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
-#include "dev_mode/asset_sections/animation_editor_window/AnimationEditorWindow.hpp"
 #include "dev_mode/asset_sections/animation_editor_window/PreviewProvider.hpp"
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/dm_styles.hpp"
@@ -443,7 +442,7 @@ void FrameEditorSession::begin(Assets* assets,
                                std::shared_ptr<animation_editor::AnimationDocument> document,
                                std::shared_ptr<animation_editor::PreviewProvider> preview,
                                const std::string& animation_id,
-                               animation_editor::AnimationEditorWindow* host_to_toggle,
+                               std::function<void(const std::string&)> on_host_closed,
                                std::function<void()> on_end_callback) {
     if (!assets || !asset || !document || animation_id.empty()) {
         return;
@@ -457,7 +456,7 @@ void FrameEditorSession::begin(Assets* assets,
     document_ = std::move(document);
     preview_ = std::move(preview);
     animation_id_ = animation_id;
-    host_ = host_to_toggle;
+    on_host_closed_ = std::move(on_host_closed);
     on_end_ = std::move(on_end_callback);
     edited_animation_ids_.clear();
     if (!snap_resolution_override_ && assets_) {
@@ -677,6 +676,8 @@ void FrameEditorSession::end() {
 
     const bool target_alive = target_is_alive();
 
+    end_hitbox_drag(true);
+    end_attack_drag(true);
     persist_changes(true);
     if (target_alive && target_ && target_->info) {
         target_->info->reload_animations_from_disk();
@@ -708,7 +709,7 @@ void FrameEditorSession::end() {
         document_->save_to_file(false);
     }
 
-    auto saved_host = host_;
+    auto saved_host_callback = std::move(on_host_closed_);
     auto saved_animation_id = animation_id_;
 
     active_ = false;
@@ -716,7 +717,7 @@ void FrameEditorSession::end() {
     target_ = nullptr;
     document_.reset();
     preview_.reset();
-    host_ = nullptr;
+    on_host_closed_ = {};
     animation_id_.clear();
     frames_.clear();
     rel_positions_.clear();
@@ -726,8 +727,8 @@ void FrameEditorSession::end() {
     edited_animation_ids_.clear();
     last_payload_loaded_ = false;
 
-    if (saved_host) {
-        saved_host->on_live_frame_editor_closed(saved_animation_id);
+    if (saved_host_callback) {
+        saved_host_callback(saved_animation_id);
     }
 
     if (on_end_) {

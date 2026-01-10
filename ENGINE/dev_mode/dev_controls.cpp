@@ -2063,7 +2063,7 @@ void DevControls::begin_frame_editor_session(Asset* asset,
                                              std::shared_ptr<animation_editor::AnimationDocument> document,
                                             std::shared_ptr<animation_editor::PreviewProvider> preview,
                                              const std::string& animation_id,
-                                             animation_editor::AnimationEditorWindow* host_to_toggle) {
+                                             std::function<void(const std::string&)> on_host_closed) {
     if (!asset || !assets_ || animation_id.empty()) return;
     if (!frame_editor_session_) frame_editor_session_ = std::make_unique<FrameEditorSession>();
     frame_editor_session_->set_snap_resolution(grid_overlay_resolution_r_);
@@ -2073,7 +2073,7 @@ void DevControls::begin_frame_editor_session(Asset* asset,
 
     frame_editor_prev_asset_info_open_ = false;
     frame_editor_asset_for_reopen_ = nullptr;
-    const bool launched_from_animation_editor = (host_to_toggle != nullptr);
+    const bool launched_from_animation_editor = static_cast<bool>(on_host_closed);
     bool asset_info_was_open = false;
     if (room_editor_) {
         asset_info_was_open = room_editor_->is_asset_info_editor_open();
@@ -2085,7 +2085,7 @@ void DevControls::begin_frame_editor_session(Asset* asset,
     if (frame_editor_prev_asset_info_open_) {
         frame_editor_asset_for_reopen_ = asset;
     }
-    frame_editor_session_->begin(assets_, asset, std::move(document), std::move(preview), animation_id, host_to_toggle, [this]() {
+    frame_editor_session_->begin(assets_, asset, std::move(document), std::move(preview), animation_id, std::move(on_host_closed), [this]() {
 
         this->grid_overlay_enabled_ = this->frame_editor_prev_grid_overlay_;
 

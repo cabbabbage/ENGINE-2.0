@@ -4,6 +4,7 @@
 #include "asset/asset_library.hpp"
 #include <SDL.h>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -32,7 +33,6 @@ class QuickTaskPopup;
 namespace animation_editor {
 class AnimationDocument;
 class PreviewProvider;
-class AnimationEditorWindow;
 }
 namespace devmode::core {
 class ManifestStore;
@@ -120,7 +120,7 @@ public:
 
     void focus_camera_on_asset(Asset* a, double height_factor = 0.8, int duration_steps = 25);
 
-    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, animation_editor::AnimationEditorWindow* host_to_toggle);
+    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, std::function<void(const std::string&)> on_host_closed);
 
     devmode::core::ManifestStore* manifest_store();
     const devmode::core::ManifestStore* manifest_store() const;

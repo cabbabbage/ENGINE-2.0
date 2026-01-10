@@ -389,6 +389,7 @@ nlohmann::json snapshot_from_asset_info(const AssetInfo& info) {
 namespace animation_editor {
 
 AnimationEditorWindow::AnimationEditorWindow() {
+    live_frame_editor_token_ = std::make_shared<LiveFrameEditorToken>();
     document_ = std::make_shared<AnimationDocument>();
     document_->set_on_saved_callback([this]() { this->handle_document_saved(); });
     preview_provider_ = std::make_shared<PreviewProvider>();
@@ -1758,7 +1759,12 @@ void AnimationEditorWindow::open_frame_editor(const std::string& animation_id) {
     }
     target_asset_ = runtime_asset;
     live_frame_editor_session_active_ = true;
-    assets_->begin_frame_editor_session(runtime_asset, document_, preview_provider_, animation_id, this);
+    std::weak_ptr<LiveFrameEditorToken> host_token = live_frame_editor_token_;
+    assets_->begin_frame_editor_session(runtime_asset, document_, preview_provider_, animation_id,
+        [this, host_token](const std::string& closed_animation_id) {
+            if (host_token.expired()) return;
+            this->on_live_frame_editor_closed(closed_animation_id);
+        });
     set_visible(false, false );
 }
 

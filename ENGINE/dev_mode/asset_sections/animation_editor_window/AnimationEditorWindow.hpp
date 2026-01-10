@@ -69,6 +69,7 @@ class AnimationEditorWindow {
     void on_live_frame_editor_closed(const std::string& animation_id);
 
   private:
+    struct LiveFrameEditorToken {};
     void handle_document_saved();
     void layout_children();
     void ensure_layout() const;
@@ -153,6 +154,8 @@ class AnimationEditorWindow {
     std::string status_message_;
     int status_timer_frames_ = 0;
     bool live_frame_editor_session_active_ = false;
+    // Expires when the window is destroyed to invalidate callbacks.
+    std::shared_ptr<LiveFrameEditorToken> live_frame_editor_token_;
     mutable SDL_Texture* inspector_background_cache_ = nullptr;
     mutable SDL_Rect inspector_background_cache_rect_{0, 0, 0, 0};
     mutable bool inspector_background_dirty_ = true;

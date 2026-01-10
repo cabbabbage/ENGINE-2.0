@@ -35,7 +35,6 @@ class RegenerateRoomPopup;
 namespace animation_editor {
 class AnimationDocument;
 class PreviewProvider;
-class AnimationEditorWindow;
 }
 
 class DevControls {
@@ -121,7 +120,7 @@ public:
     bool is_snap_to_grid_enabled() const { return snap_to_grid_enabled_; }
     int  grid_cell_size_px() const { return grid_cell_size_px_; }
 
-    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, animation_editor::AnimationEditorWindow* host_to_toggle);
+    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, std::function<void(const std::string&)> on_host_closed);
     void end_frame_editor_session();
     bool is_frame_editor_session_active() const;
 

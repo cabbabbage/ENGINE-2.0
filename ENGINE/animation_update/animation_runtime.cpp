@@ -655,19 +655,6 @@ void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFr
         slot.last_parent_frame_index = parent_frame_index;
     }
 
-    if (frame) {
-        for (int child_idx : frame->child_start_events) {
-            if (child_idx < 0 || static_cast<std::size_t>(child_idx) >= self_->animation_children_.size()) {
-                continue;
-            }
-            auto& slot = self_->animation_children_[child_idx];
-            if (!slot.timeline || slot.timeline_mode != AnimationChildMode::Async) {
-                continue;
-            }
-            restart_child_timeline(slot);
-        }
-    }
-
     child_frame_buffer_.clear();
     child_frame_buffer_.reserve(self_->animation_children_.size());
 

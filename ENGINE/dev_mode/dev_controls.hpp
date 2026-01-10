@@ -242,6 +242,7 @@ private:
     int  grid_overlay_resolution_r_ = 0;
     bool grid_overlay_resolution_user_override_ = false;
     int  grid_cell_size_px_ = 1;
+    bool movement_debug_enabled_ = false;
 
     bool depth_effects_forced_realism_disabled_ = false;
     bool depth_effects_prev_realism_enabled_ = true;

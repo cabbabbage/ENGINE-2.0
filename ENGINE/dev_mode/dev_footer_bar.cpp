@@ -58,6 +58,7 @@ DevFooterBar::DevFooterBar(std::string title)
     : title_(std::move(title)),
       height_(kDefaultFooterHeight) {
     depth_effects_checkbox_ = std::make_unique<DMCheckbox>("Depth Effects", false);
+    movement_debug_checkbox_ = std::make_unique<DMCheckbox>("Movement Debug", movement_debug_enabled_);
     grid_checkbox_ = std::make_unique<DMCheckbox>("Show Grid", grid_overlay_enabled_);
     grid_stepper_ = std::make_unique<DMNumericStepper>("Grid Resolution (r)", 0, 10, grid_resolution_);
 }
@@ -198,6 +199,14 @@ bool DevFooterBar::handle_event(const SDL_Event& e) {
         }
     }
 
+    if (movement_debug_checkbox_ && movement_debug_checkbox_->handle_event(e)) {
+        used = true;
+        movement_debug_enabled_ = movement_debug_checkbox_->value();
+        if (on_movement_debug_toggle_) {
+            on_movement_debug_toggle_(movement_debug_enabled_);
+        }
+    }
+
     if (grid_checkbox_ && grid_checkbox_->handle_event(e)) {
         used = true;
         grid_overlay_enabled_ = grid_checkbox_->value();
@@ -273,6 +282,10 @@ void DevFooterBar::render(SDL_Renderer* renderer) const {
 
     if (depth_effects_checkbox_) {
         depth_effects_checkbox_->render(renderer);
+    }
+
+    if (movement_debug_checkbox_) {
+        movement_debug_checkbox_->render(renderer);
     }
 
     if (grid_checkbox_) {
@@ -476,9 +489,26 @@ void DevFooterBar::set_grid_controls_callbacks(std::function<void(bool)> on_over
     on_grid_resolution_change_ = std::move(on_resolution_change);
 }
 
+void DevFooterBar::set_movement_debug_enabled(bool enabled) {
+    if (movement_debug_enabled_ == enabled) {
+        return;
+    }
+    movement_debug_enabled_ = enabled;
+    if (movement_debug_checkbox_) {
+        movement_debug_checkbox_->set_value(enabled);
+    }
+    if (on_movement_debug_toggle_) {
+        on_movement_debug_toggle_(enabled);
+    }
+}
+
+void DevFooterBar::set_movement_debug_callback(std::function<void(bool)> cb) {
+    on_movement_debug_toggle_ = std::move(cb);
+}
+
 void DevFooterBar::layout_grid_controls() {
     grid_controls_right_ = rect_.x + kFooterHorizontalPadding;
-    if (!depth_effects_checkbox_ || !grid_checkbox_ || !grid_stepper_) {
+    if (!depth_effects_checkbox_ || !movement_debug_checkbox_ || !grid_checkbox_ || !grid_stepper_) {
         return;
     }
 
@@ -490,6 +520,10 @@ void DevFooterBar::layout_grid_controls() {
     SDL_Rect depth_rect{x, checkbox_y, depth_effects_checkbox_->preferred_width(), DMCheckbox::height()};
     depth_effects_checkbox_->set_rect(depth_rect);
     x += depth_rect.w + gap;
+
+    SDL_Rect movement_rect{x, checkbox_y, movement_debug_checkbox_->preferred_width(), DMCheckbox::height()};
+    movement_debug_checkbox_->set_rect(movement_rect);
+    x += movement_rect.w + gap;
 
     SDL_Rect checkbox_rect{x, checkbox_y, grid_checkbox_->preferred_width(), DMCheckbox::height()};
     grid_checkbox_->set_rect(checkbox_rect);

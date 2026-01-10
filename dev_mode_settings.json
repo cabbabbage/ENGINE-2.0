@@ -35,6 +35,11 @@
             "snap": {
                 "enabled": true
             }
+        },
+        "movement": {
+            "debug": {
+                "enabled": false
+            }
         }
     },
     "dev_ui": {

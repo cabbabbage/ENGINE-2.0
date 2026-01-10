@@ -440,6 +440,10 @@ void SceneRenderer::set_dark_mask_enabled(bool enabled) {
     }
 }
 
+void SceneRenderer::set_movement_debug_enabled(bool enabled) {
+    debug_auto_paths_ = enabled;
+}
+
 void SceneRenderer::render() {
     if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;

@@ -53,6 +53,8 @@ public:
     SDL_Renderer* get_renderer() const;
 
     void set_dark_mask_enabled(bool enabled);
+    void set_movement_debug_enabled(bool enabled);
+    bool movement_debug_enabled() const { return debug_auto_paths_; }
     void set_map_clear_color(SDL_Color color) { map_clear_color_ = color; }
     SDL_Color map_clear_color() const { return map_clear_color_; }
 

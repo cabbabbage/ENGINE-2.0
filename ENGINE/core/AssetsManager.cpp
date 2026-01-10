@@ -234,6 +234,7 @@ Assets::Assets(AssetLibrary& library,
     }
     if (scene) {
         scene->set_dark_mask_enabled(render_dark_mask_enabled_);
+        scene->set_movement_debug_enabled(movement_debug_enabled_);
     }
     apply_map_light_config();
     apply_map_grid_settings(map_grid_settings_, false);
@@ -446,6 +447,16 @@ void Assets::set_depth_effects_enabled(bool enabled) {
     }
     depth_effects_enabled_ = enabled;
     devmode::camera_prefs::save_depthcue_enabled(enabled);
+}
+
+void Assets::set_movement_debug_enabled(bool enabled) {
+    if (movement_debug_enabled_ == enabled) {
+        return;
+    }
+    movement_debug_enabled_ = enabled;
+    if (scene) {
+        scene->set_movement_debug_enabled(enabled);
+    }
 }
 
 void Assets::apply_map_light_config() {

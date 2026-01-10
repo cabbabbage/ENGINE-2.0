@@ -100,6 +100,7 @@ constexpr const char* kGridOverlayEnabledKey = "dev.grid.overlay.enabled";
 constexpr const char* kGridSnapEnabledKey    = "dev.grid.snap.enabled";
 constexpr const char* kGridCellSizePxKey     = "dev.grid.cell_size_px";
 constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
+constexpr const char* kMovementDebugEnabledKey = "dev.movement.debug.enabled";
 
 struct SimpleLabelCacheKey {
     std::string font_path;
@@ -479,6 +480,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         grid_overlay_resolution_r_ = 0;
     }
     grid_cell_size_px_ = layer_spacing(grid_overlay_resolution_r_);
+    movement_debug_enabled_ = devmode::ui_settings::load_bool(kMovementDebugEnabledKey, false);
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
     if (room_editor_) {
         room_editor_->set_manifest_store(&manifest_store_);
@@ -657,7 +659,18 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                     apply_overlay_grid_resolution(clamped, from_user, true, false);
                 }
             );
+            footer->set_movement_debug_enabled(movement_debug_enabled_);
+            footer->set_movement_debug_callback([this](bool enabled) {
+                movement_debug_enabled_ = enabled;
+                devmode::ui_settings::save_bool(kMovementDebugEnabledKey, enabled);
+                if (assets_) {
+                    assets_->set_movement_debug_enabled(enabled);
+                }
+            });
         }
+    }
+    if (assets_) {
+        assets_->set_movement_debug_enabled(movement_debug_enabled_);
     }
     configure_header_button_sets();
     trail_suite_ = std::make_unique<TrailEditorSuite>();

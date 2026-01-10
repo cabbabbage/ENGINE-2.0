@@ -460,6 +460,14 @@ void SceneRenderer::render() {
     cam.rebuild_grid(grid, assets_->frame_delta_seconds());
     assets_->rebuild_active_from_screen_grid();
 
+    const auto& render_assets = assets_->getActive();
+    for (Asset* asset : render_assets) {
+        if (!asset || !asset->info) {
+            continue;
+        }
+        asset->update_scale_values();
+    }
+
     SDL_SetRenderTarget(renderer_, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, map_clear_color_.a);
@@ -475,7 +483,6 @@ void SceneRenderer::render() {
     const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
-    const auto& render_assets = assets_->getActive();
     std::vector<DarkMaskSprite> dark_mask_sprites;
     dark_mask_sprites.reserve(std::max<std::size_t>(render_assets.size(), 8u));
     for (Asset* asset : render_assets) {

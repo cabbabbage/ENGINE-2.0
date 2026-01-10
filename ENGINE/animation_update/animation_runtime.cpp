@@ -79,6 +79,17 @@ bool same_point(SDL_Point lhs, SDL_Point rhs) {
 AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
     : self_(self), assets_owner_(assets), grid_service_(&vibble::grid::global_grid()) {}
 
+float AnimationRuntime::parent_world_z() const {
+    if (!self_ || !assets_owner_) {
+        return 0.0f;
+    }
+    const WarpedScreenGrid& cam = assets_owner_->getView();
+    if (const auto* gp = cam.grid_point_for_asset(self_)) {
+        return static_cast<float>(gp->world_z());
+    }
+    return 0.0f;
+}
+
 void AnimationRuntime::set_debug_enabled(bool enabled) {
     debug_enabled_ = enabled;
 }
@@ -539,6 +550,7 @@ void AnimationRuntime::advance_child_frames(float dt) {
     parent_state.base_position = animation_update::detail::bottom_middle_for(*self_, render_pos);
     parent_state.scale = compute_attachment_scale();
     parent_state.flipped = self_->flipped;
+    parent_state.world_z = parent_world_z();
     parent_state.animation_id = self_->current_animation;
     animation_update::child_attachments::advance_frames(self_->animation_children_, parent_state, dt);
 
@@ -637,6 +649,7 @@ void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFr
     parent_state.base_position = animation_update::detail::bottom_middle_for(*self_, render_pos);
     parent_state.scale = compute_attachment_scale();
     parent_state.flipped = self_->flipped;
+    parent_state.world_z = parent_world_z();
     parent_state.animation_id = self_->current_animation;
     const int parent_frame_index = frame ? frame->frame_index : -1;
 

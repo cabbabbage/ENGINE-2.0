@@ -70,6 +70,7 @@ private:
     void       handle_async_requests(const std::vector<std::string>& requests);
     Asset::AnimationChildAttachment* find_child_slot(const std::string& name);
     void       restart_child_timeline(Asset::AnimationChildAttachment& slot);
+    float      parent_world_z() const;
 
     void       apply_pending_move();
 

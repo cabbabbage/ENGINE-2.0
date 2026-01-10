@@ -109,6 +109,7 @@ class Asset {
         const AnimationFrame* current_frame = nullptr;
         float frame_progress = 0.0f;
         SDL_Point world_pos{0, 0};
+        float world_z = 0.0f;
         float rotation_degrees = 0.0f;
         bool visible = false;
         bool render_in_front = true;

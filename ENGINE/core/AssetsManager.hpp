@@ -113,6 +113,8 @@ public:
     bool depth_effects_enabled() const { return depth_effects_enabled_; }
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return movement_debug_enabled_; }
+    void set_movement_debug_visible(bool visible);
+    bool movement_debug_visible() const { return movement_debug_visible_; }
     // Force the camera to refresh from current room settings on next update.
     void mark_camera_dirty();
 
@@ -250,6 +252,7 @@ private:
     bool render_dark_mask_enabled_ = true;
     bool depth_effects_enabled_ = false;
     bool movement_debug_enabled_ = false;
+    bool movement_debug_visible_ = true;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
     std::vector<world::GridPoint*> active_points_;

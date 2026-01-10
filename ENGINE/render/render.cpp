@@ -444,6 +444,10 @@ void SceneRenderer::set_movement_debug_enabled(bool enabled) {
     debug_auto_paths_ = enabled;
 }
 
+void SceneRenderer::set_movement_debug_visible(bool visible) {
+    movement_debug_visible_ = visible;
+}
+
 void SceneRenderer::render() {
     if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
@@ -535,7 +539,7 @@ void SceneRenderer::render() {
         render_dynamic_darkness_overlay(map_light_opacity_, dark_mask_sprites);
     }
 
-    if (debug_auto_paths_) {
+    if (debug_auto_paths_ && movement_debug_visible_) {
         static const std::array<SDL_Color, 6> kPathColors{{
             SDL_Color{255, 99, 71, 255},
             SDL_Color{50, 205, 50, 255},

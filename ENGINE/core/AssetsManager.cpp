@@ -459,6 +459,16 @@ void Assets::set_movement_debug_enabled(bool enabled) {
     }
 }
 
+void Assets::set_movement_debug_visible(bool visible) {
+    if (movement_debug_visible_ == visible) {
+        return;
+    }
+    movement_debug_visible_ = visible;
+    if (scene) {
+        scene->set_movement_debug_visible(visible);
+    }
+}
+
 void Assets::apply_map_light_config() {
     if (!scene) {
         return;
@@ -571,7 +581,7 @@ void Assets::update_filtered_active_assets() {
 
     if (dev_controls_ && dev_controls_->is_enabled()) {
         const std::uint64_t active_hash = hash_active_asset_list(active_assets);
-        const std::uint64_t filter_version = dev_controls_->asset_filter_state_version();
+        const std::uint64_t filter_version = dev_controls_->other_settings_state_version();
         if (active_hash == filtered_active_assets_source_hash_ &&
             filter_version == filtered_active_assets_filter_version_) {
             return;
@@ -909,7 +919,7 @@ void Assets::update(const Input& input)
     const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
     std::uint64_t dev_filter_version = 0;
     if (dev_controls_enabled) {
-        dev_filter_version = dev_controls_->asset_filter_state_version();
+        dev_filter_version = dev_controls_->other_settings_state_version();
         if (!last_dev_controls_enabled_ || dev_filter_version != last_dev_filter_state_version_) {
             needs_filtered_active_refresh = true;
         }
@@ -1840,7 +1850,7 @@ std::optional<Asset::TilingInfo> Assets::compute_tiling_for_asset(const Asset* a
         return std::nullopt;
     }
 
-    int step = map_grid_settings_.spacing();
+    int step = map_grid_settings_.tile_spacing();
 
     if (step <= 0) {
         const int raw_w = std::max(1, asset->info->original_canvas_width);

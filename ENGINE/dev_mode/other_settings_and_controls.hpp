@@ -2,6 +2,8 @@
 
 #include <SDL.h>
 
+#include <algorithm>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -13,9 +15,10 @@
 
 class Asset;
 class DMCheckbox;
+class DMNumericStepper;
 class Room;
 
-class AssetFilterBar {
+class OtherSettingsAndControls {
 public:
     using StateChangedCallback = std::function<void()>;
     using ExtraRenderer = std::function<void(SDL_Renderer*, const SDL_Rect&)>;
@@ -26,8 +29,8 @@ public:
         bool active = false;
 };
 
-    AssetFilterBar();
-    ~AssetFilterBar();
+    OtherSettingsAndControls();
+    ~OtherSettingsAndControls();
 
     void initialize();
 
@@ -67,6 +70,11 @@ public:
 
     bool passes(const Asset& asset) const;
     bool render_dark_mask_enabled() const;
+
+    void set_tile_resolution_range(int min_resolution, int max_resolution);
+    void set_tile_resolution_value(int resolution);
+    int tile_resolution_value() const;
+    void set_tile_resolution_change_callback(std::function<void(int)> cb);
 
 private:
     enum class FilterKind { MapAssets, CurrentRoom, RenderDarkMask, Type, SpawnMethod };
@@ -148,4 +156,8 @@ private:
     SDL_Rect extra_panel_rect_{0,0,0,0};
     ExtraRenderer extra_renderer_{};
     ExtraEventHandler extra_event_handler_{};
+    std::unique_ptr<DMNumericStepper> tile_resolution_stepper_;
+    std::function<void(int)> on_tile_resolution_changed_;
+    int tile_resolution_min_ = 0;
+    int tile_resolution_max_ = 0;
 };

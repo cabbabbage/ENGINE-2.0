@@ -1,4 +1,4 @@
-#include "asset_filter_bar.hpp"
+#include "other_settings_and_controls.hpp"
 
 #include "asset/Asset.hpp"
 #include "asset/asset_types.hpp"
@@ -56,27 +56,27 @@ std::string make_method_setting_key(const std::string& method) {
 
 }
 
-AssetFilterBar::FilterState& AssetFilterBar::persistent_state() {
+OtherSettingsAndControls::FilterState& OtherSettingsAndControls::persistent_state() {
     static FilterState state{};
     return state;
 }
 
-bool& AssetFilterBar::persistent_state_initialized_flag() {
+bool& OtherSettingsAndControls::persistent_state_initialized_flag() {
     static bool initialized = false;
     return initialized;
 }
 
-bool& AssetFilterBar::persistent_state_loaded_flag() {
+bool& OtherSettingsAndControls::persistent_state_loaded_flag() {
     static bool loaded = false;
     return loaded;
 }
 
-bool& AssetFilterBar::persistent_filters_expanded_flag() {
+bool& OtherSettingsAndControls::persistent_filters_expanded_flag() {
     static bool expanded = false;
     return expanded;
 }
 
-void AssetFilterBar::ensure_persistent_state_loaded() {
+void OtherSettingsAndControls::ensure_persistent_state_loaded() {
     if (persistent_state_loaded_flag()) {
         return;
     }
@@ -97,10 +97,54 @@ void AssetFilterBar::ensure_persistent_state_loaded() {
     persistent_filters_expanded_flag() = devmode::ui_settings::load_bool(kSettingsFiltersExpandedKey, false);
 }
 
-AssetFilterBar::AssetFilterBar() = default;
-AssetFilterBar::~AssetFilterBar() = default;
+OtherSettingsAndControls::OtherSettingsAndControls() = default;
+OtherSettingsAndControls::~OtherSettingsAndControls() = default;
 
-AssetFilterBar::FilterState& AssetFilterBar::mutable_state() {
+void OtherSettingsAndControls::set_tile_resolution_range(int min_resolution, int max_resolution) {
+    const int min_clamped = std::max(0, min_resolution);
+    const int max_clamped = std::max(min_clamped, max_resolution);
+    tile_resolution_min_ = min_clamped;
+    tile_resolution_max_ = max_clamped;
+    if (!tile_resolution_stepper_) {
+        tile_resolution_stepper_ = std::make_unique<DMNumericStepper>("Tile Resolution (r)", min_clamped, max_clamped, min_clamped);
+        tile_resolution_stepper_->set_on_change([this](int value) {
+            if (on_tile_resolution_changed_) {
+                on_tile_resolution_changed_(value);
+            }
+        });
+    } else {
+        tile_resolution_stepper_->set_range(min_clamped, max_clamped);
+        const int current = tile_resolution_stepper_->value();
+        const int clamped = std::clamp(current, min_clamped, max_clamped);
+        tile_resolution_stepper_->set_value(clamped);
+    }
+    layout_dirty_ = true;
+}
+
+void OtherSettingsAndControls::set_tile_resolution_value(int resolution) {
+    if (!tile_resolution_stepper_) {
+        return;
+    }
+    const int clamped = std::clamp(resolution, tile_resolution_min_, tile_resolution_max_);
+    if (tile_resolution_stepper_->value() == clamped) {
+        return;
+    }
+    tile_resolution_stepper_->set_value(clamped);
+    layout_dirty_ = true;
+}
+
+int OtherSettingsAndControls::tile_resolution_value() const {
+    if (!tile_resolution_stepper_) {
+        return tile_resolution_min_;
+    }
+    return tile_resolution_stepper_->value();
+}
+
+void OtherSettingsAndControls::set_tile_resolution_change_callback(std::function<void(int)> cb) {
+    on_tile_resolution_changed_ = std::move(cb);
+}
+
+OtherSettingsAndControls::FilterState& OtherSettingsAndControls::mutable_state() {
     if (!state_) {
         ensure_persistent_state_loaded();
         state_ = &persistent_state();
@@ -115,11 +159,11 @@ AssetFilterBar::FilterState& AssetFilterBar::mutable_state() {
     return *state_;
 }
 
-const AssetFilterBar::FilterState& AssetFilterBar::state() const {
-    return const_cast<AssetFilterBar*>(this)->mutable_state();
+const OtherSettingsAndControls::FilterState& OtherSettingsAndControls::state() const {
+    return const_cast<OtherSettingsAndControls*>(this)->mutable_state();
 }
 
-void AssetFilterBar::initialize() {
+void OtherSettingsAndControls::initialize() {
     entries_.clear();
     load_persisted_state();
 
@@ -230,11 +274,11 @@ void AssetFilterBar::initialize() {
     ensure_layout();
 }
 
-void AssetFilterBar::set_state_changed_callback(StateChangedCallback cb) {
+void OtherSettingsAndControls::set_state_changed_callback(StateChangedCallback cb) {
     on_state_changed_ = std::move(cb);
 }
 
-void AssetFilterBar::set_enabled(bool enabled) {
+void OtherSettingsAndControls::set_enabled(bool enabled) {
     if (enabled_ == enabled) {
         return;
     }
@@ -242,7 +286,7 @@ void AssetFilterBar::set_enabled(bool enabled) {
     layout_dirty_ = true;
 }
 
-void AssetFilterBar::set_screen_dimensions(int width, int height) {
+void OtherSettingsAndControls::set_screen_dimensions(int width, int height) {
     if (screen_w_ == width && screen_h_ == height) {
         return;
     }
@@ -251,19 +295,19 @@ void AssetFilterBar::set_screen_dimensions(int width, int height) {
     layout_dirty_ = true;
 }
 
-void AssetFilterBar::set_map_info(nlohmann::json* map_info) {
+void OtherSettingsAndControls::set_map_info(nlohmann::json* map_info) {
     map_info_json_ = map_info;
     rebuild_map_spawn_ids();
     notify_state_changed();
 }
 
-void AssetFilterBar::set_current_room(Room* room) {
+void OtherSettingsAndControls::set_current_room(Room* room) {
     current_room_ = room;
     rebuild_room_spawn_ids();
     notify_state_changed();
 }
 
-void AssetFilterBar::set_mode_buttons(std::vector<ModeButtonConfig> buttons) {
+void OtherSettingsAndControls::set_mode_buttons(std::vector<ModeButtonConfig> buttons) {
     mode_buttons_.clear();
     mode_buttons_.reserve(buttons.size());
     for (auto& cfg : buttons) {
@@ -275,11 +319,11 @@ void AssetFilterBar::set_mode_buttons(std::vector<ModeButtonConfig> buttons) {
     layout_dirty_ = true;
 }
 
-void AssetFilterBar::set_mode_changed_callback(std::function<void(const std::string&)> cb) {
+void OtherSettingsAndControls::set_mode_changed_callback(std::function<void(const std::string&)> cb) {
     on_mode_selected_ = std::move(cb);
 }
 
-void AssetFilterBar::set_active_mode(const std::string& id, bool trigger_callback) {
+void OtherSettingsAndControls::set_active_mode(const std::string& id, bool trigger_callback) {
     bool changed = false;
     for (auto& entry : mode_buttons_) {
         const bool should_be_active = (entry.config.id == id);
@@ -301,7 +345,7 @@ void AssetFilterBar::set_active_mode(const std::string& id, bool trigger_callbac
     }
 }
 
-void AssetFilterBar::set_filters_expanded(bool expanded) {
+void OtherSettingsAndControls::set_filters_expanded(bool expanded) {
     if (filters_expanded_ == expanded) {
         return;
     }
@@ -311,12 +355,12 @@ void AssetFilterBar::set_filters_expanded(bool expanded) {
     layout_dirty_ = true;
 }
 
-void AssetFilterBar::refresh_layout() {
+void OtherSettingsAndControls::refresh_layout() {
     layout_dirty_ = true;
     ensure_layout();
 }
 
-void AssetFilterBar::ensure_layout() {
+void OtherSettingsAndControls::ensure_layout() {
     if (!layout_dirty_) {
         return;
     }
@@ -324,7 +368,7 @@ void AssetFilterBar::ensure_layout() {
     rebuild_layout();
 }
 
-void AssetFilterBar::rebuild_layout() {
+void OtherSettingsAndControls::rebuild_layout() {
     layout_bounds_ = SDL_Rect{0, 0, 0, 0};
     mode_bar_rect_ = SDL_Rect{0, 0, 0, 0};
     header_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -411,11 +455,11 @@ void AssetFilterBar::rebuild_layout() {
     merge_bounds(filters_rect_);
 }
 
-void AssetFilterBar::render(SDL_Renderer* renderer) const {
+void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
     if (!enabled_ || !renderer) {
         return;
     }
-    const_cast<AssetFilterBar*>(this)->ensure_layout();
+    const_cast<OtherSettingsAndControls*>(this)->ensure_layout();
     if (layout_bounds_.w <= 0 || layout_bounds_.h <= 0) {
         return;
     }
@@ -461,12 +505,16 @@ void AssetFilterBar::render(SDL_Renderer* renderer) const {
         }
     }
 
+    if (tile_resolution_stepper_) {
+        tile_resolution_stepper_->render(renderer);
+    }
+
     if (extra_panel_rect_.w > 0 && extra_panel_rect_.h > 0 && extra_renderer_) {
         extra_renderer_(renderer, extra_panel_rect_);
     }
 }
 
-bool AssetFilterBar::handle_event(const SDL_Event& event) {
+bool OtherSettingsAndControls::handle_event(const SDL_Event& event) {
     if (!enabled_ || header_suppressed_) {
         return false;
     }
@@ -515,6 +563,10 @@ bool AssetFilterBar::handle_event(const SDL_Event& event) {
         notify_state_changed();
     }
 
+    if (tile_resolution_stepper_ && tile_resolution_stepper_->handle_event(event)) {
+        used = true;
+    }
+
     if (extra_panel_rect_.w > 0 && extra_panel_rect_.h > 0 && extra_event_handler_) {
 
         if (extra_event_handler_(event, extra_panel_rect_)) {
@@ -524,11 +576,11 @@ bool AssetFilterBar::handle_event(const SDL_Event& event) {
     return used;
 }
 
-bool AssetFilterBar::contains_point(int x, int y) const {
+bool OtherSettingsAndControls::contains_point(int x, int y) const {
     if (!enabled_) {
         return false;
     }
-    const_cast<AssetFilterBar*>(this)->ensure_layout();
+    const_cast<OtherSettingsAndControls*>(this)->ensure_layout();
     SDL_Point p{x, y};
     if (layout_bounds_.w > 0 && layout_bounds_.h > 0 && SDL_PointInRect(&p, &layout_bounds_)) {
         return true;
@@ -536,7 +588,7 @@ bool AssetFilterBar::contains_point(int x, int y) const {
     return false;
 }
 
-void AssetFilterBar::reset() {
+void OtherSettingsAndControls::reset() {
     for (auto& entry : entries_) {
         if (!entry.checkbox) {
             continue;
@@ -573,16 +625,16 @@ void AssetFilterBar::reset() {
     notify_state_changed();
 }
 
-bool AssetFilterBar::default_type_enabled(const std::string& type) const {
+bool OtherSettingsAndControls::default_type_enabled(const std::string& type) const {
     return true;
 }
 
-bool AssetFilterBar::default_method_enabled(const std::string& method) const {
+bool OtherSettingsAndControls::default_method_enabled(const std::string& method) const {
     (void)method;
     return true;
 }
 
-bool AssetFilterBar::passes(const Asset& asset) const {
+bool OtherSettingsAndControls::passes(const Asset& asset) const {
     if (!enabled_) {
         return true;
     }
@@ -609,11 +661,11 @@ bool AssetFilterBar::passes(const Asset& asset) const {
     return true;
 }
 
-bool AssetFilterBar::render_dark_mask_enabled() const {
+bool OtherSettingsAndControls::render_dark_mask_enabled() const {
     return state().render_dark_mask;
 }
 
-void AssetFilterBar::rebuild_map_spawn_ids() {
+void OtherSettingsAndControls::rebuild_map_spawn_ids() {
     map_spawn_ids_.clear();
     if (!map_info_json_) {
         return;
@@ -627,7 +679,7 @@ void AssetFilterBar::rebuild_map_spawn_ids() {
     }
 }
 
-void AssetFilterBar::rebuild_room_spawn_ids() {
+void OtherSettingsAndControls::rebuild_room_spawn_ids() {
     room_spawn_ids_.clear();
     if (!current_room_) {
         return;
@@ -639,7 +691,7 @@ void AssetFilterBar::rebuild_room_spawn_ids() {
     }
 }
 
-void AssetFilterBar::sync_state_from_ui() {
+void OtherSettingsAndControls::sync_state_from_ui() {
     FilterState& state_ref = mutable_state();
     for (auto& entry : entries_) {
         if (!entry.checkbox) {
@@ -667,7 +719,7 @@ void AssetFilterBar::sync_state_from_ui() {
     persist_state();
 }
 
-void AssetFilterBar::notify_state_changed() {
+void OtherSettingsAndControls::notify_state_changed() {
     ++state_version_;
     if (state_version_ == 0) {
         ++state_version_;
@@ -677,22 +729,25 @@ void AssetFilterBar::notify_state_changed() {
     }
 }
 
-void AssetFilterBar::update_filter_toggle_label() {
+void OtherSettingsAndControls::update_filter_toggle_label() {
     if (!filter_toggle_button_) {
         return;
     }
     filter_toggle_button_->set_text(filters_expanded_ ? std::string(DMIcons::CollapseExpanded()) : std::string(DMIcons::CollapseCollapsed()));
 }
 
-void AssetFilterBar::clear_checkbox_rects() {
+void OtherSettingsAndControls::clear_checkbox_rects() {
     for (auto& entry : entries_) {
         if (entry.checkbox) {
             entry.checkbox->set_rect(SDL_Rect{0, 0, 0, 0});
         }
     }
+    if (tile_resolution_stepper_) {
+        tile_resolution_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
+    }
 }
 
-void AssetFilterBar::layout_mode_buttons() {
+void OtherSettingsAndControls::layout_mode_buttons() {
     if (mode_buttons_.empty()) {
         return;
     }
@@ -774,7 +829,7 @@ void AssetFilterBar::layout_mode_buttons() {
     }
 }
 
-void AssetFilterBar::layout_filter_checkboxes() {
+void OtherSettingsAndControls::layout_filter_checkboxes() {
     clear_checkbox_rects();
     filters_rect_.h = 0;
     if (!filters_expanded_ || filters_rect_.w <= 0) {
@@ -934,11 +989,27 @@ void AssetFilterBar::layout_filter_checkboxes() {
         layout_rows(advanced_rows);
     }
 
+    if (tile_resolution_stepper_) {
+        if (section_emitted) {
+            y += section_gap;
+        }
+        const int stepper_width = std::max(0, filters_rect_.w - margin_x * 2);
+        if (stepper_width > 0) {
+            const int stepper_height = tile_resolution_stepper_->preferred_height(stepper_width);
+            SDL_Rect rect{filters_rect_.x + margin_x, y, stepper_width, stepper_height};
+            tile_resolution_stepper_->set_rect(rect);
+            y += stepper_height;
+        } else {
+            tile_resolution_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        section_emitted = true;
+    }
+
     y += margin_y;
     filters_rect_.h = y - filters_rect_.y;
 }
 
-bool AssetFilterBar::type_filter_enabled(const std::string& type) const {
+bool OtherSettingsAndControls::type_filter_enabled(const std::string& type) const {
     const FilterState& state_ref = state();
     auto it = state_ref.type_filters.find(type);
     if (it == state_ref.type_filters.end()) {
@@ -947,7 +1018,7 @@ bool AssetFilterBar::type_filter_enabled(const std::string& type) const {
     return it->second;
 }
 
-bool AssetFilterBar::method_filter_enabled(const std::string& method) const {
+bool OtherSettingsAndControls::method_filter_enabled(const std::string& method) const {
     const FilterState& state_ref = state();
     auto it = state_ref.method_filters.find(method);
     if (it == state_ref.method_filters.end()) {
@@ -956,21 +1027,21 @@ bool AssetFilterBar::method_filter_enabled(const std::string& method) const {
     return it->second;
 }
 
-bool AssetFilterBar::load_type_filter_value(const std::string& type, bool default_value) const {
+bool OtherSettingsAndControls::load_type_filter_value(const std::string& type, bool default_value) const {
     if (!has_saved_state_) {
         return default_value;
     }
     return devmode::ui_settings::load_bool(make_type_setting_key(type), default_value);
 }
 
-bool AssetFilterBar::load_method_filter_value(const std::string& method, bool default_value) const {
+bool OtherSettingsAndControls::load_method_filter_value(const std::string& method, bool default_value) const {
     if (!has_saved_state_) {
         return default_value;
     }
     return devmode::ui_settings::load_bool(make_method_setting_key(method), default_value);
 }
 
-std::string AssetFilterBar::format_type_label(const std::string& type) const {
+std::string OtherSettingsAndControls::format_type_label(const std::string& type) const {
     if (type.empty()) {
         return std::string{};
     }
@@ -982,7 +1053,7 @@ std::string AssetFilterBar::format_type_label(const std::string& type) const {
     return label;
 }
 
-std::string AssetFilterBar::format_method_label(const std::string& method) const {
+std::string OtherSettingsAndControls::format_method_label(const std::string& method) const {
     if (method.empty()) {
         return std::string{};
     }
@@ -1021,11 +1092,11 @@ std::string AssetFilterBar::format_method_label(const std::string& method) const
     return label;
 }
 
-std::string AssetFilterBar::canonicalize_method(const std::string& method) {
+std::string OtherSettingsAndControls::canonicalize_method(const std::string& method) {
     return canonicalize_method_string(method);
 }
 
-void AssetFilterBar::collect_spawn_ids(const nlohmann::json& node, std::unordered_set<std::string>& out) const {
+void OtherSettingsAndControls::collect_spawn_ids(const nlohmann::json& node, std::unordered_set<std::string>& out) const {
     if (node.is_object()) {
         auto sg = node.find("spawn_groups");
         if (sg != node.end() && sg->is_array()) {
@@ -1052,7 +1123,7 @@ void AssetFilterBar::collect_spawn_ids(const nlohmann::json& node, std::unordere
     }
 }
 
-void AssetFilterBar::load_persisted_state() {
+void OtherSettingsAndControls::load_persisted_state() {
     ensure_persistent_state_loaded();
     FilterState& state_ref = mutable_state();
     state_ref.type_filters.clear();
@@ -1071,7 +1142,7 @@ void AssetFilterBar::load_persisted_state() {
     filters_expanded_ = persistent_filters_expanded_flag();
 }
 
-void AssetFilterBar::persist_state() {
+void OtherSettingsAndControls::persist_state() {
     FilterState& state_ref = mutable_state();
     devmode::ui_settings::save_bool(kSettingsInitializedKey, true);
     devmode::ui_settings::save_bool(kSettingsMapAssetsKey, state_ref.map_assets);
@@ -1087,7 +1158,7 @@ void AssetFilterBar::persist_state() {
     persistent_state_initialized_flag() = true;
 }
 
-void AssetFilterBar::persist_filters_expanded() const {
+void OtherSettingsAndControls::persist_filters_expanded() const {
     persistent_filters_expanded_flag() = filters_expanded_;
     devmode::ui_settings::save_bool(kSettingsFiltersExpandedKey, filters_expanded_);
 }

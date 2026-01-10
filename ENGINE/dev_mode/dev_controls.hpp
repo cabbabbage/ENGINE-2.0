@@ -14,7 +14,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include "MapLightPanel.hpp"
-#include "asset_filter_bar.hpp"
+#include "other_settings_and_controls.hpp"
 #include "trail_editor_suite.hpp"
 #include "dev_mode/core/manifest_store.hpp"
 #include "map_assets_modals.hpp"
@@ -85,7 +85,7 @@ public:
     void close_asset_info_editor();
     bool is_asset_info_editor_open() const;
     bool is_asset_info_lighting_section_expanded() const;
-    std::uint64_t asset_filter_state_version() const;
+    std::uint64_t other_settings_state_version() const;
 
     void finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info);
 
@@ -159,7 +159,9 @@ private:
     void apply_camera_area_render_flag();
     void set_mode_from_header(int header_mode);
     void set_mode(Mode new_mode);
+    void update_movement_debug_visibility();
     void apply_overlay_grid_resolution(int resolution, bool user_override, bool update_stepper, bool update_footer);
+    void apply_tile_resolution_change(int resolution);
     void restore_filter_hidden_assets() const;
     void apply_dark_mask_visibility();
     bool lighting_section_forces_dark_mask() const;
@@ -188,7 +190,8 @@ private:
     void remove_spawn_group_assets(const std::string& spawn_id);
     void integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& spawned);
     void regenerate_map_spawn_group(const nlohmann::json& entry);
-    void regenerate_boundary_spawn_group(const nlohmann::json& entry);
+    void regenerate_boundary_spawn_group(const nlohmann::json& boundary_data);
+    
     void regenerate_map_grid_assets();
     void ensure_map_assets_modal_open();
     void ensure_boundary_assets_modal_open();
@@ -230,7 +233,7 @@ private:
     std::unique_ptr<TrailEditorSuite> trail_suite_;
     std::unique_ptr<Room> pending_trail_template_;
     devmode::core::ManifestStore manifest_store_;
-    AssetFilterBar asset_filter_;
+    OtherSettingsAndControls other_settings_;
 
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;
 
@@ -239,9 +242,10 @@ private:
 
     bool grid_overlay_enabled_ = false;
     bool snap_to_grid_enabled_ = false;
-    int  grid_overlay_resolution_r_ = 0;
-    bool grid_overlay_resolution_user_override_ = false;
-    int  grid_cell_size_px_ = 1;
+      int  grid_overlay_resolution_r_ = 0;
+      bool grid_overlay_resolution_user_override_ = false;
+      int  grid_cell_size_px_ = 1;
+      int  tile_resolution_r_ = -1;
     bool movement_debug_enabled_ = false;
 
     bool depth_effects_forced_realism_disabled_ = false;

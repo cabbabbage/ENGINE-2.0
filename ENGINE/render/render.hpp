@@ -55,6 +55,8 @@ public:
     void set_dark_mask_enabled(bool enabled);
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return debug_auto_paths_; }
+    void set_movement_debug_visible(bool visible);
+    bool movement_debug_visible() const { return movement_debug_visible_; }
     void set_map_clear_color(SDL_Color color) { map_clear_color_ = color; }
     SDL_Color map_clear_color() const { return map_clear_color_; }
 
@@ -103,6 +105,7 @@ private:
     float        map_light_opacity_        = kDefaultMapLightOpacity;
     SDL_Color    map_clear_color_{0, 128, 0, 255};
     bool         debug_auto_paths_ = true;
+    bool         movement_debug_visible_ = true;
 
     CompositeAssetRenderer composite_renderer_;
 

@@ -498,8 +498,8 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
 
         SDL_Rect area{0, 0, screen_w_, screen_h_};
 
-        if (!asset_filter_.header_suppressed()) {
-            const SDL_Rect header = asset_filter_.header_rect();
+        if (!other_settings_.header_suppressed()) {
+            const SDL_Rect header = other_settings_.header_rect();
             if (header.h > 0) {
                 const int safe_top = header.y + header.h;
                 if (safe_top < area.y + area.h) {
@@ -581,7 +581,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                 if (this->mode_ != Mode::MapEditor) {
                     enter_map_editor_mode();
                 }
-                asset_filter_.set_active_mode(kModeIdMap);
+                other_settings_.set_active_mode(kModeIdMap);
             } else if (mode == MapModeUI::HeaderMode::Room) {
                 if (this->mode_ == Mode::MapEditor) {
                     exit_map_editor_mode(false, true);
@@ -594,7 +594,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                         footer->set_title(label);
                     }
                 }
-                asset_filter_.set_active_mode(kModeIdRoom);
+                other_settings_.set_active_mode(kModeIdRoom);
             }
             sync_header_button_states();
         });
@@ -672,27 +672,32 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     if (assets_) {
         assets_->set_movement_debug_enabled(movement_debug_enabled_);
     }
+    update_movement_debug_visibility();
     configure_header_button_sets();
     trail_suite_ = std::make_unique<TrailEditorSuite>();
     if (trail_suite_) {
         trail_suite_->set_screen_dimensions(screen_w_, screen_h_);
     }
-    asset_filter_.initialize();
-    asset_filter_.set_state_changed_callback([this]() { refresh_active_asset_filters(); });
+    other_settings_.initialize();
+    other_settings_.set_state_changed_callback([this]() { refresh_active_asset_filters(); });
 
-    asset_filter_.set_enabled(enabled_);
-    asset_filter_.set_screen_dimensions(screen_w_, screen_h_);
-    asset_filter_.set_map_info(map_info_json_);
-    asset_filter_.set_current_room(current_room_);
+    other_settings_.set_enabled(enabled_);
+    other_settings_.set_screen_dimensions(screen_w_, screen_h_);
+    other_settings_.set_map_info(map_info_json_);
+    other_settings_.set_current_room(current_room_);
 
-    asset_filter_.set_extra_panel_height(0);
-    asset_filter_.set_extra_panel_renderer({});
-    asset_filter_.set_extra_panel_event_handler({});
-    asset_filter_.set_mode_buttons({
+    other_settings_.set_extra_panel_height(0);
+    other_settings_.set_extra_panel_renderer({});
+    other_settings_.set_extra_panel_event_handler({});
+    other_settings_.set_mode_buttons({
         {kModeIdRoom, "Room", mode_ == Mode::RoomEditor},
         {kModeIdMap, "Map", mode_ == Mode::MapEditor}
     });
-    asset_filter_.set_mode_changed_callback([this](const std::string& id) {
+    other_settings_.set_tile_resolution_range(0, vibble::grid::kMaxResolution);
+    other_settings_.set_tile_resolution_change_callback([this](int new_r) {
+        apply_tile_resolution_change(new_r);
+    });
+    other_settings_.set_mode_changed_callback([this](const std::string& id) {
         if (id == kModeIdMap) {
             if (this->mode_ != Mode::MapEditor) {
                 enter_map_editor_mode();
@@ -749,16 +754,20 @@ void DevControls::set_map_info(nlohmann::json* map_info, MapLightPanel::SaveCall
         map_mode_ui_->set_light_save_callback(map_light_save_cb_);
         map_mode_ui_->set_map_context(map_info_json_, map_path_);
     }
-    asset_filter_.set_map_info(map_info_json_);
+    other_settings_.set_map_info(map_info_json_);
 
     if (map_info_json_) {
         ensure_map_grid_settings(*map_info_json_);
         const nlohmann::json& section = (*map_info_json_)["map_grid_settings"];
         MapGridSettings settings = MapGridSettings::from_json(&section);
         settings.clamp();
+        tile_resolution_r_ = settings.tile_resolution_value();
+        other_settings_.set_tile_resolution_value(tile_resolution_r_);
         if (!grid_overlay_resolution_user_override_) {
             apply_overlay_grid_resolution(settings.resolution, false, true, true);
         } else {
+            tile_resolution_r_ = vibble::grid::clamp_resolution(MapGridSettings::defaults().tile_resolution_value());
+            other_settings_.set_tile_resolution_value(tile_resolution_r_);
             apply_overlay_grid_resolution(grid_overlay_resolution_r_, false, true, true);
         }
     } else {
@@ -796,6 +805,25 @@ void DevControls::apply_overlay_grid_resolution(int resolution, bool user_overri
     }
 }
 
+void DevControls::apply_tile_resolution_change(int resolution) {
+    const int clamped = vibble::grid::clamp_resolution(resolution);
+    if (clamped == tile_resolution_r_) {
+        return;
+    }
+    tile_resolution_r_ = clamped;
+    if (!map_info_json_) {
+        return;
+    }
+    ensure_map_grid_settings(*map_info_json_);
+    nlohmann::json& section = (*map_info_json_)["map_grid_settings"];
+    MapGridSettings settings = MapGridSettings::from_json(&section);
+    settings.tile_resolution = clamped;
+    settings.apply_to_json(section);
+    if (assets_) {
+        assets_->apply_map_grid_settings(settings, false);
+    }
+}
+
 void DevControls::set_player(Asset* player) {
     player_ = player;
     if (room_editor_) room_editor_->set_player(player);
@@ -825,12 +853,12 @@ void DevControls::set_screen_dimensions(int width, int height) {
     if (image_effect_panel_) image_effect_panel_->set_work_area(bounds);
     if (trail_suite_) trail_suite_->set_screen_dimensions(width, height);
 
-    asset_filter_.set_screen_dimensions(width, height);
+    other_settings_.set_screen_dimensions(width, height);
     if (map_assets_modal_) map_assets_modal_->set_screen_dimensions(width, height);
     if (boundary_assets_modal_) boundary_assets_modal_->set_screen_dimensions(width, height);
 
-    asset_filter_.set_right_accessory_width(0);
-    asset_filter_.ensure_layout();
+    other_settings_.set_right_accessory_width(0);
+    other_settings_.ensure_layout();
     SDL_Rect usable = FloatingPanelLayoutManager::instance().computeUsableRect(
         bounds,
         SDL_Rect{0, 0, 0, 0},
@@ -875,7 +903,7 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
         } catch (...) {}
         room_editor_->set_current_room(room);
     }
-    asset_filter_.set_current_room(room);
+    other_settings_.set_current_room(room);
     if (map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
             std::string label;
@@ -934,7 +962,7 @@ void DevControls::set_map_context(nlohmann::json* map_info, const std::string& m
             room->set_manifest_store(&manifest_store_, map_id, info);
         }
     }
-    asset_filter_.set_map_info(map_info_json_);
+    other_settings_.set_map_info(map_info_json_);
     configure_header_button_sets();
 
     mark_layout_dirty();
@@ -959,7 +987,7 @@ bool DevControls::is_pointer_over_dev_ui(int x, int y) const {
     if (regenerate_popup_ && regenerate_popup_->visible() && regenerate_popup_->is_point_inside(x, y)) {
         return true;
     }
-    if (!is_modal_blocking_panels() && enabled_ && asset_filter_.contains_point(x, y)) {
+    if (!is_modal_blocking_panels() && enabled_ && other_settings_.contains_point(x, y)) {
         return true;
     }
     return false;
@@ -998,7 +1026,7 @@ void DevControls::set_enabled(bool enabled) {
     }
     enabled_ = enabled;
 
-    asset_filter_.set_enabled(enabled_);
+    other_settings_.set_enabled(enabled_);
 
     if (enabled_) {
         const char* msg = "[DevControls] preparing enable flow";
@@ -1065,7 +1093,7 @@ void DevControls::set_enabled(bool enabled) {
 
     sync_header_button_states();
     if (enabled_) {
-        asset_filter_.ensure_layout();
+        other_settings_.ensure_layout();
     }
     mark_layout_dirty();
     {
@@ -1152,7 +1180,7 @@ void DevControls::update(const Input& input) {
     if (regenerate_popup_ && regenerate_popup_->visible()) {
         regenerate_popup_->update(input);
     }
-    asset_filter_.set_enabled(enabled_);
+    other_settings_.set_enabled(enabled_);
     apply_header_suppression();
     if (map_mode_ui_) {
         map_mode_ui_->update(input);
@@ -1175,7 +1203,7 @@ void DevControls::update(const Input& input) {
 
     if (room_editor_ && room_editor_->is_enabled()) {
         SDL_Point pointer{input.getX(), input.getY()};
-        if (asset_filter_.contains_point(pointer.x, pointer.y)) {
+        if (other_settings_.contains_point(pointer.x, pointer.y)) {
             room_editor_->clear_highlighted_assets();
         } else if (last_header_rect_.w > 0 && last_header_rect_.h > 0 && SDL_PointInRect(&pointer, &last_header_rect_)) {
             room_editor_->clear_highlighted_assets();
@@ -1243,9 +1271,9 @@ void DevControls::update_ui(const Input& input) {
 void DevControls::handle_sdl_event(const SDL_Event& event) {
     if (!enabled_) return;
 
-    asset_filter_.ensure_layout();
+    other_settings_.ensure_layout();
     SDL_Rect header_rect{0, 0, 0, 0};
-    SDL_Rect layout_rect = asset_filter_.layout_bounds();
+    SDL_Rect layout_rect = other_settings_.layout_bounds();
     SDL_Rect footer_rect{0, 0, 0, 0};
     std::vector<SDL_Rect> sliding_rects;
     if (map_mode_ui_) {
@@ -1264,7 +1292,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool layers_panel_open_pre = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
     const bool hide_headers_pre = modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre || frame_editor_active;
-    header_rect = hide_headers_pre ? SDL_Rect{0, 0, 0, 0} : asset_filter_.header_rect();
+    header_rect = hide_headers_pre ? SDL_Rect{0, 0, 0, 0} : other_settings_.header_rect();
     SDL_Rect usable_rect = FloatingPanelLayoutManager::instance().computeUsableRect(
         SDL_Rect{0, 0, screen_w_, screen_h_},
         header_rect,
@@ -1288,8 +1316,8 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     modal_headers_hidden_ = modal_hide;
     const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || frame_editor_active;
-    asset_filter_.set_enabled(enabled_);
-    asset_filter_.set_header_suppressed(hide_headers);
+    other_settings_.set_enabled(enabled_);
+    other_settings_.set_header_suppressed(hide_headers);
     apply_header_suppression();
 
     auto consume_if_handled = [&](bool handled, bool pointer_inside) {
@@ -1349,9 +1377,9 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
     }
 
-    if (!asset_filter_.header_suppressed()) {
-        const bool pointer_inside_header = pointer_relevant && enabled_ && asset_filter_.contains_point(pointer.x, pointer.y);
-        if (pointer_event && consume_if_handled(asset_filter_.handle_event(event), pointer_inside_header)) {
+    if (!other_settings_.header_suppressed()) {
+        const bool pointer_inside_header = pointer_relevant && enabled_ && other_settings_.contains_point(pointer.x, pointer.y);
+        if (pointer_event && consume_if_handled(other_settings_.handle_event(event), pointer_inside_header)) {
             return;
         }
         if (pointer_inside_header) {
@@ -1584,7 +1612,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
 
     const bool hide_headers = modal_headers_hidden_ || sliding_headers_hidden_ || layers_panel_open || frame_editor_active;
-    asset_filter_.set_header_suppressed(hide_headers);
+    other_settings_.set_header_suppressed(hide_headers);
 
     if (!renderer) {
         return;
@@ -2024,8 +2052,8 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     }
     if (renderer && !hide_headers && !is_modal_blocking_panels()) {
 
-        asset_filter_.set_right_accessory_width(0);
-        asset_filter_.render(renderer);
+        other_settings_.set_right_accessory_width(0);
+        other_settings_.render(renderer);
     }
 }
 
@@ -2138,8 +2166,8 @@ bool DevControls::is_asset_info_lighting_section_expanded() const {
     return lighting_section_forces_dark_mask();
 }
 
-std::uint64_t DevControls::asset_filter_state_version() const {
-    return asset_filter_.state_version();
+std::uint64_t DevControls::other_settings_state_version() const {
+    return other_settings_.state_version();
 }
 
 void DevControls::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info) {
@@ -2419,7 +2447,7 @@ void DevControls::configure_header_button_sets() {
     room_buttons.push_back(std::move(regenerate_btn));
 
     map_mode_ui_->set_mode_button_sets(std::move(map_buttons), std::move(room_buttons));
-    asset_filter_.ensure_layout();
+    other_settings_.ensure_layout();
     sync_header_button_states();
 }
 
@@ -2541,7 +2569,7 @@ void DevControls::update_header_and_footer_bounds() {
     if (hide_headers) {
         last_header_rect_ = SDL_Rect{0, 0, 0, 0};
     } else {
-        last_header_rect_ = asset_filter_.header_rect();
+        last_header_rect_ = other_settings_.header_rect();
     }
     if (map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
@@ -2559,7 +2587,7 @@ void DevControls::update_header_and_footer_bounds() {
 }
 
 void DevControls::rebuild_layout_state() {
-    SDL_Rect layout_rect = asset_filter_.layout_bounds();
+    SDL_Rect layout_rect = other_settings_.layout_bounds();
 
     std::vector<SDL_Rect> sliding_rects;
     if (map_mode_ui_) {
@@ -2585,7 +2613,7 @@ void DevControls::rebuild_layout_state() {
 void DevControls::ensure_layout_cache() {
     const bool needs_rebuild = !layout_cache_.valid || has_dirty(kDirtyLayout);
     if (needs_rebuild) {
-        asset_filter_.ensure_layout();
+        other_settings_.ensure_layout();
         update_header_and_footer_bounds();
         rebuild_layout_state();
         clear_dirty(kDirtyLayout);
@@ -2896,6 +2924,19 @@ void DevControls::regenerate_boundary_spawn_group(const nlohmann::json& entry) {
 
     remove_spawn_group_assets(spawn_id);
 
+    const nlohmann::json& map_json = assets_->map_info_json();
+    if (!map_json.is_object()) {
+        return;
+    }
+    const auto boundary_it = map_json.find("map_boundary_data");
+    if (boundary_it == map_json.end() || !boundary_it->is_object()) {
+        return;
+    }
+    const nlohmann::json& boundary_data = *boundary_it;
+    if (boundary_data.is_null()) {
+        return;
+    }
+
     const int radius = map_radius_or_default();
     const int diameter = radius * 2;
     SDL_Point center{radius, radius};
@@ -2911,14 +2952,11 @@ void DevControls::regenerate_boundary_spawn_group(const nlohmann::json& entry) {
     }
 
     AssetSpawner spawner(&assets_->library(), exclusion);
-    nlohmann::json root = nlohmann::json::object();
-    root["spawn_groups"] = nlohmann::json::array();
-    root["spawn_groups"].push_back(entry);
     std::string source = assets_->map_id();
     if (!source.empty()) {
         source += "::map_boundary_data";
     }
-    auto spawned = spawner.spawn_boundary_from_json(root, area, source);
+    auto spawned = spawner.spawn_boundary_from_json(boundary_data, area, source);
     integrate_spawned_assets(spawned);
 }
 
@@ -2984,15 +3022,23 @@ void DevControls::set_mode(Mode new_mode) {
     mode_ = new_mode;
     switch (mode_) {
     case Mode::RoomEditor:
-        asset_filter_.set_active_mode(kModeIdRoom);
+        other_settings_.set_active_mode(kModeIdRoom);
         break;
     case Mode::MapEditor:
-        asset_filter_.set_active_mode(kModeIdMap);
+        other_settings_.set_active_mode(kModeIdMap);
         break;
     }
     apply_camera_area_render_flag();
 
     mark_layout_dirty();
+    update_movement_debug_visibility();
+}
+
+void DevControls::update_movement_debug_visibility() {
+    if (!assets_) {
+        return;
+    }
+    assets_->set_movement_debug_visible(mode_ == Mode::MapEditor);
 }
 
 void DevControls::restore_filter_hidden_assets() const {
@@ -3442,7 +3488,7 @@ void DevControls::filter_active_assets(std::vector<Asset*>& assets) const {
 
         for (auto& kv : filter_hidden_assets_) {
             Asset* asset = kv.first;
-            if (!asset) {
+            if (!asset || !assets_ || !assets_->contains_asset(asset)) {
                 continue;
             }
             if (next_hidden.find(asset) != next_hidden.end()) {
@@ -3529,7 +3575,7 @@ void DevControls::apply_dark_mask_visibility() {
         return;
     }
     const bool force_dark_mask = lighting_section_forces_dark_mask();
-    const bool should_render = asset_filter_.render_dark_mask_enabled() || force_dark_mask;
+    const bool should_render = other_settings_.render_dark_mask_enabled() || force_dark_mask;
     assets_->set_render_dark_mask_enabled(should_render);
 }
 
@@ -3559,7 +3605,7 @@ bool DevControls::should_hide_assets_for_map_mode() const {
 }
 
 void DevControls::reset_asset_filters() {
-    asset_filter_.reset();
+    other_settings_.reset();
     restore_filter_hidden_assets();
     refresh_active_asset_filters();
 }
@@ -3571,7 +3617,7 @@ bool DevControls::passes_asset_filters(Asset* asset) const {
     if (should_hide_assets_for_map_mode()) {
         return false;
     }
-    return asset_filter_.passes(*asset);
+    return other_settings_.passes(*asset);
 }
 
 bool DevControls::persist_map_info_to_disk() {

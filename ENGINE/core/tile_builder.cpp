@@ -60,7 +60,7 @@ static int reduce_tile_step(int step) {
 }
 
 static int tile_step_from_settings(const MapGridSettings& settings) {
-    return reduce_tile_step(std::max(1, settings.spacing()));
+    return reduce_tile_step(std::max(1, settings.tile_spacing()));
 }
 
 static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset,

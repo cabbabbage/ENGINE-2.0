@@ -1794,7 +1794,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             const auto style = dm_draw::ResolveRoomBoundsOverlayStyle(current_room_->display_color());
             dm_draw::RenderRoomBoundsOverlay( renderer, assets_->getView(), *current_room_->room_area, style);
         }
-        render_room_labels(renderer);
     }
 
     if (renderer && enabled_) {
@@ -1909,65 +1908,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             SDL_RenderDrawLine(renderer, screen_center.x, screen_center.y - cross, screen_center.x, screen_center.y + cross);
         }
 
-        auto draw_dashed_polyline_world = [&](const std::vector<SDL_Point>& path, SDL_Color color) {
-            if (path.size() < 2) return;
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 210);
-            const int dash = 8;
-            const int gap  = 6;
-            for (size_t i = 0; i + 1 < path.size(); ++i) {
-                SDL_Point a = path[i];
-                SDL_Point b = path[i + 1];
-                const double dx = static_cast<double>(b.x - a.x);
-                const double dy = static_cast<double>(b.y - a.y);
-                const double len = std::hypot(dx, dy);
-                if (len <= 1e-6) continue;
-                const int total = static_cast<int>(std::lround(len));
-                double ux = dx / len;
-                double uy = dy / len;
-                int cursor = 0;
-                bool draw = true;
-                while (cursor < total) {
-                    int seg = draw ? dash : gap;
-                    int end = std::min(total, cursor + seg);
-                    if (draw) {
-
-                        SDL_FPoint s_world{ static_cast<float>(a.x + ux * cursor), static_cast<float>(a.y + uy * cursor) };
-                        SDL_FPoint e_world{ static_cast<float>(a.x + ux * end),    static_cast<float>(a.y + uy * end) };
-                        SDL_FPoint s_screen_f = cam.map_to_screen_f(s_world);
-                        SDL_FPoint e_screen_f = cam.map_to_screen_f(e_world);
-                        SDL_Point s{ static_cast<int>(std::lround(s_screen_f.x)), static_cast<int>(std::lround(s_screen_f.y)) };
-                        SDL_Point e{ static_cast<int>(std::lround(e_screen_f.x)), static_cast<int>(std::lround(e_screen_f.y)) };
-                        SDL_RenderDrawLine(renderer, s.x, s.y, e.x, e.y);
-                    }
-                    cursor = end;
-                    draw = !draw;
-                }
-            }
-};
-
-        auto edge_path = compute_edge_path_for_drag();
-        if (!edge_path) {
-            std::string edge_spawn_id;
-            if (hovered_asset_ && hovered_asset_->spawn_method == "Edge" && !hovered_asset_->spawn_id.empty()) {
-                edge_spawn_id = hovered_asset_->spawn_id;
-            } else {
-                for (Asset* asset : selected_assets_) {
-                    if (!asset) continue;
-                    if (asset->spawn_method == "Edge" && !asset->spawn_id.empty()) {
-                        edge_spawn_id = asset->spawn_id;
-                        break;
-                    }
-                }
-            }
-            if (!edge_spawn_id.empty()) {
-                edge_path = compute_edge_path_for_spawn(edge_spawn_id);
-            }
-        }
-        if (edge_path && !edge_path->empty()) {
-            SDL_Color color = DMStyles::AccentButton().hover_bg;
-            draw_dashed_polyline_world(*edge_path, color);
-        }
     }
     if (room_cfg_ui_ && room_cfg_ui_->visible()) {
         room_cfg_ui_->render(renderer);

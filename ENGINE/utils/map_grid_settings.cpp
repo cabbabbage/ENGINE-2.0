@@ -30,7 +30,7 @@ int power_of_three(int exponent) {
 }
 
 MapGridSettings MapGridSettings::defaults() {
-    return MapGridSettings{0, 0, 0};
+    return MapGridSettings{0, 0, 0, -1};
 }
 
 MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
@@ -75,6 +75,13 @@ MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
     } catch (...) {
         settings.r_chunk = defaults().r_chunk;
     }
+    try {
+        if (obj->contains("tile_resolution") && (*obj)["tile_resolution"].is_number_integer()) {
+            settings.tile_resolution = (*obj)["tile_resolution"].get<int>();
+        }
+    } catch (...) {
+        settings.tile_resolution = defaults().tile_resolution;
+    }
     settings.clamp();
     return settings;
 }
@@ -85,6 +92,12 @@ void MapGridSettings::clamp() {
     const int step = spacing();
     const int jitter_max = std::max(kMinJitter, step / 2);
     jitter = std::clamp(jitter, kMinJitter, jitter_max);
+    if (tile_resolution < -1) {
+        tile_resolution = -1;
+    }
+    if (tile_resolution > kMaxResolution) {
+        tile_resolution = kMaxResolution;
+    }
 }
 
 void MapGridSettings::apply_to_json(nlohmann::json& obj) const {
@@ -96,6 +109,11 @@ void MapGridSettings::apply_to_json(nlohmann::json& obj) const {
     obj["jitter"] = jitter;
     obj["r_chunk"] = r_chunk;       // tile-only
     obj["chunk_size"] = chunk_size(); // tile-only
+    if (tile_resolution >= 0) {
+        obj["tile_resolution"] = tile_resolution;
+    } else {
+        obj.erase("tile_resolution");
+    }
 }
 
 void ensure_map_grid_settings(nlohmann::json& map_info) {
@@ -138,4 +156,13 @@ int MapGridSettings::spacing() const {
 int MapGridSettings::chunk_size() const {
     const int clamped = std::clamp(r_chunk, kMinResolution, kMaxResolution);
     return 1 << clamped;
+}
+
+int MapGridSettings::tile_resolution_value() const {
+    const int candidate = (tile_resolution >= 0) ? tile_resolution : resolution;
+    return std::clamp(candidate, kMinResolution, kMaxResolution);
+}
+
+int MapGridSettings::tile_spacing() const {
+    return power_of_three(tile_resolution_value());
 }

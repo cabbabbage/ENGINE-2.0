@@ -100,48 +100,48 @@ void OtherSettingsAndControls::ensure_persistent_state_loaded() {
 OtherSettingsAndControls::OtherSettingsAndControls() = default;
 OtherSettingsAndControls::~OtherSettingsAndControls() = default;
 
-void OtherSettingsAndControls::set_tile_resolution_range(int min_resolution, int max_resolution) {
+void OtherSettingsAndControls::set_grid_resolution_range(int min_resolution, int max_resolution) {
     const int min_clamped = std::max(0, min_resolution);
     const int max_clamped = std::max(min_clamped, max_resolution);
-    tile_resolution_min_ = min_clamped;
-    tile_resolution_max_ = max_clamped;
-    if (!tile_resolution_stepper_) {
-        tile_resolution_stepper_ = std::make_unique<DMNumericStepper>("Tile Resolution (r)", min_clamped, max_clamped, min_clamped);
-        tile_resolution_stepper_->set_on_change([this](int value) {
-            if (on_tile_resolution_changed_) {
-                on_tile_resolution_changed_(value);
+    grid_resolution_min_ = min_clamped;
+    grid_resolution_max_ = max_clamped;
+    if (!grid_resolution_stepper_) {
+        grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Grid Resolution (r)", min_clamped, max_clamped, min_clamped);
+        grid_resolution_stepper_->set_on_change([this](int value) {
+            if (on_grid_resolution_changed_) {
+                on_grid_resolution_changed_(value);
             }
         });
     } else {
-        tile_resolution_stepper_->set_range(min_clamped, max_clamped);
-        const int current = tile_resolution_stepper_->value();
+        grid_resolution_stepper_->set_range(min_clamped, max_clamped);
+        const int current = grid_resolution_stepper_->value();
         const int clamped = std::clamp(current, min_clamped, max_clamped);
-        tile_resolution_stepper_->set_value(clamped);
+        grid_resolution_stepper_->set_value(clamped);
     }
     layout_dirty_ = true;
 }
 
-void OtherSettingsAndControls::set_tile_resolution_value(int resolution) {
-    if (!tile_resolution_stepper_) {
+void OtherSettingsAndControls::set_grid_resolution_value(int resolution) {
+    if (!grid_resolution_stepper_) {
         return;
     }
-    const int clamped = std::clamp(resolution, tile_resolution_min_, tile_resolution_max_);
-    if (tile_resolution_stepper_->value() == clamped) {
+    const int clamped = std::clamp(resolution, grid_resolution_min_, grid_resolution_max_);
+    if (grid_resolution_stepper_->value() == clamped) {
         return;
     }
-    tile_resolution_stepper_->set_value(clamped);
+    grid_resolution_stepper_->set_value(clamped);
     layout_dirty_ = true;
 }
 
-int OtherSettingsAndControls::tile_resolution_value() const {
-    if (!tile_resolution_stepper_) {
-        return tile_resolution_min_;
+int OtherSettingsAndControls::grid_resolution_value() const {
+    if (!grid_resolution_stepper_) {
+        return grid_resolution_min_;
     }
-    return tile_resolution_stepper_->value();
+    return grid_resolution_stepper_->value();
 }
 
-void OtherSettingsAndControls::set_tile_resolution_change_callback(std::function<void(int)> cb) {
-    on_tile_resolution_changed_ = std::move(cb);
+void OtherSettingsAndControls::set_grid_resolution_change_callback(std::function<void(int)> cb) {
+    on_grid_resolution_changed_ = std::move(cb);
 }
 
 OtherSettingsAndControls::FilterState& OtherSettingsAndControls::mutable_state() {
@@ -505,8 +505,8 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
         }
     }
 
-    if (tile_resolution_stepper_) {
-        tile_resolution_stepper_->render(renderer);
+    if (grid_resolution_stepper_) {
+        grid_resolution_stepper_->render(renderer);
     }
 
     if (extra_panel_rect_.w > 0 && extra_panel_rect_.h > 0 && extra_renderer_) {
@@ -563,7 +563,7 @@ bool OtherSettingsAndControls::handle_event(const SDL_Event& event) {
         notify_state_changed();
     }
 
-    if (tile_resolution_stepper_ && tile_resolution_stepper_->handle_event(event)) {
+    if (grid_resolution_stepper_ && grid_resolution_stepper_->handle_event(event)) {
         used = true;
     }
 
@@ -742,8 +742,8 @@ void OtherSettingsAndControls::clear_checkbox_rects() {
             entry.checkbox->set_rect(SDL_Rect{0, 0, 0, 0});
         }
     }
-    if (tile_resolution_stepper_) {
-        tile_resolution_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
+    if (grid_resolution_stepper_) {
+        grid_resolution_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
 }
 
@@ -989,18 +989,18 @@ void OtherSettingsAndControls::layout_filter_checkboxes() {
         layout_rows(advanced_rows);
     }
 
-    if (tile_resolution_stepper_) {
+    if (grid_resolution_stepper_) {
         if (section_emitted) {
             y += section_gap;
         }
         const int stepper_width = std::max(0, filters_rect_.w - margin_x * 2);
         if (stepper_width > 0) {
-            const int stepper_height = tile_resolution_stepper_->preferred_height(stepper_width);
+            const int stepper_height = grid_resolution_stepper_->preferred_height(stepper_width);
             SDL_Rect rect{filters_rect_.x + margin_x, y, stepper_width, stepper_height};
-            tile_resolution_stepper_->set_rect(rect);
+            grid_resolution_stepper_->set_rect(rect);
             y += stepper_height;
         } else {
-            tile_resolution_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
+            grid_resolution_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
         }
         section_emitted = true;
     }

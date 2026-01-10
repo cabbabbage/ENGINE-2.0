@@ -2,8 +2,6 @@
 
 #include <nlohmann/json_fwd.hpp>
 
-class Area;
-
 struct MapGridSettings {
     int grid_resolution = 0; // Single resolution value for grid spacing and tile/chunk sizing.
 

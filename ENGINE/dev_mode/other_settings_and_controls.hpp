@@ -71,10 +71,10 @@ public:
     bool passes(const Asset& asset) const;
     bool render_dark_mask_enabled() const;
 
-    void set_tile_resolution_range(int min_resolution, int max_resolution);
-    void set_tile_resolution_value(int resolution);
-    int tile_resolution_value() const;
-    void set_tile_resolution_change_callback(std::function<void(int)> cb);
+    void set_grid_resolution_range(int min_resolution, int max_resolution);
+    void set_grid_resolution_value(int resolution);
+    int grid_resolution_value() const;
+    void set_grid_resolution_change_callback(std::function<void(int)> cb);
 
 private:
     enum class FilterKind { MapAssets, CurrentRoom, RenderDarkMask, Type, SpawnMethod };
@@ -156,8 +156,8 @@ private:
     SDL_Rect extra_panel_rect_{0,0,0,0};
     ExtraRenderer extra_renderer_{};
     ExtraEventHandler extra_event_handler_{};
-    std::unique_ptr<DMNumericStepper> tile_resolution_stepper_;
-    std::function<void(int)> on_tile_resolution_changed_;
-    int tile_resolution_min_ = 0;
-    int tile_resolution_max_ = 0;
+    std::unique_ptr<DMNumericStepper> grid_resolution_stepper_;
+    std::function<void(int)> on_grid_resolution_changed_;
+    int grid_resolution_min_ = 0;
+    int grid_resolution_max_ = 0;
 };

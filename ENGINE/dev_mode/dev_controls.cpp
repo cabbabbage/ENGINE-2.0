@@ -693,9 +693,9 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         {kModeIdRoom, "Room", mode_ == Mode::RoomEditor},
         {kModeIdMap, "Map", mode_ == Mode::MapEditor}
     });
-    other_settings_.set_tile_resolution_range(0, vibble::grid::kMaxResolution);
-    other_settings_.set_tile_resolution_change_callback([this](int new_r) {
-        apply_tile_resolution_change(new_r);
+    other_settings_.set_grid_resolution_range(0, vibble::grid::kMaxResolution);
+    other_settings_.set_grid_resolution_change_callback([this](int new_r) {
+        apply_grid_resolution_change(new_r);
     });
     other_settings_.set_mode_changed_callback([this](const std::string& id) {
         if (id == kModeIdMap) {
@@ -761,13 +761,13 @@ void DevControls::set_map_info(nlohmann::json* map_info, MapLightPanel::SaveCall
         const nlohmann::json& section = (*map_info_json_)["map_grid_settings"];
         MapGridSettings settings = MapGridSettings::from_json(&section);
         settings.clamp();
-        tile_resolution_r_ = settings.tile_resolution_value();
-        other_settings_.set_tile_resolution_value(tile_resolution_r_);
+        grid_resolution_r_ = settings.grid_resolution;
+        other_settings_.set_grid_resolution_value(grid_resolution_r_);
         if (!grid_overlay_resolution_user_override_) {
-            apply_overlay_grid_resolution(settings.resolution, false, true, true);
+            apply_overlay_grid_resolution(settings.grid_resolution, false, true, true);
         } else {
-            tile_resolution_r_ = vibble::grid::clamp_resolution(MapGridSettings::defaults().tile_resolution_value());
-            other_settings_.set_tile_resolution_value(tile_resolution_r_);
+            grid_resolution_r_ = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
+            other_settings_.set_grid_resolution_value(grid_resolution_r_);
             apply_overlay_grid_resolution(grid_overlay_resolution_r_, false, true, true);
         }
     } else {
@@ -805,19 +805,19 @@ void DevControls::apply_overlay_grid_resolution(int resolution, bool user_overri
     }
 }
 
-void DevControls::apply_tile_resolution_change(int resolution) {
+void DevControls::apply_grid_resolution_change(int resolution) {
     const int clamped = vibble::grid::clamp_resolution(resolution);
-    if (clamped == tile_resolution_r_) {
+    if (clamped == grid_resolution_r_) {
         return;
     }
-    tile_resolution_r_ = clamped;
+    grid_resolution_r_ = clamped;
     if (!map_info_json_) {
         return;
     }
     ensure_map_grid_settings(*map_info_json_);
     nlohmann::json& section = (*map_info_json_)["map_grid_settings"];
     MapGridSettings settings = MapGridSettings::from_json(&section);
-    settings.tile_resolution = clamped;
+    settings.grid_resolution = clamped;
     settings.apply_to_json(section);
     if (assets_) {
         assets_->apply_map_grid_settings(settings, false);
@@ -2754,7 +2754,7 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
 
         MapGridSettings grid_settings = room->map_grid_settings();
 
-        int resolution = std::max(0, grid_settings.resolution);
+        int resolution = std::max(0, grid_settings.grid_resolution);
         try {
             if (entry.contains("grid_resolution")) {
                 resolution = std::max(5, entry.value("grid_resolution", resolution));
@@ -2819,7 +2819,6 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
                 for (auto* vertex : vertices) {
                     if (!vertex) continue;
                     SDL_Point spawn_pos{ vertex->world.x, vertex->world.y };
-                    spawn_pos = apply_map_grid_jitter(grid_settings, spawn_pos, ctx.rng(), *area_ptr);
                     bool placed = false;
                     std::vector<double> attempt_weights = base_weights;
                     const size_t max_candidate_attempts = info.candidates.size();

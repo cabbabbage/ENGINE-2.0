@@ -19,7 +19,7 @@
             "types": {
                 "area": false,
                 "boundary": false,
-                "enemy": true,
+                "enemy": false,
                 "npc": false,
                 "object": true,
                 "player": true,

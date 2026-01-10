@@ -161,7 +161,7 @@ private:
     void set_mode(Mode new_mode);
     void update_movement_debug_visibility();
     void apply_overlay_grid_resolution(int resolution, bool user_override, bool update_stepper, bool update_footer);
-    void apply_tile_resolution_change(int resolution);
+    void apply_grid_resolution_change(int resolution);
     void restore_filter_hidden_assets() const;
     void apply_dark_mask_visibility();
     bool lighting_section_forces_dark_mask() const;
@@ -245,7 +245,7 @@ private:
       int  grid_overlay_resolution_r_ = 0;
       bool grid_overlay_resolution_user_override_ = false;
       int  grid_cell_size_px_ = 1;
-      int  tile_resolution_r_ = -1;
+    int  grid_resolution_r_ = -1;
     bool movement_debug_enabled_ = false;
 
     bool depth_effects_forced_realism_disabled_ = false;

@@ -44,7 +44,7 @@ void Section_SpawnGroups::build() {
     }
     if (!list_) list_ = std::make_unique<SpawnGroupConfig>();
     if (list_) {
-        list_->set_default_resolution(MapGridSettings::defaults().resolution);
+        list_->set_default_resolution(MapGridSettings::defaults().grid_resolution);
         list_->set_embedded_mode(true);
         list_->set_manifest_store(manifest_store_);
     }

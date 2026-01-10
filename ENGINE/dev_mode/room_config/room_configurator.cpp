@@ -1416,14 +1416,14 @@ void RoomConfigurator::rebuild_spawn_rows(bool force_collapse_sections) {
             config->set_manifest_store(manifest_store_);
         }
 
-        int default_resolution = MapGridSettings::defaults().resolution;
+        int default_resolution = MapGridSettings::defaults().grid_resolution;
         if (room_) {
-            default_resolution = room_->map_grid_settings().resolution;
+            default_resolution = room_->map_grid_settings().grid_resolution;
         } else if (external_room_json_) {
             const auto it = external_room_json_->find("map_grid_settings");
             if (it != external_room_json_->end()) {
                 MapGridSettings settings = MapGridSettings::from_json(&*it);
-                default_resolution = settings.resolution;
+                default_resolution = settings.grid_resolution;
             }
         }
         config->set_default_resolution(default_resolution);

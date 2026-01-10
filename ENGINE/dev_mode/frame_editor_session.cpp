@@ -455,7 +455,7 @@ void FrameEditorSession::begin(Assets* assets,
     on_end_ = std::move(on_end_callback);
     edited_animation_ids_.clear();
     if (!snap_resolution_override_ && assets_) {
-        snap_resolution_r_ = vibble::grid::clamp_resolution(std::max(0, assets_->map_grid_settings().resolution));
+        snap_resolution_r_ = vibble::grid::clamp_resolution(std::max(0, assets_->map_grid_settings().grid_resolution));
     }
 
     // Ensure the document is hydrated from the manifest store so edits map to the real, persisted entry.

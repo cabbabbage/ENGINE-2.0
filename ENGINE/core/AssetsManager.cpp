@@ -1975,7 +1975,7 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
     MapGridSettings sanitized = settings;
     sanitized.clamp();
 
-    const bool chunk_changed = sanitized.r_chunk != map_grid_settings_.r_chunk;
+    const bool resolution_changed = sanitized.grid_resolution != map_grid_settings_.grid_resolution;
     map_grid_settings_ = sanitized;
 
     if (persist_json) {
@@ -1983,10 +1983,10 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
         sanitized.apply_to_json(section);
     }
 
-    world_grid_.set_grid_resolution(std::max(0, sanitized.resolution));
-    world_grid_.set_chunk_resolution(std::max(0, sanitized.r_chunk));
+    world_grid_.set_grid_resolution(std::max(0, sanitized.grid_resolution));
+    world_grid_.set_chunk_resolution(std::max(0, sanitized.grid_resolution));
 
-    if (chunk_changed) {
+    if (resolution_changed) {
         for (Asset* asset : all) {
             if (!asset) {
                 continue;
@@ -2004,7 +2004,7 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
         }
     }
 
-    if (chunk_changed) {
+    if (resolution_changed) {
         update_max_asset_dimensions();
         world_grid_.update_active_chunks(screen_world_rect(), 0);
         force_shaded_assets_rerender();
@@ -2013,7 +2013,7 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
 }
 
 int Assets::map_grid_chunk_resolution() const {
-    return std::max(0, map_grid_settings_.r_chunk);
+    return std::max(0, map_grid_settings_.grid_resolution);
 }
 
 void Assets::set_map_light_panel_visible(bool visible) {

@@ -595,7 +595,7 @@ struct SpawnGroupConfig::Entry {
           area_provider_(empty_provider()),
           candidate_graph_(std::make_unique<CandidateEditorPieGraphWidget>()) {
         editable_ = (owner_->bound_array_ != nullptr) || (owner_->bound_entry_ != nullptr);
-        current_resolution_ = owner_ ? owner_->default_resolution_ : vibble::grid::clamp_resolution(MapGridSettings::defaults().resolution);
+        current_resolution_ = owner_ ? owner_->default_resolution_ : vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
         method_options_ = build_method_options(kDefaultMethod);
 
         if (candidate_graph_) {
@@ -1737,7 +1737,7 @@ private:
 SpawnGroupConfig::SpawnGroupConfig(bool floatable)
     : DockableCollapsible("Spawn Groups", floatable),
       default_floatable_mode_(floatable) {
-    default_resolution_ = vibble::grid::clamp_resolution(MapGridSettings::defaults().resolution);
+    default_resolution_ = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
     set_scroll_enabled(true);
     set_cell_width(420);
     set_row_gap(8);

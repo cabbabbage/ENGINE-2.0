@@ -258,7 +258,7 @@ bool SpawnContext::point_overlaps_trail(SDL_Point pt, const Area* ignore) const 
 void SpawnContext::set_map_grid_settings(const MapGridSettings& settings) {
         map_grid_settings_ = settings;
         map_grid_settings_.clamp();
-        spawn_resolution_ = occupancy_ ? occupancy_->resolution() : vibble::grid::clamp_resolution(map_grid_settings_.resolution);
+        spawn_resolution_ = occupancy_ ? occupancy_->resolution() : vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution);
 }
 
 void SpawnContext::set_spacing_filter(std::unordered_set<std::string> names) {

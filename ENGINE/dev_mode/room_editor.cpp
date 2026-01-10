@@ -63,7 +63,7 @@ namespace {
 
 SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
     MapGridSettings settings;
-    settings.resolution = resolution;
+    settings.grid_resolution = resolution;
     const int spacing = settings.spacing();
     if (spacing <= 0) {
         return world;
@@ -388,7 +388,7 @@ void RoomEditor::paste_spawn_group_from_clipboard() {
     }
 
     const std::string display_name = entry.value("display_name", std::string{"Spawn Group"});
-    const int default_resolution = current_room_ ? current_room_->map_grid_settings().resolution : MapGridSettings::defaults().resolution;
+    const int default_resolution = current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
     devmode::spawn::ensure_spawn_group_entry_defaults(entry, display_name, default_resolution);
     remap_clipboard_entry_to_room(entry, current_room_);
 
@@ -2082,7 +2082,7 @@ void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetIn
     entry["display_name"]    = info->name;
 
     const int default_resolution =
-        current_room_ ? current_room_->map_grid_settings().resolution : MapGridSettings::defaults().resolution;
+        current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
 
     devmode::spawn::ensure_spawn_group_entry_defaults(entry, info->name, default_resolution);
 
@@ -2164,7 +2164,7 @@ void RoomEditor::regenerate_room_from_template(Room* source_room) {
 
     nlohmann::json template_root = source_room->assets_data();
     auto& template_groups = ensure_spawn_groups_array(template_root);
-    const int template_resolution = current_room_ ? current_room_->map_grid_settings().resolution : MapGridSettings::defaults().resolution;
+    const int template_resolution = current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
     for (auto& entry : template_groups) {
         if (!entry.is_object()) continue;
         entry["spawn_id"] = generate_spawn_id();
@@ -3359,7 +3359,7 @@ void RoomEditor::ensure_area_anchor_spawn_entry(Room* room, const std::string& a
             break;
         }
     }
-    const int default_resolution = room->map_grid_settings().resolution;
+    const int default_resolution = room->map_grid_settings().grid_resolution;
     int width = 0, height = 0;
     if (room->room_area) {
         auto b = room->room_area->get_bounds();
@@ -3400,7 +3400,7 @@ void RoomEditor::begin_area_drag_session(const std::string& area_name, const SDL
     area_drag_start_world_ = world_mouse;
     MapGridSettings map_settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     map_settings.clamp();
-    area_drag_resolution_ = vibble::grid::clamp_resolution(map_settings.resolution);
+    area_drag_resolution_ = vibble::grid::clamp_resolution(map_settings.grid_resolution);
 
     ensure_area_anchor_spawn_entry(current_room_, area_drag_name_);
 }
@@ -3894,7 +3894,7 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
     MapGridSettings map_settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     map_settings.clamp();
 
-    int desired_resolution = cursor_snap_resolution_ > 0 ? cursor_snap_resolution_ : map_settings.resolution;
+    int desired_resolution = cursor_snap_resolution_ > 0 ? cursor_snap_resolution_ : map_settings.grid_resolution;
     drag_resolution_ = vibble::grid::clamp_resolution(desired_resolution);
     SpawnEntryResolution resolved_entry = drag_spawn_id_.empty() ? SpawnEntryResolution{} : locate_spawn_entry(drag_spawn_id_);
     nlohmann::json* spawn_entry = resolved_entry.entry;
@@ -4659,7 +4659,7 @@ int RoomEditor::current_grid_resolution() const {
     }
     MapGridSettings settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     settings.clamp();
-    return vibble::grid::clamp_resolution(settings.resolution);
+    return vibble::grid::clamp_resolution(settings.grid_resolution);
 }
 
 void RoomEditor::refresh_cursor_snap() {
@@ -4693,7 +4693,7 @@ void RoomEditor::refresh_spawn_group_config_ui() {
     }
     rebuild_room_spawn_id_cache();
 
-    const int default_resolution = current_room_->map_grid_settings().resolution;
+    const int default_resolution = current_room_->map_grid_settings().grid_resolution;
     spawn_group_panel_->set_default_resolution(default_resolution);
 
     auto area_names_provider = [this]() {
@@ -5247,7 +5247,7 @@ void RoomEditor::handle_spawn_config_change(const nlohmann::json& entry) {
 std::unique_ptr<vibble::grid::Occupancy> RoomEditor::build_room_grid(const std::string& ignore_spawn_id) const {
     if (!current_room_ || !current_room_->room_area) return nullptr;
     MapGridSettings grid_settings = current_room_->map_grid_settings();
-    const int resolution = std::max(0, grid_settings.resolution);
+    const int resolution = std::max(0, grid_settings.grid_resolution);
     vibble::grid::Grid& grid_service = vibble::grid::global_grid();
     auto occupancy = std::make_unique<vibble::grid::Occupancy>(*current_room_->room_area, resolution, grid_service);
     if (!assets_) return occupancy;

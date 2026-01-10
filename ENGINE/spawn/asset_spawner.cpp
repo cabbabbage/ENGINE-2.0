@@ -170,7 +170,7 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                 return;
         }
         auto spacing_names = collect_spacing_asset_names(spawn_queue_);
-    const int resolution = std::max(0, map_grid_settings_.resolution);
+    const int resolution = std::max(0, map_grid_settings_.grid_resolution);
     vibble::grid::Grid& grid_service = vibble::grid::global_grid();
     checker_.begin_session(grid_service, resolution);
     vibble::grid::Occupancy occupancy(area, resolution, grid_service);
@@ -520,7 +520,7 @@ void AssetSpawner::run_child_spawning(AssetSpawnPlanner* planner,
         auto spacing_names = collect_spacing_asset_names(spawn_queue_);
 
         vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-        const int resolution = std::max(0, map_grid_settings_.resolution);
+        const int resolution = std::max(0, map_grid_settings_.grid_resolution);
         checker_.begin_session(grid_service, resolution);
         ExactSpawner exact;
         CenterSpawner center;

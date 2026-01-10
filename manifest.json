@@ -7120,7 +7120,7 @@
         ]
       },
       "map_grid_settings": {
-        "grid_resolution": 9
+        "grid_resolution": 6
       },
       "map_layers": [
         {
@@ -7302,7 +7302,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726563,
+            "offset": 658.9600219726562,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }

@@ -18,7 +18,7 @@
             "render_dark_mask": false,
             "types": {
                 "area": false,
-                "boundary": true,
+                "boundary": false,
                 "enemy": false,
                 "npc": false,
                 "object": true,
@@ -45,7 +45,7 @@
     "dev_ui": {
         "camera": {
             "background_texture_max_opacity": 255.0,
-            "depthcue_enabled": true,
+            "depthcue_enabled": false,
             "extra_cull_margin": 4670.0,
             "foreground_texture_max_opacity": 255.0,
             "meters_per_100_world_px": 0.5399999618530273,

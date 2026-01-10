@@ -2220,7 +2220,7 @@ void Assets::rebuild_active_from_screen_grid() {
             continue;
         }
         const float point_alpha = point->horizon_fade_alpha * point->near_camera_fade_alpha;
-        if (!std::isfinite(point_alpha) || point_alpha <= 0.0f) {
+        if (!std::isfinite(point_alpha)) {
             continue;
         }
         if (!point->has_assets_or_active_children()) {

@@ -370,17 +370,39 @@ void Asset::update_scale_values() {
         desired_variant_scale = current_scale;
     }
 
-    const auto& steps = (info && !info->scale_variants.empty()) ? static_cast<const std::vector<float>&>(info->scale_variants) : render_pipeline::ScalingLogic::DefaultScaleSteps();
+    const auto& steps = (info && !info->scale_variants.empty())
+        ? static_cast<const std::vector<float>&>(info->scale_variants)
+        : render_pipeline::ScalingLogic::DefaultScaleSteps();
 
-    auto selection = render_pipeline::ScalingLogic::Choose(desired_variant_scale, steps);
+    render_pipeline::ScalingLogic::HysteresisState hysteresis_state{};
+    hysteresis_state.last_index = scale_variant_state_.last_variant_index;
+    hysteresis_state.min_scale = scale_variant_state_.hysteresis_min;
+    hysteresis_state.max_scale = scale_variant_state_.hysteresis_max;
+
+    auto selection = render_pipeline::ScalingLogic::Choose(
+        desired_variant_scale,
+        steps,
+        hysteresis_state,
+        current_scale,
+        render_pipeline::ScalingLogic::HysteresisOptions{});
+
     current_nearest_variant_scale = selection.stored_scale;
     current_variant_index = selection.index;
+
+    scale_variant_state_.last_variant_index = selection.index;
+    scale_variant_state_.hysteresis_min = selection.hysteresis_min;
+    scale_variant_state_.hysteresis_max = selection.hysteresis_max;
 
     if (current_nearest_variant_scale > 0.0f) {
         current_remaining_scale_adjustment = current_scale / current_nearest_variant_scale;
     } else {
         current_remaining_scale_adjustment = 1.0f;
     }
+
+    last_scale_usage_.requested_scale = current_scale;
+    last_scale_usage_.texture_scale = current_nearest_variant_scale;
+    last_scale_usage_.remainder_scale = current_remaining_scale_adjustment;
+    last_scale_usage_.variant_index = current_variant_index;
 }
 
 SDL_Texture* Asset::get_current_variant_texture() const {

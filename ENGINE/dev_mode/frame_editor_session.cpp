@@ -444,6 +444,9 @@ void FrameEditorSession::begin(Assets* assets,
                                const std::string& animation_id,
                                std::function<void(const std::string&)> on_host_closed,
                                std::function<void()> on_end_callback) {
+    if (active_) {
+        end();
+    }
     if (!assets || !asset || !document || animation_id.empty()) {
         return;
     }

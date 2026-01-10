@@ -391,9 +391,13 @@ struct ProjectionResult {
             const double horizon = cam.horizon_screen_y;
             const double span = std::max(1.0, static_cast<double>(screen_height) - horizon);
             const double adjusted_y = screen_y + cam.texture_warp_y_offset_px;
-            const double t_raw = (adjusted_y - horizon) / span;
-            const double t = std::clamp(t_raw, 0.0, 2.0);
-            vertical = 1.0f + static_cast<float>((t - 1.0) * warp_factor);
+            if (adjusted_y <= horizon) {
+                vertical = 1.0f;
+            } else {
+                const double t_raw = (adjusted_y - horizon) / span;
+                const double t = std::clamp(t_raw, 0.0, 1.0);
+                vertical = 1.0f + static_cast<float>(t * warp_factor);
+            }
         }
         vertical = std::max(0.05f, vertical);
         const float effective_horizon_band_px = horizon_band_px * zoom_scale;

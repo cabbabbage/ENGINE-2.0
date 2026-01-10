@@ -7082,8 +7082,7 @@
         ]
       },
       "map_boundary_data": {
-        "inherits_map_assets": false,
-        "spawn_groups": [
+        "candidate_selectors": [
           {
             "candidates": [
               {
@@ -7107,7 +7106,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 7,
+            "grid_resolution": 8,
             "locked": false,
             "max_number": 100,
             "min_number": 100,
@@ -7117,7 +7116,8 @@
             "resolve_quantity_to_room_size": false,
             "spawn_id": "spn-88572bf1415f"
           }
-        ]
+        ],
+        "inherits_map_assets": false
       },
       "map_grid_settings": {
         "grid_resolution": 6
@@ -7302,7 +7302,7 @@
           },
           {
             "brightness": 1.0,
-            "offset": 658.9600219726562,
+            "offset": 658.9600219726563,
             "opacity": 7.659999847412109,
             "scale": 6.590000152587891
           }
@@ -7334,7 +7334,7 @@
           "display_color": [
             36,
             242,
-            208,
+            56,
             255
           ],
           "edge_smoothness": 19,
@@ -7352,9 +7352,9 @@
         "fountain": {
           "curvyness": 2,
           "display_color": [
-            36,
-            51,
             242,
+            36,
+            135,
             255
           ],
           "edge_smoothness": 43,
@@ -7405,9 +7405,9 @@
         "rnd": {
           "curvyness": 2,
           "display_color": [
-            77,
-            204,
+            32,
             31,
+            204,
             255
           ],
           "edge_smoothness": 29,
@@ -7460,9 +7460,9 @@
           "camera_zoom_percent": 1,
           "curvyness": 2,
           "display_color": [
-            197,
-            242,
             36,
+            242,
+            178,
             255
           ],
           "edge_smoothness": 101,

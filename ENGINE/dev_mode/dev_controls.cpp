@@ -3054,7 +3054,7 @@ void DevControls::restore_filter_hidden_assets() const {
 void DevControls::ensure_boundary_assets_modal_open() {
     if (!assets_) return;
     if (!boundary_assets_modal_) {
-        boundary_assets_modal_ = std::make_unique<SingleSpawnGroupModal>();
+        boundary_assets_modal_ = std::make_unique<BoundarySpawnGroupModal>();
         boundary_assets_modal_->set_screen_dimensions(screen_w_, screen_h_);
         boundary_assets_modal_->set_floating_stack_key("boundary_assets_modal");
     } else {

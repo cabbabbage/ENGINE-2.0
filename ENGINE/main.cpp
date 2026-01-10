@@ -482,7 +482,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     });
     map_info["map_boundary_data"] = nlohmann::json::object({
         {"inherits_map_assets", false},
-        {"spawn_groups",
+        {"candidate_selectors",
          nlohmann::json::array({ make_batch_spawn_group("map_boundary",
                                                         "batch_map_boundary") })}
     });

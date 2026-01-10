@@ -237,7 +237,7 @@ private:
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;
 
     std::unique_ptr<SingleSpawnGroupModal> map_assets_modal_;
-    std::unique_ptr<SingleSpawnGroupModal> boundary_assets_modal_;
+    std::unique_ptr<BoundarySpawnGroupModal> boundary_assets_modal_;
 
     bool grid_overlay_enabled_ = false;
     bool snap_to_grid_enabled_ = false;

@@ -5443,48 +5443,21 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
 
     if (old_area_copy && new_area_size < old_area_size) {
         nlohmann::json& map_info_json = assets_->map_info_json();
-        std::vector<std::pair<std::string, int>> boundary_options;
-        int boundary_spacing = 100;
         if (map_info_json.contains("map_boundary_data") && map_info_json["map_boundary_data"].is_object()) {
             const auto& boundary_json = map_info_json["map_boundary_data"];
-            if (boundary_json.contains("batch_assets")) {
-                const auto& batch = boundary_json["batch_assets"];
-                boundary_spacing = (batch.value("grid_spacing_min", boundary_spacing) + batch.value("grid_spacing_max", boundary_spacing)) / 2;
-                for (const auto& asset_entry : batch.value("batch_assets", std::vector<nlohmann::json>{})) {
-                    if (asset_entry.contains("name") && asset_entry["name"].is_string()) {
-                        int weight = asset_entry.value("percent", 1);
-                        boundary_options.emplace_back(asset_entry["name"].get<std::string>(), weight);
-                    }
+            if (boundary_json.contains("candidate_selectors") &&
+                boundary_json["candidate_selectors"].is_array() &&
+                !boundary_json["candidate_selectors"].empty()) {
+                std::vector<Area> exclusion;
+                if (current_room_ && current_room_->room_area) {
+                    exclusion.push_back(*current_room_->room_area);
                 }
-            }
-        }
-
-        if (!boundary_options.empty()) {
-            const int boundary_resolution = std::clamp( static_cast<int>(std::lround(std::log2(static_cast<double>(std::max(1, boundary_spacing))))), 0, vibble::grid::kMaxResolution);
-            vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-            vibble::grid::Occupancy boundary_grid(*old_area_copy, boundary_resolution, grid_service);
-            auto vertices = boundary_grid.vertices_in_area(*old_area_copy);
-            if (!vertices.empty()) {
-                std::vector<int> weights;
-                weights.reserve(boundary_options.size());
-                for (const auto& opt : boundary_options) {
-                    weights.push_back(std::max(1, opt.second));
+                AssetSpawner spawner(&assets_->library(), exclusion);
+                std::string source = assets_ ? assets_->map_id() : std::string{};
+                if (!source.empty()) {
+                    source += "::map_boundary_data";
                 }
-                std::discrete_distribution<int> pick(weights.begin(), weights.end());
-                std::mt19937 boundary_rng(std::random_device{}());
-                std::vector<std::unique_ptr<Asset>> boundary_spawned;
-                for (auto* vertex : vertices) {
-                    if (!vertex) continue;
-                    if (current_room_->room_area->contains_point(vertex->world)) continue;
-                    int idx = pick(boundary_rng);
-                    const std::string& asset_name = boundary_options[idx].first;
-                    auto info = assets_->library().get(asset_name);
-                    if (!info) continue;
-                    std::string spawn_id = generate_spawn_id();
-                    Area spawn_area(asset_name, vertex->world, 1, 1, "Point", 1, 1, 1);
-                    auto asset = std::make_unique<Asset>(info, spawn_area, vertex->world, 0, nullptr, spawn_id, std::string(asset_types::boundary));
-                    boundary_spawned.push_back(std::move(asset));
-                }
+                auto boundary_spawned = spawner.spawn_boundary_from_json(boundary_json, *old_area_copy, source);
                 integrate_spawned_assets(boundary_spawned);
             }
         }

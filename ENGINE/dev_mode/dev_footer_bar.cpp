@@ -60,7 +60,7 @@ DevFooterBar::DevFooterBar(std::string title)
     depth_effects_checkbox_ = std::make_unique<DMCheckbox>("Depth Effects", false);
     movement_debug_checkbox_ = std::make_unique<DMCheckbox>("Movement Debug", movement_debug_enabled_);
     grid_checkbox_ = std::make_unique<DMCheckbox>("Show Grid", grid_overlay_enabled_);
-    grid_stepper_ = std::make_unique<DMNumericStepper>("Grid Resolution (r)", 0, 10, grid_resolution_);
+    grid_stepper_ = std::make_unique<DMNumericStepper>("Grid Overlay (r)", 0, 10, grid_resolution_);
 }
 
 void DevFooterBar::set_bounds(int width, int height) {

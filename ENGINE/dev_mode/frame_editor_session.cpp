@@ -741,6 +741,9 @@ void FrameEditorSession::center_camera_origin() {
     if (!assets_ || !target_) {
         return;
     }
+    if (manual_pan_active_ || right_pan_active_) {
+        return;
+    }
     WarpedScreenGrid& cam = assets_->getView();
     SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
     cam.set_focus_override(anchor_world);
@@ -909,6 +912,8 @@ void FrameEditorSession::apply_camera_defaults(EditPlane plane) {
     }
     WarpedScreenGrid& cam = assets_->getView();
     pan_height_.cancel(cam);
+    manual_pan_active_ = false;
+    manual_pan_has_last_center_ = false;
     cam.set_manual_height_override(true);
 
     SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
@@ -1289,6 +1294,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             return true;
         }
         WarpedScreenGrid& cam = assets_->getView();
+        manual_pan_active_ = true;
+        manual_pan_last_center_ = cam.get_screen_center();
+        manual_pan_has_last_center_ = true;
         right_pan_active_ = true;
         right_pan_start_mouse_ = p;
         right_pan_start_center_ = cam.get_screen_center();
@@ -1326,6 +1334,8 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 new_center.y != right_pan_last_center_.y) {
                 cam.set_focus_override(new_center);
                 cam.set_screen_center(new_center);
+                manual_pan_last_center_ = new_center;
+                manual_pan_has_last_center_ = true;
                 right_pan_last_center_ = new_center;
                 right_pan_has_last_center_ = true;
             }
@@ -2375,7 +2385,7 @@ void FrameEditorSession::ensure_widgets() const {
     if (!btn_plane_toggle_) btn_plane_toggle_ = std::make_unique<DMButton>(plane_button_label(), &header, 120, DMButton::height());
     if (!cb_grid_overlay_) cb_grid_overlay_ = std::make_unique<DMCheckbox>("Show Grid", grid_overlay_enabled_);
     if (!stepper_grid_resolution_) {
-        stepper_grid_resolution_ = std::make_unique<DMNumericStepper>("Grid Resolution (r)", 0, vibble::grid::kMaxResolution, snap_resolution_r_);
+        stepper_grid_resolution_ = std::make_unique<DMNumericStepper>("Grid Overlay (r)", 0, vibble::grid::kMaxResolution, snap_resolution_r_);
     }
     refresh_animation_dropdown();
     if (!btn_apply_all_movement_) btn_apply_all_movement_ = std::make_unique<DMButton>("Apply To All Frames", &header, 180, DMButton::height());

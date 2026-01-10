@@ -286,6 +286,9 @@ FRAME_EDITOR_ACCESS:
     mutable std::vector<int> thumb_indices_;
 
     mutable class PanAndHeight pan_height_;
+    bool manual_pan_active_ = false;
+    SDL_Point manual_pan_last_center_{0, 0};
+    bool manual_pan_has_last_center_ = false;
     bool right_pan_active_ = false;
     SDL_Point right_pan_start_mouse_{0, 0};
     SDL_Point right_pan_start_center_{0, 0};

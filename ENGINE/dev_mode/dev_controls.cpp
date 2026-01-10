@@ -529,7 +529,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     map_grid_regen_cb_ = [this]() { this->regenerate_map_grid_assets(); };
     apply_header_suppression();
 
-    grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Grid Layer (3^r spacing)", 0, vibble::grid::kMaxResolution, grid_overlay_resolution_r_);
+    grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Grid Overlay (3^r spacing)", 0, vibble::grid::kMaxResolution, grid_overlay_resolution_r_);
     grid_resolution_stepper_->set_on_change([this](int new_r){
         const int clamped_r = vibble::grid::clamp_resolution(new_r);
         if (clamped_r == grid_overlay_resolution_r_) {
@@ -766,8 +766,6 @@ void DevControls::set_map_info(nlohmann::json* map_info, MapLightPanel::SaveCall
         if (!grid_overlay_resolution_user_override_) {
             apply_overlay_grid_resolution(settings.grid_resolution, false, true, true);
         } else {
-            grid_resolution_r_ = vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
-            other_settings_.set_grid_resolution_value(grid_resolution_r_);
             apply_overlay_grid_resolution(grid_overlay_resolution_r_, false, true, true);
         }
     } else {
@@ -822,6 +820,10 @@ void DevControls::apply_grid_resolution_change(int resolution) {
     if (assets_) {
         assets_->apply_map_grid_settings(settings, false);
     }
+    if (map_grid_save_cb_) {
+        map_grid_save_cb_();
+    }
+    regenerate_map_grid_assets();
 }
 
 void DevControls::set_player(Asset* player) {

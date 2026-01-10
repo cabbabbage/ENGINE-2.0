@@ -106,7 +106,7 @@ void OtherSettingsAndControls::set_grid_resolution_range(int min_resolution, int
     grid_resolution_min_ = min_clamped;
     grid_resolution_max_ = max_clamped;
     if (!grid_resolution_stepper_) {
-        grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Grid Resolution (r)", min_clamped, max_clamped, min_clamped);
+        grid_resolution_stepper_ = std::make_unique<DMNumericStepper>("Tile Resolution (r)", min_clamped, max_clamped, min_clamped);
         grid_resolution_stepper_->set_on_change([this](int value) {
             if (on_grid_resolution_changed_) {
                 on_grid_resolution_changed_(value);

@@ -231,9 +231,6 @@ void FrameEditorSession::render_plane_grid(SDL_Renderer* renderer,
     if (!renderer) {
         return;
     }
-    if (plane == FrameEditorSession::EditPlane::XY) {
-        plane = FrameEditorSession::EditPlane::XZ;
-    }
     const int step = grid_step_for_resolution(snap_resolution_r);
     if (step <= 0) {
         return;
@@ -260,11 +257,20 @@ void FrameEditorSession::render_plane_grid(SDL_Renderer* renderer,
             max_axis = half_span;
         }
     } else {
-        auto [view_minx, view_miny, view_maxx, view_maxy] = cam.get_current_view().get_bounds();
-        minx = view_minx;
-        maxx = view_maxx;
-        min_axis = view_miny;
-        max_axis = view_maxy;
+        if (metrics.width > 0 && metrics.height > 0) {
+            const int half_w = metrics.width / 2;
+            const int half_h = metrics.height / 2;
+            minx = anchor_world.x - half_w;
+            maxx = anchor_world.x + half_w;
+            min_axis = anchor_world.y - half_h;
+            max_axis = anchor_world.y + half_h;
+        } else {
+            auto [view_minx, view_miny, view_maxx, view_maxy] = cam.get_current_view().get_bounds();
+            minx = view_minx;
+            maxx = view_maxx;
+            min_axis = view_miny;
+            max_axis = view_maxy;
+        }
     }
 
     if (minx == maxx || min_axis == max_axis) {

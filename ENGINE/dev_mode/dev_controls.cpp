@@ -685,6 +685,10 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     AssetInfo::set_manifest_store_provider([this]() -> devmode::core::ManifestStore* {
         return &manifest_store_;
     });
+
+    if (assets_) {
+        assets_->set_dev_grid_overlay_callback([this]() { this->render_grid_overlay(); });
+    }
 }
 
 DevControls::~DevControls() {
@@ -1533,7 +1537,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     };
 
     const bool show_depth_guides = camera_panel_ && camera_panel_->is_depth_section_visible();
-    const bool show_grid_overlay = grid_overlay_enabled_;
+    const bool show_grid_overlay = false; // Grid is now rendered in SceneRenderer
     std::optional<float> horizon_screen_y;
     std::optional<std::string> parallax_probe_label;
     const WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
@@ -3481,4 +3485,222 @@ bool DevControls::persist_map_info_to_disk() {
         manifest_store_.flush();
     }
     return map_saved;
+}
+
+void DevControls::render_grid_overlay() {
+    if (!grid_overlay_enabled_ || !assets_) {
+        return;
+    }
+
+    SDL_Renderer* renderer = assets_->renderer();
+    if (!renderer) {
+        return;
+    }
+
+    const WarpedScreenGrid* cam = &assets_->getView();
+    if (!cam) {
+        return;
+    }
+
+    const bool show_depth_guides = false; // We only want grid here
+    const bool show_grid_overlay = grid_overlay_enabled_;
+    std::optional<float> horizon_screen_y;
+    std::optional<std::string> parallax_probe_label;
+    std::optional<WarpedScreenGrid::FloorDepthParams> floor_depth_params;
+    if (cam) {
+        floor_depth_params = cam->compute_floor_depth_params();
+    }
+
+    const bool need_grid_helpers = cam && (show_grid_overlay || show_depth_guides);
+    if (renderer && need_grid_helpers) {
+        const WarpedScreenGrid& view_cam = *cam;
+        const WarpedScreenGrid::FloorDepthParams& depth_params = *floor_depth_params;
+        world::WorldGrid& grid = assets_->world_grid();
+
+        auto parallax_offset = [&](SDL_Point w) { return 0.0f; };
+
+        SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
+        Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
+        if (show_grid_overlay) {
+            SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
+        }
+
+        SDL_Color minor{0, 255, 255, 48};
+        SDL_Color major{0, 255, 255, 80};
+
+        auto [view_min_x, view_min_y, view_max_x, view_max_y] = view_cam.get_current_view().get_bounds();
+        SDL_FPoint top_left_world{static_cast<float>(view_min_x), static_cast<float>(view_min_y)};
+        SDL_FPoint bottom_right_world{static_cast<float>(view_max_x), static_cast<float>(view_max_y)};
+        const float cam_scale = std::max(0.0001f, static_cast<float>(view_cam.get_scale()));
+
+        int cell = std::max(1, grid_cell_size_px_);
+        if (cell > 0) {
+            const float world_padding = static_cast<float>(cell) * 4.0f;
+            const float depth_world_padding = cam_scale * std::max(0.0f, view_cam.current_depth_offset_px());
+            const float min_world_x = std::min(top_left_world.x, bottom_right_world.x) - world_padding;
+            const float max_world_x = std::max(top_left_world.x, bottom_right_world.x) + world_padding;
+            const float min_world_y = std::min(top_left_world.y, bottom_right_world.y) - world_padding - depth_world_padding * 0.5f;
+            const float max_world_y = std::max(top_left_world.y, bottom_right_world.y) + world_padding + depth_world_padding;
+
+            if (depth_params.enabled) {
+                horizon_screen_y = static_cast<float>(depth_params.horizon_screen_y);
+            }
+
+            const int major_interval = 8;
+            const int samples_per_line = 32;
+            const float mid_world_x = (min_world_x + max_world_x) * 0.5f;
+
+            auto try_floor_warped_screen_position = [&](const WarpedScreenGrid& c, SDL_Point w, SDL_FPoint& out) -> bool {
+                SDL_FPoint linear{};
+                if (!c.project_world_point(SDL_FPoint{static_cast<float>(w.x), static_cast<float>(w.y)}, 0.0f, linear)) {
+                    return false;
+                }
+                float warped_y = c.warp_floor_screen_y(static_cast<float>(w.y), linear.y);
+                if (!std::isfinite(linear.x) || !std::isfinite(warped_y)) {
+                    return false;
+                }
+                out = SDL_FPoint{linear.x, warped_y};
+                return true;
+            };
+
+            float start_x = std::floor(min_world_x / cell) * cell;
+            bool have_horizon_x = false;
+            float best_horizon_x = 0.0f;
+            const float screen_center_x = static_cast<float>(screen_w_) * 0.5f;
+            auto draw_grid_polyline = [&](const std::vector<SDL_Point>& polyline, float line_value) {
+                if (!show_grid_overlay || polyline.size() < 2) {
+                    return;
+                }
+                const bool is_major = (static_cast<long long>(std::llround(line_value)) % (cell * major_interval) == 0);
+                SDL_Color c = is_major ? major : minor;
+                SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
+                SDL_RenderDrawLines(renderer, polyline.data(), static_cast<int>(polyline.size()));
+            };
+
+            auto update_horizon_for_polyline = [&](const std::vector<SDL_Point>& polyline) {
+                if (!depth_params.enabled || !horizon_screen_y || polyline.size() < 2) {
+                    return;
+                }
+                const float hy = *horizon_screen_y;
+                for (size_t i = 1; i < polyline.size(); ++i) {
+                    const float y0 = static_cast<float>(polyline[i - 1].y);
+                    const float y1 = static_cast<float>(polyline[i].y);
+                    if ((y0 <= hy && hy <= y1) || (y1 <= hy && hy <= y0)) {
+                        const float x0 = static_cast<float>(polyline[i - 1].x);
+                        const float x1 = static_cast<float>(polyline[i].x);
+                        if (std::fabs(y1 - y0) > 1e-6f) {
+                            const float t = (hy - y0) / (y1 - y0);
+                            const float ix = x0 + t * (x1 - x0);
+                            const float dist = std::fabs(ix - screen_center_x);
+                            if (!have_horizon_x || dist < std::fabs(best_horizon_x - screen_center_x)) {
+                                have_horizon_x = true;
+                                best_horizon_x = ix;
+                            }
+                        }
+                    }
+                }
+            };
+
+            for (float x = start_x; x <= max_world_x + cell; x += cell) {
+                std::vector<SDL_Point> polyline;
+                polyline.reserve(static_cast<std::size_t>(samples_per_line + 1));
+                auto flush_polyline = [&]() {
+                    draw_grid_polyline(polyline, x);
+                    update_horizon_for_polyline(polyline);
+                    polyline.clear();
+                };
+
+                for (int s = 0; s <= samples_per_line; ++s) {
+                    const float t = static_cast<float>(s) / static_cast<float>(samples_per_line);
+                    const float wy = min_world_y + (max_world_y - min_world_y) * t;
+                    SDL_Point world_point{
+                        static_cast<int>(std::lround(x)), static_cast<int>(std::lround(wy)) };
+                    SDL_FPoint screen{};
+                    if (!try_floor_warped_screen_position(view_cam, world_point, screen)) {
+                        flush_polyline();
+                        continue;
+                    }
+                    polyline.push_back(SDL_Point{
+                        static_cast<int>(std::lround(screen.x)),
+                        static_cast<int>(std::lround(screen.y))
+                    });
+                }
+                flush_polyline();
+            }
+
+            if (have_horizon_x) {
+                const int xi = static_cast<int>(std::lround(best_horizon_x));
+                SDL_BlendMode prev_mode2 = SDL_BLENDMODE_NONE;
+                SDL_GetRenderDrawBlendMode(renderer, &prev_mode2);
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(renderer, 255, 140, 0, 220);
+                SDL_RenderDrawLine(renderer, xi, 0, xi, screen_h_);
+                SDL_SetRenderDrawBlendMode(renderer, prev_mode2);
+            }
+
+            float start_y = std::floor(max_world_y / cell) * cell;
+            float highest_horizontal_screen_y = std::numeric_limits<float>::infinity();
+            for (float y = start_y; y >= min_world_y - cell; y -= cell) {
+                SDL_Point sample_world{
+                    static_cast<int>(std::lround(mid_world_x)), static_cast<int>(std::lround(y)) };
+                SDL_FPoint sample_screen{};
+                if (try_floor_warped_screen_position(view_cam, sample_world, sample_screen)) {
+                    const float screen_y = sample_screen.y;
+                    if (std::isfinite(screen_y)) {
+                        highest_horizontal_screen_y = std::min(highest_horizontal_screen_y, screen_y);
+                    }
+                }
+
+                std::vector<SDL_Point> polyline;
+                polyline.reserve(static_cast<std::size_t>(samples_per_line + 1));
+                auto flush_polyline = [&]() {
+                    draw_grid_polyline(polyline, y);
+                    update_horizon_for_polyline(polyline);
+                    polyline.clear();
+                };
+                for (int s = 0; s <= samples_per_line; ++s) {
+                    const float t = static_cast<float>(s) / static_cast<float>(samples_per_line);
+                    const float wx = min_world_x + (max_world_x - min_world_x) * t;
+                    SDL_Point world_point{
+                        static_cast<int>(std::lround(wx)), static_cast<int>(std::lround(y)) };
+                    SDL_FPoint screen{};
+                    if (!try_floor_warped_screen_position(view_cam, world_point, screen)) {
+                        flush_polyline();
+                        continue;
+                    }
+                    polyline.push_back(SDL_Point{
+                        static_cast<int>(std::lround(screen.x)),
+                        static_cast<int>(std::lround(screen.y))
+                    });
+                }
+                flush_polyline();
+            }
+
+            if (show_grid_overlay && horizon_screen_y) {
+                const float hy = *horizon_screen_y;
+                const bool already_at_horizon =
+                    std::isfinite(highest_horizontal_screen_y) && std::fabs(highest_horizontal_screen_y - hy) < 0.5f;
+                if (!already_at_horizon) {
+                    SDL_Color c = major;
+                    SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
+                    const int yi = static_cast<int>(std::lround(hy));
+                    SDL_RenderDrawLine(renderer, 0, yi, screen_w_, yi);
+                }
+            }
+
+            if (depth_params.enabled) {
+
+                horizon_screen_y = static_cast<float>(depth_params.horizon_screen_y);
+            }
+
+
+        }
+
+        if (show_grid_overlay) {
+            SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
+            SDL_SetRenderDrawBlendMode(renderer, prev_mode);
+        }
+    }
 }

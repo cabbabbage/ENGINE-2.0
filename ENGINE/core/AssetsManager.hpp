@@ -129,6 +129,8 @@ public:
 
     void show_dev_notice(const std::string& message, Uint32 duration_ms = 2000);
 
+    void set_dev_grid_overlay_callback(std::function<void()> cb) { dev_grid_overlay_callback_ = cb; }
+
     void set_editor_current_room(Room* room);
 
     Room* current_room() { return current_room_; }
@@ -338,6 +340,7 @@ private:
 };
 
     std::optional<DevNotice> dev_notice_;
+    std::function<void()> dev_grid_overlay_callback_;
 
     void rebuild_non_player_update_buffer_if_needed();
     void update_active_assets(SDL_Point center);

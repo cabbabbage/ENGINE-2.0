@@ -70,6 +70,7 @@ public:
     void update_ui(const Input& input);
     void handle_sdl_event(const SDL_Event& event);
     void render_overlays(SDL_Renderer* renderer);
+    void render_grid_overlay();
 
     void toggle_asset_library();
     void open_asset_library();

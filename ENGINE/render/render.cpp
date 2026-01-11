@@ -480,6 +480,10 @@ void SceneRenderer::render() {
         tile_renderer_->render(renderer_, cam, grid);
     }
 
+    if (assets_->dev_grid_overlay_callback_) {
+        assets_->dev_grid_overlay_callback_();
+    }
+
     const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 

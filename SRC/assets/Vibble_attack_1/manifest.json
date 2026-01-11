@@ -1,0 +1,176 @@
+{
+    "animation_children": [],
+    "animations": {
+        "default": {
+            "attack_geometry": [
+                {
+                    "vectors": [
+                        {
+                            "control_x": 63.7109375,
+                            "control_y": 0.0,
+                            "control_z": 400.51513671875,
+                            "damage": 5,
+                            "end_x": 121.0,
+                            "end_y": 0.0,
+                            "end_z": 151.0,
+                            "start_x": 53.42578125,
+                            "start_y": 0.0,
+                            "start_z": 594.45458984375
+                        }
+                    ]
+                },
+                {
+                    "vectors": [
+                        {
+                            "control_x": 180.04443359375,
+                            "control_y": 0.0,
+                            "control_z": 378.88037109375,
+                            "damage": 5,
+                            "end_x": 96.87744140625,
+                            "end_y": 0.0,
+                            "end_z": 64.18994140625,
+                            "start_x": 244.6083984375,
+                            "start_y": 0.0,
+                            "start_z": 479.5732421875
+                        }
+                    ]
+                },
+                {
+                    "vectors": [
+                        {
+                            "control_x": 302.0,
+                            "control_y": 0.0,
+                            "control_z": 218.0,
+                            "damage": 5,
+                            "end_x": 121.0,
+                            "end_y": 0.0,
+                            "end_z": 151.0,
+                            "start_x": 503.0,
+                            "start_y": 0.0,
+                            "start_z": 118.0
+                        }
+                    ]
+                },
+                {
+                    "vectors": [
+                        {
+                            "control_x": -175.6904296875,
+                            "control_y": 0.0,
+                            "control_z": 375.8388671875,
+                            "damage": 5,
+                            "end_x": 72.06689453125,
+                            "end_y": 0.0,
+                            "end_z": 247.9072265625,
+                            "start_x": -323.462890625,
+                            "start_y": 0.0,
+                            "start_z": 351.935546875
+                        }
+                    ]
+                },
+                {
+                    "vectors": [
+                        {
+                            "control_x": -325.84033203125,
+                            "control_y": 0.0,
+                            "control_z": 303.54541015625,
+                            "damage": 5,
+                            "end_x": -507.11669921875,
+                            "end_y": 0.0,
+                            "end_z": 271.22216796875,
+                            "start_x": -216.3349609375,
+                            "start_y": 0.0,
+                            "start_z": 73.88037109375
+                        }
+                    ]
+                },
+                {
+                    "vectors": [
+                        {
+                            "control_x": -251.06982421875,
+                            "control_y": 0.0,
+                            "control_z": 292.60888671875,
+                            "damage": 5,
+                            "end_x": -347.90869140625,
+                            "end_y": 0.0,
+                            "end_z": 432.50537109375,
+                            "start_x": -201.2509765625,
+                            "start_y": 0.0,
+                            "start_z": 69.98583984375
+                        }
+                    ]
+                }
+            ],
+            "child_timelines": [],
+            "crop_frames": false,
+            "flipped_source": false,
+            "frames": [
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                }
+            ],
+            "hit_geometry": [
+                {
+                    "boxes": []
+                },
+                {
+                    "boxes": []
+                },
+                {
+                    "boxes": []
+                },
+                {
+                    "boxes": []
+                },
+                {
+                    "boxes": []
+                },
+                {
+                    "boxes": []
+                }
+            ],
+            "inherit_source_movement": false,
+            "locked": false,
+            "loop": true,
+            "movement": [
+                [
+                    0,
+                    0
+                ]
+            ],
+            "movement_total": {
+                "dx": 0,
+                "dy": 0
+            },
+            "number_of_frames": 1,
+            "on_end": "default",
+            "reverse_source": false,
+            "rnd_start": false,
+            "source": {
+                "kind": "folder",
+                "name": "",
+                "path": "default"
+            },
+            "speed_multiplier": 1.0
+        }
+    },
+    "asset_directory": "SRC/assets/Vibble_attack_1",
+    "asset_name": "Vibble_attack_1",
+    "asset_type": "object",
+    "lighting_info": [],
+    "start": "default"
+}

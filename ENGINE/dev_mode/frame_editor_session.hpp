@@ -206,9 +206,15 @@ FRAME_EDITOR_ACCESS:
 
     mutable std::unique_ptr<class DMTextBox> tb_total_dx_;
     mutable std::unique_ptr<class DMTextBox> tb_total_dy_;
+    mutable std::unique_ptr<class DMTextBox> tb_frame_dx_;
+    mutable std::unique_ptr<class DMTextBox> tb_frame_dy_;
+    mutable std::unique_ptr<class DMTextBox> tb_frame_dz_;
 
     mutable std::string last_totals_dx_text_{};
     mutable std::string last_totals_dy_text_{};
+    mutable std::string last_frame_dx_text_{};
+    mutable std::string last_frame_dy_text_{};
+    mutable std::string last_frame_dz_text_{};
     mutable bool last_show_anim_value_ = true;
     mutable bool last_show_child_value_ = true;
     mutable std::string last_child_dx_text_{};
@@ -398,6 +404,11 @@ FRAME_EDITOR_ACCESS:
         int totals_width = 0;
         int total_dx_height = 0;
         int total_dy_height = 0;
+        int frame_field_width = 0;
+        int frame_dx_height = 0;
+        int frame_dy_height = 0;
+        int frame_dz_height = 0;
+        int frame_row_height = 0;
 };
     struct ChildrenToolboxMetrics {
         int padding = 0;

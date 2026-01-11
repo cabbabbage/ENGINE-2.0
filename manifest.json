@@ -1230,20 +1230,96 @@
     },
     "Vibble": {
       "animation_children": [
-        "Vibble_eyes"
+        "Vibble_eyes",
+        "Vibble_attack_1"
       ],
       "animations": {
         "attack": {
-          "child_timelines": [],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            },
+            {
+              "animation": "",
+              "asset": "Vibble_attack_1",
+              "child": 1,
+              "child_index": 1,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "async"
+            }
+          ],
+          "children": [
+            "Vibble_eyes",
+            "Vibble_attack_1"
+          ],
           "crop_frames": false,
           "flipped_source": false,
+          "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
+          ],
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
             [
               0,
-              0
+              0,
+              [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ],
+                [
+                  1,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ]
             ]
           ],
           "movement_total": {
@@ -1320,10 +1396,27 @@
                 }
               ],
               "mode": "static"
+            },
+            {
+              "animation": "",
+              "asset": "Vibble_attack_1",
+              "child": 1,
+              "child_index": 1,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "async"
             }
           ],
           "children": [
-            "Vibble_eyes"
+            "Vibble_eyes",
+            "Vibble_attack_1"
           ],
           "crop_frames": false,
           "derived_modifiers": {
@@ -1386,7 +1479,25 @@
           "movement": [
             [
               0,
-              0
+              0,
+              [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ],
+                [
+                  1,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ]
             ]
           ],
           "movement_total": {
@@ -1407,9 +1518,7 @@
         "default": {
           "attack_geometry": [
             {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
+              "vectors": []
             }
           ],
           "child_timelines": [
@@ -1428,10 +1537,27 @@
                 }
               ],
               "mode": "static"
+            },
+            {
+              "animation": "",
+              "asset": "Vibble_attack_1",
+              "child": 1,
+              "child_index": 1,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "async"
             }
           ],
           "children": [
-            "Vibble_eyes"
+            "Vibble_eyes",
+            "Vibble_attack_1"
           ],
           "crop_frames": false,
           "flipped_source": false,
@@ -1442,9 +1568,7 @@
           ],
           "hit_geometry": [
             {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
+              "boxes": []
             }
           ],
           "inherit_source_movement": false,
@@ -1458,6 +1582,14 @@
               [
                 [
                   0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ],
+                [
+                  1,
                   0,
                   0,
                   0.0,
@@ -1541,14 +1673,52 @@
                 }
               ],
               "mode": "static"
+            },
+            {
+              "animation": "",
+              "asset": "Vibble_attack_1",
+              "child": 1,
+              "child_index": 1,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "async"
             }
           ],
           "children": [
-            "Vibble_eyes"
+            "Vibble_eyes",
+            "Vibble_attack_1"
           ],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
             {
               "needs_rebuild": false
             }
@@ -1606,6 +1776,14 @@
               [
                 [
                   0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ],
+                [
+                  1,
                   0,
                   0,
                   0.0,
@@ -1679,53 +1857,20 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": -8,
-                  "dy": 136,
-                  "dz": -110,
+                  "dx": 0,
+                  "dy": 144,
+                  "dz": -96,
                   "visible": true
-                },
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 0,
-                  "visible": false
-                },
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 0,
-                  "visible": false
-                },
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 0,
-                  "visible": false
-                },
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 0,
-                  "visible": false
-                },
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 0,
-                  "visible": false
-                },
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 0,
-                  "visible": false
-                },
+                }
+              ],
+              "mode": "static"
+            },
+            {
+              "animation": "",
+              "asset": "Vibble_attack_1",
+              "child": 1,
+              "child_index": 1,
+              "frames": [
                 {
                   "degree": 0.0,
                   "dx": 0,
@@ -1734,15 +1879,37 @@
                   "visible": false
                 }
               ],
-              "mode": "static"
+              "mode": "async"
             }
           ],
           "children": [
-            "Vibble_eyes"
+            "Vibble_eyes",
+            "Vibble_attack_1"
           ],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
             {
               "needs_rebuild": false
             }
@@ -1798,36 +1965,16 @@
                   0.0,
                   true,
                   true
+                ],
+                [
+                  1,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
                 ]
               ]
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
             ]
           ],
           "movement_total": {
@@ -1846,7 +1993,44 @@
           "speed_multiplier": 1.0
         },
         "right": {
-          "child_timelines": [],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            },
+            {
+              "animation": "",
+              "asset": "Vibble_attack_1",
+              "child": 1,
+              "child_index": 1,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "async"
+            }
+          ],
+          "children": [
+            "Vibble_eyes",
+            "Vibble_attack_1"
+          ],
           "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": true,
@@ -1904,8 +2088,109 @@
       "tillable": false
     },
     "Vibble_attack_1": {
+      "animation_children": [],
       "animations": {
         "default": {
+          "attack_geometry": [
+            {
+              "vectors": [
+                {
+                  "control_x": 63.7109375,
+                  "control_y": 0.0,
+                  "control_z": 400.51513671875,
+                  "damage": 5,
+                  "end_x": 121.0,
+                  "end_y": 0.0,
+                  "end_z": 151.0,
+                  "start_x": 53.42578125,
+                  "start_y": 0.0,
+                  "start_z": 594.45458984375
+                }
+              ]
+            },
+            {
+              "vectors": [
+                {
+                  "control_x": 180.04443359375,
+                  "control_y": 0.0,
+                  "control_z": 378.88037109375,
+                  "damage": 5,
+                  "end_x": 96.87744140625,
+                  "end_y": 0.0,
+                  "end_z": 64.18994140625,
+                  "start_x": 244.6083984375,
+                  "start_y": 0.0,
+                  "start_z": 479.5732421875
+                }
+              ]
+            },
+            {
+              "vectors": [
+                {
+                  "control_x": 302.0,
+                  "control_y": 0.0,
+                  "control_z": 218.0,
+                  "damage": 5,
+                  "end_x": 121.0,
+                  "end_y": 0.0,
+                  "end_z": 151.0,
+                  "start_x": 503.0,
+                  "start_y": 0.0,
+                  "start_z": 118.0
+                }
+              ]
+            },
+            {
+              "vectors": [
+                {
+                  "control_x": -175.6904296875,
+                  "control_y": 0.0,
+                  "control_z": 375.8388671875,
+                  "damage": 5,
+                  "end_x": 72.06689453125,
+                  "end_y": 0.0,
+                  "end_z": 247.9072265625,
+                  "start_x": -323.462890625,
+                  "start_y": 0.0,
+                  "start_z": 351.935546875
+                }
+              ]
+            },
+            {
+              "vectors": [
+                {
+                  "control_x": -325.84033203125,
+                  "control_y": 0.0,
+                  "control_z": 303.54541015625,
+                  "damage": 5,
+                  "end_x": -507.11669921875,
+                  "end_y": 0.0,
+                  "end_z": 271.22216796875,
+                  "start_x": -216.3349609375,
+                  "start_y": 0.0,
+                  "start_z": 73.88037109375
+                }
+              ]
+            },
+            {
+              "vectors": [
+                {
+                  "control_x": -251.06982421875,
+                  "control_y": 0.0,
+                  "control_z": 292.60888671875,
+                  "damage": 5,
+                  "end_x": -347.90869140625,
+                  "end_y": 0.0,
+                  "end_z": 432.50537109375,
+                  "start_x": -201.2509765625,
+                  "start_y": 0.0,
+                  "start_z": 69.98583984375
+                }
+              ]
+            }
+          ],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
@@ -1926,18 +2211,95 @@
               "needs_rebuild": false
             }
           ],
+          "hit_geometry": [
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            }
+          ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
+      "anti_tags": [],
       "asset_directory": "SRC/assets/Vibble_attack_1",
       "asset_name": "Vibble_attack_1",
+      "asset_type": "object",
+      "async_children": [],
       "lighting_info": [],
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "shading_opacity_multiplier": 1.0,
+      "shading_parallax_amount": 0.0,
+      "shading_screen_brightness_multiplier": 1.0,
+      "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+      },
+      "size_settings": {
+        "scale_percentage": 30.0
+      },
+      "spawn_groups": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false
     },
     "Vibble_eyes": {
       "animation_children": [],
@@ -2002,25 +2364,230 @@
       "tillable": false
     },
     "barrel": {
+      "animation_children": [],
       "animations": {
+        "damaged": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
+          "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
+          ],
+          "inherit_source_movement": false,
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 17,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "damaged"
+          },
+          "speed_multiplier": 1.0
+        },
         "default": {
+          "attack_geometry": [
+            {
+              "vectors": []
+            }
+          ],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
             }
           ],
+          "hit_geometry": [
+            {
+              "boxes": [
+                {
+                  "center_x": 231.9780731201172,
+                  "center_y": 0.0,
+                  "center_z": 5163.4951171875,
+                  "half_height": 1570.3231201171875,
+                  "half_width": 5179.4228515625,
+                  "rotation": -93.25064086914063
+                }
+              ]
+            }
+          ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
+      "anti_tags": [],
       "asset_directory": "SRC/assets/barrel",
       "asset_name": "barrel",
+      "asset_type": "object",
+      "async_children": [],
+      "can_invert": true,
       "lighting_info": [],
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "shading_opacity_multiplier": 1.0,
+      "shading_parallax_amount": 0.0,
+      "shading_screen_brightness_multiplier": 1.0,
+      "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+      },
+      "size_settings": {
+        "scale_percentage": 16.0
+      },
+      "spawn_groups": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false
     },
     "bone": {
       "animations": {
@@ -2839,9 +3406,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -3002,6 +3569,35 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-04530d224ef6"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "barrel"
+                }
+              ],
+              "display_name": "barrel",
+              "dx": 386,
+              "dy": 1223,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 6376,
+              "origional_width": 6376,
+              "position": "Exact",
+              "priority": 5,
+              "resolution": 5,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-37d6c4ad7c3a"
             }
           ]
         }

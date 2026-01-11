@@ -583,7 +583,7 @@ void FrameEditorSession::end() {
 
     if (pending_save_ && document_) {
         pending_save_ = false;
-        document_->save_to_file(false);
+        document_->save_to_file(true);
     }
 
     auto saved_host_callback = std::move(on_host_closed_);
@@ -2386,6 +2386,9 @@ void FrameEditorSession::ensure_widgets() const {
     if (!cb_show_child_) cb_show_child_ = std::make_unique<DMCheckbox>("Show Child", show_child_);
     if (!tb_total_dx_) tb_total_dx_ = std::make_unique<DMTextBox>("Total dX", "0");
     if (!tb_total_dy_) tb_total_dy_ = std::make_unique<DMTextBox>("Total dZ", "0");
+    if (!tb_frame_dx_) tb_frame_dx_ = std::make_unique<DMTextBox>("Frame dX", "0");
+    if (!tb_frame_dy_) tb_frame_dy_ = std::make_unique<DMTextBox>("Frame dY", "0");
+    if (!tb_frame_dz_) tb_frame_dz_ = std::make_unique<DMTextBox>("Frame dZ", "0");
     if (!tb_child_dx_) tb_child_dx_ = std::make_unique<DMTextBox>("Child dX", "0");
     if (!tb_child_dy_) tb_child_dy_ = std::make_unique<DMTextBox>("Child dY", "0");
     if (!tb_child_dz_) tb_child_dz_ = std::make_unique<DMTextBox>("Child dZ", "0");
@@ -2448,6 +2451,9 @@ void FrameEditorSession::ensure_widgets() const {
     last_show_child_value_ = show_child_;
     last_totals_dx_text_ = tb_total_dx_->value();
     last_totals_dy_text_ = tb_total_dy_->value();
+    if (tb_frame_dx_) last_frame_dx_text_ = tb_frame_dx_->value();
+    if (tb_frame_dy_) last_frame_dy_text_ = tb_frame_dy_->value();
+    if (tb_frame_dz_) last_frame_dz_text_ = tb_frame_dz_->value();
 }
 
 void FrameEditorSession::refresh_animation_dropdown() const {
@@ -3811,7 +3817,7 @@ void FrameEditorSession::apply_current_mode_to_all_animations() {
     }
 
     // Trigger save
-    document_->save_to_file(false);
+    document_->save_to_file(true);
     devmode::core::DevJsonStore::instance().flush_all();
 
     // Reload current animation data to reflect changes
@@ -5279,14 +5285,13 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
         edited_animation_ids_.push_back(animation_id_);
     }
     pending_save_ = true;
-    document_->replace_animation_payload(animation_id_, serialized);
+    document_->save_to_file(true);
     if (auto normalized = document_->animation_payload(animation_id_)) {
         document_payload_cache_ = *normalized;
     } else {
         document_payload_cache_ = serialized;
     }
 
-    document_->save_to_file(false);
     devmode::core::DevJsonStore::instance().flush_all();
 
     // Aggressively mirror into the manifest store so reloads always see the latest edits.
@@ -5472,9 +5477,6 @@ void FrameEditorSession::adjust_selection_axis(int scroll_delta, const WarpedScr
     switch (adjustment_selection_.target) {
         case AdjustmentTarget::MovementPoint: {
             const int index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
-            if (index <= 0) {
-                break;
-            }
             struct AbsPos {
                 float x = 0.0f;
                 float y = 0.0f;
@@ -5495,7 +5497,7 @@ void FrameEditorSession::adjust_selection_axis(int scroll_delta, const WarpedScr
                 current.z = snap_value(current.z + delta);
             }
 
-            AbsPos prev_abs = base_abs[static_cast<std::size_t>(index - 1)];
+            AbsPos prev_abs = (index > 0) ? base_abs[static_cast<std::size_t>(index - 1)] : AbsPos{0.0f, 0.0f, 0.0f};
             frames_[index].dx = static_cast<float>(std::round(current.x - prev_abs.x));
             frames_[index].dy = static_cast<float>(std::round(current.y - prev_abs.y));
             frames_[index].dz = static_cast<float>(std::round(current.z - prev_abs.z));

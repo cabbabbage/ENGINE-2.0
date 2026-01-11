@@ -1,19 +1,95 @@
 {
     "animation_children": [
-        "Vibble_eyes"
+        "Vibble_eyes",
+        "Vibble_attack_1"
     ],
     "animations": {
         "attack": {
-            "child_timelines": [],
+            "child_timelines": [
+                {
+                    "animation": "",
+                    "asset": "Vibble_eyes",
+                    "child": 0,
+                    "child_index": 0,
+                    "frames": [
+                        {
+                            "degree": 0.0,
+                            "dx": 0,
+                            "dy": 0,
+                            "dz": 0,
+                            "visible": false
+                        }
+                    ],
+                    "mode": "static"
+                },
+                {
+                    "animation": "",
+                    "asset": "Vibble_attack_1",
+                    "child": 1,
+                    "child_index": 1,
+                    "frames": [
+                        {
+                            "degree": 0.0,
+                            "dx": 0,
+                            "dy": 0,
+                            "dz": 0,
+                            "visible": false
+                        }
+                    ],
+                    "mode": "async"
+                }
+            ],
+            "children": [
+                "Vibble_eyes",
+                "Vibble_attack_1"
+            ],
             "crop_frames": false,
             "flipped_source": false,
+            "frames": [
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                }
+            ],
             "inherit_source_movement": false,
             "locked": false,
             "loop": true,
             "movement": [
                 [
                     0,
-                    0
+                    0,
+                    [
+                        [
+                            0,
+                            0,
+                            0,
+                            0.0,
+                            true,
+                            true
+                        ],
+                        [
+                            1,
+                            0,
+                            0,
+                            0.0,
+                            true,
+                            true
+                        ]
+                    ]
                 ]
             ],
             "movement_total": {
@@ -90,10 +166,27 @@
                         }
                     ],
                     "mode": "static"
+                },
+                {
+                    "animation": "",
+                    "asset": "Vibble_attack_1",
+                    "child": 1,
+                    "child_index": 1,
+                    "frames": [
+                        {
+                            "degree": 0.0,
+                            "dx": 0,
+                            "dy": 0,
+                            "dz": 0,
+                            "visible": false
+                        }
+                    ],
+                    "mode": "async"
                 }
             ],
             "children": [
-                "Vibble_eyes"
+                "Vibble_eyes",
+                "Vibble_attack_1"
             ],
             "crop_frames": false,
             "derived_modifiers": {
@@ -156,7 +249,25 @@
             "movement": [
                 [
                     0,
-                    0
+                    0,
+                    [
+                        [
+                            0,
+                            0,
+                            0,
+                            0.0,
+                            true,
+                            true
+                        ],
+                        [
+                            1,
+                            0,
+                            0,
+                            0.0,
+                            true,
+                            true
+                        ]
+                    ]
                 ]
             ],
             "movement_total": {
@@ -177,9 +288,7 @@
         "default": {
             "attack_geometry": [
                 {
-                    "explosion": [],
-                    "melee": [],
-                    "projectile": []
+                    "vectors": []
                 }
             ],
             "child_timelines": [
@@ -198,10 +307,27 @@
                         }
                     ],
                     "mode": "static"
+                },
+                {
+                    "animation": "",
+                    "asset": "Vibble_attack_1",
+                    "child": 1,
+                    "child_index": 1,
+                    "frames": [
+                        {
+                            "degree": 0.0,
+                            "dx": 0,
+                            "dy": 0,
+                            "dz": 0,
+                            "visible": false
+                        }
+                    ],
+                    "mode": "async"
                 }
             ],
             "children": [
-                "Vibble_eyes"
+                "Vibble_eyes",
+                "Vibble_attack_1"
             ],
             "crop_frames": false,
             "flipped_source": false,
@@ -212,9 +338,7 @@
             ],
             "hit_geometry": [
                 {
-                    "explosion": null,
-                    "melee": null,
-                    "projectile": null
+                    "boxes": []
                 }
             ],
             "inherit_source_movement": false,
@@ -228,6 +352,14 @@
                     [
                         [
                             0,
+                            0,
+                            0,
+                            0.0,
+                            true,
+                            true
+                        ],
+                        [
+                            1,
                             0,
                             0,
                             0.0,
@@ -311,14 +443,52 @@
                         }
                     ],
                     "mode": "static"
+                },
+                {
+                    "animation": "",
+                    "asset": "Vibble_attack_1",
+                    "child": 1,
+                    "child_index": 1,
+                    "frames": [
+                        {
+                            "degree": 0.0,
+                            "dx": 0,
+                            "dy": 0,
+                            "dz": 0,
+                            "visible": false
+                        }
+                    ],
+                    "mode": "async"
                 }
             ],
             "children": [
-                "Vibble_eyes"
+                "Vibble_eyes",
+                "Vibble_attack_1"
             ],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
                 {
                     "needs_rebuild": false
                 }
@@ -376,6 +546,14 @@
                     [
                         [
                             0,
+                            0,
+                            0,
+                            0.0,
+                            true,
+                            true
+                        ],
+                        [
+                            1,
                             0,
                             0,
                             0.0,
@@ -449,21 +627,59 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": -8,
-                            "dy": 136,
-                            "dz": -110,
+                            "dx": 0,
+                            "dy": 144,
+                            "dz": -96,
                             "visible": true
                         }
                     ],
                     "mode": "static"
+                },
+                {
+                    "animation": "",
+                    "asset": "Vibble_attack_1",
+                    "child": 1,
+                    "child_index": 1,
+                    "frames": [
+                        {
+                            "degree": 0.0,
+                            "dx": 0,
+                            "dy": 0,
+                            "dz": 0,
+                            "visible": false
+                        }
+                    ],
+                    "mode": "async"
                 }
             ],
             "children": [
-                "Vibble_eyes"
+                "Vibble_eyes",
+                "Vibble_attack_1"
             ],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
+                {
+                    "needs_rebuild": false
+                },
                 {
                     "needs_rebuild": false
                 }
@@ -519,6 +735,14 @@
                             0.0,
                             true,
                             true
+                        ],
+                        [
+                            1,
+                            0,
+                            0,
+                            0.0,
+                            true,
+                            true
                         ]
                     ]
                 ]
@@ -539,7 +763,44 @@
             "speed_multiplier": 1.0
         },
         "right": {
-            "child_timelines": [],
+            "child_timelines": [
+                {
+                    "animation": "",
+                    "asset": "Vibble_eyes",
+                    "child": 0,
+                    "child_index": 0,
+                    "frames": [
+                        {
+                            "degree": 0.0,
+                            "dx": 0,
+                            "dy": 0,
+                            "dz": 0,
+                            "visible": false
+                        }
+                    ],
+                    "mode": "static"
+                },
+                {
+                    "animation": "",
+                    "asset": "Vibble_attack_1",
+                    "child": 1,
+                    "child_index": 1,
+                    "frames": [
+                        {
+                            "degree": 0.0,
+                            "dx": 0,
+                            "dy": 0,
+                            "dz": 0,
+                            "visible": false
+                        }
+                    ],
+                    "mode": "async"
+                }
+            ],
+            "children": [
+                "Vibble_eyes",
+                "Vibble_attack_1"
+            ],
             "crop_frames": false,
             "derived_modifiers": {
                 "flipMovementX": true,

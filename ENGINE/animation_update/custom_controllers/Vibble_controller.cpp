@@ -72,7 +72,7 @@ void VibbleController::movement(const Input& input) {
 
     }
     if(melee && canMelee == true) {
-        player_->anim_->run_async("melee");
+        player_->anim_->run_async("Vibble_attack_1");
         canMelee = false;
         isMeleeing = true;
         meleeCooldownEndTime = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(meleeCooldown));

@@ -1089,6 +1089,10 @@ void DevControls::sync_camera_tilt_override() {
         return;
     }
 
+    if (cam.has_tilt_override()) {
+        return;
+    }
+
     cam.set_tilt_override(45.0f);
 }
 

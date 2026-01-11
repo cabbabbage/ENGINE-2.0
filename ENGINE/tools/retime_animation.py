@@ -105,18 +105,18 @@ def _child_from_entry(entry):
             idx = None
         dx = entry[1] if len(entry) > 1 and isinstance(entry[1], (int, float)) else 0
         dy = entry[2] if len(entry) > 2 and isinstance(entry[2], (int, float)) else 0
-        deg = entry[3] if len(entry) > 3 and isinstance(entry[3], (int, float)) else 0.0
-        visible = entry[4] if len(entry) > 4 else True
-        front = entry[5] if len(entry) > 5 else True
-        return idx, {"type": "list", "dx": dx, "dy": dy, "deg": deg, "visible": visible, "front": front}
+        dz = entry[3] if len(entry) > 3 and isinstance(entry[3], (int, float)) else 0
+        deg = entry[4] if len(entry) > 4 and isinstance(entry[4], (int, float)) else 0.0
+        visible = entry[5] if len(entry) > 5 else True
+        return idx, {"type": "list", "dx": dx, "dy": dy, "dz": dz, "deg": deg, "visible": visible}
     if isinstance(entry, dict):
         idx = entry.get("child_index", entry.get("index"))
         dx = entry.get("dx", 0)
         dy = entry.get("dy", 0)
+        dz = entry.get("dz", entry.get("dy", 0))
         deg = entry.get("degree", entry.get("rotation", 0.0))
         visible = entry.get("visible", True)
-        front = entry.get("render_in_front", True)
-        return idx, {"type": "dict", "dx": dx, "dy": dy, "deg": deg, "visible": visible, "front": front, "raw": dict(entry)}
+        return idx, {"type": "dict", "dx": dx, "dy": dy, "dz": dz, "deg": deg, "visible": visible, "raw": dict(entry)}
     return None, None
 
 
@@ -126,12 +126,12 @@ def _build_child_entry(idx, data, template_type):
         base["child_index"] = idx
         base["dx"] = data["dx"]
         base["dy"] = data["dy"]
+        base["dz"] = data["dz"]
         base["degree"] = data["deg"]
         base["visible"] = data["visible"]
-        base["render_in_front"] = data["front"]
         return base
     # default to list representation
-    return [idx, data["dx"], data["dy"], data["deg"], data["visible"], data["front"]]
+    return [idx, data["dx"], data["dy"], data["dz"], data["deg"], data["visible"]]
 
 
 def interpolate_children(prev_children, next_children):
@@ -156,10 +156,12 @@ def interpolate_children(prev_children, next_children):
         template_type = p["type"] if p else n["type"]
         dx = _avg(p["dx"] if p else None, n["dx"] if n else None) or 0
         dy = _avg(p["dy"] if p else None, n["dy"] if n else None) or 0
+        dz = _avg(p["dz"] if p else None, n["dz"] if n else None)
+        if dz is None:
+            dz = dy
         deg = _avg(p["deg"] if p else None, n["deg"] if n else None) or 0.0
         visible = p["visible"] if p is not None else (n["visible"] if n is not None else True)
-        front = p["front"] if p is not None else (n["front"] if n is not None else True)
-        result.append(_build_child_entry(idx, {"dx": dx, "dy": dy, "deg": deg, "visible": visible, "front": front}, template_type))
+        result.append(_build_child_entry(idx, {"dx": dx, "dy": dy, "dz": dz, "deg": deg, "visible": visible}, template_type))
     return result
 
 

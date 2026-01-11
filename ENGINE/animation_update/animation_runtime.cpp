@@ -622,20 +622,17 @@ void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFr
         float scale = remainder / std::max(0.0001f, perspective_scale);
         if (!std::isfinite(scale) || scale <= 0.0f) {
             scale = 1.0f;
-        }
+    }
         return scale;
 };
     std::vector<bool> prev_visible;
-    std::vector<bool> prev_front;
     std::vector<float> prev_rotation;
     std::vector<SDL_Point> prev_world;
     prev_visible.reserve(self_->animation_children_.size());
-    prev_front.reserve(self_->animation_children_.size());
     prev_rotation.reserve(self_->animation_children_.size());
     prev_world.reserve(self_->animation_children_.size());
     for (const auto& slot : self_->animation_children_) {
         prev_visible.push_back(slot.visible);
-        prev_front.push_back(slot.render_in_front);
         prev_rotation.push_back(slot.rotation_degrees);
         prev_world.push_back(slot.world_pos);
     }
@@ -718,7 +715,7 @@ void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFr
     bool any_changed = false;
     for (std::size_t i = 0; i < self_->animation_children_.size(); ++i) {
         const auto& slot = self_->animation_children_[i];
-        const bool changed = (prev_visible[i] != slot.visible) || (prev_front[i] != slot.render_in_front) || (std::abs(prev_rotation[i] - slot.rotation_degrees) > 0.001f) || (prev_world[i].x != slot.world_pos.x) || (prev_world[i].y != slot.world_pos.y);
+        const bool changed = (prev_visible[i] != slot.visible) || (std::abs(prev_rotation[i] - slot.rotation_degrees) > 0.001f) || (prev_world[i].x != slot.world_pos.x) || (prev_world[i].y != slot.world_pos.y);
         if (changed) {
             any_changed = true;
             break;
@@ -769,7 +766,6 @@ void AnimationRuntime::destroy_child_assets() {
         slot.child_index = -1;
         slot.visible = false;
         slot.was_visible = false;
-        slot.render_in_front = true;
         slot.frame_progress = 0.0f;
         slot.last_parent_frame_index = -1;
         slot.timeline_active = false;

@@ -325,7 +325,6 @@ void Animation::rebuild_child_timelines_from_frames() {
         auto make_default_sample = [&](int index) {
             AnimationChildFrameData sample{};
             sample.child_index = index;
-            sample.render_in_front = true;
             sample.visible = false;
             sample.dx = 0;
             sample.dy = 0;

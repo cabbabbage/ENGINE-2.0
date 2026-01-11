@@ -510,6 +510,9 @@ void FrameEditorSession::begin(Assets* assets,
     curve_enabled_ = false;
     edit_plane_ = EditPlane::XZ;
     grid_overlay_enabled_ = true;
+    adjustment_mode_active_ = false;
+    adjustment_dirty_ = false;
+    adjustment_selection_.reset();
     selected_hitbox_type_index_ = 1;
     selected_attack_type_index_ = 1;
     selected_attack_vector_indices_.fill(-1);
@@ -1034,11 +1037,34 @@ void FrameEditorSession::update(const Input& input) {
             scroll_delta = input.getScrollY();
         }
 
+        const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+        if (shift_down) {
+            if (!adjustment_mode_active_) {
+                adjustment_mode_active_ = true;
+                adjustment_dirty_ = false;
+            }
+            ensure_adjustment_auto_select(cam);
+            if (manual_pan_active_ || right_pan_active_) {
+                manual_pan_active_ = false;
+                right_pan_active_ = false;
+                manual_pan_has_last_center_ = false;
+                right_pan_has_last_center_ = false;
+            }
+        } else if (adjustment_mode_active_) {
+            exit_adjustment_mode(true);
+        }
+
         if (!block_camera_controls) {
-            if (is_xy_plane()) {
-                handle_xy_scroll(cam, scroll_delta);
+            if (shift_down) {
+                if (scroll_delta != 0) {
+                    adjust_selection_axis(scroll_delta, cam);
+                }
             } else {
-                handle_xz_scroll(cam, scroll_delta);
+                if (is_xy_plane()) {
+                    handle_xy_scroll(cam, scroll_delta);
+                } else {
+                    handle_xz_scroll(cam, scroll_delta);
+                }
             }
         }
         center_camera_origin();
@@ -1136,17 +1162,11 @@ void FrameEditorSession::update(const Input& input) {
                 cb_child_visible_->set_value(child->visible);
                 last_child_visible_value_ = child->visible;
             }
-            if (cb_child_render_front_) {
-                cb_child_render_front_->set_value(child->render_in_front);
-                last_child_front_value_ = child->render_in_front;
-            }
         } else {
             if (tb_child_dx_ && !tb_child_dx_->is_editing()) tb_child_dx_->set_value("0");
             if (tb_child_dy_ && !tb_child_dy_->is_editing()) tb_child_dy_->set_value("0");
             if (tb_child_deg_ && !tb_child_deg_->is_editing()) tb_child_deg_->set_value("0");
             if (cb_child_visible_) cb_child_visible_->set_value(false);
-            if (cb_child_render_front_) cb_child_render_front_->set_value(true);
-            last_child_front_value_ = cb_child_render_front_ ? cb_child_render_front_->value() : true;
         }
     }
     if (mode_ == Mode::HitGeometry) {
@@ -1319,6 +1339,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
 
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_RIGHT) {
         SDL_Point p{ e.button.x, e.button.y };
+        if ((SDL_GetModState() & KMOD_SHIFT) != 0) {
+            return true;
+        }
         if (SDL_PointInRect(&p, &directory_rect_) || SDL_PointInRect(&p, &nav_rect_) || SDL_PointInRect(&p, &toolbox_rect_)) {
             return true;
         }
@@ -1682,7 +1705,6 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         if (tb_child_dy_) consumed_child = tb_child_dy_->handle_event(e) || consumed_child;
         if (tb_child_deg_) consumed_child = tb_child_deg_->handle_event(e) || consumed_child;
         if (cb_child_visible_) consumed_child = cb_child_visible_->handle_event(e) || consumed_child;
-        if (cb_child_render_front_) consumed_child = cb_child_render_front_->handle_event(e) || consumed_child;
         if (consumed_child) {
             auto* child = current_child_frame();
             if (child) {
@@ -1726,13 +1748,6 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     bool vis = cb_child_visible_->value();
                     if (child->visible != vis) {
                         child->visible = vis;
-                        changed = true;
-                    }
-                }
-                if (cb_child_render_front_) {
-                    bool front = cb_child_render_front_->value();
-                    if (child->render_in_front != front) {
-                        child->render_in_front = front;
                         changed = true;
                     }
                 }
@@ -1934,7 +1949,8 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (mode_ == Mode::HitGeometry) {
+    const bool shift_held = (SDL_GetModState() & KMOD_SHIFT) != 0;
+    if (mode_ == Mode::HitGeometry && !shift_held) {
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
             if (begin_hitbox_drag(SDL_Point{e.button.x, e.button.y})) {
                 return true;
@@ -1948,7 +1964,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             update_hitbox_drag(SDL_Point{e.motion.x, e.motion.y});
             return true;
         }
-    } else if (mode_ == Mode::AttackGeometry) {
+    } else if (mode_ == Mode::AttackGeometry && !shift_held) {
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
             if (begin_attack_drag(SDL_Point{e.button.x, e.button.y})) {
                 return true;
@@ -1995,45 +2011,177 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         if (SDL_PointInRect(&sp, &directory_rect_) || SDL_PointInRect(&sp, &nav_rect_) || SDL_PointInRect(&sp, &toolbox_rect_)) {
             return true;
         }
+        if (!shift_held) {
+            return false;
+        }
+        if (!adjustment_mode_active_) {
+            adjustment_mode_active_ = true;
+            adjustment_dirty_ = false;
+        }
         if (!assets_ || !target_) return false;
         WarpedScreenGrid& cam = assets_->getView();
-        SDL_FPoint world_f = cam.screen_to_map(sp);
+        SDL_Point anchor_world = asset_anchor_world();
 
-        SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
-
-        SDL_Point world_px{ static_cast<int>(std::lround(world_f.x)), static_cast<int>(std::lround(world_f.y)) };
-        int snap_r = vibble::grid::clamp_resolution(std::max(0, snap_resolution_r_));
-        SDL_Point snapped = vibble::grid::snap_world_to_vertex(world_px, snap_r);
-        SDL_FPoint desired_rel{ static_cast<float>(snapped.x - anchor_world.x), static_cast<float>(snapped.y - anchor_world.y) };
-
-        if (is_children_mode(mode_)) {
-
-            if (auto* child = current_child_frame()) {
-                const float attachment = attachment_scale();
-                const float screen_to_local = (attachment > 0.0001f) ? (1.0f / attachment) : 1.0f;
-                const float unflipped_x = target_->flipped ? -desired_rel.x : desired_rel.x;
-                child->dx = static_cast<float>(std::round(unflipped_x * screen_to_local));
-                child_plane_delta(*child) = static_cast<float>(std::round(desired_rel.y * screen_to_local));
-                child->has_data = true;
-                const bool should_smooth_child = smooth_enabled_ && selected_index_ > 0;
-                if (should_smooth_child) {
-                    smooth_child_offsets(selected_child_index_, selected_index_);
-                } else {
-                    persist_changes();
+        bool handled = false;
+        if (mode_ == Mode::Movement) {
+            constexpr float radius = 10.0f;
+            float best = radius * radius;
+            int hit_index = -1;
+            SDL_FPoint hit_screen{};
+            for (std::size_t i = 0; i < rel_positions_.size(); ++i) {
+                SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{
+                    rel_positions_[i].x + static_cast<float>(anchor_world.x),
+                    rel_positions_[i].y + static_cast<float>(anchor_world.y)
+                });
+                const float dx = static_cast<float>(sp.x) - screen.x;
+                const float dy = static_cast<float>(sp.y) - screen.y;
+                const float dist = dx * dx + dy * dy;
+                if (dist <= best) {
+                    best = dist;
+                    hit_index = static_cast<int>(i);
+                    hit_screen = screen;
                 }
             }
-        } else {
-
-            std::vector<SDL_FPoint> base = rel_positions_;
-            apply_frame_move_from_base(selected_index_, desired_rel, base);
-            rebuild_rel_positions();
-            const bool should_smooth = (mode_ == Mode::Movement) && smooth_enabled_ && selected_index_ > 0;
-            if (should_smooth) {
-
-                redistribute_frames_after_adjustment(selected_index_);
-            } else {
-                persist_changes();
+            if (hit_index >= 0) {
+                if (hit_index != selected_index_) {
+                    select_frame(hit_index);
+                }
+                if (adjustment_selection_.target == AdjustmentTarget::MovementPoint &&
+                    hit_index == selected_index_) {
+                    cycle_adjustment_axis();
+                } else {
+                    apply_adjustment_smoothing();
+                    select_adjustment_target(AdjustmentTarget::MovementPoint, -1, rel_positions_[hit_index], round_point(hit_screen));
+                }
+                handled = true;
             }
+        } else if (is_children_mode(mode_)) {
+            const float base_adjustment = attachment_scale();
+            if (auto hit_child = hit_test_child_marker(sp, cam, anchor_world, base_adjustment)) {
+                const int child_index = *hit_child;
+                if (child_index != selected_child_index_) {
+                    select_child(child_index);
+                }
+                if (adjustment_selection_.target == AdjustmentTarget::ChildPoint &&
+                    child_index == selected_child_index_) {
+                    cycle_adjustment_axis();
+                } else {
+                    apply_adjustment_smoothing();
+                    SDL_FPoint local = child_world_position(child_index, base_adjustment, target_->flipped);
+                    SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{
+                        local.x + static_cast<float>(anchor_world.x),
+                        local.y + static_cast<float>(anchor_world.y)
+                    });
+                    select_adjustment_target(AdjustmentTarget::ChildPoint, child_index, local, round_point(screen));
+                }
+                handled = true;
+            }
+        } else if (mode_ == Mode::AttackGeometry) {
+            if (frames_.empty()) {
+                handled = false;
+            } else {
+                const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
+                auto& frame = frames_[frame_index];
+                const std::string current_type = current_attack_type();
+                const float scale = asset_local_scale();
+                auto to_screen = [&](float lx, float plane_axis) -> SDL_FPoint {
+                    SDL_FPoint world{
+                        static_cast<float>(anchor_world.x) + lx * scale,
+                        static_cast<float>(anchor_world.y) - plane_axis * scale
+                    };
+                    return cam.map_to_screen_f(world);
+                };
+
+                constexpr float radius = kAttackNodeRadius;
+                float best = radius * radius;
+                int hit_vector = -1;
+                AdjustmentTarget hit_target = AdjustmentTarget::None;
+                SDL_FPoint hit_screen{};
+
+                int type_counter = 0;
+                for (const auto& vec : frame.attack.vectors) {
+                    if (vec.type != current_type) continue;
+                    SDL_FPoint start_screen = to_screen(vec.start_x, attack_plane_start(vec));
+                    SDL_FPoint control_screen = to_screen(vec.control_x, attack_plane_control(vec));
+                    SDL_FPoint end_screen = to_screen(vec.end_x, attack_plane_end(vec));
+                    auto try_hit = [&](const SDL_FPoint& screen, AdjustmentTarget target) {
+                        const float dx = static_cast<float>(sp.x) - screen.x;
+                        const float dy = static_cast<float>(sp.y) - screen.y;
+                        const float dist = dx * dx + dy * dy;
+                        if (dist <= best) {
+                            best = dist;
+                            hit_vector = type_counter;
+                            hit_target = target;
+                            hit_screen = screen;
+                        }
+                    };
+                    try_hit(start_screen, AdjustmentTarget::AttackStart);
+                    try_hit(control_screen, AdjustmentTarget::AttackControl);
+                    try_hit(end_screen, AdjustmentTarget::AttackEnd);
+                    ++type_counter;
+                }
+
+                if (hit_vector >= 0 && hit_target != AdjustmentTarget::None) {
+                    set_current_attack_vector_index(hit_vector);
+                    clamp_attack_selection();
+                    refresh_attack_form();
+                    if (adjustment_selection_.target == hit_target &&
+                        adjustment_selection_.attack_vector_index == hit_vector) {
+                        cycle_adjustment_axis();
+                    } else {
+                        apply_adjustment_smoothing();
+                        select_adjustment_target(hit_target, -1, SDL_FPoint{0.0f, 0.0f}, round_point(hit_screen));
+                        adjustment_selection_.attack_vector_index = hit_vector;
+                    }
+                    handled = true;
+                }
+            }
+        } else if (mode_ == Mode::HitGeometry) {
+            if (!frames_.empty()) {
+                const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
+                auto& frame = frames_[frame_index];
+                constexpr float radius = 12.0f;
+                float best = radius * radius;
+                int hit_type_index = -1;
+                SDL_FPoint hit_screen{};
+                for (const auto& box : frame.hit.boxes) {
+                    HitBoxVisual visual;
+                    if (!build_hitbox_visual(box, visual)) {
+                        continue;
+                    }
+                    const float dx = static_cast<float>(sp.x) - visual.center.x;
+                    const float dy = static_cast<float>(sp.y) - visual.center.y;
+                    const float dist = dx * dx + dy * dy;
+                    if (dist <= best) {
+                        best = dist;
+                        hit_screen = visual.center;
+                        for (std::size_t idx = 0; idx < kDamageTypeNames.size(); ++idx) {
+                            if (box.type == kDamageTypeNames[idx]) {
+                                hit_type_index = static_cast<int>(idx);
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (hit_type_index >= 0) {
+                    const bool same_target = adjustment_selection_.target == AdjustmentTarget::HitboxCenter &&
+                                             hit_type_index == selected_hitbox_type_index_;
+                    selected_hitbox_type_index_ = hit_type_index;
+                    refresh_hitbox_form();
+                    if (same_target) {
+                        cycle_adjustment_axis();
+                    } else {
+                        apply_adjustment_smoothing();
+                        select_adjustment_target(AdjustmentTarget::HitboxCenter, -1, SDL_FPoint{0.0f, 0.0f}, round_point(hit_screen));
+                    }
+                    handled = true;
+                }
+            }
+        }
+
+        if (!handled) {
+            apply_adjustment_smoothing();
+            reset_adjustment_selection();
         }
         return true;
     }
@@ -2196,6 +2344,243 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
         render_attack_geometry(renderer);
     }
 
+    if (adjustment_mode_active_ && adjustment_selection_.has_value() && assets_ && target_) {
+        const int step = std::max(1, grid_step_for_resolution(snap_resolution_r_));
+        SDL_Color axis_color{255, 60, 60, 255};
+        switch (adjustment_selection_.axis) {
+            case AdjustmentAxis::X:
+                axis_color = SDL_Color{255, 60, 60, 255};
+                break;
+            case AdjustmentAxis::Y:
+                axis_color = SDL_Color{80, 220, 80, 255};
+                break;
+            case AdjustmentAxis::Z:
+                axis_color = SDL_Color{80, 140, 255, 255};
+                break;
+        }
+
+        SDL_FPoint screen{};
+        SDL_FPoint ghost{};
+        bool has_screen = false;
+        bool has_ghost = false;
+        float axis_value = 0.0f;
+        const SDL_Point anchor_world = asset_anchor_world();
+
+        auto snap_value = [&](float value) -> float {
+            return std::round(value / static_cast<float>(step)) * static_cast<float>(step);
+        };
+
+        if (adjustment_selection_.target == AdjustmentTarget::MovementPoint &&
+            selected_index_ >= 0 && selected_index_ < static_cast<int>(frames_.size())) {
+            struct AbsPos { float x = 0.0f; float y = 0.0f; float z = 0.0f; };
+            std::vector<AbsPos> base_abs(frames_.size());
+            for (std::size_t i = 1; i < frames_.size(); ++i) {
+                base_abs[i].x = base_abs[i - 1].x + frames_[i].dx;
+                base_abs[i].y = base_abs[i - 1].y + frames_[i].dy;
+                base_abs[i].z = base_abs[i - 1].z + frames_[i].dz;
+            }
+            AbsPos current = base_abs[static_cast<std::size_t>(selected_index_)];
+            const float plane_value = is_xy_plane() ? current.y : current.z;
+            screen = cam.map_to_screen_f(SDL_FPoint{
+                static_cast<float>(anchor_world.x) + current.x,
+                static_cast<float>(anchor_world.y) + plane_value
+            });
+            has_screen = true;
+
+            AbsPos ghost_abs = current;
+            if (adjustment_selection_.axis == AdjustmentAxis::X) {
+                axis_value = current.x;
+                ghost_abs.x = snap_value(ghost_abs.x + static_cast<float>(step));
+            } else if (adjustment_selection_.axis == AdjustmentAxis::Y) {
+                axis_value = current.y;
+                ghost_abs.y = snap_value(ghost_abs.y + static_cast<float>(step));
+            } else {
+                axis_value = current.z;
+                ghost_abs.z = snap_value(ghost_abs.z + static_cast<float>(step));
+            }
+            const float ghost_plane = is_xy_plane() ? ghost_abs.y : ghost_abs.z;
+            ghost = cam.map_to_screen_f(SDL_FPoint{
+                static_cast<float>(anchor_world.x) + ghost_abs.x,
+                static_cast<float>(anchor_world.y) + ghost_plane
+            });
+            has_ghost = true;
+        } else if (adjustment_selection_.target == AdjustmentTarget::ChildPoint &&
+                   is_children_mode(mode_) && selected_index_ >= 0 &&
+                   selected_index_ < static_cast<int>(frames_.size()) &&
+                   adjustment_selection_.child_index >= 0) {
+            const auto& frame = frames_[selected_index_];
+            if (adjustment_selection_.child_index < static_cast<int>(frame.children.size())) {
+                const auto& child = frame.children[static_cast<std::size_t>(adjustment_selection_.child_index)];
+                const float base_adjustment = attachment_scale();
+                float dx = child.dx;
+                float dy = child.dy;
+                float dz = child.dz;
+                axis_value = (adjustment_selection_.axis == AdjustmentAxis::X)
+                                 ? dx
+                                 : (adjustment_selection_.axis == AdjustmentAxis::Y ? dy : dz);
+
+                float ghost_dx = dx;
+                float ghost_dy = dy;
+                float ghost_dz = dz;
+                if (adjustment_selection_.axis == AdjustmentAxis::X) {
+                    ghost_dx = snap_value(ghost_dx + static_cast<float>(step));
+                } else if (adjustment_selection_.axis == AdjustmentAxis::Y) {
+                    ghost_dy = snap_value(ghost_dy + static_cast<float>(step));
+                } else {
+                    ghost_dz = snap_value(ghost_dz + static_cast<float>(step));
+                }
+
+                const float scaled_dx = dx * base_adjustment;
+                const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
+                const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
+                screen = cam.map_to_screen_f(SDL_FPoint{
+                    static_cast<float>(anchor_world.x) + dx_world,
+                    static_cast<float>(anchor_world.y) + scaled_plane
+                });
+                has_screen = true;
+
+                const float ghost_scaled_dx = ghost_dx * base_adjustment;
+                const float ghost_plane = is_xy_plane() ? ghost_dy : ghost_dz;
+                const float ghost_scaled_plane = ghost_plane * base_adjustment;
+                const float ghost_world_dx = target_->flipped ? -ghost_scaled_dx : ghost_scaled_dx;
+                ghost = cam.map_to_screen_f(SDL_FPoint{
+                    static_cast<float>(anchor_world.x) + ghost_world_dx,
+                    static_cast<float>(anchor_world.y) + ghost_scaled_plane
+                });
+                has_ghost = true;
+            }
+        } else if ((adjustment_selection_.target == AdjustmentTarget::AttackStart ||
+                    adjustment_selection_.target == AdjustmentTarget::AttackControl ||
+                    adjustment_selection_.target == AdjustmentTarget::AttackEnd) &&
+                   !frames_.empty()) {
+            const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
+            auto& frame = frames_[frame_index];
+            const std::string current_type = current_attack_type();
+            int type_counter = 0;
+            animation_update::FrameAttackGeometry::Vector* vec = nullptr;
+            for (auto& entry : frame.attack.vectors) {
+                if (entry.type != current_type) continue;
+                if (type_counter == adjustment_selection_.attack_vector_index) {
+                    vec = &entry;
+                    break;
+                }
+                ++type_counter;
+            }
+            if (vec) {
+                const float scale = asset_local_scale();
+                auto to_screen = [&](float lx, float plane_axis) -> SDL_FPoint {
+                    SDL_FPoint world{
+                        static_cast<float>(anchor_world.x) + lx * scale,
+                        static_cast<float>(anchor_world.y) - plane_axis * scale
+                    };
+                    return cam.map_to_screen_f(world);
+                };
+
+                float x = 0.0f;
+                float y = 0.0f;
+                float z = 0.0f;
+                if (adjustment_selection_.target == AdjustmentTarget::AttackStart) {
+                    x = vec->start_x;
+                    y = vec->start_y;
+                    z = vec->start_z;
+                } else if (adjustment_selection_.target == AdjustmentTarget::AttackControl) {
+                    x = vec->control_x;
+                    y = vec->control_y;
+                    z = vec->control_z;
+                } else {
+                    x = vec->end_x;
+                    y = vec->end_y;
+                    z = vec->end_z;
+                }
+                axis_value = (adjustment_selection_.axis == AdjustmentAxis::X)
+                                 ? x
+                                 : (adjustment_selection_.axis == AdjustmentAxis::Y ? y : z);
+                const float plane_value = is_xy_plane() ? y : z;
+                screen = to_screen(x, plane_value);
+                has_screen = true;
+
+                float ghost_x = x;
+                float ghost_y = y;
+                float ghost_z = z;
+                if (adjustment_selection_.axis == AdjustmentAxis::X) {
+                    ghost_x = snap_value(ghost_x + static_cast<float>(step));
+                } else if (adjustment_selection_.axis == AdjustmentAxis::Y) {
+                    ghost_y = snap_value(ghost_y + static_cast<float>(step));
+                } else {
+                    ghost_z = snap_value(ghost_z + static_cast<float>(step));
+                }
+                const float ghost_plane = is_xy_plane() ? ghost_y : ghost_z;
+                ghost = to_screen(ghost_x, ghost_plane);
+                has_ghost = true;
+            }
+        } else if (adjustment_selection_.target == AdjustmentTarget::HitboxCenter) {
+            if (const auto* box = current_hit_box()) {
+                axis_value = (adjustment_selection_.axis == AdjustmentAxis::X)
+                                 ? box->center_x
+                                 : (adjustment_selection_.axis == AdjustmentAxis::Y ? box->center_y : box->center_z);
+                HitBoxVisual visual;
+                if (build_hitbox_visual(*box, visual)) {
+                    screen = visual.center;
+                    has_screen = true;
+                    animation_update::FrameHitGeometry::HitBox ghost_box = *box;
+                    if (adjustment_selection_.axis == AdjustmentAxis::X) {
+                        ghost_box.center_x = snap_value(ghost_box.center_x + static_cast<float>(step));
+                    } else if (adjustment_selection_.axis == AdjustmentAxis::Y) {
+                        ghost_box.center_y = snap_value(ghost_box.center_y + static_cast<float>(step));
+                    } else {
+                        ghost_box.center_z = snap_value(ghost_box.center_z + static_cast<float>(step));
+                    }
+                    HitBoxVisual ghost_visual;
+                    if (build_hitbox_visual(ghost_box, ghost_visual)) {
+                        ghost = ghost_visual.center;
+                        has_ghost = true;
+                    }
+                }
+            }
+        }
+
+        if (has_screen) {
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            const int r = 8;
+            SDL_Rect dot{ static_cast<int>(std::lround(screen.x)) - r,
+                          static_cast<int>(std::lround(screen.y)) - r,
+                          r * 2, r * 2 };
+            SDL_SetRenderDrawColor(renderer, axis_color.r, axis_color.g, axis_color.b, 200);
+            SDL_RenderDrawRect(renderer, &dot);
+
+            if (has_ghost) {
+                const int gr = 6;
+                SDL_Rect ghost_dot{ static_cast<int>(std::lround(ghost.x)) - gr,
+                                    static_cast<int>(std::lround(ghost.y)) - gr,
+                                    gr * 2, gr * 2 };
+                SDL_SetRenderDrawColor(renderer, axis_color.r, axis_color.g, axis_color.b, 120);
+                SDL_RenderDrawRect(renderer, &ghost_dot);
+            }
+
+            SDL_FPoint dir{1.0f, 0.0f};
+            if (adjustment_selection_.axis == AdjustmentAxis::Y) {
+                dir = SDL_FPoint{0.0f, -1.0f};
+            } else if (adjustment_selection_.axis == AdjustmentAxis::Z) {
+                dir = SDL_FPoint{0.7f, 0.7f};
+            }
+            const float len = 18.0f;
+            SDL_FPoint end{ screen.x + dir.x * len, screen.y + dir.y * len };
+            SDL_SetRenderDrawColor(renderer, axis_color.r, axis_color.g, axis_color.b, 220);
+            SDL_RenderDrawLineF(renderer, screen.x, screen.y, end.x, end.y);
+            SDL_RenderDrawLineF(renderer, end.x - dir.x * 4.0f + dir.y * 2.0f, end.y - dir.y * 4.0f - dir.x * 2.0f, end.x, end.y);
+            SDL_RenderDrawLineF(renderer, end.x - dir.x * 4.0f - dir.y * 2.0f, end.y - dir.y * 4.0f + dir.x * 2.0f, end.x, end.y);
+
+            const char* axis_label = (adjustment_selection_.axis == AdjustmentAxis::X)
+                                         ? "X"
+                                         : (adjustment_selection_.axis == AdjustmentAxis::Y ? "Y" : "Z");
+            std::ostringstream oss;
+            oss << axis_label << ": " << std::fixed << std::setprecision(0) << axis_value;
+            render_label(renderer, oss.str(),
+                         static_cast<int>(std::lround(screen.x)) + 12,
+                         static_cast<int>(std::lround(screen.y)) - 18);
+        }
+    }
+
     ensure_widgets();
     rebuild_layout();
 
@@ -2345,7 +2730,6 @@ void FrameEditorSession::render_toolbox(SDL_Renderer* renderer) const {
         render_if(tb_child_dy_.get());
         render_if(tb_child_deg_.get());
         render_if(cb_child_visible_.get());
-        render_if(cb_child_render_front_.get());
         render_if(btn_apply_all_children_.get());
         render_if(dd_child_mode_.get());
         render_if(tb_child_name_.get());
@@ -2477,7 +2861,6 @@ void FrameEditorSession::ensure_widgets() const {
     if (!tb_child_dy_) tb_child_dy_ = std::make_unique<DMTextBox>("Child dZ", "0");
     if (!tb_child_deg_) tb_child_deg_ = std::make_unique<DMTextBox>("Rotation", "0");
     if (!cb_child_visible_) cb_child_visible_ = std::make_unique<DMCheckbox>("Visible", true);
-    if (!cb_child_render_front_) cb_child_render_front_ = std::make_unique<DMCheckbox>("Render In Front", true);
     if (cb_grid_overlay_ && cb_grid_overlay_->value() != grid_overlay_enabled_) {
         cb_grid_overlay_->set_value(grid_overlay_enabled_);
     }
@@ -2562,7 +2945,6 @@ void FrameEditorSession::ensure_widgets() const {
     last_show_child_value_ = show_child_;
     last_totals_dx_text_ = tb_total_dx_->value();
     last_totals_dy_text_ = tb_total_dy_->value();
-    last_child_front_value_ = cb_child_render_front_ ? cb_child_render_front_->value() : true;
 }
 
 void FrameEditorSession::refresh_animation_dropdown() const {
@@ -2911,7 +3293,7 @@ void FrameEditorSession::rebuild_layout() const {
             }
 
             if (metrics.form_row_height > 0 &&
-                (tb_child_dx_ || tb_child_dy_ || tb_child_deg_ || cb_child_visible_ || cb_child_render_front_)) {
+                (tb_child_dx_ || tb_child_dy_ || tb_child_deg_ || cb_child_visible_)) {
                 const int row_top = allocate_row(metrics.form_row_height);
                 if (row_top >= 0) {
                     int tx = row_left;
@@ -2942,7 +3324,6 @@ void FrameEditorSession::rebuild_layout() const {
                         register_toolbox_widget(cb);
 };
                     place_checkbox(cb_child_visible_.get(), metrics.child_visible_checkbox_width);
-                    place_checkbox(cb_child_render_front_.get(), metrics.child_render_checkbox_width);
                 }
             }
 
@@ -3341,8 +3722,6 @@ FrameEditorSession::ChildrenToolboxMetrics FrameEditorSession::build_children_to
     const int checkbox_height = DMCheckbox::height();
     metrics.child_visible_checkbox_width = cb_child_visible_
                                                ? std::max(kChildVisibilityCheckboxMinWidth, cb_child_visible_->preferred_width()) : 0;
-    metrics.child_render_checkbox_width = cb_child_render_front_
-                                              ? std::max(kChildVisibilityCheckboxMinWidth, cb_child_render_front_->preferred_width()) : 0;
     metrics.mode_dropdown_width = dd_child_mode_ ? kChildDropdownMinWidth : 0;
     metrics.mode_row_height = dd_child_mode_ ? dd_child_mode_->preferred_height(kChildDropdownMinWidth) : 0;
     metrics.name_textbox_width = tb_child_name_ ? std::max(kChildDropdownMinWidth, kChildrenFieldWidth) : 0;
@@ -3356,9 +3735,6 @@ FrameEditorSession::ChildrenToolboxMetrics FrameEditorSession::build_children_to
                                             ? std::max(kShowChildCheckboxMinWidth, cb_show_child_->preferred_width()) : 0;
     int form_content_height = max_textbox_height;
     if (cb_child_visible_) {
-        form_content_height = std::max(form_content_height, checkbox_height);
-    }
-    if (cb_child_render_front_) {
         form_content_height = std::max(form_content_height, checkbox_height);
     }
     metrics.form_row_height = form_content_height > 0 ? form_content_height : checkbox_height;
@@ -3396,7 +3772,6 @@ FrameEditorSession::ChildrenToolboxMetrics FrameEditorSession::build_children_to
     if (tb_child_dy_) append_form(metrics.textbox_width);
     if (tb_child_deg_) append_form(metrics.textbox_width);
     if (cb_child_visible_ && metrics.child_visible_checkbox_width > 0) append_form(metrics.child_visible_checkbox_width);
-    if (cb_child_render_front_ && metrics.child_render_checkbox_width > 0) append_form(metrics.child_render_checkbox_width);
     if (form_row_width == 0) {
         metrics.form_row_height = 0;
     }
@@ -3736,7 +4111,6 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
                     child_plane_delta(d) = child_plane_delta(src);
                     d.degree = src.degree;
                     d.visible = src.visible;
-                    d.render_in_front = src.render_in_front;
                     d.has_data = true;
                 }
             }
@@ -4621,7 +4995,6 @@ void FrameEditorSession::refresh_child_assets_from_document() {
                     child.dz = 0.0f;
                     child.degree = 0.0f;
                     child.visible = true;
-                    child.render_in_front = true;
                     child.has_data = true;
                 }
             }
@@ -4760,7 +5133,6 @@ void FrameEditorSession::hydrate_frames_from_animation() {
                 child.dz = static_cast<float>(child_src.dz);
                 child.degree = child_src.degree;
                 child.visible = child_src.visible;
-                child.render_in_front = child_src.render_in_front;
                 child.has_data = true;
             }
         }
@@ -4828,7 +5200,6 @@ void FrameEditorSession::apply_frames_to_animation() {
                     child.dz = static_cast<int>(std::lround(child_src.dz));
                     child.degree = child_src.degree;
                     child.visible = child_src.visible;
-                    child.render_in_front = child_src.render_in_front;
                     dst.children.push_back(child);
                 }
             }
@@ -4889,7 +5260,6 @@ void FrameEditorSession::apply_frames_to_animation() {
                 AnimationChildFrameData sample{};
                 sample.child_index = static_cast<int>(child_idx);
                 sample.visible = false;
-                sample.render_in_front = true;
                 descriptor.frames.push_back(sample);
             } else {
                 for (const auto& movement_frame : frames_) {
@@ -5396,7 +5766,6 @@ AnimationChildFrameData FrameEditorSession::build_child_frame_descriptor(const M
     descriptor.dz = 0;
     descriptor.degree = 0.0f;
     descriptor.visible = false;
-    descriptor.render_in_front = true;
     if (child_index < frame.children.size()) {
         const ChildFrame& child = frame.children[child_index];
         if (child.has_data) {
@@ -5406,10 +5775,337 @@ AnimationChildFrameData FrameEditorSession::build_child_frame_descriptor(const M
             descriptor.dz = static_cast<int>(std::lround(child.dz));
             descriptor.degree = child.degree;
             descriptor.visible = child.visible;
-            descriptor.render_in_front = child.render_in_front;
         }
     }
     return descriptor;
+}
+
+void FrameEditorSession::reset_adjustment_selection() {
+    adjustment_selection_.reset();
+    adjustment_dirty_ = false;
+}
+
+void FrameEditorSession::exit_adjustment_mode(bool apply_smoothing) {
+    if (!adjustment_mode_active_) {
+        reset_adjustment_selection();
+        return;
+    }
+    if (apply_smoothing) {
+        apply_adjustment_smoothing();
+    }
+    adjustment_mode_active_ = false;
+    reset_adjustment_selection();
+}
+
+void FrameEditorSession::select_adjustment_target(AdjustmentTarget target,
+                                                  int child_index,
+                                                  SDL_FPoint world_pos,
+                                                  SDL_Point screen_pos) {
+    adjustment_selection_.target = target;
+    adjustment_selection_.axis = AdjustmentAxis::X;
+    adjustment_selection_.child_index = child_index;
+    adjustment_selection_.attack_vector_index = -1;
+    adjustment_selection_.world_pos = world_pos;
+    adjustment_selection_.screen_pos = screen_pos;
+    adjustment_dirty_ = false;
+}
+
+void FrameEditorSession::cycle_adjustment_axis() {
+    if (!adjustment_selection_.has_value()) {
+        return;
+    }
+    switch (adjustment_selection_.axis) {
+        case AdjustmentAxis::X:
+            adjustment_selection_.axis = AdjustmentAxis::Y;
+            break;
+        case AdjustmentAxis::Y:
+            adjustment_selection_.axis = AdjustmentAxis::Z;
+            break;
+        case AdjustmentAxis::Z:
+            adjustment_selection_.axis = AdjustmentAxis::X;
+            break;
+    }
+}
+
+void FrameEditorSession::adjust_selection_axis(int scroll_delta, const WarpedScreenGrid& cam) {
+    if (!adjustment_selection_.has_value() || scroll_delta == 0 || frames_.empty()) {
+        return;
+    }
+    (void)cam;
+    const int step = std::max(1, grid_step_for_resolution(snap_resolution_r_));
+    const float delta = static_cast<float>(step * scroll_delta);
+    auto snap_value = [&](float value) -> float {
+        const float snapped = std::round(value / static_cast<float>(step)) * static_cast<float>(step);
+        return snapped;
+    };
+
+    bool changed = false;
+    switch (adjustment_selection_.target) {
+        case AdjustmentTarget::MovementPoint: {
+            const int index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
+            if (index <= 0) {
+                break;
+            }
+            struct AbsPos {
+                float x = 0.0f;
+                float y = 0.0f;
+                float z = 0.0f;
+            };
+            std::vector<AbsPos> base_abs(frames_.size());
+            for (std::size_t i = 1; i < frames_.size(); ++i) {
+                base_abs[i].x = base_abs[i - 1].x + frames_[i].dx;
+                base_abs[i].y = base_abs[i - 1].y + frames_[i].dy;
+                base_abs[i].z = base_abs[i - 1].z + frames_[i].dz;
+            }
+            AbsPos current = base_abs[static_cast<std::size_t>(index)];
+            if (adjustment_selection_.axis == AdjustmentAxis::X) {
+                current.x = snap_value(current.x + delta);
+            } else if (adjustment_selection_.axis == AdjustmentAxis::Y) {
+                current.y = snap_value(current.y + delta);
+            } else {
+                current.z = snap_value(current.z + delta);
+            }
+
+            frames_[0].dx = 0.0f;
+            frames_[0].dy = 0.0f;
+            frames_[0].dz = 0.0f;
+
+            AbsPos prev_abs = base_abs[static_cast<std::size_t>(index - 1)];
+            frames_[index].dx = static_cast<float>(std::round(current.x - prev_abs.x));
+            frames_[index].dy = static_cast<float>(std::round(current.y - prev_abs.y));
+            frames_[index].dz = static_cast<float>(std::round(current.z - prev_abs.z));
+
+            AbsPos last_abs = current;
+            for (int j = index + 1; j < static_cast<int>(frames_.size()); ++j) {
+                const AbsPos desired = base_abs[static_cast<std::size_t>(j)];
+                frames_[j].dx = static_cast<float>(std::round(desired.x - last_abs.x));
+                frames_[j].dy = static_cast<float>(std::round(desired.y - last_abs.y));
+                frames_[j].dz = static_cast<float>(std::round(desired.z - last_abs.z));
+                last_abs = desired;
+            }
+            rebuild_rel_positions();
+            changed = true;
+            break;
+        }
+        case AdjustmentTarget::ChildPoint: {
+            if (!is_children_mode(mode_)) {
+                break;
+            }
+            auto* child = current_child_frame();
+            if (!child) {
+                break;
+            }
+            if (adjustment_selection_.axis == AdjustmentAxis::X) {
+                child->dx = snap_value(child->dx + delta);
+            } else if (adjustment_selection_.axis == AdjustmentAxis::Y) {
+                child->dy = snap_value(child->dy + delta);
+            } else {
+                child->dz = snap_value(child->dz + delta);
+            }
+            child->has_data = true;
+            changed = true;
+            break;
+        }
+        case AdjustmentTarget::AttackStart:
+        case AdjustmentTarget::AttackControl:
+        case AdjustmentTarget::AttackEnd: {
+            if (frames_.empty()) {
+                break;
+            }
+            const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
+            auto& frame = frames_[frame_index];
+            const std::string current_type = current_attack_type();
+            int type_counter = 0;
+            animation_update::FrameAttackGeometry::Vector* vec = nullptr;
+            for (auto& entry : frame.attack.vectors) {
+                if (entry.type != current_type) continue;
+                if (type_counter == adjustment_selection_.attack_vector_index) {
+                    vec = &entry;
+                    break;
+                }
+                ++type_counter;
+            }
+            if (!vec) {
+                break;
+            }
+
+            auto adjust_component = [&](float& x, float& y, float& z) {
+                if (adjustment_selection_.axis == AdjustmentAxis::X) {
+                    x = snap_value(x + delta);
+                } else if (adjustment_selection_.axis == AdjustmentAxis::Y) {
+                    y = snap_value(y + delta);
+                } else {
+                    z = snap_value(z + delta);
+                }
+            };
+            if (adjustment_selection_.target == AdjustmentTarget::AttackStart) {
+                adjust_component(vec->start_x, vec->start_y, vec->start_z);
+            } else if (adjustment_selection_.target == AdjustmentTarget::AttackControl) {
+                adjust_component(vec->control_x, vec->control_y, vec->control_z);
+            } else {
+                adjust_component(vec->end_x, vec->end_y, vec->end_z);
+            }
+            refresh_attack_form();
+            changed = true;
+            break;
+        }
+        case AdjustmentTarget::HitboxCenter: {
+            auto* box = current_hit_box();
+            if (!box) {
+                break;
+            }
+            if (adjustment_selection_.axis == AdjustmentAxis::X) {
+                box->center_x = snap_value(box->center_x + delta);
+            } else if (adjustment_selection_.axis == AdjustmentAxis::Y) {
+                box->center_y = snap_value(box->center_y + delta);
+            } else {
+                box->center_z = snap_value(box->center_z + delta);
+            }
+            refresh_hitbox_form();
+            changed = true;
+            break;
+        }
+        case AdjustmentTarget::None:
+        default:
+            break;
+    }
+
+    if (changed) {
+        adjustment_dirty_ = true;
+        persist_changes();
+    }
+}
+
+void FrameEditorSession::ensure_adjustment_auto_select(const WarpedScreenGrid& cam) {
+    if (!adjustment_mode_active_ || adjustment_selection_.has_value()) {
+        return;
+    }
+    if (!assets_ || !target_) {
+        return;
+    }
+
+    const SDL_Point anchor_world = asset_anchor_world();
+    if (mode_ == Mode::Movement) {
+        if (!rel_positions_.empty() && selected_index_ >= 0 && selected_index_ < static_cast<int>(rel_positions_.size())) {
+            SDL_FPoint rel = rel_positions_[selected_index_];
+            SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{rel.x + anchor_world.x, rel.y + anchor_world.y});
+            select_adjustment_target(AdjustmentTarget::MovementPoint, -1, rel, round_point(screen));
+        }
+        return;
+    }
+
+    if (is_children_mode(mode_) && child_assets_.size() == 1 && selected_index_ >= 0 && selected_index_ < static_cast<int>(frames_.size())) {
+        selected_child_index_ = 0;
+        const auto& frame = frames_[selected_index_];
+        if (!frame.children.empty()) {
+            const float base_adjustment = attachment_scale();
+            const SDL_Point parent_base = asset_anchor_world();
+            const auto& child = frame.children.front();
+            const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
+            const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
+            const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
+            SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{
+                dx_world + static_cast<float>(parent_base.x),
+                scaled_plane + static_cast<float>(parent_base.y)
+            });
+            select_adjustment_target(AdjustmentTarget::ChildPoint, 0, SDL_FPoint{scaled_dx, scaled_plane}, round_point(screen));
+        }
+    }
+}
+
+std::optional<int> FrameEditorSession::hit_test_child_marker(const SDL_Point& mouse,
+                                                             const WarpedScreenGrid& cam,
+                                                             SDL_Point parent_base,
+                                                             float base_adjustment) const {
+    if (!assets_ || !target_ || frames_.empty() || child_assets_.empty()) {
+        return std::nullopt;
+    }
+    const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
+    const auto& frame = frames_[frame_index];
+    if (frame.children.empty()) {
+        return std::nullopt;
+    }
+
+    constexpr float radius = 10.0f;
+    const float radius_sq = radius * radius;
+    float best = radius_sq;
+    int best_index = -1;
+    for (std::size_t i = 0; i < frame.children.size(); ++i) {
+        const auto& child = frame.children[i];
+        const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
+        const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
+        const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
+        SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{
+            dx_world + static_cast<float>(parent_base.x),
+            scaled_plane + static_cast<float>(parent_base.y)
+        });
+        const float dx = static_cast<float>(mouse.x) - screen.x;
+        const float dy = static_cast<float>(mouse.y) - screen.y;
+        const float dist = dx * dx + dy * dy;
+        if (dist <= best) {
+            best = dist;
+            best_index = static_cast<int>(i);
+        }
+    }
+    if (best_index < 0) {
+        return std::nullopt;
+    }
+    return best_index;
+}
+
+SDL_FPoint FrameEditorSession::movement_point_world_position() const {
+    if (rel_positions_.empty() || selected_index_ < 0 || selected_index_ >= static_cast<int>(rel_positions_.size())) {
+        return SDL_FPoint{0.0f, 0.0f};
+    }
+    return rel_positions_[selected_index_];
+}
+
+SDL_FPoint FrameEditorSession::child_world_position(int child_index, float base_adjustment, bool flipped) const {
+    if (frames_.empty() || selected_index_ < 0 || selected_index_ >= static_cast<int>(frames_.size())) {
+        return SDL_FPoint{0.0f, 0.0f};
+    }
+    const auto& frame = frames_[selected_index_];
+    if (child_index < 0 || child_index >= static_cast<int>(frame.children.size())) {
+        return SDL_FPoint{0.0f, 0.0f};
+    }
+    const auto& child = frame.children[static_cast<std::size_t>(child_index)];
+    const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
+    const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
+    const float dx_world = flipped ? -scaled_dx : scaled_dx;
+    return SDL_FPoint{dx_world, scaled_plane};
+}
+
+void FrameEditorSession::apply_adjustment_smoothing() {
+    if (!adjustment_selection_.has_value() || !adjustment_dirty_) {
+        adjustment_dirty_ = false;
+        return;
+    }
+    switch (adjustment_selection_.target) {
+        case AdjustmentTarget::MovementPoint:
+            if (mode_ == Mode::Movement && smooth_enabled_ && selected_index_ > 0) {
+                redistribute_frames_after_adjustment(selected_index_);
+            } else {
+                persist_changes();
+            }
+            break;
+        case AdjustmentTarget::ChildPoint:
+            if (is_children_mode(mode_) && smooth_enabled_ && selected_index_ > 0) {
+                smooth_child_offsets(selected_child_index_, selected_index_);
+            } else {
+                persist_changes();
+            }
+            break;
+        case AdjustmentTarget::AttackStart:
+        case AdjustmentTarget::AttackControl:
+        case AdjustmentTarget::AttackEnd:
+        case AdjustmentTarget::HitboxCenter:
+            persist_changes();
+            break;
+        case AdjustmentTarget::None:
+        default:
+            break;
+    }
+    adjustment_dirty_ = false;
 }
 
 void FrameEditorSession::persist_mode_changes(Mode mode) {

@@ -28,7 +28,6 @@ void FrameEditorSession::sync_child_frames() {
         for (std::size_t i = 0; i < normalized.size(); ++i) {
             normalized[i].child_index = static_cast<int>(i);
             normalized[i].visible = false;
-            normalized[i].render_in_front = true;
             normalized[i].has_data = false;
         }
         for (const auto& existing : frame.children) {
@@ -73,7 +72,6 @@ void FrameEditorSession::ensure_child_frames_initialized() {
                 child.has_data = true;
             } else if (!child.has_data && !has_last[i]) {
                 child.visible = false;
-                child.render_in_front = true;
                 child.dx = 0.0f;
                 child.dy = 0.0f;
                 child.degree = 0.0f;
@@ -171,7 +169,6 @@ FrameEditorSession::ChildFrame FrameEditorSession::child_frame_from_timeline_sam
     child.dz = 0.0f;
     child.degree = 0.0f;
     child.visible = false;
-    child.render_in_front = true;
     child.has_data = false;
 
     if (sample.is_object()) {
@@ -189,20 +186,17 @@ FrameEditorSession::ChildFrame FrameEditorSession::child_frame_from_timeline_sam
             child.degree = read_float(sample["rotation"], 0.0f);
         }
         if (sample.contains("visible")) child.visible = read_bool(sample["visible"], child.visible);
-        if (sample.contains("render_in_front")) child.render_in_front = read_bool(sample["render_in_front"], child.render_in_front);
         child.has_data = true;
     } else if (sample.is_array()) {
         if (!sample.empty()) child.dx = static_cast<float>(read_int(sample[0], 0));
         if (sample.size() > 1) child.dy = static_cast<float>(read_int(sample[1], 0));
-        if (sample.size() > 2 && sample.size() >= 6) {
+        if (sample.size() > 2 && sample[2].is_number()) {
             child.dz = static_cast<float>(read_int(sample[2], 0));
             if (sample.size() > 3) child.degree = read_float(sample[3], 0.0f);
             if (sample.size() > 4) child.visible = read_bool(sample[4], child.visible);
-            if (sample.size() > 5) child.render_in_front = read_bool(sample[5], child.render_in_front);
         } else {
             if (sample.size() > 2) child.degree = read_float(sample[2], 0.0f);
             if (sample.size() > 3) child.visible = read_bool(sample[3], child.visible);
-            if (sample.size() > 4) child.render_in_front = read_bool(sample[4], child.render_in_front);
             child.dz = child.dy;
             child.dy = 0.0f;
         }
@@ -219,7 +213,6 @@ nlohmann::json FrameEditorSession::child_frame_to_json(const ChildFrame& frame) 
     sample["dz"] = has_sample ? static_cast<int>(std::lround(frame.dz)) : 0;
     sample["degree"] = has_sample ? static_cast<double>(frame.degree) : 0.0;
     sample["visible"] = has_sample ? frame.visible : false;
-    sample["render_in_front"] = has_sample ? frame.render_in_front : true;
     return sample;
 }
 
@@ -339,7 +332,6 @@ nlohmann::json FrameEditorSession::build_child_timelines_payload(const nlohmann:
                 ChildFrame sample{};
                 sample.child_index = static_cast<int>(child_idx);
                 sample.visible = false;
-                sample.render_in_front = true;
                 frames.push_back(child_frame_to_json(sample));
             }
             entry["frames"] = std::move(frames);

@@ -47,6 +47,25 @@ struct ChildPreviewContext {
 class FrameEditorSession {
 public:
     enum class Mode { Movement, StaticChildren, AsyncChildren, AttackGeometry, HitGeometry };
+    enum class AdjustmentAxis { X, Y, Z };
+    enum class AdjustmentTarget { None, MovementPoint, ChildPoint, AttackStart, AttackControl, AttackEnd, HitboxCenter };
+    struct AdjustmentSelection {
+        AdjustmentTarget target = AdjustmentTarget::None;
+        AdjustmentAxis axis = AdjustmentAxis::X;
+        int child_index = -1;
+        int attack_vector_index = -1;
+        SDL_FPoint world_pos{};
+        SDL_Point screen_pos{};
+        bool has_value() const { return target != AdjustmentTarget::None; }
+        void reset() {
+            target = AdjustmentTarget::None;
+            axis = AdjustmentAxis::X;
+            child_index = -1;
+            attack_vector_index = -1;
+            world_pos = SDL_FPoint{0.0f, 0.0f};
+            screen_pos = SDL_Point{0, 0};
+        }
+    };
     enum class EditPlane { XY, XZ };
     static inline constexpr std::array<const char*, 3> kDamageTypeNames = {
         "projectile", "melee", "explosion"
@@ -116,7 +135,6 @@ FRAME_EDITOR_ACCESS:
         float dz = 0.0f;
         float degree = 0.0f;
         bool visible = true;
-        bool render_in_front = true;
         bool has_data = false;
 };
     struct MovementFrame {
@@ -159,6 +177,9 @@ FRAME_EDITOR_ACCESS:
     int selected_child_index_ = 0;
     EditPlane edit_plane_ = EditPlane::XZ;
     bool grid_overlay_enabled_ = true;
+    bool adjustment_mode_active_ = false;
+    bool adjustment_dirty_ = false;
+    AdjustmentSelection adjustment_selection_;
 
     bool prev_realism_enabled_ = true;
     bool prev_parallax_enabled_ = true;
@@ -200,7 +221,6 @@ FRAME_EDITOR_ACCESS:
     mutable std::unique_ptr<class DMTextBox> tb_child_dy_;
     mutable std::unique_ptr<class DMTextBox> tb_child_deg_;
     mutable std::unique_ptr<class DMCheckbox> cb_child_visible_;
-    mutable std::unique_ptr<class DMCheckbox> cb_child_render_front_;
 
     mutable std::unique_ptr<class DMDropdown> dd_hitbox_type_;
     mutable std::unique_ptr<class DMButton> btn_hitbox_add_remove_;
@@ -236,7 +256,6 @@ FRAME_EDITOR_ACCESS:
     mutable std::string last_child_name_text_{};
     mutable int last_child_mode_index_ = 0;
     mutable bool last_child_visible_value_ = false;
-    mutable bool last_child_front_value_ = true;
     mutable bool cb_show_anim_targets_parent_label_ = false;
     mutable std::string last_hit_center_x_text_{};
     mutable std::string last_hit_center_y_text_{};
@@ -439,7 +458,6 @@ FRAME_EDITOR_ACCESS:
         int child_dy_height = 0;
         int child_rotation_height = 0;
         int child_visible_checkbox_width = 0;
-        int child_render_checkbox_width = 0;
         int show_parent_checkbox_width = 0;
         int show_child_checkbox_width = 0;
 
@@ -522,6 +540,16 @@ FRAME_EDITOR_ACCESS:
     static nlohmann::json child_frame_to_json(const ChildFrame& frame);
     static bool timeline_entry_is_static(const nlohmann::json& entry);
     AnimationChildFrameData build_child_frame_descriptor(const MovementFrame& frame, std::size_t child_index) const;
+    void reset_adjustment_selection();
+    void exit_adjustment_mode(bool apply_smoothing = true);
+    void select_adjustment_target(AdjustmentTarget target, int child_index, SDL_FPoint world_pos, SDL_Point screen_pos);
+    void cycle_adjustment_axis();
+    void adjust_selection_axis(int scroll_delta, const WarpedScreenGrid& cam);
+    void ensure_adjustment_auto_select(const WarpedScreenGrid& cam);
+    std::optional<int> hit_test_child_marker(const SDL_Point& mouse, const WarpedScreenGrid& cam, SDL_Point parent_base, float base_adjustment) const;
+    SDL_FPoint movement_point_world_position() const;
+    SDL_FPoint child_world_position(int child_index, float base_adjustment, bool flipped) const;
+    void apply_adjustment_smoothing();
 };
 
 inline std::vector<FrameEditorSession::MovementFrame>
@@ -707,7 +735,7 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                     if (child_entry.size() > 2 && child_entry[2].is_number()) {
                         child.dy = static_cast<float>(child_entry[2].get<double>());
                     }
-                    if (child_entry.size() > 3 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                    if (child_entry.size() > 3 && child_entry[3].is_number()) {
                         child.dz = static_cast<float>(child_entry[3].get<double>());
                         if (child_entry.size() > 4 && child_entry[4].is_number()) {
                             child.degree = static_cast<float>(child_entry[4].get<double>());
@@ -719,13 +747,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                                 child.visible = child_entry[5].get<int>() != 0;
                             }
                         }
-                        if (child_entry.size() > 6) {
-                            if (child_entry[6].is_boolean()) {
-                                child.render_in_front = child_entry[6].get<bool>();
-                            } else if (child_entry[6].is_number_integer()) {
-                                child.render_in_front = child_entry[6].get<int>() != 0;
-                            }
-                        }
                     } else {
                         if (child_entry.size() > 3 && child_entry[3].is_number()) {
                             child.degree = static_cast<float>(child_entry[3].get<double>());
@@ -735,13 +756,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                                 child.visible = child_entry[4].get<bool>();
                             } else if (child_entry[4].is_number_integer()) {
                                 child.visible = child_entry[4].get<int>() != 0;
-                            }
-                        }
-                        if (child_entry.size() > 5) {
-                            if (child_entry[5].is_boolean()) {
-                                child.render_in_front = child_entry[5].get<bool>();
-                            } else if (child_entry[5].is_number_integer()) {
-                                child.render_in_front = child_entry[5].get<int>() != 0;
                             }
                         }
                         child.dz = child.dy;
@@ -776,7 +790,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                             child.degree = 0.0f;
                         }
                         child.visible = child_entry.value("visible", true);
-                        child.render_in_front = child_entry.value("render_in_front", true);
                         child.has_data = true;
                     } else if (child_entry.is_array()) {
                         try { child.child_index = child_entry[0].get<int>(); } catch (...) { child.child_index = -1; }
@@ -786,7 +799,7 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                         if (child_entry.size() > 2 && child_entry[2].is_number()) {
                             child.dy = static_cast<float>(child_entry[2].get<double>());
                         }
-                        if (child_entry.size() > 3 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                        if (child_entry.size() > 3 && child_entry[3].is_number()) {
                             child.dz = static_cast<float>(child_entry[3].get<double>());
                             if (child_entry.size() > 4 && child_entry[4].is_number()) {
                                 child.degree = static_cast<float>(child_entry[4].get<double>());
@@ -798,13 +811,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                                     child.visible = child_entry[5].get<int>() != 0;
                                 }
                             }
-                            if (child_entry.size() > 6) {
-                                if (child_entry[6].is_boolean()) {
-                                    child.render_in_front = child_entry[6].get<bool>();
-                                } else if (child_entry[6].is_number_integer()) {
-                                    child.render_in_front = child_entry[6].get<int>() != 0;
-                                }
-                            }
                         } else {
                             if (child_entry.size() > 3 && child_entry[3].is_number()) {
                                 child.degree = static_cast<float>(child_entry[3].get<double>());
@@ -814,13 +820,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                                     child.visible = child_entry[4].get<bool>();
                                 } else if (child_entry[4].is_number_integer()) {
                                     child.visible = child_entry[4].get<int>() != 0;
-                                }
-                            }
-                            if (child_entry.size() > 5) {
-                                if (child_entry[5].is_boolean()) {
-                                    child.render_in_front = child_entry[5].get<bool>();
-                                } else if (child_entry[5].is_number_integer()) {
-                                    child.render_in_front = child_entry[5].get<int>() != 0;
                                 }
                             }
                             child.dz = child.dy;

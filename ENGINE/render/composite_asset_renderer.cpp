@@ -297,13 +297,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                           world_z_offset);
 };
 
-    for (const auto& child_attachment : asset->animation_children()) {
-        if (child_attachment.render_in_front) {
-            continue;
-        }
-        emit_child(child_attachment);
-    }
-
     SDL_Texture* base_tex = nullptr;
 
     if (asset->info) {
@@ -349,9 +342,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
     }
 
     for (const auto& child_attachment : asset->animation_children()) {
-        if (!child_attachment.render_in_front) {
-            continue;
-        }
         emit_child(child_attachment);
     }
 

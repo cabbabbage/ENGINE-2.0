@@ -10,6 +10,8 @@ vcpkg/
 vcpkg_installed/
 key.txt
 release/
+Tasks/
+.clinerules/
 Demo and Tutorial.mp4
 *.exe
 # Visual Studio build output

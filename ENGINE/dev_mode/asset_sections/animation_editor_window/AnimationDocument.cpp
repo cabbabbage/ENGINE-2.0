@@ -100,7 +100,7 @@ std::string sanitize_child_mode_string(const nlohmann::json& entry) {
 }
 
 nlohmann::json default_child_frame_json() {
-    return nlohmann::json{{"dx", 0}, {"dy", 0}, {"degree", 0.0}, {"visible", false}, {"render_in_front", true}};
+    return nlohmann::json{{"dx", 0}, {"dy", 0}, {"dz", 0}, {"degree", 0.0}, {"visible", false}};
 }
 
 nlohmann::json normalize_child_frame_json(const nlohmann::json& sample) {
@@ -108,19 +108,30 @@ nlohmann::json normalize_child_frame_json(const nlohmann::json& sample) {
     if (sample.is_object()) {
         normalized["dx"] = parse_int(sample.value("dx", normalized["dx"].get<int>()), normalized["dx"].get<int>());
         normalized["dy"] = parse_int(sample.value("dy", normalized["dy"].get<int>()), normalized["dy"].get<int>());
+        normalized["dz"] = parse_int(sample.value("dz", normalized["dz"].get<int>()), normalized["dz"].get<int>());
+        if (!sample.contains("dz")) {
+            normalized["dz"] = normalized["dy"];
+            normalized["dy"] = 0;
+        }
         if (sample.contains("degree")) {
             normalized["degree"] = parse_float(sample["degree"], static_cast<float>(normalized["degree"].get<double>()));
         } else if (sample.contains("rotation")) {
             normalized["degree"] = parse_float(sample["rotation"], static_cast<float>(normalized["degree"].get<double>()));
         }
         normalized["visible"] = parse_bool(sample.value("visible", normalized["visible"]), normalized["visible"].get<bool>());
-        normalized["render_in_front"] = parse_bool(sample.value("render_in_front", sample.value("front", normalized["render_in_front"])), normalized["render_in_front"].get<bool>());
     } else if (sample.is_array()) {
         if (!sample.empty()) normalized["dx"] = parse_int(sample[0], normalized["dx"].get<int>());
         if (sample.size() > 1) normalized["dy"] = parse_int(sample[1], normalized["dy"].get<int>());
-        if (sample.size() > 2) normalized["degree"] = parse_float(sample[2], static_cast<float>(normalized["degree"].get<double>()));
-        if (sample.size() > 3) normalized["visible"] = parse_bool(sample[3], normalized["visible"].get<bool>());
-        if (sample.size() > 4) normalized["render_in_front"] = parse_bool(sample[4], normalized["render_in_front"].get<bool>());
+        if (sample.size() > 2 && sample[2].is_number()) {
+            normalized["dz"] = parse_int(sample[2], normalized["dz"].get<int>());
+            if (sample.size() > 3) normalized["degree"] = parse_float(sample[3], static_cast<float>(normalized["degree"].get<double>()));
+            if (sample.size() > 4) normalized["visible"] = parse_bool(sample[4], normalized["visible"].get<bool>());
+        } else {
+            if (sample.size() > 2) normalized["degree"] = parse_float(sample[2], static_cast<float>(normalized["degree"].get<double>()));
+            if (sample.size() > 3) normalized["visible"] = parse_bool(sample[3], normalized["visible"].get<bool>());
+            normalized["dz"] = normalized["dy"];
+            normalized["dy"] = 0;
+        }
     }
     return normalized;
 }
@@ -1185,13 +1196,9 @@ bool ensure_child_entries(nlohmann::json& movement_entry, std::size_t child_coun
             ensure_index(0, idx);
             ensure_index(1, 0);
             ensure_index(2, 0);
-            ensure_index(3, 0.0);
-            ensure_index(4, true);
+            ensure_index(3, 0);
+            ensure_index(4, 0.0);
             ensure_index(5, true);
-            if (!entry[4].is_boolean()) {
-                entry[4] = true;
-                changed = true;
-            }
             if (!entry[5].is_boolean()) {
                 entry[5] = true;
                 changed = true;
@@ -1203,10 +1210,6 @@ bool ensure_child_entries(nlohmann::json& movement_entry, std::size_t child_coun
             }
             if (!entry.contains("visible") || !entry["visible"].is_boolean()) {
                 entry["visible"] = true;
-                changed = true;
-            }
-            if (!entry.contains("render_in_front") || !entry["render_in_front"].is_boolean()) {
-                entry["render_in_front"] = true;
                 changed = true;
             }
             if (!entry.contains("dx")) {

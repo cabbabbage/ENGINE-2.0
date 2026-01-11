@@ -119,6 +119,9 @@
             </Array>
           </mxGeometry>
         </mxCell>
+        <mxCell id="341" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#1f3f72;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;AssetsManager&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Central coordinator that manages all assets, rendering, world grid, lighting, and game state throughout the runtime lifecycle.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="2325" y="2576" as="geometry" />
+        </mxCell>
         <mxCell id="43" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#166534;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;Asset&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Runtime object that carries position, animation, render caches, controller, and child references so the engine can update and draw it.&lt;/span&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="188" width="311" x="2325" y="2276" as="geometry" />
         </mxCell>
@@ -453,6 +456,9 @@
         </mxCell>
         <mxCell id="146" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#4d7c0f;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;spawn_group&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Spawn configuration block controlling how groups of assets spread across the map.&lt;/span&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="220" width="260" x="4119" y="3215" as="geometry" />
+        </mxCell>
+        <mxCell id="342" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#4d7c0f;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;AssetSpawner&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Executes spawn operations across rooms and areas, handling asset placement, boundary constraints, and child attachment spawning.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="4119" y="3535" as="geometry" />
         </mxCell>
         <mxCell id="147" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#d9f99d;strokeColor=#c96b05;fontColor=#2f1b0c;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;expansion_ratio&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Ratio the group uses to grow spawn radius as assets spawn.&lt;/span&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="110" width="220" x="3779" y="1255" as="geometry" />
@@ -1798,6 +1804,9 @@
         </mxCell>
         <mxCell id="r-J4RqB1GObzojSzGF0T-345" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#5b21b6;strokeColor=#0f172a;fontColor=#f8fafc;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;RENDERER&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Visual label denoting the renderer section of the diagram.&lt;/span&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="420" width="420" x="5839" y="2005" as="geometry" />
+        </mxCell>
+        <mxCell id="343" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#5b21b6;strokeColor=#0f172a;fontColor=#f8fafc;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;CompositeAssetRenderer&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Manages the rendering pipeline for composite assets, handling flicker effects and local bounds calculation for proper asset compositing.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="5839" y="2455" as="geometry" />
         </mxCell>
         <mxCell id="r-J4RqB1GObzojSzGF0T-347" edge="1" parent="1" source="128" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.667;entryY=0.014;entryDx=0;entryDy=0;entryPerimeter=0;noEdgeStyle=1;orthogonal=1;" target="r-J4RqB1GObzojSzGF0T-345">
           <mxGeometry relative="1" as="geometry">

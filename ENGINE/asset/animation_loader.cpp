@@ -117,7 +117,6 @@ AnimationChildFrameData make_default_child_frame(int child_index) {
         sample.dz = 0;
         sample.degree = 0.0f;
         sample.visible = false;
-        sample.render_in_front = true;
         return sample;
 }
 
@@ -126,7 +125,7 @@ AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int
         if (node.is_object()) {
                 sample.dx = json_int(node.value("dx", 0), 0);
                 sample.dy = json_int(node.value("dy", 0), 0);
-                sample.dz = json_int(node.value("dz", 0), 0);
+                sample.dz = json_int(node.value("dz", node.value("dy", 0)), 0);
                 if (!node.contains("dz")) {
                         sample.dz = sample.dy;
                         sample.dy = 0;
@@ -137,7 +136,6 @@ AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int
                         sample.degree = json_float(node["rotation"], 0.0f);
                 }
                 sample.visible = json_bool(node.value("visible", sample.visible), sample.visible);
-                sample.render_in_front = json_bool(node.value("render_in_front", node.value("front", sample.render_in_front)), sample.render_in_front);
         } else if (node.is_array()) {
                 if (!node.empty() && node[0].is_number()) {
                         sample.dx = json_int(node[0], 0);
@@ -145,16 +143,13 @@ AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int
                 if (node.size() > 1 && node[1].is_number()) {
                         sample.dy = json_int(node[1], 0);
                 }
-                if (node.size() > 2 && node[2].is_number() && node.size() >= 6) {
-                        sample.dz = json_int(node[2], 0);
-                        if (node.size() > 3 && node[3].is_number()) {
-                                sample.degree = json_float(node[3], 0.0f);
-                        }
-                        if (node.size() > 4) {
-                                sample.visible = json_bool(node[4], sample.visible);
+                if (node.size() > 3 && node[3].is_number()) {
+                        sample.dz = json_int(node[3], 0);
+                        if (node.size() > 4 && node[4].is_number()) {
+                                sample.degree = json_float(node[4], 0.0f);
                         }
                         if (node.size() > 5) {
-                                sample.render_in_front = json_bool(node[5], sample.render_in_front);
+                                sample.visible = json_bool(node[5], sample.visible);
                         }
                 } else {
                         if (node.size() > 2 && node[2].is_number()) {
@@ -162,9 +157,6 @@ AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int
                         }
                         if (node.size() > 3) {
                                 sample.visible = json_bool(node[3], sample.visible);
-                        }
-                        if (node.size() > 4) {
-                                sample.render_in_front = json_bool(node[4], sample.render_in_front);
                         }
                         sample.dz = sample.dy;
                         sample.dy = 0;
@@ -679,31 +671,22 @@ void AnimationLoader::load(Animation& animation,
                                                                 try { child_data.degree = static_cast<float>(child_entry["rotation"].get<double>()); } catch (...) { child_data.degree = 0.0f; }
                                                         }
                                                         child_data.visible = child_entry.value("visible", true);
-                                                        child_data.render_in_front = child_entry.value("render_in_front", true);
                                                 } else if (child_entry.is_array() && !child_entry.empty()) {
                                                         try { child_data.child_index = child_entry[0].get<int>(); } catch (...) { child_data.child_index = -1; }
                                                         if (child_entry.size() >= 2 && child_entry[1].is_number()) { try { child_data.dx = child_entry[1].get<int>(); } catch (...) { child_data.dx = 0; } }
                                                         if (child_entry.size() >= 3 && child_entry[2].is_number()) { try { child_data.dy = child_entry[2].get<int>(); } catch (...) { child_data.dy = 0; } }
-                                                        if (child_entry.size() >= 4 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                                                        if (child_entry.size() >= 4 && child_entry[3].is_number()) {
                                                                 try { child_data.dz = child_entry[3].get<int>(); } catch (...) { child_data.dz = 0; }
                                                                 if (child_entry.size() >= 5 && child_entry[4].is_number()) { try { child_data.degree = static_cast<float>(child_entry[4].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
                                                                 if (child_entry.size() >= 6) {
                                                                         if (child_entry[5].is_boolean()) child_data.visible = child_entry[5].get<bool>();
                                                                         else if (child_entry[5].is_number_integer()) child_data.visible = child_entry[5].get<int>() != 0;
                                                                 }
-                                                                if (child_entry.size() >= 7) {
-                                                                        if (child_entry[6].is_boolean()) child_data.render_in_front = child_entry[6].get<bool>();
-                                                                        else if (child_entry[6].is_number_integer()) child_data.render_in_front = child_entry[6].get<int>() != 0;
-                                                                }
                                                         } else {
                                                                 if (child_entry.size() >= 4 && child_entry[3].is_number()) { try { child_data.degree = static_cast<float>(child_entry[3].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
                                                                 if (child_entry.size() >= 5) {
                                                                         if (child_entry[4].is_boolean()) child_data.visible = child_entry[4].get<bool>();
                                                                         else if (child_entry[4].is_number_integer()) child_data.visible = child_entry[4].get<int>() != 0;
-                                                                }
-                                                                if (child_entry.size() >= 6) {
-                                                                        if (child_entry[5].is_boolean()) child_data.render_in_front = child_entry[5].get<bool>();
-                                                                        else if (child_entry[5].is_number_integer()) child_data.render_in_front = child_entry[5].get<int>() != 0;
                                                                 }
                                                                 child_data.dz = child_data.dy;
                                                                 child_data.dy = 0;
@@ -761,26 +744,18 @@ void AnimationLoader::load(Animation& animation,
                                         try { child_data.child_index = child_entry[0].get<int>(); } catch (...) { child_data.child_index = -1; }
                                         if (child_entry.size() >= 2 && child_entry[1].is_number()) { try { child_data.dx = child_entry[1].get<int>(); } catch (...) { child_data.dx = 0; } }
                                         if (child_entry.size() >= 3 && child_entry[2].is_number()) { try { child_data.dy = child_entry[2].get<int>(); } catch (...) { child_data.dy = 0; } }
-                                        if (child_entry.size() >= 4 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                                        if (child_entry.size() >= 4 && child_entry[3].is_number()) {
                                                 try { child_data.dz = child_entry[3].get<int>(); } catch (...) { child_data.dz = 0; }
                                                 if (child_entry.size() >= 5 && child_entry[4].is_number()) { try { child_data.degree = static_cast<float>(child_entry[4].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
                                                 if (child_entry.size() >= 6) {
                                                         if (child_entry[5].is_boolean()) child_data.visible = child_entry[5].get<bool>();
                                                         else if (child_entry[5].is_number_integer()) child_data.visible = child_entry[5].get<int>() != 0;
                                                 }
-                                                if (child_entry.size() >= 7) {
-                                                        if (child_entry[6].is_boolean()) child_data.render_in_front = child_entry[6].get<bool>();
-                                                        else if (child_entry[6].is_number_integer()) child_data.render_in_front = child_entry[6].get<int>() != 0;
-                                                }
                                         } else {
                                                 if (child_entry.size() >= 4 && child_entry[3].is_number()) { try { child_data.degree = static_cast<float>(child_entry[3].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
                                                 if (child_entry.size() >= 5) {
                                                         if (child_entry[4].is_boolean()) child_data.visible = child_entry[4].get<bool>();
                                                         else if (child_entry[4].is_number_integer()) child_data.visible = child_entry[4].get<int>() != 0;
-                                                }
-                                                if (child_entry.size() >= 6) {
-                                                        if (child_entry[5].is_boolean()) child_data.render_in_front = child_entry[5].get<bool>();
-                                                        else if (child_entry[5].is_number_integer()) child_data.render_in_front = child_entry[5].get<int>() != 0;
                                                 }
                                                 child_data.dz = child_data.dy;
                                                 child_data.dy = 0;

@@ -105,9 +105,6 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
 
     if (delta.x != 0 || delta.y != 0) {
         self->pos = to;
-        if (!frame || frame->z_resort) {
-            up.refresh_z_index();
-        }
         up.mark_progress_toward_checkpoints();
     }
 

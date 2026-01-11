@@ -440,6 +440,14 @@ void SceneRenderer::set_dark_mask_enabled(bool enabled) {
     }
 }
 
+void SceneRenderer::set_movement_debug_enabled(bool enabled) {
+    debug_auto_paths_ = enabled;
+}
+
+void SceneRenderer::set_movement_debug_visible(bool visible) {
+    movement_debug_visible_ = visible;
+}
+
 void SceneRenderer::render() {
     if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
@@ -451,6 +459,14 @@ void SceneRenderer::render() {
     world::WorldGrid& grid = assets_->world_grid();
     cam.rebuild_grid(grid, assets_->frame_delta_seconds());
     assets_->rebuild_active_from_screen_grid();
+
+    const auto& render_assets = assets_->getActive();
+    for (Asset* asset : render_assets) {
+        if (!asset || !asset->info) {
+            continue;
+        }
+        asset->update_scale_values();
+    }
 
     SDL_SetRenderTarget(renderer_, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -467,17 +483,9 @@ void SceneRenderer::render() {
     const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
-    const auto& active_assets = assets_->getActive();
-    std::vector<Asset*> sorted_assets(active_assets.begin(), active_assets.end());
-    std::sort(sorted_assets.begin(), sorted_assets.end(), [&](Asset* a, Asset* b) {
-        world::GridPoint* ga = cam.grid_point_for_asset(a);
-        world::GridPoint* gb = cam.grid_point_for_asset(b);
-        if (!ga || !gb) return ga > gb;
-        return ga->distance_to_camera > gb->distance_to_camera;
-    });
     std::vector<DarkMaskSprite> dark_mask_sprites;
-    dark_mask_sprites.reserve(std::max<std::size_t>(sorted_assets.size(), 8u));
-    for (Asset* asset : sorted_assets) {
+    dark_mask_sprites.reserve(std::max<std::size_t>(render_assets.size(), 8u));
+    for (Asset* asset : render_assets) {
         if (!asset || asset->is_hidden() || !asset->info) {
             continue;
         }
@@ -538,7 +546,7 @@ void SceneRenderer::render() {
         render_dynamic_darkness_overlay(map_light_opacity_, dark_mask_sprites);
     }
 
-    if (debug_auto_paths_) {
+    if (debug_auto_paths_ && movement_debug_visible_) {
         static const std::array<SDL_Color, 6> kPathColors{{
             SDL_Color{255, 99, 71, 255},
             SDL_Color{50, 205, 50, 255},
@@ -549,7 +557,7 @@ void SceneRenderer::render() {
         }};
 
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-        for (Asset* asset : sorted_assets) {
+        for (Asset* asset : render_assets) {
             if (!asset || asset->is_hidden() || !asset->info || !asset->anim_) {
                 continue;
             }

@@ -67,7 +67,6 @@ class AssetInfoUI {
     bool is_point_inside(int x, int y) const;
     SDL_Renderer* get_last_renderer() const { return last_renderer_; }
     void refresh_target_asset_scale();
-    void sync_target_z_threshold();
     void sync_target_tiling_state();
     void request_apply_section(AssetInfoSectionId section_id);
     void set_header_visibility_callback(std::function<void(bool)> cb);

@@ -61,8 +61,6 @@ private:
     void update_section_header_labels();
     void sync_ui_from_json();
     void sync_json_from_ui();
-    void sync_chunk_slider_from_json();
-    void persist_chunk_resolution();
     void load_update_map_light_setting();
     nlohmann::json& ensure_light();
     struct OrbitSettings {
@@ -119,8 +117,6 @@ private:
     std::unique_ptr<DMSlider> orbit_x_;
     std::unique_ptr<DMSlider> orbit_y_;
     std::unique_ptr<DMSlider> update_interval_;
-    std::unique_ptr<DMSlider> chunk_resolution_;
-    int chunk_resolution_value_ = 0;
 
     class OrbitKeyWidget;
     class SectionToggleWidget;

@@ -389,6 +389,7 @@ nlohmann::json snapshot_from_asset_info(const AssetInfo& info) {
 namespace animation_editor {
 
 AnimationEditorWindow::AnimationEditorWindow() {
+    live_frame_editor_token_ = std::make_shared<LiveFrameEditorToken>();
     document_ = std::make_shared<AnimationDocument>();
     document_->set_on_saved_callback([this]() { this->handle_document_saved(); });
     preview_provider_ = std::make_shared<PreviewProvider>();
@@ -420,6 +421,7 @@ AnimationEditorWindow::~AnimationEditorWindow() {
     if (document_) {
         document_->set_on_saved_callback(nullptr);
     }
+    invalidate_inspector_background_cache();
 }
 
 void AnimationEditorWindow::set_visible(bool visible, bool process_close) {
@@ -737,6 +739,16 @@ void AnimationEditorWindow::layout_children() {
     if (list_panel_) list_panel_->set_bounds(list_rect_);
     if (inspector_panel_) inspector_panel_->set_bounds(inspector_rect_);
 
+    invalidate_inspector_background_cache();
+
+}
+
+void AnimationEditorWindow::invalidate_inspector_background_cache() {
+    if (inspector_background_cache_) {
+        SDL_DestroyTexture(inspector_background_cache_);
+        inspector_background_cache_ = nullptr;
+    }
+    inspector_background_dirty_ = true;
 }
 
 void AnimationEditorWindow::configure_list_panel() {
@@ -1230,18 +1242,51 @@ void AnimationEditorWindow::render_inspector(SDL_Renderer* renderer) const {
         return;
     }
 
+    render_inspector_background(renderer);
+
     if (inspector_panel_ && selected_animation_id_) {
         inspector_panel_->render(renderer);
         return;
     }
 
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    animation_editor::ui::draw_panel_background(renderer, inspector_rect_);
-
     std::string message = "Select an animation to edit.";
     int text_x = inspector_rect_.x + DMSpacing::panel_padding();
     int text_y = inspector_rect_.y + DMSpacing::panel_padding();
     render_label(renderer, message, text_x, text_y);
+}
+
+void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) const {
+    if (!renderer) return;
+    if (inspector_rect_.w <= 0 || inspector_rect_.h <= 0) {
+        return;
+    }
+
+    if (!inspector_background_dirty_ &&
+        inspector_background_cache_ &&
+        inspector_background_cache_rect_.w == inspector_rect_.w &&
+        inspector_background_cache_rect_.h == inspector_rect_.h) {
+        SDL_RenderCopy(renderer, inspector_background_cache_, nullptr, &inspector_rect_);
+        return;
+    }
+
+    if (inspector_background_cache_) {
+        SDL_DestroyTexture(inspector_background_cache_);
+        inspector_background_cache_ = nullptr;
+    }
+
+    SDL_Texture* cache = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, inspector_rect_.w, inspector_rect_.h);
+    if (!cache) {
+        return;
+    }
+    SDL_SetRenderTarget(renderer, cache);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Rect local_rect{0, 0, inspector_rect_.w, inspector_rect_.h};
+    animation_editor::ui::draw_panel_background(renderer, local_rect);
+    SDL_SetRenderTarget(renderer, nullptr);
+    inspector_background_cache_ = cache;
+    inspector_background_cache_rect_ = SDL_Rect{inspector_rect_.x, inspector_rect_.y, inspector_rect_.w, inspector_rect_.h};
+    inspector_background_dirty_ = false;
+    SDL_RenderCopy(renderer, cache, nullptr, &inspector_rect_);
 }
 
 bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
@@ -1714,7 +1759,12 @@ void AnimationEditorWindow::open_frame_editor(const std::string& animation_id) {
     }
     target_asset_ = runtime_asset;
     live_frame_editor_session_active_ = true;
-    assets_->begin_frame_editor_session(runtime_asset, document_, preview_provider_, animation_id, this);
+    std::weak_ptr<LiveFrameEditorToken> host_token = live_frame_editor_token_;
+    assets_->begin_frame_editor_session(runtime_asset, document_, preview_provider_, animation_id,
+        [this, host_token](const std::string& closed_animation_id) {
+            if (host_token.expired()) return;
+            this->on_live_frame_editor_closed(closed_animation_id);
+        });
     set_visible(false, false );
 }
 
@@ -2214,6 +2264,9 @@ bool AnimationEditorWindow::rebuild_animation_via_pipeline(const std::shared_ptr
 
     vibble::RebuildQueueCoordinator coordinator;
     coordinator.request_animation(info->name, animation_id);
+    if (!coordinator.has_pending_asset_work()) {
+        return true;
+    }
     if (!coordinator.run_asset_tool()) {
         set_status_message("asset_tool.py failed; see logs for details.", 240);
         return false;
@@ -2260,6 +2313,9 @@ bool AnimationEditorWindow::rebuild_all_animations_via_pipeline(const std::share
 
     vibble::RebuildQueueCoordinator coordinator;
     coordinator.request_asset(info->name);
+    if (!coordinator.has_pending_asset_work()) {
+        return true;
+    }
     if (!coordinator.run_asset_tool()) {
         set_status_message("asset_tool.py failed; see logs for details.", 240);
         return false;

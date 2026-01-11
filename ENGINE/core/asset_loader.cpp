@@ -400,8 +400,9 @@ std::vector<std::unique_ptr<Asset>> AssetLoader::extract_all_assets() {
 void AssetLoader::createAssets(world::WorldGrid& grid) {
         const auto t0 = std::chrono::steady_clock::now();
 
-        grid.set_chunk_resolution(std::max(0, map_grid_settings_.r_chunk));
-        vibble::log::debug(std::string("[AssetLoader] createAssets: requested r_chunk=") + std::to_string(map_grid_settings_.r_chunk));
+        const int requested = std::max(0, map_grid_settings_.grid_resolution);
+        grid.set_chunk_resolution(requested);
+        vibble::log::debug(std::string("[AssetLoader] createAssets: requested r_chunk=") + std::to_string(requested));
 
         auto extracted_assets = extract_all_assets();
         std::vector<Asset*> registered_assets;

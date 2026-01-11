@@ -29,3 +29,4 @@ inline bool is_protected_asset_root(const std::filesystem::path& path) {
 
 }
 
+

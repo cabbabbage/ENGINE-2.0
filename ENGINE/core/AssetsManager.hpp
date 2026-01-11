@@ -4,6 +4,7 @@
 #include "asset/asset_library.hpp"
 #include <SDL.h>
 #include <atomic>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -32,7 +33,6 @@ class QuickTaskPopup;
 namespace animation_editor {
 class AnimationDocument;
 class PreviewProvider;
-class AnimationEditorWindow;
 }
 namespace devmode::core {
 class ManifestStore;
@@ -111,12 +111,16 @@ public:
     void apply_camera_runtime_settings();
     void set_depth_effects_enabled(bool enabled);
     bool depth_effects_enabled() const { return depth_effects_enabled_; }
+    void set_movement_debug_enabled(bool enabled);
+    bool movement_debug_enabled() const { return movement_debug_enabled_; }
+    void set_movement_debug_visible(bool visible);
+    bool movement_debug_visible() const { return movement_debug_visible_; }
     // Force the camera to refresh from current room settings on next update.
     void mark_camera_dirty();
 
     void focus_camera_on_asset(Asset* a, double height_factor = 0.8, int duration_steps = 25);
 
-    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, animation_editor::AnimationEditorWindow* host_to_toggle);
+    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, std::function<void(const std::string&)> on_host_closed);
 
     devmode::core::ManifestStore* manifest_store();
     const devmode::core::ManifestStore* manifest_store() const;
@@ -231,6 +235,10 @@ private:
     std::vector<Asset*> active_moving_light_assets_;
     std::unordered_set<Asset*> active_moving_light_lookup_;
     std::unordered_set<Asset*> scratch_moving_light_lookup_;
+    std::vector<Asset*> last_static_light_assets_;
+    std::vector<Asset*> last_moving_light_assets_;
+    std::uint64_t light_assets_version_ = 0;
+    std::uint64_t last_seen_light_assets_version_ = 0;
     std::vector<Room*> rooms_;
     std::size_t rooms_generation_ = 0;
     Room* current_room_ = nullptr;
@@ -243,6 +251,8 @@ private:
     bool force_high_quality_rendering_ = false;
     bool render_dark_mask_enabled_ = true;
     bool depth_effects_enabled_ = false;
+    bool movement_debug_enabled_ = false;
+    bool movement_debug_visible_ = true;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
     std::vector<world::GridPoint*> active_points_;
@@ -267,11 +277,27 @@ private:
     float max_asset_width_world_  = 0.0f;
     float cached_height_level_      = 0.0f;
     bool  max_asset_dimensions_dirty_ = true;
+    struct AssetDimensionCache {
+        float width = 0.0f;
+        float height = 0.0f;
+    };
+    std::unordered_map<Asset*, AssetDimensionCache> asset_dimension_cache_;
+    std::vector<Asset*> asset_dimension_update_queue_;
+    std::unordered_set<Asset*> asset_dimension_update_lookup_;
+    Asset* max_asset_width_holder_ = nullptr;
+    Asset* max_asset_height_holder_ = nullptr;
     std::vector<Asset*> visible_candidate_buffer_;
     std::uint64_t active_candidate_generation_ = 0;
+    std::uint32_t frame_id_ = 0;
+    std::uint32_t last_active_rebuild_frame_id_ = 0;
 
     bool pending_initial_rebuild_ = false;
     bool logged_initial_rebuild_warning_ = false;
+    bool grid_dirty_ = true;
+    bool camera_view_dirty_ = true;
+    SDL_Point last_camera_center_for_grid_{0, 0};
+    double last_camera_scale_for_grid_ = 0.0;
+    double last_camera_pitch_for_grid_ = 0.0;
 
     struct GridMovementCommand {
         Asset* asset = nullptr;
@@ -280,6 +306,8 @@ private:
 };
 
     void track_asset_for_grid(Asset* asset);
+    bool maybe_rebuild_world_grid();
+    void mark_grid_dirty();
     void untrack_asset_for_grid(Asset* asset);
     void register_pending_static_assets();
     void rebuild_all_assets_from_grid();
@@ -316,6 +344,11 @@ private:
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();
     void invalidate_max_asset_dimensions();
+    void queue_asset_dimension_update(Asset* asset);
+    void remove_asset_dimension_cache(Asset* asset);
+    void rebuild_asset_dimension_cache(float camera_scale);
+    bool compute_asset_dimension_cache(const Asset* asset, float camera_scale, AssetDimensionCache& out) const;
+    void finalize_max_asset_dimensions(float max_width, float max_height);
     SDL_Rect screen_world_rect() const;
     int audio_effect_max_distance_world() const;
 
@@ -331,5 +364,8 @@ private:
     std::vector<SDL_Rect> culled_debug_rects_;
     std::uint64_t filtered_active_assets_source_hash_ = 0;
     std::uint64_t filtered_active_assets_filter_version_ = 0;
+    bool needs_filtered_active_refresh_ = true;
+    bool last_dev_controls_enabled_ = false;
+    std::uint64_t last_dev_filter_state_version_ = 0;
 };
 #include "utils/map_grid_settings.hpp"

@@ -28,44 +28,8 @@ T lerp(T a, T b, double t) {
 namespace {
     constexpr double PI_D       = 3.14159265358979323846;
     constexpr double kHalfFovY  = PI_D / 4.0;
-    constexpr double kBottomAngleLimit = (PI_D * 0.5) - 1e-3;
-    constexpr float  kDefaultPitchDegrees   = 60.0f;
     constexpr float  kVirtualScreenScale = 1.5f;
     struct CameraState;
-
-    double wrap_degrees_0_360(double raw_value) {
-        if (!std::isfinite(raw_value)) {
-            return static_cast<double>(kDefaultPitchDegrees);
-        }
-        double wrapped = std::fmod(raw_value, 360.0);
-        if (wrapped < 0.0) wrapped += 360.0;
-        if (wrapped >= 360.0 || !std::isfinite(wrapped)) {
-            wrapped = std::fmod(wrapped, 360.0);
-            if (wrapped < 0.0) wrapped += 360.0;
-        }
-        return std::isfinite(wrapped) ? wrapped : static_cast<double>(kDefaultPitchDegrees);
-    }
-
-    float wrap_degrees_0_360(float raw_value) {
-        return static_cast<float>(wrap_degrees_0_360(static_cast<double>(raw_value)));
-    }
-
-    double shortest_delta_degrees(double from_deg, double to_deg);
-
-    double lerp_angle(double from_deg, double to_deg, double t) {
-        const double delta = shortest_delta_degrees(from_deg, to_deg);
-        return wrap_degrees_0_360(from_deg + delta * t);
-    }
-
-    double signed_radians_from_degrees(double degrees) {
-        const double wrapped_deg = wrap_degrees_0_360(degrees);
-        const double signed_deg  = (wrapped_deg > 180.0) ? wrapped_deg - 360.0 : wrapped_deg;
-        return signed_deg * (PI_D / 180.0);
-    }
-
-    double shortest_delta_degrees(double from_deg, double to_deg) {
-        return std::remainder(to_deg - from_deg, 360.0);
-    }
 
     static inline Area make_rect_area(const std::string& name, SDL_Point center, int w, int h, int resolution) {
         const int left   = center.x - (w / 2);
@@ -150,8 +114,6 @@ namespace {
         double screen_zoom = 1.0;
         double inv_screen_zoom = 1.0;
         double screen_pan_y_px = 0.0;
-        double texture_warp = 1.0;
-        double texture_warp_y_offset_px = 0.0;
         float  near_camera_max_perspective_scale = 0.0f;
         float  offscreen_fade_amount_px = 0.0f;
     };
@@ -206,12 +168,6 @@ namespace {
         };
     }
 
-    float resolve_pitch_degrees(const WarpedScreenGrid::RealismSettings& ,
-                                double ) {
-        // Simplified: return fixed default pitch since we're moving to explicit per-room settings
-        return camera_math::sanitize_pitch_degrees(camera_math::kDefaultCameraTiltDeg);
-    }
-
     float horizon_fade_for_height(double camera_height) {
         const double safe_height = std::max(1.0, camera_height);
         const double scaled = std::clamp(std::sqrt(safe_height) * 18.0, 60.0, 420.0);
@@ -248,13 +204,6 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         }
         state.inv_screen_zoom = 1.0 / state.screen_zoom;
         state.screen_pan_y_px = static_cast<double>(screen_height) * std::clamp(safe_params.pan_y_percent, -100.0, 100.0) * 0.01;
-        state.texture_warp = std::clamp(static_cast<double>(settings.texture_warp_percent), 0.0, 100.0) * 0.01;
-        if (!std::isfinite(state.texture_warp)) {
-            state.texture_warp = 1.0;
-        }
-        state.texture_warp_y_offset_px = std::isfinite(settings.texture_warp_y_offset_px)
-            ? static_cast<double>(settings.texture_warp_y_offset_px)
-            : 0.0;
         state.near_camera_max_perspective_scale = settings.near_camera_max_perspective_scale;
         state.offscreen_fade_amount_px = settings.offscreen_fade_amount_px;
 
@@ -280,14 +229,14 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
             forward = normalize(forward);
         }
 
-        Vec3 up{ 0.0, 0.0, 1.0 };
-        Vec3 right = cross(forward, up);
+        Vec3 world_up{0.0, 0.0, 1.0};
+        Vec3 right = cross(world_up, forward);
         if (length(right) < 1e-6 || !std::isfinite(length(right))) {
-            up = Vec3{0.0, 1.0, 0.0};
-            right = cross(forward, up);
+            world_up = Vec3{0.0, 1.0, 0.0};
+            right = cross(world_up, forward);
         }
         right = normalize(right);
-        up = normalize(cross(right, forward));
+        Vec3 up = normalize(cross(forward, right));
 
         const double dist_horiz = length(Vec3{ anchor.x - camera_pos.x, anchor.y - camera_pos.y, 0.0 });
 
@@ -333,6 +282,45 @@ struct ProjectionResult {
         float       forward_depth     = 0.0f;
     };
 
+    std::optional<SDL_FPoint> project_camera_space_point(const CameraState& cam,
+                                                         double cam_x,
+                                                         double cam_y,
+                                                         double depth,
+                                                         int screen_width,
+                                                         int screen_height) {
+        if (!std::isfinite(depth) || depth <= cam.near_plane) {
+            return std::nullopt;
+        }
+        const double ndc_x = (cam_x / depth) / cam.tan_half_fov_x;
+        const double ndc_y = (cam_y / depth) / cam.tan_half_fov_y;
+        if (!std::isfinite(ndc_x) || !std::isfinite(ndc_y)) {
+            return std::nullopt;
+        }
+        return ndc_to_screen_point(cam, ndc_x, ndc_y, screen_width, screen_height);
+    }
+
+    float compute_perspective_scale_from_depth(const CameraState& cam,
+                                               double depth_along_forward,
+                                               int screen_width) {
+        if (!std::isfinite(depth_along_forward) || depth_along_forward <= cam.near_plane) {
+            return 1.0f;
+        }
+        const double safe_width = static_cast<double>(std::max(1, screen_width));
+        const double tan_half_fov_x = std::max(1e-6, cam.tan_half_fov_x);
+        const double pixels_per_meter =
+            (safe_width * 0.5) * cam.screen_zoom / tan_half_fov_x;
+        const double scale = cam.meters_scale * pixels_per_meter / depth_along_forward;
+        if (!std::isfinite(scale) || scale <= 0.0) {
+            return 1.0f;
+        }
+        float result = static_cast<float>(scale);
+        if (std::isfinite(cam.near_camera_max_perspective_scale) &&
+            cam.near_camera_max_perspective_scale > 0.0f) {
+            result = std::min(result, cam.near_camera_max_perspective_scale);
+        }
+        return result;
+    }
+
     ProjectionResult project_world_point_internal(const CameraState& cam,
                                          double world_x_pixels,
                                          double world_y_pixels,
@@ -365,37 +353,76 @@ struct ProjectionResult {
         const double cam_x = dot(to_point_meters, cam.right);
         const double cam_y = dot(to_point_meters, cam.up);
 
-        const double ndc_x = (cam_x / depth_along_forward) / cam.tan_half_fov_x;
-        double ndc_y = (cam_y / depth_along_forward) / cam.tan_half_fov_y;
-        const double near_range_end = std::max(cam.near_plane * 4.0, cam.reference_depth * 0.35);
-        if (depth_along_forward < near_range_end) {
-            const double near_range_start = cam.near_plane;
-            const double near_span = std::max(1e-4, near_range_end - near_range_start);
-            const double t = std::clamp((depth_along_forward - near_range_start) / near_span, 0.0, 1.0);
-            const double near_factor = 1.0 - t;
-            const double damp = 1.0 - near_factor * 0.4;
-            const double down_bias = 0.18 * near_factor;
-            ndc_y = ndc_y * damp - down_bias;
+        const auto screen_opt = project_camera_space_point(
+            cam, cam_x, cam_y, depth_along_forward, screen_width, screen_height);
+        if (!screen_opt.has_value()) {
+            return out;
         }
-
-        const SDL_FPoint screen_pt = ndc_to_screen_point(cam, ndc_x, ndc_y, screen_width, screen_height);
+        const SDL_FPoint screen_pt = *screen_opt;
         const double screen_x = screen_pt.x;
         const double screen_y = screen_pt.y;
 
-        const float perspective = static_cast<float>(cam.reference_depth / std::max(depth_along_forward, 1e-4));
-        const float zoom_scale = std::isfinite(cam.screen_zoom) && cam.screen_zoom > 0.0 ? static_cast<float>(cam.screen_zoom) : 1.0f;
-        const float warp_factor = std::clamp(static_cast<float>(cam.texture_warp), 0.0f, 1.0f);
-        float warped_perspective = perspective;
-        float vertical = 1.0f;
-        if (std::isfinite(screen_y)) {
-            const double horizon = cam.horizon_screen_y;
-            const double span = std::max(1.0, static_cast<double>(screen_height) - horizon);
-            const double adjusted_y = screen_y + cam.texture_warp_y_offset_px;
-            const double t_raw = (adjusted_y - horizon) / span;
-            const double t = std::clamp(t_raw, 0.0, 2.0);
-            vertical = 1.0f + static_cast<float>((t - 1.0) * warp_factor);
+        float perspective_scale = compute_perspective_scale_from_depth(
+            cam, depth_along_forward, screen_width);
+        float vertical_scale = 1.0f;
+
+        const double unit_meters = std::max(1e-6, cam.meters_scale);
+        const Vec3 unit_world_x{ unit_meters, 0.0, 0.0 };
+        const Vec3 unit_world_z{ 0.0, 0.0, unit_meters };
+        const Vec3 delta_cam_x{
+            dot(unit_world_x, cam.right),
+            dot(unit_world_x, cam.up),
+            dot(unit_world_x, cam.forward)
+        };
+        const Vec3 delta_cam_z{
+            dot(unit_world_z, cam.right),
+            dot(unit_world_z, cam.up),
+            dot(unit_world_z, cam.forward)
+        };
+        auto screen_distance_for_delta = [&](const Vec3& delta_cam) -> std::optional<double> {
+            const double depth2 = depth_along_forward + delta_cam.z;
+            if (!std::isfinite(depth2) || depth2 <= cam.near_plane) {
+                return std::nullopt;
+            }
+            const auto shifted = project_camera_space_point(
+                cam,
+                cam_x + delta_cam.x,
+                cam_y + delta_cam.y,
+                depth2,
+                screen_width,
+                screen_height);
+            if (!shifted.has_value()) {
+                return std::nullopt;
+            }
+            const double dx = shifted->x - screen_x;
+            const double dy = shifted->y - screen_y;
+            const double dist = std::sqrt(dx * dx + dy * dy);
+            if (!std::isfinite(dist) || dist <= 1e-6) {
+                return std::nullopt;
+            }
+            return dist;
+        };
+
+        if (const auto scale_x = screen_distance_for_delta(delta_cam_x)) {
+            perspective_scale = static_cast<float>(*scale_x);
         }
-        vertical = std::max(0.05f, vertical);
+        if (const auto scale_z = screen_distance_for_delta(delta_cam_z)) {
+            if (std::isfinite(perspective_scale) && perspective_scale > 1e-6f) {
+                vertical_scale = static_cast<float>(*scale_z / perspective_scale);
+            }
+        }
+        if (std::isfinite(cam.near_camera_max_perspective_scale) &&
+            cam.near_camera_max_perspective_scale > 0.0f) {
+            perspective_scale = std::min(perspective_scale, cam.near_camera_max_perspective_scale);
+        }
+        if (!std::isfinite(perspective_scale) || perspective_scale <= 0.0f) {
+            perspective_scale = 1.0f;
+        }
+        if (!std::isfinite(vertical_scale) || vertical_scale <= 0.0f) {
+            vertical_scale = 1.0f;
+        }
+
+        const float zoom_scale = std::isfinite(cam.screen_zoom) && cam.screen_zoom > 0.0 ? static_cast<float>(cam.screen_zoom) : 1.0f;
         const float effective_horizon_band_px = horizon_band_px * zoom_scale;
 
         float horizon_fade = 1.0f;
@@ -412,11 +439,6 @@ struct ProjectionResult {
         float near_camera_fade = 1.0f;
         if (std::isfinite(screen_y) && screen_height > 0) {
             const float screen_h = static_cast<float>(screen_height);
-            if (std::isfinite(cam.near_camera_max_perspective_scale) &&
-                cam.near_camera_max_perspective_scale > 0.0f) {
-                warped_perspective = std::min(warped_perspective, cam.near_camera_max_perspective_scale);
-            }
-
             const float offscreen_amount = std::max(0.0f, cam.offscreen_fade_amount_px);
             if (static_cast<float>(screen_y) >= screen_h) {
                 if (offscreen_amount <= 0.0f) {
@@ -430,8 +452,8 @@ struct ProjectionResult {
 
         out.valid             = std::isfinite(screen_x) && std::isfinite(screen_y);
         out.screen            = SDL_FPoint{ static_cast<float>(screen_x), static_cast<float>(screen_y) };
-        out.perspective_scale = std::isfinite(warped_perspective) ? warped_perspective * zoom_scale : 1.0f;
-        out.vertical_scale    = std::isfinite(vertical) ? vertical : 1.0f;
+        out.perspective_scale = perspective_scale;
+        out.vertical_scale    = vertical_scale;
         out.horizon_fade      = horizon_fade;
         out.near_camera_fade  = near_camera_fade;
         out.distance          = std::isfinite(distance_to_camera) ? static_cast<float>(distance_to_camera) : 0.0f;
@@ -460,158 +482,6 @@ struct ProjectionResult {
             static_cast<float>(hit.x / safe_scale + static_cast<double>(cam.anchor_world_px.x)),
             static_cast<float>(hit.y / safe_scale + static_cast<double>(cam.anchor_world_px.y))
         };
-    }
-
-    double camera_height_from_scale(const WarpedScreenGrid::RealismSettings& settings, double scale_value) {
-        // Deprecated: camera_height_from_scale is obsolete. Use explicit camera parameters.
-        return 0.0;
-    }
-
-    double solve_pitch_for_fixed_depth(double camera_height,
-                                       double desired_depth_world,
-                                       double default_pitch_rad) {
-        if (!std::isfinite(camera_height) || camera_height <= 0.0) {
-            return default_pitch_rad;
-        }
-        if (!std::isfinite(desired_depth_world) || desired_depth_world <= 0.0) {
-            return default_pitch_rad;
-        }
-
-        const double min_pitch_rad = std::max(1e-4, static_cast<double>(WarpedScreenGrid::kMinPitchDegrees) * (PI_D / 180.0));
-        const double max_pitch_rad = std::min( static_cast<double>(WarpedScreenGrid::kMaxPitchDegrees) * (PI_D / 180.0), kBottomAngleLimit - 1e-4);
-
-        double low = min_pitch_rad;
-        double high = std::max(low + 1e-4, max_pitch_rad);
-
-        const auto depth_span = [&](double pitch) -> double {
-            const double clamped_pitch = std::clamp(pitch, min_pitch_rad, high);
-            const double tan_center = std::tan(clamped_pitch);
-            if (!std::isfinite(tan_center) || std::abs(tan_center) < 1e-6) {
-                return std::numeric_limits<double>::infinity();
-            }
-            const double center_depth = camera_height / tan_center;
-
-            const double bottom_angle = std::min(kBottomAngleLimit, clamped_pitch + kHalfFovY);
-            const double tan_bottom = std::tan(bottom_angle);
-            if (!std::isfinite(tan_bottom) || std::abs(tan_bottom) < 1e-6) {
-                return std::numeric_limits<double>::infinity();
-            }
-            const double bottom_depth = camera_height / tan_bottom;
-            return center_depth - bottom_depth;
-};
-
-        const double desired = std::max(0.0, desired_depth_world);
-        double span_low = depth_span(low);
-        double span_high = depth_span(high);
-        if (!std::isfinite(span_low) || !std::isfinite(span_high)) {
-            return std::clamp(default_pitch_rad, low, high);
-        }
-
-        if (desired >= span_low) {
-            return low;
-        }
-        if (desired <= span_high) {
-            return high;
-        }
-
-        for (int i = 0; i < 48; ++i) {
-            const double mid = 0.5 * (low + high);
-            const double span_mid = depth_span(mid);
-            if (!std::isfinite(span_mid)) {
-                high = mid;
-                continue;
-            }
-            if (span_mid > desired) {
-                low = mid;
-            } else {
-                high = mid;
-            }
-        }
-
-        return std::clamp(high, low, max_pitch_rad);
-    }
-
-    WarpedScreenGrid::CameraGeometry build_geometry(const WarpedScreenGrid::RealismSettings& settings,
-                                               double scale_value,
-                                               double anchor_world_y,
-                                               double desired_depth_world,
-                                               bool realism_enabled) {
-        WarpedScreenGrid::CameraGeometry g{};
-        if (!realism_enabled) {
-            return g;
-        }
-
-        // Deprecated: build_geometry is obsolete. Use explicit camera parameters.
-        return g;
-    }
-
-    WarpedScreenGrid::FloorDepthParams build_floor_params(
-        const WarpedScreenGrid::RealismSettings& settings,
-        int screen_height,
-        const WarpedScreenGrid::CameraGeometry& geom,
-        double scale_value,
-        bool realism_enabled) {
-        WarpedScreenGrid::FloorDepthParams p{};
-        (void)scale_value;
-        if (!realism_enabled || !geom.valid) {
-            return p;
-        }
-
-        const double screen_h = std::max(1.0, static_cast<double>(screen_height));
-        if (!std::isfinite(geom.camera_height) ||
-            !std::isfinite(geom.pitch_radians) ||
-            !std::isfinite(geom.camera_world_y) ||
-            !std::isfinite(geom.anchor_world_y)) {
-            return p;
-        }
-
-        constexpr double kMaxHorizonRatio = 0.45;
-        const double max_horizon = screen_h * kMaxHorizonRatio;
-        const double min_horizon = -screen_h * 4.0;
-
-        const double tan_fov   = std::tan(kHalfFovY);
-        const double tan_pitch = std::tan(geom.pitch_radians);
-        if (!std::isfinite(tan_fov) || !std::isfinite(tan_pitch) || std::abs(tan_fov) < 1e-6) {
-            return p;
-        }
-
-        const double max_phi = (PI_D * 0.5) - 1e-3;
-        double phi_bottom = geom.pitch_radians + kHalfFovY;
-        phi_bottom = std::clamp(phi_bottom, 1e-3, max_phi);
-
-        const double ndc_bottom_raw = std::tan(geom.pitch_radians - phi_bottom) / tan_fov;
-        const double ndc_scale = (std::isfinite(ndc_bottom_raw) && ndc_bottom_raw < -1e-4) ? (-1.0 / ndc_bottom_raw) : 1.0;
-        double near_ndc = ndc_bottom_raw * ndc_scale;
-        if (!std::isfinite(near_ndc)) {
-            near_ndc = -1.0;
-        }
-
-        const double horizon_ndc_raw = tan_pitch / tan_fov;
-        if (!std::isfinite(horizon_ndc_raw)) {
-            return p;
-        }
-        const double horizon_ndc = horizon_ndc_raw * ndc_scale;
-        double horizon_y = screen_h * (0.5 - 0.5 * horizon_ndc);
-        horizon_y = std::clamp(horizon_y, min_horizon, max_horizon);
-
-        double pitch_norm = geom.pitch_radians / (kHalfFovY * 2.0);
-        pitch_norm = std::clamp(pitch_norm, 0.0, 1.0);
-
-        p.horizon_screen_y = horizon_y;
-        p.bottom_screen_y  = screen_h;
-        p.base_world_y     = geom.anchor_world_y;
-        p.camera_world_y   = geom.camera_world_y;
-        p.camera_height    = geom.camera_height;
-        p.pitch_radians    = geom.pitch_radians;
-        p.pitch_norm       = pitch_norm;
-        p.focus_ndc_offset = 0.0;
-        p.horizon_ndc      = horizon_ndc;
-        p.near_ndc         = near_ndc;
-        p.ndc_scale        = ndc_scale;
-        p.strength         = 6.0;
-        p.enabled          = true;
-        (void)settings;
-        return p;
     }
 
     WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
@@ -723,20 +593,6 @@ struct ProjectionResult {
         return (params.near_ndc - ndc_y) / ndc_span;
     }
 
-}
-
-WarpedScreenGrid::CameraGeometry WarpedScreenGrid::compute_geometry_for_scale(double scale_value) const {
-    // Deprecated: compute_geometry_for_scale is obsolete. Use explicit camera parameters.
-    return CameraGeometry{};
-}
-
-WarpedScreenGrid::CameraGeometry WarpedScreenGrid::compute_geometry() const {
-    // Deprecated: compute_geometry is obsolete. Use explicit camera parameters.
-    return CameraGeometry{};
-}
-
-void WarpedScreenGrid::update_geometry_cache(const CameraGeometry& g) {
-    // Deprecated: update_geometry_cache is obsolete. Use explicit camera parameters.
 }
 
 WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_view)
@@ -872,14 +728,8 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
 
     camera_.apply_room_targets(cur_params, neigh_params, t, refresh_requested, 20, dev_mode);
 
-    if (dev_mode) {
-        if (camera_.has_focus_override()) {
-            set_screen_center(camera_.state().focus_override);
-        } else if (player) {
-            set_screen_center(SDL_Point{ player->pos.x, player->pos.y }, false);
-        } else if (cur && cur->room_area) {
-            set_screen_center(cur->room_area->get_center());
-        }
+    if (camera_.has_focus_override()) {
+        set_screen_center(camera_.state().focus_override);
     } else if (player) {
         set_screen_center(SDL_Point{ player->pos.x, player->pos.y }, false);
     } else if (cur && cur->room_area) {
@@ -950,7 +800,6 @@ void WarpedScreenGrid::recompute_current_view() {
         const int virtual_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_width_) * kVirtualScreenScale)));
         const int virtual_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_height_) * kVirtualScreenScale)));
         current_view_ = make_rect_area("current_view", center, virtual_w, virtual_h, 0);
-        update_geometry_cache(compute_geometry());
         return;
     }
 
@@ -978,7 +827,6 @@ void WarpedScreenGrid::recompute_current_view() {
         static_cast<int>(std::lround((miny + maxy) * 0.5f))
     };
     current_view_ = make_rect_area("current_view", center, cur_w, cur_h, 0);
-    update_geometry_cache(compute_geometry());
 }
 
 
@@ -1072,7 +920,7 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
 
     result.screen_position   = proj.screen;
     result.vertical_scale    = proj.vertical_scale;
-    result.distance_scale    = cam.reference_depth / proj.distance;
+    result.distance_scale    = proj.perspective_scale;
     result.horizon_fade_alpha = proj.horizon_fade * proj.near_camera_fade;
     return result;
 }
@@ -1205,18 +1053,6 @@ SDL_FPoint WarpedScreenGrid::get_view_center_f() const {
     return SDL_FPoint{ cx, cy };
 }
 
-WarpedScreenGrid::FloorDepthParams WarpedScreenGrid::compute_floor_depth_params_for_geometry(const CameraGeometry& geom, double scale_value) const {
-    return build_floor_params(settings_, screen_height_, geom, scale_value, realism_enabled_);
-}
-
-WarpedScreenGrid::FloorDepthParams WarpedScreenGrid::compute_floor_depth_params_for_scale(double scale_value) const {
-    CameraParams params = camera_.state().params;
-    params.height_px = scale_value;
-    const CameraState cam = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, camera_.state().center, params);
-    return build_floor_params_from_camera_state(screen_width_, screen_height_, cam, realism_enabled_);
-}
-
 WarpedScreenGrid::FloorDepthParams WarpedScreenGrid::compute_floor_depth_params() const {
     const CameraState cam = build_camera_state(
         settings_, aspect_, screen_width_, screen_height_, camera_.state().center, camera_.state().params);
@@ -1235,54 +1071,9 @@ double WarpedScreenGrid::view_height_world() const {
     return static_cast<double>(std::max(0, maxy - miny));
 }
 
-double WarpedScreenGrid::view_height_for_scale(double scale_value) const {
-    const int base_h = std::max(1, height_from_area(base_view_));
-    const double clamped_scale = std::max(0.0001, scale_value);
-    return static_cast<double>(base_h) * clamped_scale;
-}
-
 double WarpedScreenGrid::anchor_world_y() const {
 
     return static_cast<double>(camera_.state().center.y);
-}
-
-double WarpedScreenGrid::height_lerp_t_for_scale(double ) const {
-    // Simplified: since we're using explicit camera settings, interpolation is handled elsewhere
-    return 0.0;
-}
-
-float WarpedScreenGrid::depth_offset_for_scale(double scale_value) const {
-    CameraParams params = camera_.state().params;
-    params.height_px = scale_value;
-    const CameraState cam = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, camera_.state().center, params);
-    if (!cam.valid) {
-        return 0.0f;
-    }
-    return static_cast<float>(std::clamp(cam.reference_depth, 0.0, 1e6));
-}
-
-double WarpedScreenGrid::horizon_screen_y_for_scale_value(double scale_value) const {
-    if (!realism_enabled_) {
-        return 0.0;
-    }
-
-    const double extent    = static_cast<double>(screen_height_);
-    const double min_bound = -4.0 * extent;
-    const double max_bound = extent * 0.45;
-
-    CameraParams params = camera_.state().params;
-    params.height_px = scale_value;
-    const CameraState cam = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, camera_.state().center, params);
-    if (!cam.valid) {
-        return extent > 0.0 ? extent * 0.5 : 0.0;
-    }
-    return std::clamp(cam.horizon_screen_y, min_bound, max_bound);
-}
-
-double WarpedScreenGrid::horizon_screen_y_for_scale() const {
-    return horizon_screen_y_for_scale_value(1.0);
 }
 
 void WarpedScreenGrid::clear_grid_state() {
@@ -1387,7 +1178,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
     const float pre_horizon_screen_y = horizon_screen_y - std::max(0.0f, settings_.pre_horizon_lock_offset_px);
     const float horizon_band = horizon_fade_for_height(cam_state.camera_height);
 
-    const float margin_px    = std::max(0.0f, settings_.extra_cull_margin);
+    const float world_margin_units = std::max(0.0f, settings_.extra_cull_margin);
+    const float meters_per_100 = std::max(0.0001f, settings_.meters_per_100_world_px);
+    const float pixels_per_world_unit = 100.0f / meters_per_100;
+    const float margin_px = world_margin_units * pixels_per_world_unit;
     const float cull_top = std::clamp(static_cast<float>(cam_state.horizon_screen_y) - margin_px, virtual_bounds.top, virtual_bounds.bottom);
     const SDL_FRect cull_rect{
         virtual_bounds.left - margin_px,
@@ -1587,10 +1381,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             proj.screen = prev_screen_valid
                 ? prev_screen
                 : SDL_FPoint{ static_cast<float>(world_pos.x), static_cast<float>(world_pos.y) };
-            proj.perspective_scale = (std::isfinite(space.depth) && std::abs(space.depth) > 1e-4)
-                ? static_cast<float>(cam_state.reference_depth / std::max(space.depth, 1e-4))
-                : 1.0f;
-            proj.vertical_scale = proj.perspective_scale;
+            proj.perspective_scale = 1.0f;
+            proj.vertical_scale = 1.0f;
             proj.horizon_fade = 1.0f;
             proj.distance = std::isfinite(space.distance) ? static_cast<float>(space.distance) : 0.0f;
         }
@@ -1680,16 +1472,12 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             }
         }
         if (!have_projected_bounds) {
-            float approx_w = static_cast<float>(fw) * base_scale * proj.perspective_scale;
-            float approx_h = static_cast<float>(fh) * base_scale * proj.perspective_scale * proj.vertical_scale;
-            approx_w = std::isfinite(approx_w) && approx_w > 0.0f ? std::max(approx_w, min_size) : min_size;
-            approx_h = std::isfinite(approx_h) && approx_h > 0.0f ? std::max(approx_h, min_size) : min_size;
-
+            const float size = min_size;
             bounds = SDL_FRect{
-                screen_for_bounds.x - approx_w * 0.5f,
-                screen_for_bounds.y - approx_h,
-                approx_w,
-                approx_h
+                screen_for_bounds.x - size * 0.5f,
+                screen_for_bounds.y - size,
+                size,
+                size
             };
         }
 
@@ -1864,6 +1652,16 @@ void WarpedScreenGrid::set_scale(double s) {
     params.height_px = clamped;
     camera_.set_params(params);
     runtime_camera_height_ = camera_.current_height();
+}
+
+double WarpedScreenGrid::camera_y_distance() const {
+    return camera_.state().params.y_distance_px;
+}
+
+void WarpedScreenGrid::set_camera_y_distance(double distance) {
+    CameraParams params = camera_.state().params;
+    params.y_distance_px = distance;
+    camera_.set_params(params);
 }
 
 void WarpedScreenGrid::set_tilt_override(std::optional<float> tilt_deg) {

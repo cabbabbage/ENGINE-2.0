@@ -1,7 +1,10 @@
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
+
+#include "animation_update/attack.hpp"
 
 namespace animation_update {
 
@@ -38,21 +41,7 @@ struct FrameHitGeometry {
 };
 
 struct FrameAttackGeometry {
-    struct Vector {
-
-        std::string type;
-        float start_x = 0.0f;
-        float start_y = 0.0f;
-        float start_z = 0.0f;
-
-        float control_x = 0.0f;
-        float control_y = 0.0f;
-        float control_z = 0.0f;
-        float end_x   = 0.0f;
-        float end_y   = 0.0f;
-        float end_z   = 0.0f;
-        int   damage  = 0;
-};
+    using Vector = AttackVector;
 
     std::vector<Vector> vectors;
 

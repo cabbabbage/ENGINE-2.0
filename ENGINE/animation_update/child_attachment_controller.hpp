@@ -15,6 +15,7 @@ struct ParentState {
     SDL_Point position{0, 0};
     SDL_Point base_position{0, 0};
     float scale = 1.0f;
+    float world_z = 0.0f;
     bool flipped = false;
     std::string_view animation_id{};
 };

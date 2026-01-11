@@ -937,7 +937,8 @@ void AssetLibraryUI::toggle() {
     if (should_show) {
         floating_->set_expanded(true);
 
-        rebuild_rows();
+        mark_rows_dirty();
+        ensure_rows_layout();
         if (search_box_) search_box_->start_editing();
     } else if (search_box_) {
         search_box_->stop_editing();
@@ -952,7 +953,8 @@ void AssetLibraryUI::open() {
         floating_->set_visible(true);
         floating_->set_expanded(true);
 
-        rebuild_rows();
+        mark_rows_dirty();
+        ensure_rows_layout();
         if (search_box_) search_box_->start_editing();
     }
 }
@@ -1006,7 +1008,7 @@ void AssetLibraryUI::ensure_items(AssetLibrary& lib) {
     }
 }
 
-void AssetLibraryUI::rebuild_rows() {
+void AssetLibraryUI::rebuild_rows_impl() {
     if (!floating_) return;
     std::vector<DockableCollapsible::Row> rows;
     if (search_widget_) rows.push_back({ search_widget_.get() });
@@ -1034,6 +1036,16 @@ void AssetLibraryUI::rebuild_rows() {
     floating_->set_rows(rows);
 }
 
+void AssetLibraryUI::mark_rows_dirty() {
+    layout_rows_dirty_ = true;
+}
+
+void AssetLibraryUI::ensure_rows_layout() {
+    if (!layout_rows_dirty_) return;
+    layout_rows_dirty_ = false;
+    rebuild_rows_impl();
+}
+
 void AssetLibraryUI::toggle_multi_select_mode() {
     multi_select_mode_ = !multi_select_mode_;
     if (!multi_select_mode_) {
@@ -1051,7 +1063,8 @@ void AssetLibraryUI::update_multi_select_controls() {
     if (multi_select_button_) {
         multi_select_button_->set_text(multi_select_mode_ ? "Cancel Multi-Select" : "Select Multiple");
     }
-    rebuild_rows();
+    mark_rows_dirty();
+    ensure_rows_layout();
 }
 
 void AssetLibraryUI::handle_multi_select_selection(const std::shared_ptr<AssetInfo>& info, bool selected) {
@@ -1554,7 +1567,8 @@ void AssetLibraryUI::refresh_tiles(Assets& assets) {
         }
     }
 
-    rebuild_rows();
+    mark_rows_dirty();
+    ensure_rows_layout();
 }
 
 void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer_multi_select_refresh) {
@@ -2081,6 +2095,7 @@ void AssetLibraryUI::update(const Input& input,
     library_owner_ = &lib;
     manifest_store_owner_ = &store;
     ensure_items(lib);
+    ensure_rows_layout();
 
     if (search_box_) {
         std::string current = search_box_->value();
@@ -2308,7 +2323,8 @@ void AssetLibraryUI::set_expanded(bool e) {
     if (floating_) {
         floating_->set_expanded(e);
 
-        rebuild_rows();
+        mark_rows_dirty();
+        ensure_rows_layout();
     }
 }
 

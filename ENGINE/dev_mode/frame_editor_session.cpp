@@ -8,6 +8,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <unordered_set>
 #include <unordered_map>
@@ -25,7 +26,6 @@
 #include "dev_mode/core/dev_json_store.hpp"
 #include "dev_mode/core/manifest_store.hpp"
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
-#include "dev_mode/asset_sections/animation_editor_window/AnimationEditorWindow.hpp"
 #include "dev_mode/asset_sections/animation_editor_window/PreviewProvider.hpp"
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/dm_styles.hpp"
@@ -53,10 +53,18 @@ namespace {
     constexpr int   kChildVisibilityCheckboxMinWidth = 120;
     constexpr int   kShowChildCheckboxMinWidth = 140;
     constexpr int   kChildDropdownMinWidth = 200;
+    constexpr int   kPanelDragHandleHeight = 18;
     constexpr float kDegToRad = static_cast<float>(M_PI) / 180.0f;
     constexpr float kRadToDeg = 180.0f / static_cast<float>(M_PI);
     constexpr float kHitboxRotateHandleRadius = 12.0f;
     constexpr float kAttackNodeRadius = 12.0f;
+    constexpr float kFrameFitScreenRatio = 0.5f;
+    constexpr int kFrameFitIterations = 20;
+    constexpr double kFrameFitMinHeight = 1.0;
+    constexpr double kFrameFitMaxHeight = 100000.0;
+    constexpr int kToolboxScrollbarWidth = 8;
+    constexpr int kToolboxScrollbarPadding = 4;
+    constexpr double kToolboxHeightRatio = 0.6;
 
     int nav_header_height_px(bool has_dropdown) {
         return has_dropdown ? DMDropdown::height() : DMButton::height();
@@ -177,6 +185,26 @@ namespace {
         SDL_FreeSurface(surface);
     }
 
+    int grid_step_for_resolution(int r) {
+        return vibble::grid::delta(vibble::grid::clamp_resolution(std::max(0, r)));
+    }
+
+    int floor_to_step(int value, int step) {
+        if (step <= 0) {
+            return value;
+        }
+        const double scaled = std::floor(static_cast<double>(value) / static_cast<double>(step));
+        return static_cast<int>(scaled * static_cast<double>(step));
+    }
+
+    int ceil_to_step(int value, int step) {
+        if (step <= 0) {
+            return value;
+        }
+        const double scaled = std::ceil(static_cast<double>(value) / static_cast<double>(step));
+        return static_cast<int>(scaled * static_cast<double>(step));
+    }
+
     const char* mode_display_name(FrameEditorSession::Mode mode) {
         switch (mode) {
             case FrameEditorSession::Mode::Movement:        return "Movement";
@@ -194,13 +222,232 @@ namespace {
     }
 }
 
+void FrameEditorSession::render_plane_grid(SDL_Renderer* renderer,
+                                           const WarpedScreenGrid& cam,
+                                           SDL_Point anchor_world,
+                                           FrameEditorSession::EditPlane plane,
+                                           int snap_resolution_r,
+                                           const FrameEditorSession::TextureMetrics& metrics) {
+    if (!renderer) {
+        return;
+    }
+    const int step = grid_step_for_resolution(snap_resolution_r);
+    if (step <= 0) {
+        return;
+    }
+
+    int minx = 0;
+    int maxx = 0;
+    int min_axis = 0;
+    int max_axis = 0;
+    if (plane == FrameEditorSession::EditPlane::XZ) {
+        if (metrics.width > 0 && metrics.height > 0) {
+            const int half_w = metrics.width / 2;
+            minx = anchor_world.x - half_w;
+            maxx = anchor_world.x + half_w;
+            min_axis = 0;
+            max_axis = metrics.height;
+        } else {
+            auto [view_minx, view_miny, view_maxx, view_maxy] = cam.get_current_view().get_bounds();
+            minx = view_minx;
+            maxx = view_maxx;
+            const int view_span = std::max(1, view_maxy - view_miny);
+            const int half_span = view_span / 2;
+            min_axis = -half_span;
+            max_axis = half_span;
+        }
+    } else {
+        if (metrics.width > 0 && metrics.height > 0) {
+            const int half_w = metrics.width / 2;
+            const int half_h = metrics.height / 2;
+            minx = anchor_world.x - half_w;
+            maxx = anchor_world.x + half_w;
+            min_axis = anchor_world.y - half_h;
+            max_axis = anchor_world.y + half_h;
+        } else {
+            auto [view_minx, view_miny, view_maxx, view_maxy] = cam.get_current_view().get_bounds();
+            minx = view_minx;
+            maxx = view_maxx;
+            min_axis = view_miny;
+            max_axis = view_maxy;
+        }
+    }
+
+    if (minx == maxx || min_axis == max_axis) {
+        return;
+    }
+
+    const int start_x = floor_to_step(minx, step);
+    const int end_x = ceil_to_step(maxx, step);
+    const int start_axis = floor_to_step(min_axis, step);
+    const int end_axis = ceil_to_step(max_axis, step);
+    const int major_step = (step > 0 && step <= (std::numeric_limits<int>::max() / 4))
+                               ? step * 4
+                               : 0;
+
+    SDL_Color base = DMStyles::AccentButton().hover_bg;
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    auto draw_line = [&](const SDL_FPoint& a, const SDL_FPoint& b, Uint8 alpha) {
+        SDL_Color color = devmode::utils::with_alpha(base, alpha);
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+        SDL_RenderDrawLine(renderer,
+                           static_cast<int>(std::lround(a.x)),
+                           static_cast<int>(std::lround(a.y)),
+                           static_cast<int>(std::lround(b.x)),
+                           static_cast<int>(std::lround(b.y)));
+    };
+
+    auto project_point = [&](float world_x, float axis) -> std::optional<SDL_FPoint> {
+        if (plane == FrameEditorSession::EditPlane::XZ) {
+            SDL_FPoint screen{};
+            if (!cam.project_world_point(SDL_FPoint{world_x, static_cast<float>(anchor_world.y)}, axis, screen)) {
+                return std::nullopt;
+            }
+            return screen;
+        }
+        return cam.map_to_screen_f(SDL_FPoint{world_x, axis});
+    };
+
+    for (int x = start_x; x <= end_x; x += step) {
+        const bool major = (major_step > 0) && (x % major_step == 0);
+        auto a = project_point(static_cast<float>(x), static_cast<float>(start_axis));
+        auto b = project_point(static_cast<float>(x), static_cast<float>(end_axis));
+        if (a && b) {
+            draw_line(*a, *b, major ? 55 : 22);
+        }
+    }
+    for (int axis = start_axis; axis <= end_axis; axis += step) {
+        const bool major = (major_step > 0) && (axis % major_step == 0);
+        auto a = project_point(static_cast<float>(start_x), static_cast<float>(axis));
+        auto b = project_point(static_cast<float>(end_x), static_cast<float>(axis));
+        if (a && b) {
+            draw_line(*a, *b, major ? 55 : 22);
+        }
+    }
+
+    SDL_Color axis = devmode::utils::with_alpha(DMStyles::AccentButton().press_bg, 170);
+    SDL_SetRenderDrawColor(renderer, axis.r, axis.g, axis.b, axis.a);
+    if (anchor_world.x >= minx && anchor_world.x <= maxx) {
+        auto a = project_point(static_cast<float>(anchor_world.x), static_cast<float>(start_axis));
+        auto b = project_point(static_cast<float>(anchor_world.x), static_cast<float>(end_axis));
+        if (a && b) {
+            SDL_RenderDrawLine(renderer,
+                               static_cast<int>(std::lround(a->x)),
+                               static_cast<int>(std::lround(a->y)),
+                               static_cast<int>(std::lround(b->x)),
+                               static_cast<int>(std::lround(b->y)));
+        }
+    }
+    const int axis_world = (plane == FrameEditorSession::EditPlane::XZ) ? 0 : anchor_world.y;
+    if (axis_world >= min_axis && axis_world <= max_axis) {
+        auto a = project_point(static_cast<float>(start_x), static_cast<float>(axis_world));
+        auto b = project_point(static_cast<float>(end_x), static_cast<float>(axis_world));
+        if (a && b) {
+            SDL_RenderDrawLine(renderer,
+                               static_cast<int>(std::lround(a->x)),
+                               static_cast<int>(std::lround(a->y)),
+                               static_cast<int>(std::lround(b->x)),
+                               static_cast<int>(std::lround(b->y)));
+        }
+    }
+}
+
+bool FrameEditorSession::is_xy_plane() const {
+    return edit_plane_ == EditPlane::XY;
+}
+
+const char* FrameEditorSession::plane_axis_label() const {
+    return is_xy_plane() ? "Y" : "Z";
+}
+
+const char* FrameEditorSession::plane_button_label() const {
+    return is_xy_plane() ? "XY Plane" : "XZ Plane";
+}
+
+void FrameEditorSession::toggle_edit_plane() {
+    edit_plane_ = is_xy_plane() ? EditPlane::XZ : EditPlane::XY;
+    end_hitbox_drag(false);
+    end_attack_drag(false);
+    update_plane_labels();
+    rebuild_rel_positions();
+    apply_camera_defaults(edit_plane_);
+    refresh_hitbox_form();
+    refresh_attack_form();
+    rebuild_layout();
+}
+
+void FrameEditorSession::update_plane_labels() const {
+    if (btn_plane_toggle_) {
+        btn_plane_toggle_->set_text(plane_button_label());
+    }
+    const std::string axis = plane_axis_label();
+    if (tb_total_dy_) tb_total_dy_->set_label_text("Total d" + axis);
+    if (tb_child_dy_) tb_child_dy_->set_label_text("Child d" + axis);
+    if (tb_hit_center_y_) tb_hit_center_y_->set_label_text("Center " + axis);
+    if (tb_attack_start_y_) tb_attack_start_y_->set_label_text("Start " + axis);
+    if (tb_attack_control_y_) tb_attack_control_y_->set_label_text("Control " + axis);
+    if (tb_attack_end_y_) tb_attack_end_y_->set_label_text("End " + axis);
+}
+
+float FrameEditorSession::movement_plane_delta(const MovementFrame& frame) const {
+    return is_xy_plane() ? frame.dy : frame.dz;
+}
+
+float& FrameEditorSession::movement_plane_delta(MovementFrame& frame) {
+    return is_xy_plane() ? frame.dy : frame.dz;
+}
+
+float FrameEditorSession::child_plane_delta(const ChildFrame& child) const {
+    return is_xy_plane() ? child.dy : child.dz;
+}
+
+float& FrameEditorSession::child_plane_delta(ChildFrame& child) {
+    return is_xy_plane() ? child.dy : child.dz;
+}
+
+float FrameEditorSession::hitbox_plane_center(const animation_update::FrameHitGeometry::HitBox& box) const {
+    return is_xy_plane() ? box.center_y : box.center_z;
+}
+
+float& FrameEditorSession::hitbox_plane_center(animation_update::FrameHitGeometry::HitBox& box) {
+    return is_xy_plane() ? box.center_y : box.center_z;
+}
+
+float FrameEditorSession::attack_plane_start(const animation_update::FrameAttackGeometry::Vector& vec) const {
+    return is_xy_plane() ? vec.start_y : vec.start_z;
+}
+
+float& FrameEditorSession::attack_plane_start(animation_update::FrameAttackGeometry::Vector& vec) {
+    return is_xy_plane() ? vec.start_y : vec.start_z;
+}
+
+float FrameEditorSession::attack_plane_control(const animation_update::FrameAttackGeometry::Vector& vec) const {
+    return is_xy_plane() ? vec.control_y : vec.control_z;
+}
+
+float& FrameEditorSession::attack_plane_control(animation_update::FrameAttackGeometry::Vector& vec) {
+    return is_xy_plane() ? vec.control_y : vec.control_z;
+}
+
+float FrameEditorSession::attack_plane_end(const animation_update::FrameAttackGeometry::Vector& vec) const {
+    return is_xy_plane() ? vec.end_y : vec.end_z;
+}
+
+float& FrameEditorSession::attack_plane_end(animation_update::FrameAttackGeometry::Vector& vec) {
+    return is_xy_plane() ? vec.end_y : vec.end_z;
+}
+
 void FrameEditorSession::begin(Assets* assets,
                                Asset* asset,
                                std::shared_ptr<animation_editor::AnimationDocument> document,
                                std::shared_ptr<animation_editor::PreviewProvider> preview,
                                const std::string& animation_id,
-                               animation_editor::AnimationEditorWindow* host_to_toggle,
+                               std::function<void(const std::string&)> on_host_closed,
                                std::function<void()> on_end_callback) {
+    if (active_) {
+        end();
+    }
     if (!assets || !asset || !document || animation_id.empty()) {
         return;
     }
@@ -213,11 +460,11 @@ void FrameEditorSession::begin(Assets* assets,
     document_ = std::move(document);
     preview_ = std::move(preview);
     animation_id_ = animation_id;
-    host_ = host_to_toggle;
+    on_host_closed_ = std::move(on_host_closed);
     on_end_ = std::move(on_end_callback);
     edited_animation_ids_.clear();
     if (!snap_resolution_override_ && assets_) {
-        snap_resolution_r_ = vibble::grid::clamp_resolution(std::max(0, assets_->map_grid_settings().resolution));
+        snap_resolution_r_ = vibble::grid::clamp_resolution(std::max(0, assets_->map_grid_settings().grid_resolution));
     }
 
     // Ensure the document is hydrated from the manifest store so edits map to the real, persisted entry.
@@ -261,6 +508,8 @@ void FrameEditorSession::begin(Assets* assets,
     show_child_ = true;
     smooth_enabled_ = false;
     curve_enabled_ = false;
+    edit_plane_ = EditPlane::XZ;
+    grid_overlay_enabled_ = true;
     selected_hitbox_type_index_ = 1;
     selected_attack_type_index_ = 1;
     selected_attack_vector_indices_.fill(-1);
@@ -280,9 +529,11 @@ void FrameEditorSession::begin(Assets* assets,
     cache_child_hidden_states();
 
     ensure_widgets();
+    update_plane_labels();
     refresh_hitbox_form();
     refresh_attack_form();
     refresh_hitbox_form();
+    apply_camera_defaults(edit_plane_);
 
     {
         int sw = 0, sh = 0;
@@ -297,8 +548,14 @@ void FrameEditorSession::begin(Assets* assets,
         DirectoryPanelMetrics dir_metrics = build_directory_panel_metrics();
         const int dir_w = dir_metrics.width;
         const int dir_h = dir_metrics.height;
-        const int nav_h = 90;
         const int nav_w = 560;
+        const int nav_vertical_padding = DMSpacing::small_gap() * 2;
+        const int nav_drag_handle_height = kPanelDragHandleHeight;
+        const int nav_h = nav_header_height_px(dd_animation_select_ != nullptr) +
+                          nav_vertical_padding +
+                          kNavPreviewHeight +
+                          kNavSliderGap +
+                          nav_drag_handle_height;
 
         int tool_w = 0;
         int tool_h = 0;
@@ -429,6 +686,8 @@ void FrameEditorSession::end() {
 
     const bool target_alive = target_is_alive();
 
+    end_hitbox_drag(true);
+    end_attack_drag(true);
     persist_changes(true);
     if (target_alive && target_ && target_->info) {
         target_->info->reload_animations_from_disk();
@@ -460,7 +719,7 @@ void FrameEditorSession::end() {
         document_->save_to_file(false);
     }
 
-    auto saved_host = host_;
+    auto saved_host_callback = std::move(on_host_closed_);
     auto saved_animation_id = animation_id_;
 
     active_ = false;
@@ -468,7 +727,7 @@ void FrameEditorSession::end() {
     target_ = nullptr;
     document_.reset();
     preview_.reset();
-    host_ = nullptr;
+    on_host_closed_ = {};
     animation_id_.clear();
     frames_.clear();
     rel_positions_.clear();
@@ -478,8 +737,8 @@ void FrameEditorSession::end() {
     edited_animation_ids_.clear();
     last_payload_loaded_ = false;
 
-    if (saved_host) {
-        saved_host->on_live_frame_editor_closed(saved_animation_id);
+    if (saved_host_callback) {
+        saved_host_callback(saved_animation_id);
     }
 
     if (on_end_) {
@@ -493,10 +752,248 @@ void FrameEditorSession::center_camera_origin() {
     if (!assets_ || !target_) {
         return;
     }
+    if (manual_pan_active_ || right_pan_active_) {
+        return;
+    }
     WarpedScreenGrid& cam = assets_->getView();
     SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
     cam.set_focus_override(anchor_world);
     cam.set_screen_center(anchor_world);
+}
+
+FrameEditorSession::TextureMetrics FrameEditorSession::current_frame_texture_metrics(SDL_Renderer* renderer) const {
+    TextureMetrics metrics{};
+    if (!renderer || animation_id_.empty()) {
+        return metrics;
+    }
+    if (preview_) {
+        if (SDL_Texture* tex = preview_->get_frame_texture(renderer, animation_id_, selected_index_)) {
+            SDL_QueryTexture(tex, nullptr, nullptr, &metrics.width, &metrics.height);
+        }
+    }
+    if ((metrics.width <= 0 || metrics.height <= 0) && target_ && target_->info) {
+        auto it = target_->info->animations.find(animation_id_);
+        if (it != target_->info->animations.end() &&
+            selected_index_ >= 0 &&
+            selected_index_ < static_cast<int>(it->second.frames.size())) {
+            const AnimationFrame* frame = it->second.frames[static_cast<std::size_t>(selected_index_)];
+            const float variant_scale = std::max(0.0001f, target_->current_nearest_variant_scale);
+            if (const FrameVariant* variant = it->second.get_frame(frame, variant_scale)) {
+                if (SDL_Texture* tex = variant->get_base_texture()) {
+                    SDL_QueryTexture(tex, nullptr, nullptr, &metrics.width, &metrics.height);
+                }
+            }
+        }
+    }
+    if (metrics.width < 0) {
+        metrics.width = 0;
+    }
+    if (metrics.height < 0) {
+        metrics.height = 0;
+    }
+    return metrics;
+}
+
+bool FrameEditorSession::project_texture_bounds(const WarpedScreenGrid& cam,
+                                                SDL_Point anchor_world,
+                                                const TextureMetrics& metrics,
+                                                EditPlane plane,
+                                                SDL_FRect& out_bounds) const {
+    if (metrics.width <= 0 || metrics.height <= 0) {
+        return false;
+    }
+    const float half_w = static_cast<float>(metrics.width) * 0.5f;
+    const float left = static_cast<float>(anchor_world.x) - half_w;
+    const float right = static_cast<float>(anchor_world.x) + half_w;
+    const float bottom = static_cast<float>(anchor_world.y);
+    const float top = static_cast<float>(anchor_world.y) - static_cast<float>(metrics.height);
+
+    std::array<SDL_FPoint, 4> projected{};
+    if (plane == EditPlane::XZ) {
+        const float world_y = static_cast<float>(anchor_world.y);
+        const float top_z = static_cast<float>(metrics.height);
+        const float bottom_z = 0.0f;
+        std::array<std::pair<float, float>, 4> corners = {
+            std::pair<float, float>{left, bottom_z},
+            {right, bottom_z},
+            {right, top_z},
+            {left, top_z}
+        };
+        for (std::size_t i = 0; i < corners.size(); ++i) {
+            SDL_FPoint screen{};
+            if (!cam.project_world_point(SDL_FPoint{corners[i].first, world_y}, corners[i].second, screen)) {
+                return false;
+            }
+            projected[i] = screen;
+        }
+    } else {
+        projected = {
+            cam.map_to_screen_f(SDL_FPoint{left, top}),
+            cam.map_to_screen_f(SDL_FPoint{right, top}),
+            cam.map_to_screen_f(SDL_FPoint{right, bottom}),
+            cam.map_to_screen_f(SDL_FPoint{left, bottom})
+        };
+    }
+
+    float min_x = projected[0].x;
+    float max_x = projected[0].x;
+    float min_y = projected[0].y;
+    float max_y = projected[0].y;
+    for (const auto& p : projected) {
+        if (!std::isfinite(p.x) || !std::isfinite(p.y)) {
+            return false;
+        }
+        min_x = std::min(min_x, p.x);
+        max_x = std::max(max_x, p.x);
+        min_y = std::min(min_y, p.y);
+        max_y = std::max(max_y, p.y);
+    }
+    out_bounds.x = min_x;
+    out_bounds.y = min_y;
+    out_bounds.w = max_x - min_x;
+    out_bounds.h = max_y - min_y;
+    return (out_bounds.w > 0.0f && out_bounds.h > 0.0f);
+}
+
+double FrameEditorSession::fit_camera_height_for_xy(WarpedScreenGrid& cam,
+                                                    SDL_Point anchor_world,
+                                                    const TextureMetrics& metrics,
+                                                    int screen_w,
+                                                    int screen_h) const {
+    if (metrics.width <= 0 || metrics.height <= 0 || screen_w <= 0 || screen_h <= 0) {
+        return cam.get_scale();
+    }
+    const float target_w = static_cast<float>(screen_w) * kFrameFitScreenRatio;
+    const float target_h = static_cast<float>(screen_h) * kFrameFitScreenRatio;
+    double low = kFrameFitMinHeight;
+    double high = kFrameFitMaxHeight;
+    double best = cam.get_scale();
+    for (int i = 0; i < kFrameFitIterations; ++i) {
+        const double mid = (low + high) * 0.5;
+        cam.set_scale(mid);
+        SDL_FRect bounds{};
+        if (!project_texture_bounds(cam, anchor_world, metrics, EditPlane::XY, bounds)) {
+            break;
+        }
+        const bool fits = bounds.w <= target_w && bounds.h <= target_h;
+        if (fits) {
+            best = mid;
+            high = mid;
+        } else {
+            low = mid;
+        }
+    }
+    return best;
+}
+
+double FrameEditorSession::fit_camera_y_distance_for_xz(WarpedScreenGrid& cam,
+                                                        SDL_Point anchor_world,
+                                                        const TextureMetrics& metrics,
+                                                        int screen_w,
+                                                        int screen_h) const {
+    if (metrics.width <= 0 || metrics.height <= 0 || screen_w <= 0 || screen_h <= 0) {
+        return cam.camera_y_distance();
+    }
+    const float target_w = static_cast<float>(screen_w) * kFrameFitScreenRatio;
+    const float target_h = static_cast<float>(screen_h) * kFrameFitScreenRatio;
+    double low = 0.0;
+    double high = 2000.0;
+    double best = cam.camera_y_distance();
+    for (int i = 0; i < kFrameFitIterations; ++i) {
+        const double mid = (low + high) * 0.5;
+        cam.set_camera_y_distance(mid);
+        SDL_FRect bounds{};
+        if (!project_texture_bounds(cam, anchor_world, metrics, EditPlane::XZ, bounds)) {
+            break;
+        }
+        const bool fits = bounds.w <= target_w && bounds.h <= target_h;
+        if (fits) {
+            best = mid;
+            high = mid;
+        } else {
+            low = mid;
+        }
+    }
+    return best;
+}
+
+void FrameEditorSession::apply_camera_defaults(EditPlane plane) {
+    if (!assets_ || !target_) {
+        return;
+    }
+    WarpedScreenGrid& cam = assets_->getView();
+    pan_height_.cancel(cam);
+    manual_pan_active_ = false;
+    manual_pan_has_last_center_ = false;
+    cam.set_manual_height_override(true);
+
+    SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
+    cam.set_focus_override(anchor_world);
+    cam.set_screen_center(anchor_world);
+
+    SDL_Renderer* renderer = assets_->renderer();
+    TextureMetrics metrics = current_frame_texture_metrics(renderer);
+
+    int screen_w = 0;
+    int screen_h = 0;
+    if (renderer) {
+        SDL_GetRendererOutputSize(renderer, &screen_w, &screen_h);
+    }
+
+    if (plane == EditPlane::XY) {
+        cam.set_camera_y_distance(0.0);
+        const double height = fit_camera_height_for_xy(cam, anchor_world, metrics, screen_w, screen_h);
+        cam.set_scale(height);
+    } else {
+        const double base_height = (metrics.height > 0)
+            ? std::max(kFrameFitMinHeight, static_cast<double>(metrics.height) * 0.5)
+            : cam.get_scale();
+        cam.set_scale(base_height);
+        const double distance = fit_camera_y_distance_for_xz(cam, anchor_world, metrics, screen_w, screen_h);
+        cam.set_camera_y_distance(distance);
+    }
+}
+
+void FrameEditorSession::handle_xz_scroll(WarpedScreenGrid& cam, int wheel_y) {
+    if (wheel_y == 0) {
+        return;
+    }
+
+    const double step = 1.1;
+    const int ticks = std::abs(wheel_y);
+    const bool distance_increase = (wheel_y < 0);
+    const double mag = std::pow(step, ticks);
+    const double current = cam.camera_y_distance();
+    const double base = std::max(1.0, current);
+    double target = distance_increase ? base * mag : (base / mag);
+    if (!distance_increase && current <= 1.0) {
+        target = 0.0;
+    }
+    cam.set_camera_y_distance(target);
+}
+
+void FrameEditorSession::handle_xy_scroll(WarpedScreenGrid& cam, int wheel_y) const {
+    if (wheel_y == 0) {
+        return;
+    }
+    const double step = 1.1;
+    const int ticks = std::abs(wheel_y);
+    const bool height_increase = (wheel_y < 0);
+    const double mag = std::pow(step, ticks);
+    const double eff = height_increase ? mag : (1.0 / mag);
+
+    const double base_scale = std::max(1.0, static_cast<double>(cam.get_scale()));
+    const double unclamped_target = base_scale * eff;
+    const double target_scale = std::clamp(unclamped_target, 1.0, 50000.0);
+    const double adjusted_eff = target_scale / base_scale;
+
+    if (std::abs(adjusted_eff - 1.0) > 1e-6) {
+        cam.set_manual_height_override(true);
+        const SDL_Point focus = cam.get_screen_center();
+        cam.set_focus_override(focus);
+        cam.set_screen_center(focus);
+        cam.animate_height_multiply(adjusted_eff);
+    }
 }
 
 void FrameEditorSession::update(const Input& input) {
@@ -513,8 +1010,37 @@ void FrameEditorSession::update(const Input& input) {
 
         ensure_widgets();
         rebuild_layout();
-        const bool pan_blocked = true;
-        pan_height_.handle_input(cam, input, pan_blocked);
+        const SDL_Point mouse{input.getX(), input.getY()};
+        hover_toolbox_ = toolbox_rect_.w > 0 && toolbox_rect_.h > 0 && SDL_PointInRect(&mouse, &toolbox_rect_);
+        hover_toolbox_drag_handle_ = false;
+        if (toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
+            bool over_widget = false;
+            for (const auto& r : toolbox_widget_rects_) {
+                if (r.w > 0 && r.h > 0 && SDL_PointInRect(&mouse, &r)) {
+                    over_widget = true;
+                    break;
+                }
+            }
+            const bool over_handle = toolbox_drag_rect_.w > 0 && SDL_PointInRect(&mouse, &toolbox_drag_rect_);
+            hover_toolbox_drag_handle_ = over_handle || (SDL_PointInRect(&mouse, &toolbox_rect_) && !over_widget);
+        }
+        hover_nav_drag_handle_ = nav_drag_rect_.w > 0 && nav_drag_rect_.h > 0 && SDL_PointInRect(&mouse, &nav_drag_rect_);
+        const bool block_camera_controls = hover_toolbox_ || dragging_toolbox_scrollbar_;
+        int scroll_delta = 0;
+        if (pending_scroll_delta_ != 0) {
+            scroll_delta = pending_scroll_delta_;
+            pending_scroll_delta_ = 0;
+        } else {
+            scroll_delta = input.getScrollY();
+        }
+
+        if (!block_camera_controls) {
+            if (is_xy_plane()) {
+                handle_xy_scroll(cam, scroll_delta);
+            } else {
+                handle_xz_scroll(cam, scroll_delta);
+            }
+        }
         center_camera_origin();
     }
 
@@ -567,13 +1093,13 @@ void FrameEditorSession::update(const Input& input) {
     if (cb_curve_) {
         cb_curve_->set_value(smooth_enabled_ ? curve_enabled_ : false);
     }
-    int total_dx = 0, total_dy = 0;
+    int total_dx = 0, total_plane = 0;
     for (size_t i = 1; i < frames_.size(); ++i) {
         total_dx += static_cast<int>(std::lround(frames_[i].dx));
-        total_dy += static_cast<int>(std::lround(frames_[i].dy));
+        total_plane += static_cast<int>(std::lround(movement_plane_delta(frames_[i])));
     }
     const std::string dxs = std::to_string(total_dx);
-    const std::string dys = std::to_string(total_dy);
+    const std::string dys = std::to_string(total_plane);
     if (tb_total_dx_ && !tb_total_dx_->is_editing()) {
         if (tb_total_dx_->value() != dxs) tb_total_dx_->set_value(dxs);
         last_totals_dx_text_ = tb_total_dx_->value();
@@ -596,7 +1122,7 @@ void FrameEditorSession::update(const Input& input) {
 };
         if (child) {
             sync_text_box(tb_child_dx_.get(), last_child_dx_text_, child->dx);
-            sync_text_box(tb_child_dy_.get(), last_child_dy_text_, child->dz);
+            sync_text_box(tb_child_dy_.get(), last_child_dy_text_, child_plane_delta(*child));
             if (tb_child_deg_ && !tb_child_deg_->is_editing()) {
                 std::ostringstream oss;
                 oss << std::fixed << std::setprecision(1) << child->degree;
@@ -701,22 +1227,41 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         }
         return false;
 };
+    auto point_in_toolbox_scrollbar = [&](const SDL_Point& p) -> bool {
+        return toolbox_scrollbar_visible_ && SDL_PointInRect(&p, &toolbox_scrollbar_track_);
+};
+    auto update_toolbox_scrollbar_from_mouse = [&](int mouse_y) {
+        if (!toolbox_scrollbar_visible_) return;
+        const int thumb_h = toolbox_scrollbar_thumb_.h;
+        int track_min = toolbox_scrollbar_track_.y;
+        int track_max = toolbox_scrollbar_track_.y + toolbox_scrollbar_track_.h - thumb_h;
+        if (track_max < track_min) track_max = track_min;
+        int new_thumb_y = mouse_y - toolbox_scrollbar_drag_offset_;
+        new_thumb_y = std::clamp(new_thumb_y, track_min, track_max);
+        const float denom = static_cast<float>(track_max - track_min);
+        float ratio = 0.0f;
+        if (denom > 0.0f) {
+            ratio = static_cast<float>(new_thumb_y - track_min) / denom;
+        }
+        const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+        toolbox_scroll_offset_ = std::clamp(static_cast<int>(std::round(ratio * static_cast<float>(max_scroll))), 0, max_scroll);
+};
 
-    if (dragging_dir_ || dragging_toolbox_ || dragging_nav_ || dragging_scrollbar_thumb_) {
+    if (dragging_toolbox_ || dragging_scrollbar_thumb_ || dragging_toolbox_scrollbar_ || dragging_nav_) {
         if (e.type == SDL_MOUSEMOTION) {
             bool moved = false;
-            if (dragging_dir_) {
-                dir_pos_.x = e.motion.x - drag_offset_dir_.x;
-                dir_pos_.y = e.motion.y - drag_offset_dir_.y;
-                DirectoryPanelMetrics dir_metrics = build_directory_panel_metrics();
-                clamp_panel_pos(dir_pos_.x, dir_pos_.y, dir_metrics.width, dir_metrics.height);
-                moved = true;
-            } else if (dragging_toolbox_) {
+            if (dragging_toolbox_) {
                 toolbox_pos_.x = e.motion.x - drag_offset_toolbox_.x;
                 toolbox_pos_.y = e.motion.y - drag_offset_toolbox_.y;
                 const int tool_w = toolbox_rect_.w;
                 const int tool_h = toolbox_rect_.h;
                 clamp_panel_pos(toolbox_pos_.x, toolbox_pos_.y, tool_w, tool_h);
+                moved = true;
+            } else if (dragging_scrollbar_thumb_) {
+                update_scrollbar_from_mouse(e.motion.x);
+                moved = true;
+            } else if (dragging_toolbox_scrollbar_) {
+                update_toolbox_scrollbar_from_mouse(e.motion.y);
                 moved = true;
             } else if (dragging_nav_) {
                 nav_pos_.x = e.motion.x - drag_offset_nav_.x;
@@ -725,19 +1270,16 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 const int nav_h = nav_rect_.h;
                 clamp_panel_pos(nav_pos_.x, nav_pos_.y, nav_w, nav_h);
                 moved = true;
-            } else if (dragging_scrollbar_thumb_) {
-                update_scrollbar_from_mouse(e.motion.x);
-                moved = true;
             }
             if (moved) {
                 rebuild_layout();
             }
             return true;
         } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-            dragging_dir_ = false;
             dragging_toolbox_ = false;
-            dragging_nav_ = false;
             dragging_scrollbar_thumb_ = false;
+            dragging_toolbox_scrollbar_ = false;
+            dragging_nav_ = false;
             return true;
         }
     }
@@ -751,6 +1293,98 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             rebuild_layout();
             return true;
         }
+        if (point_in_toolbox_scrollbar(p)) {
+            dragging_toolbox_scrollbar_ = true;
+            toolbox_scrollbar_drag_offset_ = std::clamp(p.y - toolbox_scrollbar_thumb_.y, 0, toolbox_scrollbar_thumb_.h);
+            update_toolbox_scrollbar_from_mouse(p.y);
+            rebuild_layout();
+            return true;
+        }
+    }
+
+    if (e.type == SDL_MOUSEWHEEL) {
+        SDL_Point p{0, 0};
+        SDL_GetMouseState(&p.x, &p.y);
+        if (toolbox_rect_.w > 0 && toolbox_rect_.h > 0 && SDL_PointInRect(&p, &toolbox_rect_)) {
+            const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+            if (max_scroll > 0) {
+                toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_ - e.wheel.y * 24, 0, max_scroll);
+                rebuild_layout();
+            }
+            return true;
+        }
+        pending_scroll_delta_ += e.wheel.y;
+        return true;
+    }
+
+    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_RIGHT) {
+        SDL_Point p{ e.button.x, e.button.y };
+        if (SDL_PointInRect(&p, &directory_rect_) || SDL_PointInRect(&p, &nav_rect_) || SDL_PointInRect(&p, &toolbox_rect_)) {
+            return true;
+        }
+        if (!assets_) {
+            return true;
+        }
+        WarpedScreenGrid& cam = assets_->getView();
+        manual_pan_active_ = true;
+        const SDL_Point focus_start = cam.has_focus_override()
+            ? cam.get_focus_override_point()
+            : cam.get_screen_center();
+        manual_pan_last_center_ = focus_start;
+        manual_pan_has_last_center_ = true;
+        right_pan_active_ = true;
+        right_pan_start_mouse_ = p;
+        right_pan_start_center_ = cam.get_screen_center();
+        right_pan_start_world_ = cam.screen_to_map(p);
+        right_pan_last_world_ = right_pan_start_world_;
+        right_pan_start_focus_ = focus_start;
+        right_pan_start_distance_ = cam.camera_y_distance();
+        right_pan_last_center_ = focus_start;
+        right_pan_has_last_center_ = true;
+        return true;
+    }
+
+    if (e.type == SDL_MOUSEMOTION && right_pan_active_) {
+        if (!assets_) {
+            return true;
+        }
+        const bool right_down = (e.motion.state & SDL_BUTTON_RMASK) != 0;
+        if (!right_down) {
+            right_pan_active_ = false;
+            right_pan_has_last_center_ = false;
+            return true;
+        }
+        SDL_Point p{ e.motion.x, e.motion.y };
+        WarpedScreenGrid& cam = assets_->getView();
+        SDL_FPoint world_now = cam.screen_to_map(p);
+        SDL_FPoint delta_world{
+            world_now.x - right_pan_last_world_.x,
+            world_now.y - right_pan_last_world_.y
+        };
+
+        SDL_Point new_focus{
+            static_cast<int>(std::lround(right_pan_last_center_.x - delta_world.x)),
+            static_cast<int>(std::lround(right_pan_last_center_.y - delta_world.y))
+        };
+        const bool focus_changed = (!right_pan_has_last_center_) ||
+                                   new_focus.x != right_pan_last_center_.x ||
+                                   new_focus.y != right_pan_last_center_.y;
+        if (focus_changed) {
+            cam.set_focus_override(new_focus);
+            cam.set_screen_center(new_focus);
+            manual_pan_last_center_ = new_focus;
+            manual_pan_has_last_center_ = true;
+            right_pan_last_center_ = new_focus;
+            right_pan_has_last_center_ = true;
+        }
+        right_pan_last_world_ = cam.screen_to_map(p);
+        return true;
+    }
+
+    if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_RIGHT) {
+        right_pan_active_ = false;
+        right_pan_has_last_center_ = false;
+        return true;
     }
 
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
@@ -760,14 +1394,23 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         if (over_dir) {
             bool over_button = false;
             const DMButton* buttons[] = {
-                btn_back_.get(), btn_movement_.get(), btn_children_.get(), btn_attack_geometry_.get(), btn_hit_geometry_.get() };
+                btn_back_.get(), btn_movement_.get(), btn_children_.get(), btn_attack_geometry_.get(), btn_hit_geometry_.get(),
+                btn_plane_toggle_.get() };
             for (const DMButton* b : buttons) {
                 if (!b) continue; const SDL_Rect& r = b->rect();
                 if (SDL_PointInRect(&p, &r)) { over_button = true; break; }
             }
+            if (!over_button && cb_grid_overlay_) {
+                if (SDL_PointInRect(&p, &cb_grid_overlay_->rect())) {
+                    over_button = true;
+                }
+            }
+            if (!over_button && stepper_grid_resolution_) {
+                if (SDL_PointInRect(&p, &stepper_grid_resolution_->rect())) {
+                    over_button = true;
+                }
+            }
             if (!over_button) {
-                dragging_dir_ = true;
-                drag_offset_dir_ = SDL_Point{ p.x - directory_rect_.x, p.y - directory_rect_.y };
                 return true;
             }
         }
@@ -782,6 +1425,12 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             }
         }
 
+        if (nav_drag_rect_.w > 0 && SDL_PointInRect(&p, &nav_drag_rect_)) {
+            dragging_nav_ = true;
+            drag_offset_nav_ = SDL_Point{ p.x - nav_rect_.x, p.y - nav_rect_.y };
+            return true;
+        }
+
         if (SDL_PointInRect(&p, &nav_rect_)) {
             bool over_nav_ctrl = false;
             if (btn_prev_) { const SDL_Rect& r = btn_prev_->rect(); if (SDL_PointInRect(&p, &r)) over_nav_ctrl = true; }
@@ -792,10 +1441,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             }
             if (!over_nav_ctrl) over_nav_ctrl = point_in_any_thumb(p);
             if (!over_nav_ctrl && point_in_scrollbar(p)) over_nav_ctrl = true;
-            const bool is_on_nav_handle = nav_drag_rect_.w > 0 && SDL_PointInRect(&p, &nav_drag_rect_);
-            if (is_on_nav_handle || !over_nav_ctrl) {
-                dragging_nav_ = true;
-                drag_offset_nav_ = SDL_Point{ p.x - nav_rect_.x, p.y - nav_rect_.y };
+            if (!over_nav_ctrl) {
                 return true;
             }
         }
@@ -838,6 +1484,17 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             this->end_hitbox_drag(false);
             this->end_attack_drag(false);
         })) return true;
+    if (handle_button(btn_plane_toggle_, [this]() {
+            this->toggle_edit_plane();
+        })) return true;
+    if (cb_grid_overlay_ && cb_grid_overlay_->handle_event(e)) {
+        grid_overlay_enabled_ = cb_grid_overlay_->value();
+        return true;
+    }
+    if (stepper_grid_resolution_ && stepper_grid_resolution_->handle_event(e)) {
+        set_snap_resolution(stepper_grid_resolution_->value());
+        return true;
+    }
     if (mode_ == Mode::HitGeometry) {
         if (handle_button(btn_hitbox_add_remove_, [this]() {
                 const std::string type = this->current_hitbox_type();
@@ -924,17 +1581,18 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 last_totals_dx_text_ = now_dx;
                 last_totals_dy_text_ = now_dy;
                 if (okx && oky) {
-                    double cur_dx = 0.0, cur_dy = 0.0;
+                    double cur_dx = 0.0, cur_plane = 0.0;
                     for (size_t i = 1; i < frames_.size(); ++i) {
                         cur_dx += std::isfinite(frames_[i].dx) ? frames_[i].dx : 0.0;
-                        cur_dy += std::isfinite(frames_[i].dy) ? frames_[i].dy : 0.0;
+                        const float axis = movement_plane_delta(frames_[i]);
+                        cur_plane += std::isfinite(axis) ? axis : 0.0;
                     }
                     const double need_dx = static_cast<double>(dx) - cur_dx;
-                    const double need_dy = static_cast<double>(dy) - cur_dy;
+                    const double need_plane = static_cast<double>(dy) - cur_plane;
                     const size_t last = frames_.size() > 0 ? frames_.size() - 1 : 0;
                     if (last >= 1) {
                         frames_[last].dx = static_cast<float>(std::lround(frames_[last].dx + need_dx));
-                        frames_[last].dy = static_cast<float>(std::lround(frames_[last].dy + need_dy));
+                        movement_plane_delta(frames_[last]) = static_cast<float>(std::lround(movement_plane_delta(frames_[last]) + need_plane));
                         rebuild_rel_positions();
                         persist_changes();
                     }
@@ -1050,15 +1708,12 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_child_dy_) {
-                    float new_dz = parse_float(tb_child_dy_->value(), child->dz);
-                    if (!std::isnan(new_dz) && child->dz != new_dz) {
-                        child->dz = new_dz;
+                    float new_plane = parse_float(tb_child_dy_->value(), child_plane_delta(*child));
+                    if (!std::isnan(new_plane) && child_plane_delta(*child) != new_plane) {
+                        child_plane_delta(*child) = new_plane;
                         changed = true;
                         child_offset_changed = true;
                     }
-                }
-                if (child_offset_changed) {
-                    child->dy = 0.0f;
                 }
                 if (tb_child_deg_) {
                     float new_deg = parse_float(tb_child_deg_->value(), child->degree);
@@ -1137,10 +1792,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_hit_center_y_) {
-                    float value = parse_float(tb_hit_center_y_->value(), box->center_z);
-                    if (std::isfinite(value) && box->center_z != value) {
-                        box->center_z = value;
-                        box->center_y = 0.0f;
+                    float value = parse_float(tb_hit_center_y_->value(), hitbox_plane_center(*box));
+                    if (std::isfinite(value) && hitbox_plane_center(*box) != value) {
+                        hitbox_plane_center(*box) = value;
                         changed = true;
                     }
                 }
@@ -1229,10 +1883,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_start_y_) {
-                    float value = parse_float(tb_attack_start_y_->value(), vec->start_z);
-                    if (std::isfinite(value) && vec->start_z != value) {
-                        vec->start_z = value;
-                        vec->start_y = 0.0f;
+                    float value = parse_float(tb_attack_start_y_->value(), attack_plane_start(*vec));
+                    if (std::isfinite(value) && attack_plane_start(*vec) != value) {
+                        attack_plane_start(*vec) = value;
                         changed = true;
                     }
                 }
@@ -1244,10 +1897,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_control_y_) {
-                    float value = parse_float(tb_attack_control_y_->value(), vec->control_z);
-                    if (std::isfinite(value) && vec->control_z != value) {
-                        vec->control_z = value;
-                        vec->control_y = 0.0f;
+                    float value = parse_float(tb_attack_control_y_->value(), attack_plane_control(*vec));
+                    if (std::isfinite(value) && attack_plane_control(*vec) != value) {
+                        attack_plane_control(*vec) = value;
                         changed = true;
                     }
                 }
@@ -1259,10 +1911,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_end_y_) {
-                    float value = parse_float(tb_attack_end_y_->value(), vec->end_z);
-                    if (std::isfinite(value) && vec->end_z != value) {
-                        vec->end_z = value;
-                        vec->end_y = 0.0f;
+                    float value = parse_float(tb_attack_end_y_->value(), attack_plane_end(*vec));
+                    if (std::isfinite(value) && attack_plane_end(*vec) != value) {
+                        attack_plane_end(*vec) = value;
                         changed = true;
                     }
                 }
@@ -1328,7 +1979,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
     if (handle_button(btn_next_, [this]() { this->select_frame(this->selected_index_ + 1); })) return true;
 
     if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-        if (dragging_dir_ || dragging_nav_ || dragging_scrollbar_thumb_) return true;
+        if (dragging_dir_ || dragging_scrollbar_thumb_ || dragging_nav_) return true;
         SDL_Point p{e.button.x, e.button.y};
         for (size_t i = 0; i < thumb_rects_.size() && i < thumb_indices_.size(); ++i) {
             if (SDL_PointInRect(&p, &thumb_rects_[i])) {
@@ -1362,8 +2013,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 const float screen_to_local = (attachment > 0.0001f) ? (1.0f / attachment) : 1.0f;
                 const float unflipped_x = target_->flipped ? -desired_rel.x : desired_rel.x;
                 child->dx = static_cast<float>(std::round(unflipped_x * screen_to_local));
-                child->dz = static_cast<float>(std::round(desired_rel.y * screen_to_local));
-                child->dy = 0.0f;
+                child_plane_delta(*child) = static_cast<float>(std::round(desired_rel.y * screen_to_local));
                 child->has_data = true;
                 const bool should_smooth_child = smooth_enabled_ && selected_index_ > 0;
                 if (should_smooth_child) {
@@ -1433,6 +2083,12 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
     const WarpedScreenGrid& cam = assets_->getView();
     SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
 
+    if (grid_overlay_enabled_ && (mode_ == Mode::Movement || is_children_mode(mode_))) {
+        TextureMetrics metrics = current_frame_texture_metrics(renderer);
+        const EditPlane grid_plane = (edit_plane_ == EditPlane::XY) ? EditPlane::XZ : edit_plane_;
+        render_plane_grid(renderer, cam, anchor_world, grid_plane, snap_resolution_r_, metrics);
+    }
+
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     const SDL_Color path_col = DMStyles::AccentButton().bg;
     SDL_SetRenderDrawColor(renderer, path_col.r, path_col.g, path_col.b, 205);
@@ -1475,11 +2131,11 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
             const auto& child = frame.children[i];
 
             const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
-            const float scaled_dz = static_cast<float>(child.dz) * base_adjustment;
+            const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
             const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
             SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{
                 dx_world + static_cast<float>(parent_base.x),
-                scaled_dz + static_cast<float>(parent_base.y)
+                scaled_plane + static_cast<float>(parent_base.y)
             });
             SDL_Point cp = round_point(screen);
             const int marker_r = (static_cast<int>(i) == selected_child_index_) ? 6 : 4;
@@ -1502,10 +2158,10 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
             const AnimationFrame* preview_frame = slot.frame;
 
             const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
-            const float scaled_dz = static_cast<float>(child.dz) * base_adjustment;
+            const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
             const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
             SDL_FPoint child_world{
-                static_cast<float>(parent_base.x) + dx_world, static_cast<float>(parent_base.y) + scaled_dz };
+                static_cast<float>(parent_base.x) + dx_world, static_cast<float>(parent_base.y) + scaled_plane };
             const FrameVariant* variant = (preview_anim && preview_frame) ? preview_anim->get_frame(preview_frame, variant_scale) : nullptr;
             SDL_Texture* tex = variant ? variant->get_base_texture() : slot.texture;
             if (!tex) continue;
@@ -1543,70 +2199,9 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
     ensure_widgets();
     rebuild_layout();
 
-    dm_draw::DrawBeveledRect(renderer, directory_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelHeader(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-    {
-        std::string mode_text = std::string("Mode: ") + mode_display_name(mode_);
-        if (pending_save_) {
-            mode_text.append(" *");
-        }
-        render_label(renderer, mode_text, directory_rect_.x + DMSpacing::small_gap(), directory_rect_.y + DMSpacing::small_gap());
-    }
-    if (btn_back_) btn_back_->render(renderer);
-    if (btn_movement_) btn_movement_->render(renderer);
-    if (btn_children_) btn_children_->render(renderer);
-    if (btn_attack_geometry_) btn_attack_geometry_->render(renderer);
-    if (btn_hit_geometry_) btn_hit_geometry_->render(renderer);
+    render_navigation_panel(renderer);
 
-    if (mode_ == Mode::Movement && toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
-        dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-        if (cb_smooth_) cb_smooth_->render(renderer);
-        if (smooth_enabled_ && cb_curve_) cb_curve_->render(renderer);
-        if (cb_show_anim_) cb_show_anim_->render(renderer);
-        if (tb_total_dx_) tb_total_dx_->render(renderer);
-        if (tb_total_dy_) tb_total_dy_->render(renderer);
-        if (btn_apply_all_movement_) btn_apply_all_movement_->render(renderer);
-    } else if (is_children_mode(mode_) && toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
-        dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-
-        if (cb_smooth_) cb_smooth_->render(renderer);
-        if (smooth_enabled_ && cb_curve_) cb_curve_->render(renderer);
-        if (tb_total_dx_) tb_total_dx_->render(renderer);
-        if (tb_total_dy_) tb_total_dy_->render(renderer);
-        if (dd_child_select_) dd_child_select_->render(renderer);
-        if (cb_show_anim_) cb_show_anim_->render(renderer);
-        if (cb_show_child_) cb_show_child_->render(renderer);
-        if (tb_child_dx_) tb_child_dx_->render(renderer);
-        if (tb_child_dy_) tb_child_dy_->render(renderer);
-        if (tb_child_deg_) tb_child_deg_->render(renderer);
-        if (cb_child_visible_) cb_child_visible_->render(renderer);
-        if (cb_child_render_front_) cb_child_render_front_->render(renderer);
-        if (btn_apply_all_children_) btn_apply_all_children_->render(renderer);
-    } else if (mode_ == Mode::HitGeometry && toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
-        dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-        if (dd_hitbox_type_) dd_hitbox_type_->render(renderer);
-        if (btn_hitbox_add_remove_) btn_hitbox_add_remove_->render(renderer);
-        if (btn_hitbox_copy_next_) btn_hitbox_copy_next_->render(renderer);
-        if (tb_hit_center_x_) tb_hit_center_x_->render(renderer);
-        if (tb_hit_center_y_) tb_hit_center_y_->render(renderer);
-        if (tb_hit_width_) tb_hit_width_->render(renderer);
-        if (tb_hit_height_) tb_hit_height_->render(renderer);
-        if (tb_hit_rotation_) tb_hit_rotation_->render(renderer);
-        if (btn_apply_all_hit_) btn_apply_all_hit_->render(renderer);
-    } else if (mode_ == Mode::AttackGeometry && toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
-        dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-        if (dd_attack_type_) dd_attack_type_->render(renderer);
-        if (btn_attack_add_remove_) btn_attack_add_remove_->render(renderer);
-        if (btn_attack_delete_) btn_attack_delete_->render(renderer);
-        if (btn_attack_copy_next_) btn_attack_copy_next_->render(renderer);
-        if (tb_attack_start_x_) tb_attack_start_x_->render(renderer);
-        if (tb_attack_start_y_) tb_attack_start_y_->render(renderer);
-        if (tb_attack_control_x_) tb_attack_control_x_->render(renderer);
-        if (tb_attack_control_y_) tb_attack_control_y_->render(renderer);
-        if (tb_attack_end_x_) tb_attack_end_x_->render(renderer);
-        if (tb_attack_end_y_) tb_attack_end_y_->render(renderer);
-        if (tb_attack_damage_) tb_attack_damage_->render(renderer);
-        if (btn_apply_all_attack_) btn_apply_all_attack_->render(renderer);
-    }
+    render_toolbox(renderer);
 
     dm_draw::DrawBeveledRect(renderer, nav_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
     if (dd_animation_select_) {
@@ -1681,13 +2276,168 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
     DMDropdown::render_active_options(renderer);
 }
 
+void FrameEditorSession::render_navigation_panel(SDL_Renderer* renderer) const {
+    if (!renderer) return;
+    dm_draw::DrawBeveledRect(renderer, directory_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelHeader(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+    {
+        std::string mode_text = std::string("Mode: ") + mode_display_name(mode_);
+        if (pending_save_) {
+            mode_text.append(" *");
+        }
+        render_label(renderer, mode_text, directory_rect_.x + DMSpacing::small_gap(), directory_rect_.y + DMSpacing::small_gap());
+    }
+    if (btn_back_) btn_back_->render(renderer);
+    if (btn_movement_) btn_movement_->render(renderer);
+    if (btn_children_) btn_children_->render(renderer);
+    if (btn_attack_geometry_) btn_attack_geometry_->render(renderer);
+    if (btn_hit_geometry_) btn_hit_geometry_->render(renderer);
+    if (btn_plane_toggle_) btn_plane_toggle_->render(renderer);
+    if (cb_grid_overlay_) cb_grid_overlay_->render(renderer);
+    if (stepper_grid_resolution_) stepper_grid_resolution_->render(renderer);
+
+    if (nav_drag_rect_.w > 0 && nav_drag_rect_.h > 0) {
+        SDL_Color handle = hover_nav_drag_handle_ || dragging_nav_
+            ? SDL_Color{255, 255, 255, 200}
+            : DMStyles::Border();
+        SDL_SetRenderDrawColor(renderer, handle.r, handle.g, handle.b, handle.a);
+        SDL_RenderDrawRect(renderer, &nav_drag_rect_);
+    }
+    if (hover_nav_drag_handle_ || dragging_nav_) {
+        SDL_Color outline{255, 255, 255, 200};
+        SDL_SetRenderDrawColor(renderer, outline.r, outline.g, outline.b, outline.a);
+        SDL_RenderDrawRect(renderer, &nav_rect_);
+    }
+}
+
+void FrameEditorSession::render_toolbox(SDL_Renderer* renderer) const {
+    if (!renderer || toolbox_rect_.w <= 0 || toolbox_rect_.h <= 0) {
+        return;
+    }
+    dm_draw::DrawBeveledRect(renderer, toolbox_rect_, DMStyles::CornerRadius(), DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false,
+                             DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+
+    SDL_Rect prev_clip{};
+    SDL_RenderGetClipRect(renderer, &prev_clip);
+    const SDL_bool had_clip = SDL_RenderIsClipEnabled(renderer);
+    SDL_RenderSetClipRect(renderer, &toolbox_rect_);
+
+    auto render_if = [&](auto* widget) {
+        if (widget) widget->render(renderer);
+    };
+
+    if (mode_ == Mode::Movement) {
+        render_if(cb_smooth_.get());
+        if (smooth_enabled_) render_if(cb_curve_.get());
+        render_if(cb_show_anim_.get());
+        render_if(tb_total_dx_.get());
+        render_if(tb_total_dy_.get());
+        render_if(btn_apply_all_movement_.get());
+    } else if (is_children_mode(mode_)) {
+        render_if(cb_smooth_.get());
+        if (smooth_enabled_) render_if(cb_curve_.get());
+        render_if(tb_total_dx_.get());
+        render_if(tb_total_dy_.get());
+        render_if(dd_child_select_.get());
+        render_if(cb_show_anim_.get());
+        render_if(cb_show_child_.get());
+        render_if(tb_child_dx_.get());
+        render_if(tb_child_dy_.get());
+        render_if(tb_child_deg_.get());
+        render_if(cb_child_visible_.get());
+        render_if(cb_child_render_front_.get());
+        render_if(btn_apply_all_children_.get());
+        render_if(dd_child_mode_.get());
+        render_if(tb_child_name_.get());
+        render_if(btn_child_add_.get());
+        render_if(btn_child_remove_.get());
+    } else if (mode_ == Mode::HitGeometry) {
+        render_if(dd_hitbox_type_.get());
+        render_if(btn_hitbox_add_remove_.get());
+        render_if(btn_hitbox_copy_next_.get());
+        render_if(tb_hit_center_x_.get());
+        render_if(tb_hit_center_y_.get());
+        render_if(tb_hit_width_.get());
+        render_if(tb_hit_height_.get());
+        render_if(tb_hit_rotation_.get());
+        render_if(btn_apply_all_hit_.get());
+    } else if (mode_ == Mode::AttackGeometry) {
+        render_if(dd_attack_type_.get());
+        render_if(btn_attack_add_remove_.get());
+        render_if(btn_attack_delete_.get());
+        render_if(btn_attack_copy_next_.get());
+        render_if(tb_attack_start_x_.get());
+        render_if(tb_attack_start_y_.get());
+        render_if(tb_attack_control_x_.get());
+        render_if(tb_attack_control_y_.get());
+        render_if(tb_attack_end_x_.get());
+        render_if(tb_attack_end_y_.get());
+        render_if(tb_attack_damage_.get());
+        render_if(btn_apply_all_attack_.get());
+    }
+
+    if (had_clip == SDL_TRUE) {
+        SDL_RenderSetClipRect(renderer, &prev_clip);
+    } else {
+        SDL_RenderSetClipRect(renderer, nullptr);
+    }
+
+    if (toolbox_scrollbar_visible_) {
+        SDL_Color track = devmode::utils::with_alpha(DMStyles::PanelHeader(), 180);
+        SDL_SetRenderDrawColor(renderer, track.r, track.g, track.b, track.a);
+        SDL_RenderFillRect(renderer, &toolbox_scrollbar_track_);
+        SDL_Color thumb = DMStyles::AccentButton().bg;
+        SDL_SetRenderDrawColor(renderer, thumb.r, thumb.g, thumb.b, 220);
+        SDL_RenderFillRect(renderer, &toolbox_scrollbar_thumb_);
+        SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g, DMStyles::Border().b, 255);
+        SDL_RenderDrawRect(renderer, &toolbox_scrollbar_thumb_);
+    }
+
+    if (toolbox_drag_rect_.w > 0 && toolbox_drag_rect_.h > 0) {
+        SDL_Color handle = hover_toolbox_drag_handle_ || dragging_toolbox_
+            ? SDL_Color{255, 255, 255, 200}
+            : DMStyles::Border();
+        SDL_SetRenderDrawColor(renderer, handle.r, handle.g, handle.b, handle.a);
+        SDL_RenderDrawRect(renderer, &toolbox_drag_rect_);
+    }
+    if (hover_toolbox_drag_handle_ || dragging_toolbox_) {
+        SDL_Color outline{255, 255, 255, 200};
+        SDL_SetRenderDrawColor(renderer, outline.r, outline.g, outline.b, outline.a);
+        SDL_RenderDrawRect(renderer, &toolbox_rect_);
+    }
+}
+
 void FrameEditorSession::set_grid_overlay_enabled_transient(bool enabled) {
-    (void)enabled;
+    grid_overlay_enabled_ = enabled;
+    if (cb_grid_overlay_ && cb_grid_overlay_->value() != enabled) {
+        cb_grid_overlay_->set_value(enabled);
+    }
+}
+
+bool FrameEditorSession::should_render_asset(const Asset* asset) const {
+    if (!asset || !target_) {
+        return false;
+    }
+    if (asset == target_) {
+        return true;
+    }
+    if (!show_child_ || child_assets_.empty() || !asset->info) {
+        return false;
+    }
+    const std::string& name = asset->info->name;
+    return std::find(child_assets_.begin(), child_assets_.end(), name) != child_assets_.end();
 }
 
 void FrameEditorSession::set_snap_resolution(int r) {
     snap_resolution_r_ = vibble::grid::clamp_resolution(std::max(0, r));
     snap_resolution_override_ = true;
+    if (stepper_grid_resolution_ && stepper_grid_resolution_->value() != snap_resolution_r_) {
+        stepper_grid_resolution_->set_value(snap_resolution_r_);
+    }
+    if (assets_) {
+        assets_->refresh_filtered_active_assets();
+    }
+    rebuild_layout();
 }
 
 void FrameEditorSession::ensure_widgets() const {
@@ -1702,6 +2452,11 @@ void FrameEditorSession::ensure_widgets() const {
     if (!btn_hit_geometry_) btn_hit_geometry_ = std::make_unique<DMButton>("Hit Geometry", mode_ == Mode::HitGeometry ? &tab_active : &header, bw, bh);
     if (!btn_prev_) btn_prev_ = std::make_unique<DMButton>("<", &header, 40, 40);
     if (!btn_next_) btn_next_ = std::make_unique<DMButton>(">", &header, 40, 40);
+    if (!btn_plane_toggle_) btn_plane_toggle_ = std::make_unique<DMButton>(plane_button_label(), &header, 120, DMButton::height());
+    if (!cb_grid_overlay_) cb_grid_overlay_ = std::make_unique<DMCheckbox>("Show Grid", grid_overlay_enabled_);
+    if (!stepper_grid_resolution_) {
+        stepper_grid_resolution_ = std::make_unique<DMNumericStepper>("Grid Overlay (r)", 0, vibble::grid::kMaxResolution, snap_resolution_r_);
+    }
     refresh_animation_dropdown();
     if (!btn_apply_all_movement_) btn_apply_all_movement_ = std::make_unique<DMButton>("Apply To All Frames", &header, 180, DMButton::height());
     if (!btn_apply_all_children_) btn_apply_all_children_ = std::make_unique<DMButton>("Apply To All Frames", &header, 180, DMButton::height());
@@ -1723,6 +2478,12 @@ void FrameEditorSession::ensure_widgets() const {
     if (!tb_child_deg_) tb_child_deg_ = std::make_unique<DMTextBox>("Rotation", "0");
     if (!cb_child_visible_) cb_child_visible_ = std::make_unique<DMCheckbox>("Visible", true);
     if (!cb_child_render_front_) cb_child_render_front_ = std::make_unique<DMCheckbox>("Render In Front", true);
+    if (cb_grid_overlay_ && cb_grid_overlay_->value() != grid_overlay_enabled_) {
+        cb_grid_overlay_->set_value(grid_overlay_enabled_);
+    }
+    if (stepper_grid_resolution_ && stepper_grid_resolution_->value() != snap_resolution_r_) {
+        stepper_grid_resolution_->set_value(snap_resolution_r_);
+    }
     if (!dd_child_select_ || child_dropdown_options_cache_ != child_assets_) {
         child_dropdown_options_cache_ = child_assets_;
         int dropdown_index = selected_child_index_;
@@ -1796,6 +2557,7 @@ void FrameEditorSession::ensure_widgets() const {
     if (!tb_attack_end_x_) tb_attack_end_x_ = std::make_unique<DMTextBox>("End X", "0");
     if (!tb_attack_end_y_) tb_attack_end_y_ = std::make_unique<DMTextBox>("End Z", "0");
     if (!tb_attack_damage_) tb_attack_damage_ = std::make_unique<DMTextBox>("Damage", "0");
+    update_plane_labels();
     last_show_anim_value_ = show_animation_;
     last_show_child_value_ = show_child_;
     last_totals_dx_text_ = tb_total_dx_->value();
@@ -1840,11 +2602,25 @@ void FrameEditorSession::refresh_animation_dropdown() const {
 void FrameEditorSession::rebuild_layout() const {
     if (!assets_ || !target_) return;
     const WarpedScreenGrid& cam = assets_->getView();
-    const int screen_w = assets_->renderer() ? assets_->getView().get_camera_area().width() : 0;
-    (void)screen_w;
+    int screen_w = 0;
+    int screen_h = 0;
+    if (assets_->renderer()) {
+        SDL_GetRendererOutputSize(assets_->renderer(), &screen_w, &screen_h);
+    }
     (void)cam;
+    auto clamp_panel_pos = [&](int x, int y, int w, int h) -> SDL_Point {
+        if (screen_w > 0 && screen_h > 0) {
+            x = std::clamp(x, 0, std::max(0, screen_w - w));
+            y = std::clamp(y, 0, std::max(0, screen_h - h));
+        }
+        return SDL_Point{ x, y };
+    };
+    const int max_toolbox_height = (screen_h > 0)
+        ? std::max(160, static_cast<int>(std::round(static_cast<double>(screen_h) * kToolboxHeightRatio)))
+        : std::numeric_limits<int>::max();
     DirectoryPanelMetrics dir_metrics = build_directory_panel_metrics();
-    directory_rect_ = SDL_Rect{ dir_pos_.x, dir_pos_.y, dir_metrics.width, dir_metrics.height };
+    const int header_width = (screen_w > 0) ? screen_w : dir_metrics.width;
+    directory_rect_ = SDL_Rect{ 0, 0, header_width, dir_metrics.height };
     toolbox_widget_rects_.clear();
     const int dir_padding = DMSpacing::small_gap();
     const int button_gap = DMSpacing::small_gap();
@@ -1877,12 +2653,9 @@ void FrameEditorSession::rebuild_layout() const {
     accumulate_width(btn_children_);
     accumulate_width(btn_attack_geometry_);
     accumulate_width(btn_hit_geometry_);
-    int y = directory_rect_.y + dir_metrics.top_padding;
+    accumulate_width(btn_plane_toggle_);
+    int y = directory_rect_.y + (directory_rect_.h - DMButton::height()) / 2;
     int x = directory_rect_.x + dir_padding;
-    if (total_button_width > 0) {
-        const int centered_offset = (directory_rect_.w - total_button_width) / 2;
-        x = directory_rect_.x + std::max(dir_padding, centered_offset);
-    }
     bool first_button = true;
     auto place_button = [&](std::unique_ptr<DMButton>& btn, auto&& prepare) {
         if (!btn) return;
@@ -1909,19 +2682,62 @@ void FrameEditorSession::rebuild_layout() const {
     place_button(btn_hit_geometry_, [&](DMButton* btn) {
         btn->set_style(mode_ == Mode::HitGeometry ? &DMStyles::AccentButton() : &DMStyles::HeaderButton());
     });
+    place_button(btn_plane_toggle_, [&](DMButton* btn) {
+        btn->set_style(&DMStyles::HeaderButton());
+        btn->set_text(plane_button_label());
+    });
+    if (cb_grid_overlay_ || stepper_grid_resolution_) {
+        const int header_gap = DMSpacing::small_gap();
+        const int right_limit = directory_rect_.x + directory_rect_.w - dir_padding;
+        const int checkbox_w = cb_grid_overlay_ ? std::max(cb_grid_overlay_->preferred_width(), DMCheckbox::height()) : 0;
+        const int stepper_w = stepper_grid_resolution_ ? 180 : 0;
+        int required = 0;
+        if (cb_grid_overlay_) required += checkbox_w;
+        if (stepper_grid_resolution_) required += stepper_w;
+        if (cb_grid_overlay_ && stepper_grid_resolution_) {
+            required += header_gap;
+        }
+        if (required > 0 && right_limit - required >= x) {
+            int cursor = right_limit;
+            if (stepper_grid_resolution_) {
+                cursor -= stepper_w;
+                const int stepper_y = directory_rect_.y + (directory_rect_.h - DMNumericStepper::height()) / 2;
+                stepper_grid_resolution_->set_rect(SDL_Rect{ cursor, stepper_y, stepper_w, DMNumericStepper::height() });
+                cursor -= header_gap;
+            }
+            if (cb_grid_overlay_) {
+                cursor -= checkbox_w;
+                const int checkbox_y = directory_rect_.y + (directory_rect_.h - DMCheckbox::height()) / 2;
+                cb_grid_overlay_->set_rect(SDL_Rect{ cursor, checkbox_y, checkbox_w, DMCheckbox::height() });
+            }
+        } else {
+            if (cb_grid_overlay_) {
+                cb_grid_overlay_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+            if (stepper_grid_resolution_) {
+                stepper_grid_resolution_->set_rect(SDL_Rect{0, 0, 0, 0});
+            }
+        }
+    }
 
     if (mode_ == Mode::Movement) {
         MovementToolboxMetrics metrics = build_movement_toolbox_metrics();
         if (metrics.width <= 0 || metrics.height <= 0) {
             toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, 0, 0 };
             toolbox_drag_rect_ = SDL_Rect{ 0, 0, 0, 0 };
+            toolbox_content_height_ = 0;
         } else {
-            toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, metrics.width, metrics.height };
+            toolbox_content_height_ = metrics.height;
+            const int viewport_height = std::min(metrics.height, max_toolbox_height);
+            const SDL_Point clamped_toolbox_pos = clamp_panel_pos(toolbox_pos_.x, toolbox_pos_.y, metrics.width, viewport_height);
+            toolbox_rect_ = SDL_Rect{ clamped_toolbox_pos.x, clamped_toolbox_pos.y, metrics.width, viewport_height };
+            const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+            toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
             const int handle_height = std::max(0, metrics.drag_handle_height);
             const int drag_area_height = std::min(toolbox_rect_.h, handle_height + metrics.padding);
             toolbox_drag_rect_ = SDL_Rect{ toolbox_rect_.x, toolbox_rect_.y, toolbox_rect_.w, drag_area_height };
             int tx = toolbox_rect_.x + metrics.padding;
-            const int row_top = toolbox_rect_.y + metrics.padding + handle_height;
+            const int row_top = toolbox_rect_.y + metrics.padding + handle_height - toolbox_scroll_offset_;
             bool first = true;
             auto reserve = [&](int w) -> int {
                 if (w <= 0) return tx;
@@ -1987,13 +2803,19 @@ void FrameEditorSession::rebuild_layout() const {
         if (metrics.width <= 0 || metrics.height <= 0) {
             toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, 0, 0 };
             toolbox_drag_rect_ = SDL_Rect{ 0, 0, 0, 0 };
+            toolbox_content_height_ = 0;
         } else {
-            toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, metrics.width, metrics.height };
+            toolbox_content_height_ = metrics.height;
+            const int viewport_height = std::min(metrics.height, max_toolbox_height);
+            const SDL_Point clamped_toolbox_pos = clamp_panel_pos(toolbox_pos_.x, toolbox_pos_.y, metrics.width, viewport_height);
+            toolbox_rect_ = SDL_Rect{ clamped_toolbox_pos.x, clamped_toolbox_pos.y, metrics.width, viewport_height };
+            const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+            toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
             const int handle_height = std::max(0, metrics.drag_handle_height);
             const int drag_area_height = std::min(toolbox_rect_.h, handle_height + metrics.padding);
             toolbox_drag_rect_ = SDL_Rect{ toolbox_rect_.x, toolbox_rect_.y, toolbox_rect_.w, drag_area_height };
             const int content_width = std::max(0, toolbox_rect_.w - metrics.padding * 2);
-            int row_cursor = toolbox_rect_.y + metrics.padding + handle_height;
+            int row_cursor = toolbox_rect_.y + metrics.padding + handle_height - toolbox_scroll_offset_;
             bool have_previous_row = false;
             auto allocate_row = [&](int row_height) -> int {
                 if (row_height <= 0) return -1;
@@ -2158,11 +2980,12 @@ void FrameEditorSession::rebuild_layout() const {
         const int padding = DMSpacing::small_gap();
         const int gap = DMSpacing::small_gap();
         const int width = 360;
-        const int handle_height = DMSpacing::small_gap();
+        const int handle_height = kPanelDragHandleHeight;
         int content_y = padding + handle_height;
         const int inner_width = width - padding * 2;
+        const int scroll_offset = toolbox_scroll_offset_;
         auto place_row = [&](int height) -> SDL_Rect {
-            SDL_Rect r{ toolbox_pos_.x + padding, toolbox_pos_.y + content_y, inner_width, height };
+            SDL_Rect r{ toolbox_pos_.x + padding, toolbox_pos_.y + content_y - scroll_offset, inner_width, height };
             content_y += height + gap;
             return r;
 };
@@ -2212,17 +3035,22 @@ void FrameEditorSession::rebuild_layout() const {
             register_toolbox_widget(btn_apply_all_hit_.get());
         }
         int total_height = content_y > padding ? content_y - gap + padding : padding * 2;
-        toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, total_height };
-        toolbox_drag_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, std::min(total_height, handle_height + padding) };
+        toolbox_content_height_ = total_height;
+        const int viewport_height = std::min(total_height, max_toolbox_height);
+        toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, viewport_height };
+        toolbox_drag_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, std::min(viewport_height, handle_height + padding) };
+        const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+        toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
     } else if (mode_ == Mode::AttackGeometry) {
         const int padding = DMSpacing::small_gap();
         const int gap = DMSpacing::small_gap();
         const int width = 360;
-        const int handle_height = DMSpacing::small_gap();
+        const int handle_height = kPanelDragHandleHeight;
         int content_y = padding + handle_height;
         const int inner_width = width - padding * 2;
+        const int scroll_offset = toolbox_scroll_offset_;
         auto place_row = [&](int height) -> SDL_Rect {
-            SDL_Rect r{ toolbox_pos_.x + padding, toolbox_pos_.y + content_y, inner_width, height };
+            SDL_Rect r{ toolbox_pos_.x + padding, toolbox_pos_.y + content_y - scroll_offset, inner_width, height };
             content_y += height + gap;
             return r;
 };
@@ -2281,20 +3109,59 @@ void FrameEditorSession::rebuild_layout() const {
             register_toolbox_widget(btn_apply_all_attack_.get());
         }
         int total_height = content_y > padding ? content_y - gap + padding : padding * 2;
-        toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, total_height };
-        toolbox_drag_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, std::min(total_height, handle_height + padding) };
+        toolbox_content_height_ = total_height;
+        const int viewport_height = std::min(total_height, max_toolbox_height);
+        const SDL_Point clamped_toolbox_pos = clamp_panel_pos(toolbox_pos_.x, toolbox_pos_.y, width, viewport_height);
+        toolbox_rect_ = SDL_Rect{ clamped_toolbox_pos.x, clamped_toolbox_pos.y, width, viewport_height };
+        toolbox_drag_rect_ = SDL_Rect{ clamped_toolbox_pos.x, clamped_toolbox_pos.y, width, std::min(viewport_height, handle_height + padding) };
+        const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+        toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
     } else {
         toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, 0, 0 };
         toolbox_drag_rect_ = SDL_Rect{ 0, 0, 0, 0 };
+        toolbox_content_height_ = 0;
+    }
+
+    const int toolbox_max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
+    toolbox_scrollbar_visible_ = toolbox_rect_.w > 0 && toolbox_rect_.h > 0 && toolbox_max_scroll > 0;
+    if (toolbox_scrollbar_visible_) {
+        const int track_height = std::max(0, toolbox_rect_.h - kToolboxScrollbarPadding * 2);
+        const int track_x = toolbox_rect_.x + toolbox_rect_.w - kToolboxScrollbarWidth - kToolboxScrollbarPadding;
+        const int track_y = toolbox_rect_.y + kToolboxScrollbarPadding;
+        toolbox_scrollbar_track_ = SDL_Rect{ track_x, track_y, kToolboxScrollbarWidth, track_height };
+        const float viewport_ratio = toolbox_content_height_ > 0
+            ? static_cast<float>(toolbox_rect_.h) / static_cast<float>(toolbox_content_height_)
+            : 1.0f;
+        int thumb_h = track_height > 0
+            ? std::max(18, static_cast<int>(std::round(static_cast<float>(track_height) * viewport_ratio)))
+            : track_height;
+        thumb_h = std::min(thumb_h, track_height);
+        int thumb_y = toolbox_scrollbar_track_.y;
+        if (toolbox_max_scroll > 0 && track_height > thumb_h) {
+            const float scroll_ratio = static_cast<float>(toolbox_scroll_offset_) / static_cast<float>(toolbox_max_scroll);
+            thumb_y += static_cast<int>(std::round(scroll_ratio * static_cast<float>(track_height - thumb_h)));
+        }
+        toolbox_scrollbar_thumb_ = SDL_Rect{ track_x, thumb_y, kToolboxScrollbarWidth, thumb_h };
+    } else {
+        toolbox_scrollbar_track_ = SDL_Rect{0, 0, 0, 0};
+        toolbox_scrollbar_thumb_ = SDL_Rect{0, 0, 0, 0};
+        if (toolbox_max_scroll <= 0) {
+            toolbox_scroll_offset_ = 0;
+        }
     }
 
     const int nav_w = 560;
     const int title_h = nav_header_height_px(dd_animation_select_ != nullptr);
     const int nav_vertical_padding = DMSpacing::small_gap() * 2;
-    const int nav_drag_handle_height = DMSpacing::small_gap() * 2;
+    const int nav_drag_handle_height = kPanelDragHandleHeight;
     const int nav_h = title_h + nav_vertical_padding + kNavPreviewHeight + kNavSliderGap + nav_drag_handle_height;
-    nav_rect_ = SDL_Rect{ nav_pos_.x, nav_pos_.y, nav_w, nav_h };
-    nav_drag_rect_ = SDL_Rect{ nav_rect_.x, nav_rect_.y, nav_rect_.w, std::min(nav_rect_.h, nav_drag_handle_height) };
+    const SDL_Point clamped_nav_pos = clamp_panel_pos(nav_pos_.x, nav_pos_.y, nav_w, nav_h);
+    nav_rect_ = SDL_Rect{ clamped_nav_pos.x, clamped_nav_pos.y, nav_w, nav_h };
+    if (nav_drag_handle_height > 0) {
+        nav_drag_rect_ = SDL_Rect{ nav_rect_.x, nav_rect_.y, nav_rect_.w, nav_drag_handle_height };
+    } else {
+        nav_drag_rect_ = SDL_Rect{ 0, 0, 0, 0 };
+    }
 
     const int thumb_h = std::max(1, nav_rect_.h - nav_drag_handle_height - nav_vertical_padding - title_h - kNavSliderGap);
     const int thumb_w = thumb_h;
@@ -2373,12 +3240,14 @@ void FrameEditorSession::rebuild_layout() const {
 FrameEditorSession::DirectoryPanelMetrics FrameEditorSession::build_directory_panel_metrics() const {
     DirectoryPanelMetrics metrics;
     const int padding = DMSpacing::small_gap();
-    const int drag_padding = DMSpacing::small_gap();
     const int vertical_padding = DMSpacing::small_gap();
     const int button_gap = DMSpacing::small_gap();
-    metrics.top_padding = padding + drag_padding + vertical_padding;
+    metrics.top_padding = padding + vertical_padding;
     const int bottom_padding = padding + vertical_padding;
-    metrics.height = metrics.top_padding + DMButton::height() + bottom_padding;
+    int row_height = DMButton::height();
+    row_height = std::max(row_height, DMCheckbox::height());
+    row_height = std::max(row_height, DMNumericStepper::height());
+    metrics.height = metrics.top_padding + row_height + bottom_padding;
 
     int row_width = 0;
     auto append_button = [&](const std::unique_ptr<DMButton>& btn) {
@@ -2396,6 +3265,7 @@ FrameEditorSession::DirectoryPanelMetrics FrameEditorSession::build_directory_pa
     append_button(btn_children_);
     append_button(btn_attack_geometry_);
     append_button(btn_hit_geometry_);
+    append_button(btn_plane_toggle_);
 
     const int content_width = row_width > 0 ? row_width : 0;
     metrics.width = std::max(kDirectoryPanelMinWidth, content_width + padding * 2);
@@ -2406,7 +3276,7 @@ FrameEditorSession::MovementToolboxMetrics FrameEditorSession::build_movement_to
     MovementToolboxMetrics metrics;
     metrics.padding = DMSpacing::small_gap();
     metrics.gap = DMSpacing::small_gap();
-    metrics.drag_handle_height = DMSpacing::small_gap();
+    metrics.drag_handle_height = kPanelDragHandleHeight;
     metrics.totals_width = kMovementTotalsFieldWidth;
     metrics.smooth_checkbox_width = cb_smooth_ ? std::max(kSmoothCheckboxMinWidth, cb_smooth_->preferred_width()) : 0;
     const bool curve_visible = smooth_enabled_ && cb_curve_;
@@ -2449,7 +3319,7 @@ FrameEditorSession::ChildrenToolboxMetrics FrameEditorSession::build_children_to
     ChildrenToolboxMetrics metrics;
     metrics.padding = DMSpacing::small_gap();
     metrics.gap = DMSpacing::small_gap();
-    metrics.drag_handle_height = DMSpacing::small_gap();
+    metrics.drag_handle_height = kPanelDragHandleHeight;
     metrics.textbox_width = kChildrenFieldWidth;
 
     metrics.totals_width = kMovementTotalsFieldWidth;
@@ -2609,7 +3479,8 @@ animation_update::FrameHitGeometry::HitBox* FrameEditorSession::ensure_hit_box_f
     box.type = type;
     box.center_x = 0.0f;
     box.center_y = 0.0f;
-    box.center_z = 40.0f;
+    box.center_z = 0.0f;
+    hitbox_plane_center(box) = 40.0f;
     box.half_width = 40.0f;
     box.half_height = 60.0f;
     box.rotation_degrees = 0.0f;
@@ -2646,7 +3517,7 @@ void FrameEditorSession::refresh_hitbox_form() const {
 };
     if (box) {
         sync_field(tb_hit_center_x_.get(), last_hit_center_x_text_, std::to_string(static_cast<int>(std::lround(box->center_x))));
-        sync_field(tb_hit_center_y_.get(), last_hit_center_y_text_, std::to_string(static_cast<int>(std::lround(box->center_z))));
+        sync_field(tb_hit_center_y_.get(), last_hit_center_y_text_, std::to_string(static_cast<int>(std::lround(hitbox_plane_center(*box)))));
         sync_field(tb_hit_width_.get(), last_hit_width_text_, std::to_string(static_cast<int>(std::lround(box->half_width * 2.0f))));
         sync_field(tb_hit_height_.get(), last_hit_height_text_, std::to_string(static_cast<int>(std::lround(box->half_height * 2.0f))));
         if (tb_hit_rotation_ && !tb_hit_rotation_->is_editing()) {
@@ -2767,11 +3638,11 @@ void FrameEditorSession::refresh_attack_form() const {
 };
     if (vec) {
         sync_field(tb_attack_start_x_.get(), last_attack_start_x_text_, std::to_string(static_cast<int>(std::lround(vec->start_x))));
-        sync_field(tb_attack_start_y_.get(), last_attack_start_y_text_, std::to_string(static_cast<int>(std::lround(vec->start_z))));
+        sync_field(tb_attack_start_y_.get(), last_attack_start_y_text_, std::to_string(static_cast<int>(std::lround(attack_plane_start(*vec)))));
         sync_field(tb_attack_control_x_.get(), last_attack_control_x_text_, std::to_string(static_cast<int>(std::lround(vec->control_x))));
-        sync_field(tb_attack_control_y_.get(), last_attack_control_y_text_, std::to_string(static_cast<int>(std::lround(vec->control_z))));
+        sync_field(tb_attack_control_y_.get(), last_attack_control_y_text_, std::to_string(static_cast<int>(std::lround(attack_plane_control(*vec)))));
         sync_field(tb_attack_end_x_.get(), last_attack_end_x_text_, std::to_string(static_cast<int>(std::lround(vec->end_x))));
-        sync_field(tb_attack_end_y_.get(), last_attack_end_y_text_, std::to_string(static_cast<int>(std::lround(vec->end_z))));
+        sync_field(tb_attack_end_y_.get(), last_attack_end_y_text_, std::to_string(static_cast<int>(std::lround(attack_plane_end(*vec)))));
         sync_field(tb_attack_damage_.get(), last_attack_damage_text_, std::to_string(vec->damage));
     } else {
         sync_field(tb_attack_start_x_.get(), last_attack_start_x_text_, "0");
@@ -2842,7 +3713,7 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
             const MovementFrame src = frames_[idx];
             for (size_t i = 1; i < frames_.size(); ++i) {
                 frames_[i].dx = src.dx;
-                frames_[i].dy = src.dy;
+                movement_plane_delta(frames_[i]) = movement_plane_delta(src);
                 frames_[i].resort_z = src.resort_z;
             }
             rebuild_rel_positions();
@@ -2862,7 +3733,7 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
                 if (child_index >= 0 && child_index < static_cast<int>(f.children.size())) {
                     auto& d = f.children[child_index];
                     d.dx = src.dx;
-                    d.dy = src.dy;
+                    child_plane_delta(d) = child_plane_delta(src);
                     d.degree = src.degree;
                     d.visible = src.visible;
                     d.render_in_front = src.render_in_front;
@@ -3000,7 +3871,7 @@ bool FrameEditorSession::build_hitbox_visual(const animation_update::FrameHitGeo
         return cam.map_to_screen_f(world);
     };
 
-    SDL_FPoint center_local{box.center_x, box.center_z};
+    SDL_FPoint center_local{box.center_x, hitbox_plane_center(box)};
     out.center = to_screen(center_local);
 
     std::array<SDL_FPoint, 4> local_corners = {
@@ -3187,7 +4058,7 @@ bool FrameEditorSession::begin_hitbox_drag(SDL_Point mouse) {
         return false;
     }
     hitbox_drag_grab_offset_.x = local_mouse.x - box->center_x;
-    hitbox_drag_grab_offset_.y = local_mouse.y - box->center_z;
+    hitbox_drag_grab_offset_.y = local_mouse.y - hitbox_plane_center(*box);
     return true;
 }
 
@@ -3216,7 +4087,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
         };
     };
     SDL_FPoint delta{ local.x - hitbox_drag_start_box_.center_x,
-                      local.y - hitbox_drag_start_box_.center_z };
+                      local.y - hitbox_plane_center(hitbox_drag_start_box_) };
     SDL_FPoint aligned = rotate_to_box(delta.x, delta.y);
     switch (active_hitbox_handle_) {
         case HitHandle::Move: {
@@ -3225,7 +4096,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
                 local.y - hitbox_drag_grab_offset_.y
 };
             box->center_x = new_center.x;
-            box->center_z = new_center.y;
+            hitbox_plane_center(*box) = new_center.y;
             break;
         }
         case HitHandle::Left:
@@ -3241,7 +4112,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
             const float center_offset = (right + left) * 0.5f;
             SDL_FPoint offset_world = rotate_to_world(SDL_FPoint{center_offset, 0.0f});
             box->center_x = hitbox_drag_start_box_.center_x + offset_world.x;
-            box->center_z = hitbox_drag_start_box_.center_z + offset_world.y;
+            hitbox_plane_center(*box) = hitbox_plane_center(hitbox_drag_start_box_) + offset_world.y;
             box->half_width = width * 0.5f;
             break;
         }
@@ -3258,12 +4129,12 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
             const float center_offset = (top + bottom) * 0.5f;
             SDL_FPoint offset_world = rotate_to_world(SDL_FPoint{0.0f, center_offset});
             box->center_x = hitbox_drag_start_box_.center_x + offset_world.x;
-            box->center_z = hitbox_drag_start_box_.center_z + offset_world.y;
+            hitbox_plane_center(*box) = hitbox_plane_center(hitbox_drag_start_box_) + offset_world.y;
             box->half_height = height * 0.5f;
             break;
         }
         case HitHandle::Rotate: {
-            SDL_FPoint rel{ local.x - box->center_x, local.y - box->center_z };
+            SDL_FPoint rel{ local.x - box->center_x, local.y - hitbox_plane_center(*box) };
             box->rotation_degrees = std::atan2(rel.y, rel.x) * kRadToDeg;
             break;
         }
@@ -3271,7 +4142,6 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
         default:
             break;
     }
-    box->center_y = 0.0f;
     refresh_hitbox_form();
 }
 
@@ -3294,9 +4164,9 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
     const WarpedScreenGrid& cam = assets_->getView();
     SDL_Point anchor = asset_anchor_world();
     const float scale = asset_local_scale();
-    auto to_screen = [&](float lx, float lz) -> SDL_FPoint {
+    auto to_screen = [&](float lx, float plane_axis) -> SDL_FPoint {
         SDL_FPoint world{
-            static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - lz * scale };
+            static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - plane_axis * scale };
         return cam.map_to_screen_f(world);
     };
 
@@ -3314,9 +4184,9 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
     for (const auto& vec : frame.attack.vectors) {
         if (vec.type != current_type) continue;
 
-        SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
-        SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
-        SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
+        SDL_FPoint start_screen = to_screen(vec.start_x, attack_plane_start(vec));
+        SDL_FPoint control_screen = to_screen(vec.control_x, attack_plane_control(vec));
+        SDL_FPoint end_screen = to_screen(vec.end_x, attack_plane_end(vec));
 
         if (point_hit(start_screen, node_radius)) {
             clicked_vector_index = type_counter;
@@ -3342,9 +4212,9 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
         for (const auto& vec : frame.attack.vectors) {
             if (vec.type != current_type) continue;
 
-            SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
-            SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
-            SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
+            SDL_FPoint start_screen = to_screen(vec.start_x, attack_plane_start(vec));
+            SDL_FPoint control_screen = to_screen(vec.control_x, attack_plane_control(vec));
+            SDL_FPoint end_screen = to_screen(vec.end_x, attack_plane_end(vec));
 
             for (int i = 0; i <= segments; ++i) {
                 const float t = static_cast<float>(i) / static_cast<float>(segments);
@@ -3409,34 +4279,31 @@ void FrameEditorSession::update_attack_drag(SDL_Point mouse) {
     switch (active_attack_handle_) {
         case AttackHandle::Start:
             vec->start_x = local.x;
-            vec->start_z = local.y;
+            attack_plane_start(*vec) = local.y;
             break;
         case AttackHandle::Control:
             vec->control_x = local.x;
-            vec->control_z = local.y;
+            attack_plane_control(*vec) = local.y;
             break;
         case AttackHandle::End:
             vec->end_x = local.x;
-            vec->end_z = local.y;
+            attack_plane_end(*vec) = local.y;
             break;
         case AttackHandle::Segment: {
             SDL_FPoint delta{ local.x - attack_drag_start_mouse_local_.x,
                               local.y - attack_drag_start_mouse_local_.y };
             vec->start_x = attack_drag_start_vector_.start_x + delta.x;
-            vec->start_z = attack_drag_start_vector_.start_z + delta.y;
+            attack_plane_start(*vec) = attack_plane_start(attack_drag_start_vector_) + delta.y;
             vec->control_x = attack_drag_start_vector_.control_x + delta.x;
-            vec->control_z = attack_drag_start_vector_.control_z + delta.y;
+            attack_plane_control(*vec) = attack_plane_control(attack_drag_start_vector_) + delta.y;
             vec->end_x = attack_drag_start_vector_.end_x + delta.x;
-            vec->end_z = attack_drag_start_vector_.end_z + delta.y;
+            attack_plane_end(*vec) = attack_plane_end(attack_drag_start_vector_) + delta.y;
             break;
         }
         case AttackHandle::None:
         default:
             break;
     }
-    vec->start_y = 0.0f;
-    vec->control_y = 0.0f;
-    vec->end_y = 0.0f;
     refresh_attack_form();
 }
 
@@ -3465,17 +4332,17 @@ void FrameEditorSession::apply_frame_move_from_base(int index, SDL_FPoint desire
     if (base_rel.size() != frames_.size()) return;
 
     frames_.front().dx = 0.0f;
-    frames_.front().dy = 0.0f;
+    movement_plane_delta(frames_.front()) = 0.0f;
 
     SDL_FPoint prev_abs = base_rel[index - 1];
     frames_[index].dx = static_cast<float>(std::round(desired_rel.x - prev_abs.x));
-    frames_[index].dy = static_cast<float>(std::round(desired_rel.y - prev_abs.y));
+    movement_plane_delta(frames_[index]) = static_cast<float>(std::round(desired_rel.y - prev_abs.y));
 
     SDL_FPoint last_abs = desired_rel;
     for (int j = index + 1; j < static_cast<int>(frames_.size()); ++j) {
         const SDL_FPoint desired = base_rel[j];
         frames_[j].dx = static_cast<float>(std::round(desired.x - last_abs.x));
-        frames_[j].dy = static_cast<float>(std::round(desired.y - last_abs.y));
+        movement_plane_delta(frames_[j]) = static_cast<float>(std::round(desired.y - last_abs.y));
         last_abs = desired;
     }
 }
@@ -3514,12 +4381,12 @@ void FrameEditorSession::redistribute_frames_after_adjustment(int adjusted_index
     }
 
     frames_[0].dx = 0.0f;
-    frames_[0].dy = 0.0f;
+    movement_plane_delta(frames_[0]) = 0.0f;
     for (size_t i = 1; i < count; ++i) {
         const SDL_FPoint prev = redistributed[i - 1];
         const SDL_FPoint curr = redistributed[i];
         frames_[i].dx = static_cast<float>(std::round(curr.x - prev.x));
-        frames_[i].dy = static_cast<float>(std::round(curr.y - prev.y));
+        movement_plane_delta(frames_[i]) = static_cast<float>(std::round(curr.y - prev.y));
     }
     rebuild_rel_positions();
     persist_changes();
@@ -3647,7 +4514,7 @@ void FrameEditorSession::smooth_child_offsets(int child_index, int adjusted_inde
             continue;
         }
         const auto& child = children[child_index];
-        original[i] = SDL_FPoint{ child.dx, child.dz };
+        original[i] = SDL_FPoint{ child.dx, child_plane_delta(child) };
     }
     std::vector<SDL_FPoint> redistributed = original;
     if (curve_enabled_) {
@@ -3662,8 +4529,7 @@ void FrameEditorSession::smooth_child_offsets(int child_index, int adjusted_inde
         }
         auto& child = children[child_index];
         child.dx = static_cast<float>(std::round(redistributed[i].x));
-        child.dz = static_cast<float>(std::round(redistributed[i].y));
-        child.dy = 0.0f;
+        child_plane_delta(child) = static_cast<float>(std::round(redistributed[i].y));
         child.has_data = true;
     }
     persist_changes();
@@ -3677,7 +4543,7 @@ void FrameEditorSession::rebuild_rel_positions() {
             curr = SDL_FPoint{0.0f, 0.0f};
         } else {
             curr.x += frames_[i].dx;
-            curr.y += frames_[i].dy;
+            curr.y += movement_plane_delta(frames_[i]);
         }
         rel_positions_.push_back(curr);
     }
@@ -4190,22 +5056,46 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
         nlohmann::json previous = movement[static_cast<nlohmann::json::array_t::size_type>(i)];
         int dx = static_cast<int>(std::lround(f.dx));
         int dy = static_cast<int>(std::lround(f.dy));
+        int dz = static_cast<int>(std::lround(f.dz));
 
         nlohmann::json entry = movement[static_cast<nlohmann::json::array_t::size_type>(i)];
-        if (!entry.is_array()) {
-            entry = nlohmann::json::array();
-        }
-        if (entry.size() < 2) {
-            entry = nlohmann::json::array({0, 0});
-        }
-        entry[0] = dx;
-        entry[1] = dy;
+        if (entry.is_object()) {
+            entry["dx"] = dx;
+            entry["dy"] = dy;
+            entry["dz"] = dz;
+            if (f.resort_z || entry.contains("resort_z")) {
+                entry["resort_z"] = f.resort_z;
+            }
+        } else {
+            if (!entry.is_array()) {
+                entry = nlohmann::json::array();
+            }
+            const bool should_write_object = entry.size() <= 3 &&
+                                             std::isfinite(f.dz) &&
+                                             std::fabs(f.dz) > 0.01f;
+            if (should_write_object) {
+                nlohmann::json obj = nlohmann::json::object();
+                obj["dx"] = dx;
+                obj["dy"] = dy;
+                obj["dz"] = dz;
+                if (f.resort_z || (entry.size() > 2 && entry[2].is_boolean())) {
+                    obj["resort_z"] = f.resort_z;
+                }
+                entry = std::move(obj);
+            } else {
+                if (entry.size() < 2) {
+                    entry = nlohmann::json::array({0, 0});
+                }
+                entry[0] = dx;
+                entry[1] = dy;
 
-        // Preserve any existing fields beyond index 2 (child data, etc.).
-        if (entry.size() < 3 && f.resort_z) {
-            entry.insert(entry.begin() + 2, f.resort_z);
-        } else if (entry.size() >= 3) {
-            entry[2] = f.resort_z;
+                // Preserve any existing fields beyond index 2 (child data, etc.).
+                if (entry.size() < 3 && f.resort_z) {
+                    entry.insert(entry.begin() + 2, f.resort_z);
+                } else if (entry.size() >= 3) {
+                    entry[2] = f.resort_z;
+                }
+            }
         }
         if (entry != previous) {
             touched_frames.insert(static_cast<int>(i));
@@ -4699,9 +5589,9 @@ void FrameEditorSession::render_attack_geometry(SDL_Renderer* renderer) const {
     const float scale = asset_local_scale();
     if (scale <= 0.0001f) return;
 
-    auto to_screen = [&](float lx, float lz) -> SDL_FPoint {
+    auto to_screen = [&](float lx, float plane_axis) -> SDL_FPoint {
         SDL_FPoint world{
-            static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - lz * scale };
+            static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - plane_axis * scale };
         return cam.map_to_screen_f(world);
     };
 
@@ -4714,9 +5604,9 @@ void FrameEditorSession::render_attack_geometry(SDL_Renderer* renderer) const {
             selected = (current_type_counter == selected_idx && selected_idx >= 0);
             ++current_type_counter;
         }
-        SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
-        SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
-        SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
+        SDL_FPoint start_screen = to_screen(vec.start_x, attack_plane_start(vec));
+        SDL_FPoint control_screen = to_screen(vec.control_x, attack_plane_control(vec));
+        SDL_FPoint end_screen = to_screen(vec.end_x, attack_plane_end(vec));
 
         SDL_Color line_color = selected ? DMStyles::AccentButton().bg : DMStyles::HeaderButton().bg;
         SDL_SetRenderDrawColor(renderer, line_color.r, line_color.g, line_color.b, 220);

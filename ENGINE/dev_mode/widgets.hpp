@@ -1,4 +1,5 @@
 #pragma once
+#define DM_WIDGETS_INCLUDED
 
 #include <SDL.h>
 #include <SDL_ttf.h>
@@ -422,6 +423,7 @@ public:
     ~ButtonWidget() override {
         if (b_) b_->set_tooltip_state(nullptr);
     }
+    void set_on_click(std::function<void()> on_click) { on_click_ = std::move(on_click); }
     void set_rect(const SDL_Rect& r) override { if (b_) b_->set_rect(r); }
     const SDL_Rect& rect() const override { return b_->rect(); }
     int height_for_width(int ) const override { return DMButton::height(); }

@@ -59,6 +59,31 @@
 #include <fstream>
 #include <SDL_log.h>
 
+namespace {
+
+SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
+    MapGridSettings settings;
+    settings.grid_resolution = resolution;
+    const int spacing = settings.spacing();
+    if (spacing <= 0) {
+        return world;
+    }
+    auto snap_axis = [spacing](int value) -> int {
+        const long double ratio = static_cast<long double>(value) / static_cast<long double>(spacing);
+        const long long rounded = static_cast<long long>(std::llround(ratio));
+        const long long scaled = rounded * static_cast<long long>(spacing);
+        if (scaled > std::numeric_limits<int>::max()) {
+            return std::numeric_limits<int>::max();
+        }
+        if (scaled < std::numeric_limits<int>::min()) {
+            return std::numeric_limits<int>::min();
+        }
+        return static_cast<int>(scaled);
+    };
+    return SDL_Point{ snap_axis(world.x), snap_axis(world.y) };
+}
+
+}
 #include <nlohmann/json.hpp>
 #include "utils/log.hpp"
 
@@ -363,7 +388,7 @@ void RoomEditor::paste_spawn_group_from_clipboard() {
     }
 
     const std::string display_name = entry.value("display_name", std::string{"Spawn Group"});
-    const int default_resolution = current_room_ ? current_room_->map_grid_settings().resolution : MapGridSettings::defaults().resolution;
+    const int default_resolution = current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
     devmode::spawn::ensure_spawn_group_entry_defaults(entry, display_name, default_resolution);
     remap_clipboard_entry_to_room(entry, current_room_);
 
@@ -1769,7 +1794,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             const auto style = dm_draw::ResolveRoomBoundsOverlayStyle(current_room_->display_color());
             dm_draw::RenderRoomBoundsOverlay( renderer, assets_->getView(), *current_room_->room_area, style);
         }
-        render_room_labels(renderer);
     }
 
     if (renderer && enabled_) {
@@ -1884,65 +1908,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             SDL_RenderDrawLine(renderer, screen_center.x, screen_center.y - cross, screen_center.x, screen_center.y + cross);
         }
 
-        auto draw_dashed_polyline_world = [&](const std::vector<SDL_Point>& path, SDL_Color color) {
-            if (path.size() < 2) return;
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 210);
-            const int dash = 8;
-            const int gap  = 6;
-            for (size_t i = 0; i + 1 < path.size(); ++i) {
-                SDL_Point a = path[i];
-                SDL_Point b = path[i + 1];
-                const double dx = static_cast<double>(b.x - a.x);
-                const double dy = static_cast<double>(b.y - a.y);
-                const double len = std::hypot(dx, dy);
-                if (len <= 1e-6) continue;
-                const int total = static_cast<int>(std::lround(len));
-                double ux = dx / len;
-                double uy = dy / len;
-                int cursor = 0;
-                bool draw = true;
-                while (cursor < total) {
-                    int seg = draw ? dash : gap;
-                    int end = std::min(total, cursor + seg);
-                    if (draw) {
-
-                        SDL_FPoint s_world{ static_cast<float>(a.x + ux * cursor), static_cast<float>(a.y + uy * cursor) };
-                        SDL_FPoint e_world{ static_cast<float>(a.x + ux * end),    static_cast<float>(a.y + uy * end) };
-                        SDL_FPoint s_screen_f = cam.map_to_screen_f(s_world);
-                        SDL_FPoint e_screen_f = cam.map_to_screen_f(e_world);
-                        SDL_Point s{ static_cast<int>(std::lround(s_screen_f.x)), static_cast<int>(std::lround(s_screen_f.y)) };
-                        SDL_Point e{ static_cast<int>(std::lround(e_screen_f.x)), static_cast<int>(std::lround(e_screen_f.y)) };
-                        SDL_RenderDrawLine(renderer, s.x, s.y, e.x, e.y);
-                    }
-                    cursor = end;
-                    draw = !draw;
-                }
-            }
-};
-
-        auto edge_path = compute_edge_path_for_drag();
-        if (!edge_path) {
-            std::string edge_spawn_id;
-            if (hovered_asset_ && hovered_asset_->spawn_method == "Edge" && !hovered_asset_->spawn_id.empty()) {
-                edge_spawn_id = hovered_asset_->spawn_id;
-            } else {
-                for (Asset* asset : selected_assets_) {
-                    if (!asset) continue;
-                    if (asset->spawn_method == "Edge" && !asset->spawn_id.empty()) {
-                        edge_spawn_id = asset->spawn_id;
-                        break;
-                    }
-                }
-            }
-            if (!edge_spawn_id.empty()) {
-                edge_path = compute_edge_path_for_spawn(edge_spawn_id);
-            }
-        }
-        if (edge_path && !edge_path->empty()) {
-            SDL_Color color = DMStyles::AccentButton().hover_bg;
-            draw_dashed_polyline_world(*edge_path, color);
-        }
     }
     if (room_cfg_ui_ && room_cfg_ui_->visible()) {
         room_cfg_ui_->render(renderer);
@@ -2117,7 +2082,7 @@ void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetIn
     entry["display_name"]    = info->name;
 
     const int default_resolution =
-        current_room_ ? current_room_->map_grid_settings().resolution : MapGridSettings::defaults().resolution;
+        current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
 
     devmode::spawn::ensure_spawn_group_entry_defaults(entry, info->name, default_resolution);
 
@@ -2199,7 +2164,7 @@ void RoomEditor::regenerate_room_from_template(Room* source_room) {
 
     nlohmann::json template_root = source_room->assets_data();
     auto& template_groups = ensure_spawn_groups_array(template_root);
-    const int template_resolution = current_room_ ? current_room_->map_grid_settings().resolution : MapGridSettings::defaults().resolution;
+    const int template_resolution = current_room_ ? current_room_->map_grid_settings().grid_resolution : MapGridSettings::defaults().grid_resolution;
     for (auto& entry : template_groups) {
         if (!entry.is_object()) continue;
         entry["spawn_id"] = generate_spawn_id();
@@ -2504,9 +2469,11 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const SDL_FPoint world_f = cam.screen_to_map(screen_pt);
     SDL_Point world_pt{ (int)std::lround(world_f.x), (int)std::lround(world_f.y) };
 
+    last_raw_mouse_world_ = world_pt;
+    has_last_raw_mouse_world_ = true;
+
     cursor_snap_resolution_ = current_grid_resolution();
-    vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-    snapped_cursor_world_ = grid_service.snap_to_vertex(world_pt, cursor_snap_resolution_);
+    snapped_cursor_world_ = snap_world_point_to_overlay_grid(world_pt, cursor_snap_resolution_);
 
     Asset* hit = hit_test_asset(screen_pt, nullptr);
 
@@ -2671,13 +2638,11 @@ Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const 
         int best_bottom = std::numeric_limits<int>::max();
         int best_top = std::numeric_limits<int>::max();
         int best_screen_y = std::numeric_limits<int>::max();
-        int best_z = std::numeric_limits<int>::min();
         int best_area = std::numeric_limits<int>::max();
 
         auto consider_candidate = [&](Asset* asset,
                                       const SDL_Rect& rect,
-                                      int screen_y,
-                                      int z_index) {
+                                      int screen_y) {
             if (!asset) return;
             if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) {
                 return;
@@ -2691,16 +2656,15 @@ Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const 
             const bool is_better =
                 !best ||
                 bottom < best_bottom ||
-                (bottom == best_bottom && top < best_top) || (bottom == best_bottom && top == best_top && screen_y < best_screen_y) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && z_index > best_z) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && z_index == best_z && area < best_area);
+                (bottom == best_bottom && top < best_top) || (bottom == best_bottom && top == best_top && screen_y < best_screen_y) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && area < best_area);
             if (is_better) {
                 best = asset;
                 best_bottom = bottom;
                 best_top = top;
                 best_screen_y = screen_y;
-                best_z = z_index;
                 best_area = area;
             }
-};
+        };
 
         for (Asset* asset : candidates) {
             auto bc = asset_bounds_cache_.find(asset);
@@ -2708,7 +2672,7 @@ Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const 
                 continue;
             }
             const AssetSpatialEntry& entry = bc->second;
-            consider_candidate(asset, entry.bounds, entry.screen_y, entry.z_index);
+            consider_candidate(asset, entry.bounds, entry.screen_y);
         }
 
         if (best) {
@@ -2763,12 +2727,90 @@ bool RoomEditor::ensure_spatial_index(const WarpedScreenGrid& cam) const {
     return !spatial_index_dirty_;
 }
 
+bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam,
+                                                     Asset* asset,
+                                                     SDL_Rect& out_rect) const {
+    if (!asset) {
+        return false;
+    }
+    if (asset->render_package.empty()) {
+        return false;
+    }
+
+    float min_x = std::numeric_limits<float>::infinity();
+    float min_y = std::numeric_limits<float>::infinity();
+    float max_x = -std::numeric_limits<float>::infinity();
+    float max_y = -std::numeric_limits<float>::infinity();
+    SDL_FPoint base_screen{};
+    bool have_bounds = false;
+
+    for (const auto& obj : asset->render_package) {
+        if (obj.screen_rect.w <= 0 || obj.screen_rect.h <= 0) {
+            continue;
+        }
+        SDL_FPoint world_point{ static_cast<float>(obj.screen_rect.x), static_cast<float>(obj.screen_rect.y) };
+        if (!cam.project_world_point(world_point, obj.world_z_offset, base_screen)) {
+            continue;
+        }
+        const float half_width = static_cast<float>(obj.screen_rect.w) * 0.5f;
+        const float height = static_cast<float>(obj.screen_rect.h);
+
+        if (!std::isfinite(base_screen.x) || !std::isfinite(base_screen.y)) {
+            continue;
+        }
+
+        const float left = base_screen.x - half_width;
+        const float right = base_screen.x + half_width;
+        const float top = base_screen.y - height;
+        const float bottom = base_screen.y;
+
+        if (!std::isfinite(left) || !std::isfinite(right) || !std::isfinite(top) || !std::isfinite(bottom)) {
+            continue;
+        }
+
+        min_x = std::min(min_x, left);
+        min_y = std::min(min_y, top);
+        max_x = std::max(max_x, right);
+        max_y = std::max(max_y, bottom);
+        have_bounds = true;
+    }
+
+    if (!have_bounds) {
+        return false;
+    }
+
+    const int left = static_cast<int>(std::floor(min_x));
+    const int top = static_cast<int>(std::floor(min_y));
+    const int right = static_cast<int>(std::ceil(max_x));
+    const int bottom = static_cast<int>(std::ceil(max_y));
+
+    const int width = std::max(1, right - left);
+    const int height = std::max(1, bottom - top);
+
+    out_rect = SDL_Rect{left, top, width, height};
+    return true;
+}
+
 bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
                                              Asset* asset,
                                              SDL_Rect& out_rect,
                                              int& out_screen_y) const {
     if (!asset) {
         return false;
+    }
+
+    auto* gp = cam.grid_point_for_asset(asset);
+    if (!gp || !gp->on_screen) {
+        return false;
+    }
+
+    if (gp->perspective_scale <= 0.0f || gp->vertical_scale <= 0.0f) {
+        return false;
+    }
+
+    if (compute_asset_render_package_bounds(cam, asset, out_rect)) {
+        out_screen_y = static_cast<int>(std::lround(gp->screen.y));
+        return true;
     }
 
     SDL_Texture* tex = asset->get_current_frame();
@@ -2795,15 +2837,6 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
 
     const float scaled_fw = static_cast<float>(fw) * base_scale;
     const float scaled_fh = static_cast<float>(fh) * base_scale;
-
-    auto* gp = cam.grid_point_for_asset(asset);
-    if (!gp || !gp->on_screen) {
-        return false;
-    }
-
-    if (gp->perspective_scale <= 0.0f || gp->vertical_scale <= 0.0f) {
-        return false;
-    }
 
     const float screen_width = scaled_fw * gp->perspective_scale;
     const float screen_height = screen_width * gp->vertical_scale;
@@ -2856,7 +2889,6 @@ void RoomEditor::insert_asset_entry(Asset* asset, const SDL_Rect& rect, int scre
     AssetSpatialEntry entry;
     entry.bounds = rect;
     entry.screen_y = screen_y;
-    entry.z_index = asset->z_index;
 
     const int left = floor_div(rect.x, kSpatialCellSize);
     const int right = floor_div(rect.x + rect.w - 1, kSpatialCellSize);
@@ -2996,13 +3028,11 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
     int best_bottom = std::numeric_limits<int>::max();
     int best_top = std::numeric_limits<int>::max();
     int best_screen_y = std::numeric_limits<int>::max();
-    int best_z = std::numeric_limits<int>::min();
     int best_area = std::numeric_limits<int>::max();
 
     auto consider_candidate = [&](Asset* asset,
                                   const SDL_Rect& rect,
-                                  int screen_y,
-                                  int z_index) {
+                                  int screen_y) {
         if (!asset) return;
         if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) {
             return;
@@ -3016,13 +3046,12 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
         const bool is_better =
             !best ||
             bottom < best_bottom ||
-            (bottom == best_bottom && top < best_top) || (bottom == best_bottom && top == best_top && screen_y < best_screen_y) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && z_index > best_z) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && z_index == best_z && area < best_area);
+            (bottom == best_bottom && top < best_top) || (bottom == best_bottom && top == best_top && screen_y < best_screen_y) || (bottom == best_bottom && top == best_top && screen_y == best_screen_y && area < best_area);
         if (is_better) {
             best = asset;
             best_bottom = bottom;
             best_top = top;
             best_screen_y = screen_y;
-            best_z = z_index;
             best_area = area;
         }
 };
@@ -3039,7 +3068,7 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
             continue;
         }
 
-        consider_candidate(asset, rect, screen_y, asset->z_index);
+        consider_candidate(asset, rect, screen_y);
     }
 
     return best;
@@ -3330,7 +3359,7 @@ void RoomEditor::ensure_area_anchor_spawn_entry(Room* room, const std::string& a
             break;
         }
     }
-    const int default_resolution = room->map_grid_settings().resolution;
+    const int default_resolution = room->map_grid_settings().grid_resolution;
     int width = 0, height = 0;
     if (room->room_area) {
         auto b = room->room_area->get_bounds();
@@ -3371,7 +3400,7 @@ void RoomEditor::begin_area_drag_session(const std::string& area_name, const SDL
     area_drag_start_world_ = world_mouse;
     MapGridSettings map_settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     map_settings.clamp();
-    area_drag_resolution_ = vibble::grid::clamp_resolution(map_settings.resolution);
+    area_drag_resolution_ = vibble::grid::clamp_resolution(map_settings.grid_resolution);
 
     ensure_area_anchor_spawn_entry(current_room_, area_drag_name_);
 }
@@ -3865,7 +3894,7 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
     MapGridSettings map_settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     map_settings.clamp();
 
-    int desired_resolution = cursor_snap_resolution_ > 0 ? cursor_snap_resolution_ : map_settings.resolution;
+    int desired_resolution = cursor_snap_resolution_ > 0 ? cursor_snap_resolution_ : map_settings.grid_resolution;
     drag_resolution_ = vibble::grid::clamp_resolution(desired_resolution);
     SpawnEntryResolution resolved_entry = drag_spawn_id_.empty() ? SpawnEntryResolution{} : locate_spawn_entry(drag_spawn_id_);
     nlohmann::json* spawn_entry = resolved_entry.entry;
@@ -4630,7 +4659,15 @@ int RoomEditor::current_grid_resolution() const {
     }
     MapGridSettings settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     settings.clamp();
-    return vibble::grid::clamp_resolution(settings.resolution);
+    return vibble::grid::clamp_resolution(settings.grid_resolution);
+}
+
+void RoomEditor::refresh_cursor_snap() {
+    if (!has_last_raw_mouse_world_) {
+        return;
+    }
+    cursor_snap_resolution_ = current_grid_resolution();
+    snapped_cursor_world_ = snap_world_point_to_overlay_grid(last_raw_mouse_world_, cursor_snap_resolution_);
 }
 
 void RoomEditor::refresh_spawn_group_config_ui() {
@@ -4656,7 +4693,7 @@ void RoomEditor::refresh_spawn_group_config_ui() {
     }
     rebuild_room_spawn_id_cache();
 
-    const int default_resolution = current_room_->map_grid_settings().resolution;
+    const int default_resolution = current_room_->map_grid_settings().grid_resolution;
     spawn_group_panel_->set_default_resolution(default_resolution);
 
     auto area_names_provider = [this]() {
@@ -5210,7 +5247,7 @@ void RoomEditor::handle_spawn_config_change(const nlohmann::json& entry) {
 std::unique_ptr<vibble::grid::Occupancy> RoomEditor::build_room_grid(const std::string& ignore_spawn_id) const {
     if (!current_room_ || !current_room_->room_area) return nullptr;
     MapGridSettings grid_settings = current_room_->map_grid_settings();
-    const int resolution = std::max(0, grid_settings.resolution);
+    const int resolution = std::max(0, grid_settings.grid_resolution);
     vibble::grid::Grid& grid_service = vibble::grid::global_grid();
     auto occupancy = std::make_unique<vibble::grid::Occupancy>(*current_room_->room_area, resolution, grid_service);
     if (!assets_) return occupancy;
@@ -5406,48 +5443,21 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
 
     if (old_area_copy && new_area_size < old_area_size) {
         nlohmann::json& map_info_json = assets_->map_info_json();
-        std::vector<std::pair<std::string, int>> boundary_options;
-        int boundary_spacing = 100;
         if (map_info_json.contains("map_boundary_data") && map_info_json["map_boundary_data"].is_object()) {
             const auto& boundary_json = map_info_json["map_boundary_data"];
-            if (boundary_json.contains("batch_assets")) {
-                const auto& batch = boundary_json["batch_assets"];
-                boundary_spacing = (batch.value("grid_spacing_min", boundary_spacing) + batch.value("grid_spacing_max", boundary_spacing)) / 2;
-                for (const auto& asset_entry : batch.value("batch_assets", std::vector<nlohmann::json>{})) {
-                    if (asset_entry.contains("name") && asset_entry["name"].is_string()) {
-                        int weight = asset_entry.value("percent", 1);
-                        boundary_options.emplace_back(asset_entry["name"].get<std::string>(), weight);
-                    }
+            if (boundary_json.contains("candidate_selectors") &&
+                boundary_json["candidate_selectors"].is_array() &&
+                !boundary_json["candidate_selectors"].empty()) {
+                std::vector<Area> exclusion;
+                if (current_room_ && current_room_->room_area) {
+                    exclusion.push_back(*current_room_->room_area);
                 }
-            }
-        }
-
-        if (!boundary_options.empty()) {
-            const int boundary_resolution = std::clamp( static_cast<int>(std::lround(std::log2(static_cast<double>(std::max(1, boundary_spacing))))), 0, vibble::grid::kMaxResolution);
-            vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-            vibble::grid::Occupancy boundary_grid(*old_area_copy, boundary_resolution, grid_service);
-            auto vertices = boundary_grid.vertices_in_area(*old_area_copy);
-            if (!vertices.empty()) {
-                std::vector<int> weights;
-                weights.reserve(boundary_options.size());
-                for (const auto& opt : boundary_options) {
-                    weights.push_back(std::max(1, opt.second));
+                AssetSpawner spawner(&assets_->library(), exclusion);
+                std::string source = assets_ ? assets_->map_id() : std::string{};
+                if (!source.empty()) {
+                    source += "::map_boundary_data";
                 }
-                std::discrete_distribution<int> pick(weights.begin(), weights.end());
-                std::mt19937 boundary_rng(std::random_device{}());
-                std::vector<std::unique_ptr<Asset>> boundary_spawned;
-                for (auto* vertex : vertices) {
-                    if (!vertex) continue;
-                    if (current_room_->room_area->contains_point(vertex->world)) continue;
-                    int idx = pick(boundary_rng);
-                    const std::string& asset_name = boundary_options[idx].first;
-                    auto info = assets_->library().get(asset_name);
-                    if (!info) continue;
-                    std::string spawn_id = generate_spawn_id();
-                    Area spawn_area(asset_name, vertex->world, 1, 1, "Point", 1, 1, 1);
-                    auto asset = std::make_unique<Asset>(info, spawn_area, vertex->world, 0, nullptr, spawn_id, std::string(asset_types::boundary));
-                    boundary_spawned.push_back(std::move(asset));
-                }
+                auto boundary_spawned = spawner.spawn_boundary_from_json(boundary_json, *old_area_copy, source);
                 integrate_spawned_assets(boundary_spawned);
             }
         }

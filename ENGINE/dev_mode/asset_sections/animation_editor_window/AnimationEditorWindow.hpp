@@ -69,9 +69,11 @@ class AnimationEditorWindow {
     void on_live_frame_editor_closed(const std::string& animation_id);
 
   private:
+    struct LiveFrameEditorToken {};
     void handle_document_saved();
     void layout_children();
     void ensure_layout() const;
+    void invalidate_inspector_background_cache();
     void configure_list_panel();
     void configure_inspector_panel();
     void select_animation(const std::optional<std::string>& animation_id, bool from_user);
@@ -85,6 +87,7 @@ class AnimationEditorWindow {
     void render_header(SDL_Renderer* renderer) const;
     void render_status(SDL_Renderer* renderer) const;
     void render_inspector(SDL_Renderer* renderer) const;
+    void render_inspector_background(SDL_Renderer* renderer) const;
     bool handle_header_event(const SDL_Event& e);
     void set_status_message(const std::string& message, int frames = 300);
     void open_frame_editor(const std::string& animation_id);
@@ -151,6 +154,11 @@ class AnimationEditorWindow {
     std::string status_message_;
     int status_timer_frames_ = 0;
     bool live_frame_editor_session_active_ = false;
+    // Expires when the window is destroyed to invalidate callbacks.
+    std::shared_ptr<LiveFrameEditorToken> live_frame_editor_token_;
+    mutable SDL_Texture* inspector_background_cache_ = nullptr;
+    mutable SDL_Rect inspector_background_cache_rect_{0, 0, 0, 0};
+    mutable bool inspector_background_dirty_ = true;
     std::optional<std::string> selected_animation_id_;
     mutable bool layout_dirty_ = true;
     bool auto_save_pending_ = false;

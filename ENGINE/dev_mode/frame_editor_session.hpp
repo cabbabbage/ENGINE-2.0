@@ -29,13 +29,14 @@ class Input;
 struct SDL_Renderer;
 class DMButton;
 class DMDropdown;
+class DMNumericStepper;
+class WarpedScreenGrid;
 struct AnimationChildFrameData;
 enum class AnimationChildMode;
 
 namespace animation_editor {
 class AnimationDocument;
 class PreviewProvider;
-class AnimationEditorWindow;
 }
 
 struct ChildPreviewContext {
@@ -46,6 +47,7 @@ struct ChildPreviewContext {
 class FrameEditorSession {
 public:
     enum class Mode { Movement, StaticChildren, AsyncChildren, AttackGeometry, HitGeometry };
+    enum class EditPlane { XY, XZ };
     static inline constexpr std::array<const char*, 3> kDamageTypeNames = {
         "projectile", "melee", "explosion"
 };
@@ -58,12 +60,13 @@ public:
                std::shared_ptr<animation_editor::AnimationDocument> document,
                std::shared_ptr<animation_editor::PreviewProvider> preview,
                const std::string& animation_id,
-               animation_editor::AnimationEditorWindow* host_to_toggle,
+               std::function<void(const std::string&)> on_host_closed,
                std::function<void()> on_end_callback = {});
     void end();
 
     bool is_active() const { return active_; }
     Mode mode() const { return mode_; }
+    EditPlane edit_plane() const { return edit_plane_; }
 
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
@@ -71,10 +74,40 @@ public:
 
     void set_snap_resolution(int r);
     void set_grid_overlay_enabled_transient(bool enabled);
+    bool should_render_asset(const Asset* asset) const;
 
 FRAME_EDITOR_ACCESS:
     bool target_is_alive() const;
     void center_camera_origin();
+    struct TextureMetrics {
+        int width = 0;
+        int height = 0;
+    };
+    TextureMetrics current_frame_texture_metrics(SDL_Renderer* renderer) const;
+    bool project_texture_bounds(const WarpedScreenGrid& cam,
+                                SDL_Point anchor_world,
+                                const TextureMetrics& metrics,
+                                EditPlane plane,
+                                SDL_FRect& out_bounds) const;
+    double fit_camera_height_for_xy(WarpedScreenGrid& cam,
+                                    SDL_Point anchor_world,
+                                    const TextureMetrics& metrics,
+                                    int screen_w,
+                                    int screen_h) const;
+    double fit_camera_y_distance_for_xz(WarpedScreenGrid& cam,
+                                        SDL_Point anchor_world,
+                                        const TextureMetrics& metrics,
+                                        int screen_w,
+                                        int screen_h) const;
+    void apply_camera_defaults(EditPlane plane);
+    void handle_xz_scroll(WarpedScreenGrid& cam, int wheel_y);
+    void handle_xy_scroll(WarpedScreenGrid& cam, int wheel_y) const;
+    static void render_plane_grid(SDL_Renderer* renderer,
+                                  const WarpedScreenGrid& cam,
+                                  SDL_Point anchor_world,
+                                  EditPlane plane,
+                                  int snap_resolution_r,
+                                  const TextureMetrics& metrics);
 
     struct ChildFrame {
         int child_index = -1;
@@ -110,7 +143,7 @@ FRAME_EDITOR_ACCESS:
     Asset* target_ = nullptr;
     std::shared_ptr<animation_editor::AnimationDocument> document_;
     std::shared_ptr<animation_editor::PreviewProvider> preview_;
-    animation_editor::AnimationEditorWindow* host_ = nullptr;
+    std::function<void(const std::string&)> on_host_closed_{};
     std::function<void()> on_end_{};
 
     bool active_ = false;
@@ -124,6 +157,8 @@ FRAME_EDITOR_ACCESS:
     bool smooth_enabled_ = false;
     bool curve_enabled_ = false;
     int selected_child_index_ = 0;
+    EditPlane edit_plane_ = EditPlane::XZ;
+    bool grid_overlay_enabled_ = true;
 
     bool prev_realism_enabled_ = true;
     bool prev_parallax_enabled_ = true;
@@ -141,9 +176,12 @@ FRAME_EDITOR_ACCESS:
     mutable std::unique_ptr<DMButton> btn_children_;
     mutable std::unique_ptr<DMButton> btn_attack_geometry_;
     mutable std::unique_ptr<DMButton> btn_hit_geometry_;
+    mutable std::unique_ptr<DMButton> btn_plane_toggle_;
     mutable std::unique_ptr<DMButton> btn_prev_;
     mutable std::unique_ptr<DMButton> btn_next_;
     mutable std::unique_ptr<DMDropdown> dd_animation_select_;
+    mutable std::unique_ptr<class DMCheckbox> cb_grid_overlay_;
+    mutable std::unique_ptr<DMNumericStepper> stepper_grid_resolution_;
 
     mutable std::unique_ptr<class DMButton> btn_apply_all_movement_;
     mutable std::unique_ptr<class DMButton> btn_apply_all_children_;
@@ -219,16 +257,27 @@ FRAME_EDITOR_ACCESS:
     mutable SDL_Rect nav_rect_{0,0,0,0};
     mutable SDL_Rect nav_drag_rect_{0,0,0,0};
     mutable std::vector<SDL_Rect> toolbox_widget_rects_;
+    mutable int toolbox_scroll_offset_ = 0;
+    mutable int toolbox_content_height_ = 0;
+    mutable bool toolbox_scrollbar_visible_ = false;
+    mutable SDL_Rect toolbox_scrollbar_track_{0,0,0,0};
+    mutable SDL_Rect toolbox_scrollbar_thumb_{0,0,0,0};
     SDL_Point dir_pos_{0, 0};
     SDL_Point toolbox_pos_{0, 0};
     SDL_Point nav_pos_{0, 0};
+    SDL_FPoint right_pan_start_world_{0.0f, 0.0f};
+    SDL_FPoint right_pan_last_world_{0.0f, 0.0f};
+    SDL_Point right_pan_start_focus_{0, 0};
+    double right_pan_start_distance_ = 0.0;
     bool dragging_dir_ = false;
     bool dragging_toolbox_ = false;
+    bool dragging_toolbox_scrollbar_ = false;
     bool dragging_nav_ = false;
     bool dragging_scrollbar_thumb_ = false;
     SDL_Point drag_offset_dir_{0, 0};
     SDL_Point drag_offset_toolbox_{0, 0};
     SDL_Point drag_offset_nav_{0, 0};
+    int toolbox_scrollbar_drag_offset_ = 0;
     int scrollbar_drag_offset_x_ = 0;
     mutable int scroll_offset_ = 0;
     mutable int thumb_content_width_ = 0;
@@ -240,6 +289,18 @@ FRAME_EDITOR_ACCESS:
     mutable std::vector<int> thumb_indices_;
 
     mutable class PanAndHeight pan_height_;
+    bool manual_pan_active_ = false;
+    SDL_Point manual_pan_last_center_{0, 0};
+    bool manual_pan_has_last_center_ = false;
+    bool right_pan_active_ = false;
+    SDL_Point right_pan_start_mouse_{0, 0};
+    SDL_Point right_pan_start_center_{0, 0};
+    SDL_Point right_pan_last_center_{0, 0};
+    bool right_pan_has_last_center_ = false;
+    int pending_scroll_delta_ = 0;
+    bool hover_toolbox_ = false;
+    bool hover_toolbox_drag_handle_ = false;
+    bool hover_nav_drag_handle_ = false;
     std::vector<std::string> child_assets_;
     mutable std::vector<AnimationChildMode> child_modes_;
     std::vector<ChildPreviewSlot> child_preview_slots_;
@@ -283,6 +344,7 @@ FRAME_EDITOR_ACCESS:
     void ensure_widgets() const;
     void refresh_animation_dropdown() const;
     void rebuild_layout() const;
+    void render_toolbox(SDL_Renderer* renderer) const;
     void apply_current_mode_to_all_frames();
     void apply_frame_move_from_base(int index, SDL_FPoint desired_rel, const std::vector<SDL_FPoint>& base_rel);
     void redistribute_frames_from_middle_drag(int adjusted_index);
@@ -426,10 +488,27 @@ FRAME_EDITOR_ACCESS:
     void update_attack_drag(SDL_Point mouse);
     void end_attack_drag(bool commit);
     float attachment_scale() const;
+    bool is_xy_plane() const;
+    const char* plane_axis_label() const;
+    const char* plane_button_label() const;
+    void toggle_edit_plane();
+    void update_plane_labels() const;
+    float movement_plane_delta(const MovementFrame& frame) const;
+    float& movement_plane_delta(MovementFrame& frame);
+    float child_plane_delta(const ChildFrame& child) const;
+    float& child_plane_delta(ChildFrame& child);
+    float hitbox_plane_center(const animation_update::FrameHitGeometry::HitBox& box) const;
+    float& hitbox_plane_center(animation_update::FrameHitGeometry::HitBox& box);
+    float attack_plane_start(const animation_update::FrameAttackGeometry::Vector& vec) const;
+    float& attack_plane_start(animation_update::FrameAttackGeometry::Vector& vec);
+    float attack_plane_control(const animation_update::FrameAttackGeometry::Vector& vec) const;
+    float& attack_plane_control(animation_update::FrameAttackGeometry::Vector& vec);
+    float attack_plane_end(const animation_update::FrameAttackGeometry::Vector& vec) const;
+    float& attack_plane_end(animation_update::FrameAttackGeometry::Vector& vec);
 
 FRAME_EDITOR_ACCESS:
     void render_directory_panel(SDL_Renderer* renderer);
-    void render_navigation_panel(SDL_Renderer* renderer);
+    void render_navigation_panel(SDL_Renderer* renderer) const;
     void render_toolbox(SDL_Renderer* renderer);
     void render_child_guides(SDL_Renderer* renderer, const WarpedScreenGrid& cam);
     void render_hitbox_guides(SDL_Renderer* renderer, const WarpedScreenGrid& cam);
@@ -600,7 +679,7 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         if (entry.is_array()) {
             if (!entry.empty() && entry[0].is_number()) f.dx = static_cast<float>(entry[0].get<double>());
             if (entry.size() > 1 && entry[1].is_number()) f.dy = static_cast<float>(entry[1].get<double>());
-            f.dz = 0.0f;
+            f.dz = f.dy;
             if (entry.size() > 2 && entry[2].is_boolean()) f.resort_z = entry[2].get<bool>();
 
             const nlohmann::json* children_json = nullptr;
@@ -675,7 +754,7 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         } else if (entry.is_object()) {
             f.dx = static_cast<float>(entry.value("dx", 0.0));
             f.dy = static_cast<float>(entry.value("dy", 0.0));
-            f.dz = static_cast<float>(entry.value("dz", 0.0));
+            f.dz = static_cast<float>(entry.value("dz", entry.value("dy", 0.0)));
             f.resort_z = entry.value("resort_z", false);
             if (entry.contains("children") && entry["children"].is_array()) {
                 for (const auto& child_entry : entry["children"]) {

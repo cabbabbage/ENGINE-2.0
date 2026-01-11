@@ -482,7 +482,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     });
     map_info["map_boundary_data"] = nlohmann::json::object({
         {"inherits_map_assets", false},
-        {"spawn_groups",
+        {"candidate_selectors",
          nlohmann::json::array({ make_batch_spawn_group("map_boundary",
                                                         "batch_map_boundary") })}
     });
@@ -563,17 +563,11 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     map_info["camera_settings"] = nlohmann::json::object({
         {"render_quality_percent", 80},
         {"smooth_motion_height", true},
-        {"camera_height_min", 0.75},
-        {"camera_height_max", 3.0},
         {"base_height_px", 720.0},
         {"min_visible_screen_ratio", 0.01}
     });
     map_info["map_grid_settings"] = nlohmann::json::object({
-        {"resolution", 6},
-        {"spacing", 100},
-        {"jitter", 0},
-        {"r_chunk", 6},
-        {"chunk_size", 64}
+        {"grid_resolution", 6}
     });
     map_info["audio"] = nlohmann::json::object({
         {"music", nlohmann::json::object({

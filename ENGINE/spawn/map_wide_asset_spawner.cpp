@@ -297,7 +297,6 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
         }
 
         SDL_Point spawn_pos = vertex->world;
-        spawn_pos = apply_map_grid_jitter(grid_settings_, spawn_pos, rng, *owner->room_area);
         context.set_clip_area(owner->room_area.get());
 
         const bool enforce_spacing = spawn_info->check_min_spacing;

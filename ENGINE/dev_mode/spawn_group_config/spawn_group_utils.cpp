@@ -326,7 +326,7 @@ bool ensure_spawn_group_entry_defaults(nlohmann::json& entry,
     }
 
     const int fallback_resolution = default_resolution
-        ? vibble::grid::clamp_resolution(*default_resolution) : vibble::grid::clamp_resolution(MapGridSettings::defaults().resolution);
+        ? vibble::grid::clamp_resolution(*default_resolution) : vibble::grid::clamp_resolution(MapGridSettings::defaults().grid_resolution);
     int resolution = read_int(entry, "resolution", fallback_resolution);
     resolution = vibble::grid::clamp_resolution(resolution);
     if (!entry.contains("resolution") || !entry["resolution"].is_number_integer() ||

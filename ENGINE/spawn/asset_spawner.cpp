@@ -121,27 +121,32 @@ void AssetSpawner::spawn(Room& room) {
 std::vector<std::unique_ptr<Asset>> AssetSpawner::spawn_boundary_from_json(const nlohmann::json& boundary_json,
                                                                           const Area& spawn_area,
                                                                           const std::string& source_name) {
-        if (boundary_json.is_null()) {
+        if (boundary_json.is_null() || !boundary_json.is_object()) {
                 return {};
         }
-    std::vector<nlohmann::json> json_sources{ boundary_json };
+        const auto selectors_it = boundary_json.find("candidate_selectors");
+        if (selectors_it == boundary_json.end() || !selectors_it->is_array() || selectors_it->empty()) {
+                return {};
+        }
+
+        nlohmann::json source = nlohmann::json::object();
+        source["spawn_groups"] = *selectors_it;
+        std::vector<nlohmann::json> json_sources{ source };
 
         group_resolution_map_.clear();
         try {
-                if (boundary_json.contains("spawn_groups") && boundary_json["spawn_groups"].is_array()) {
-                        for (const auto& entry : boundary_json["spawn_groups"]) {
-                                if (!entry.is_object()) continue;
-                                const std::string sid = entry.value("spawn_id", std::string{});
-                                if (sid.empty()) continue;
-                                int r = std::max(5, entry.value("grid_resolution", 5));
-                                r = vibble::grid::clamp_resolution(r);
-                                group_resolution_map_.insert_or_assign(sid, r);
-                        }
+                for (const auto& entry : *selectors_it) {
+                        if (!entry.is_object()) continue;
+                        const std::string sid = entry.value("spawn_id", std::string{});
+                        if (sid.empty()) continue;
+                        int r = entry.value("grid_resolution", 5);
+                        r = vibble::grid::clamp_resolution(r);
+                        group_resolution_map_.insert_or_assign(sid, r);
                 }
         } catch (...) {
 
         }
-    AssetSpawnPlanner planner(json_sources, spawn_area, *asset_library_);
+        AssetSpawnPlanner planner(json_sources, spawn_area, *asset_library_);
         boundary_mode_ = true;
         run_spawning(&planner, spawn_area);
         boundary_mode_ = false;
@@ -170,7 +175,7 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                 return;
         }
         auto spacing_names = collect_spacing_asset_names(spawn_queue_);
-    const int resolution = std::max(0, map_grid_settings_.resolution);
+    const int resolution = std::max(0, map_grid_settings_.grid_resolution);
     vibble::grid::Grid& grid_service = vibble::grid::global_grid();
     checker_.begin_session(grid_service, resolution);
     vibble::grid::Occupancy occupancy(area, resolution, grid_service);
@@ -279,7 +284,6 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                         for (auto* vertex : vertices) {
                                 if (!vertex) continue;
                                 SDL_Point spawn_pos{ vertex->world.x, vertex->world.y };
-                                spawn_pos = apply_map_grid_jitter(map_grid_settings_, spawn_pos, batch_ctx.rng(), area);
                                 bool placed = false;
                                 std::vector<double> attempt_weights = base_weights;
                                 const size_t max_candidate_attempts = queue_item.candidates.size();
@@ -520,7 +524,7 @@ void AssetSpawner::run_child_spawning(AssetSpawnPlanner* planner,
         auto spacing_names = collect_spacing_asset_names(spawn_queue_);
 
         vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-        const int resolution = std::max(0, map_grid_settings_.resolution);
+        const int resolution = std::max(0, map_grid_settings_.grid_resolution);
         checker_.begin_session(grid_service, resolution);
         ExactSpawner exact;
         CenterSpawner center;

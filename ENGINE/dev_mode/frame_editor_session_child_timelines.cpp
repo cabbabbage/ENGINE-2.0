@@ -3,8 +3,9 @@
 #include <cctype>
 
 #include "asset/animation.hpp"
+#include "dev_mode/widgets.hpp"
 
-#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS) && !defined(DM_WIDGETS_INCLUDED)
 class DMButton {};
 class DMDropdown {};
 class DMTextBox {};

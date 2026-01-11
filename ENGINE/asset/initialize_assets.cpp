@@ -5,6 +5,7 @@
 #include "asset_types.hpp"
 #include "asset_utils.hpp"
 #include "utils/log.hpp"
+#include "core/tile_builder.hpp"
 #include <algorithm>
 #include <iostream>
 #include <memory>
@@ -78,6 +79,10 @@ void InitializeAssets::initialize(Assets& assets,
                 }
         }
 	find_player(assets);
+
+        if (SDL_Renderer* renderer = assets.renderer()) {
+            loader_tiles::build_grid_tiles(renderer, assets.world_grid(), assets.map_grid_settings(), assets.all);
+        }
 
         assets.mark_active_assets_dirty();
         vibble::log::debug("[InitializeAssets] Initialization base complete. Total assets: " + std::to_string(assets.all.size()));

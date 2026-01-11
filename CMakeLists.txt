@@ -195,10 +195,12 @@ add_executable(engine_tests
     TESTS/test_animation_child_visibility.cpp
     TESTS/test_animation_child_runtime.cpp
     TESTS/test_animation_child_clone.cpp
+    TESTS/test_attack_validation.cpp
     ENGINE/asset/animation.cpp
     ENGINE/asset/surface_utils.cpp
     ENGINE/asset/animation_cloner.cpp
     ENGINE/animation_update/child_attachment_controller.cpp
+    ENGINE/animation_update/attack_validation.cpp
     ENGINE/dev_mode/frame_editor_session_child_timelines.cpp
     ENGINE/dev_mode/core/dev_json_store.cpp
     ENGINE/dev_mode/core/manifest_store.cpp

@@ -22,7 +22,6 @@ class ManifestStore;
 
 struct ChildInfo {
     std::string area_name;
-    int z_offset = 0;
     bool placed_on_top_parent = false;
     nlohmann::json spawn_group;
 };
@@ -65,7 +64,6 @@ class AssetInfo {
     std::string name;
     std::string type;
     std::string start_animation;
-    int z_threshold;
     bool passable;
     bool has_shading = false;
     ShadowMaskSettings shadow_mask_settings{};
@@ -124,7 +122,6 @@ class AssetInfo {
     void loadAnimations(SDL_Renderer* renderer);
     bool commit_manifest();
     void set_asset_type(const std::string &t);
-    void set_z_threshold(int z);
     void set_min_same_type_distance(int d);
     void set_min_distance_all(int d);
     void set_neighbor_search_radius(int radius);

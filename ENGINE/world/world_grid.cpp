@@ -337,23 +337,6 @@ GridPoint& WorldGrid::ensure_point(SDL_Point grid_index, SDL_Point chunk_index, 
     if (inserted && parent == nullptr) {
         add_root_id(id);
     }
-    if (!inserted) {
-        const bool legacy_identity_mismatch =
-            point.world_x() != canonical_world.x ||
-            point.world_y() != canonical_world.y ||
-            point.world_z() != world_z ||
-            point.resolution_layer() != resolution_layer ||
-            point.grid_index.x != grid_index.x ||
-            point.grid_index.y != grid_index.y ||
-            point.chunk_index.x != chunk_index.x ||
-            point.chunk_index.y != chunk_index.y;
-        if (legacy_identity_mismatch) {
-            vibble::log::warn("[WorldGrid] GridPoint identity mismatch between canonical and legacy fields; these must remain aligned during migration (Phase 1 - 3d_refactor_plan.md).");
-        }
-        // Legacy chunk bindings remain mutable during migration to keep renderers stable.
-        point.chunk_index = chunk_index;
-        point.chunk = owning_chunk;
-    }
     key_to_id_[canonical_key] = id;
     return point;
 }
@@ -916,17 +899,20 @@ void WorldGrid::update_active_chunks(const SDL_Rect& camera_world, int margin_px
 
     chunks_.clear_active();
     auto& active = chunks_.active();
-    const auto& storage = chunks_.storage();
-    active.reserve(storage.size());
-    for (const auto& chunk : storage) {
-        if (!chunk) {
-            continue;
-        }
-        if (chunk->world_bounds.w <= 0 || chunk->world_bounds.h <= 0) {
-            continue;
-        }
-        if (SDL_HasIntersection(&chunk->world_bounds, &expanded) == SDL_TRUE) {
-            active.push_back(chunk.get());
+    const int chunk_step = 1 << r_chunk_;
+    if (chunk_step > 0 && expanded.w > 0 && expanded.h > 0) {
+        const int min_i = grid_floor_div(expanded.x - origin_.x, chunk_step);
+        const int min_j = grid_floor_div(expanded.y - origin_.y, chunk_step);
+        const int max_i = grid_floor_div(expanded.x + expanded.w - 1 - origin_.x, chunk_step);
+        const int max_j = grid_floor_div(expanded.y + expanded.h - 1 - origin_.y, chunk_step);
+        if (max_i >= min_i && max_j >= min_j) {
+            for (int i = min_i; i <= max_i; ++i) {
+                for (int j = min_j; j <= max_j; ++j) {
+                    if (Chunk* chunk = chunks_.find(i, j)) {
+                        active.push_back(chunk);
+                    }
+                }
+            }
         }
     }
 

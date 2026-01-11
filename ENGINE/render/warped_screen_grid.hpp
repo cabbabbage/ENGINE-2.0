@@ -58,7 +58,7 @@ public:
         float texture_warp_percent            = 100.0f;
         float texture_warp_y_offset_px        = 0.0f;
 
-        float extra_cull_margin = 300.0f;
+        float extra_cull_margin = 1000.0f;
         float depth_near_world = 0.0f;
         float depth_far_world  = 5000.0f;
         float pre_horizon_lock_offset_px = 80.0f;
@@ -67,17 +67,6 @@ public:
 
         camera_effects::ImageEffectSettings foreground_effects{};
         camera_effects::ImageEffectSettings background_effects{};
-};
-
-    struct CameraGeometry {
-        bool valid = false;
-        double camera_height = 0.0;
-        double focus_depth = 0.0;
-        double anchor_world_y = 0.0;
-        double focus_ndc_offset = 0.0;
-        double pitch_radians = 0.0;
-        float pitch_degrees = 0.0f;
-        double camera_world_y = 0.0;
 };
 
     struct FloorDepthParams {
@@ -146,14 +135,7 @@ public:
 
     RenderEffects compute_render_effects(SDL_Point world, float asset_screen_height, float reference_screen_height, RenderSmoothingKey smoothing_key, int world_z = 0) const;
 
-    CameraGeometry compute_geometry() const;
-    CameraGeometry compute_geometry_for_scale(double scale_value) const;
-    void update_geometry_cache(const CameraGeometry& g);
-
     FloorDepthParams compute_floor_depth_params() const;
-    FloorDepthParams compute_floor_depth_params_for_scale(double scale_value) const;
-    FloorDepthParams compute_floor_depth_params_for_geometry(const CameraGeometry& geom, double scale_value) const;
-    const FloorDepthParams& current_floor_depth_params() const { return runtime_floor_params_; }
     float warp_floor_screen_y(float world_y, float linear_screen_y) const;
 
     double current_camera_height() const { return runtime_camera_height_; }
@@ -165,12 +147,7 @@ public:
     float current_pitch_degrees() const { return runtime_pitch_deg_; }
 
     double view_height_world() const;
-    double view_height_for_scale(double scale_value) const;
     double anchor_world_y() const;
-    double height_lerp_t_for_scale(double scale_value) const;
-    float depth_offset_for_scale(double scale_value) const;
-    double horizon_screen_y_for_scale() const;
-    double horizon_screen_y_for_scale_value(double scale_value) const;
     SDL_FPoint get_view_center_f() const;
     SDL_Point get_screen_center() const {
         SDL_FPoint center = camera_.state().center;
@@ -209,6 +186,8 @@ public:
     void set_manual_height_override(bool);
     double get_scale() const;
     void set_scale(double);
+    double camera_y_distance() const;
+    void set_camera_y_distance(double distance);
     void update();
     void set_tilt_override(std::optional<float> tilt_deg);
     void clear_tilt_override();
@@ -269,8 +248,6 @@ private:
     double runtime_pitch_rad_ = 0.0;
     float runtime_pitch_deg_ = 0.0f;
     float runtime_depth_offset_px_ = 0.0f;
-    FloorDepthParams runtime_floor_params_{};
-    bool geometry_valid_ = false;
 
     std::vector<world::GridPoint*> warped_points_;
     std::vector<Asset*> visible_assets_;

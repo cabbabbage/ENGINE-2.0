@@ -73,6 +73,8 @@ private:
     std::vector<Result> results_;
     std::string last_query_;
     std::uint64_t tag_data_version_ = 0;
+    size_t last_result_row_count_ = 0;
+    bool rows_initialized_ = false;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     std::unique_ptr<devmode::core::ManifestStore> owned_manifest_store_;
     int screen_w_ = 1920;

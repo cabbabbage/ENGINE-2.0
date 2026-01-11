@@ -13,6 +13,7 @@ public:
     spiderController(Assets* assets, Asset* self);
     ~spiderController() override = default;
     void update(const Input&) override;
+    void process_pending_attacks(Asset& self) override;
 
 private:
     Assets* assets_ = nullptr;

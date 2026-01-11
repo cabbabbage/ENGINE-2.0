@@ -14,7 +14,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include "MapLightPanel.hpp"
-#include "asset_filter_bar.hpp"
+#include "other_settings_and_controls.hpp"
 #include "trail_editor_suite.hpp"
 #include "dev_mode/core/manifest_store.hpp"
 #include "map_assets_modals.hpp"
@@ -35,7 +35,6 @@ class RegenerateRoomPopup;
 namespace animation_editor {
 class AnimationDocument;
 class PreviewProvider;
-class AnimationEditorWindow;
 }
 
 class DevControls {
@@ -85,7 +84,7 @@ public:
     void close_asset_info_editor();
     bool is_asset_info_editor_open() const;
     bool is_asset_info_lighting_section_expanded() const;
-    std::uint64_t asset_filter_state_version() const;
+    std::uint64_t other_settings_state_version() const;
 
     void finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info);
 
@@ -121,7 +120,7 @@ public:
     bool is_snap_to_grid_enabled() const { return snap_to_grid_enabled_; }
     int  grid_cell_size_px() const { return grid_cell_size_px_; }
 
-    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, animation_editor::AnimationEditorWindow* host_to_toggle);
+    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, std::function<void(const std::string&)> on_host_closed);
     void end_frame_editor_session();
     bool is_frame_editor_session_active() const;
 
@@ -159,17 +158,39 @@ private:
     void apply_camera_area_render_flag();
     void set_mode_from_header(int header_mode);
     void set_mode(Mode new_mode);
+    void update_movement_debug_visibility();
     void apply_overlay_grid_resolution(int resolution, bool user_override, bool update_stepper, bool update_footer);
+    void apply_grid_resolution_change(int resolution);
     void restore_filter_hidden_assets() const;
     void apply_dark_mask_visibility();
     bool lighting_section_forces_dark_mask() const;
+    void mark_layout_dirty();
+    void rebuild_layout_state();
+    void update_header_and_footer_bounds();
+    void ensure_layout_cache();
+    void mark_dirty(std::uint32_t flags);
+    bool has_dirty(std::uint32_t flags) const;
+    void clear_dirty(std::uint32_t flags);
 
 private:
+    enum class DirtyFlag : std::uint32_t {
+        None   = 0,
+        Layout = 1 << 0,
+    };
+
+    static constexpr std::uint32_t kDirtyLayout = static_cast<std::uint32_t>(DirtyFlag::Layout);
+
+    struct LayoutCache {
+        SDL_Rect usable_rect{0, 0, 0, 0};
+        bool valid = false;
+    };
+
     int map_radius_or_default() const;
     void remove_spawn_group_assets(const std::string& spawn_id);
     void integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& spawned);
     void regenerate_map_spawn_group(const nlohmann::json& entry);
-    void regenerate_boundary_spawn_group(const nlohmann::json& entry);
+    void regenerate_boundary_spawn_group(const nlohmann::json& boundary_data);
+    
     void regenerate_map_grid_assets();
     void ensure_map_assets_modal_open();
     void ensure_boundary_assets_modal_open();
@@ -211,18 +232,20 @@ private:
     std::unique_ptr<TrailEditorSuite> trail_suite_;
     std::unique_ptr<Room> pending_trail_template_;
     devmode::core::ManifestStore manifest_store_;
-    AssetFilterBar asset_filter_;
+    OtherSettingsAndControls other_settings_;
 
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;
 
     std::unique_ptr<SingleSpawnGroupModal> map_assets_modal_;
-    std::unique_ptr<SingleSpawnGroupModal> boundary_assets_modal_;
+    std::unique_ptr<BoundarySpawnGroupModal> boundary_assets_modal_;
 
     bool grid_overlay_enabled_ = false;
     bool snap_to_grid_enabled_ = false;
-    int  grid_overlay_resolution_r_ = 0;
-    bool grid_overlay_resolution_user_override_ = false;
-    int  grid_cell_size_px_ = 1;
+      int  grid_overlay_resolution_r_ = 0;
+      bool grid_overlay_resolution_user_override_ = false;
+      int  grid_cell_size_px_ = 1;
+    int  grid_resolution_r_ = -1;
+    bool movement_debug_enabled_ = false;
 
     bool depth_effects_forced_realism_disabled_ = false;
     bool depth_effects_prev_realism_enabled_ = true;
@@ -241,6 +264,11 @@ private:
     Asset* frame_editor_asset_for_reopen_ = nullptr;
 
     bool render_suppression_in_progress_ = false;
+
+    std::uint32_t dirty_flags_ = kDirtyLayout;
+    LayoutCache layout_cache_;
+    SDL_Rect last_header_rect_{0, 0, 0, 0};
+    SDL_Rect last_footer_rect_{0, 0, 0, 0};
 
     enum class DepthCueDragState { None, Foreground, Background };
     DepthCueDragState depthcue_drag_state_ = DepthCueDragState::None;

@@ -10,8 +10,6 @@ namespace {
     }
 
     constexpr double PI_D = 3.14159265358979323846;
-    constexpr double kCameraHeightMinPx = 1.0;
-    constexpr double kCameraHeightMaxPx = 2000.0;
     constexpr double kCameraYDistanceMinPx = 0.0;
     constexpr double kCameraYDistanceMaxPx = 2000.0;
 
@@ -41,11 +39,10 @@ float camera_math::sanitize_pitch_degrees(float raw_value, bool* clamped) {
 
 CameraParams camera_math::sanitize_camera_params(const CameraParams& raw, double fallback_height_px) {
     CameraParams params = raw;
-    const double safe_height = std::max(kCameraHeightMinPx, std::isfinite(fallback_height_px) ? fallback_height_px : 1000.0);
+    const double safe_height = std::isfinite(fallback_height_px) ? fallback_height_px : 1000.0;
     if (!std::isfinite(params.height_px) || params.height_px <= 0.0) {
         params.height_px = safe_height;
     }
-    params.height_px = std::clamp(params.height_px, kCameraHeightMinPx, kCameraHeightMaxPx);
     params.tilt_deg = sanitize_pitch_degrees(static_cast<float>(params.tilt_deg));
     if (!std::isfinite(params.y_distance_px)) {
         params.y_distance_px = 0.0;
@@ -186,10 +183,11 @@ void CameraController::apply_room_targets(const CameraParams& cur,
     blended.pan_y_percent = lerp(cur_params.pan_y_percent, neigh_params.pan_y_percent, t);
     blended = camera_math::sanitize_camera_params(blended, fallback_height_px_);
 
-    if (manual_height_override_ && dev_mode) {
+    if (manual_height_override_) {
         // Preserve manual zoom adjustments (e.g., scroll wheel) instead of snapping back to the last applied height.
         blended.height_px = smoothed_.height_px;
     }
+    (void)dev_mode;
     (void)refresh_requested;
     (void)steps;
     set_params(blended);

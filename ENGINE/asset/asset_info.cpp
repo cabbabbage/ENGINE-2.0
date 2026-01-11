@@ -895,7 +895,6 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
                 std::cout << "[AssetInfo] Player asset '" << name << "' loaded\n\n";
         }
         start_animation = data.value("start", std::string{"default"});
-        z_threshold = data.value("z_threshold", 0);
         passable = has_tag("passable");
         try {
                 if (data.contains("tillable")) {
@@ -972,7 +971,7 @@ void AssetInfo::generate_lights(SDL_Renderer* renderer) {
 
     clear_light_textures();
     std::cerr << "[AssetInfo] Missing light cache for '" << name
-              << "' after python regeneration; run tools/light_tool.py manually.\n";
+              << "' after python regeneration; run engine/tools/light_tool.py manually.\n";
 }
 
 bool AssetInfo::rebuild_light_texture(SDL_Renderer* renderer, std::size_t light_index) {
@@ -1084,11 +1083,6 @@ void AssetInfo::set_asset_type(const std::string &t) {
         std::string canonical = asset_types::canonicalize(t);
         type = canonical;
         info_json_["asset_type"] = canonical;
-}
-
-void AssetInfo::set_z_threshold(int z) {
-	z_threshold = z;
-	info_json_["z_threshold"] = z;
 }
 
 void AssetInfo::set_min_same_type_distance(int d) {
@@ -1472,7 +1466,7 @@ void AssetInfo::upsert_area_from_editor(const Area& area,
 
     if (existing_entry && existing_entry->is_object()) {
         static const char* kAttachmentKeys[] = {
-            "attachment_subtype", "is_on_top", "child_candidates", "placed_on_top_parent", "z_offset"
+            "attachment_subtype", "is_on_top", "child_candidates", "placed_on_top_parent"
 };
         for (const char* key : kAttachmentKeys) {
             auto it = existing_entry->find(key);
@@ -1739,7 +1733,6 @@ void AssetInfo::set_children(const std::vector<ChildInfo>& new_children) {
             entry["link_to_area"] = true;
         }
 
-        entry["z_offset"] = c.z_offset;
         entry["placed_on_top_parent"] = c.placed_on_top_parent;
 
         if (!entry.contains("candidates") || !entry["candidates"].is_array()) {

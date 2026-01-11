@@ -22,7 +22,11 @@ fs::path default_repo_root() {
 }
 
 fs::path script_path(const fs::path& repo_root, const std::string& script_name) {
-    return repo_root / "tools" / script_name;
+    const fs::path root_script = repo_root / "tools" / script_name;
+    if (fs::exists(root_script)) {
+        return root_script;
+    }
+    return repo_root / "ENGINE" / "tools" / script_name;
 }
 
 }

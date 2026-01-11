@@ -130,11 +130,6 @@ Asset* SpawnContext::spawnAssetInternal(const std::string& name,
                         for (auto* child : kids) {
                                 if (!child || !child->info) continue;
                                 child->parent = raw;
-                                int z_offset = asset_child_info->z_offset;
-                                if (asset_child_info->placed_on_top_parent && z_offset <= 0) {
-                                        z_offset = 1;
-                                }
-                                child->set_z_offset(z_offset);
                                 child->set_hidden(false);
                                 child->set_owning_room_name(raw->owning_room_name());
 
@@ -144,8 +139,8 @@ Asset* SpawnContext::spawnAssetInternal(const std::string& name,
                                         if (asset_child_ptr && asset_child_ptr->info) {
                                                 std::ostringstream oss;
                                                 oss << "[Spawn] -> Child '" << asset_child_ptr->info->name
-                                                    << "' placed at (" << asset_child_ptr->pos.x << ", "
-                                                    << asset_child_ptr->pos.y << ") with z_offset " << asset_child_ptr->z_offset;
+                                                  << "' placed at (" << asset_child_ptr->pos.x << ", "
+                                                     << asset_child_ptr->pos.y << ")";
                                                 vibble::log::debug(oss.str());
                                         }
                                 }
@@ -263,7 +258,7 @@ bool SpawnContext::point_overlaps_trail(SDL_Point pt, const Area* ignore) const 
 void SpawnContext::set_map_grid_settings(const MapGridSettings& settings) {
         map_grid_settings_ = settings;
         map_grid_settings_.clamp();
-        spawn_resolution_ = occupancy_ ? occupancy_->resolution() : vibble::grid::clamp_resolution(map_grid_settings_.resolution);
+        spawn_resolution_ = occupancy_ ? occupancy_->resolution() : vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution);
 }
 
 void SpawnContext::set_spacing_filter(std::unordered_set<std::string> names) {

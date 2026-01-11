@@ -278,6 +278,9 @@ void ForegroundBackgroundEffectPanel::render_content(SDL_Renderer* renderer) con
     preview_->render(renderer);
 }
 
+
+
+
 void ForegroundBackgroundEffectPanel::build_ui() {
 
     fg_mode_button_ = std::make_unique<DMButton>("Foreground", &DMStyles::AccentButton(), 0, DMButton::height());
@@ -647,7 +650,7 @@ void ForegroundBackgroundEffectPanel::generate_preview_with_python(
         return;
     }
 
-    std::string python_cmd = "python tools/apply_color_effects.py";
+    std::string python_cmd = "python engine/tools/apply_color_effects.py";
     std::string output_path = "cache/preview_image.png";
 
     std::error_code ec;

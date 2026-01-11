@@ -38,6 +38,7 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool 
     if (input.wasReleased(Input::LEFT)) {
         panning_ = false;
         pan_drag_pending_ = false;
+        has_last_pan_center_ = false;
     }
 
     if (input.wasPressed(Input::LEFT)) {
@@ -69,6 +70,8 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool 
             pan_drag_pending_ = false;
             cam.set_focus_override(pan_start_center_);
             cam.set_screen_center(pan_start_center_);
+            last_pan_center_ = pan_start_center_;
+            has_last_pan_center_ = true;
         }
     }
 
@@ -76,13 +79,24 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool 
         return;
     }
 
-    const double scale = std::max(0.0001, static_cast<double>(cam.get_scale()));
     const int dx = mouse.x - pan_start_mouse_screen_.x;
     const int dy = mouse.y - pan_start_mouse_screen_.y;
+    if (dx == 0 && dy == 0) {
+        return;
+    }
     SDL_Point new_center{
-        static_cast<int>(std::lround(static_cast<double>(pan_start_center_.x) - static_cast<double>(dx) * scale)),  static_cast<int>(std::lround(static_cast<double>(pan_start_center_.y) - static_cast<double>(dy) * scale)) };
+        pan_start_center_.x - dx,
+        pan_start_center_.y - dy
+    };
+    if (has_last_pan_center_ &&
+        new_center.x == last_pan_center_.x &&
+        new_center.y == last_pan_center_.y) {
+        return;
+    }
     cam.set_focus_override(new_center);
     cam.set_screen_center(new_center);
+    last_pan_center_ = new_center;
+    has_last_pan_center_ = true;
 }
 
 void PanAndHeight::cancel(WarpedScreenGrid& cam) {
@@ -91,6 +105,7 @@ void PanAndHeight::cancel(WarpedScreenGrid& cam) {
         return;
     }
     panning_ = false;
+    has_last_pan_center_ = false;
     cam.set_manual_height_override(false);
     cam.clear_focus_override();
 }

@@ -834,18 +834,6 @@ void CameraUIPanel::sync_from_camera() {
     if (meters_slider_) {
         meters_slider_->set_value(last_settings_.meters_per_100_world_px);
     }
-    if (texture_warp_slider_) {
-        texture_warp_slider_->set_value(last_settings_.texture_warp_percent);
-    }
-    if (texture_warp_y_offset_slider_) {
-        texture_warp_y_offset_slider_->set_value(last_settings_.texture_warp_y_offset_px);
-    }
-    if (near_max_perspective_slider_) {
-        near_max_perspective_slider_->set_value(last_settings_.near_camera_max_perspective_scale);
-    }
-    if (offscreen_fade_amount_slider_) {
-        offscreen_fade_amount_slider_->set_value(last_settings_.offscreen_fade_amount_px);
-    }
     if (foreground_texture_opacity_slider_) {
         foreground_texture_opacity_slider_->set_value(static_cast<float>(last_settings_.foreground_texture_max_opacity));
     }
@@ -891,8 +879,6 @@ void CameraUIPanel::build_ui() {
     defaults.extra_cull_margin = devmode::camera_prefs::load_extra_cull_margin(defaults.extra_cull_margin);
     defaults.meters_per_100_world_px = devmode::camera_prefs::load_meters_per_100_world_px(defaults.meters_per_100_world_px);
     defaults.render_quality_percent = devmode::camera_prefs::load_render_quality_percent(defaults.render_quality_percent);
-    defaults.texture_warp_percent = devmode::camera_prefs::load_texture_warp_percent(defaults.texture_warp_percent);
-    defaults.texture_warp_y_offset_px = devmode::camera_prefs::load_texture_warp_y_offset_px(defaults.texture_warp_y_offset_px);
     defaults.near_camera_max_perspective_scale = devmode::camera_prefs::load_near_camera_max_perspective_scale(defaults.near_camera_max_perspective_scale);
     defaults.offscreen_fade_amount_px = devmode::camera_prefs::load_offscreen_fade_amount_px(defaults.offscreen_fade_amount_px);
 
@@ -921,8 +907,8 @@ void CameraUIPanel::build_ui() {
     min_render_size_slider_->set_tooltip("Cull sprites once their height drops below this fraction of the screen (0.01 = 1%).");
     min_render_size_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    cull_margin_slider_ = std::make_unique<FloatSliderWidget>("Cull Margin (px)", 0.0f, 1000.0f, 1.0f, defaults.extra_cull_margin, 0);
-    cull_margin_slider_->set_tooltip("Extra margin below the screen for culling (for perspective/warping). Increase if assets pop in/out at the bottom edge.");
+    cull_margin_slider_ = std::make_unique<FloatSliderWidget>("Cull Depth (world units)", 0.0f, 5000.0f, 10.0f, defaults.extra_cull_margin, 0);
+    cull_margin_slider_->set_tooltip("Distance in world units from camera beyond which assets are culled for depth. Determines render depth range (not horizontal range).");
     cull_margin_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
     render_quality_slider_ = std::make_unique<DiscreteSliderWidget>("Render Quality (%)", std::vector<int>{100, 75, 50, 25, 10}, defaults.render_quality_percent);
@@ -933,23 +919,7 @@ void CameraUIPanel::build_ui() {
     meters_slider_->set_tooltip("Defines how many meters are represented by 100 world pixels, translating engine space into physical units.");
     meters_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    texture_warp_slider_ = std::make_unique<FloatSliderWidget>("Texture Perspective Warp (%)", 0.0f, 100.0f, 1.0f, defaults.texture_warp_percent, 0);
-    texture_warp_slider_->set_tooltip("Blend the perspective warp applied to textures. 0% = no warp (orthographic feel), 100% = full perspective scaling.");
-    texture_warp_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    texture_warp_y_offset_slider_ = std::make_unique<FloatSliderWidget>("Texture Warp Y Offset (px)", -2000.0f, 2000.0f, 1.0f, defaults.texture_warp_y_offset_px, 0);
-    texture_warp_y_offset_slider_->set_tooltip("Offsets the Y coordinate used to compute texture warping without moving world positions.");
-    texture_warp_y_offset_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    near_max_perspective_slider_ = std::make_unique<FloatSliderWidget>("Near Max Perspective Scale", 0.0f, 10.0f, 0.1f, defaults.near_camera_max_perspective_scale, 2);
-    near_max_perspective_slider_->set_tooltip("Caps the perspective scale to limit stretching.");
-    near_max_perspective_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    offscreen_fade_amount_slider_ = std::make_unique<FloatSliderWidget>("Offscreen Amount (px)", 0.0f, 1000.0f, 1.0f, defaults.offscreen_fade_amount_px, 0);
-    offscreen_fade_amount_slider_->set_tooltip("Distance below the bottom of the screen where assets fade from fully visible to fully transparent.");
-    offscreen_fade_amount_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-
+    
 
     const int stored_fg_opacity = devmode::camera_prefs::load_foreground_texture_max_opacity();
     const int stored_bg_opacity = devmode::camera_prefs::load_background_texture_max_opacity();
@@ -1009,10 +979,6 @@ void CameraUIPanel::rebuild_rows() {
     if (depth_section_header_) rows.push_back({ depth_section_header_.get() });
     if (depth_section_expanded_) {
         if (meters_slider_) rows.push_back({ meters_slider_.get() });
-        if (texture_warp_slider_) rows.push_back({ texture_warp_slider_.get() });
-        if (texture_warp_y_offset_slider_) rows.push_back({ texture_warp_y_offset_slider_.get() });
-        if (near_max_perspective_slider_) rows.push_back({ near_max_perspective_slider_.get() });
-        if (offscreen_fade_amount_slider_) rows.push_back({ offscreen_fade_amount_slider_.get() });
     }
 
     if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
@@ -1059,8 +1025,6 @@ void CameraUIPanel::apply_settings_if_needed() {
     }
     changed = changed || differs(settings.meters_per_100_world_px, prev.meters_per_100_world_px);
     changed = changed || differs(settings.scale_variant_hysteresis_margin, prev.scale_variant_hysteresis_margin);
-    changed = changed || differs(settings.texture_warp_percent, prev.texture_warp_percent);
-    changed = changed || differs(settings.texture_warp_y_offset_px, prev.texture_warp_y_offset_px);
     changed = changed || differs(settings.near_camera_max_perspective_scale, prev.near_camera_max_perspective_scale);
     changed = changed || differs(settings.offscreen_fade_amount_px, prev.offscreen_fade_amount_px);
 
@@ -1090,8 +1054,6 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
     cam.set_realism_settings(effective);
     cam.set_realism_enabled(effects_enabled);
     cam.set_parallax_enabled(effects_enabled);
-
-    cam.update_geometry_cache(cam.compute_geometry());
 
     if (assets_) {
         assets_->set_depth_effects_enabled(depthcue_enabled);
@@ -1126,13 +1088,9 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
     WarpedScreenGrid::RealismSettings settings = last_settings_;
     if (min_render_size_slider_) settings.min_visible_screen_ratio = std::clamp(min_render_size_slider_->value(), 0.0f, 0.5f);
     if (render_quality_slider_) settings.render_quality_percent = render_quality_slider_->value();
-    if (cull_margin_slider_) settings.extra_cull_margin = std::clamp(cull_margin_slider_->value(), 0.0f, 1000.0f);
+    if (cull_margin_slider_) settings.extra_cull_margin = std::clamp(cull_margin_slider_->value(), 0.0f, 5000.0f);
 
     if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
-    if (texture_warp_slider_) settings.texture_warp_percent = std::clamp(texture_warp_slider_->value(), 0.0f, 100.0f);
-    if (texture_warp_y_offset_slider_) settings.texture_warp_y_offset_px = std::clamp(texture_warp_y_offset_slider_->value(), -10000.0f, 10000.0f);
-    if (near_max_perspective_slider_) settings.near_camera_max_perspective_scale = std::clamp(near_max_perspective_slider_->value(), 0.0f, 100.0f);
-    if (offscreen_fade_amount_slider_) settings.offscreen_fade_amount_px = std::clamp(offscreen_fade_amount_slider_->value(), 0.0f, 1000.0f);
 
     auto slider_to_opacity = [](const FloatSliderWidget* slider) -> int {
         if (!slider) return 0;

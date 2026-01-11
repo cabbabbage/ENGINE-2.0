@@ -31,8 +31,6 @@ constexpr int kRadiusSliderInitialMax = 2000;
 constexpr int kRadiusSliderExpansionMargin = 64;
 constexpr int kRadiusSliderExpansionFactor = 2;
 constexpr int kRadiusSliderHardCap = 20000;
-constexpr int kCameraHeightMinPx = 1;
-constexpr int kCameraHeightMaxPx = 10000;
 constexpr float kCameraTiltMinDeg = 0.0f;
 constexpr float kCameraTiltMaxDeg = 150.0f;
 constexpr int kCameraYDistanceMinPx = 0;
@@ -304,11 +302,6 @@ struct RoomConfigurator::State {
             is_boss = false;
             mutated = true;
         }
-        int clamped_height = std::clamp(camera_height_px, kCameraHeightMinPx, kCameraHeightMaxPx);
-        if (clamped_height != camera_height_px) {
-            camera_height_px = clamped_height;
-            mutated = true;
-        }
         float clamped_tilt = std::clamp(camera_tilt_deg, kCameraTiltMinDeg, kCameraTiltMaxDeg);
         if (std::fabs(clamped_tilt - camera_tilt_deg) > 1e-6f) {
             camera_tilt_deg = clamped_tilt;
@@ -340,7 +333,7 @@ struct RoomConfigurator::State {
         geometry = src.value("geometry", geometry_options.empty() ? std::string{} : geometry_options.front());
 
         // Camera settings
-        camera_height_px = std::clamp(src.value("camera_height_px", 1000), kCameraHeightMinPx, kCameraHeightMaxPx);
+        camera_height_px = src.value("camera_height_px", 1000);
         camera_tilt_deg = std::clamp(src.value("camera_tilt_deg", 60.0f), kCameraTiltMinDeg, kCameraTiltMaxDeg);
         camera_y_distance_px = std::clamp(src.value("camera_y_distance_px", 0), kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
         camera_zoom_percent = std::clamp(src.value("camera_zoom_percent", 0), kCameraZoomMinPercent, kCameraZoomMaxPercent);
@@ -1423,14 +1416,14 @@ void RoomConfigurator::rebuild_spawn_rows(bool force_collapse_sections) {
             config->set_manifest_store(manifest_store_);
         }
 
-        int default_resolution = MapGridSettings::defaults().resolution;
+        int default_resolution = MapGridSettings::defaults().grid_resolution;
         if (room_) {
-            default_resolution = room_->map_grid_settings().resolution;
+            default_resolution = room_->map_grid_settings().grid_resolution;
         } else if (external_room_json_) {
             const auto it = external_room_json_->find("map_grid_settings");
             if (it != external_room_json_->end()) {
                 MapGridSettings settings = MapGridSettings::from_json(&*it);
-                default_resolution = settings.resolution;
+                default_resolution = settings.grid_resolution;
             }
         }
         config->set_default_resolution(default_resolution);
@@ -2053,9 +2046,9 @@ bool RoomConfigurator::sync_state_from_widgets() {
     }
 
     if (camera_height_slider_) {
-        int sanitized = std::clamp(camera_height_slider_->value(), kCameraHeightMinPx, kCameraHeightMaxPx);
-        if (sanitized != state_->camera_height_px) {
-            state_->camera_height_px = sanitized;
+        int slider_height = camera_height_slider_->value();
+        if (slider_height != state_->camera_height_px) {
+            state_->camera_height_px = slider_height;
             changed = true;
             camera_changed = true;
         }
@@ -2178,7 +2171,7 @@ bool RoomConfigurator::sync_state_from_widgets() {
         }
     };
     if (camera_height_slider_) {
-        camera_height_slider_->set_value(std::clamp(state_->camera_height_px, kCameraHeightMinPx, kCameraHeightMaxPx));
+        camera_height_slider_->set_value(state_->camera_height_px);
     }
     if (camera_tilt_slider_) {
         camera_tilt_slider_->set_value(std::clamp(static_cast<int>(std::lround(state_->camera_tilt_deg)),
@@ -2448,7 +2441,7 @@ bool RoomConfigurator::camera_controls_enabled() const {
 }
 
 void RoomConfigurator::refresh_camera_panel_widgets() {
-    const int height_value = std::clamp(state_->camera_height_px, kCameraHeightMinPx, kCameraHeightMaxPx);
+    const int height_value = state_->camera_height_px;
     const int tilt_value = std::clamp(static_cast<int>(std::lround(state_->camera_tilt_deg)),
                                       static_cast<int>(kCameraTiltMinDeg),
                                       static_cast<int>(kCameraTiltMaxDeg));
@@ -2462,7 +2455,7 @@ void RoomConfigurator::refresh_camera_panel_widgets() {
     const std::string zoom_label = is_trail_context_ ? "Trail Zoom (%)" : "Zoom (%)";
     const std::string pan_label = is_trail_context_ ? "Trail Pan Y (%)" : "Pan Up/Down (%)";
 
-    camera_height_slider_ = std::make_unique<DMSlider>(height_label, kCameraHeightMinPx, kCameraHeightMaxPx, height_value);
+    camera_height_slider_ = std::make_unique<DMSlider>(height_label, 0, 100000, height_value);
     camera_tilt_slider_ = std::make_unique<DMSlider>(tilt_label,
                                                      static_cast<int>(kCameraTiltMinDeg),
                                                      static_cast<int>(kCameraTiltMaxDeg),
@@ -2493,7 +2486,6 @@ bool RoomConfigurator::apply_camera_adjustment(const CameraAdjustment& adjustmen
 
     if (adjustment.height_delta_px != 0) {
         state_->camera_height_px += adjustment.height_delta_px;
-        clamp_int(state_->camera_height_px, kCameraHeightMinPx, kCameraHeightMaxPx);
         changed = true;
     }
     if (std::fabs(adjustment.tilt_delta_deg) > 1e-6f) {

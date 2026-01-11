@@ -222,54 +222,6 @@ namespace {
     }
 }
 
-float FrameEditorSession::movement_plane_delta(const MovementFrame& frame) const {
-    return frame.dz;
-}
-
-float& FrameEditorSession::movement_plane_delta(MovementFrame& frame) {
-    return frame.dz;
-}
-
-float FrameEditorSession::child_plane_delta(const ChildFrame& child) const {
-    return child.dz;
-}
-
-float& FrameEditorSession::child_plane_delta(ChildFrame& child) {
-    return child.dz;
-}
-
-float FrameEditorSession::hitbox_plane_center(const animation_update::FrameHitGeometry::HitBox& box) const {
-    return box.center_z;
-}
-
-float& FrameEditorSession::hitbox_plane_center(animation_update::FrameHitGeometry::HitBox& box) {
-    return box.center_z;
-}
-
-float FrameEditorSession::attack_plane_start(const animation_update::FrameAttackGeometry::Vector& vec) const {
-    return vec.start_z;
-}
-
-float& FrameEditorSession::attack_plane_start(animation_update::FrameAttackGeometry::Vector& vec) {
-    return vec.start_z;
-}
-
-float FrameEditorSession::attack_plane_control(const animation_update::FrameAttackGeometry::Vector& vec) const {
-    return vec.control_z;
-}
-
-float& FrameEditorSession::attack_plane_control(animation_update::FrameAttackGeometry::Vector& vec) {
-    return vec.control_z;
-}
-
-float FrameEditorSession::attack_plane_end(const animation_update::FrameAttackGeometry::Vector& vec) const {
-    return vec.end_z;
-}
-
-float& FrameEditorSession::attack_plane_end(animation_update::FrameAttackGeometry::Vector& vec) {
-    return vec.end_z;
-}
-
 void FrameEditorSession::begin(Assets* assets,
                                Asset* asset,
                                std::shared_ptr<animation_editor::AnimationDocument> document,
@@ -328,13 +280,9 @@ void FrameEditorSession::begin(Assets* assets,
     }
 
     WarpedScreenGrid& cam = assets_->getView();
-    prev_realism_enabled_ = cam.realism_enabled();
-    prev_parallax_enabled_ = cam.parallax_enabled();
     prev_asset_hidden_ = target_->is_hidden();
 
     load_animation_data(animation_id_);
-
-    assets_->focus_camera_on_asset(target_, 0.85, 18);
 
     show_animation_ = true;
     show_child_ = true;
@@ -365,7 +313,6 @@ void FrameEditorSession::begin(Assets* assets,
     refresh_hitbox_form();
     refresh_attack_form();
     refresh_hitbox_form();
-    apply_camera_defaults();
 
     {
         int sw = 0, sh = 0;
@@ -527,8 +474,6 @@ void FrameEditorSession::end() {
 
     if (assets_ != nullptr) {
         WarpedScreenGrid& cam = assets_->getView();
-        cam.set_realism_enabled(prev_realism_enabled_);
-        cam.set_parallax_enabled(prev_parallax_enabled_);
 
         pan_height_.cancel(cam);
     }
@@ -580,183 +525,6 @@ void FrameEditorSession::end() {
     }
 }
 
-void FrameEditorSession::center_camera_origin() {
-    if (!assets_ || !target_) {
-        return;
-    }
-    if (manual_pan_active_ || right_pan_active_) {
-        return;
-    }
-    WarpedScreenGrid& cam = assets_->getView();
-    SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
-    cam.set_focus_override(anchor_world);
-    cam.set_screen_center(anchor_world);
-}
-
-FrameEditorSession::TextureMetrics FrameEditorSession::current_frame_texture_metrics(SDL_Renderer* renderer) const {
-    TextureMetrics metrics{};
-    if (!renderer || animation_id_.empty()) {
-        return metrics;
-    }
-    if (preview_) {
-        if (SDL_Texture* tex = preview_->get_frame_texture(renderer, animation_id_, selected_index_)) {
-            SDL_QueryTexture(tex, nullptr, nullptr, &metrics.width, &metrics.height);
-        }
-    }
-    if ((metrics.width <= 0 || metrics.height <= 0) && target_ && target_->info) {
-        auto it = target_->info->animations.find(animation_id_);
-        if (it != target_->info->animations.end() &&
-            selected_index_ >= 0 &&
-            selected_index_ < static_cast<int>(it->second.frames.size())) {
-            const AnimationFrame* frame = it->second.frames[static_cast<std::size_t>(selected_index_)];
-            const float variant_scale = std::max(0.0001f, target_->current_nearest_variant_scale);
-            if (const FrameVariant* variant = it->second.get_frame(frame, variant_scale)) {
-                if (SDL_Texture* tex = variant->get_base_texture()) {
-                    SDL_QueryTexture(tex, nullptr, nullptr, &metrics.width, &metrics.height);
-                }
-            }
-        }
-    }
-    if (metrics.width < 0) {
-        metrics.width = 0;
-    }
-    if (metrics.height < 0) {
-        metrics.height = 0;
-    }
-    return metrics;
-}
-
-bool FrameEditorSession::project_texture_bounds(const WarpedScreenGrid& cam,
-                                                SDL_Point anchor_world,
-                                                const TextureMetrics& metrics,
-                                                SDL_FRect& out_bounds) const {
-    if (metrics.width <= 0 || metrics.height <= 0) {
-        return false;
-    }
-    const float half_w = static_cast<float>(metrics.width) * 0.5f;
-    const float left = static_cast<float>(anchor_world.x) - half_w;
-    const float right = static_cast<float>(anchor_world.x) + half_w;
-    const float bottom = static_cast<float>(anchor_world.y);
-    const float top = static_cast<float>(anchor_world.y) - static_cast<float>(metrics.height);
-
-    std::array<SDL_FPoint, 4> projected{};
-    const float world_y = static_cast<float>(anchor_world.y);
-    const float top_z = static_cast<float>(metrics.height);
-    const float bottom_z = 0.0f;
-    std::array<std::pair<float, float>, 4> corners = {
-        std::pair<float, float>{left, bottom_z},
-        {right, bottom_z},
-        {right, top_z},
-        {left, top_z}
-    };
-    for (std::size_t i = 0; i < corners.size(); ++i) {
-        SDL_FPoint screen{};
-        if (!cam.project_world_point(SDL_FPoint{corners[i].first, world_y}, corners[i].second, screen)) {
-            return false;
-        }
-        projected[i] = screen;
-    }
-
-    float min_x = projected[0].x;
-    float max_x = projected[0].x;
-    float min_y = projected[0].y;
-    float max_y = projected[0].y;
-    for (const auto& p : projected) {
-        if (!std::isfinite(p.x) || !std::isfinite(p.y)) {
-            return false;
-        }
-        min_x = std::min(min_x, p.x);
-        max_x = std::max(max_x, p.x);
-        min_y = std::min(min_y, p.y);
-        max_y = std::max(max_y, p.y);
-    }
-    out_bounds.x = min_x;
-    out_bounds.y = min_y;
-    out_bounds.w = max_x - min_x;
-    out_bounds.h = max_y - min_y;
-    return (out_bounds.w > 0.0f && out_bounds.h > 0.0f);
-}
-
-double FrameEditorSession::fit_camera_y_distance_for_xz(WarpedScreenGrid& cam,
-                                                        SDL_Point anchor_world,
-                                                        const TextureMetrics& metrics,
-                                                        int screen_w,
-                                                        int screen_h) const {
-    if (metrics.width <= 0 || metrics.height <= 0 || screen_w <= 0 || screen_h <= 0) {
-        return cam.camera_y_distance();
-    }
-    const float target_w = static_cast<float>(screen_w) * kFrameFitScreenRatio;
-    const float target_h = static_cast<float>(screen_h) * kFrameFitScreenRatio;
-    double low = 0.0;
-    double high = 2000.0;
-    double best = cam.camera_y_distance();
-    for (int i = 0; i < kFrameFitIterations; ++i) {
-        const double mid = (low + high) * 0.5;
-        cam.set_camera_y_distance(mid);
-        SDL_FRect bounds{};
-        if (!project_texture_bounds(cam, anchor_world, metrics, bounds)) {
-            break;
-        }
-        const bool fits = bounds.w <= target_w && bounds.h <= target_h;
-        if (fits) {
-            best = mid;
-            high = mid;
-        } else {
-            low = mid;
-        }
-    }
-    return best;
-}
-
-void FrameEditorSession::apply_camera_defaults() {
-    if (!assets_ || !target_) {
-        return;
-    }
-    WarpedScreenGrid& cam = assets_->getView();
-    pan_height_.cancel(cam);
-    manual_pan_active_ = false;
-    manual_pan_has_last_center_ = false;
-    cam.set_manual_height_override(true);
-
-    SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
-    cam.set_focus_override(anchor_world);
-    cam.set_screen_center(anchor_world);
-
-    SDL_Renderer* renderer = assets_->renderer();
-    TextureMetrics metrics = current_frame_texture_metrics(renderer);
-
-    int screen_w = 0;
-    int screen_h = 0;
-    if (renderer) {
-        SDL_GetRendererOutputSize(renderer, &screen_w, &screen_h);
-    }
-
-    const double base_height = (metrics.height > 0)
-        ? std::max(kFrameFitMinHeight, static_cast<double>(metrics.height) * 0.5)
-        : cam.get_scale();
-    cam.set_scale(base_height);
-    const double distance = fit_camera_y_distance_for_xz(cam, anchor_world, metrics, screen_w, screen_h);
-    cam.set_camera_y_distance(distance);
-}
-
-void FrameEditorSession::handle_xz_scroll(WarpedScreenGrid& cam, int wheel_y) {
-    if (wheel_y == 0) {
-        return;
-    }
-
-    const double step = 1.1;
-    const int ticks = std::abs(wheel_y);
-    const bool distance_increase = (wheel_y < 0);
-    const double mag = std::pow(step, ticks);
-    const double current = cam.camera_y_distance();
-    const double base = std::max(1.0, current);
-    double target = distance_increase ? base * mag : (base / mag);
-    if (!distance_increase && current <= 1.0) {
-        target = 0.0;
-    }
-    cam.set_camera_y_distance(target);
-}
-
 void FrameEditorSession::update(const Input& input) {
     if (!active_) return;
 
@@ -786,7 +554,11 @@ void FrameEditorSession::update(const Input& input) {
             hover_toolbox_drag_handle_ = over_handle || (SDL_PointInRect(&mouse, &toolbox_rect_) && !over_widget);
         }
         hover_nav_drag_handle_ = nav_drag_rect_.w > 0 && nav_drag_rect_.h > 0 && SDL_PointInRect(&mouse, &nav_drag_rect_);
-        const bool block_camera_controls = hover_toolbox_ || dragging_toolbox_scrollbar_;
+        const bool pointer_over_ui =
+            (directory_rect_.w > 0 && directory_rect_.h > 0 && SDL_PointInRect(&mouse, &directory_rect_)) ||
+            (nav_rect_.w > 0 && nav_rect_.h > 0 && SDL_PointInRect(&mouse, &nav_rect_)) ||
+            (toolbox_rect_.w > 0 && toolbox_rect_.h > 0 && SDL_PointInRect(&mouse, &toolbox_rect_));
+        const bool block_camera_controls = pointer_over_ui || dragging_toolbox_scrollbar_;
         int scroll_delta = 0;
         if (pending_scroll_delta_ != 0) {
             scroll_delta = pending_scroll_delta_;
@@ -794,34 +566,16 @@ void FrameEditorSession::update(const Input& input) {
         } else {
             scroll_delta = input.getScrollY();
         }
+        const bool selection_active = adjustment_mode_active_ && adjustment_selection_.has_value();
+        if (selection_active && !block_camera_controls && scroll_delta != 0) {
+            adjust_selection_axis(scroll_delta, cam);
+        } else {
+            pan_height_.handle_input(cam, input, block_camera_controls);
+        }
 
-        const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
-        if (shift_down) {
-            if (!adjustment_mode_active_) {
-                adjustment_mode_active_ = true;
-                adjustment_dirty_ = false;
-            }
-            ensure_adjustment_auto_select(cam);
-            if (manual_pan_active_ || right_pan_active_) {
-                manual_pan_active_ = false;
-                right_pan_active_ = false;
-                manual_pan_has_last_center_ = false;
-                right_pan_has_last_center_ = false;
-            }
-        } else if (adjustment_mode_active_) {
+        if (input.wasClicked(Input::LEFT) && !pointer_over_ui && !pan_height_.is_panning()) {
             exit_adjustment_mode(true);
         }
-
-        if (!block_camera_controls) {
-            if (shift_down) {
-                if (scroll_delta != 0) {
-                    adjust_selection_axis(scroll_delta, cam);
-                }
-            } else {
-                handle_xz_scroll(cam, scroll_delta);
-            }
-        }
-        center_camera_origin();
     }
 
     update_asset_preview_frame();
@@ -876,7 +630,7 @@ void FrameEditorSession::update(const Input& input) {
     int total_dx = 0, total_plane = 0;
     for (size_t i = 1; i < frames_.size(); ++i) {
         total_dx += static_cast<int>(std::lround(frames_[i].dx));
-        total_plane += static_cast<int>(std::lround(movement_plane_delta(frames_[i])));
+        total_plane += static_cast<int>(std::lround(frames_[i].dz));
     }
     const std::string dxs = std::to_string(total_dx);
     const std::string dys = std::to_string(total_plane);
@@ -902,7 +656,7 @@ void FrameEditorSession::update(const Input& input) {
 };
         if (child) {
             sync_text_box(tb_child_dx_.get(), last_child_dx_text_, child->dx);
-            sync_text_box(tb_child_dy_.get(), last_child_dy_text_, child_plane_delta(*child));
+            sync_text_box(tb_child_dy_.get(), last_child_dy_text_, child->dz);
             if (tb_child_deg_ && !tb_child_deg_->is_editing()) {
                 std::ostringstream oss;
                 oss << std::fixed << std::setprecision(1) << child->degree;
@@ -1091,79 +845,6 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         return true;
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_RIGHT) {
-        SDL_Point p{ e.button.x, e.button.y };
-        if ((SDL_GetModState() & KMOD_SHIFT) != 0) {
-            return true;
-        }
-        if (SDL_PointInRect(&p, &directory_rect_) || SDL_PointInRect(&p, &nav_rect_) || SDL_PointInRect(&p, &toolbox_rect_)) {
-            return true;
-        }
-        if (!assets_) {
-            return true;
-        }
-        WarpedScreenGrid& cam = assets_->getView();
-        manual_pan_active_ = true;
-        const SDL_Point focus_start = cam.has_focus_override()
-            ? cam.get_focus_override_point()
-            : cam.get_screen_center();
-        manual_pan_last_center_ = focus_start;
-        manual_pan_has_last_center_ = true;
-        right_pan_active_ = true;
-        right_pan_start_mouse_ = p;
-        right_pan_start_center_ = cam.get_screen_center();
-        right_pan_start_world_ = cam.screen_to_map(p);
-        right_pan_last_world_ = right_pan_start_world_;
-        right_pan_start_focus_ = focus_start;
-        right_pan_start_distance_ = cam.camera_y_distance();
-        right_pan_last_center_ = focus_start;
-        right_pan_has_last_center_ = true;
-        return true;
-    }
-
-    if (e.type == SDL_MOUSEMOTION && right_pan_active_) {
-        if (!assets_) {
-            return true;
-        }
-        const bool right_down = (e.motion.state & SDL_BUTTON_RMASK) != 0;
-        if (!right_down) {
-            right_pan_active_ = false;
-            right_pan_has_last_center_ = false;
-            return true;
-        }
-        SDL_Point p{ e.motion.x, e.motion.y };
-        WarpedScreenGrid& cam = assets_->getView();
-        SDL_FPoint world_now = cam.screen_to_map(p);
-        SDL_FPoint delta_world{
-            world_now.x - right_pan_last_world_.x,
-            world_now.y - right_pan_last_world_.y
-        };
-
-        SDL_Point new_focus{
-            static_cast<int>(std::lround(right_pan_last_center_.x - delta_world.x)),
-            static_cast<int>(std::lround(right_pan_last_center_.y - delta_world.y))
-        };
-        const bool focus_changed = (!right_pan_has_last_center_) ||
-                                   new_focus.x != right_pan_last_center_.x ||
-                                   new_focus.y != right_pan_last_center_.y;
-        if (focus_changed) {
-            cam.set_focus_override(new_focus);
-            cam.set_screen_center(new_focus);
-            manual_pan_last_center_ = new_focus;
-            manual_pan_has_last_center_ = true;
-            right_pan_last_center_ = new_focus;
-            right_pan_has_last_center_ = true;
-        }
-        right_pan_last_world_ = cam.screen_to_map(p);
-        return true;
-    }
-
-    if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_RIGHT) {
-        right_pan_active_ = false;
-        right_pan_has_last_center_ = false;
-        return true;
-    }
-
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
 
@@ -1348,7 +1029,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     double cur_dx = 0.0, cur_plane = 0.0;
                     for (size_t i = 1; i < frames_.size(); ++i) {
                         cur_dx += std::isfinite(frames_[i].dx) ? frames_[i].dx : 0.0;
-                        const float axis = movement_plane_delta(frames_[i]);
+                        const float axis = frames_[i].dz;
                         cur_plane += std::isfinite(axis) ? axis : 0.0;
                     }
                     const double need_dx = static_cast<double>(dx) - cur_dx;
@@ -1356,7 +1037,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     const size_t last = frames_.size() > 0 ? frames_.size() - 1 : 0;
                     if (last >= 1) {
                         frames_[last].dx = static_cast<float>(std::lround(frames_[last].dx + need_dx));
-                        movement_plane_delta(frames_[last]) = static_cast<float>(std::lround(movement_plane_delta(frames_[last]) + need_plane));
+                        frames_[last].dz = static_cast<float>(std::lround(frames_[last].dz + need_plane));
                         rebuild_rel_positions();
                         persist_changes();
                     }
@@ -1471,9 +1152,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_child_dy_) {
-                    float new_plane = parse_float(tb_child_dy_->value(), child_plane_delta(*child));
-                    if (!std::isnan(new_plane) && child_plane_delta(*child) != new_plane) {
-                        child_plane_delta(*child) = new_plane;
+                    float new_plane = parse_float(tb_child_dy_->value(), child->dz);
+                    if (!std::isnan(new_plane) && child->dz != new_plane) {
+                        child->dz = new_plane;
                         changed = true;
                         child_offset_changed = true;
                     }
@@ -1548,9 +1229,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_hit_center_y_) {
-                    float value = parse_float(tb_hit_center_y_->value(), hitbox_plane_center(*box));
-                    if (std::isfinite(value) && hitbox_plane_center(*box) != value) {
-                        hitbox_plane_center(*box) = value;
+                    float value = parse_float(tb_hit_center_y_->value(), box->center_z);
+                    if (std::isfinite(value) && box->center_z != value) {
+                        box->center_z = value;
                         changed = true;
                     }
                 }
@@ -1639,9 +1320,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_start_y_) {
-                    float value = parse_float(tb_attack_start_y_->value(), attack_plane_start(*vec));
-                    if (std::isfinite(value) && attack_plane_start(*vec) != value) {
-                        attack_plane_start(*vec) = value;
+                    float value = parse_float(tb_attack_start_y_->value(), vec->start_z);
+                    if (std::isfinite(value) && vec->start_z != value) {
+                        vec->start_z = value;
                         changed = true;
                     }
                 }
@@ -1653,9 +1334,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_control_y_) {
-                    float value = parse_float(tb_attack_control_y_->value(), attack_plane_control(*vec));
-                    if (std::isfinite(value) && attack_plane_control(*vec) != value) {
-                        attack_plane_control(*vec) = value;
+                    float value = parse_float(tb_attack_control_y_->value(), vec->control_z);
+                    if (std::isfinite(value) && vec->control_z != value) {
+                        vec->control_z = value;
                         changed = true;
                     }
                 }
@@ -1667,9 +1348,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_end_y_) {
-                    float value = parse_float(tb_attack_end_y_->value(), attack_plane_end(*vec));
-                    if (std::isfinite(value) && attack_plane_end(*vec) != value) {
-                        attack_plane_end(*vec) = value;
+                    float value = parse_float(tb_attack_end_y_->value(), vec->end_z);
+                    if (std::isfinite(value) && vec->end_z != value) {
+                        vec->end_z = value;
                         changed = true;
                     }
                 }
@@ -1690,8 +1371,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         }
     }
 
-    const bool shift_held = (SDL_GetModState() & KMOD_SHIFT) != 0;
-    if (mode_ == Mode::HitGeometry && !shift_held) {
+    if (mode_ == Mode::HitGeometry) {
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
             if (begin_hitbox_drag(SDL_Point{e.button.x, e.button.y})) {
                 return true;
@@ -1705,7 +1385,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             update_hitbox_drag(SDL_Point{e.motion.x, e.motion.y});
             return true;
         }
-    } else if (mode_ == Mode::AttackGeometry && !shift_held) {
+    } else if (mode_ == Mode::AttackGeometry) {
         if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
             if (begin_attack_drag(SDL_Point{e.button.x, e.button.y})) {
                 return true;
@@ -1746,24 +1426,24 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_RIGHT) {
         SDL_Point sp{e.button.x, e.button.y};
 
         if (SDL_PointInRect(&sp, &directory_rect_) || SDL_PointInRect(&sp, &nav_rect_) || SDL_PointInRect(&sp, &toolbox_rect_)) {
             return true;
-        }
-        if (!shift_held) {
-            return false;
-        }
-        if (!adjustment_mode_active_) {
-            adjustment_mode_active_ = true;
-            adjustment_dirty_ = false;
         }
         if (!assets_ || !target_) return false;
         WarpedScreenGrid& cam = assets_->getView();
         SDL_Point anchor_world = asset_anchor_world();
 
         bool handled = false;
+        auto ensure_adjustment_active = [&]() {
+            if (!adjustment_mode_active_) {
+                adjustment_mode_active_ = true;
+                adjustment_dirty_ = false;
+            }
+        };
+
         if (mode_ == Mode::Movement) {
             constexpr float radius = 10.0f;
             float best = radius * radius;
@@ -1784,6 +1464,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 }
             }
             if (hit_index >= 0) {
+                ensure_adjustment_active();
                 if (hit_index != selected_index_) {
                     select_frame(hit_index);
                 }
@@ -1799,6 +1480,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         } else if (is_children_mode(mode_)) {
             const float base_adjustment = attachment_scale();
             if (auto hit_child = hit_test_child_marker(sp, cam, anchor_world, base_adjustment)) {
+                ensure_adjustment_active();
                 const int child_index = *hit_child;
                 if (child_index != selected_child_index_) {
                     select_child(child_index);
@@ -1818,9 +1500,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 handled = true;
             }
         } else if (mode_ == Mode::AttackGeometry) {
-            if (frames_.empty()) {
-                handled = false;
-            } else {
+            if (!frames_.empty()) {
                 const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
                 auto& frame = frames_[frame_index];
                 const std::string current_type = current_attack_type();
@@ -1842,9 +1522,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 int type_counter = 0;
                 for (const auto& vec : frame.attack.vectors) {
                     if (vec.type != current_type) continue;
-                    SDL_FPoint start_screen = to_screen(vec.start_x, attack_plane_start(vec));
-                    SDL_FPoint control_screen = to_screen(vec.control_x, attack_plane_control(vec));
-                    SDL_FPoint end_screen = to_screen(vec.end_x, attack_plane_end(vec));
+                    SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
+                    SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
+                    SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
                     auto try_hit = [&](const SDL_FPoint& screen, AdjustmentTarget target) {
                         const float dx = static_cast<float>(sp.x) - screen.x;
                         const float dy = static_cast<float>(sp.y) - screen.y;
@@ -1863,6 +1543,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 }
 
                 if (hit_vector >= 0 && hit_target != AdjustmentTarget::None) {
+                    ensure_adjustment_active();
                     set_current_attack_vector_index(hit_vector);
                     clamp_attack_selection();
                     refresh_attack_form();
@@ -1905,6 +1586,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (hit_type_index >= 0) {
+                    ensure_adjustment_active();
                     const bool same_target = adjustment_selection_.target == AdjustmentTarget::HitboxCenter &&
                                              hit_type_index == selected_hitbox_type_index_;
                     selected_hitbox_type_index_ = hit_type_index;
@@ -1920,11 +1602,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             }
         }
 
-        if (!handled) {
-            apply_adjustment_smoothing();
-            reset_adjustment_selection();
-        }
-        return true;
+        return handled;
     }
 
     if (is_children_mode(mode_) &&
@@ -2014,7 +1692,7 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
             const auto& child = frame.children[i];
 
             const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
-            const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
+            const float scaled_plane = static_cast<float>(child.dz) * base_adjustment;
             const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
             SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{
                 dx_world + static_cast<float>(parent_base.x),
@@ -2041,7 +1719,7 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
             const AnimationFrame* preview_frame = slot.frame;
 
             const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
-            const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
+            const float scaled_plane = static_cast<float>(child.dz) * base_adjustment;
             const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
             SDL_FPoint child_world{
                 static_cast<float>(parent_base.x) + dx_world, static_cast<float>(parent_base.y) + scaled_plane };
@@ -2166,7 +1844,7 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
                 }
 
                 const float scaled_dx = dx * base_adjustment;
-                const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
+                const float scaled_plane = dz * base_adjustment;
                 const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
                 screen = cam.map_to_screen_f(SDL_FPoint{
                     static_cast<float>(anchor_world.x) + dx_world,
@@ -3555,7 +3233,7 @@ animation_update::FrameHitGeometry::HitBox* FrameEditorSession::ensure_hit_box_f
     box.center_x = 0.0f;
     box.center_y = 0.0f;
     box.center_z = 0.0f;
-    hitbox_plane_center(box) = 40.0f;
+    box.center_z = 40.0f;
     box.half_width = 40.0f;
     box.half_height = 60.0f;
     box.rotation_degrees = 0.0f;
@@ -3592,7 +3270,7 @@ void FrameEditorSession::refresh_hitbox_form() const {
 };
     if (box) {
         sync_field(tb_hit_center_x_.get(), last_hit_center_x_text_, std::to_string(static_cast<int>(std::lround(box->center_x))));
-        sync_field(tb_hit_center_y_.get(), last_hit_center_y_text_, std::to_string(static_cast<int>(std::lround(hitbox_plane_center(*box)))));
+        sync_field(tb_hit_center_y_.get(), last_hit_center_y_text_, std::to_string(static_cast<int>(std::lround(box->center_z))));
         sync_field(tb_hit_width_.get(), last_hit_width_text_, std::to_string(static_cast<int>(std::lround(box->half_width * 2.0f))));
         sync_field(tb_hit_height_.get(), last_hit_height_text_, std::to_string(static_cast<int>(std::lround(box->half_height * 2.0f))));
         if (tb_hit_rotation_ && !tb_hit_rotation_->is_editing()) {
@@ -3713,11 +3391,11 @@ void FrameEditorSession::refresh_attack_form() const {
 };
     if (vec) {
         sync_field(tb_attack_start_x_.get(), last_attack_start_x_text_, std::to_string(static_cast<int>(std::lround(vec->start_x))));
-        sync_field(tb_attack_start_y_.get(), last_attack_start_y_text_, std::to_string(static_cast<int>(std::lround(attack_plane_start(*vec)))));
+        sync_field(tb_attack_start_y_.get(), last_attack_start_y_text_, std::to_string(static_cast<int>(std::lround(vec->start_z))));
         sync_field(tb_attack_control_x_.get(), last_attack_control_x_text_, std::to_string(static_cast<int>(std::lround(vec->control_x))));
-        sync_field(tb_attack_control_y_.get(), last_attack_control_y_text_, std::to_string(static_cast<int>(std::lround(attack_plane_control(*vec)))));
+        sync_field(tb_attack_control_y_.get(), last_attack_control_y_text_, std::to_string(static_cast<int>(std::lround(vec->control_z))));
         sync_field(tb_attack_end_x_.get(), last_attack_end_x_text_, std::to_string(static_cast<int>(std::lround(vec->end_x))));
-        sync_field(tb_attack_end_y_.get(), last_attack_end_y_text_, std::to_string(static_cast<int>(std::lround(attack_plane_end(*vec)))));
+        sync_field(tb_attack_end_y_.get(), last_attack_end_y_text_, std::to_string(static_cast<int>(std::lround(vec->end_z))));
         sync_field(tb_attack_damage_.get(), last_attack_damage_text_, std::to_string(vec->damage));
     } else {
         sync_field(tb_attack_start_x_.get(), last_attack_start_x_text_, "0");
@@ -3788,7 +3466,7 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
             const MovementFrame src = frames_[idx];
             for (size_t i = 1; i < frames_.size(); ++i) {
                 frames_[i].dx = src.dx;
-                movement_plane_delta(frames_[i]) = movement_plane_delta(src);
+                frames_[i].dz = src.dz;
                 frames_[i].resort_z = src.resort_z;
             }
             rebuild_rel_positions();
@@ -3808,7 +3486,7 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
                 if (child_index >= 0 && child_index < static_cast<int>(f.children.size())) {
                     auto& d = f.children[child_index];
                     d.dx = src.dx;
-                    child_plane_delta(d) = child_plane_delta(src);
+                    d.dz = src.dz;
                     d.degree = src.degree;
                     d.visible = src.visible;
                     d.has_data = true;
@@ -3945,7 +3623,7 @@ bool FrameEditorSession::build_hitbox_visual(const animation_update::FrameHitGeo
         return cam.map_to_screen_f(world);
     };
 
-    SDL_FPoint center_local{box.center_x, hitbox_plane_center(box)};
+    SDL_FPoint center_local{box.center_x, box.center_z};
     out.center = to_screen(center_local);
 
     std::array<SDL_FPoint, 4> local_corners = {
@@ -4132,7 +3810,7 @@ bool FrameEditorSession::begin_hitbox_drag(SDL_Point mouse) {
         return false;
     }
     hitbox_drag_grab_offset_.x = local_mouse.x - box->center_x;
-    hitbox_drag_grab_offset_.y = local_mouse.y - hitbox_plane_center(*box);
+    hitbox_drag_grab_offset_.y = local_mouse.y - box->center_z;
     return true;
 }
 
@@ -4161,7 +3839,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
         };
     };
     SDL_FPoint delta{ local.x - hitbox_drag_start_box_.center_x,
-                      local.y - hitbox_plane_center(hitbox_drag_start_box_) };
+                      local.y - hitbox_drag_start_box_.center_z };
     SDL_FPoint aligned = rotate_to_box(delta.x, delta.y);
     switch (active_hitbox_handle_) {
         case HitHandle::Move: {
@@ -4170,7 +3848,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
                 local.y - hitbox_drag_grab_offset_.y
 };
             box->center_x = new_center.x;
-            hitbox_plane_center(*box) = new_center.y;
+            box->center_z = new_center.y;
             break;
         }
         case HitHandle::Left:
@@ -4186,7 +3864,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
             const float center_offset = (right + left) * 0.5f;
             SDL_FPoint offset_world = rotate_to_world(SDL_FPoint{center_offset, 0.0f});
             box->center_x = hitbox_drag_start_box_.center_x + offset_world.x;
-            hitbox_plane_center(*box) = hitbox_plane_center(hitbox_drag_start_box_) + offset_world.y;
+            box->center_z = hitbox_drag_start_box_.center_z + offset_world.y;
             box->half_width = width * 0.5f;
             break;
         }
@@ -4203,12 +3881,12 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
             const float center_offset = (top + bottom) * 0.5f;
             SDL_FPoint offset_world = rotate_to_world(SDL_FPoint{0.0f, center_offset});
             box->center_x = hitbox_drag_start_box_.center_x + offset_world.x;
-            hitbox_plane_center(*box) = hitbox_plane_center(hitbox_drag_start_box_) + offset_world.y;
+            box->center_z = hitbox_drag_start_box_.center_z + offset_world.y;
             box->half_height = height * 0.5f;
             break;
         }
         case HitHandle::Rotate: {
-            SDL_FPoint rel{ local.x - box->center_x, local.y - hitbox_plane_center(*box) };
+            SDL_FPoint rel{ local.x - box->center_x, local.y - box->center_z };
             box->rotation_degrees = std::atan2(rel.y, rel.x) * kRadToDeg;
             break;
         }
@@ -4258,9 +3936,9 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
     for (const auto& vec : frame.attack.vectors) {
         if (vec.type != current_type) continue;
 
-        SDL_FPoint start_screen = to_screen(vec.start_x, attack_plane_start(vec));
-        SDL_FPoint control_screen = to_screen(vec.control_x, attack_plane_control(vec));
-        SDL_FPoint end_screen = to_screen(vec.end_x, attack_plane_end(vec));
+        SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
+        SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
+        SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
 
         if (point_hit(start_screen, node_radius)) {
             clicked_vector_index = type_counter;
@@ -4286,9 +3964,9 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
         for (const auto& vec : frame.attack.vectors) {
             if (vec.type != current_type) continue;
 
-            SDL_FPoint start_screen = to_screen(vec.start_x, attack_plane_start(vec));
-            SDL_FPoint control_screen = to_screen(vec.control_x, attack_plane_control(vec));
-            SDL_FPoint end_screen = to_screen(vec.end_x, attack_plane_end(vec));
+            SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
+            SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
+            SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
 
             for (int i = 0; i <= segments; ++i) {
                 const float t = static_cast<float>(i) / static_cast<float>(segments);
@@ -4353,25 +4031,25 @@ void FrameEditorSession::update_attack_drag(SDL_Point mouse) {
     switch (active_attack_handle_) {
         case AttackHandle::Start:
             vec->start_x = local.x;
-            attack_plane_start(*vec) = local.y;
+            vec->start_z = local.y;
             break;
         case AttackHandle::Control:
             vec->control_x = local.x;
-            attack_plane_control(*vec) = local.y;
+            vec->control_z = local.y;
             break;
         case AttackHandle::End:
             vec->end_x = local.x;
-            attack_plane_end(*vec) = local.y;
+            vec->end_z = local.y;
             break;
         case AttackHandle::Segment: {
             SDL_FPoint delta{ local.x - attack_drag_start_mouse_local_.x,
                               local.y - attack_drag_start_mouse_local_.y };
             vec->start_x = attack_drag_start_vector_.start_x + delta.x;
-            attack_plane_start(*vec) = attack_plane_start(attack_drag_start_vector_) + delta.y;
+            vec->start_z = attack_drag_start_vector_.start_z + delta.y;
             vec->control_x = attack_drag_start_vector_.control_x + delta.x;
-            attack_plane_control(*vec) = attack_plane_control(attack_drag_start_vector_) + delta.y;
+            vec->control_z = attack_drag_start_vector_.control_z + delta.y;
             vec->end_x = attack_drag_start_vector_.end_x + delta.x;
-            attack_plane_end(*vec) = attack_plane_end(attack_drag_start_vector_) + delta.y;
+            vec->end_z = attack_drag_start_vector_.end_z + delta.y;
             break;
         }
         case AttackHandle::None:
@@ -4406,17 +4084,17 @@ void FrameEditorSession::apply_frame_move_from_base(int index, SDL_FPoint desire
     if (base_rel.size() != frames_.size()) return;
 
     frames_.front().dx = 0.0f;
-    movement_plane_delta(frames_.front()) = 0.0f;
+    frames_.front().dz = 0.0f;
 
     SDL_FPoint prev_abs = base_rel[index - 1];
     frames_[index].dx = static_cast<float>(std::round(desired_rel.x - prev_abs.x));
-    movement_plane_delta(frames_[index]) = static_cast<float>(std::round(desired_rel.y - prev_abs.y));
+    frames_[index].dz = static_cast<float>(std::round(desired_rel.y - prev_abs.y));
 
     SDL_FPoint last_abs = desired_rel;
     for (int j = index + 1; j < static_cast<int>(frames_.size()); ++j) {
         const SDL_FPoint desired = base_rel[j];
         frames_[j].dx = static_cast<float>(std::round(desired.x - last_abs.x));
-        movement_plane_delta(frames_[j]) = static_cast<float>(std::round(desired.y - last_abs.y));
+        frames_[j].dz = static_cast<float>(std::round(desired.y - last_abs.y));
         last_abs = desired;
     }
 }
@@ -4455,12 +4133,12 @@ void FrameEditorSession::redistribute_frames_after_adjustment(int adjusted_index
     }
 
     frames_[0].dx = 0.0f;
-    movement_plane_delta(frames_[0]) = 0.0f;
+    frames_[0].dz = 0.0f;
     for (size_t i = 1; i < count; ++i) {
         const SDL_FPoint prev = redistributed[i - 1];
         const SDL_FPoint curr = redistributed[i];
         frames_[i].dx = static_cast<float>(std::round(curr.x - prev.x));
-        movement_plane_delta(frames_[i]) = static_cast<float>(std::round(curr.y - prev.y));
+        frames_[i].dz = static_cast<float>(std::round(curr.y - prev.y));
     }
     rebuild_rel_positions();
     persist_changes();
@@ -4588,7 +4266,7 @@ void FrameEditorSession::smooth_child_offsets(int child_index, int adjusted_inde
             continue;
         }
         const auto& child = children[child_index];
-        original[i] = SDL_FPoint{ child.dx, child_plane_delta(child) };
+        original[i] = SDL_FPoint{ child.dx, child.dz };
     }
     std::vector<SDL_FPoint> redistributed = original;
     if (curve_enabled_) {
@@ -4603,7 +4281,7 @@ void FrameEditorSession::smooth_child_offsets(int child_index, int adjusted_inde
         }
         auto& child = children[child_index];
         child.dx = static_cast<float>(std::round(redistributed[i].x));
-        child_plane_delta(child) = static_cast<float>(std::round(redistributed[i].y));
+        child.dz = static_cast<float>(std::round(redistributed[i].y));
         child.has_data = true;
     }
     persist_changes();
@@ -4617,7 +4295,7 @@ void FrameEditorSession::rebuild_rel_positions() {
             curr = SDL_FPoint{0.0f, 0.0f};
         } else {
             curr.x += frames_[i].dx;
-            curr.y += movement_plane_delta(frames_[i]);
+            curr.y += frames_[i].dz;
         }
         rel_positions_.push_back(curr);
     }
@@ -5702,7 +5380,7 @@ void FrameEditorSession::ensure_adjustment_auto_select(const WarpedScreenGrid& c
             const SDL_Point parent_base = asset_anchor_world();
             const auto& child = frame.children.front();
             const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
-            const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
+            const float scaled_plane = static_cast<float>(child.dz) * base_adjustment;
             const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
             SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{
                 dx_world + static_cast<float>(parent_base.x),
@@ -5733,7 +5411,7 @@ std::optional<int> FrameEditorSession::hit_test_child_marker(const SDL_Point& mo
     for (std::size_t i = 0; i < frame.children.size(); ++i) {
         const auto& child = frame.children[i];
         const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
-        const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
+        const float scaled_plane = static_cast<float>(child.dz) * base_adjustment;
         const float dx_world = target_->flipped ? -scaled_dx : scaled_dx;
         SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{
             dx_world + static_cast<float>(parent_base.x),
@@ -5770,7 +5448,7 @@ SDL_FPoint FrameEditorSession::child_world_position(int child_index, float base_
     }
     const auto& child = frame.children[static_cast<std::size_t>(child_index)];
     const float scaled_dx = static_cast<float>(child.dx) * base_adjustment;
-    const float scaled_plane = static_cast<float>(child_plane_delta(child)) * base_adjustment;
+    const float scaled_plane = static_cast<float>(child.dz) * base_adjustment;
     const float dx_world = flipped ? -scaled_dx : scaled_dx;
     return SDL_FPoint{dx_world, scaled_plane};
 }
@@ -6000,9 +5678,9 @@ void FrameEditorSession::render_attack_geometry(SDL_Renderer* renderer) const {
             selected = (current_type_counter == selected_idx && selected_idx >= 0);
             ++current_type_counter;
         }
-        SDL_FPoint start_screen = to_screen(vec.start_x, attack_plane_start(vec));
-        SDL_FPoint control_screen = to_screen(vec.control_x, attack_plane_control(vec));
-        SDL_FPoint end_screen = to_screen(vec.end_x, attack_plane_end(vec));
+        SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
+        SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
+        SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
 
         SDL_Color line_color = selected ? DMStyles::AccentButton().bg : DMStyles::HeaderButton().bg;
         SDL_SetRenderDrawColor(renderer, line_color.r, line_color.g, line_color.b, 220);

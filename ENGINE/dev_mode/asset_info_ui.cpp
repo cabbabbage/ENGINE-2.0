@@ -1259,15 +1259,9 @@ void AssetInfoUI::apply_camera_override(bool enable) {
     WarpedScreenGrid& cam = assets_->getView();
     if (enable) {
         if (camera_override_active_) return;
-        prev_camera_realism_enabled_ = cam.realism_enabled();
-        prev_camera_parallax_enabled_ = cam.parallax_enabled();
-        cam.set_realism_enabled(false);
-        cam.set_parallax_enabled(false);
         camera_override_active_ = true;
     } else {
         if (!camera_override_active_) return;
-        cam.set_realism_enabled(prev_camera_realism_enabled_);
-        cam.set_parallax_enabled(prev_camera_parallax_enabled_);
         camera_override_active_ = false;
     }
 }

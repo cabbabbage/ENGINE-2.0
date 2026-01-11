@@ -417,9 +417,7 @@ void Assets::reload_camera_settings() {
 }
 
 int Assets::saved_render_quality_percent() const {
-    const WarpedScreenGrid::RealismSettings& settings = camera_.realism_settings();
-    const int clamped = std::clamp(settings.render_quality_percent, kMinRenderQuality, kQualityOptions[0]);
-    return align_render_quality_percent(clamped);
+    return 100;
 }
 
 int Assets::effective_render_quality_percent() const {

@@ -146,17 +146,10 @@ public:
     RealismSettings& get_settings() { return settings_; }
     const RealismSettings& realism_settings() const { return settings_; }
     RealismSettings& realism_settings() { return settings_; }
-    bool is_realism_enabled() const { return realism_enabled_ && depth_enabled_; }
-    bool realism_enabled() const { return is_realism_enabled(); }
-    bool parallax_enabled() const { return is_realism_enabled(); }
-    void set_realism_enabled(bool enabled) {
-        realism_enabled_ = enabled;
-    }
     void set_depth_enabled(bool enabled) { depth_enabled_ = enabled; }
     bool depth_enabled() const { return depth_enabled_; }
     void set_depth_debug_logging(bool enabled) { depth_debug_logging_ = enabled; }
     bool depth_debug_logging() const { return depth_debug_logging_; }
-    void set_parallax_enabled(bool enabled) { set_realism_enabled(enabled); }
     void set_render_areas_enabled(bool enabled) { render_areas_enabled_ = enabled; }
     const Area& get_current_view() const { return current_view_; }
     const Area& get_camera_area() const { return current_view_; }
@@ -208,7 +201,6 @@ private:
     int screen_height_ = 0;
     double aspect_ = 1.0;
 
-    bool realism_enabled_ = false;
     bool render_areas_enabled_ = false;
     RealismSettings settings_{};
 

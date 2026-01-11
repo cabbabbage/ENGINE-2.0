@@ -2702,12 +2702,7 @@ bool RoomEditor::camera_state_changed(const WarpedScreenGrid& cam) const {
     if (center.x != cached_camera_center_.x || center.y != cached_camera_center_.y) {
         return true;
     }
-    if (cam.parallax_enabled() != cached_camera_parallax_enabled_) {
-        return true;
-    }
-    if (cam.realism_enabled() != cached_camera_realism_enabled_) {
-        return true;
-    }
+
     return false;
 }
 
@@ -2875,8 +2870,7 @@ void RoomEditor::rebuild_spatial_index(const WarpedScreenGrid& cam) const {
 
     cached_camera_scale_ = cam.get_scale();
     cached_camera_center_ = cam.get_screen_center();
-    cached_camera_parallax_enabled_ = cam.parallax_enabled();
-    cached_camera_realism_enabled_ = cam.realism_enabled();
+
     cached_camera_state_valid_ = true;
     spatial_index_dirty_ = false;
 }

@@ -98,23 +98,6 @@ public:
 
 FRAME_EDITOR_ACCESS:
     bool target_is_alive() const;
-    void center_camera_origin();
-    struct TextureMetrics {
-        int width = 0;
-        int height = 0;
-    };
-    TextureMetrics current_frame_texture_metrics(SDL_Renderer* renderer) const;
-    bool project_texture_bounds(const WarpedScreenGrid& cam,
-                                SDL_Point anchor_world,
-                                const TextureMetrics& metrics,
-                                SDL_FRect& out_bounds) const;
-    double fit_camera_y_distance_for_xz(WarpedScreenGrid& cam,
-                                        SDL_Point anchor_world,
-                                        const TextureMetrics& metrics,
-                                        int screen_w,
-                                        int screen_h) const;
-    void apply_camera_defaults();
-    void handle_xz_scroll(WarpedScreenGrid& cam, int wheel_y);
 
     struct ChildFrame {
         int child_index = -1;
@@ -267,10 +250,6 @@ FRAME_EDITOR_ACCESS:
     SDL_Point dir_pos_{0, 0};
     SDL_Point toolbox_pos_{0, 0};
     SDL_Point nav_pos_{0, 0};
-    SDL_FPoint right_pan_start_world_{0.0f, 0.0f};
-    SDL_FPoint right_pan_last_world_{0.0f, 0.0f};
-    SDL_Point right_pan_start_focus_{0, 0};
-    double right_pan_start_distance_ = 0.0;
     bool dragging_dir_ = false;
     bool dragging_toolbox_ = false;
     bool dragging_toolbox_scrollbar_ = false;
@@ -291,14 +270,6 @@ FRAME_EDITOR_ACCESS:
     mutable std::vector<int> thumb_indices_;
 
     mutable class PanAndHeight pan_height_;
-    bool manual_pan_active_ = false;
-    SDL_Point manual_pan_last_center_{0, 0};
-    bool manual_pan_has_last_center_ = false;
-    bool right_pan_active_ = false;
-    SDL_Point right_pan_start_mouse_{0, 0};
-    SDL_Point right_pan_start_center_{0, 0};
-    SDL_Point right_pan_last_center_{0, 0};
-    bool right_pan_has_last_center_ = false;
     int pending_scroll_delta_ = 0;
     bool hover_toolbox_ = false;
     bool hover_toolbox_drag_handle_ = false;
@@ -489,18 +460,6 @@ FRAME_EDITOR_ACCESS:
     void update_attack_drag(SDL_Point mouse);
     void end_attack_drag(bool commit);
     float attachment_scale() const;
-    float movement_plane_delta(const MovementFrame& frame) const;
-    float& movement_plane_delta(MovementFrame& frame);
-    float child_plane_delta(const ChildFrame& child) const;
-    float& child_plane_delta(ChildFrame& child);
-    float hitbox_plane_center(const animation_update::FrameHitGeometry::HitBox& box) const;
-    float& hitbox_plane_center(animation_update::FrameHitGeometry::HitBox& box);
-    float attack_plane_start(const animation_update::FrameAttackGeometry::Vector& vec) const;
-    float& attack_plane_start(animation_update::FrameAttackGeometry::Vector& vec);
-    float attack_plane_control(const animation_update::FrameAttackGeometry::Vector& vec) const;
-    float& attack_plane_control(animation_update::FrameAttackGeometry::Vector& vec);
-    float attack_plane_end(const animation_update::FrameAttackGeometry::Vector& vec) const;
-    float& attack_plane_end(animation_update::FrameAttackGeometry::Vector& vec);
 
 FRAME_EDITOR_ACCESS:
     void render_directory_panel(SDL_Renderer* renderer);

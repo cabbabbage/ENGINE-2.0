@@ -484,15 +484,14 @@ struct ProjectionResult {
         };
     }
 
-    WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
-        int screen_width,
-        int screen_height,
-        const CameraState& cam,
-        bool realism_enabled) {
-        WarpedScreenGrid::FloorDepthParams p{};
-        if (!realism_enabled || !cam.valid) {
-            return p;
-        }
+WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
+    int screen_width,
+    int screen_height,
+    const CameraState& cam) {
+    WarpedScreenGrid::FloorDepthParams p{};
+    if (!cam.valid) {
+        return p;
+    }
 
         const double screen_h = std::max(1.0, static_cast<double>(screen_height));
         constexpr double kMaxHorizonRatio = 0.45;
@@ -616,7 +615,6 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
     runtime_pitch_deg_ = camera_.current_pitch_deg();
     runtime_pitch_rad_ = camera_.current_pitch_rad();
     runtime_anchor_world_y_ = camera_.state().center.y;
-    realism_enabled_ = true;
     depth_enabled_   = true;
 }
 
@@ -1023,7 +1021,7 @@ SDL_FPoint WarpedScreenGrid::get_view_center_f() const {
 WarpedScreenGrid::FloorDepthParams WarpedScreenGrid::compute_floor_depth_params() const {
     const CameraState cam = build_camera_state(
         settings_, aspect_, screen_width_, screen_height_, camera_.state().center, camera_.state().params);
-    return build_floor_params_from_camera_state(screen_width_, screen_height_, cam, realism_enabled_);
+    return build_floor_params_from_camera_state(screen_width_, screen_height_, cam);
 }
 
 float WarpedScreenGrid::warp_floor_screen_y(float world_y, float linear_screen_y) const {

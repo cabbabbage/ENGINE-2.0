@@ -514,33 +514,18 @@ void CameraUIPanel::render(SDL_Renderer* renderer) const {
 }
 
 void CameraUIPanel::layout_custom_content(int screen_w, int screen_h) const {
-
-    if (hero_banner_widget_) {
-        set_drag_handle_rect(hero_banner_widget_->rect());
-    } else {
-        set_drag_handle_rect(SDL_Rect{0,0,0,0});
-    }
+    set_drag_handle_rect(SDL_Rect{0,0,0,0});
 }
 
 void CameraUIPanel::sync_from_camera() {
     if (!assets_) return;
     WarpedScreenGrid& cam = assets_->getView();
-    last_settings_ = cam.realism_settings();
-    bool effects_enabled = cam.realism_enabled() && cam.parallax_enabled();
-    last_realism_enabled_ = effects_enabled;
 
-    if (min_render_size_slider_) min_render_size_slider_->set_value(last_settings_.min_visible_screen_ratio);
-    if (render_quality_slider_) render_quality_slider_->set_value(last_settings_.render_quality_percent);
-    if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
-
+    if (min_render_size_slider_) min_render_size_slider_->set_value(cam.get_settings().min_visible_screen_ratio);
+    if (render_quality_slider_) render_quality_slider_->set_value(cam.get_settings().render_quality_percent);
+    if (cull_margin_slider_) cull_margin_slider_->set_value(cam.get_settings().extra_cull_margin);
     if (meters_slider_) {
-        meters_slider_->set_value(last_settings_.meters_per_100_world_px);
-    }
-    if (realism_enabled_checkbox_) {
-        realism_enabled_checkbox_->set_value(last_realism_enabled_);
-    }
-    if (depthcue_checkbox_) {
-        depthcue_checkbox_->set_value(false); // Default to disabled
+        meters_slider_->set_value(cam.get_settings().meters_per_100_world_px);
     }
 }
 
@@ -553,10 +538,6 @@ void CameraUIPanel::build_ui() {
     set_floating_content_width(460);
 
     header_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::header_gap());
-    hero_banner_widget_ = std::make_unique<PanelBannerWidget>( "Camera realism", "Dial in render buffers and parallax depth without leaving the editor.");
-    realism_enabled_checkbox_ = std::make_unique<DMCheckbox>("Enable Realism Effects", last_realism_enabled_);
-    realism_widget_ = std::make_unique<CheckboxWidget>(realism_enabled_checkbox_.get());
-    realism_widget_->set_tooltip("Toggle perspective effects, grid warping, and parallax depth.");
 
     controls_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::small_gap());
 
@@ -564,9 +545,9 @@ void CameraUIPanel::build_ui() {
     depthcue_widget_ = std::make_unique<CheckboxWidget>(depthcue_checkbox_.get());
     depthcue_widget_->set_tooltip("Toggle depth cue texture compositing.\nDoes not affect parallax or perspective scaling.");
 
-    WarpedScreenGrid::RealismSettings defaults = last_settings_;
+    WarpedScreenGrid::RealismSettings defaults;
     if (assets_) {
-        defaults = assets_->getView().realism_settings();
+        defaults = assets_->getView().get_settings();
     }
     defaults.min_visible_screen_ratio = devmode::camera_prefs::load_min_visible_screen_ratio(defaults.min_visible_screen_ratio);
     defaults.extra_cull_margin = devmode::camera_prefs::load_extra_cull_margin(defaults.extra_cull_margin);
@@ -636,8 +617,6 @@ void CameraUIPanel::on_control_value_changed() {
 void CameraUIPanel::rebuild_rows() {
     Rows rows;
     if (header_spacer_) rows.push_back({ header_spacer_.get() });
-    if (hero_banner_widget_) rows.push_back({ hero_banner_widget_.get() });
-    if (realism_widget_) rows.push_back({ realism_widget_.get() });
     if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     if (depthcue_widget_) rows.push_back({ depthcue_widget_.get() });
 
@@ -672,74 +651,19 @@ void CameraUIPanel::apply_settings_if_needed() {
         ~ScopedApplyingGuard() { flag = false; }
     } guard(applying_settings_);
     WarpedScreenGrid& cam = assets_->getView();
-    WarpedScreenGrid::RealismSettings settings = read_settings_from_ui();
-    const bool reported_effects_enabled = realism_enabled_checkbox_
-        ? realism_enabled_checkbox_->value() : last_realism_enabled_;
-    const bool reported_depthcue_enabled = depthcue_checkbox_
-        ? depthcue_checkbox_->value() : false;
 
-    const bool depth_available = cam.depth_enabled();
-    const bool effects_enabled = depth_available && reported_effects_enabled;
-    const bool depthcue_enabled = depth_available && reported_depthcue_enabled;
+    WarpedScreenGrid::RealismSettings settings;
+    if (min_render_size_slider_) settings.min_visible_screen_ratio = min_render_size_slider_->value();
+    if (render_quality_slider_) settings.render_quality_percent = render_quality_slider_->value();
+    if (cull_margin_slider_) settings.extra_cull_margin = cull_margin_slider_->value();
+    if (meters_slider_) settings.meters_per_100_world_px = meters_slider_->value();
 
-    auto differs = [](float a, float b) {
-        return std::fabs(a - b) > 0.0001f;
-};
-    bool changed = (effects_enabled != last_realism_enabled_) || depthcue_enabled;
-    const WarpedScreenGrid::RealismSettings& prev = last_settings_;
-    changed = changed || differs(settings.min_visible_screen_ratio, prev.min_visible_screen_ratio);
-    changed = changed || differs(settings.extra_cull_margin, prev.extra_cull_margin);
-    if (render_quality_slider_) {
-        changed = changed || settings.render_quality_percent != prev.render_quality_percent;
-    }
-    changed = changed || differs(settings.meters_per_100_world_px, prev.meters_per_100_world_px);
-    changed = changed || differs(settings.near_camera_max_perspective_scale, prev.near_camera_max_perspective_scale);
-    changed = changed || differs(settings.offscreen_fade_amount_px, prev.offscreen_fade_amount_px);
-
-    if (changed) {
-        apply_settings_to_camera(settings, effects_enabled, depthcue_enabled);
-
-        assets_->on_camera_settings_changed();
-    }
-}
-
-void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSettings& settings,
-                                             bool effects_enabled,
-                                             bool depthcue_enabled) {
-    if (!assets_) return;
-    WarpedScreenGrid& cam = assets_->getView();
     cam.set_realism_settings(settings);
-    cam.set_realism_enabled(effects_enabled);
-    cam.set_parallax_enabled(effects_enabled);
 
-    if (assets_) {
-        assets_->set_depth_effects_enabled(depthcue_enabled);
-        assets_->apply_camera_runtime_settings();
-    }
-    last_settings_ = settings;
-    last_realism_enabled_ = effects_enabled;
-    if (on_realism_enabled_changed_) {
-        on_realism_enabled_changed_(effects_enabled);
-    }
-    if (on_depth_effects_enabled_changed_) {
-        on_depth_effects_enabled_changed_(depthcue_enabled);
-    }
     devmode::camera_prefs::save_min_visible_screen_ratio(settings.min_visible_screen_ratio);
     devmode::camera_prefs::save_extra_cull_margin(settings.extra_cull_margin);
     devmode::camera_prefs::save_meters_per_100_world_px(settings.meters_per_100_world_px);
     devmode::camera_prefs::save_render_quality_percent(settings.render_quality_percent);
-    devmode::camera_prefs::save_near_camera_max_perspective_scale(settings.near_camera_max_perspective_scale);
-    devmode::camera_prefs::save_offscreen_fade_amount_px(settings.offscreen_fade_amount_px);
 
-}
-
-WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
-    WarpedScreenGrid::RealismSettings settings = last_settings_;
-    if (min_render_size_slider_) settings.min_visible_screen_ratio = std::clamp(min_render_size_slider_->value(), 0.0f, 0.5f);
-    if (render_quality_slider_) settings.render_quality_percent = render_quality_slider_->value();
-    if (cull_margin_slider_) settings.extra_cull_margin = std::clamp(cull_margin_slider_->value(), 0.0f, 5000.0f);
-
-    if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
-
-    return settings;
+    assets_->on_camera_settings_changed();
 }

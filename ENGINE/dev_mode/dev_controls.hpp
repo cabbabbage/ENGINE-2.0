@@ -247,8 +247,7 @@ private:
     int  grid_resolution_r_ = -1;
     bool movement_debug_enabled_ = false;
 
-    bool depth_effects_forced_realism_disabled_ = false;
-    bool depth_effects_prev_realism_enabled_ = true;
+
 
     std::unique_ptr<class DMNumericStepper> grid_resolution_stepper_;
 

@@ -552,22 +552,6 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     }
     if (camera_panel_) {
         camera_panel_->set_image_effects_panel_callback([this]() { this->toggle_image_effect_panel(); });
-        camera_panel_->set_on_realism_enabled_changed([this](bool enabled) {
-            if (map_mode_ui_) {
-                DevFooterBar* footer = map_mode_ui_->get_footer_bar();
-                if (footer) {
-                    footer->set_depth_effects_enabled(enabled);
-                }
-            }
-        });
-        camera_panel_->set_on_depth_effects_enabled_changed([this](bool enabled) {
-            if (map_mode_ui_) {
-                DevFooterBar* footer = map_mode_ui_->get_footer_bar();
-                if (footer) {
-                    footer->set_depth_effects_enabled(enabled);
-                }
-            }
-        });
     }
     if (map_editor_) {
         map_editor_->set_ui_blocker([this](int x, int y) { return is_pointer_over_dev_ui(x, y); });
@@ -609,31 +593,12 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         ? assets_->depth_effects_enabled() : false;
             footer->set_depth_effects_enabled(depth_effects_enabled);
             footer->set_depth_effects_callbacks([this](bool enabled) {
-                auto* cam = camera_override_for_testing_
-                    ? camera_override_for_testing_
-                    : (assets_ ? &assets_->getView() : nullptr);
                 if (assets_) {
                     assets_->set_depth_effects_enabled(enabled);
-                    if (cam) {
-                        if (!enabled) {
-                            if (!depth_effects_forced_realism_disabled_) {
-                                depth_effects_prev_realism_enabled_ = cam->realism_enabled();
-                                depth_effects_forced_realism_disabled_ = true;
-                            }
-                            if (cam->realism_enabled()) {
-                                cam->set_realism_enabled(false);
-                            }
-                        } else if (depth_effects_forced_realism_disabled_) {
-                            cam->set_realism_enabled(depth_effects_prev_realism_enabled_);
-                            depth_effects_forced_realism_disabled_ = false;
-                        }
-                    }
                     assets_->apply_camera_runtime_settings();
                     if (camera_panel_) {
                         camera_panel_->sync_from_camera();
                     }
-                } else {
-                    // Depth cue save functionality removed
                 }
             });
 
@@ -1745,32 +1710,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 horizon_screen_y = static_cast<float>(depth_params.horizon_screen_y);
             }
 
-            if (show_grid_overlay && view_cam.parallax_enabled()) {
-                const int sample_dx = std::max(cell * 2, 64);
-                const int sample_dy = std::max(cell * 3, 96);
-                const SDL_FPoint view_center = view_cam.get_view_center_f();
-                const double anchor_y = view_cam.current_anchor_world_y();
-                const int sample_x = static_cast<int>(std::lround( std::clamp(view_center.x + static_cast<float>(sample_dx), min_world_x, max_world_x)));
-                const double clamped_anchor_y = std::clamp(anchor_y, static_cast<double>(min_world_y), static_cast<double>(max_world_y));
-                const SDL_Point anchor_sample{
-                    sample_x,
-                    static_cast<int>(std::lround(clamped_anchor_y)) };
-                const SDL_Point above_sample{
-                    sample_x,
-                    static_cast<int>(std::lround(std::clamp(clamped_anchor_y - static_cast<double>(sample_dy), static_cast<double>(min_world_y), static_cast<double>(max_world_y)))) };
-                const SDL_Point below_sample{
-                    sample_x,
-                    static_cast<int>(std::lround(std::clamp(clamped_anchor_y + static_cast<double>(sample_dy), static_cast<double>(min_world_y), static_cast<double>(max_world_y)))) };
 
-                const float parallax_anchor = parallax_offset(anchor_sample);
-                const float parallax_above  = parallax_offset(above_sample);
-                const float parallax_below  = parallax_offset(below_sample);
-                if (std::isfinite(parallax_anchor) && std::isfinite(parallax_above) && std::isfinite(parallax_below)) {
-                    char buffer[192];
-                    std::snprintf(buffer, sizeof(buffer), "Parallax probe dx=+%d | above %.1f px  anchor %.1f px  below %.1f px", sample_dx, parallax_above, parallax_anchor, parallax_below);
-                    parallax_probe_label = std::string(buffer);
-                }
-            }
         }
 
         if (show_grid_overlay) {

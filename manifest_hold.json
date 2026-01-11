@@ -3634,7 +3634,6 @@
                   "degree": 0.0,
                   "dx": -4055,
                   "dy": 0,
-                  "render_in_front": true,
                   "visible": false
                 }
               ],
@@ -3650,7 +3649,6 @@
                   "degree": 0.0,
                   "dx": -3,
                   "dy": 0,
-                  "render_in_front": true,
                   "visible": true
                 }
               ],
@@ -3754,7 +3752,6 @@
                   "degree": 0.0,
                   "dx": -35,
                   "dy": 0,
-                  "render_in_front": true,
                   "visible": true
                 }
               ],
@@ -3770,7 +3767,6 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "render_in_front": true,
                   "visible": false
                 }
               ],
@@ -3885,7 +3881,6 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "render_in_front": true,
                   "visible": false
                 }
               ],
@@ -3901,7 +3896,6 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "render_in_front": true,
                   "visible": false
                 }
               ],

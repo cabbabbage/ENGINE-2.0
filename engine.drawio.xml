@@ -2034,6 +2034,24 @@
             </Array>
           </mxGeometry>
         </mxCell>
+        <mxCell id="500" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#b45309;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;AssetLibrary&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Central repository managing all AssetInfo instances, providing access to animation definitions, spawn rules, and asset metadata throughout the runtime lifecycle.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="3200" y="618" as="geometry" />
+        </mxCell>
+        <mxCell id="501" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#be185d;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;AnimationRuntime&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Manages animation state and progression for individual assets, handling pathfinding, child attachments, and frame transitions during runtime updates.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="3759" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="502" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#4d7c0f;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;AssetSpawnPlanner&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Merges spawn_groups across manifest, rooms, and trails, assigns spawn IDs/priorities, resolves tag-based candidates, and scales quantities to room size.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="4119" y="3700" as="geometry" />
+        </mxCell>
+        <mxCell id="503" parent="1" source="341" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;noEdgeStyle=1;orthogonal=1;" target="500">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="504" parent="1" source="116" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;noEdgeStyle=1;orthogonal=1;" target="501">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="505" parent="1" source="342" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;noEdgeStyle=1;orthogonal=1;" target="502">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>

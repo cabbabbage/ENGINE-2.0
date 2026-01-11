@@ -521,7 +521,7 @@ void AnimationRuntime::advance_child_frames(float dt) {
     }
     auto compute_attachment_scale = [&]() -> float {
         float perspective_scale = 1.0f;
-        if (assets_owner_ && self_ && self_->info && self_->info->apply_distance_scaling) {
+        if (assets_owner_ && self_ && self_->info) {
             const WarpedScreenGrid& cam = assets_owner_->getView();
             if (const auto* gp = cam.grid_point_for_asset(self_)) {
                 perspective_scale = std::max(0.0001f, gp->perspective_scale);
@@ -609,7 +609,7 @@ void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFr
     }
     auto compute_attachment_scale = [&]() -> float {
         float perspective_scale = 1.0f;
-        if (assets_owner_ && self_ && self_->info && self_->info->apply_distance_scaling) {
+        if (assets_owner_ && self_ && self_->info) {
             const WarpedScreenGrid& cam = assets_owner_->getView();
             if (const auto* gp = cam.grid_point_for_asset(self_)) {
                 perspective_scale = std::max(0.0001f, gp->perspective_scale);
@@ -1322,4 +1322,3 @@ SDL_Point AnimationRuntime::convert_delta_to_world(SDL_Point delta, int resoluti
     (void)resolution;
     return delta;
 }
-

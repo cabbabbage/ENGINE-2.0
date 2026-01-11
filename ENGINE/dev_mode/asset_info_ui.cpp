@@ -878,15 +878,13 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
                 }
 
                 SDL_FPoint screen_pos = cam.map_to_screen(SDL_Point{ target_asset_->pos.x, target_asset_->pos.y });
-                float distance_scale = 1.0f;
-                float vertical_scale = 1.0f;
-                if (const auto* gp = cam.grid_point_for_asset(target_asset_)) {
-                    screen_pos = gp->screen;
-                    if (target_asset_->info) {
-                        distance_scale = target_asset_->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
-                        vertical_scale = target_asset_->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
-                    }
-                }
+            float distance_scale = 1.0f;
+            float vertical_scale = 1.0f;
+            if (const auto* gp = cam.grid_point_for_asset(target_asset_)) {
+                screen_pos = gp->screen;
+                distance_scale = std::max(0.0001f, gp->perspective_scale);
+                vertical_scale = std::max(0.0001f, gp->vertical_scale);
+            }
 
                 const float base_sw = static_cast<float>(base_w) * package_scale;
                 const float base_sh = static_cast<float>(base_h) * package_scale;
@@ -1306,9 +1304,9 @@ float AssetInfoUI::compute_player_screen_height(const WarpedScreenGrid& cam) con
     const world::GridPoint* gp = cam.grid_point_for_asset(player_asset);
     float distance_scale = 1.0f;
     float vertical_scale = 1.0f;
-    if (gp && player_asset->info) {
-        distance_scale = player_asset->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
-        vertical_scale = player_asset->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
+    if (gp) {
+        distance_scale = std::max(0.0001f, gp->perspective_scale);
+        vertical_scale = std::max(0.0001f, gp->vertical_scale);
     }
 
     if (ph > 0) {
@@ -1366,15 +1364,13 @@ void AssetInfoUI::render_world_overlay(SDL_Renderer* r, const WarpedScreenGrid& 
             }
 
             SDL_FPoint screen_pos = cam.map_to_screen(SDL_Point{ target_asset_->pos.x, target_asset_->pos.y });
-            float distance_scale = 1.0f;
-            float vertical_scale = 1.0f;
-            if (const auto* gp = cam.grid_point_for_asset(target_asset_)) {
-                screen_pos = gp->screen;
-                if (target_asset_->info) {
-                    distance_scale = target_asset_->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
-                    vertical_scale = target_asset_->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
+                float distance_scale = 1.0f;
+                float vertical_scale = 1.0f;
+                if (const auto* gp = cam.grid_point_for_asset(target_asset_)) {
+                    screen_pos = gp->screen;
+                    distance_scale = std::max(0.0001f, gp->perspective_scale);
+                    vertical_scale = std::max(0.0001f, gp->vertical_scale);
                 }
-            }
 
             const float base_sw = static_cast<float>(base_w) * package_scale;
             const float base_sh = static_cast<float>(base_h) * package_scale;
@@ -1994,8 +1990,6 @@ void AssetInfoUI::sync_target_basic_render_settings(bool type_changed) {
         }
         asset->info->set_asset_type(info_->type);
         asset->info->set_flipable(info_->flipable);
-        asset->info->set_apply_distance_scaling(info_->apply_distance_scaling);
-        asset->info->set_apply_vertical_scaling(info_->apply_vertical_scaling);
     });
 
     if (updated_any && assets_) {

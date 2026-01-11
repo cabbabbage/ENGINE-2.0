@@ -36,8 +36,6 @@ class Section_BasicInfo : public DockableCollapsible {
     std::unique_ptr<DMDropdown>  dd_type_;
     std::unique_ptr<DMSlider>    s_scale_pct_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
-    std::unique_ptr<DMCheckbox>  c_apply_distance_scaling_;
-    std::unique_ptr<DMCheckbox>  c_apply_vertical_scaling_;
     std::unique_ptr<DMCheckbox>  c_tillable_;
     std::unique_ptr<DMTextBox>   tb_starting_health_;
     std::unique_ptr<DMButton>    apply_btn_;
@@ -95,12 +93,8 @@ inline void Section_BasicInfo::build() {
     s_scale_pct_->set_on_value_changed([this](int value) { this->on_scale_slider_value_changed(value); });
     if (!is_tiled_asset) {
         c_flipable_  = std::make_unique<DMCheckbox>("Flipable (can invert)", info_->flipable);
-        c_apply_distance_scaling_ = std::make_unique<DMCheckbox>("Apply distance scaling", info_->apply_distance_scaling);
-        c_apply_vertical_scaling_ = std::make_unique<DMCheckbox>("Apply vertical scaling", info_->apply_vertical_scaling);
     } else {
         c_flipable_.reset();
-        c_apply_distance_scaling_.reset();
-        c_apply_vertical_scaling_.reset();
     }
     c_tillable_ = std::make_unique<DMCheckbox>("Tileable (grid tiles)", info_->tillable);
 
@@ -121,18 +115,6 @@ inline void Section_BasicInfo::build() {
         auto w_flip = std::make_unique<CheckboxWidget>(c_flipable_.get());
         rows.push_back({ w_flip.get() });
         widgets_.push_back(std::move(w_flip));
-    }
-
-    if (c_apply_distance_scaling_) {
-        auto w_distance = std::make_unique<CheckboxWidget>(c_apply_distance_scaling_.get());
-        rows.push_back({ w_distance.get() });
-        widgets_.push_back(std::move(w_distance));
-    }
-
-    if (c_apply_vertical_scaling_) {
-        auto w_vertical = std::make_unique<CheckboxWidget>(c_apply_vertical_scaling_.get());
-        rows.push_back({ w_vertical.get() });
-        widgets_.push_back(std::move(w_vertical));
     }
 
     auto w_tillable = std::make_unique<CheckboxWidget>(c_tillable_.get());
@@ -160,8 +142,6 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
-    if (c_apply_distance_scaling_ && c_apply_distance_scaling_->handle_event(e)) used = true;
-        if (c_apply_vertical_scaling_ && c_apply_vertical_scaling_->handle_event(e)) used = true;
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
     }
 
@@ -199,18 +179,6 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
 
     if (c_flipable_ && info_->flipable != c_flipable_->value()) {
         info_->set_flipable(c_flipable_->value());
-        changed = true;
-        render_settings_changed = true;
-    }
-
-    if (c_apply_distance_scaling_ && info_->apply_distance_scaling != c_apply_distance_scaling_->value()) {
-        info_->set_apply_distance_scaling(c_apply_distance_scaling_->value());
-        changed = true;
-        render_settings_changed = true;
-    }
-
-    if (c_apply_vertical_scaling_ && info_->apply_vertical_scaling != c_apply_vertical_scaling_->value()) {
-        info_->set_apply_vertical_scaling(c_apply_vertical_scaling_->value());
         changed = true;
         render_settings_changed = true;
     }
@@ -278,10 +246,8 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
     float vertical_scale = 1.0f;
     if (auto* gp = cam.grid_point_for_asset(target)) {
         screen_pos = gp->screen;
-        if (target->info) {
-            distance_scale = target->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
-            vertical_scale = target->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
-        }
+        distance_scale = std::max(0.0001f, gp->perspective_scale);
+        vertical_scale = std::max(0.0001f, gp->vertical_scale);
     }
 
     float scaled_sw = base_sw * distance_scale;

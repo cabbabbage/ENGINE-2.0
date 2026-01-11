@@ -3814,11 +3814,11 @@ float FrameEditorSession::attachment_scale() const {
     }
     const WarpedScreenGrid& cam = assets_->getView();
     float perspective_scale = 1.0f;
-    if (target_->info && target_->info->apply_distance_scaling) {
-        if (const auto* gp = cam.grid_point_for_asset(target_)) {
-            perspective_scale = std::max(0.0001f, gp->perspective_scale);
-        }
+
+    if (const auto* gp = cam.grid_point_for_asset(target_)) {
+        perspective_scale = std::max(0.0001f, gp->perspective_scale);
     }
+    
     float remainder = target_->current_remaining_scale_adjustment;
     if (!std::isfinite(remainder) || remainder <= 0.0f) {
         remainder = 1.0f;
@@ -5365,8 +5365,8 @@ SDL_FRect FrameEditorSession::child_preview_rect(SDL_FPoint child_world,
     if (const auto* gp = cam.grid_point_for_asset(target_)) {
         screen_base = gp->screen;
         if (target_->info) {
-            distance_scale = target_->info->apply_distance_scaling ? std::max(0.0001f, gp->perspective_scale) : 1.0f;
-            vertical_scale = target_->info->apply_vertical_scaling ? std::max(0.0001f, gp->vertical_scale) : 1.0f;
+            distance_scale =  std::max(0.0001f, gp->perspective_scale);
+            vertical_scale = std::max(0.0001f, gp->vertical_scale);
         }
     }
 

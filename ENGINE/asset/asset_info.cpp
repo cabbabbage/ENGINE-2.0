@@ -920,8 +920,6 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
         min_same_type_distance = data.value("min_same_type_distance", 0);
         min_distance_all = data.value("min_distance_all", 0);
         flipable = data.value("can_invert", false);
-        apply_distance_scaling = data.value("apply_distance_scaling", true);
-        apply_vertical_scaling = data.value("apply_vertical_scaling", true);
         info_json_["tillable"] = tillable;
         NeighborSearchRadius = std::clamp( data.value("neighbor_search_distance", NeighborSearchRadius), 20, 1000);
         info_json_["neighbor_search_distance"] = NeighborSearchRadius;
@@ -1139,21 +1137,7 @@ void AssetInfo::set_scale_filter(bool smooth) {
         info_json_["size_settings"]["scale_filter"] = smooth ? "linear" : "nearest";
 }
 
-void AssetInfo::set_apply_distance_scaling(bool v) {
-        apply_distance_scaling = v;
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        info_json_["apply_distance_scaling"] = v;
-}
 
-void AssetInfo::set_apply_vertical_scaling(bool v) {
-        apply_vertical_scaling = v;
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        info_json_["apply_vertical_scaling"] = v;
-}
 
 void AssetInfo::set_tags(const std::vector<std::string> &t) {
         tags = t;

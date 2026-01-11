@@ -1217,6 +1217,26 @@
           "child_timelines": [],
           "crop_frames": false,
           "flipped_source": false,
+          "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
+          ],
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
@@ -1541,23 +1561,45 @@
       "start": "default"
     },
     "Vibble_eyes": {
+      "animation_children": [],
       "animations": {
         "default": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "asset_directory": "SRC/assets/Vibble_eyes",
       "asset_name": "Vibble_eyes",
+      "asset_type": "object",
       "lighting_info": [],
       "start": "default"
     },

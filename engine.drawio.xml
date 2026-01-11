@@ -1992,6 +1992,48 @@
         <mxCell id="Z97nJ7mlNoWdLQ9hPTn0-345" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#2563eb;strokeColor=#1d4ed8;fontColor=#ffffff;rounded=1;fontSize=16;" value="&lt;div style=&quot;text-align:left;&quot;&gt;&lt;span style=&quot;font-size: 18px;&quot;&gt;&lt;b&gt;Asset Loader&lt;/b&gt;&lt;/span&gt;&lt;br&gt;&lt;span style=&quot;font-size:14px;&quot;&gt;pipe for managing the map gen room and trail gen and spawning.&lt;/span&gt;&lt;/div&gt;" vertex="1">
           <mxGeometry height="180" width="260" x="-2990" y="1399.5" as="geometry" />
         </mxCell>
+        <mxCell id="344" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#166534;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;AssetLibrary&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Central repository managing all AssetInfo instances, providing access to animation definitions, spawn rules, and asset metadata throughout the runtime lifecycle.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="2736" y="918" as="geometry" />
+        </mxCell>
+        <mxCell id="345" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#5b21b6;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;SceneRenderer&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Coordinates the complete rendering pipeline, managing asset drawing, lighting, compositing, and final frame presentation to the display.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="2325" y="2876" as="geometry" />
+        </mxCell>
+        <mxCell id="346" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#be185d;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;AnimationRuntime&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Manages animation state and progression for individual assets, handling pathfinding, child attachments, and frame transitions during runtime updates.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="2325" y="1990" as="geometry" />
+        </mxCell>
+        <mxCell id="350" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#1f3f72;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;CurrentRoomFinder&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Tracks the current room for the player asset and manages room transitions during movement.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="2325" y="2800" as="geometry" />
+        </mxCell>
+        <mxCell id="351" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#166534;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;AssetList&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Manages filtered lists of assets based on tags, proximity, and eligibility criteria for efficient querying and rendering.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="2325" y="2980" as="geometry" />
+        </mxCell>
+        <mxCell id="352" parent="1" style="whiteSpace=wrap;html=1;strokeWidth=2;labelBackgroundColor=none;fillColor=#5b21b6;strokeColor=#062d62;fontColor=#ffffff;rounded=1;fontSize=14;" value="&lt;div style=&#39;text-align:left;&#39;&gt;&lt;span style=&#39;font-size:18px;font-weight:bold;&#39;&gt;WarpedScreenGrid&lt;/span&gt;&lt;br/&gt;&lt;span style=&#39;font-size:14px;&#39;&gt;Handles camera projection, perspective warping, and screen-to-world coordinate transformations.&lt;/span&gt;&lt;/div&gt;" vertex="1">
+          <mxGeometry height="150" width="260" x="2325" y="3160" as="geometry" />
+        </mxCell>
+        <mxCell id="353" edge="1" parent="1" source="341" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;noEdgeStyle=1;orthogonal=1;" target="350" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2585" y="2676" />
+              <mxPoint x="2585" y="2800" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="354" edge="1" parent="1" source="341" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=0;exitDx=0;exitDy=0;noEdgeStyle=1;orthogonal=1;" target="351" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2585" y="2676" />
+              <mxPoint x="2585" y="2980" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="355" edge="1" parent="1" source="345" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;noEdgeStyle=1;orthogonal=1;" target="352" value="">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="2585" y="3026" />
+              <mxPoint x="2585" y="3160" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
       </root>
     </mxGraphModel>
   </diagram>

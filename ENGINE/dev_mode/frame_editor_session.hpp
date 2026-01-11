@@ -47,6 +47,7 @@ struct ChildPreviewContext {
 class FrameEditorSession {
 public:
     enum class Mode { Movement, StaticChildren, AsyncChildren, AttackGeometry, HitGeometry };
+    enum class EditPlane { XZ, XY };
     enum class AdjustmentAxis { X, Y, Z };
     enum class AdjustmentTarget { None, MovementPoint, ChildPoint, AttackStart, AttackControl, AttackEnd, HitboxCenter };
     struct AdjustmentSelection {
@@ -66,7 +67,6 @@ public:
             screen_pos = SDL_Point{0, 0};
         }
     };
-    enum class EditPlane { XY, XZ };
     static inline constexpr std::array<const char*, 3> kDamageTypeNames = {
         "projectile", "melee", "explosion"
 };
@@ -85,14 +85,15 @@ public:
 
     bool is_active() const { return active_; }
     Mode mode() const { return mode_; }
-    EditPlane edit_plane() const { return edit_plane_; }
+    EditPlane edit_plane() const {
+        return (mode_ == Mode::Movement) ? EditPlane::XZ : EditPlane::XY;
+    }
 
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
     void render(SDL_Renderer* renderer) const;
 
     void set_snap_resolution(int r);
-    void set_grid_overlay_enabled_transient(bool enabled);
     bool should_render_asset(const Asset* asset) const;
 
 FRAME_EDITOR_ACCESS:
@@ -106,27 +107,14 @@ FRAME_EDITOR_ACCESS:
     bool project_texture_bounds(const WarpedScreenGrid& cam,
                                 SDL_Point anchor_world,
                                 const TextureMetrics& metrics,
-                                EditPlane plane,
                                 SDL_FRect& out_bounds) const;
-    double fit_camera_height_for_xy(WarpedScreenGrid& cam,
-                                    SDL_Point anchor_world,
-                                    const TextureMetrics& metrics,
-                                    int screen_w,
-                                    int screen_h) const;
     double fit_camera_y_distance_for_xz(WarpedScreenGrid& cam,
                                         SDL_Point anchor_world,
                                         const TextureMetrics& metrics,
                                         int screen_w,
                                         int screen_h) const;
-    void apply_camera_defaults(EditPlane plane);
+    void apply_camera_defaults();
     void handle_xz_scroll(WarpedScreenGrid& cam, int wheel_y);
-    void handle_xy_scroll(WarpedScreenGrid& cam, int wheel_y) const;
-    static void render_plane_grid(SDL_Renderer* renderer,
-                                  const WarpedScreenGrid& cam,
-                                  SDL_Point anchor_world,
-                                  EditPlane plane,
-                                  int snap_resolution_r,
-                                  const TextureMetrics& metrics);
 
     struct ChildFrame {
         int child_index = -1;
@@ -175,15 +163,12 @@ FRAME_EDITOR_ACCESS:
     bool smooth_enabled_ = false;
     bool curve_enabled_ = false;
     int selected_child_index_ = 0;
-    EditPlane edit_plane_ = EditPlane::XZ;
-    bool grid_overlay_enabled_ = true;
     bool adjustment_mode_active_ = false;
     bool adjustment_dirty_ = false;
     AdjustmentSelection adjustment_selection_;
 
     bool prev_realism_enabled_ = true;
     bool prev_parallax_enabled_ = true;
-    bool prev_grid_overlay_enabled_ = false;
     bool prev_asset_hidden_ = false;
 
     int  snap_resolution_r_ = 0;
@@ -197,11 +182,9 @@ FRAME_EDITOR_ACCESS:
     mutable std::unique_ptr<DMButton> btn_children_;
     mutable std::unique_ptr<DMButton> btn_attack_geometry_;
     mutable std::unique_ptr<DMButton> btn_hit_geometry_;
-    mutable std::unique_ptr<DMButton> btn_plane_toggle_;
     mutable std::unique_ptr<DMButton> btn_prev_;
     mutable std::unique_ptr<DMButton> btn_next_;
     mutable std::unique_ptr<DMDropdown> dd_animation_select_;
-    mutable std::unique_ptr<class DMCheckbox> cb_grid_overlay_;
     mutable std::unique_ptr<DMNumericStepper> stepper_grid_resolution_;
 
     mutable std::unique_ptr<class DMButton> btn_apply_all_movement_;
@@ -506,11 +489,6 @@ FRAME_EDITOR_ACCESS:
     void update_attack_drag(SDL_Point mouse);
     void end_attack_drag(bool commit);
     float attachment_scale() const;
-    bool is_xy_plane() const;
-    const char* plane_axis_label() const;
-    const char* plane_button_label() const;
-    void toggle_edit_plane();
-    void update_plane_labels() const;
     float movement_plane_delta(const MovementFrame& frame) const;
     float& movement_plane_delta(MovementFrame& frame);
     float child_plane_delta(const ChildFrame& child) const;

@@ -1370,6 +1370,7 @@
               "projectile": []
             }
           ],
+          "child_timelines": [],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
@@ -1448,34 +1449,6 @@
               0,
               0,
               false
-            ],
-            [
-              -82,
-              189
-            ],
-            [
-              82,
-              -189
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
             ]
           ],
           "movement_total": {

@@ -193,9 +193,7 @@ void apply_frame_data(std::vector<Asset::AnimationChildAttachment>& slots,
 
         const int dx = parent_state.flipped
                            ? -static_cast<int>(std::lround(scaled_dx)) : static_cast<int>(std::lround(scaled_dx));
-        const int vertical_offset = (child_data.dy != 0)
-                                        ? static_cast<int>(std::lround(scaled_dy))
-                                        : static_cast<int>(std::lround(scaled_dz));
+        const int vertical_offset = static_cast<int>(std::lround(scaled_dy));
         slot.world_pos.x = parent_state.base_position.x + dx;
         slot.world_pos.y = parent_state.base_position.y + vertical_offset;
         slot.world_z = parent_state.world_z + scaled_dz;

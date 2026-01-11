@@ -1,11 +1,38 @@
 ﻿#include "Vibble_controller.hpp"
 
 #include "animation_update/animation_update.hpp"
+#include "animation_update/attack_validation.hpp"
 #include "asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
 #include <algorithm>
 #include <cmath>
+
+namespace {
+
+float sanitize_scale(float value) {
+    return (std::isfinite(value) && value > 0.0f) ? value : 1.0f;
+}
+
+animation_update::GeometryContext geometry_for(const Asset& asset) {
+    animation_update::GeometryContext context{};
+    context.anchor = animation_update::detail::bottom_middle_for(asset, asset.pos);
+    context.scale = sanitize_scale(asset.smoothed_scale());
+    context.flipped = asset.flipped;
+    context.plane = animation_update::CombatPlane::XY;
+    return context;
+}
+
+animation_update::CombatantSnapshot snapshot_from_asset(const Asset& asset) {
+    animation_update::CombatantSnapshot snapshot;
+    snapshot.asset_id = asset.spawn_id.empty() ? (asset.info ? asset.info->name : std::string{}) : asset.spawn_id;
+    snapshot.asset_name = asset.info ? asset.info->name : std::string{};
+    snapshot.frame = asset.current_animation_frame();
+    snapshot.transform = geometry_for(asset);
+    return snapshot;
+}
+
+}
 
 VibbleController::VibbleController(Asset* player)
     : player_(player) {}
@@ -25,6 +52,8 @@ void VibbleController::movement(const Input& input) {
     const bool right = input.isScancodeDown(SDL_SCANCODE_D) || input.isScancodeDown(SDL_SCANCODE_RIGHT);
     const bool sprint = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     const bool dash = input.isScancodeDown(SDL_SCANCODE_SPACE);
+    const bool melee = input.isScancodeDown(SDL_SCANCODE_E);
+
 
     const int raw_x = (right ? 1 : 0) - (left ? 1 : 0);
     const int raw_y = (down  ? 1 : 0) - (up    ? 1 : 0);
@@ -41,6 +70,12 @@ void VibbleController::movement(const Input& input) {
     if(dash && canDash == true) {
         Dash();
 
+    }
+    if(melee && canMelee == true) {
+        player_->anim_->run_async("melee");
+        canMelee = false;
+        isMeleeing = true;
+        meleeCooldownEndTime = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(meleeCooldown));
     }
 
     float speedMultiplier = kWalkSpeed;
@@ -114,6 +149,10 @@ void VibbleController::update(const Input& input) {
         canDash = true;
     }
 
+    if(!canMelee && !isMeleeing && now >= meleeCooldownEndTime) {
+        canMelee = true;
+    }
+
     dx_ = dy_ = 0;
     movement(input);
 }
@@ -183,5 +222,61 @@ void VibbleController::Dash() {
 }
 
 void VibbleController::process_pending_attacks(Asset& self) {
-    (void)self.process_pending_attacks();
+    using namespace animation_update;
+
+    if (!self.info || !self.current_animation_frame() || self.dead || !self.active) {
+        return;
+    }
+
+    Assets* assets = self.get_assets();
+    if (!assets) {
+        return;
+    }
+
+    // Create attacker snapshot
+    CombatantSnapshot attacker_snapshot = snapshot_from_asset(self);
+
+    // Create child snapshots
+    std::vector<ChildAttachmentSnapshot> child_snapshots;
+    for (const auto& child : self.animation_children()) {
+        if (child.current_frame && child.visible) {
+            ChildAttachmentSnapshot child_snap;
+            child_snap.asset_id = child.asset_name;
+            child_snap.asset_name = child.asset_name;
+            child_snap.frame = child.current_frame;
+
+            // Create geometry context for child
+            GeometryContext child_context{};
+            child_context.anchor = {child.world_pos.x, child.world_pos.y};
+            child_context.scale = 1.0f; // Children use world scale
+            child_context.flipped = self.flipped;
+            child_context.plane = CombatPlane::XY;
+
+            child_snap.transform = child_context;
+            child_snapshots.push_back(child_snap);
+        }
+    }
+
+    // Get active assets as potential targets
+    const auto& active_assets = assets->getActive();
+
+    // Check attacks against all other assets
+    for (Asset* target : active_assets) {
+        if (!target || target == &self || !target->info || !target->current_animation_frame() ||
+            target->dead || !target->active) {
+            continue;
+        }
+
+        CombatantSnapshot target_snapshot = snapshot_from_asset(*target);
+
+        auto attack_opt = AttackValidation::compute_attack_if_hit(
+            attacker_snapshot, target_snapshot, child_snapshots);
+
+        if (attack_opt.has_value()) {
+            target->send_attack(*attack_opt);
+        }
+    }
+
+    // Process any attacks that were sent to self
+    self.process_pending_attacks();
 }

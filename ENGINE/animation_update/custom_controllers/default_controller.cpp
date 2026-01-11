@@ -29,6 +29,14 @@ void DefaultController::update(const Input& ) {
 }
 
 void DefaultController::process_pending_attacks(Asset& ) {
-    // Default controller does not respond to attacks.
+    if (!self_ || !self_->info || !self_->anim_) {
+        return;
+    }
+    if (self_->current_animation == "damaged" && self_->info->animations.count("destroyed")) {
+        self_->anim_->set_animation("destroy");
+    }
+    if (self_->info->animations.count("damaged")) {
+        self_->anim_->set_animation("damaged");
+    }
 }
 

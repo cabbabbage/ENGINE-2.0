@@ -39,10 +39,7 @@ class AnimationDocument;
 class PreviewProvider;
 }
 
-struct ChildPreviewContext {
-    SDL_FPoint anchor_world{};
-    float document_scale = 1.0f;
-};
+
 
 class FrameEditorSession {
 public:
@@ -118,15 +115,6 @@ FRAME_EDITOR_ACCESS:
         animation_update::FrameHitGeometry    hit;
         animation_update::FrameAttackGeometry attack;
 };
-    struct ChildPreviewSlot {
-        std::string asset_name;
-        std::shared_ptr<AssetInfo> info;
-        const Animation* animation = nullptr;
-        const AnimationFrame* frame = nullptr;
-        SDL_Texture* texture = nullptr;
-        int width = 0;
-        int height = 0;
-};
 
     Assets* assets_ = nullptr;
     Asset* target_ = nullptr;
@@ -172,9 +160,13 @@ FRAME_EDITOR_ACCESS:
     mutable std::unique_ptr<DMNumericStepper> stepper_grid_resolution_;
 
     mutable std::unique_ptr<class DMButton> btn_apply_all_movement_;
+    mutable std::unique_ptr<class DMButton> btn_apply_all_animations_movement_;
     mutable std::unique_ptr<class DMButton> btn_apply_all_children_;
+    mutable std::unique_ptr<class DMButton> btn_apply_all_animations_children_;
     mutable std::unique_ptr<class DMButton> btn_apply_all_hit_;
+    mutable std::unique_ptr<class DMButton> btn_apply_all_animations_hit_;
     mutable std::unique_ptr<class DMButton> btn_apply_all_attack_;
+    mutable std::unique_ptr<class DMButton> btn_apply_all_animations_attack_;
     mutable std::unique_ptr<class DMCheckbox> cb_smooth_;
     mutable std::unique_ptr<class DMCheckbox> cb_curve_;
     mutable std::unique_ptr<class DMCheckbox> cb_show_anim_;
@@ -186,6 +178,7 @@ FRAME_EDITOR_ACCESS:
     mutable std::unique_ptr<class DMButton> btn_child_remove_;
     mutable std::unique_ptr<class DMTextBox> tb_child_dx_;
     mutable std::unique_ptr<class DMTextBox> tb_child_dy_;
+    mutable std::unique_ptr<class DMTextBox> tb_child_dz_;
     mutable std::unique_ptr<class DMTextBox> tb_child_deg_;
     mutable std::unique_ptr<class DMCheckbox> cb_child_visible_;
 
@@ -220,6 +213,7 @@ FRAME_EDITOR_ACCESS:
     mutable bool last_show_child_value_ = true;
     mutable std::string last_child_dx_text_{};
     mutable std::string last_child_dy_text_{};
+    mutable std::string last_child_dz_text_{};
     mutable std::string last_child_deg_text_{};
     mutable std::string last_child_name_text_{};
     mutable int last_child_mode_index_ = 0;
@@ -295,7 +289,6 @@ FRAME_EDITOR_ACCESS:
     float locked_tilt_deg_ = 0.0f;
     std::vector<std::string> child_assets_;
     mutable std::vector<AnimationChildMode> child_modes_;
-    std::vector<ChildPreviewSlot> child_preview_slots_;
     std::string document_payload_cache_;
     std::string document_children_signature_;
     std::unordered_map<Asset*, bool> child_hidden_cache_;
@@ -334,6 +327,7 @@ FRAME_EDITOR_ACCESS:
     void rebuild_layout() const;
     void render_toolbox(SDL_Renderer* renderer) const;
     void apply_current_mode_to_all_frames();
+    void apply_current_mode_to_all_animations();
     void apply_frame_move_from_base(int index, SDL_FPoint desired_rel, const std::vector<SDL_FPoint>& base_rel);
     void redistribute_frames_from_middle_drag(int adjusted_index);
 
@@ -482,8 +476,8 @@ FRAME_EDITOR_ACCESS:
     void render_child_guides(SDL_Renderer* renderer, const WarpedScreenGrid& cam);
     void render_hitbox_guides(SDL_Renderer* renderer, const WarpedScreenGrid& cam);
     void render_attack_guides(SDL_Renderer* renderer, const WarpedScreenGrid& cam);
-    ChildPreviewContext build_child_preview_context() const;
-    SDL_FRect child_preview_rect(SDL_FPoint child_world, int texture_w, int texture_h, const ChildPreviewContext& ctx, float scale_override) const;
+
+
     float mirrored_child_rotation(bool parent_is_flipped, float degree) const;
     void apply_child_timelines_from_payload(const nlohmann::json& payload);
     nlohmann::json build_child_timelines_payload(const nlohmann::json& existing_payload) const;

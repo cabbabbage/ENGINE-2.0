@@ -1649,116 +1649,25 @@
               ]
             },
             {
-              "vectors": [
-                {
-                  "control_x": -508.1666564941406,
-                  "control_y": 0.0,
-                  "control_z": 412.74835205078125,
-                  "damage": 0,
-                  "end_x": 0.0,
-                  "end_y": 0.0,
-                  "end_z": 0.0,
-                  "start_x": -448.3371276855469,
-                  "start_y": 0.0,
-                  "start_z": 1441.63525390625
-                }
-              ]
+              "vectors": []
             },
             {
-              "vectors": [
-                {
-                  "control_x": -508.1666564941406,
-                  "control_y": 0.0,
-                  "control_z": 412.74835205078125,
-                  "damage": 0,
-                  "end_x": 0.0,
-                  "end_y": 0.0,
-                  "end_z": 0.0,
-                  "start_x": -448.3371276855469,
-                  "start_y": 0.0,
-                  "start_z": 1441.63525390625
-                }
-              ]
+              "vectors": []
             },
             {
-              "vectors": [
-                {
-                  "control_x": -508.1666564941406,
-                  "control_y": 0.0,
-                  "control_z": 412.74835205078125,
-                  "damage": 0,
-                  "end_x": 0.0,
-                  "end_y": 0.0,
-                  "end_z": 0.0,
-                  "start_x": -448.3371276855469,
-                  "start_y": 0.0,
-                  "start_z": 1441.63525390625
-                }
-              ]
+              "vectors": []
             },
             {
-              "vectors": [
-                {
-                  "control_x": -508.1666564941406,
-                  "control_y": 0.0,
-                  "control_z": 412.74835205078125,
-                  "damage": 0,
-                  "end_x": 0.0,
-                  "end_y": 0.0,
-                  "end_z": 0.0,
-                  "start_x": -448.3371276855469,
-                  "start_y": 0.0,
-                  "start_z": 1441.63525390625
-                }
-              ]
+              "vectors": []
             },
             {
-              "vectors": [
-                {
-                  "control_x": -508.1666564941406,
-                  "control_y": 0.0,
-                  "control_z": 412.74835205078125,
-                  "damage": 0,
-                  "end_x": 0.0,
-                  "end_y": 0.0,
-                  "end_z": 0.0,
-                  "start_x": -448.3371276855469,
-                  "start_y": 0.0,
-                  "start_z": 1441.63525390625
-                }
-              ]
+              "vectors": []
             },
             {
-              "vectors": [
-                {
-                  "control_x": -508.1666564941406,
-                  "control_y": 0.0,
-                  "control_z": 412.74835205078125,
-                  "damage": 0,
-                  "end_x": 0.0,
-                  "end_y": 0.0,
-                  "end_z": 0.0,
-                  "start_x": -448.3371276855469,
-                  "start_y": 0.0,
-                  "start_z": 1441.63525390625
-                }
-              ]
+              "vectors": []
             },
             {
-              "vectors": [
-                {
-                  "control_x": -508.1666564941406,
-                  "control_y": 0.0,
-                  "control_z": 412.74835205078125,
-                  "damage": 0,
-                  "end_x": 0.0,
-                  "end_y": 0.0,
-                  "end_z": 0.0,
-                  "start_x": -448.3371276855469,
-                  "start_y": 0.0,
-                  "start_z": 1441.63525390625
-                }
-              ]
+              "vectors": []
             }
           ],
           "child_timelines": [
@@ -1772,7 +1681,7 @@
                   "degree": 0.0,
                   "dx": -8,
                   "dy": 136,
-                  "dz": -56,
+                  "dz": -110,
                   "visible": true
                 },
                 {
@@ -1852,88 +1761,25 @@
               ]
             },
             {
-              "boxes": [
-                {
-                  "center_x": -14.073272705078125,
-                  "center_y": 0.0,
-                  "center_z": 1230.8443603515625,
-                  "half_height": 702.7274780273438,
-                  "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
-                }
-              ]
+              "boxes": []
             },
             {
-              "boxes": [
-                {
-                  "center_x": -14.073272705078125,
-                  "center_y": 0.0,
-                  "center_z": 1230.8443603515625,
-                  "half_height": 702.7274780273438,
-                  "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
-                }
-              ]
+              "boxes": []
             },
             {
-              "boxes": [
-                {
-                  "center_x": -14.073272705078125,
-                  "center_y": 0.0,
-                  "center_z": 1230.8443603515625,
-                  "half_height": 702.7274780273438,
-                  "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
-                }
-              ]
+              "boxes": []
             },
             {
-              "boxes": [
-                {
-                  "center_x": -14.073272705078125,
-                  "center_y": 0.0,
-                  "center_z": 1230.8443603515625,
-                  "half_height": 702.7274780273438,
-                  "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
-                }
-              ]
+              "boxes": []
             },
             {
-              "boxes": [
-                {
-                  "center_x": -14.073272705078125,
-                  "center_y": 0.0,
-                  "center_z": 1230.8443603515625,
-                  "half_height": 702.7274780273438,
-                  "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
-                }
-              ]
+              "boxes": []
             },
             {
-              "boxes": [
-                {
-                  "center_x": -14.073272705078125,
-                  "center_y": 0.0,
-                  "center_z": 1230.8443603515625,
-                  "half_height": 702.7274780273438,
-                  "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
-                }
-              ]
+              "boxes": []
             },
             {
-              "boxes": [
-                {
-                  "center_x": -14.073272705078125,
-                  "center_y": 0.0,
-                  "center_z": 1230.8443603515625,
-                  "half_height": 702.7274780273438,
-                  "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
-                }
-              ]
+              "boxes": []
             }
           ],
           "inherit_source_movement": false,

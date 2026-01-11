@@ -1223,16 +1223,11 @@ void DevControls::update(const Input& input) {
             }
             return std::clamp(value, 0.0f, static_cast<float>(screen_h_));
 };
-        float fg_y = clamp_line(settings.foreground_plane_screen_y);
-        float bg_y = clamp_line(settings.background_plane_screen_y);
+
         int mouse_y = input.getY();
         const int hover_threshold = 5;
-        bool hovering_foreground = std::abs(mouse_y - fg_y) < hover_threshold;
-        bool hovering_background = std::abs(mouse_y - bg_y) < hover_threshold;
-        bool is_top_zone = mouse_y < static_cast<float>(screen_h_) * 0.1f;
-        bool is_bottom_zone = mouse_y > static_cast<float>(screen_h_) * 0.9f;
-        hover_depthcue_foreground_ = hovering_foreground || (is_bottom_zone && !hovering_background);
-        hover_depthcue_background_ = hovering_background || (is_top_zone && !hovering_foreground);
+
+
     } else {
         hover_depthcue_foreground_ = false;
         hover_depthcue_background_ = false;
@@ -1537,50 +1532,12 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         return;
     }
 
-    if (depthcue_drag_state_ == DepthCueDragState::None) {
-        if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT &&
-            camera_panel_ && camera_panel_->is_blur_section_visible() && assets_ && enabled_) {
-            auto clamp_line = [&](float value) -> float {
-                if (!std::isfinite(value)) {
-                    return static_cast<float>(screen_h_) * 0.5f;
-                }
-                return std::clamp(value, 0.0f, static_cast<float>(screen_h_));
-};
-            if (hover_depthcue_foreground_) {
-                depthcue_drag_state_ = DepthCueDragState::Foreground;
-                const WarpedScreenGrid::RealismSettings& settings = assets_->getView().realism_settings();
-                depthcue_drag_start_y_ = clamp_line(settings.foreground_plane_screen_y);
-                depthcue_drag_mouse_start_ = event.button.y;
-                if (input_) {
-                    input_->consumeEvent(event);
-                }
-                return;
-            } else if (hover_depthcue_background_) {
-                depthcue_drag_state_ = DepthCueDragState::Background;
-                const WarpedScreenGrid::RealismSettings& settings = assets_->getView().realism_settings();
-                depthcue_drag_start_y_ = clamp_line(settings.background_plane_screen_y);
-                depthcue_drag_mouse_start_ = event.button.y;
-                if (input_) {
-                    input_->consumeEvent(event);
-                }
-                return;
-            }
-        }
-    } else {
+ 
+    else {
         if (event.type == SDL_MOUSEMOTION) {
             int delta_y = event.motion.y - depthcue_drag_mouse_start_;
             float new_y = depthcue_drag_start_y_ + delta_y;
-            if (assets_) {
-                WarpedScreenGrid& cam = assets_->getView();
-                WarpedScreenGrid::RealismSettings new_settings = cam.realism_settings();
-                if (depthcue_drag_state_ == DepthCueDragState::Foreground) {
-                    new_settings.foreground_plane_screen_y = new_y;
-                } else if (depthcue_drag_state_ == DepthCueDragState::Background) {
-                    new_settings.background_plane_screen_y = new_y;
-                }
-                cam.set_realism_settings(new_settings);
-                assets_->apply_camera_runtime_settings();
-            }
+
         } else if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT) {
             depthcue_drag_state_ = DepthCueDragState::None;
         }
@@ -1942,8 +1899,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             }
             return std::clamp(value, 0.0f, static_cast<float>(screen_h_));
 };
-        const float bg_line = clamp_line(settings.background_plane_screen_y);
-        const float fg_line = clamp_line(settings.foreground_plane_screen_y);
+
 
         SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
         SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
@@ -1984,24 +1940,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             return std::string(buffer);
 };
 
-        draw_line(bg_line, bg_color, hover_depthcue_background_ || (depthcue_drag_state_ == DepthCueDragState::Background));
-        {
-            const int bg_opacity = settings.background_texture_max_opacity;
-            draw_label(bg_line, bg_color, make_depthcue_label("BG", bg_opacity));
-        }
-
-        draw_line(center_y, center_color);
-        draw_label(center_y, center_color, "Base Layer");
-
-        draw_line(fg_line, fg_color, hover_depthcue_foreground_ || (depthcue_drag_state_ == DepthCueDragState::Foreground));
-        {
-            const int fg_opacity = settings.foreground_texture_max_opacity;
-            draw_label(fg_line, fg_color, make_depthcue_label("FG", fg_opacity));
-        }
-
-        SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
-        SDL_SetRenderDrawBlendMode(renderer, prev_mode);
-    }
+}
 
     if (renderer && camera_panel_ && camera_panel_->is_visible() && assets_) {
         const WarpedScreenGrid& cam = assets_->getView();

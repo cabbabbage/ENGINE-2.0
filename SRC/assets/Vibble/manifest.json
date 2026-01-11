@@ -1,6 +1,5 @@
 {
     "animation_children": [
-        "Vibble_attack_1",
         "Vibble_eyes"
     ],
     "animations": {
@@ -8,26 +7,6 @@
             "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
-            "frames": [
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                }
-            ],
             "inherit_source_movement": false,
             "locked": false,
             "loop": true,
@@ -56,51 +35,21 @@
             "attack_geometry": [
                 {
                     "explosion": [],
-                    "melee": [
-                        {
-                            "control_x": 1101.5701904296875,
-                            "control_y": 0.0,
-                            "control_z": 1748.0172119140625,
-                            "damage": 0,
-                            "end_x": 309.3656005859375,
-                            "end_y": 0.0,
-                            "end_z": 1065.64208984375,
-                            "start_x": 1220.90869140625,
-                            "start_y": 0.0,
-                            "start_z": 2771.51953125,
-                            "type": "melee"
-                        }
-                    ],
+                    "melee": [],
                     "projectile": []
                 }
             ],
             "child_timelines": [
                 {
                     "animation": "",
-                    "asset": "Vibble_attack_1",
+                    "asset": "Vibble_eyes",
                     "child": 0,
                     "child_index": 0,
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "render_in_front": true,
-                            "visible": false
-                        }
-                    ],
-                    "mode": "static"
-                },
-                {
-                    "animation": "",
-                    "asset": "Vibble_eyes",
-                    "child": 1,
-                    "child_index": 1,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "dx": -3,
-                            "dy": 0,
+                            "dx": -192,
+                            "dy": 96,
                             "render_in_front": true,
                             "visible": true
                         }
@@ -109,10 +58,9 @@
                 }
             ],
             "children": [
-                "Vibble_attack_1",
                 "Vibble_eyes"
             ],
-            "crop_frames": true,
+            "crop_frames": false,
             "flipped_source": false,
             "frames": [
                 {
@@ -152,70 +100,12 @@
             "speed_multiplier": 1.0
         },
         "forward": {
-            "attack_geometry": [
-                {
-                    "explosion": [],
-                    "melee": [],
-                    "projectile": []
-                },
-                {
-                    "explosion": [],
-                    "melee": [],
-                    "projectile": []
-                },
-                {
-                    "explosion": [],
-                    "melee": [],
-                    "projectile": []
-                },
-                {
-                    "explosion": [],
-                    "melee": [],
-                    "projectile": []
-                },
-                {
-                    "explosion": [],
-                    "melee": [],
-                    "projectile": []
-                },
-                {
-                    "explosion": [],
-                    "melee": [],
-                    "projectile": []
-                },
-                {
-                    "explosion": [],
-                    "melee": [],
-                    "projectile": []
-                },
-                {
-                    "explosion": [],
-                    "melee": [],
-                    "projectile": []
-                }
-            ],
             "child_timelines": [
                 {
                     "animation": "",
-                    "asset": "Vibble_attack_1",
+                    "asset": "Vibble_eyes",
                     "child": 0,
                     "child_index": 0,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "dx": -35,
-                            "dy": 0,
-                            "render_in_front": true,
-                            "visible": true
-                        }
-                    ],
-                    "mode": "static"
-                },
-                {
-                    "animation": "",
-                    "asset": "Vibble_eyes",
-                    "child": 1,
-                    "child_index": 1,
                     "frames": [
                         {
                             "degree": 0.0,
@@ -229,10 +119,9 @@
                 }
             ],
             "children": [
-                "Vibble_attack_1",
                 "Vibble_eyes"
             ],
-            "crop_frames": true,
+            "crop_frames": false,
             "flipped_source": false,
             "frames": [
                 {
@@ -260,48 +149,6 @@
                     "needs_rebuild": false
                 }
             ],
-            "hit_geometry": [
-                {
-                    "explosion": null,
-                    "melee": null,
-                    "projectile": null
-                },
-                {
-                    "explosion": null,
-                    "melee": null,
-                    "projectile": null
-                },
-                {
-                    "explosion": null,
-                    "melee": null,
-                    "projectile": null
-                },
-                {
-                    "explosion": null,
-                    "melee": null,
-                    "projectile": null
-                },
-                {
-                    "explosion": null,
-                    "melee": null,
-                    "projectile": null
-                },
-                {
-                    "explosion": null,
-                    "melee": null,
-                    "projectile": null
-                },
-                {
-                    "explosion": null,
-                    "melee": null,
-                    "projectile": null
-                },
-                {
-                    "explosion": null,
-                    "melee": null,
-                    "projectile": null
-                }
-            ],
             "inherit_source_movement": false,
             "locked": false,
             "loop": true,
@@ -309,18 +156,9 @@
                 [
                     0,
                     0,
-                    false,
                     [
                         [
                             0,
-                            0,
-                            0,
-                            0.0,
-                            true,
-                            true
-                        ],
-                        [
-                            1,
                             0,
                             0,
                             0.0,
@@ -349,25 +187,9 @@
             "child_timelines": [
                 {
                     "animation": "",
-                    "asset": "Vibble_attack_1",
+                    "asset": "Vibble_eyes",
                     "child": 0,
                     "child_index": 0,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "render_in_front": true,
-                            "visible": false
-                        }
-                    ],
-                    "mode": "static"
-                },
-                {
-                    "animation": "",
-                    "asset": "Vibble_eyes",
-                    "child": 1,
-                    "child_index": 1,
                     "frames": [
                         {
                             "degree": 0.0,
@@ -381,10 +203,9 @@
                 }
             ],
             "children": [
-                "Vibble_attack_1",
                 "Vibble_eyes"
             ],
-            "crop_frames": true,
+            "crop_frames": false,
             "flipped_source": false,
             "frames": [
                 {
@@ -427,14 +248,6 @@
                             0.0,
                             true,
                             true
-                        ],
-                        [
-                            1,
-                            0,
-                            0,
-                            0.0,
-                            true,
-                            true
                         ]
                     ]
                 ]
@@ -455,8 +268,28 @@
             "speed_multiplier": 1.0
         }
     },
+    "anti_tags": [],
+    "apply_distance_scaling": true,
+    "apply_vertical_scaling": true,
     "asset_directory": "SRC/assets/Vibble",
     "asset_name": "Vibble",
     "asset_type": "player",
-    "start": "default"
+    "async_children": [],
+    "can_invert": false,
+    "lighting_info": [],
+    "neighbor_search_distance": 500,
+    "shading_opacity_multiplier": 1.0,
+    "shading_parallax_amount": 0.0,
+    "shading_screen_brightness_multiplier": 1.0,
+    "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+    },
+    "spawn_groups": [],
+    "start": "default",
+    "tags": [],
+    "tillable": false
 }

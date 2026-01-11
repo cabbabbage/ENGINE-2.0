@@ -53,6 +53,7 @@ namespace {
     constexpr int   kChildVisibilityCheckboxMinWidth = 120;
     constexpr int   kShowChildCheckboxMinWidth = 140;
     constexpr int   kChildDropdownMinWidth = 200;
+    constexpr int   kPanelDragHandleHeight = 18;
     constexpr float kDegToRad = static_cast<float>(M_PI) / 180.0f;
     constexpr float kRadToDeg = 180.0f / static_cast<float>(M_PI);
     constexpr float kHitboxRotateHandleRadius = 12.0f;
@@ -547,8 +548,14 @@ void FrameEditorSession::begin(Assets* assets,
         DirectoryPanelMetrics dir_metrics = build_directory_panel_metrics();
         const int dir_w = dir_metrics.width;
         const int dir_h = dir_metrics.height;
-        const int nav_h = 90;
         const int nav_w = 560;
+        const int nav_vertical_padding = DMSpacing::small_gap() * 2;
+        const int nav_drag_handle_height = kPanelDragHandleHeight;
+        const int nav_h = nav_header_height_px(dd_animation_select_ != nullptr) +
+                          nav_vertical_padding +
+                          kNavPreviewHeight +
+                          kNavSliderGap +
+                          nav_drag_handle_height;
 
         int tool_w = 0;
         int tool_h = 0;
@@ -1005,6 +1012,19 @@ void FrameEditorSession::update(const Input& input) {
         rebuild_layout();
         const SDL_Point mouse{input.getX(), input.getY()};
         hover_toolbox_ = toolbox_rect_.w > 0 && toolbox_rect_.h > 0 && SDL_PointInRect(&mouse, &toolbox_rect_);
+        hover_toolbox_drag_handle_ = false;
+        if (toolbox_rect_.w > 0 && toolbox_rect_.h > 0) {
+            bool over_widget = false;
+            for (const auto& r : toolbox_widget_rects_) {
+                if (r.w > 0 && r.h > 0 && SDL_PointInRect(&mouse, &r)) {
+                    over_widget = true;
+                    break;
+                }
+            }
+            const bool over_handle = toolbox_drag_rect_.w > 0 && SDL_PointInRect(&mouse, &toolbox_drag_rect_);
+            hover_toolbox_drag_handle_ = over_handle || (SDL_PointInRect(&mouse, &toolbox_rect_) && !over_widget);
+        }
+        hover_nav_drag_handle_ = nav_drag_rect_.w > 0 && nav_drag_rect_.h > 0 && SDL_PointInRect(&mouse, &nav_drag_rect_);
         const bool block_camera_controls = hover_toolbox_ || dragging_toolbox_scrollbar_;
         int scroll_delta = 0;
         if (pending_scroll_delta_ != 0) {
@@ -1227,7 +1247,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         toolbox_scroll_offset_ = std::clamp(static_cast<int>(std::round(ratio * static_cast<float>(max_scroll))), 0, max_scroll);
 };
 
-    if (dragging_toolbox_ || dragging_scrollbar_thumb_ || dragging_toolbox_scrollbar_) {
+    if (dragging_toolbox_ || dragging_scrollbar_thumb_ || dragging_toolbox_scrollbar_ || dragging_nav_) {
         if (e.type == SDL_MOUSEMOTION) {
             bool moved = false;
             if (dragging_toolbox_) {
@@ -1243,6 +1263,13 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             } else if (dragging_toolbox_scrollbar_) {
                 update_toolbox_scrollbar_from_mouse(e.motion.y);
                 moved = true;
+            } else if (dragging_nav_) {
+                nav_pos_.x = e.motion.x - drag_offset_nav_.x;
+                nav_pos_.y = e.motion.y - drag_offset_nav_.y;
+                const int nav_w = nav_rect_.w;
+                const int nav_h = nav_rect_.h;
+                clamp_panel_pos(nav_pos_.x, nav_pos_.y, nav_w, nav_h);
+                moved = true;
             }
             if (moved) {
                 rebuild_layout();
@@ -1252,6 +1279,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             dragging_toolbox_ = false;
             dragging_scrollbar_thumb_ = false;
             dragging_toolbox_scrollbar_ = false;
+            dragging_nav_ = false;
             return true;
         }
     }
@@ -1299,12 +1327,19 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         }
         WarpedScreenGrid& cam = assets_->getView();
         manual_pan_active_ = true;
-        manual_pan_last_center_ = cam.get_screen_center();
+        const SDL_Point focus_start = cam.has_focus_override()
+            ? cam.get_focus_override_point()
+            : cam.get_screen_center();
+        manual_pan_last_center_ = focus_start;
         manual_pan_has_last_center_ = true;
         right_pan_active_ = true;
         right_pan_start_mouse_ = p;
         right_pan_start_center_ = cam.get_screen_center();
-        right_pan_last_center_ = right_pan_start_center_;
+        right_pan_start_world_ = cam.screen_to_map(p);
+        right_pan_last_world_ = right_pan_start_world_;
+        right_pan_start_focus_ = focus_start;
+        right_pan_start_distance_ = cam.camera_y_distance();
+        right_pan_last_center_ = focus_start;
         right_pan_has_last_center_ = true;
         return true;
     }
@@ -1320,30 +1355,29 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             return true;
         }
         SDL_Point p{ e.motion.x, e.motion.y };
-        if (SDL_PointInRect(&p, &toolbox_rect_)) {
-            right_pan_active_ = false;
-            right_pan_has_last_center_ = false;
-            return true;
+        WarpedScreenGrid& cam = assets_->getView();
+        SDL_FPoint world_now = cam.screen_to_map(p);
+        SDL_FPoint delta_world{
+            world_now.x - right_pan_last_world_.x,
+            world_now.y - right_pan_last_world_.y
+        };
+
+        SDL_Point new_focus{
+            static_cast<int>(std::lround(right_pan_last_center_.x - delta_world.x)),
+            static_cast<int>(std::lround(right_pan_last_center_.y - delta_world.y))
+        };
+        const bool focus_changed = (!right_pan_has_last_center_) ||
+                                   new_focus.x != right_pan_last_center_.x ||
+                                   new_focus.y != right_pan_last_center_.y;
+        if (focus_changed) {
+            cam.set_focus_override(new_focus);
+            cam.set_screen_center(new_focus);
+            manual_pan_last_center_ = new_focus;
+            manual_pan_has_last_center_ = true;
+            right_pan_last_center_ = new_focus;
+            right_pan_has_last_center_ = true;
         }
-        const int dx = p.x - right_pan_start_mouse_.x;
-        const int dy = p.y - right_pan_start_mouse_.y;
-        if (dx != 0 || dy != 0) {
-            WarpedScreenGrid& cam = assets_->getView();
-            SDL_Point new_center{
-                right_pan_start_center_.x - dx,
-                right_pan_start_center_.y - dy
-            };
-            if (!right_pan_has_last_center_ ||
-                new_center.x != right_pan_last_center_.x ||
-                new_center.y != right_pan_last_center_.y) {
-                cam.set_focus_override(new_center);
-                cam.set_screen_center(new_center);
-                manual_pan_last_center_ = new_center;
-                manual_pan_has_last_center_ = true;
-                right_pan_last_center_ = new_center;
-                right_pan_has_last_center_ = true;
-            }
-        }
+        right_pan_last_world_ = cam.screen_to_map(p);
         return true;
     }
 
@@ -1389,6 +1423,12 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 drag_offset_toolbox_ = SDL_Point{ p.x - toolbox_rect_.x, p.y - toolbox_rect_.y };
                 return true;
             }
+        }
+
+        if (nav_drag_rect_.w > 0 && SDL_PointInRect(&p, &nav_drag_rect_)) {
+            dragging_nav_ = true;
+            drag_offset_nav_ = SDL_Point{ p.x - nav_rect_.x, p.y - nav_rect_.y };
+            return true;
         }
 
         if (SDL_PointInRect(&p, &nav_rect_)) {
@@ -1939,7 +1979,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
     if (handle_button(btn_next_, [this]() { this->select_frame(this->selected_index_ + 1); })) return true;
 
     if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-        if (dragging_dir_ || dragging_scrollbar_thumb_) return true;
+        if (dragging_dir_ || dragging_scrollbar_thumb_ || dragging_nav_) return true;
         SDL_Point p{e.button.x, e.button.y};
         for (size_t i = 0; i < thumb_rects_.size() && i < thumb_indices_.size(); ++i) {
             if (SDL_PointInRect(&p, &thumb_rects_[i])) {
@@ -2254,6 +2294,19 @@ void FrameEditorSession::render_navigation_panel(SDL_Renderer* renderer) const {
     if (btn_plane_toggle_) btn_plane_toggle_->render(renderer);
     if (cb_grid_overlay_) cb_grid_overlay_->render(renderer);
     if (stepper_grid_resolution_) stepper_grid_resolution_->render(renderer);
+
+    if (nav_drag_rect_.w > 0 && nav_drag_rect_.h > 0) {
+        SDL_Color handle = hover_nav_drag_handle_ || dragging_nav_
+            ? SDL_Color{255, 255, 255, 200}
+            : DMStyles::Border();
+        SDL_SetRenderDrawColor(renderer, handle.r, handle.g, handle.b, handle.a);
+        SDL_RenderDrawRect(renderer, &nav_drag_rect_);
+    }
+    if (hover_nav_drag_handle_ || dragging_nav_) {
+        SDL_Color outline{255, 255, 255, 200};
+        SDL_SetRenderDrawColor(renderer, outline.r, outline.g, outline.b, outline.a);
+        SDL_RenderDrawRect(renderer, &nav_rect_);
+    }
 }
 
 void FrameEditorSession::render_toolbox(SDL_Renderer* renderer) const {
@@ -2338,6 +2391,19 @@ void FrameEditorSession::render_toolbox(SDL_Renderer* renderer) const {
         SDL_RenderFillRect(renderer, &toolbox_scrollbar_thumb_);
         SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g, DMStyles::Border().b, 255);
         SDL_RenderDrawRect(renderer, &toolbox_scrollbar_thumb_);
+    }
+
+    if (toolbox_drag_rect_.w > 0 && toolbox_drag_rect_.h > 0) {
+        SDL_Color handle = hover_toolbox_drag_handle_ || dragging_toolbox_
+            ? SDL_Color{255, 255, 255, 200}
+            : DMStyles::Border();
+        SDL_SetRenderDrawColor(renderer, handle.r, handle.g, handle.b, handle.a);
+        SDL_RenderDrawRect(renderer, &toolbox_drag_rect_);
+    }
+    if (hover_toolbox_drag_handle_ || dragging_toolbox_) {
+        SDL_Color outline{255, 255, 255, 200};
+        SDL_SetRenderDrawColor(renderer, outline.r, outline.g, outline.b, outline.a);
+        SDL_RenderDrawRect(renderer, &toolbox_rect_);
     }
 }
 
@@ -2542,6 +2608,13 @@ void FrameEditorSession::rebuild_layout() const {
         SDL_GetRendererOutputSize(assets_->renderer(), &screen_w, &screen_h);
     }
     (void)cam;
+    auto clamp_panel_pos = [&](int x, int y, int w, int h) -> SDL_Point {
+        if (screen_w > 0 && screen_h > 0) {
+            x = std::clamp(x, 0, std::max(0, screen_w - w));
+            y = std::clamp(y, 0, std::max(0, screen_h - h));
+        }
+        return SDL_Point{ x, y };
+    };
     const int max_toolbox_height = (screen_h > 0)
         ? std::max(160, static_cast<int>(std::round(static_cast<double>(screen_h) * kToolboxHeightRatio)))
         : std::numeric_limits<int>::max();
@@ -2656,7 +2729,8 @@ void FrameEditorSession::rebuild_layout() const {
         } else {
             toolbox_content_height_ = metrics.height;
             const int viewport_height = std::min(metrics.height, max_toolbox_height);
-            toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, metrics.width, viewport_height };
+            const SDL_Point clamped_toolbox_pos = clamp_panel_pos(toolbox_pos_.x, toolbox_pos_.y, metrics.width, viewport_height);
+            toolbox_rect_ = SDL_Rect{ clamped_toolbox_pos.x, clamped_toolbox_pos.y, metrics.width, viewport_height };
             const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
             toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
             const int handle_height = std::max(0, metrics.drag_handle_height);
@@ -2733,7 +2807,8 @@ void FrameEditorSession::rebuild_layout() const {
         } else {
             toolbox_content_height_ = metrics.height;
             const int viewport_height = std::min(metrics.height, max_toolbox_height);
-            toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, metrics.width, viewport_height };
+            const SDL_Point clamped_toolbox_pos = clamp_panel_pos(toolbox_pos_.x, toolbox_pos_.y, metrics.width, viewport_height);
+            toolbox_rect_ = SDL_Rect{ clamped_toolbox_pos.x, clamped_toolbox_pos.y, metrics.width, viewport_height };
             const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
             toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
             const int handle_height = std::max(0, metrics.drag_handle_height);
@@ -2905,7 +2980,7 @@ void FrameEditorSession::rebuild_layout() const {
         const int padding = DMSpacing::small_gap();
         const int gap = DMSpacing::small_gap();
         const int width = 360;
-        const int handle_height = 0;
+        const int handle_height = kPanelDragHandleHeight;
         int content_y = padding + handle_height;
         const int inner_width = width - padding * 2;
         const int scroll_offset = toolbox_scroll_offset_;
@@ -2970,7 +3045,7 @@ void FrameEditorSession::rebuild_layout() const {
         const int padding = DMSpacing::small_gap();
         const int gap = DMSpacing::small_gap();
         const int width = 360;
-        const int handle_height = 0;
+        const int handle_height = kPanelDragHandleHeight;
         int content_y = padding + handle_height;
         const int inner_width = width - padding * 2;
         const int scroll_offset = toolbox_scroll_offset_;
@@ -3036,8 +3111,9 @@ void FrameEditorSession::rebuild_layout() const {
         int total_height = content_y > padding ? content_y - gap + padding : padding * 2;
         toolbox_content_height_ = total_height;
         const int viewport_height = std::min(total_height, max_toolbox_height);
-        toolbox_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, viewport_height };
-        toolbox_drag_rect_ = SDL_Rect{ toolbox_pos_.x, toolbox_pos_.y, width, std::min(viewport_height, handle_height + padding) };
+        const SDL_Point clamped_toolbox_pos = clamp_panel_pos(toolbox_pos_.x, toolbox_pos_.y, width, viewport_height);
+        toolbox_rect_ = SDL_Rect{ clamped_toolbox_pos.x, clamped_toolbox_pos.y, width, viewport_height };
+        toolbox_drag_rect_ = SDL_Rect{ clamped_toolbox_pos.x, clamped_toolbox_pos.y, width, std::min(viewport_height, handle_height + padding) };
         const int max_scroll = std::max(0, toolbox_content_height_ - toolbox_rect_.h);
         toolbox_scroll_offset_ = std::clamp(toolbox_scroll_offset_, 0, max_scroll);
     } else {
@@ -3077,10 +3153,15 @@ void FrameEditorSession::rebuild_layout() const {
     const int nav_w = 560;
     const int title_h = nav_header_height_px(dd_animation_select_ != nullptr);
     const int nav_vertical_padding = DMSpacing::small_gap() * 2;
-    const int nav_drag_handle_height = 0;
+    const int nav_drag_handle_height = kPanelDragHandleHeight;
     const int nav_h = title_h + nav_vertical_padding + kNavPreviewHeight + kNavSliderGap + nav_drag_handle_height;
-    nav_rect_ = SDL_Rect{ nav_pos_.x, nav_pos_.y, nav_w, nav_h };
-    nav_drag_rect_ = SDL_Rect{ 0, 0, 0, 0 };
+    const SDL_Point clamped_nav_pos = clamp_panel_pos(nav_pos_.x, nav_pos_.y, nav_w, nav_h);
+    nav_rect_ = SDL_Rect{ clamped_nav_pos.x, clamped_nav_pos.y, nav_w, nav_h };
+    if (nav_drag_handle_height > 0) {
+        nav_drag_rect_ = SDL_Rect{ nav_rect_.x, nav_rect_.y, nav_rect_.w, nav_drag_handle_height };
+    } else {
+        nav_drag_rect_ = SDL_Rect{ 0, 0, 0, 0 };
+    }
 
     const int thumb_h = std::max(1, nav_rect_.h - nav_drag_handle_height - nav_vertical_padding - title_h - kNavSliderGap);
     const int thumb_w = thumb_h;
@@ -3195,7 +3276,7 @@ FrameEditorSession::MovementToolboxMetrics FrameEditorSession::build_movement_to
     MovementToolboxMetrics metrics;
     metrics.padding = DMSpacing::small_gap();
     metrics.gap = DMSpacing::small_gap();
-    metrics.drag_handle_height = 0;
+    metrics.drag_handle_height = kPanelDragHandleHeight;
     metrics.totals_width = kMovementTotalsFieldWidth;
     metrics.smooth_checkbox_width = cb_smooth_ ? std::max(kSmoothCheckboxMinWidth, cb_smooth_->preferred_width()) : 0;
     const bool curve_visible = smooth_enabled_ && cb_curve_;
@@ -3238,7 +3319,7 @@ FrameEditorSession::ChildrenToolboxMetrics FrameEditorSession::build_children_to
     ChildrenToolboxMetrics metrics;
     metrics.padding = DMSpacing::small_gap();
     metrics.gap = DMSpacing::small_gap();
-    metrics.drag_handle_height = 0;
+    metrics.drag_handle_height = kPanelDragHandleHeight;
     metrics.textbox_width = kChildrenFieldWidth;
 
     metrics.totals_width = kMovementTotalsFieldWidth;

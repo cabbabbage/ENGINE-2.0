@@ -265,6 +265,10 @@ FRAME_EDITOR_ACCESS:
     SDL_Point dir_pos_{0, 0};
     SDL_Point toolbox_pos_{0, 0};
     SDL_Point nav_pos_{0, 0};
+    SDL_FPoint right_pan_start_world_{0.0f, 0.0f};
+    SDL_FPoint right_pan_last_world_{0.0f, 0.0f};
+    SDL_Point right_pan_start_focus_{0, 0};
+    double right_pan_start_distance_ = 0.0;
     bool dragging_dir_ = false;
     bool dragging_toolbox_ = false;
     bool dragging_toolbox_scrollbar_ = false;
@@ -295,6 +299,8 @@ FRAME_EDITOR_ACCESS:
     bool right_pan_has_last_center_ = false;
     int pending_scroll_delta_ = 0;
     bool hover_toolbox_ = false;
+    bool hover_toolbox_drag_handle_ = false;
+    bool hover_nav_drag_handle_ = false;
     std::vector<std::string> child_assets_;
     mutable std::vector<AnimationChildMode> child_modes_;
     std::vector<ChildPreviewSlot> child_preview_slots_;

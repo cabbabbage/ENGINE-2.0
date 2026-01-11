@@ -183,10 +183,11 @@ void CameraController::apply_room_targets(const CameraParams& cur,
     blended.pan_y_percent = lerp(cur_params.pan_y_percent, neigh_params.pan_y_percent, t);
     blended = camera_math::sanitize_camera_params(blended, fallback_height_px_);
 
-    if (manual_height_override_ && dev_mode) {
+    if (manual_height_override_) {
         // Preserve manual zoom adjustments (e.g., scroll wheel) instead of snapping back to the last applied height.
         blended.height_px = smoothed_.height_px;
     }
+    (void)dev_mode;
     (void)refresh_requested;
     (void)steps;
     set_params(blended);

@@ -1055,8 +1055,6 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
     cam.set_realism_enabled(effects_enabled);
     cam.set_parallax_enabled(effects_enabled);
 
-    cam.update_geometry_cache(cam.compute_geometry());
-
     if (assets_) {
         assets_->set_depth_effects_enabled(depthcue_enabled);
         assets_->apply_camera_runtime_settings();

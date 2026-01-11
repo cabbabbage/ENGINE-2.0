@@ -117,6 +117,96 @@ namespace {
         return lerp(a, b, t);
     }
 
+    float sample_quadratic_1d(float p0, float p1, float p2, float ratio) {
+        const float t = std::clamp(ratio, 0.0f, 1.0f);
+        const float u = 1.0f - t;
+        return (u * u * p0) + (2.0f * u * t * p1) + (t * t * p2);
+    }
+
+    bool project_movement_point(const WarpedScreenGrid& cam,
+                                const SDL_Point& anchor_world,
+                                const SDL_FPoint& rel,
+                                float rel_z,
+                                SDL_FPoint& out) {
+        SDL_FPoint world{
+            rel.x + static_cast<float>(anchor_world.x),
+            rel.y + static_cast<float>(anchor_world.y)
+        };
+        if (cam.project_world_point(world, rel_z, out)) {
+            return true;
+        }
+        out = cam.map_to_screen_f(world);
+        return false;
+    }
+
+    void apply_linear_smoothing_1d(int adjusted_index,
+                                   std::vector<float>& redistributed,
+                                   int last_index) {
+        if (redistributed.empty()) return;
+        if (adjusted_index <= 0) return;
+        const float start = redistributed.front();
+        const float end = redistributed.back();
+        const float steps = static_cast<float>(last_index);
+        if (steps <= 0.0f) {
+            return;
+        }
+        if (adjusted_index >= 1 && adjusted_index < last_index) {
+            const float anchor = redistributed[adjusted_index];
+            const float pre_steps = static_cast<float>(adjusted_index);
+            const float pre_delta = anchor - start;
+            for (int j = 1; j < adjusted_index; ++j) {
+                const float t = pre_steps > 0.0f ? (static_cast<float>(j) / pre_steps) : 0.0f;
+                redistributed[j] = start + pre_delta * t;
+            }
+            const float post_steps = static_cast<float>(last_index - adjusted_index);
+            const float post_delta = end - anchor;
+            for (int j = adjusted_index + 1; j < last_index; ++j) {
+                const float t = post_steps > 0.0f ? (static_cast<float>(j - adjusted_index) / post_steps) : 0.0f;
+                redistributed[j] = anchor + post_delta * t;
+            }
+        } else {
+            const float delta = end - start;
+            for (int j = 1; j < last_index; ++j) {
+                const float t = static_cast<float>(j) / steps;
+                redistributed[j] = start + delta * t;
+            }
+        }
+    }
+
+    void apply_curved_smoothing_1d(int adjusted_index,
+                                   const std::vector<float>& original,
+                                   std::vector<float>& redistributed,
+                                   int last_index) {
+        if (redistributed.size() < 2) return;
+        if (original.size() != redistributed.size()) return;
+        if (adjusted_index <= 0) return;
+
+        auto place_half = [&](int first_idx, int second_idx) {
+            const int segment_count = second_idx - first_idx;
+            if (segment_count <= 1) return;
+            const float p0 = redistributed[first_idx];
+            const float p2 = redistributed[second_idx];
+            float control = (p0 + p2) * 0.5f;
+            const int interior_count = segment_count - 1;
+            if (interior_count > 0) {
+                int mid_index = first_idx + (segment_count / 2);
+                mid_index = std::clamp(mid_index, first_idx + 1, second_idx - 1);
+                if (mid_index >= 0 && mid_index < static_cast<int>(original.size())) {
+                    control = original[mid_index];
+                }
+            }
+            for (int j = first_idx + 1; j < second_idx; ++j) {
+                const float ratio = static_cast<float>(j - first_idx) / static_cast<float>(segment_count);
+                redistributed[j] = sample_quadratic_1d(p0, control, p2, ratio);
+            }
+        };
+
+        place_half(0, std::min(adjusted_index, last_index));
+        if (adjusted_index < last_index) {
+            place_half(adjusted_index, last_index);
+        }
+    }
+
     struct LabelFontHandle {
         TTF_Font* font = nullptr;
         bool owns = false;
@@ -510,6 +600,7 @@ void FrameEditorSession::end() {
     animation_id_.clear();
     frames_.clear();
     rel_positions_.clear();
+    rel_z_positions_.clear();
     child_preview_slots_.clear();
     document_payload_cache_.clear();
     document_children_signature_.clear();
@@ -632,7 +723,7 @@ void FrameEditorSession::update(const Input& input) {
         } else {
             scroll_delta = input.getScrollY();
         }
-        const bool selection_active = adjustment_mode_active_ && adjustment_selection_.has_value();
+        const bool selection_active = adjustment_selection_.has_value();
         const bool block_height_controls = selection_active ? block_camera_controls : false;
         if (selection_active && !block_camera_controls && scroll_delta != 0) {
             adjust_selection_axis(scroll_delta, cam);
@@ -643,7 +734,9 @@ void FrameEditorSession::update(const Input& input) {
         if (input.wasClicked(Input::LEFT) && !pointer_over_ui && !pan_height_.is_panning()) {
             exit_adjustment_mode(true);
         }
-        enforce_camera_locks(cam);
+        if (selection_active) {
+            enforce_camera_locks(cam);
+        }
     }
 
     update_asset_preview_frame();
@@ -1518,10 +1611,9 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             int hit_index = -1;
             SDL_FPoint hit_screen{};
             for (std::size_t i = 0; i < rel_positions_.size(); ++i) {
-                SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{
-                    rel_positions_[i].x + static_cast<float>(anchor_world.x),
-                    rel_positions_[i].y + static_cast<float>(anchor_world.y)
-                });
+                const float rel_z = (i < rel_z_positions_.size()) ? rel_z_positions_[i] : 0.0f;
+                SDL_FPoint screen{};
+                project_movement_point(cam, anchor_world, rel_positions_[i], rel_z, screen);
                 const float dx = static_cast<float>(sp.x) - screen.x;
                 const float dy = static_cast<float>(sp.y) - screen.y;
                 const float dist = dx * dx + dy * dy;
@@ -1718,29 +1810,38 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
     const WarpedScreenGrid& cam = assets_->getView();
     SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
 
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    const SDL_Color path_col = DMStyles::AccentButton().bg;
-    SDL_SetRenderDrawColor(renderer, path_col.r, path_col.g, path_col.b, 205);
-    for (size_t i = 1; i < rel_positions_.size(); ++i) {
-        SDL_FPoint a = cam.map_to_screen_f(SDL_FPoint{ rel_positions_[i-1].x + anchor_world.x,
-                                                       rel_positions_[i-1].y + anchor_world.y });
-        SDL_FPoint b = cam.map_to_screen_f(SDL_FPoint{ rel_positions_[i].x + anchor_world.x,
-                                                       rel_positions_[i].y + anchor_world.y });
-        SDL_RenderDrawLine(renderer, static_cast<int>(std::lround(a.x)), static_cast<int>(std::lround(a.y)), static_cast<int>(std::lround(b.x)), static_cast<int>(std::lround(b.y)));
-    }
+    if (mode_ == Mode::Movement) {
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        const SDL_Color path_col = DMStyles::AccentButton().bg;
+        SDL_SetRenderDrawColor(renderer, path_col.r, path_col.g, path_col.b, 205);
+        for (size_t i = 1; i < rel_positions_.size(); ++i) {
+            const float rel_z_a = (i - 1 < rel_z_positions_.size()) ? rel_z_positions_[i - 1] : 0.0f;
+            const float rel_z_b = (i < rel_z_positions_.size()) ? rel_z_positions_[i] : 0.0f;
+            SDL_FPoint a{};
+            SDL_FPoint b{};
+            project_movement_point(cam, anchor_world, rel_positions_[i - 1], rel_z_a, a);
+            project_movement_point(cam, anchor_world, rel_positions_[i], rel_z_b, b);
+            SDL_RenderDrawLine(renderer,
+                               static_cast<int>(std::lround(a.x)),
+                               static_cast<int>(std::lround(a.y)),
+                               static_cast<int>(std::lround(b.x)),
+                               static_cast<int>(std::lround(b.y)));
+        }
 
-    for (size_t i = 0; i < rel_positions_.size(); ++i) {
-        SDL_FPoint p = cam.map_to_screen_f(SDL_FPoint{ rel_positions_[i].x + anchor_world.x,
-                                                       rel_positions_[i].y + anchor_world.y });
-        const bool is_current = static_cast<int>(i) == selected_index_;
-        const int r = is_current ? 6 : 4;
-        SDL_Color c = is_current ? DMStyles::AccentButton().hover_bg : devmode::utils::with_alpha(DMStyles::AccentButton().bg, 128);
-        SDL_Point cp = round_point(p);
-        SDL_Rect dot{ cp.x - r, cp.y - r, r * 2, r * 2 };
-        SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-        SDL_RenderFillRect(renderer, &dot);
-        SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g, DMStyles::Border().b, DMStyles::Border().a);
-        SDL_RenderDrawRect(renderer, &dot);
+        for (size_t i = 0; i < rel_positions_.size(); ++i) {
+            const float rel_z = (i < rel_z_positions_.size()) ? rel_z_positions_[i] : 0.0f;
+            SDL_FPoint p{};
+            project_movement_point(cam, anchor_world, rel_positions_[i], rel_z, p);
+            const bool is_current = static_cast<int>(i) == selected_index_;
+            const int r = is_current ? 6 : 4;
+            SDL_Color c = is_current ? DMStyles::AccentButton().hover_bg : devmode::utils::with_alpha(DMStyles::AccentButton().bg, 128);
+            SDL_Point cp = round_point(p);
+            SDL_Rect dot{ cp.x - r, cp.y - r, r * 2, r * 2 };
+            SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
+            SDL_RenderFillRect(renderer, &dot);
+            SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g, DMStyles::Border().b, DMStyles::Border().a);
+            SDL_RenderDrawRect(renderer, &dot);
+        }
     }
 
     if (is_children_mode(mode_) && show_child_ && !child_assets_.empty() &&
@@ -1861,11 +1962,11 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
                 base_abs[i].z = base_abs[i - 1].z + frames_[i].dz;
             }
             AbsPos current = base_abs[static_cast<std::size_t>(selected_index_)];
-            const float plane_value = current.z;
-            screen = cam.map_to_screen_f(SDL_FPoint{
-                static_cast<float>(anchor_world.x) + current.x,
-                static_cast<float>(anchor_world.y) + plane_value
-            });
+            project_movement_point(cam,
+                                   anchor_world,
+                                   SDL_FPoint{current.x, current.y},
+                                   current.z,
+                                   screen);
             has_screen = true;
 
             AbsPos ghost_abs = current;
@@ -1879,11 +1980,11 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
                 axis_value = current.z;
                 ghost_abs.z = snap_value(ghost_abs.z + static_cast<float>(step));
             }
-            const float ghost_plane = ghost_abs.z;
-            ghost = cam.map_to_screen_f(SDL_FPoint{
-                static_cast<float>(anchor_world.x) + ghost_abs.x,
-                static_cast<float>(anchor_world.y) + ghost_plane
-            });
+            project_movement_point(cam,
+                                   anchor_world,
+                                   SDL_FPoint{ghost_abs.x, ghost_abs.y},
+                                   ghost_abs.z,
+                                   ghost);
             has_ghost = true;
         } else if (adjustment_selection_.target == AdjustmentTarget::ChildPoint &&
                    is_children_mode(mode_) && selected_index_ >= 0 &&
@@ -4152,17 +4253,17 @@ void FrameEditorSession::apply_frame_move_from_base(int index, SDL_FPoint desire
     if (base_rel.size() != frames_.size()) return;
 
     frames_.front().dx = 0.0f;
-    frames_.front().dz = 0.0f;
+    frames_.front().dy = 0.0f;
 
     SDL_FPoint prev_abs = base_rel[index - 1];
     frames_[index].dx = static_cast<float>(std::round(desired_rel.x - prev_abs.x));
-    frames_[index].dz = static_cast<float>(std::round(desired_rel.y - prev_abs.y));
+    frames_[index].dy = static_cast<float>(std::round(desired_rel.y - prev_abs.y));
 
     SDL_FPoint last_abs = desired_rel;
     for (int j = index + 1; j < static_cast<int>(frames_.size()); ++j) {
         const SDL_FPoint desired = base_rel[j];
         frames_[j].dx = static_cast<float>(std::round(desired.x - last_abs.x));
-        frames_[j].dz = static_cast<float>(std::round(desired.y - last_abs.y));
+        frames_[j].dy = static_cast<float>(std::round(desired.y - last_abs.y));
         last_abs = desired;
     }
 }
@@ -4192,21 +4293,43 @@ void FrameEditorSession::redistribute_frames_after_adjustment(int adjusted_index
         return;
     }
 
-    const std::vector<SDL_FPoint> original_positions = rel_positions_;
-    std::vector<SDL_FPoint> redistributed = original_positions;
-    if (curve_enabled_) {
-        apply_curved_smoothing(adjusted_index, original_positions, redistributed, last_index);
-    } else {
-        apply_linear_smoothing(adjusted_index, redistributed, last_index);
+    if (rel_z_positions_.size() != count) {
+        rebuild_rel_positions();
     }
 
-    frames_[0].dx = 0.0f;
-    frames_[0].dz = 0.0f;
-    for (size_t i = 1; i < count; ++i) {
-        const SDL_FPoint prev = redistributed[i - 1];
-        const SDL_FPoint curr = redistributed[i];
-        frames_[i].dx = static_cast<float>(std::round(curr.x - prev.x));
-        frames_[i].dz = static_cast<float>(std::round(curr.y - prev.y));
+    const std::vector<SDL_FPoint> original_positions = rel_positions_;
+    const bool smooth_depth = adjustment_selection_.has_value() &&
+                              adjustment_selection_.axis == AdjustmentAxis::Z;
+
+    std::vector<SDL_FPoint> redistributed = original_positions;
+    if (!smooth_depth) {
+        if (curve_enabled_) {
+            apply_curved_smoothing(adjusted_index, original_positions, redistributed, last_index);
+        } else {
+            apply_linear_smoothing(adjusted_index, redistributed, last_index);
+        }
+
+        frames_[0].dx = 0.0f;
+        frames_[0].dy = 0.0f;
+        for (size_t i = 1; i < count; ++i) {
+            const SDL_FPoint prev = redistributed[i - 1];
+            const SDL_FPoint curr = redistributed[i];
+            frames_[i].dx = static_cast<float>(std::round(curr.x - prev.x));
+            frames_[i].dy = static_cast<float>(std::round(curr.y - prev.y));
+        }
+    }
+
+    if (smooth_depth && rel_z_positions_.size() == count) {
+        std::vector<float> redistributed_z = rel_z_positions_;
+        if (curve_enabled_) {
+            apply_curved_smoothing_1d(adjusted_index, rel_z_positions_, redistributed_z, last_index);
+        } else {
+            apply_linear_smoothing_1d(adjusted_index, redistributed_z, last_index);
+        }
+        frames_[0].dz = 0.0f;
+        for (size_t i = 1; i < count; ++i) {
+            frames_[i].dz = static_cast<float>(std::round(redistributed_z[i] - redistributed_z[i - 1]));
+        }
     }
     rebuild_rel_positions();
     persist_changes();
@@ -4357,15 +4480,20 @@ void FrameEditorSession::smooth_child_offsets(int child_index, int adjusted_inde
 
 void FrameEditorSession::rebuild_rel_positions() {
     rel_positions_.clear();
+    rel_z_positions_.clear();
     SDL_FPoint curr{0.0f, 0.0f};
+    float curr_z = 0.0f;
     for (size_t i = 0; i < frames_.size(); ++i) {
         if (i == 0) {
             curr = SDL_FPoint{0.0f, 0.0f};
+            curr_z = 0.0f;
         } else {
             curr.x += frames_[i].dx;
-            curr.y += frames_[i].dz;
+            curr.y += frames_[i].dy;
+            curr_z += frames_[i].dz;
         }
         rel_positions_.push_back(curr);
+        rel_z_positions_.push_back(curr_z);
     }
 }
 void FrameEditorSession::refresh_child_assets_from_document() {
@@ -5434,7 +5562,11 @@ void FrameEditorSession::ensure_adjustment_auto_select(const WarpedScreenGrid& c
     if (mode_ == Mode::Movement) {
         if (!rel_positions_.empty() && selected_index_ >= 0 && selected_index_ < static_cast<int>(rel_positions_.size())) {
             SDL_FPoint rel = rel_positions_[selected_index_];
-            SDL_FPoint screen = cam.map_to_screen_f(SDL_FPoint{rel.x + anchor_world.x, rel.y + anchor_world.y});
+            const float rel_z = (static_cast<std::size_t>(selected_index_) < rel_z_positions_.size())
+                ? rel_z_positions_[static_cast<std::size_t>(selected_index_)]
+                : 0.0f;
+            SDL_FPoint screen{};
+            project_movement_point(cam, anchor_world, rel, rel_z, screen);
             select_adjustment_target(AdjustmentTarget::MovementPoint, -1, rel, round_point(screen));
         }
         return;

@@ -163,6 +163,7 @@ FRAME_EDITOR_ACCESS:
 
     std::vector<MovementFrame> frames_;
     std::vector<SDL_FPoint> rel_positions_;
+    std::vector<float> rel_z_positions_;
 
     mutable std::unique_ptr<DMButton> btn_back_;
     mutable std::unique_ptr<DMButton> btn_movement_;

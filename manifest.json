@@ -1505,8 +1505,49 @@
             },
             {
               "explosion": [],
-              "melee": [],
-              "projectile": []
+              "melee": [
+                {
+                  "control_x": -1030.002197265625,
+                  "control_y": 0.0,
+                  "control_z": 756.0447387695313,
+                  "damage": 0,
+                  "end_x": -356.8785705566406,
+                  "end_y": 0.0,
+                  "end_z": 163.12586975097656,
+                  "start_x": -1406.1068115234375,
+                  "start_y": 0.0,
+                  "start_z": 1856.971923828125,
+                  "type": "melee"
+                },
+                {
+                  "control_x": -1971.0511474609375,
+                  "control_y": 0.0,
+                  "control_z": -427.1933288574219,
+                  "damage": 0,
+                  "end_x": -516.310302734375,
+                  "end_y": 0.0,
+                  "end_z": -285.18487548828125,
+                  "start_x": -2526.542724609375,
+                  "start_y": 0.0,
+                  "start_z": 648.04638671875,
+                  "type": "melee"
+                }
+              ],
+              "projectile": [
+                {
+                  "control_x": 0.0,
+                  "control_y": 0.0,
+                  "control_z": 0.0,
+                  "damage": 0,
+                  "end_x": 0.0,
+                  "end_y": 0.0,
+                  "end_z": 0.0,
+                  "start_x": 1611.4298095703125,
+                  "start_y": 0.0,
+                  "start_z": 1639.3251953125,
+                  "type": "projectile"
+                }
+              ]
             }
           ],
           "crop_frames": false,
@@ -1575,7 +1616,15 @@
             },
             {
               "explosion": null,
-              "melee": null,
+              "melee": {
+                "center_x": -535.7105712890625,
+                "center_y": 0.0,
+                "center_z": 802.6536865234375,
+                "half_height": 854.5411376953125,
+                "half_width": 990.1494140625,
+                "rotation": -70.19165802001953,
+                "type": "melee"
+              },
               "projectile": null
             }
           ],
@@ -1589,37 +1638,38 @@
               false
             ],
             [
-              3,
+              0,
               0
             ],
             [
-              6,
+              0,
               0
             ],
             [
-              8,
+              0,
               0
             ],
             [
-              11,
+              0,
               0
             ],
             [
-              14,
+              0,
               0
             ],
             [
-              17,
+              0,
               0
             ],
-            [
-              20,
-              -136
-            ]
+            {
+              "dx": 64,
+              "dy": -40,
+              "dz": 120
+            }
           ],
           "movement_total": {
-            "dx": 79,
-            "dy": -136
+            "dx": 0,
+            "dy": 0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -2560,9 +2610,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -2694,6 +2744,34 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-47f5d3b1cff5"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "Bush_1"
+                }
+              ],
+              "display_name": "Bush_1",
+              "dx": -3070,
+              "dy": -721,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 6376,
+              "origional_width": 6376,
+              "position": "Exact",
+              "resolution": 5,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-04530d224ef6"
             }
           ]
         }

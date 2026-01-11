@@ -1080,8 +1080,6 @@ void DevControls::sync_camera_tilt_override() {
     }
 
     if (frame_editor_session_ && frame_editor_session_->is_active()) {
-        const float tilt_deg = (frame_editor_session_->edit_plane() == FrameEditorSession::EditPlane::XY) ? 90.0f : 0.0f;
-        cam.set_tilt_override(tilt_deg);
         return;
     }
 

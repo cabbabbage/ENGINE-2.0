@@ -1641,6 +1641,10 @@ void WarpedScreenGrid::clear_tilt_override() {
     tilt_override_deg_.reset();
 }
 
+std::optional<float> WarpedScreenGrid::tilt_override() const {
+    return tilt_override_deg_;
+}
+
 void WarpedScreenGrid::update() {
     camera_.tick(0.0f);
     runtime_camera_height_ = camera_.current_height();

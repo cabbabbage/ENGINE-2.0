@@ -98,6 +98,10 @@ public:
 
 FRAME_EDITOR_ACCESS:
     bool target_is_alive() const;
+    void capture_camera_state();
+    void lock_camera_state();
+    void restore_camera_state();
+    void enforce_camera_locks(WarpedScreenGrid& cam);
 
     struct ChildFrame {
         int child_index = -1;
@@ -274,6 +278,20 @@ FRAME_EDITOR_ACCESS:
     bool hover_toolbox_ = false;
     bool hover_toolbox_drag_handle_ = false;
     bool hover_nav_drag_handle_ = false;
+    struct CameraLockState {
+        bool valid = false;
+        bool manual_override_before = false;
+        bool focus_override_before = false;
+        SDL_Point focus_point_before{0, 0};
+        SDL_Point screen_center_before{0, 0};
+        std::optional<float> tilt_override_before{};
+        double camera_y_distance_before = 0.0;
+    };
+    CameraLockState camera_lock_state_;
+    bool camera_y_distance_locked_ = false;
+    double locked_camera_y_distance_ = 0.0;
+    bool tilt_locked_ = false;
+    float locked_tilt_deg_ = 0.0f;
     std::vector<std::string> child_assets_;
     mutable std::vector<AnimationChildMode> child_modes_;
     std::vector<ChildPreviewSlot> child_preview_slots_;

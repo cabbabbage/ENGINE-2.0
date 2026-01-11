@@ -279,8 +279,9 @@ void FrameEditorSession::begin(Assets* assets,
         }
     }
 
-    WarpedScreenGrid& cam = assets_->getView();
     prev_asset_hidden_ = target_->is_hidden();
+    capture_camera_state();
+    lock_camera_state();
 
     load_animation_data(animation_id_);
 
@@ -476,6 +477,7 @@ void FrameEditorSession::end() {
         WarpedScreenGrid& cam = assets_->getView();
 
         pan_height_.cancel(cam);
+        restore_camera_state();
     }
 
     if (target_alive) {
@@ -523,6 +525,70 @@ void FrameEditorSession::end() {
         on_end_ = {};
         cb();
     }
+
+    camera_lock_state_.valid = false;
+}
+
+void FrameEditorSession::capture_camera_state() {
+    if (!assets_) return;
+    WarpedScreenGrid& cam = assets_->getView();
+    camera_lock_state_.manual_override_before = cam.is_manual_height_override();
+    camera_lock_state_.focus_override_before = cam.has_focus_override();
+    if (camera_lock_state_.focus_override_before) {
+        camera_lock_state_.focus_point_before = cam.get_focus_override_point();
+    }
+    camera_lock_state_.screen_center_before = cam.get_screen_center();
+    camera_lock_state_.tilt_override_before = cam.tilt_override();
+    camera_lock_state_.camera_y_distance_before = cam.camera_y_distance();
+    camera_lock_state_.valid = true;
+}
+
+void FrameEditorSession::lock_camera_state() {
+    if (!assets_) return;
+    WarpedScreenGrid& cam = assets_->getView();
+    const SDL_Point center = cam.get_screen_center();
+    locked_tilt_deg_ = cam.current_pitch_degrees();
+    tilt_locked_ = true;
+    cam.set_manual_height_override(true);
+    cam.set_focus_override(center);
+    cam.set_screen_center(center);
+    cam.set_tilt_override(locked_tilt_deg_);
+    locked_camera_y_distance_ = cam.camera_y_distance();
+    camera_y_distance_locked_ = true;
+}
+
+void FrameEditorSession::restore_camera_state() {
+    if (!assets_ || !camera_lock_state_.valid) return;
+    WarpedScreenGrid& cam = assets_->getView();
+    cam.set_manual_height_override(camera_lock_state_.manual_override_before);
+    if (camera_lock_state_.focus_override_before) {
+        cam.set_focus_override(camera_lock_state_.focus_point_before);
+    } else {
+        cam.clear_focus_override();
+    }
+    cam.set_screen_center(camera_lock_state_.screen_center_before);
+    if (camera_lock_state_.tilt_override_before.has_value()) {
+        cam.set_tilt_override(*camera_lock_state_.tilt_override_before);
+    } else {
+        cam.clear_tilt_override();
+    }
+    cam.set_camera_y_distance(camera_lock_state_.camera_y_distance_before);
+    camera_lock_state_.valid = false;
+    camera_y_distance_locked_ = false;
+    tilt_locked_ = false;
+}
+
+void FrameEditorSession::enforce_camera_locks(WarpedScreenGrid& cam) {
+    if (camera_y_distance_locked_) {
+        constexpr double kCameraDistanceEpsilon = 1e-3;
+        const double distance_delta = std::fabs(cam.camera_y_distance() - locked_camera_y_distance_);
+        if (distance_delta > kCameraDistanceEpsilon) {
+            cam.set_camera_y_distance(locked_camera_y_distance_);
+        }
+    }
+    if (tilt_locked_) {
+        cam.set_tilt_override(locked_tilt_deg_);
+    }
 }
 
 void FrameEditorSession::update(const Input& input) {
@@ -567,15 +633,17 @@ void FrameEditorSession::update(const Input& input) {
             scroll_delta = input.getScrollY();
         }
         const bool selection_active = adjustment_mode_active_ && adjustment_selection_.has_value();
+        const bool block_height_controls = selection_active ? block_camera_controls : false;
         if (selection_active && !block_camera_controls && scroll_delta != 0) {
             adjust_selection_axis(scroll_delta, cam);
         } else {
-            pan_height_.handle_input(cam, input, block_camera_controls);
+            pan_height_.handle_input(cam, input, block_height_controls);
         }
 
         if (input.wasClicked(Input::LEFT) && !pointer_over_ui && !pan_height_.is_panning()) {
             exit_adjustment_mode(true);
         }
+        enforce_camera_locks(cam);
     }
 
     update_asset_preview_frame();

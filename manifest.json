@@ -1370,6 +1370,7 @@
               "projectile": []
             }
           ],
+          "child_timelines": [],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
@@ -1448,36 +1449,7 @@
               0,
               0,
               false
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            {
-              "dx": 136,
-              "dy": -104,
-              "dz": -72
-            }
+            ]
           ],
           "movement_total": {
             "dx": 0,

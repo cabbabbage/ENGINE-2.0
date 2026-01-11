@@ -163,6 +163,7 @@ public:
     void update();
     void set_tilt_override(std::optional<float> tilt_deg);
     void clear_tilt_override();
+    std::optional<float> tilt_override() const;
     bool has_tilt_override() const { return tilt_override_deg_.has_value(); }
     float tilt_override_deg() const { return tilt_override_deg_.value_or(camera_math::kDefaultCameraTiltDeg); }
     Area frame_to_area(const SDL_Rect& frame) const;

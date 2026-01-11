@@ -67,10 +67,6 @@ public:
             screen_pos = SDL_Point{0, 0};
         }
     };
-    static inline constexpr std::array<const char*, 3> kDamageTypeNames = {
-        "projectile", "melee", "explosion"
-};
-
     FrameEditorSession();
     ~FrameEditorSession();
 
@@ -193,25 +189,26 @@ FRAME_EDITOR_ACCESS:
     mutable std::unique_ptr<class DMTextBox> tb_child_deg_;
     mutable std::unique_ptr<class DMCheckbox> cb_child_visible_;
 
-    mutable std::unique_ptr<class DMDropdown> dd_hitbox_type_;
     mutable std::unique_ptr<class DMButton> btn_hitbox_add_remove_;
     mutable std::unique_ptr<class DMButton> btn_hitbox_copy_next_;
     mutable std::unique_ptr<class DMTextBox> tb_hit_center_x_;
-    mutable std::unique_ptr<class DMTextBox> tb_hit_center_y_;
+    mutable std::unique_ptr<class DMTextBox> tb_hit_center_z_;
     mutable std::unique_ptr<class DMTextBox> tb_hit_width_;
     mutable std::unique_ptr<class DMTextBox> tb_hit_height_;
     mutable std::unique_ptr<class DMTextBox> tb_hit_rotation_;
 
-    mutable std::unique_ptr<class DMDropdown> dd_attack_type_;
     mutable std::unique_ptr<class DMButton> btn_attack_add_remove_;
     mutable std::unique_ptr<class DMButton> btn_attack_delete_;
     mutable std::unique_ptr<class DMButton> btn_attack_copy_next_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_start_x_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_start_y_;
+    mutable std::unique_ptr<class DMTextBox> tb_attack_start_z_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_control_x_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_control_y_;
+    mutable std::unique_ptr<class DMTextBox> tb_attack_control_z_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_end_x_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_end_y_;
+    mutable std::unique_ptr<class DMTextBox> tb_attack_end_z_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_damage_;
 
     mutable std::unique_ptr<class DMTextBox> tb_total_dx_;
@@ -229,16 +226,19 @@ FRAME_EDITOR_ACCESS:
     mutable bool last_child_visible_value_ = false;
     mutable bool cb_show_anim_targets_parent_label_ = false;
     mutable std::string last_hit_center_x_text_{};
-    mutable std::string last_hit_center_y_text_{};
+    mutable std::string last_hit_center_z_text_{};
     mutable std::string last_hit_width_text_{};
     mutable std::string last_hit_height_text_{};
     mutable std::string last_hit_rotation_text_{};
     mutable std::string last_attack_start_x_text_{};
     mutable std::string last_attack_start_y_text_{};
+    mutable std::string last_attack_start_z_text_{};
     mutable std::string last_attack_control_x_text_{};
     mutable std::string last_attack_control_y_text_{};
+    mutable std::string last_attack_control_z_text_{};
     mutable std::string last_attack_end_x_text_{};
     mutable std::string last_attack_end_y_text_{};
+    mutable std::string last_attack_end_z_text_{};
     mutable std::string last_attack_damage_text_{};
 
     mutable SDL_Rect directory_rect_{0,0,0,0};
@@ -302,10 +302,7 @@ FRAME_EDITOR_ACCESS:
     bool last_payload_loaded_ = false;
     mutable std::vector<std::string> animation_dropdown_options_cache_;
     mutable std::vector<std::string> child_dropdown_options_cache_;
-    mutable std::vector<std::string> hitbox_type_labels_;
-    mutable std::vector<std::string> attack_type_labels_;
-
-    int selected_hitbox_type_index_ = 1;
+    int selected_hitbox_index_ = -1;
     enum class HitHandle { None, Move, Left, Right, Top, Bottom, Rotate };
     HitHandle active_hitbox_handle_ = HitHandle::None;
     bool hitbox_dragging_ = false;
@@ -318,8 +315,7 @@ FRAME_EDITOR_ACCESS:
     float hitbox_drag_bottom_ = 0.0f;
     bool hitbox_drag_moved_ = false;
 
-    int selected_attack_type_index_ = 1;
-    std::array<int, kDamageTypeNames.size()> selected_attack_vector_indices_{ { -1, -1, -1 } };
+    int selected_attack_vector_index_ = -1;
     enum class AttackHandle { None, Start, Control, End, Segment };
     AttackHandle active_attack_handle_ = AttackHandle::None;
     bool attack_dragging_ = false;
@@ -454,9 +450,9 @@ FRAME_EDITOR_ACCESS:
 
     animation_update::FrameHitGeometry::HitBox* current_hit_box();
     const animation_update::FrameHitGeometry::HitBox* current_hit_box() const;
-    animation_update::FrameHitGeometry::HitBox* ensure_hit_box_for_type(const std::string& type);
-    void delete_hit_box_for_type(const std::string& type);
-    std::string current_hitbox_type() const;
+    void clamp_hitbox_selection();
+    animation_update::FrameHitGeometry::HitBox* ensure_hit_box();
+    void delete_current_hit_box();
     void refresh_hitbox_form() const;
     void copy_hit_box_to_next_frame();
     float document_scale_factor() const;
@@ -466,9 +462,8 @@ FRAME_EDITOR_ACCESS:
     bool build_hitbox_visual(const animation_update::FrameHitGeometry::HitBox& box, HitBoxVisual& out) const;
     animation_update::FrameAttackGeometry::Vector* current_attack_vector();
     const animation_update::FrameAttackGeometry::Vector* current_attack_vector() const;
-    animation_update::FrameAttackGeometry::Vector* ensure_attack_vector_for_type(const std::string& type);
+    animation_update::FrameAttackGeometry::Vector* ensure_attack_vector();
     void delete_current_attack_vector();
-    std::string current_attack_type() const;
     int current_attack_vector_index() const;
     void set_current_attack_vector_index(int index);
     void clamp_attack_selection();
@@ -561,14 +556,15 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         return fallback;
 };
 
-    auto upsert_hit_box = [&](MovementFrame& frame,
-                              const std::string& type,
+    constexpr std::array<const char*, 3> kLegacyDamageTypeNames = {
+        "projectile", "melee", "explosion"
+    };
+    auto append_hit_box = [&](MovementFrame& frame,
                               const nlohmann::json& node) {
-        if (type.empty() || node.is_null()) {
+        if (node.is_null()) {
             return;
         }
         animation_update::FrameHitGeometry::HitBox box;
-        box.type = type;
         if (node.is_object()) {
             box.center_x = read_float(node.value("center_x", 0.0f));
             const bool has_center_z = node.contains("center_z");
@@ -578,9 +574,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
             box.half_width = read_float(node.value("half_width", 0.0f));
             box.half_height = read_float(node.value("half_height", 0.0f));
             box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
-            if (node.contains("type") && node["type"].is_string()) {
-                box.type = node["type"].get<std::string>();
-            }
         } else if (node.is_array()) {
             const auto& arr = node;
             if (!arr.empty())          box.center_x = read_float(arr[0]);
@@ -601,19 +594,13 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         if (box.is_empty()) {
             return;
         }
-        if (auto* existing = frame.hit.find_box(box.type)) {
-            *existing = box;
-        } else {
-            frame.hit.boxes.push_back(box);
-        }
+        frame.hit.boxes.push_back(box);
 };
 
     auto append_attack_vector = [&](MovementFrame& frame,
-                                    const std::string& type,
                                     const nlohmann::json& node) {
-        if (type.empty() || node.is_null()) return;
+        if (node.is_null()) return;
         animation_update::FrameAttackGeometry::Vector vec;
-        vec.type = type;
         if (node.is_object()) {
             vec.start_x = read_float(node.value("start_x", 0.0f));
             const bool has_start_z = node.contains("start_z");
@@ -630,7 +617,8 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
             } else {
                 vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
                 const float fallback_end_z = read_float(node.value("end_z", read_float(node.value("end_y", 0.0f))));
-                vec.control_y = 0.0f;
+                const float fallback_end_y = has_start_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
+                vec.control_y = (vec.start_y + fallback_end_y) * 0.5f;
                 vec.control_z = (vec.start_z + fallback_end_z) * 0.5f;
             }
             vec.end_x   = read_float(node.value("end_x", 0.0f));
@@ -639,9 +627,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
             vec.end_z   = has_end_z ? read_float(node.value("end_z", 0.0f))
                                     : read_float(node.value("end_y", 0.0f));
             vec.damage  = read_int(node.value("damage", 0));
-            if (node.contains("type") && node["type"].is_string()) {
-                vec.type = node["type"].get<std::string>();
-            }
         } else if (node.is_array()) {
             const auto& arr = node;
             if (!arr.empty())      vec.start_x = read_float(arr[0]);
@@ -649,12 +634,13 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
             if (arr.size() > 2)    vec.end_x   = read_float(arr[2]);
             if (arr.size() > 3)    vec.end_z   = read_float(arr[3]);
             vec.control_x = (vec.start_x + vec.end_x) * 0.5f;
+            vec.control_y = 0.0f;
             vec.control_z = (vec.start_z + vec.end_z) * 0.5f;
             if (arr.size() > 4)    vec.damage  = read_int(arr[4]);
         } else {
             return;
         }
-        frame.attack.add_vector(vec.type, vec);
+        frame.attack.add_vector(vec);
 };
 
     std::size_t frame_index = 0;
@@ -792,14 +778,28 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         if (hit_geom.is_array() && frame_index < hit_geom.size()) {
             const auto& hit_entry = hit_geom[static_cast<nlohmann::json::size_type>(frame_index)];
             if (hit_entry.is_object()) {
-                for (const char* type : kDamageTypeNames) {
-                    auto it = hit_entry.find(type);
-                    if (it != hit_entry.end()) {
-                        upsert_hit_box(f, type, *it);
+                if (hit_entry.contains("boxes") && hit_entry["boxes"].is_array()) {
+                    for (const auto& node : hit_entry["boxes"]) {
+                        append_hit_box(f, node);
+                    }
+                } else if (hit_entry.contains("center_x") || hit_entry.contains("half_width") || hit_entry.contains("rotation")) {
+                    append_hit_box(f, hit_entry);
+                } else {
+                    for (const char* type : kLegacyDamageTypeNames) {
+                        auto it = hit_entry.find(type);
+                        if (it != hit_entry.end()) {
+                            append_hit_box(f, *it);
+                        }
                     }
                 }
-            } else if (!hit_entry.is_null()) {
-                upsert_hit_box(f, "melee", hit_entry);
+            } else if (hit_entry.is_array()) {
+                if (!hit_entry.empty() && hit_entry.front().is_object()) {
+                    for (const auto& node : hit_entry) {
+                        append_hit_box(f, node);
+                    }
+                } else if (!hit_entry.is_null()) {
+                    append_hit_box(f, hit_entry);
+                }
             }
         }
 
@@ -807,12 +807,22 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         if (attack_geom.is_array() && frame_index < attack_geom.size()) {
             const auto& attack_entry = attack_geom[static_cast<nlohmann::json::size_type>(frame_index)];
             if (attack_entry.is_object()) {
-                for (const char* type : kDamageTypeNames) {
-                    auto it = attack_entry.find(type);
-                    if (it == attack_entry.end() || !it->is_array()) continue;
-                    for (const auto& vec_node : *it) {
-                        append_attack_vector(f, type, vec_node);
+                if (attack_entry.contains("vectors") && attack_entry["vectors"].is_array()) {
+                    for (const auto& vec_node : attack_entry["vectors"]) {
+                        append_attack_vector(f, vec_node);
                     }
+                } else {
+                    for (const char* type : kLegacyDamageTypeNames) {
+                        auto it = attack_entry.find(type);
+                        if (it == attack_entry.end() || !it->is_array()) continue;
+                        for (const auto& vec_node : *it) {
+                            append_attack_vector(f, vec_node);
+                        }
+                    }
+                }
+            } else if (attack_entry.is_array()) {
+                for (const auto& vec_node : attack_entry) {
+                    append_attack_vector(f, vec_node);
                 }
             }
         }

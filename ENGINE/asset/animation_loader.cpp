@@ -212,7 +212,7 @@ fs::path project_root_path() {
 #endif
 }
 
-constexpr std::array<const char*, 3> kDamageTypeNames = {
+constexpr std::array<const char*, 3> kLegacyDamageTypeNames = {
         "projectile", "melee", "explosion"
 };
 
@@ -247,14 +247,12 @@ int read_int(const nlohmann::json& value, int fallback = 0) {
         return fallback;
 }
 
-void upsert_hit_box(animation_update::FrameHitGeometry& geometry,
-                    const std::string& type,
+void append_hit_box(animation_update::FrameHitGeometry& geometry,
                     const nlohmann::json& node) {
-        if (type.empty() || node.is_null()) {
+        if (node.is_null()) {
                 return;
         }
         animation_update::FrameHitGeometry::HitBox box;
-        box.type = type;
         if (node.is_object()) {
                 box.center_x = read_float(node.value("center_x", 0.0f));
                 const bool has_center_z = node.contains("center_z");
@@ -264,9 +262,6 @@ void upsert_hit_box(animation_update::FrameHitGeometry& geometry,
                 box.half_width = read_float(node.value("half_width", 0.0f));
                 box.half_height = read_float(node.value("half_height", 0.0f));
                 box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
-                if (node.contains("type") && node["type"].is_string()) {
-                        box.type = node["type"].get<std::string>();
-                }
         } else if (node.is_array()) {
                 const auto& arr = node;
                 if (!arr.empty())          box.center_x = read_float(arr[0]);
@@ -287,35 +282,45 @@ void upsert_hit_box(animation_update::FrameHitGeometry& geometry,
         if (box.is_empty()) {
                 return;
         }
-        if (auto* existing = geometry.find_box(box.type)) {
-                *existing = box;
-        } else {
-                geometry.boxes.push_back(box);
-        }
+        geometry.boxes.push_back(box);
 }
 
 void apply_hit_geometry_entry(AnimationFrame& frame, const nlohmann::json& entry) {
         frame.hit_geometry.boxes.clear();
         if (entry.is_object()) {
-                for (const char* type : kDamageTypeNames) {
+                if (entry.contains("boxes") && entry["boxes"].is_array()) {
+                        for (const auto& node : entry["boxes"]) {
+                                append_hit_box(frame.hit_geometry, node);
+                        }
+                        return;
+                }
+                if (entry.contains("center_x") || entry.contains("half_width") || entry.contains("rotation")) {
+                        append_hit_box(frame.hit_geometry, entry);
+                        return;
+                }
+                for (const char* type : kLegacyDamageTypeNames) {
                         auto it = entry.find(type);
                         if (it != entry.end()) {
-                                upsert_hit_box(frame.hit_geometry, type, *it);
+                                append_hit_box(frame.hit_geometry, *it);
                         }
                 }
-        } else if (!entry.is_null()) {
-                upsert_hit_box(frame.hit_geometry, "melee", entry);
+        } else if (entry.is_array()) {
+                if (!entry.empty() && entry.front().is_object()) {
+                        for (const auto& node : entry) {
+                                append_hit_box(frame.hit_geometry, node);
+                        }
+                } else {
+                        append_hit_box(frame.hit_geometry, entry);
+                }
         }
 }
 
 void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
-                          const std::string& type,
                           const nlohmann::json& node) {
-        if (type.empty() || node.is_null()) {
+        if (node.is_null()) {
                 return;
         }
         animation_update::FrameAttackGeometry::Vector vec;
-        vec.type = type;
         if (node.is_object()) {
                 vec.start_x = read_float(node.value("start_x", 0.0f));
                 const bool has_start_z = node.contains("start_z");
@@ -332,7 +337,8 @@ void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
                 } else {
                         vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
                         const float fallback_end_z = read_float(node.value("end_z", read_float(node.value("end_y", 0.0f))));
-                        vec.control_y = 0.0f;
+                        const float fallback_end_y = has_start_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
+                        vec.control_y = (vec.start_y + fallback_end_y) * 0.5f;
                         vec.control_z = (vec.start_z + fallback_end_z) * 0.5f;
                 }
                 vec.end_x   = read_float(node.value("end_x", 0.0f));
@@ -341,9 +347,6 @@ void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
                 vec.end_z   = has_end_z ? read_float(node.value("end_z", 0.0f))
                                         : read_float(node.value("end_y", 0.0f));
                 vec.damage  = read_int(node.value("damage", 0));
-                if (node.contains("type") && node["type"].is_string()) {
-                        vec.type = node["type"].get<std::string>();
-                }
         } else if (node.is_array()) {
                 const auto& arr = node;
                 if (!arr.empty())      vec.start_x = read_float(arr[0]);
@@ -351,26 +354,38 @@ void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
                 if (arr.size() > 2)    vec.end_x   = read_float(arr[2]);
                 if (arr.size() > 3)    vec.end_z   = read_float(arr[3]);
                 vec.control_x = (vec.start_x + vec.end_x) * 0.5f;
+                vec.control_y = 0.0f;
                 vec.control_z = (vec.start_z + vec.end_z) * 0.5f;
                 if (arr.size() > 4)    vec.damage  = read_int(arr[4]);
         } else {
                 return;
         }
-        geometry.add_vector(vec.type, vec);
+        geometry.add_vector(vec);
 }
 
 void apply_attack_geometry_entry(AnimationFrame& frame, const nlohmann::json& entry) {
         frame.attack_geometry.vectors.clear();
-        if (!entry.is_object()) {
+        if (entry.is_object()) {
+                if (entry.contains("vectors") && entry["vectors"].is_array()) {
+                        for (const auto& vec_node : entry["vectors"]) {
+                                append_attack_vector(frame.attack_geometry, vec_node);
+                        }
+                        return;
+                }
+                for (const char* type : kLegacyDamageTypeNames) {
+                        auto it = entry.find(type);
+                        if (it == entry.end() || !it->is_array()) {
+                                continue;
+                        }
+                        for (const auto& vec_node : *it) {
+                                append_attack_vector(frame.attack_geometry, vec_node);
+                        }
+                }
                 return;
         }
-        for (const char* type : kDamageTypeNames) {
-                auto it = entry.find(type);
-                if (it == entry.end() || !it->is_array()) {
-                        continue;
-                }
-                for (const auto& vec_node : *it) {
-                        append_attack_vector(frame.attack_geometry, type, vec_node);
+        if (entry.is_array()) {
+                for (const auto& vec_node : entry) {
+                        append_attack_vector(frame.attack_geometry, vec_node);
                 }
         }
 }

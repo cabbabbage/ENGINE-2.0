@@ -17,7 +17,6 @@ TEST_CASE("AttackValidation mirrors attack paths when flipped") {
     vec.start_x = 0.0f;
     vec.end_x = 10.0f;
     vec.control_x = 5.0f;
-    vec.type = "melee";
 
     GeometryContext ctx{};
     ctx.anchor = SDL_Point{100, 50};
@@ -35,19 +34,17 @@ TEST_CASE("AttackValidation mirrors attack paths when flipped") {
     CHECK(mirrored.back().x == doctest::Approx(90.0f));
 }
 
-TEST_CASE("AttackValidation reports a hit when an attack vector touches a matching hitbox") {
+TEST_CASE("AttackValidation reports a hit when an attack vector touches a hitbox") {
     AnimationFrame attacker_frame;
     attacker_frame.frame_index = 7;
     FrameAttackGeometry::Vector vec;
     vec.start_x = 0.0f;
     vec.end_x = 10.0f;
     vec.damage = 5;
-    vec.type = "melee";
     attacker_frame.attack_geometry.vectors.push_back(vec);
 
     AnimationFrame target_frame;
     FrameHitGeometry::HitBox hitbox;
-    hitbox.type = "melee";
     hitbox.half_width = 5.0f;
     hitbox.half_height = 5.0f;
     target_frame.hit_geometry.boxes.push_back(hitbox);

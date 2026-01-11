@@ -382,9 +382,8 @@ void FrameEditorSession::begin(Assets* assets,
     adjustment_mode_active_ = false;
     adjustment_dirty_ = false;
     adjustment_selection_.reset();
-    selected_hitbox_type_index_ = 1;
-    selected_attack_type_index_ = 1;
-    selected_attack_vector_indices_.fill(-1);
+    selected_hitbox_index_ = -1;
+    selected_attack_vector_index_ = -1;
     hitbox_dragging_ = false;
     active_hitbox_handle_ = HitHandle::None;
     hitbox_drag_moved_ = false;
@@ -541,7 +540,7 @@ void FrameEditorSession::load_animation_data(const std::string& animation_id) {
     dragging_scrollbar_thumb_ = false;
     child_dropdown_options_cache_.clear();
     animation_dropdown_options_cache_.clear();
-    selected_attack_vector_indices_.fill(-1);
+    selected_attack_vector_index_ = -1;
     clamp_attack_selection();
 
     target_->current_animation = animation_id_;
@@ -839,20 +838,8 @@ void FrameEditorSession::update(const Input& input) {
         }
     }
     if (mode_ == Mode::HitGeometry) {
-        if (dd_hitbox_type_ && !hitbox_type_labels_.empty()) {
-            int desired = std::clamp(selected_hitbox_type_index_, 0, static_cast<int>(hitbox_type_labels_.size()) - 1);
-            if (dd_hitbox_type_->selected() != desired) {
-                dd_hitbox_type_->set_selected(desired);
-            }
-        }
         refresh_hitbox_form();
     } else if (mode_ == Mode::AttackGeometry) {
-        if (dd_attack_type_ && !attack_type_labels_.empty()) {
-            int desired = std::clamp(selected_attack_type_index_, 0, static_cast<int>(attack_type_labels_.size()) - 1);
-            if (dd_attack_type_->selected() != desired) {
-                dd_attack_type_->set_selected(desired);
-            }
-        }
         refresh_attack_form();
     }
 
@@ -1103,13 +1090,12 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
     }
     if (mode_ == Mode::HitGeometry) {
         if (handle_button(btn_hitbox_add_remove_, [this]() {
-                const std::string type = this->current_hitbox_type();
                 this->end_hitbox_drag(false);
                 this->end_attack_drag(false);
                 if (this->current_hit_box()) {
-                    this->delete_hit_box_for_type(type);
+                    this->delete_current_hit_box();
                 } else {
-                    this->ensure_hit_box_for_type(type);
+                    this->ensure_hit_box();
                 }
                 this->refresh_hitbox_form();
                 this->persist_changes();
@@ -1124,9 +1110,8 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             })) return true;
     } else if (mode_ == Mode::AttackGeometry) {
         if (handle_button(btn_attack_add_remove_, [this]() {
-                const std::string type = this->current_attack_type();
                 this->end_attack_drag(false);
-                this->ensure_attack_vector_for_type(type);
+                this->ensure_attack_vector();
                 this->refresh_attack_form();
                 this->persist_changes();
             })) return true;
@@ -1351,26 +1336,16 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         }
     }
     if (mode_ == Mode::HitGeometry) {
-        if (dd_hitbox_type_ && dd_hitbox_type_->handle_event(e)) {
-            if (!hitbox_type_labels_.empty()) {
-                int idx = std::clamp(dd_hitbox_type_->selected(), 0, static_cast<int>(hitbox_type_labels_.size()) - 1);
-                if (idx != selected_hitbox_type_index_) {
-                    selected_hitbox_type_index_ = idx;
-                    refresh_hitbox_form();
-                }
-            }
-            return true;
-        }
         bool consumed_hit = false;
         if (tb_hit_center_x_) consumed_hit = tb_hit_center_x_->handle_event(e) || consumed_hit;
-        if (tb_hit_center_y_) consumed_hit = tb_hit_center_y_->handle_event(e) || consumed_hit;
+        if (tb_hit_center_z_) consumed_hit = tb_hit_center_z_->handle_event(e) || consumed_hit;
         if (tb_hit_width_) consumed_hit = tb_hit_width_->handle_event(e) || consumed_hit;
         if (tb_hit_height_) consumed_hit = tb_hit_height_->handle_event(e) || consumed_hit;
         if (tb_hit_rotation_) consumed_hit = tb_hit_rotation_->handle_event(e) || consumed_hit;
         if (consumed_hit) {
             auto* box = current_hit_box();
             if (!box) {
-                box = ensure_hit_box_for_type(current_hitbox_type());
+                box = ensure_hit_box();
             }
             if (box) {
                 auto parse_float = [](const std::string& text, float fallback) -> float {
@@ -1389,13 +1364,14 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                         changed = true;
                     }
                 }
-                if (tb_hit_center_y_) {
-                    float value = parse_float(tb_hit_center_y_->value(), box->center_z);
+                if (tb_hit_center_z_) {
+                    float value = parse_float(tb_hit_center_z_->value(), box->center_z);
                     if (std::isfinite(value) && box->center_z != value) {
                         box->center_z = value;
                         changed = true;
                     }
                 }
+                box->center_y = 0.0f;
                 if (tb_hit_width_) {
                     float value = parse_float(tb_hit_width_->value(), box->half_width * 2.0f);
                     if (std::isfinite(value)) {
@@ -1431,29 +1407,21 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             return true;
         }
     } else if (mode_ == Mode::AttackGeometry) {
-        if (dd_attack_type_ && dd_attack_type_->handle_event(e)) {
-            if (!attack_type_labels_.empty()) {
-                int idx = std::clamp(dd_attack_type_->selected(), 0, static_cast<int>(attack_type_labels_.size()) - 1);
-                if (idx != selected_attack_type_index_) {
-                    selected_attack_type_index_ = idx;
-                    clamp_attack_selection();
-                    refresh_attack_form();
-                }
-            }
-            return true;
-        }
         bool consumed_attack = false;
         if (tb_attack_start_x_) consumed_attack = tb_attack_start_x_->handle_event(e) || consumed_attack;
         if (tb_attack_start_y_) consumed_attack = tb_attack_start_y_->handle_event(e) || consumed_attack;
+        if (tb_attack_start_z_) consumed_attack = tb_attack_start_z_->handle_event(e) || consumed_attack;
         if (tb_attack_control_x_) consumed_attack = tb_attack_control_x_->handle_event(e) || consumed_attack;
         if (tb_attack_control_y_) consumed_attack = tb_attack_control_y_->handle_event(e) || consumed_attack;
+        if (tb_attack_control_z_) consumed_attack = tb_attack_control_z_->handle_event(e) || consumed_attack;
         if (tb_attack_end_x_) consumed_attack = tb_attack_end_x_->handle_event(e) || consumed_attack;
         if (tb_attack_end_y_) consumed_attack = tb_attack_end_y_->handle_event(e) || consumed_attack;
+        if (tb_attack_end_z_) consumed_attack = tb_attack_end_z_->handle_event(e) || consumed_attack;
         if (tb_attack_damage_) consumed_attack = tb_attack_damage_->handle_event(e) || consumed_attack;
         if (consumed_attack) {
             auto* vec = current_attack_vector();
             if (!vec) {
-                vec = ensure_attack_vector_for_type(current_attack_type());
+                vec = ensure_attack_vector();
             }
             if (vec) {
                 auto parse_float = [](const std::string& text, float fallback) -> float {
@@ -1481,7 +1449,14 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_start_y_) {
-                    float value = parse_float(tb_attack_start_y_->value(), vec->start_z);
+                    float value = parse_float(tb_attack_start_y_->value(), vec->start_y);
+                    if (std::isfinite(value) && vec->start_y != value) {
+                        vec->start_y = value;
+                        changed = true;
+                    }
+                }
+                if (tb_attack_start_z_) {
+                    float value = parse_float(tb_attack_start_z_->value(), vec->start_z);
                     if (std::isfinite(value) && vec->start_z != value) {
                         vec->start_z = value;
                         changed = true;
@@ -1495,7 +1470,14 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_control_y_) {
-                    float value = parse_float(tb_attack_control_y_->value(), vec->control_z);
+                    float value = parse_float(tb_attack_control_y_->value(), vec->control_y);
+                    if (std::isfinite(value) && vec->control_y != value) {
+                        vec->control_y = value;
+                        changed = true;
+                    }
+                }
+                if (tb_attack_control_z_) {
+                    float value = parse_float(tb_attack_control_z_->value(), vec->control_z);
                     if (std::isfinite(value) && vec->control_z != value) {
                         vec->control_z = value;
                         changed = true;
@@ -1509,7 +1491,14 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     }
                 }
                 if (tb_attack_end_y_) {
-                    float value = parse_float(tb_attack_end_y_->value(), vec->end_z);
+                    float value = parse_float(tb_attack_end_y_->value(), vec->end_y);
+                    if (std::isfinite(value) && vec->end_y != value) {
+                        vec->end_y = value;
+                        changed = true;
+                    }
+                }
+                if (tb_attack_end_z_) {
+                    float value = parse_float(tb_attack_end_z_->value(), vec->end_z);
                     if (std::isfinite(value) && vec->end_z != value) {
                         vec->end_z = value;
                         changed = true;
@@ -1663,14 +1652,17 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             if (!frames_.empty()) {
                 const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
                 auto& frame = frames_[frame_index];
-                const std::string current_type = current_attack_type();
                 const float scale = asset_local_scale();
                 auto to_screen = [&](float lx, float plane_axis) -> SDL_FPoint {
                     SDL_FPoint world{
                         static_cast<float>(anchor_world.x) + lx * scale,
-                        static_cast<float>(anchor_world.y) - plane_axis * scale
+                        static_cast<float>(anchor_world.y)
                     };
-                    return cam.map_to_screen_f(world);
+                    SDL_FPoint out{};
+                    if (cam.project_world_point(world, plane_axis * scale, out)) {
+                        return out;
+                    }
+                    return cam.map_to_screen_f(SDL_FPoint{ world.x, world.y - plane_axis * scale });
                 };
 
                 constexpr float radius = kAttackNodeRadius;
@@ -1679,9 +1671,8 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 AdjustmentTarget hit_target = AdjustmentTarget::None;
                 SDL_FPoint hit_screen{};
 
-                int type_counter = 0;
+                int vector_index = 0;
                 for (const auto& vec : frame.attack.vectors) {
-                    if (vec.type != current_type) continue;
                     SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
                     SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
                     SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
@@ -1691,7 +1682,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                         const float dist = dx * dx + dy * dy;
                         if (dist <= best) {
                             best = dist;
-                            hit_vector = type_counter;
+                            hit_vector = vector_index;
                             hit_target = target;
                             hit_screen = screen;
                         }
@@ -1699,7 +1690,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     try_hit(start_screen, AdjustmentTarget::AttackStart);
                     try_hit(control_screen, AdjustmentTarget::AttackControl);
                     try_hit(end_screen, AdjustmentTarget::AttackEnd);
-                    ++type_counter;
+                    ++vector_index;
                 }
 
                 if (hit_vector >= 0 && hit_target != AdjustmentTarget::None) {
@@ -1724,9 +1715,10 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 auto& frame = frames_[frame_index];
                 constexpr float radius = 12.0f;
                 float best = radius * radius;
-                int hit_type_index = -1;
+                int hit_box_index = -1;
                 SDL_FPoint hit_screen{};
-                for (const auto& box : frame.hit.boxes) {
+                for (std::size_t idx = 0; idx < frame.hit.boxes.size(); ++idx) {
+                    const auto& box = frame.hit.boxes[idx];
                     HitBoxVisual visual;
                     if (!build_hitbox_visual(box, visual)) {
                         continue;
@@ -1737,19 +1729,14 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     if (dist <= best) {
                         best = dist;
                         hit_screen = visual.center;
-                        for (std::size_t idx = 0; idx < kDamageTypeNames.size(); ++idx) {
-                            if (box.type == kDamageTypeNames[idx]) {
-                                hit_type_index = static_cast<int>(idx);
-                                break;
-                            }
-                        }
+                        hit_box_index = static_cast<int>(idx);
                     }
                 }
-                if (hit_type_index >= 0) {
+                if (hit_box_index >= 0) {
                     ensure_adjustment_active();
                     const bool same_target = adjustment_selection_.target == AdjustmentTarget::HitboxCenter &&
-                                             hit_type_index == selected_hitbox_type_index_;
-                    selected_hitbox_type_index_ = hit_type_index;
+                                             hit_box_index == selected_hitbox_index_;
+                    selected_hitbox_index_ = hit_box_index;
                     refresh_hitbox_form();
                     if (same_target) {
                         cycle_adjustment_axis();
@@ -2036,26 +2023,24 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
                     adjustment_selection_.target == AdjustmentTarget::AttackEnd) &&
                    !frames_.empty()) {
             const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
-            auto& frame = frames_[frame_index];
-            const std::string current_type = current_attack_type();
-            int type_counter = 0;
-    animation_update::FrameAttackGeometry::Vector* vec = nullptr;
-    for (const auto& entry : frame.attack.vectors) {
-        if (entry.type != current_type) continue;
-        if (type_counter == adjustment_selection_.attack_vector_index) {
-            vec = const_cast<animation_update::FrameAttackGeometry::Vector*>(&entry);
-            break;
-        }
-        ++type_counter;
-    }
+            const auto& frame = frames_[frame_index];
+            const animation_update::FrameAttackGeometry::Vector* vec = nullptr;
+            if (adjustment_selection_.attack_vector_index >= 0 &&
+                adjustment_selection_.attack_vector_index < static_cast<int>(frame.attack.vectors.size())) {
+                vec = &frame.attack.vectors[static_cast<std::size_t>(adjustment_selection_.attack_vector_index)];
+            }
             if (vec) {
                 const float scale = asset_local_scale();
                 auto to_screen = [&](float lx, float plane_axis) -> SDL_FPoint {
                     SDL_FPoint world{
                         static_cast<float>(anchor_world.x) + lx * scale,
-                        static_cast<float>(anchor_world.y) - plane_axis * scale
+                        static_cast<float>(anchor_world.y)
                     };
-                    return cam.map_to_screen_f(world);
+                    SDL_FPoint out{};
+                    if (cam.project_world_point(world, plane_axis * scale, out)) {
+                        return out;
+                    }
+                    return cam.map_to_screen_f(SDL_FPoint{ world.x, world.y - plane_axis * scale });
                 };
 
                 float x = 0.0f;
@@ -2099,7 +2084,7 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
             if (const auto* box = current_hit_box()) {
                 axis_value = (adjustment_selection_.axis == AdjustmentAxis::X)
                                  ? box->center_x
-                                 : (adjustment_selection_.axis == AdjustmentAxis::Y ? box->center_y : box->center_z);
+                                 : (adjustment_selection_.axis == AdjustmentAxis::Z ? box->center_z : 0.0f);
                 HitBoxVisual visual;
                 if (build_hitbox_visual(*box, visual)) {
                     screen = visual.center;
@@ -2107,10 +2092,10 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
                     animation_update::FrameHitGeometry::HitBox ghost_box = *box;
                     if (adjustment_selection_.axis == AdjustmentAxis::X) {
                         ghost_box.center_x = snap_value(ghost_box.center_x + static_cast<float>(step));
-                    } else if (adjustment_selection_.axis == AdjustmentAxis::Y) {
-                        ghost_box.center_y = snap_value(ghost_box.center_y + static_cast<float>(step));
-                    } else {
+                    } else if (adjustment_selection_.axis == AdjustmentAxis::Z) {
                         ghost_box.center_z = snap_value(ghost_box.center_z + static_cast<float>(step));
+                    } else {
+                        ghost_box.center_y = 0.0f;
                     }
                     HitBoxVisual ghost_visual;
                     if (build_hitbox_visual(ghost_box, ghost_visual)) {
@@ -2316,26 +2301,27 @@ void FrameEditorSession::render_toolbox(SDL_Renderer* renderer) const {
         render_if(btn_child_add_.get());
         render_if(btn_child_remove_.get());
     } else if (mode_ == Mode::HitGeometry) {
-        render_if(dd_hitbox_type_.get());
         render_if(btn_hitbox_add_remove_.get());
         render_if(btn_hitbox_copy_next_.get());
         render_if(tb_hit_center_x_.get());
-        render_if(tb_hit_center_y_.get());
+        render_if(tb_hit_center_z_.get());
         render_if(tb_hit_width_.get());
         render_if(tb_hit_height_.get());
         render_if(tb_hit_rotation_.get());
         render_if(btn_apply_all_hit_.get());
     } else if (mode_ == Mode::AttackGeometry) {
-        render_if(dd_attack_type_.get());
         render_if(btn_attack_add_remove_.get());
         render_if(btn_attack_delete_.get());
         render_if(btn_attack_copy_next_.get());
         render_if(tb_attack_start_x_.get());
         render_if(tb_attack_start_y_.get());
+        render_if(tb_attack_start_z_.get());
         render_if(tb_attack_control_x_.get());
         render_if(tb_attack_control_y_.get());
+        render_if(tb_attack_control_z_.get());
         render_if(tb_attack_end_x_.get());
         render_if(tb_attack_end_y_.get());
+        render_if(tb_attack_end_z_.get());
         render_if(tb_attack_damage_.get());
         render_if(btn_apply_all_attack_.get());
     }
@@ -2455,19 +2441,6 @@ void FrameEditorSession::ensure_widgets() const {
     if (!tb_child_name_) tb_child_name_ = std::make_unique<DMTextBox>("Child Asset", "");
     if (!btn_child_add_) btn_child_add_ = std::make_unique<DMButton>("Add / Rename", &DMStyles::AccentButton(), 140, DMButton::height());
     if (!btn_child_remove_) btn_child_remove_ = std::make_unique<DMButton>("Remove", &DMStyles::DeleteButton(), 120, DMButton::height());
-    if (hitbox_type_labels_.size() != kDamageTypeNames.size()) {
-        hitbox_type_labels_.clear();
-        for (const char* type : kDamageTypeNames) {
-            std::string label = type;
-            if (!label.empty()) {
-                label[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(label[0])));
-            }
-            hitbox_type_labels_.push_back(label);
-        }
-    }
-    if (!dd_hitbox_type_ && !hitbox_type_labels_.empty()) {
-        dd_hitbox_type_ = std::make_unique<DMDropdown>("Hit Box Type", hitbox_type_labels_, std::clamp(selected_hitbox_type_index_, 0, static_cast<int>(hitbox_type_labels_.size()) - 1));
-    }
     if (!btn_hitbox_add_remove_) {
         btn_hitbox_add_remove_ = std::make_unique<DMButton>("Add Hit Box", &DMStyles::AccentButton(), 150, DMButton::height());
     }
@@ -2475,23 +2448,10 @@ void FrameEditorSession::ensure_widgets() const {
         btn_hitbox_copy_next_ = std::make_unique<DMButton>("Copy To Next", &header, 150, DMButton::height());
     }
     if (!tb_hit_center_x_) tb_hit_center_x_ = std::make_unique<DMTextBox>("Center X", "0");
-    if (!tb_hit_center_y_) tb_hit_center_y_ = std::make_unique<DMTextBox>("Center Z", "0");
+    if (!tb_hit_center_z_) tb_hit_center_z_ = std::make_unique<DMTextBox>("Center Z", "0");
     if (!tb_hit_width_) tb_hit_width_ = std::make_unique<DMTextBox>("Width", "0");
     if (!tb_hit_height_) tb_hit_height_ = std::make_unique<DMTextBox>("Height", "0");
     if (!tb_hit_rotation_) tb_hit_rotation_ = std::make_unique<DMTextBox>("Rotation", "0");
-    if (attack_type_labels_.size() != kDamageTypeNames.size()) {
-        attack_type_labels_.clear();
-        for (const char* type : kDamageTypeNames) {
-            std::string label = type;
-            if (!label.empty()) {
-                label[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(label[0])));
-            }
-            attack_type_labels_.push_back(label);
-        }
-    }
-    if (!dd_attack_type_ && !attack_type_labels_.empty()) {
-        dd_attack_type_ = std::make_unique<DMDropdown>("Attack Type", attack_type_labels_, std::clamp(selected_attack_type_index_, 0, static_cast<int>(attack_type_labels_.size()) - 1));
-    }
     if (!btn_attack_add_remove_) {
         btn_attack_add_remove_ = std::make_unique<DMButton>("Add Attack", &DMStyles::AccentButton(), 150, DMButton::height());
     }
@@ -2502,11 +2462,14 @@ void FrameEditorSession::ensure_widgets() const {
         btn_attack_copy_next_ = std::make_unique<DMButton>("Copy To Next", &header, 150, DMButton::height());
     }
     if (!tb_attack_start_x_) tb_attack_start_x_ = std::make_unique<DMTextBox>("Start X", "0");
-    if (!tb_attack_start_y_) tb_attack_start_y_ = std::make_unique<DMTextBox>("Start Z", "0");
+    if (!tb_attack_start_y_) tb_attack_start_y_ = std::make_unique<DMTextBox>("Start Y", "0");
+    if (!tb_attack_start_z_) tb_attack_start_z_ = std::make_unique<DMTextBox>("Start Z", "0");
     if (!tb_attack_control_x_) tb_attack_control_x_ = std::make_unique<DMTextBox>("Control X", "0");
-    if (!tb_attack_control_y_) tb_attack_control_y_ = std::make_unique<DMTextBox>("Control Z", "0");
+    if (!tb_attack_control_y_) tb_attack_control_y_ = std::make_unique<DMTextBox>("Control Y", "0");
+    if (!tb_attack_control_z_) tb_attack_control_z_ = std::make_unique<DMTextBox>("Control Z", "0");
     if (!tb_attack_end_x_) tb_attack_end_x_ = std::make_unique<DMTextBox>("End X", "0");
-    if (!tb_attack_end_y_) tb_attack_end_y_ = std::make_unique<DMTextBox>("End Z", "0");
+    if (!tb_attack_end_y_) tb_attack_end_y_ = std::make_unique<DMTextBox>("End Y", "0");
+    if (!tb_attack_end_z_) tb_attack_end_z_ = std::make_unique<DMTextBox>("End Z", "0");
     if (!tb_attack_damage_) tb_attack_damage_ = std::make_unique<DMTextBox>("Damage", "0");
     last_show_anim_value_ = show_animation_;
     last_show_child_value_ = show_child_;
@@ -2918,11 +2881,6 @@ void FrameEditorSession::rebuild_layout() const {
             content_y += height + gap;
             return r;
 };
-        if (dd_hitbox_type_) {
-            const int h = DMDropdown::height();
-            dd_hitbox_type_->set_rect(place_row(h));
-            register_toolbox_widget(dd_hitbox_type_.get());
-        }
         if (btn_hitbox_add_remove_ || btn_hitbox_copy_next_) {
             const int row_h = DMButton::height();
             SDL_Rect row = place_row(row_h);
@@ -2952,7 +2910,7 @@ void FrameEditorSession::rebuild_layout() const {
                 register_toolbox_widget(right);
             }
 };
-        place_pair(tb_hit_center_x_.get(), tb_hit_center_y_.get());
+        place_pair(tb_hit_center_x_.get(), tb_hit_center_z_.get());
         place_pair(tb_hit_width_.get(), tb_hit_height_.get());
         if (tb_hit_rotation_) {
             const int rot_height = tb_hit_rotation_->height_for_width(inner_width);
@@ -2983,11 +2941,6 @@ void FrameEditorSession::rebuild_layout() const {
             content_y += height + gap;
             return r;
 };
-        if (dd_attack_type_) {
-            const int h = DMDropdown::height();
-            dd_attack_type_->set_rect(place_row(h));
-            register_toolbox_widget(dd_attack_type_.get());
-        }
         if (btn_attack_add_remove_ || btn_attack_delete_ || btn_attack_copy_next_) {
             const int row_h = DMButton::height();
             SDL_Rect row = place_row(row_h);
@@ -3025,9 +2978,17 @@ void FrameEditorSession::rebuild_layout() const {
                 register_toolbox_widget(right);
             }
 };
+        auto place_full = [&](DMTextBox* tb) {
+            if (!tb) return;
+            const int row_h = tb->height_for_width(inner_width);
+            tb->set_rect(place_row(row_h));
+            register_toolbox_widget(tb);
+        };
         place_pair(tb_attack_start_x_.get(), tb_attack_start_y_.get());
-        place_pair(tb_attack_control_x_.get(), tb_attack_control_y_.get());
+        place_pair(tb_attack_start_z_.get(), tb_attack_control_x_.get());
+        place_pair(tb_attack_control_y_.get(), tb_attack_control_z_.get());
         place_pair(tb_attack_end_x_.get(), tb_attack_end_y_.get());
+        place_full(tb_attack_end_z_.get());
         if (tb_attack_damage_) {
             const int dmg_height = tb_attack_damage_->height_for_width(inner_width);
             tb_attack_damage_->set_rect(place_row(dmg_height));
@@ -3378,51 +3339,77 @@ animation_update::FrameHitGeometry::HitBox* FrameEditorSession::current_hit_box(
     if (frames_.empty()) return nullptr;
     const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
     auto& frame = frames_[frame_index];
-    const std::string type = current_hitbox_type();
-    return frame.hit.find_box(type);
+    clamp_hitbox_selection();
+    if (selected_hitbox_index_ < 0 ||
+        selected_hitbox_index_ >= static_cast<int>(frame.hit.boxes.size())) {
+        return nullptr;
+    }
+    auto& box = frame.hit.boxes[static_cast<std::size_t>(selected_hitbox_index_)];
+    box.center_y = 0.0f;
+    return &box;
 }
 
 const animation_update::FrameHitGeometry::HitBox* FrameEditorSession::current_hit_box() const {
     if (frames_.empty()) return nullptr;
     const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
     const auto& frame = frames_[frame_index];
-    const std::string type = current_hitbox_type();
-    return frame.hit.find_box(type);
+    const_cast<FrameEditorSession*>(this)->clamp_hitbox_selection();
+    if (selected_hitbox_index_ < 0 ||
+        selected_hitbox_index_ >= static_cast<int>(frame.hit.boxes.size())) {
+        return nullptr;
+    }
+    return &frame.hit.boxes[static_cast<std::size_t>(selected_hitbox_index_)];
 }
 
-animation_update::FrameHitGeometry::HitBox* FrameEditorSession::ensure_hit_box_for_type(const std::string& type) {
+void FrameEditorSession::clamp_hitbox_selection() {
+    if (frames_.empty()) {
+        selected_hitbox_index_ = -1;
+        return;
+    }
+    const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
+    const auto& frame = frames_[frame_index];
+    if (frame.hit.boxes.empty()) {
+        selected_hitbox_index_ = -1;
+        return;
+    }
+    if (selected_hitbox_index_ < 0) {
+        selected_hitbox_index_ = 0;
+        return;
+    }
+    if (selected_hitbox_index_ >= static_cast<int>(frame.hit.boxes.size())) {
+        selected_hitbox_index_ = static_cast<int>(frame.hit.boxes.size()) - 1;
+    }
+}
+
+animation_update::FrameHitGeometry::HitBox* FrameEditorSession::ensure_hit_box() {
     if (frames_.empty()) return nullptr;
     const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
     auto& frame = frames_[frame_index];
-    if (auto* existing = frame.hit.find_box(type)) {
-        return existing;
+    if (!frame.hit.boxes.empty()) {
+        clamp_hitbox_selection();
+        return current_hit_box();
     }
     animation_update::FrameHitGeometry::HitBox box;
-    box.type = type;
     box.center_x = 0.0f;
-    box.center_y = 0.0f;
-    box.center_z = 0.0f;
     box.center_z = 40.0f;
     box.half_width = 40.0f;
     box.half_height = 60.0f;
     box.rotation_degrees = 0.0f;
     frame.hit.boxes.push_back(box);
-    return frame.hit.find_box(type);
+    selected_hitbox_index_ = 0;
+    return &frame.hit.boxes.front();
 }
 
-void FrameEditorSession::delete_hit_box_for_type(const std::string& type) {
+void FrameEditorSession::delete_current_hit_box() {
     if (frames_.empty()) return;
     const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
     auto& frame = frames_[frame_index];
-    auto& boxes = frame.hit.boxes;
-    boxes.erase(std::remove_if(boxes.begin(), boxes.end(), [&](const auto& box) {
-        return box.type == type;
-    }), boxes.end());
-}
-
-std::string FrameEditorSession::current_hitbox_type() const {
-    int idx = std::clamp(selected_hitbox_type_index_, 0, static_cast<int>(kDamageTypeNames.size()) - 1);
-    return std::string{kDamageTypeNames[idx]};
+    if (selected_hitbox_index_ < 0 ||
+        selected_hitbox_index_ >= static_cast<int>(frame.hit.boxes.size())) {
+        return;
+    }
+    frame.hit.boxes.erase(frame.hit.boxes.begin() + static_cast<std::ptrdiff_t>(selected_hitbox_index_));
+    clamp_hitbox_selection();
 }
 
 void FrameEditorSession::refresh_hitbox_form() const {
@@ -3439,7 +3426,7 @@ void FrameEditorSession::refresh_hitbox_form() const {
 };
     if (box) {
         sync_field(tb_hit_center_x_.get(), last_hit_center_x_text_, std::to_string(static_cast<int>(std::lround(box->center_x))));
-        sync_field(tb_hit_center_y_.get(), last_hit_center_y_text_, std::to_string(static_cast<int>(std::lround(box->center_z))));
+        sync_field(tb_hit_center_z_.get(), last_hit_center_z_text_, std::to_string(static_cast<int>(std::lround(box->center_z))));
         sync_field(tb_hit_width_.get(), last_hit_width_text_, std::to_string(static_cast<int>(std::lround(box->half_width * 2.0f))));
         sync_field(tb_hit_height_.get(), last_hit_height_text_, std::to_string(static_cast<int>(std::lround(box->half_height * 2.0f))));
         if (tb_hit_rotation_ && !tb_hit_rotation_->is_editing()) {
@@ -3449,7 +3436,7 @@ void FrameEditorSession::refresh_hitbox_form() const {
         }
     } else {
         sync_field(tb_hit_center_x_.get(), last_hit_center_x_text_, "0");
-        sync_field(tb_hit_center_y_.get(), last_hit_center_y_text_, "0");
+        sync_field(tb_hit_center_z_.get(), last_hit_center_z_text_, "0");
         sync_field(tb_hit_width_.get(), last_hit_width_text_, "0");
         sync_field(tb_hit_height_.get(), last_hit_height_text_, "0");
         sync_field(tb_hit_rotation_.get(), last_hit_rotation_text_, "0");
@@ -3466,7 +3453,7 @@ animation_update::FrameAttackGeometry::Vector* FrameEditorSession::current_attac
     clamp_attack_selection();
     const int vector_index = current_attack_vector_index();
     if (vector_index < 0) return nullptr;
-    return frame.attack.vector_at(current_attack_type(), static_cast<std::size_t>(vector_index));
+    return frame.attack.vector_at(static_cast<std::size_t>(vector_index));
 }
 
 const animation_update::FrameAttackGeometry::Vector* FrameEditorSession::current_attack_vector() const {
@@ -3476,16 +3463,15 @@ const animation_update::FrameAttackGeometry::Vector* FrameEditorSession::current
     const_cast<FrameEditorSession*>(this)->clamp_attack_selection();
     const int vector_index = current_attack_vector_index();
     if (vector_index < 0) return nullptr;
-    return frame.attack.vector_at(current_attack_type(), static_cast<std::size_t>(vector_index));
+    return frame.attack.vector_at(static_cast<std::size_t>(vector_index));
 }
 
-animation_update::FrameAttackGeometry::Vector* FrameEditorSession::ensure_attack_vector_for_type(const std::string& type) {
+animation_update::FrameAttackGeometry::Vector* FrameEditorSession::ensure_attack_vector() {
     if (frames_.empty()) return nullptr;
     const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
     auto& frame = frames_[frame_index];
-    const std::size_t existing_count = frame.attack.count_for_type(type);
+    const std::size_t existing_count = frame.attack.vectors.size();
     animation_update::FrameAttackGeometry::Vector vec;
-    vec.type = type;
     vec.start_x = 0.0f;
     vec.start_y = 0.0f;
     vec.start_z = 0.0f;
@@ -3496,7 +3482,7 @@ animation_update::FrameAttackGeometry::Vector* FrameEditorSession::ensure_attack
     vec.end_y = 0.0f;
     vec.end_z = 0.0f;
     vec.damage = 0;
-    animation_update::FrameAttackGeometry::Vector& created = frame.attack.add_vector(type, vec);
+    animation_update::FrameAttackGeometry::Vector& created = frame.attack.add_vector(vec);
     set_current_attack_vector_index(static_cast<int>(existing_count));
     return &created;
 }
@@ -3507,23 +3493,16 @@ void FrameEditorSession::delete_current_attack_vector() {
     auto& frame = frames_[frame_index];
     const int index = current_attack_vector_index();
     if (index < 0) return;
-    frame.attack.erase_vector(current_attack_type(), static_cast<std::size_t>(index));
+    frame.attack.erase_vector(static_cast<std::size_t>(index));
     clamp_attack_selection();
 }
 
-std::string FrameEditorSession::current_attack_type() const {
-    int idx = std::clamp(selected_attack_type_index_, 0, static_cast<int>(kDamageTypeNames.size()) - 1);
-    return std::string{kDamageTypeNames[idx]};
-}
-
 int FrameEditorSession::current_attack_vector_index() const {
-    const int type_idx = std::clamp(selected_attack_type_index_, 0, static_cast<int>(kDamageTypeNames.size()) - 1);
-    return selected_attack_vector_indices_[static_cast<std::size_t>(type_idx)];
+    return selected_attack_vector_index_;
 }
 
 void FrameEditorSession::set_current_attack_vector_index(int index) {
-    const int type_idx = std::clamp(selected_attack_type_index_, 0, static_cast<int>(kDamageTypeNames.size()) - 1);
-    selected_attack_vector_indices_[static_cast<std::size_t>(type_idx)] = index;
+    selected_attack_vector_index_ = index;
 }
 
 void FrameEditorSession::clamp_attack_selection() {
@@ -3533,8 +3512,7 @@ void FrameEditorSession::clamp_attack_selection() {
     }
     const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
     auto& frame = frames_[frame_index];
-    const std::string type = current_attack_type();
-    const std::size_t count = frame.attack.count_for_type(type);
+    const std::size_t count = frame.attack.vectors.size();
     if (count == 0) {
         set_current_attack_vector_index(-1);
         return;
@@ -3560,19 +3538,25 @@ void FrameEditorSession::refresh_attack_form() const {
 };
     if (vec) {
         sync_field(tb_attack_start_x_.get(), last_attack_start_x_text_, std::to_string(static_cast<int>(std::lround(vec->start_x))));
-        sync_field(tb_attack_start_y_.get(), last_attack_start_y_text_, std::to_string(static_cast<int>(std::lround(vec->start_z))));
+        sync_field(tb_attack_start_y_.get(), last_attack_start_y_text_, std::to_string(static_cast<int>(std::lround(vec->start_y))));
+        sync_field(tb_attack_start_z_.get(), last_attack_start_z_text_, std::to_string(static_cast<int>(std::lround(vec->start_z))));
         sync_field(tb_attack_control_x_.get(), last_attack_control_x_text_, std::to_string(static_cast<int>(std::lround(vec->control_x))));
-        sync_field(tb_attack_control_y_.get(), last_attack_control_y_text_, std::to_string(static_cast<int>(std::lround(vec->control_z))));
+        sync_field(tb_attack_control_y_.get(), last_attack_control_y_text_, std::to_string(static_cast<int>(std::lround(vec->control_y))));
+        sync_field(tb_attack_control_z_.get(), last_attack_control_z_text_, std::to_string(static_cast<int>(std::lround(vec->control_z))));
         sync_field(tb_attack_end_x_.get(), last_attack_end_x_text_, std::to_string(static_cast<int>(std::lround(vec->end_x))));
-        sync_field(tb_attack_end_y_.get(), last_attack_end_y_text_, std::to_string(static_cast<int>(std::lround(vec->end_z))));
+        sync_field(tb_attack_end_y_.get(), last_attack_end_y_text_, std::to_string(static_cast<int>(std::lround(vec->end_y))));
+        sync_field(tb_attack_end_z_.get(), last_attack_end_z_text_, std::to_string(static_cast<int>(std::lround(vec->end_z))));
         sync_field(tb_attack_damage_.get(), last_attack_damage_text_, std::to_string(vec->damage));
     } else {
         sync_field(tb_attack_start_x_.get(), last_attack_start_x_text_, "0");
         sync_field(tb_attack_start_y_.get(), last_attack_start_y_text_, "0");
+        sync_field(tb_attack_start_z_.get(), last_attack_start_z_text_, "0");
         sync_field(tb_attack_control_x_.get(), last_attack_control_x_text_, "0");
         sync_field(tb_attack_control_y_.get(), last_attack_control_y_text_, "0");
+        sync_field(tb_attack_control_z_.get(), last_attack_control_z_text_, "0");
         sync_field(tb_attack_end_x_.get(), last_attack_end_x_text_, "0");
         sync_field(tb_attack_end_y_.get(), last_attack_end_y_text_, "0");
+        sync_field(tb_attack_end_z_.get(), last_attack_end_z_text_, "0");
         sync_field(tb_attack_damage_.get(), last_attack_damage_text_, "0");
     }
     if (btn_attack_add_remove_) {
@@ -3589,22 +3573,10 @@ void FrameEditorSession::copy_attack_vector_to_next_frame() {
     if (next_index >= static_cast<int>(frames_.size())) {
         return;
     }
-    const std::string type = current_attack_type();
     const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
     const auto& src_vectors = frames_[frame_index].attack.vectors;
-    std::vector<animation_update::FrameAttackGeometry::Vector> to_copy;
-    to_copy.reserve(src_vectors.size());
-    for (const auto& v : src_vectors) {
-        if (v.type == type) {
-            to_copy.push_back(v);
-        }
-    }
     auto& dest_frame = frames_[next_index];
-    auto& dest_vecs = dest_frame.attack.vectors;
-    dest_vecs.erase(std::remove_if(dest_vecs.begin(), dest_vecs.end(), [&](const auto& v) {
-        return v.type == type;
-    }), dest_vecs.end());
-    dest_vecs.insert(dest_vecs.end(), to_copy.begin(), to_copy.end());
+    dest_frame.attack.vectors = src_vectors;
     persist_changes();
 }
 
@@ -3614,16 +3586,13 @@ void FrameEditorSession::copy_hit_box_to_next_frame() {
     if (next_index >= static_cast<int>(frames_.size())) {
         return;
     }
-    const std::string type = current_hitbox_type();
     const auto* source = current_hit_box();
     if (!source) return;
     auto& dest_frame = frames_[next_index];
-    auto* dest = dest_frame.hit.find_box(type);
-    if (!dest) {
-        dest_frame.hit.boxes.push_back(*source);
-    } else {
-        *dest = *source;
-    }
+    dest_frame.hit.boxes.clear();
+    auto locked = *source;
+    locked.center_y = 0.0f;
+    dest_frame.hit.boxes.push_back(locked);
     persist_changes();
 }
 
@@ -3666,13 +3635,13 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
             break;
         }
         case Mode::HitGeometry: {
-            const std::string type = current_hitbox_type();
             const auto* source = current_hit_box();
             for (auto& f : frames_) {
-                auto& boxes = f.hit.boxes;
-                boxes.erase(std::remove_if(boxes.begin(), boxes.end(), [&](const auto& b) { return b.type == type; }), boxes.end());
+                f.hit.boxes.clear();
                 if (source) {
-                    boxes.push_back(*source);
+                    auto locked = *source;
+                    locked.center_y = 0.0f;
+                    f.hit.boxes.push_back(locked);
                 }
             }
             refresh_hitbox_form();
@@ -3681,20 +3650,10 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
             break;
         }
         case Mode::AttackGeometry: {
-            const std::string type = current_attack_type();
             const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
             const auto& source_vecs = frames_[frame_index].attack.vectors;
-            std::vector<animation_update::FrameAttackGeometry::Vector> type_vecs;
-            type_vecs.reserve(source_vecs.size());
-            for (const auto& v : source_vecs) {
-                if (v.type == type) {
-                    type_vecs.push_back(v);
-                }
-            }
             for (auto& f : frames_) {
-                auto& vecs = f.attack.vectors;
-                vecs.erase(std::remove_if(vecs.begin(), vecs.end(), [&](const auto& v) { return v.type == type; }), vecs.end());
-                vecs.insert(vecs.end(), type_vecs.begin(), type_vecs.end());
+                f.attack.vectors = source_vecs;
             }
             refresh_attack_form();
             persist_mode_changes(Mode::AttackGeometry);
@@ -3788,8 +3747,14 @@ bool FrameEditorSession::build_hitbox_visual(const animation_update::FrameHitGeo
     };
     auto to_screen = [&](SDL_FPoint local) -> SDL_FPoint {
         SDL_FPoint world{
-            static_cast<float>(anchor.x) + local.x * scale, static_cast<float>(anchor.y) - local.y * scale };
-        return cam.map_to_screen_f(world);
+            static_cast<float>(anchor.x) + local.x * scale,
+            static_cast<float>(anchor.y)
+        };
+        SDL_FPoint out{};
+        if (cam.project_world_point(world, local.y * scale, out)) {
+            return out;
+        }
+        return cam.map_to_screen_f(SDL_FPoint{ world.x, world.y - local.y * scale });
     };
 
     SDL_FPoint center_local{box.center_x, box.center_z};
@@ -3825,11 +3790,13 @@ void FrameEditorSession::render_hit_geometry(SDL_Renderer* renderer) const {
     const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
     const auto& frame = frames_[frame_index];
     if (frame.hit.boxes.empty()) return;
-    const std::string type = current_hitbox_type();
-    for (const auto& box : frame.hit.boxes) {
+    const_cast<FrameEditorSession*>(this)->clamp_hitbox_selection();
+    const int selected_index = selected_hitbox_index_;
+    for (std::size_t idx = 0; idx < frame.hit.boxes.size(); ++idx) {
+        const auto& box = frame.hit.boxes[idx];
         HitBoxVisual visual;
         if (!build_hitbox_visual(box, visual)) continue;
-        const bool selected = (box.type == type);
+        const bool selected = (static_cast<int>(idx) == selected_index);
 
         bool hovered_any = false;
         int hovered_edge_index = -1;
@@ -3927,42 +3894,71 @@ void FrameEditorSession::render_hit_geometry(SDL_Renderer* renderer) const {
 
 bool FrameEditorSession::begin_hitbox_drag(SDL_Point mouse) {
     if (mode_ != Mode::HitGeometry) return false;
-    auto* box = current_hit_box();
-    if (!box) return false;
-    HitBoxVisual visual;
-    if (!build_hitbox_visual(*box, visual)) return false;
-    active_hitbox_handle_ = HitHandle::None;
-    const int handle_size = 12;
-    auto point_in_rect = [&](const SDL_FPoint& center) {
-        SDL_Rect r{ static_cast<int>(std::round(center.x)) - handle_size / 2,
-                    static_cast<int>(std::round(center.y)) - handle_size / 2, handle_size, handle_size };
-        return SDL_PointInRect(&mouse, &r) == SDL_TRUE;
+    if (frames_.empty()) return false;
+    const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
+    auto& boxes = frames_[frame_index].hit.boxes;
+    if (boxes.empty()) return false;
+
+    auto detect_handle = [&](const HitBoxVisual& visual) -> HitHandle {
+        const int handle_size = 12;
+        auto point_in_rect = [&](const SDL_FPoint& center) {
+            SDL_Rect r{ static_cast<int>(std::round(center.x)) - handle_size / 2,
+                        static_cast<int>(std::round(center.y)) - handle_size / 2, handle_size, handle_size };
+            return SDL_PointInRect(&mouse, &r) == SDL_TRUE;
+        };
+        SDL_FPoint mouse_f{ static_cast<float>(mouse.x), static_cast<float>(mouse.y) };
+        const float rotate_radius = kHitboxRotateHandleRadius;
+        if (dist_sq(mouse_f, visual.rotate_handle) <= rotate_radius * rotate_radius) {
+            return HitHandle::Rotate;
+        }
+        if (point_in_rect(visual.edge_midpoints[3])) return HitHandle::Left;
+        if (point_in_rect(visual.edge_midpoints[1])) return HitHandle::Right;
+        if (point_in_rect(visual.edge_midpoints[0])) return HitHandle::Top;
+        if (point_in_rect(visual.edge_midpoints[2])) return HitHandle::Bottom;
+
+        bool inside = false;
+        for (int i = 0, j = 3; i < 4; j = i++) {
+            const SDL_FPoint& a = visual.corners[i];
+            const SDL_FPoint& b = visual.corners[j];
+            const bool intersect = ((a.y > mouse_f.y) != (b.y > mouse_f.y)) &&
+                                   (mouse_f.x < (b.x - a.x) * (mouse_f.y - a.y) / (b.y - a.y + 0.0001f) + a.x);
+            if (intersect) inside = !inside;
+        }
+        return inside ? HitHandle::Move : HitHandle::None;
     };
-    SDL_FPoint mouse_f{ static_cast<float>(mouse.x), static_cast<float>(mouse.y) };
-    const float rotate_radius = kHitboxRotateHandleRadius;
-    if (dist_sq(mouse_f, visual.rotate_handle) <= rotate_radius * rotate_radius) {
-        active_hitbox_handle_ = HitHandle::Rotate;
-    } else {
 
-        if (point_in_rect(visual.edge_midpoints[3])) active_hitbox_handle_ = HitHandle::Left;
-        else if (point_in_rect(visual.edge_midpoints[1])) active_hitbox_handle_ = HitHandle::Right;
-        else if (point_in_rect(visual.edge_midpoints[0])) active_hitbox_handle_ = HitHandle::Top;
-        else if (point_in_rect(visual.edge_midpoints[2])) active_hitbox_handle_ = HitHandle::Bottom;
-        else {
+    std::vector<int> check_order;
+    check_order.reserve(boxes.size());
+    if (selected_hitbox_index_ >= 0 && selected_hitbox_index_ < static_cast<int>(boxes.size())) {
+        check_order.push_back(selected_hitbox_index_);
+    }
+    for (std::size_t i = 0; i < boxes.size(); ++i) {
+        if (static_cast<int>(i) == selected_hitbox_index_) continue;
+        check_order.push_back(static_cast<int>(i));
+    }
 
-            bool inside = false;
-            for (int i = 0, j = 3; i < 4; j = i++) {
-                const SDL_FPoint& a = visual.corners[i];
-                const SDL_FPoint& b = visual.corners[j];
-                const bool intersect = ((a.y > mouse_f.y) != (b.y > mouse_f.y)) && (mouse_f.x < (b.x - a.x) * (mouse_f.y - a.y) / (b.y - a.y + 0.0001f) + a.x);
-                if (intersect) inside = !inside;
-            }
-            if (inside) {
-                active_hitbox_handle_ = HitHandle::Move;
-            }
+    HitHandle handle = HitHandle::None;
+    int hit_index = -1;
+    for (int idx : check_order) {
+        HitBoxVisual candidate{};
+        if (!build_hitbox_visual(boxes[static_cast<std::size_t>(idx)], candidate)) {
+            continue;
+        }
+        handle = detect_handle(candidate);
+        if (handle != HitHandle::None) {
+            hit_index = idx;
+            break;
         }
     }
-    if (active_hitbox_handle_ == HitHandle::None) {
+
+    if (hit_index < 0) {
+        return false;
+    }
+    selected_hitbox_index_ = hit_index;
+    active_hitbox_handle_ = handle;
+    auto* box = current_hit_box();
+    if (!box) {
+        active_hitbox_handle_ = HitHandle::None;
         return false;
     }
     hitbox_dragging_ = true;
@@ -4063,6 +4059,7 @@ void FrameEditorSession::update_hitbox_drag(SDL_Point mouse) {
         default:
             break;
     }
+    box->center_y = 0.0f;
     refresh_hitbox_form();
 }
 
@@ -4080,15 +4077,19 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
 
     const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
     auto& frame = frames_[frame_index];
-    const std::string current_type = current_attack_type();
-
     const WarpedScreenGrid& cam = assets_->getView();
     SDL_Point anchor = asset_anchor_world();
     const float scale = asset_local_scale();
     auto to_screen = [&](float lx, float plane_axis) -> SDL_FPoint {
         SDL_FPoint world{
-            static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - plane_axis * scale };
-        return cam.map_to_screen_f(world);
+            static_cast<float>(anchor.x) + lx * scale,
+            static_cast<float>(anchor.y)
+        };
+        SDL_FPoint out{};
+        if (cam.project_world_point(world, plane_axis * scale, out)) {
+            return out;
+        }
+        return cam.map_to_screen_f(SDL_FPoint{ world.x, world.y - plane_axis * scale });
     };
 
     auto point_hit = [&](SDL_FPoint p, float radius) -> bool {
@@ -4098,41 +4099,36 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
     };
     const float node_radius = kAttackNodeRadius;
 
-    int type_counter = 0;
     int clicked_vector_index = -1;
     AttackHandle clicked_handle = AttackHandle::None;
 
-    for (const auto& vec : frame.attack.vectors) {
-        if (vec.type != current_type) continue;
-
+    for (std::size_t idx = 0; idx < frame.attack.vectors.size(); ++idx) {
+        const auto& vec = frame.attack.vectors[idx];
         SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
         SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
         SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
 
         if (point_hit(start_screen, node_radius)) {
-            clicked_vector_index = type_counter;
+            clicked_vector_index = static_cast<int>(idx);
             clicked_handle = AttackHandle::Start;
             break;
         } else if (point_hit(control_screen, node_radius)) {
-            clicked_vector_index = type_counter;
+            clicked_vector_index = static_cast<int>(idx);
             clicked_handle = AttackHandle::Control;
             break;
         } else if (point_hit(end_screen, node_radius)) {
-            clicked_vector_index = type_counter;
+            clicked_vector_index = static_cast<int>(idx);
             clicked_handle = AttackHandle::End;
             break;
         }
-        ++type_counter;
     }
 
     if (clicked_vector_index < 0) {
-        type_counter = 0;
         constexpr int segments = 16;
         constexpr float segment_hit_radius = 8.0f;
 
-        for (const auto& vec : frame.attack.vectors) {
-            if (vec.type != current_type) continue;
-
+        for (std::size_t idx = 0; idx < frame.attack.vectors.size(); ++idx) {
+            const auto& vec = frame.attack.vectors[idx];
             SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
             SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
             SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);
@@ -4145,13 +4141,12 @@ bool FrameEditorSession::begin_attack_drag(SDL_Point mp) {
                     u * u * start_screen.y + 2.0f * u * t * control_screen.y + t * t * end_screen.y
 };
                 if (point_hit(curve_point, segment_hit_radius)) {
-                    clicked_vector_index = type_counter;
+                    clicked_vector_index = static_cast<int>(idx);
                     clicked_handle = AttackHandle::Segment;
                     break;
                 }
             }
             if (clicked_vector_index >= 0) break;
-            ++type_counter;
         }
     }
 
@@ -4780,7 +4775,9 @@ void FrameEditorSession::apply_frames_to_animation() {
             dst.hit_geometry.boxes.clear();
             for (const auto& box : src.hit.boxes) {
                 if (box.is_empty()) continue;
-                dst.hit_geometry.boxes.push_back(box);
+                auto locked = box;
+                locked.center_y = 0.0f;
+                dst.hit_geometry.boxes.push_back(locked);
             }
             dst.attack_geometry.vectors = src.attack.vectors;
         }
@@ -5063,25 +5060,27 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
         if (!existing.is_object()) existing = nlohmann::json::object();
         auto preserved_needs_rebuild = existing.contains("needs_rebuild") ? existing["needs_rebuild"] : nlohmann::json();
 
-        for (const char* type : kDamageTypeNames) {
-            const auto* box = f.hit.find_box(type);
-            if (!box || box->is_empty() ||
-                !std::isfinite(box->center_x) || !std::isfinite(box->center_y) ||
-                !std::isfinite(box->center_z) || !std::isfinite(box->half_width) ||
-                !std::isfinite(box->half_height) || !std::isfinite(box->rotation_degrees)) {
-                existing[type] = nullptr;
+        nlohmann::json boxes = nlohmann::json::array();
+        for (const auto& box : f.hit.boxes) {
+            if (box.is_empty() ||
+                !std::isfinite(box.center_x) || !std::isfinite(box.center_z) ||
+                !std::isfinite(box.half_width) || !std::isfinite(box.half_height) ||
+                !std::isfinite(box.rotation_degrees)) {
                 continue;
             }
-            existing[type] = nlohmann::json{
-                {"center_x", box->center_x},
-                {"center_y", box->center_y},
-                {"center_z", box->center_z},
-                {"half_width", box->half_width},
-                {"half_height", box->half_height},
-                {"rotation", box->rotation_degrees},
-                {"type", type}
-            };
+            boxes.push_back(nlohmann::json{
+                {"center_x", box.center_x},
+                {"center_y", 0.0f},
+                {"center_z", box.center_z},
+                {"half_width", box.half_width},
+                {"half_height", box.half_height},
+                {"rotation", box.rotation_degrees}
+            });
         }
+        existing["boxes"] = std::move(boxes);
+        existing.erase("projectile");
+        existing.erase("melee");
+        existing.erase("explosion");
         if (preserved_needs_rebuild.is_boolean()) {
             existing["needs_rebuild"] = preserved_needs_rebuild;
         }
@@ -5107,31 +5106,30 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
         if (!existing.is_object()) existing = nlohmann::json::object();
         auto preserved_needs_rebuild = existing.contains("needs_rebuild") ? existing["needs_rebuild"] : nlohmann::json();
 
-        for (const char* type : kDamageTypeNames) {
-            nlohmann::json type_array = nlohmann::json::array();
-            for (const auto& vec : f.attack.vectors) {
-                if (vec.type != type) continue;
-                if (!std::isfinite(vec.start_x) || !std::isfinite(vec.start_y) || !std::isfinite(vec.start_z) ||
-                    !std::isfinite(vec.end_x) || !std::isfinite(vec.end_y) || !std::isfinite(vec.end_z) ||
-                    !std::isfinite(vec.control_x) || !std::isfinite(vec.control_y) || !std::isfinite(vec.control_z)) {
-                    continue;
-                }
-                type_array.push_back(nlohmann::json{
-                    {"start_x", vec.start_x},
-                    {"start_y", vec.start_y},
-                    {"start_z", vec.start_z},
-                    {"control_x", vec.control_x},
-                    {"control_y", vec.control_y},
-                    {"control_z", vec.control_z},
-                    {"end_x", vec.end_x},
-                    {"end_y", vec.end_y},
-                    {"end_z", vec.end_z},
-                    {"damage", vec.damage},
-                    {"type", vec.type}
-                });
+        nlohmann::json vectors = nlohmann::json::array();
+        for (const auto& vec : f.attack.vectors) {
+            if (!std::isfinite(vec.start_x) || !std::isfinite(vec.start_y) || !std::isfinite(vec.start_z) ||
+                !std::isfinite(vec.end_x) || !std::isfinite(vec.end_y) || !std::isfinite(vec.end_z) ||
+                !std::isfinite(vec.control_x) || !std::isfinite(vec.control_y) || !std::isfinite(vec.control_z)) {
+                continue;
             }
-            existing[type] = std::move(type_array);
+            vectors.push_back(nlohmann::json{
+                {"start_x", vec.start_x},
+                {"start_y", vec.start_y},
+                {"start_z", vec.start_z},
+                {"control_x", vec.control_x},
+                {"control_y", vec.control_y},
+                {"control_z", vec.control_z},
+                {"end_x", vec.end_x},
+                {"end_y", vec.end_y},
+                {"end_z", vec.end_z},
+                {"damage", vec.damage}
+            });
         }
+        existing["vectors"] = std::move(vectors);
+        existing.erase("projectile");
+        existing.erase("melee");
+        existing.erase("explosion");
         if (preserved_needs_rebuild.is_boolean()) {
             existing["needs_rebuild"] = preserved_needs_rebuild;
         }
@@ -5388,6 +5386,12 @@ void FrameEditorSession::cycle_adjustment_axis() {
     if (!adjustment_selection_.has_value()) {
         return;
     }
+    if (adjustment_selection_.target == AdjustmentTarget::HitboxCenter) {
+        adjustment_selection_.axis = (adjustment_selection_.axis == AdjustmentAxis::X)
+                                         ? AdjustmentAxis::Z
+                                         : AdjustmentAxis::X;
+        return;
+    }
     switch (adjustment_selection_.axis) {
         case AdjustmentAxis::X:
             adjustment_selection_.axis = AdjustmentAxis::Y;
@@ -5488,16 +5492,10 @@ void FrameEditorSession::adjust_selection_axis(int scroll_delta, const WarpedScr
             }
             const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
             auto& frame = frames_[frame_index];
-            const std::string current_type = current_attack_type();
-            int type_counter = 0;
             animation_update::FrameAttackGeometry::Vector* vec = nullptr;
-            for (auto& entry : frame.attack.vectors) {
-                if (entry.type != current_type) continue;
-                if (type_counter == adjustment_selection_.attack_vector_index) {
-                    vec = &entry;
-                    break;
-                }
-                ++type_counter;
+            if (adjustment_selection_.attack_vector_index >= 0 &&
+                adjustment_selection_.attack_vector_index < static_cast<int>(frame.attack.vectors.size())) {
+                vec = &frame.attack.vectors[static_cast<std::size_t>(adjustment_selection_.attack_vector_index)];
             }
             if (!vec) {
                 break;
@@ -5530,11 +5528,13 @@ void FrameEditorSession::adjust_selection_axis(int scroll_delta, const WarpedScr
             }
             if (adjustment_selection_.axis == AdjustmentAxis::X) {
                 box->center_x = snap_value(box->center_x + delta);
-            } else if (adjustment_selection_.axis == AdjustmentAxis::Y) {
-                box->center_y = snap_value(box->center_y + delta);
-            } else {
+            } else if (adjustment_selection_.axis == AdjustmentAxis::Z) {
                 box->center_z = snap_value(box->center_z + delta);
+            } else {
+                box->center_y = 0.0f;
+                break;
             }
+            box->center_y = 0.0f;
             refresh_hitbox_form();
             changed = true;
             break;
@@ -5700,6 +5700,7 @@ void FrameEditorSession::select_frame(int index) {
     update_asset_preview_frame();
     ensure_selected_thumb_visible();
     clamp_attack_selection();
+    clamp_hitbox_selection();
     refresh_hitbox_form();
     refresh_attack_form();
 }
@@ -5865,19 +5866,20 @@ void FrameEditorSession::render_attack_geometry(SDL_Renderer* renderer) const {
 
     auto to_screen = [&](float lx, float plane_axis) -> SDL_FPoint {
         SDL_FPoint world{
-            static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - plane_axis * scale };
-        return cam.map_to_screen_f(world);
+            static_cast<float>(anchor.x) + lx * scale,
+            static_cast<float>(anchor.y)
+        };
+        SDL_FPoint out{};
+        if (cam.project_world_point(world, plane_axis * scale, out)) {
+            return out;
+        }
+        return cam.map_to_screen_f(SDL_FPoint{ world.x, world.y - plane_axis * scale });
     };
 
-    const std::string current_type = current_attack_type();
-    int current_type_counter = 0;
     const int selected_idx = current_attack_vector_index();
-    for (const auto& vec : frame.attack.vectors) {
-        bool selected = false;
-        if (vec.type == current_type) {
-            selected = (current_type_counter == selected_idx && selected_idx >= 0);
-            ++current_type_counter;
-        }
+    for (std::size_t idx = 0; idx < frame.attack.vectors.size(); ++idx) {
+        const auto& vec = frame.attack.vectors[idx];
+        const bool selected = (selected_idx >= 0 && static_cast<int>(idx) == selected_idx);
         SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_z);
         SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_z);
         SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_z);

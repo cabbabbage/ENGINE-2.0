@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstddef>
-#include <string>
 #include <vector>
 
 #include "animation_update/attack.hpp"
@@ -10,7 +9,6 @@ namespace animation_update {
 
 struct FrameHitGeometry {
     struct HitBox {
-        std::string type;
         float center_x   = 0.0f;
         float center_y   = 0.0f;
         float center_z   = 0.0f;
@@ -25,19 +23,6 @@ struct FrameHitGeometry {
 
     std::vector<HitBox> boxes;
 
-    HitBox* find_box(const std::string& type) {
-        for (auto& box : boxes) {
-            if (box.type == type) return &box;
-        }
-        return nullptr;
-    }
-
-    const HitBox* find_box(const std::string& type) const {
-        for (const auto& box : boxes) {
-            if (box.type == type) return &box;
-        }
-        return nullptr;
-    }
 };
 
 struct FrameAttackGeometry {
@@ -45,57 +30,31 @@ struct FrameAttackGeometry {
 
     std::vector<Vector> vectors;
 
-    std::size_t count_for_type(const std::string& type) const {
-        std::size_t count = 0;
-        for (const auto& v : vectors) {
-            if (v.type == type) {
-                ++count;
-            }
+    Vector* vector_at(std::size_t index) {
+        if (index >= vectors.size()) {
+            return nullptr;
         }
-        return count;
+        return &vectors[index];
     }
 
-    Vector* vector_at(const std::string& type, std::size_t type_index) {
-        std::size_t seen = 0;
-        for (auto& v : vectors) {
-            if (v.type != type) continue;
-            if (seen == type_index) {
-                return &v;
-            }
-            ++seen;
+    const Vector* vector_at(std::size_t index) const {
+        if (index >= vectors.size()) {
+            return nullptr;
         }
-        return nullptr;
+        return &vectors[index];
     }
 
-    const Vector* vector_at(const std::string& type, std::size_t type_index) const {
-        std::size_t seen = 0;
-        for (const auto& v : vectors) {
-            if (v.type != type) continue;
-            if (seen == type_index) {
-                return &v;
-            }
-            ++seen;
-        }
-        return nullptr;
-    }
-
-    Vector& add_vector(const std::string& type, Vector vec = {}) {
-        vec.type = type;
+    Vector& add_vector(Vector vec = {}) {
         vectors.push_back(vec);
         return vectors.back();
     }
 
-    bool erase_vector(const std::string& type, std::size_t type_index) {
-        std::size_t seen = 0;
-        for (auto it = vectors.begin(); it != vectors.end(); ++it) {
-            if (it->type != type) continue;
-            if (seen == type_index) {
-                vectors.erase(it);
-                return true;
-            }
-            ++seen;
+    bool erase_vector(std::size_t index) {
+        if (index >= vectors.size()) {
+            return false;
         }
-        return false;
+        vectors.erase(vectors.begin() + static_cast<std::ptrdiff_t>(index));
+        return true;
     }
 };
 

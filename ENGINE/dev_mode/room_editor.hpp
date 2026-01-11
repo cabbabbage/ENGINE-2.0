@@ -417,6 +417,8 @@ private:
     bool camera_settings_lock_active_ = false;
     CameraSettingsDragState camera_settings_drag_{};
     std::unordered_set<std::string> room_spawn_ids_;
+    bool right_click_held_for_tilt_ = false;
+    bool tilt_adjusted_during_right_click_ = false;
     void rebuild_room_spawn_id_cache();
     bool is_room_spawn_id(const std::string& spawn_id) const;
     bool asset_belongs_to_room(const Asset* asset) const;

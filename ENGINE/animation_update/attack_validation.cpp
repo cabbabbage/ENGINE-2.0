@@ -4,7 +4,6 @@
 #include <array>
 #include <cmath>
 #include <limits>
-#include <unordered_map>
 
 #include <SDL.h>
 
@@ -197,7 +196,7 @@ std::vector<SDL_FPoint> AttackValidation::hitbox_polygon(const FrameHitGeometry:
         return {};
     }
 
-    const float plane_center = plane_coordinate(box.center_y, box.center_z, context.plane);
+    const float plane_center = plane_coordinate(0.0f, box.center_z, context.plane);
     const float cos_r = std::cos(box.rotation_degrees * kDegToRad);
     const float sin_r = std::sin(box.rotation_degrees * kDegToRad);
     const std::array<SDL_FPoint, 4> offsets = {
@@ -233,8 +232,8 @@ std::optional<Attack> AttackValidation::compute_attack_if_hit(
         return std::nullopt;
     }
 
-    std::unordered_map<std::string, std::vector<std::vector<SDL_FPoint>>> hitbox_map;
-    hitbox_map.reserve(target.frame->hit_geometry.boxes.size());
+    std::vector<std::vector<SDL_FPoint>> hitboxes;
+    hitboxes.reserve(target.frame->hit_geometry.boxes.size());
     AABB target_aabb{};
     for (const auto& box : target.frame->hit_geometry.boxes) {
         if (box.is_empty()) {
@@ -247,9 +246,9 @@ std::optional<Attack> AttackValidation::compute_attack_if_hit(
         for (const auto& corner : corners) {
             extend_aabb(target_aabb, corner);
         }
-        hitbox_map[box.type].push_back(corners);
+        hitboxes.push_back(corners);
     }
-    if (hitbox_map.empty() || !target_aabb.valid) {
+    if (hitboxes.empty() || !target_aabb.valid) {
         return std::nullopt;
     }
 
@@ -304,16 +303,12 @@ std::optional<Attack> AttackValidation::compute_attack_if_hit(
 
     for (const auto& source : sources) {
         for (const auto& vector : source.frame->attack_geometry.vectors) {
-            auto it = hitbox_map.find(vector.type);
-            if (it == hitbox_map.end()) {
-                continue;
-            }
             const auto path = attack_vector_path(vector, source.transform,
                                                  path_segments == 0 ? kDefaultAttackSegments : path_segments);
             if (path.size() < 2) {
                 continue;
             }
-            for (const auto& polygon : it->second) {
+            for (const auto& polygon : hitboxes) {
                 const auto intersection = find_path_polygon_intersection(path, polygon);
                 if (!intersection.has_value()) {
                     continue;
@@ -324,7 +319,6 @@ std::optional<Attack> AttackValidation::compute_attack_if_hit(
                 attack.target_asset_id = target.asset_id;
                 attack.target_asset_name = target.asset_name;
                 attack.damage_amount = vector.damage;
-                attack.damage_type = vector.type;
                 attack.hit_x = intersection->x;
                 const float plane_value =
                     (target.transform.anchor.y - intersection->y) / target.transform.scale;

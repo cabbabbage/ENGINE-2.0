@@ -237,6 +237,48 @@
             "speed_multiplier": 1.0
         },
         "left": {
+            "attack_geometry": [
+                {
+                    "explosion": [],
+                    "melee": [],
+                    "projectile": []
+                },
+                {
+                    "explosion": [],
+                    "melee": [],
+                    "projectile": []
+                },
+                {
+                    "explosion": [],
+                    "melee": [],
+                    "projectile": []
+                },
+                {
+                    "explosion": [],
+                    "melee": [],
+                    "projectile": []
+                },
+                {
+                    "explosion": [],
+                    "melee": [],
+                    "projectile": []
+                },
+                {
+                    "explosion": [],
+                    "melee": [],
+                    "projectile": []
+                },
+                {
+                    "explosion": [],
+                    "melee": [],
+                    "projectile": []
+                },
+                {
+                    "explosion": [],
+                    "melee": [],
+                    "projectile": []
+                }
+            ],
             "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
@@ -266,6 +308,48 @@
                     "needs_rebuild": false
                 }
             ],
+            "hit_geometry": [
+                {
+                    "explosion": null,
+                    "melee": null,
+                    "projectile": null
+                },
+                {
+                    "explosion": null,
+                    "melee": null,
+                    "projectile": null
+                },
+                {
+                    "explosion": null,
+                    "melee": null,
+                    "projectile": null
+                },
+                {
+                    "explosion": null,
+                    "melee": null,
+                    "projectile": null
+                },
+                {
+                    "explosion": null,
+                    "melee": null,
+                    "projectile": null
+                },
+                {
+                    "explosion": null,
+                    "melee": null,
+                    "projectile": null
+                },
+                {
+                    "explosion": null,
+                    "melee": null,
+                    "projectile": null
+                },
+                {
+                    "explosion": null,
+                    "melee": null,
+                    "projectile": null
+                }
+            ],
             "inherit_source_movement": false,
             "locked": false,
             "loop": true,
@@ -273,7 +357,7 @@
                 [
                     0,
                     0,
-                    []
+                    false
                 ]
             ],
             "movement_total": {
@@ -292,8 +376,31 @@
             "speed_multiplier": 1.0
         }
     },
+    "anti_tags": [],
+    "apply_distance_scaling": true,
+    "apply_vertical_scaling": true,
     "asset_directory": "SRC/assets/Vibble",
     "asset_name": "Vibble",
     "asset_type": "player",
-    "start": "default"
+    "async_children": [],
+    "can_invert": false,
+    "lighting_info": [],
+    "neighbor_search_distance": 500,
+    "shading_opacity_multiplier": 1.0,
+    "shading_parallax_amount": 0.0,
+    "shading_screen_brightness_multiplier": 1.0,
+    "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+    },
+    "size_settings": {
+        "scale_percentage": 36.0
+    },
+    "spawn_groups": [],
+    "start": "default",
+    "tags": [],
+    "tillable": false
 }

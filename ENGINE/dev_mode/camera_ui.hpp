@@ -77,11 +77,6 @@ private:
     std::unique_ptr<FloatSliderWidget> cull_margin_slider_;
     std::unique_ptr<FloatSliderWidget> meters_slider_;
 
-    std::unique_ptr<FloatSliderWidget> foreground_texture_opacity_slider_;
-    std::unique_ptr<FloatSliderWidget> background_texture_opacity_slider_;
-
-    std::unique_ptr<DMDropdown> texture_opacity_interp_dropdown_;
-    std::unique_ptr<DropdownWidget> texture_opacity_interp_widget_;
     std::unique_ptr<DMButton> image_effect_button_;
     std::unique_ptr<ButtonWidget> image_effect_widget_;
 
@@ -91,7 +86,7 @@ private:
     bool depthcue_section_expanded_ = false;
     bool applying_settings_ = false;
 
-    bool last_depthcue_enabled_ = false;
+
     std::function<void()> open_image_effects_cb_;
     int last_screen_w_ = 0;
     int last_screen_h_ = 0;

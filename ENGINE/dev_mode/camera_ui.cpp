@@ -413,7 +413,6 @@ private:
 CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
     : DockableCollapsible("Camera Settings", true, x, y),
       assets_(assets) {
-    last_depthcue_enabled_ = devmode::camera_prefs::load_depthcue_enabled();
     set_expanded(true);
     set_visible(false);
     set_padding(16);
@@ -537,20 +536,11 @@ void CameraUIPanel::sync_from_camera() {
     if (meters_slider_) {
         meters_slider_->set_value(last_settings_.meters_per_100_world_px);
     }
-    if (foreground_texture_opacity_slider_) {
-        foreground_texture_opacity_slider_->set_value(static_cast<float>(last_settings_.foreground_texture_max_opacity));
-    }
-    if (background_texture_opacity_slider_) {
-        background_texture_opacity_slider_->set_value(static_cast<float>(last_settings_.background_texture_max_opacity));
-    }
-    if (texture_opacity_interp_dropdown_) {
-        texture_opacity_interp_dropdown_->set_selected(static_cast<int>(last_settings_.texture_opacity_falloff_method));
-    }
     if (realism_enabled_checkbox_) {
         realism_enabled_checkbox_->set_value(last_realism_enabled_);
     }
     if (depthcue_checkbox_) {
-        depthcue_checkbox_->set_value(last_depthcue_enabled_);
+        depthcue_checkbox_->set_value(false); // Default to disabled
     }
 }
 
@@ -570,7 +560,7 @@ void CameraUIPanel::build_ui() {
 
     controls_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::small_gap());
 
-    depthcue_checkbox_ = std::make_unique<DMCheckbox>("Enable Depth Cue", last_depthcue_enabled_);
+    depthcue_checkbox_ = std::make_unique<DMCheckbox>("Enable Depth Cue", false);
     depthcue_widget_ = std::make_unique<CheckboxWidget>(depthcue_checkbox_.get());
     depthcue_widget_->set_tooltip("Toggle depth cue texture compositing.\nDoes not affect parallax or perspective scaling.");
 
@@ -622,27 +612,6 @@ void CameraUIPanel::build_ui() {
     meters_slider_->set_tooltip("Defines how many meters are represented by 100 world pixels, translating engine space into physical units.");
     meters_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    
-
-    const int stored_fg_opacity = devmode::camera_prefs::load_foreground_texture_max_opacity();
-    const int stored_bg_opacity = devmode::camera_prefs::load_background_texture_max_opacity();
-    foreground_texture_opacity_slider_ = std::make_unique<FloatSliderWidget>( "Foreground Texture Max Opacity", 0.0f, 255.0f, 1.0f, static_cast<float>(stored_fg_opacity), 0);
-    foreground_texture_opacity_slider_->set_tooltip("Maximum opacity when blending the foreground texture.");
-    foreground_texture_opacity_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    background_texture_opacity_slider_ = std::make_unique<FloatSliderWidget>( "Background Texture Max Opacity", 0.0f, 255.0f, 1.0f, static_cast<float>(stored_bg_opacity), 0);
-    background_texture_opacity_slider_->set_tooltip("Maximum opacity when blending the background texture.");
-    background_texture_opacity_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    {
-        const int default_interp_index = std::clamp( static_cast<int>(defaults.texture_opacity_falloff_method), 0, 4);
-        std::vector<std::string> options{ "Linear", "Quadratic", "Cubic", "Logarithmic", "Exponential" };
-        texture_opacity_interp_dropdown_ = std::make_unique<DMDropdown>("Depth Cue Opacity Interpolation", options, default_interp_index);
-        texture_opacity_interp_widget_   = std::make_unique<DropdownWidget>(texture_opacity_interp_dropdown_.get());
-        texture_opacity_interp_widget_->set_tooltip("Curve used when blending precomputed textures by depth.");
-        texture_opacity_interp_dropdown_->set_on_selection_changed([this](int) { on_control_value_changed(); });
-    }
-
     image_effect_button_ = std::make_unique<DMButton>("Configure Image Effects", &DMStyles::AccentButton(), DockableCollapsible::kDefaultFloatingContentWidth, DMButton::height());
     image_effect_widget_ = std::make_unique<ButtonWidget>(image_effect_button_.get(), [this]() {
         if (open_image_effects_cb_) {
@@ -686,9 +655,6 @@ void CameraUIPanel::rebuild_rows() {
 
     if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
     if (depthcue_section_expanded_) {
-        if (foreground_texture_opacity_slider_) rows.push_back({ foreground_texture_opacity_slider_.get() });
-        if (background_texture_opacity_slider_) rows.push_back({ background_texture_opacity_slider_.get() });
-        if (texture_opacity_interp_widget_) rows.push_back({ texture_opacity_interp_widget_.get() });
         if (image_effect_widget_) rows.push_back({ image_effect_widget_.get() });
     }
 
@@ -710,7 +676,7 @@ void CameraUIPanel::apply_settings_if_needed() {
     const bool reported_effects_enabled = realism_enabled_checkbox_
         ? realism_enabled_checkbox_->value() : last_realism_enabled_;
     const bool reported_depthcue_enabled = depthcue_checkbox_
-        ? depthcue_checkbox_->value() : last_depthcue_enabled_;
+        ? depthcue_checkbox_->value() : false;
 
     const bool depth_available = cam.depth_enabled();
     const bool effects_enabled = depth_available && reported_effects_enabled;
@@ -719,7 +685,7 @@ void CameraUIPanel::apply_settings_if_needed() {
     auto differs = [](float a, float b) {
         return std::fabs(a - b) > 0.0001f;
 };
-    bool changed = (effects_enabled != last_realism_enabled_) || (depthcue_enabled != last_depthcue_enabled_);
+    bool changed = (effects_enabled != last_realism_enabled_) || depthcue_enabled;
     const WarpedScreenGrid::RealismSettings& prev = last_settings_;
     changed = changed || differs(settings.min_visible_screen_ratio, prev.min_visible_screen_ratio);
     changed = changed || differs(settings.extra_cull_margin, prev.extra_cull_margin);
@@ -729,10 +695,6 @@ void CameraUIPanel::apply_settings_if_needed() {
     changed = changed || differs(settings.meters_per_100_world_px, prev.meters_per_100_world_px);
     changed = changed || differs(settings.near_camera_max_perspective_scale, prev.near_camera_max_perspective_scale);
     changed = changed || differs(settings.offscreen_fade_amount_px, prev.offscreen_fade_amount_px);
-
-    changed = changed || (settings.foreground_texture_max_opacity != prev.foreground_texture_max_opacity);
-    changed = changed || (settings.background_texture_max_opacity != prev.background_texture_max_opacity);
-    changed = changed || static_cast<int>(settings.texture_opacity_falloff_method) != static_cast<int>(prev.texture_opacity_falloff_method);
 
     if (changed) {
         apply_settings_to_camera(settings, effects_enabled, depthcue_enabled);
@@ -746,40 +708,29 @@ void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSett
                                              bool depthcue_enabled) {
     if (!assets_) return;
     WarpedScreenGrid& cam = assets_->getView();
-    WarpedScreenGrid::RealismSettings effective = settings;
-    if (!depthcue_enabled) {
-        effective.foreground_texture_max_opacity = 0;
-        effective.background_texture_max_opacity = 0;
-    }
-    cam.set_realism_settings(effective);
+    cam.set_realism_settings(settings);
     cam.set_realism_enabled(effects_enabled);
     cam.set_parallax_enabled(effects_enabled);
 
     if (assets_) {
         assets_->set_depth_effects_enabled(depthcue_enabled);
         assets_->apply_camera_runtime_settings();
-    } else if (depthcue_enabled != last_depthcue_enabled_) {
-        devmode::camera_prefs::save_depthcue_enabled(depthcue_enabled);
     }
     last_settings_ = settings;
     last_realism_enabled_ = effects_enabled;
     if (on_realism_enabled_changed_) {
         on_realism_enabled_changed_(effects_enabled);
     }
-    if (depthcue_enabled != last_depthcue_enabled_) {
-        if (on_depth_effects_enabled_changed_) {
-            on_depth_effects_enabled_changed_(depthcue_enabled);
-        }
+    if (on_depth_effects_enabled_changed_) {
+        on_depth_effects_enabled_changed_(depthcue_enabled);
     }
-    devmode::camera_prefs::save_foreground_texture_max_opacity(settings.foreground_texture_max_opacity);
-    devmode::camera_prefs::save_background_texture_max_opacity(settings.background_texture_max_opacity);
     devmode::camera_prefs::save_min_visible_screen_ratio(settings.min_visible_screen_ratio);
     devmode::camera_prefs::save_extra_cull_margin(settings.extra_cull_margin);
     devmode::camera_prefs::save_meters_per_100_world_px(settings.meters_per_100_world_px);
     devmode::camera_prefs::save_render_quality_percent(settings.render_quality_percent);
     devmode::camera_prefs::save_near_camera_max_perspective_scale(settings.near_camera_max_perspective_scale);
     devmode::camera_prefs::save_offscreen_fade_amount_px(settings.offscreen_fade_amount_px);
-    last_depthcue_enabled_ = depthcue_enabled;
+
 }
 
 WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
@@ -790,19 +741,5 @@ WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
 
     if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
 
-    auto slider_to_opacity = [](const FloatSliderWidget* slider) -> int {
-        if (!slider) return 0;
-        const float clamped = std::clamp(slider->value(), 0.0f, 255.0f);
-        return static_cast<int>(std::round(clamped));
-};
-    settings.foreground_texture_max_opacity = slider_to_opacity(foreground_texture_opacity_slider_.get());
-    settings.background_texture_max_opacity = slider_to_opacity(background_texture_opacity_slider_.get());
-    auto clamp_curve_selection = [](DMDropdown* dropdown) -> WarpedScreenGrid::BlurFalloffMethod {
-        if (!dropdown) return WarpedScreenGrid::BlurFalloffMethod::Linear;
-        int sel = dropdown->selected();
-        sel = std::clamp(sel, 0, 4);
-        return static_cast<WarpedScreenGrid::BlurFalloffMethod>(sel);
-};
-    settings.texture_opacity_falloff_method = clamp_curve_selection(texture_opacity_interp_dropdown_.get());
     return settings;
 }

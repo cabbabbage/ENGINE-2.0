@@ -990,16 +990,6 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("near_camera_max_perspective_scale", updated.near_camera_max_perspective_scale, 0.0f, 100.0f);
     read_float("offscreen_fade_amount_px", updated.offscreen_fade_amount_px, 0.0f, 1000.0f);
 
-    read_int("foreground_texture_max_opacity", updated.foreground_texture_max_opacity, 0, 255);
-    read_int("background_texture_max_opacity", updated.background_texture_max_opacity, 0, 255);
-
-    int falloff = static_cast<int>(updated.texture_opacity_falloff_method);
-    read_int("texture_opacity_falloff_method", falloff, 0, 4);
-    updated.texture_opacity_falloff_method = static_cast<BlurFalloffMethod>(falloff);
-
-
-    read_effect_settings("foreground_effects", updated.foreground_effects);
-    read_effect_settings("background_effects", updated.background_effects);
 
     set_realism_settings(updated);
 }
@@ -1015,23 +1005,7 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["near_camera_max_perspective_scale"] = settings_.near_camera_max_perspective_scale;
     result["offscreen_fade_amount_px"] = settings_.offscreen_fade_amount_px;
 
-    result["foreground_texture_max_opacity"] = settings_.foreground_texture_max_opacity;
-    result["background_texture_max_opacity"] = settings_.background_texture_max_opacity;
-    result["texture_opacity_falloff_method"] = static_cast<int>(settings_.texture_opacity_falloff_method);
 
-    auto write_effects = [](const camera_effects::ImageEffectSettings& settings) {
-        return nlohmann::json::object({
-            {"contrast", settings.contrast},
-            {"brightness", settings.brightness},
-            {"blur", settings.blur},
-            {"saturation_red", settings.saturation_red},
-            {"saturation_green", settings.saturation_green},
-            {"saturation_blue", settings.saturation_blue},
-            {"hue", settings.hue}
-        });
-    };
-    result["foreground_effects"] = write_effects(settings_.foreground_effects);
-    result["background_effects"] = write_effects(settings_.background_effects);
     return result;
 }
 SDL_FPoint WarpedScreenGrid::get_view_center_f() const {

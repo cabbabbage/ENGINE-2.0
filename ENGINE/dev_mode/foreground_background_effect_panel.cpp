@@ -784,10 +784,9 @@ void ForegroundBackgroundEffectPanel::refresh_from_camera() {
         load_current_mode_settings();
         return;
     }
-    WarpedScreenGrid& cam = assets_->getView();
-    const WarpedScreenGrid::RealismSettings& settings = cam.realism_settings();
-    fg_settings_ = settings.foreground_effects;
-    bg_settings_ = settings.background_effects;
+    // Depth cue functionality removed - will be reimplemented later
+    fg_settings_ = camera_effects::ImageEffectSettings{};
+    bg_settings_ = camera_effects::ImageEffectSettings{};
     saved_fg_ = fg_settings_;
     saved_bg_ = bg_settings_;
     load_current_mode_settings();
@@ -921,12 +920,13 @@ void ForegroundBackgroundEffectPanel::apply_and_regenerate() {
     }
 
     save_depth_cue_settings_to_manifest();
-    WarpedScreenGrid& cam = assets_->getView();
-    WarpedScreenGrid::RealismSettings settings = cam.realism_settings();
-    settings.foreground_effects = fg_settings_;
-    settings.background_effects = bg_settings_;
-    cam.set_realism_settings(settings);
-    assets_->on_camera_settings_changed();
+    // Depth cue functionality removed - will be reimplemented later
+    // WarpedScreenGrid& cam = assets_->getView();
+    // WarpedScreenGrid::RealismSettings settings = cam.realism_settings();
+    // settings.foreground_effects = fg_settings_;
+    // settings.background_effects = bg_settings_;
+    // cam.set_realism_settings(settings);
+    // assets_->on_camera_settings_changed();
 
     vibble::RebuildQueueCoordinator coordinator;
     if (selected_asset_.empty()) {

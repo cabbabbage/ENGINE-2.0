@@ -184,7 +184,7 @@ Assets::Assets(AssetLibrary& library,
     }
 
     hydrate_map_info_sections();
-    depth_effects_enabled_ = devmode::camera_prefs::load_depthcue_enabled();
+    depth_effects_enabled_ = false;
 
     InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_y, map_radius);
 
@@ -446,7 +446,6 @@ void Assets::set_depth_effects_enabled(bool enabled) {
         return;
     }
     depth_effects_enabled_ = enabled;
-    devmode::camera_prefs::save_depthcue_enabled(enabled);
 }
 
 void Assets::set_movement_debug_enabled(bool enabled) {

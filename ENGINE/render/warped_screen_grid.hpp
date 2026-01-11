@@ -28,14 +28,6 @@ public:
     static constexpr float kMinPitchDegrees = 0.0f;
     static constexpr float kMaxPitchDegrees = 150.0f;
 
-    enum class BlurFalloffMethod {
-        Linear = 0,
-        Quadratic = 1,
-        Cubic = 2,
-        Logarithmic = 3,
-        Exponential = 4
-};
-
     struct RealismSettings {
 
         float min_visible_screen_ratio     = 0.015f;
@@ -48,19 +40,12 @@ public:
 
         float meters_per_100_world_px         = 1.0f;
 
-        int   foreground_texture_max_opacity  = 255;
-        int   background_texture_max_opacity  = 255;
-        BlurFalloffMethod texture_opacity_falloff_method = BlurFalloffMethod::Linear;
-
         float extra_cull_margin = 1000.0f;
         float depth_near_world = 0.0f;
         float depth_far_world  = 5000.0f;
         float pre_horizon_lock_offset_px = 80.0f;
         float near_camera_max_perspective_scale = 4.0f;
         float offscreen_fade_amount_px = 200.0f;
-
-        camera_effects::ImageEffectSettings foreground_effects{};
-        camera_effects::ImageEffectSettings background_effects{};
 };
 
     struct FloorDepthParams {

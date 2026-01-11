@@ -605,8 +605,8 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
 
     if (map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            const bool depth_effects_enabled = assets_
-                ? assets_->depth_effects_enabled() : devmode::camera_prefs::load_depthcue_enabled();
+    const bool depth_effects_enabled = assets_
+        ? assets_->depth_effects_enabled() : false;
             footer->set_depth_effects_enabled(depth_effects_enabled);
             footer->set_depth_effects_callbacks([this](bool enabled) {
                 auto* cam = camera_override_for_testing_
@@ -633,16 +633,13 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                         camera_panel_->sync_from_camera();
                     }
                 } else {
-                    devmode::camera_prefs::save_depthcue_enabled(enabled);
+                    // Depth cue save functionality removed
                 }
             });
 
             if (assets_) {
                 assets_->set_depth_effects_enabled(true);
                 footer->set_depth_effects_enabled(true);
-                devmode::camera_prefs::save_depthcue_enabled(true);
-            } else {
-                devmode::camera_prefs::save_depthcue_enabled(true);
             }
             footer->set_grid_overlay_enabled(grid_overlay_enabled_);
             footer->set_grid_resolution(grid_overlay_resolution_r_);
@@ -1214,24 +1211,7 @@ void DevControls::update(const Input& input) {
         }
     }
 
-    if (camera_panel_ && camera_panel_->is_blur_section_visible() && assets_ && enabled_) {
-        const WarpedScreenGrid& cam = assets_->getView();
-        const WarpedScreenGrid::RealismSettings& settings = cam.realism_settings();
-        auto clamp_line = [&](float value) -> float {
-            if (!std::isfinite(value)) {
-                return static_cast<float>(screen_h_) * 0.5f;
-            }
-            return std::clamp(value, 0.0f, static_cast<float>(screen_h_));
-};
 
-        int mouse_y = input.getY();
-        const int hover_threshold = 5;
-
-
-    } else {
-        hover_depthcue_foreground_ = false;
-        hover_depthcue_background_ = false;
-    }
 
     sync_header_button_states();
 
@@ -1534,19 +1514,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
 
  
     else {
-        if (event.type == SDL_MOUSEMOTION) {
-            int delta_y = event.motion.y - depthcue_drag_mouse_start_;
-            float new_y = depthcue_drag_start_y_ + delta_y;
-
-        } else if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT) {
-            depthcue_drag_state_ = DepthCueDragState::None;
-        }
-        if (depthcue_drag_state_ != DepthCueDragState::None) {
-            if (input_) {
-                input_->consumeEvent(event);
-            }
-            return;
-        }
+        // Depth cue drag functionality removed
     }
 
     if (!(frame_editor_session_ && frame_editor_session_->is_active()) && can_route_room_editor &&

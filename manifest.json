@@ -2102,89 +2102,37 @@
                   "end_x": 121.0,
                   "end_y": 0.0,
                   "end_z": 151.0,
-                  "start_x": 53.42578125,
+                  "start_x": 493.8111877441406,
                   "start_y": 0.0,
-                  "start_z": 594.45458984375
+                  "start_z": 2411.45654296875
                 }
               ]
             },
             {
-              "vectors": [
-                {
-                  "control_x": 180.04443359375,
-                  "control_y": 0.0,
-                  "control_z": 378.88037109375,
-                  "damage": 5,
-                  "end_x": 96.87744140625,
-                  "end_y": 0.0,
-                  "end_z": 64.18994140625,
-                  "start_x": 244.6083984375,
-                  "start_y": 0.0,
-                  "start_z": 479.5732421875
-                }
-              ]
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
             },
             {
               "vectors": [
                 {
-                  "control_x": 302.0,
+                  "control_x": -3761.252685546875,
                   "control_y": 0.0,
-                  "control_z": 218.0,
-                  "damage": 5,
-                  "end_x": 121.0,
+                  "control_z": 3173.541015625,
+                  "damage": 0,
+                  "end_x": -1306.340087890625,
                   "end_y": 0.0,
-                  "end_z": 151.0,
-                  "start_x": 503.0,
+                  "end_z": 323.7535095214844,
+                  "start_x": -5106.9755859375,
                   "start_y": 0.0,
-                  "start_z": 118.0
-                }
-              ]
-            },
-            {
-              "vectors": [
-                {
-                  "control_x": -175.6904296875,
-                  "control_y": 0.0,
-                  "control_z": 375.8388671875,
-                  "damage": 5,
-                  "end_x": 72.06689453125,
-                  "end_y": 0.0,
-                  "end_z": 247.9072265625,
-                  "start_x": -323.462890625,
-                  "start_y": 0.0,
-                  "start_z": 351.935546875
-                }
-              ]
-            },
-            {
-              "vectors": [
-                {
-                  "control_x": -325.84033203125,
-                  "control_y": 0.0,
-                  "control_z": 303.54541015625,
-                  "damage": 5,
-                  "end_x": -507.11669921875,
-                  "end_y": 0.0,
-                  "end_z": 271.22216796875,
-                  "start_x": -216.3349609375,
-                  "start_y": 0.0,
-                  "start_z": 73.88037109375
-                }
-              ]
-            },
-            {
-              "vectors": [
-                {
-                  "control_x": -251.06982421875,
-                  "control_y": 0.0,
-                  "control_z": 292.60888671875,
-                  "damage": 5,
-                  "end_x": -347.90869140625,
-                  "end_y": 0.0,
-                  "end_z": 432.50537109375,
-                  "start_x": -201.2509765625,
-                  "start_y": 0.0,
-                  "start_z": 69.98583984375
+                  "start_z": 4039.01416015625
                 }
               ]
             }
@@ -2213,7 +2161,16 @@
           ],
           "hit_geometry": [
             {
-              "boxes": []
+              "boxes": [
+                {
+                  "center_x": -905.5833740234375,
+                  "center_y": 0.0,
+                  "center_z": 3183.236572265625,
+                  "half_height": 1936.9722900390625,
+                  "half_width": 208.69158935546875,
+                  "rotation": -144.6161651611328
+                }
+              ]
             },
             {
               "boxes": []
@@ -3052,21 +3009,69 @@
       "start": "default"
     },
     "spider": {
+      "animation_children": [],
       "animations": {
         "default": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
+        },
+        "down": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "derived_modifiers": {
+            "flipMovementX": false,
+            "flipMovementY": true,
+            "flipX": false,
+            "flipY": false,
+            "reverse": false
+          },
+          "flipped_source": false,
+          "inherit_source_movement": true,
+          "loop": true,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "up",
+            "path": ""
+          },
+          "speed_multiplier": 1.0
         },
         "left": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
@@ -3087,18 +3092,110 @@
               "needs_rebuild": false
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "left"
-          }
+          },
+          "speed_multiplier": 1.0
+        },
+        "right": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "derived_modifiers": {
+            "flipMovementX": true,
+            "flipMovementY": false,
+            "flipX": true,
+            "flipY": false,
+            "reverse": false
+          },
+          "flipped_source": true,
+          "inherit_source_movement": true,
+          "loop": true,
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "left",
+            "path": ""
+          },
+          "speed_multiplier": 1.0
+        },
+        "up": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "derived_modifiers": {
+            "flipMovementX": false,
+            "flipMovementY": false,
+            "flipX": true,
+            "flipY": false,
+            "reverse": false
+          },
+          "flipped_source": true,
+          "inherit_source_movement": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "animation",
+            "name": "left",
+            "path": ""
+          },
+          "speed_multiplier": 1.0
         }
       },
+      "anti_tags": [],
       "asset_directory": "SRC/assets/spider",
       "asset_name": "spider",
+      "asset_type": "enemy",
+      "async_children": [],
       "lighting_info": [],
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "shading_opacity_multiplier": 1.0,
+      "shading_parallax_amount": 0.0,
+      "shading_screen_brightness_multiplier": 1.0,
+      "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+      },
+      "spawn_groups": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false
     },
     "tex": {
       "animations": {
@@ -3406,9 +3503,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 101,
@@ -3598,6 +3695,34 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-37d6c4ad7c3a"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "spider"
+                }
+              ],
+              "display_name": "spider",
+              "dx": -2827,
+              "dy": 35,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 6376,
+              "origional_width": 6376,
+              "position": "Exact",
+              "resolution": 5,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-c6162102e00c"
             }
           ]
         }

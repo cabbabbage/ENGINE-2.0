@@ -5288,6 +5288,7 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
         return;
     }
 
+    document_->replace_animation_payload(animation_id_, serialized);
     if (std::find(edited_animation_ids_.begin(), edited_animation_ids_.end(), animation_id_) == edited_animation_ids_.end()) {
         edited_animation_ids_.push_back(animation_id_);
     }

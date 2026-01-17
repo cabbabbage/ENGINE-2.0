@@ -64,12 +64,52 @@
             "speed_multiplier": 1.0
         },
         "left": {
+            "attack_geometry": [
+                {
+                    "vectors": []
+                },
+                {
+                    "vectors": []
+                },
+                {
+                    "vectors": []
+                },
+                {
+                    "vectors": []
+                },
+                {
+                    "vectors": []
+                },
+                {
+                    "vectors": []
+                }
+            ],
             "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [
                 {
                     "needs_rebuild": false
+                }
+            ],
+            "hit_geometry": [
+                {
+                    "boxes": []
+                },
+                {
+                    "boxes": []
+                },
+                {
+                    "boxes": []
+                },
+                {
+                    "boxes": []
+                },
+                {
+                    "boxes": []
+                },
+                {
+                    "boxes": []
                 }
             ],
             "inherit_source_movement": false,
@@ -79,13 +119,33 @@
                 [
                     0,
                     0
+                ],
+                [
+                    -90,
+                    0
+                ],
+                [
+                    -90,
+                    0
+                ],
+                [
+                    -90,
+                    0
+                ],
+                [
+                    -90,
+                    0
+                ],
+                [
+                    -90,
+                    0
                 ]
             ],
             "movement_total": {
-                "dx": 0,
+                "dx": -450,
                 "dy": 0
             },
-            "number_of_frames": 1,
+            "number_of_frames": 6,
             "on_end": "default",
             "reverse_source": false,
             "rnd_start": false,

@@ -5275,6 +5275,13 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
         payload["child_timelines"] = build_child_timelines_payload(payload);
     }
 
+    // Add the missing number_of_frames field to ensure coerce_payload doesn't truncate data
+    payload["number_of_frames"] = frames_.size();
+
+    // Debug logging to track persistence
+    SDL_Log("[FrameEditor] DEBUG: Persisting %zu frames for animation '%s', number_of_frames set to %zu",
+            frames_.size(), animation_id_.c_str(), frames_.size());
+
     std::string serialized = payload.dump();
     const bool changed = document_payload_cache_.empty() || serialized != document_payload_cache_;
     if (!changed) {
@@ -5294,42 +5301,7 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
 
     devmode::core::DevJsonStore::instance().flush_all();
 
-    // Aggressively mirror into the manifest store so reloads always see the latest edits.
-    if (assets_ && target_ && target_->info) {
-        if (auto* store = assets_->manifest_store()) {
-            auto tx = store->begin_asset_transaction(target_->info->name, true);
-            if (tx) {
-                nlohmann::json& draft = tx.data();
-                if (!draft.is_object()) draft = nlohmann::json::object();
 
-                auto update_animation_entry = [&](nlohmann::json& container) {
-                    if (!container.is_object()) {
-                        container = nlohmann::json::object();
-                    }
-                    container[animation_id_] = payload;
-                };
-
-                if (draft.contains("animations") && draft["animations"].is_object() &&
-                    draft["animations"].contains("animations") && draft["animations"]["animations"].is_object()) {
-                    update_animation_entry(draft["animations"]["animations"]);
-                    if (!draft["animations"].contains("start") || !draft["animations"]["start"].is_string()) {
-                        draft["animations"]["start"] = animation_id_;
-                    }
-                } else {
-                    if (!draft.contains("animations") || !draft["animations"].is_object()) {
-                        draft["animations"] = nlohmann::json::object();
-                    }
-                    update_animation_entry(draft["animations"]);
-                    if (!draft.contains("start") || !draft["start"].is_string()) {
-                        draft["start"] = animation_id_;
-                    }
-                }
-
-                tx.finalize();
-                store->flush();
-            }
-        }
-    }
 
     const std::filesystem::path manifest_path = std::filesystem::absolute(std::filesystem::path(manifest::manifest_path()));
     std::vector<int> touched_sorted(touched_frames.begin(), touched_frames.end());

@@ -48,21 +48,6 @@
             "frames": [
                 {
                     "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
                 }
             ],
             "inherit_source_movement": false,
@@ -470,27 +455,6 @@
             "frames": [
                 {
                     "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
                 }
             ],
             "hit_geometry": [
@@ -661,27 +625,6 @@
             "frames": [
                 {
                     "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
                 }
             ],
             "hit_geometry": [
@@ -829,31 +772,8 @@
             "speed_multiplier": 1.0
         }
     },
-    "anti_tags": [],
-    "apply_distance_scaling": true,
-    "apply_vertical_scaling": true,
     "asset_directory": "SRC/assets/Vibble",
     "asset_name": "Vibble",
     "asset_type": "player",
-    "async_children": [],
-    "can_invert": false,
-    "lighting_info": [],
-    "neighbor_search_distance": 500,
-    "shading_opacity_multiplier": 1.0,
-    "shading_parallax_amount": 0.0,
-    "shading_screen_brightness_multiplier": 1.0,
-    "shadow_mask_settings": {
-        "alpha_multiplier": 1.0,
-        "blur_scale": 1.0,
-        "expansion_ratio": 0.800000011920929,
-        "falloff_exponent": 1.0499999523162842,
-        "falloff_start": 0.0
-    },
-    "size_settings": {
-        "scale_percentage": 36.0
-    },
-    "spawn_groups": [],
-    "start": "default",
-    "tags": [],
-    "tillable": false
+    "start": "default"
 }

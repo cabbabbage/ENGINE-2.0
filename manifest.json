@@ -1278,21 +1278,6 @@
           "frames": [
             {
               "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -1700,27 +1685,6 @@
           "frames": [
             {
               "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -1889,27 +1853,6 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
             {
               "needs_rebuild": false
             }
@@ -2140,21 +2083,6 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
             {
               "needs_rebuild": false
             }
@@ -3055,6 +2983,11 @@
             "reverse": false
           },
           "flipped_source": false,
+          "frames": [
+            {
+              "needs_rebuild": true
+            }
+          ],
           "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 1,
@@ -3073,21 +3006,6 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
             {
               "needs_rebuild": false
             }
@@ -3127,6 +3045,11 @@
             "reverse": false
           },
           "flipped_source": true,
+          "frames": [
+            {
+              "needs_rebuild": true
+            }
+          ],
           "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 1,
@@ -3151,6 +3074,11 @@
             "reverse": false
           },
           "flipped_source": true,
+          "frames": [
+            {
+              "needs_rebuild": true
+            }
+          ],
           "inherit_source_movement": false,
           "loop": true,
           "movement": [
@@ -3503,9 +3431,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -3708,8 +3636,8 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -2827,
-              "dy": 35,
+              "dx": -2292,
+              "dy": 140,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -3719,7 +3647,8 @@
               "origional_height": 6376,
               "origional_width": 6376,
               "position": "Exact",
-              "resolution": 5,
+              "priority": 6,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-c6162102e00c"

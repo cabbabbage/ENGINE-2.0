@@ -45,6 +45,11 @@
                 "reverse": false
             },
             "flipped_source": false,
+            "frames": [
+                {
+                    "needs_rebuild": true
+                }
+            ],
             "inherit_source_movement": true,
             "loop": true,
             "number_of_frames": 1,
@@ -63,21 +68,6 @@
             "crop_frames": false,
             "flipped_source": false,
             "frames": [
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
-                {
-                    "needs_rebuild": false
-                },
                 {
                     "needs_rebuild": false
                 }
@@ -117,6 +107,11 @@
                 "reverse": false
             },
             "flipped_source": true,
+            "frames": [
+                {
+                    "needs_rebuild": true
+                }
+            ],
             "inherit_source_movement": true,
             "loop": true,
             "number_of_frames": 1,
@@ -141,6 +136,11 @@
                 "reverse": false
             },
             "flipped_source": true,
+            "frames": [
+                {
+                    "needs_rebuild": true
+                }
+            ],
             "inherit_source_movement": false,
             "loop": true,
             "movement": [

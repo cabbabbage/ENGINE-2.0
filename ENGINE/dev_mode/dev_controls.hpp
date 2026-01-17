@@ -70,6 +70,7 @@ public:
     void update_ui(const Input& input);
     void handle_sdl_event(const SDL_Event& event);
     void render_overlays(SDL_Renderer* renderer);
+    void render_grid_overlay();
 
     void toggle_asset_library();
     void open_asset_library();
@@ -247,8 +248,7 @@ private:
     int  grid_resolution_r_ = -1;
     bool movement_debug_enabled_ = false;
 
-    bool depth_effects_forced_realism_disabled_ = false;
-    bool depth_effects_prev_realism_enabled_ = true;
+
 
     std::unique_ptr<class DMNumericStepper> grid_resolution_stepper_;
 
@@ -270,10 +270,5 @@ private:
     SDL_Rect last_header_rect_{0, 0, 0, 0};
     SDL_Rect last_footer_rect_{0, 0, 0, 0};
 
-    enum class DepthCueDragState { None, Foreground, Background };
-    DepthCueDragState depthcue_drag_state_ = DepthCueDragState::None;
-    float depthcue_drag_start_y_ = 0.0f;
-    int depthcue_drag_mouse_start_ = 0;
-    bool hover_depthcue_foreground_ = false;
-    bool hover_depthcue_background_ = false;
+
 };

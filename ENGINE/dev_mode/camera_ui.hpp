@@ -41,31 +41,23 @@ public:
 
     void sync_from_camera();
 
-    void set_on_realism_enabled_changed(std::function<void(bool)> cb) { on_realism_enabled_changed_ = std::move(cb); }
-    void set_on_depth_effects_enabled_changed(std::function<void(bool)> cb) { on_depth_effects_enabled_changed_ = std::move(cb); }
+
 
 private:
-    std::function<void(bool)> on_realism_enabled_changed_;
-    std::function<void(bool)> on_depth_effects_enabled_changed_;
+
     void build_ui();
     void rebuild_rows();
     void apply_settings_if_needed();
-    void apply_settings_to_camera(const WarpedScreenGrid::RealismSettings& settings, bool effects_enabled, bool depthcue_enabled);
-    WarpedScreenGrid::RealismSettings read_settings_from_ui() const;
+
     void on_control_value_changed();
 
 private:
     Assets* assets_ = nullptr;
-    WarpedScreenGrid::RealismSettings last_settings_{};
-    bool last_realism_enabled_ = true;
 
     bool suppress_apply_once_ = false;
     bool was_visible_ = false;
 
     std::unique_ptr<Widget> header_spacer_;
-    std::unique_ptr<Widget> hero_banner_widget_;
-    std::unique_ptr<DMCheckbox> realism_enabled_checkbox_;
-    std::unique_ptr<CheckboxWidget> realism_widget_;
     std::unique_ptr<Widget> controls_spacer_;
     std::unique_ptr<DMCheckbox> depthcue_checkbox_;
     std::unique_ptr<CheckboxWidget> depthcue_widget_;
@@ -77,11 +69,6 @@ private:
     std::unique_ptr<FloatSliderWidget> cull_margin_slider_;
     std::unique_ptr<FloatSliderWidget> meters_slider_;
 
-    std::unique_ptr<FloatSliderWidget> foreground_texture_opacity_slider_;
-    std::unique_ptr<FloatSliderWidget> background_texture_opacity_slider_;
-
-    std::unique_ptr<DMDropdown> texture_opacity_interp_dropdown_;
-    std::unique_ptr<DropdownWidget> texture_opacity_interp_widget_;
     std::unique_ptr<DMButton> image_effect_button_;
     std::unique_ptr<ButtonWidget> image_effect_widget_;
 
@@ -91,7 +78,7 @@ private:
     bool depthcue_section_expanded_ = false;
     bool applying_settings_ = false;
 
-    bool last_depthcue_enabled_ = false;
+
     std::function<void()> open_image_effects_cb_;
     int last_screen_w_ = 0;
     int last_screen_h_ = 0;

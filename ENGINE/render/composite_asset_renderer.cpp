@@ -250,7 +250,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         float perspective_multiplier = 1.0f;
         float vertical_multiplier = 1.0f;
         if (assets_) {
-            const bool apply_distance_scaling = !(slot.info && !slot.info->apply_distance_scaling);
+            const bool apply_distance_scaling = !(slot.info);
             if (apply_distance_scaling) {
                 SDL_Point world_point{ slot.world_pos.x, slot.world_pos.y };
                 float world_z_value = std::isfinite(slot.world_z) ? slot.world_z : 0.0f;
@@ -297,13 +297,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                           world_z_offset);
 };
 
-    for (const auto& child_attachment : asset->animation_children()) {
-        if (child_attachment.render_in_front) {
-            continue;
-        }
-        emit_child(child_attachment);
-    }
-
     SDL_Texture* base_tex = nullptr;
 
     if (asset->info) {
@@ -349,9 +342,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
     }
 
     for (const auto& child_attachment : asset->animation_children()) {
-        if (!child_attachment.render_in_front) {
-            continue;
-        }
         emit_child(child_attachment);
     }
 

@@ -856,10 +856,6 @@ void FrameMovementEditor::smooth_frames() {
         return;
     }
 
-    frames_[0].dx = 0.0f;
-    frames_[0].dy = 0.0f;
-    frames_[0].dz = 0.0f;
-
     int accum_x = 0;
     int accum_y = 0;
     for (size_t i = 1; i < frame_count; ++i) {

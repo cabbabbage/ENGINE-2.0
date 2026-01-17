@@ -406,311 +406,13 @@ private:
     ChangeCallback on_change_{};
 };
 
-class PitchDialWidget : public Widget {
-public:
-    using ChangeCallback = std::function<void(float)>;
 
-    PitchDialWidget(std::string label, float angle_degrees = 0.0f, float min_deg = 0.0f, float max_deg = 360.0f)
-        : label_(std::move(label)),
-          angle_deg_(clamp_angle_deg(wrap_angle_deg(angle_degrees), min_deg, max_deg)),
-          min_deg_(min_deg),
-          max_deg_(max_deg) {
-        label_style_ = DMStyles::Label();
-        value_style_ = DMStyles::Slider().value;
-        value_style_.font_size = std::max(value_style_.font_size, label_style_.font_size);
-    }
-
-    ~PitchDialWidget() override {
-        if (icon_texture_) {
-            SDL_DestroyTexture(icon_texture_);
-            icon_texture_ = nullptr;
-        }
-    }
-
-    void set_rect(const SDL_Rect& r) override { rect_ = r; }
-    const SDL_Rect& rect() const override { return rect_; }
-
-    int height_for_width(int w) const override {
-        const int heading_h = label_style_.font_size + DMSpacing::label_gap();
-        const int dial_size = std::clamp(w - 80, 120, 180);
-        return heading_h + dial_size + DMSpacing::item_gap();
-    }
-
-    bool handle_event(const SDL_Event& e) override {
-        bool used = false;
-        switch (e.type) {
-        case SDL_MOUSEBUTTONDOWN: {
-            SDL_Point p{ e.button.x, e.button.y };
-            hovered_ = point_in_dial(p);
-            if (e.button.button == SDL_BUTTON_LEFT && hovered_) {
-                dragging_ = true;
-                update_angle_from_mouse(p);
-                used = true;
-            }
-            break;
-        }
-        case SDL_MOUSEBUTTONUP: {
-            SDL_Point p{ e.button.x, e.button.y };
-            hovered_ = point_in_dial(p);
-            if (dragging_ && e.button.button == SDL_BUTTON_LEFT) {
-                dragging_ = false;
-                update_angle_from_mouse(p);
-                used = true;
-            }
-            break;
-        }
-        case SDL_MOUSEMOTION: {
-            SDL_Point p{ e.motion.x, e.motion.y };
-            hovered_ = point_in_dial(p);
-            if (dragging_) {
-                update_angle_from_mouse(p);
-                used = true;
-            }
-            break;
-        }
-        case SDL_MOUSEWHEEL: {
-            if (hovered_) {
-                const float delta = static_cast<float>(-e.wheel.y) * 2.5f;
-                set_angle_from_user(angle_deg_ + delta);
-                used = true;
-            }
-            break;
-        }
-        default:
-            break;
-        }
-        if (tooltip_enabled() && DMWidgetTooltipHandleEvent(e, rect_, *tooltip_state())) {
-            used = true;
-        }
-        return used;
-    }
-
-    void render(SDL_Renderer* renderer) const override {
-        if (!renderer) return;
-        const auto slider_style = DMStyles::Slider();
-        const DialGeometry g    = compute_geometry();
-
-        draw_heading(renderer);
-        draw_ring(renderer, g, slider_style);
-        draw_line(renderer, g, slider_style);
-        draw_icon(renderer, g);
-        draw_rotated_value(renderer, g);
-        draw_knob(renderer, g, slider_style);
-
-        if (tooltip_enabled()) {
-            DMWidgetTooltipRender(renderer, rect_, *tooltip_state());
-        }
-    }
-
-    bool wants_full_row() const override { return true; }
-
-    void set_angle_degrees(float deg) { angle_deg_ = wrap_angle_deg(deg); }
-    float angle_degrees() const { return angle_deg_; }
-    void set_on_angle_changed(ChangeCallback cb) { on_change_ = std::move(cb); }
-
-private:
-    struct DialGeometry {
-        SDL_Rect area{0, 0, 0, 0};
-        SDL_Point center{0, 0};
-        int radius = 0;
-        int knob_size = 12;
-};
-
-    DialGeometry compute_geometry() const {
-        DialGeometry g{};
-        const int heading_h = label_style_.font_size + DMSpacing::label_gap();
-        g.area = SDL_Rect{
-            rect_.x,
-            rect_.y + heading_h,
-            rect_.w,
-            std::max(0, rect_.h - heading_h) };
-        const int padding = 12;
-        const int usable_w = std::max(1, g.area.w - padding * 2);
-        const int usable_h = std::max(1, g.area.h - padding * 2);
-        const int diameter = std::min(usable_w, usable_h);
-        g.radius = std::max(22, diameter / 2);
-        g.center = SDL_Point{ g.area.x + g.area.w / 2, g.area.y + g.area.h / 2 };
-        g.knob_size = std::max(12, g.radius / 3);
-        return g;
-    }
-
-    void draw_heading(SDL_Renderer* renderer) const {
-        const std::string heading = label_ + " (" + formatted_angle() + ")";
-        DrawLabelText(renderer, heading, rect_.x, rect_.y, label_style_);
-    }
-
-    void draw_circle(SDL_Renderer* renderer, const SDL_Point& c, int radius, SDL_Color color, int thickness = 1) const {
-        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-        const int segments = 64;
-        for (int t = 0; t < thickness; ++t) {
-            const int r = std::max(1, radius - t);
-            SDL_Point prev{ c.x + r, c.y };
-            for (int i = 1; i <= segments; ++i) {
-                const float theta = (static_cast<float>(i) / static_cast<float>(segments)) * 2.0f * kPi;
-                SDL_Point next{
-                    c.x + static_cast<int>(std::round(std::cos(theta) * static_cast<float>(r))), c.y + static_cast<int>(std::round(std::sin(theta) * static_cast<float>(r))) };
-                SDL_RenderDrawLine(renderer, prev.x, prev.y, next.x, next.y);
-                prev = next;
-            }
-        }
-    }
-
-    void draw_ring(SDL_Renderer* renderer, const DialGeometry& g, const DMSliderStyle& slider_style) const {
-        SDL_Color base = dm_draw::DarkenColor(slider_style.track_bg, 0.25f);
-        SDL_Color accent = dragging_ ? slider_style.track_fill_active : slider_style.track_fill;
-        draw_circle(renderer, g.center, g.radius + 6, base, 3);
-        draw_circle(renderer, g.center, g.radius, accent, 2);
-    }
-
-    void draw_line(SDL_Renderer* renderer, const DialGeometry& g, const DMSliderStyle& slider_style) const {
-        const float rad = angle_deg_ * kDegToRad;
-        const float dir_x = std::cos(rad);
-        const float dir_y = -std::sin(rad);
-        const SDL_Point knob{
-            g.center.x + static_cast<int>(std::round(dir_x * static_cast<float>(g.radius))), g.center.y + static_cast<int>(std::round(dir_y * static_cast<float>(g.radius))) };
-        SDL_Color line_color = dragging_ ? slider_style.track_fill_active : slider_style.track_fill;
-        SDL_SetRenderDrawColor(renderer, line_color.r, line_color.g, line_color.b, line_color.a);
-        SDL_RenderDrawLine(renderer, g.center.x, g.center.y, knob.x, knob.y);
-    }
-
-    void draw_knob(SDL_Renderer* renderer, const DialGeometry& g, const DMSliderStyle& slider_style) const {
-        const float rad = angle_deg_ * kDegToRad;
-        const float dir_x = std::cos(rad);
-        const float dir_y = -std::sin(rad);
-        const SDL_Point knob_center{
-            g.center.x + static_cast<int>(std::round(dir_x * static_cast<float>(g.radius))), g.center.y + static_cast<int>(std::round(dir_y * static_cast<float>(g.radius))) };
-        SDL_Rect knob_rect{
-            knob_center.x - g.knob_size / 2,
-            knob_center.y - g.knob_size / 2,
-            g.knob_size,
-            g.knob_size
-};
-        SDL_Color knob_col   = slider_style.knob;
-        SDL_Color knob_border = slider_style.knob_border;
-        if (dragging_) {
-            knob_col    = slider_style.knob_accent;
-            knob_border = slider_style.knob_accent_border;
-        } else if (hovered_) {
-            knob_col    = slider_style.knob_hover;
-            knob_border = slider_style.knob_border_hover;
-        }
-        const int bevel = std::min(DMStyles::BevelDepth(), std::max(1, g.knob_size / 3));
-        const int radius = std::min(DMStyles::CornerRadius(), g.knob_size / 2);
-        dm_draw::DrawBeveledRect( renderer, knob_rect, radius, bevel, knob_col, DMStyles::HighlightColor(), DMStyles::ShadowColor(), true, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-        dm_draw::DrawRoundedOutline(renderer, knob_rect, radius, 1, knob_border);
-    }
-
-    void draw_icon(SDL_Renderer* renderer, const DialGeometry& g) const {
-        if (!ensure_icon(renderer)) {
-            return;
-        }
-        const int icon_size = std::clamp(g.radius, g.radius / 2, g.radius * 2);
-        SDL_Rect dst{
-            g.center.x - icon_size / 2,
-            g.center.y - icon_size / 2,
-            icon_size,
-            icon_size
-};
-        SDL_Point pivot{ icon_size / 2, icon_size / 2 };
-        SDL_RenderCopyEx(renderer, icon_texture_, nullptr, &dst, -angle_deg_, &pivot, SDL_FLIP_NONE);
-    }
-
-    void draw_rotated_value(SDL_Renderer* renderer, const DialGeometry& g) const {
-        TTF_Font* font = DMFontCache::instance().get_font(value_style_.font_path, value_style_.font_size);
-        if (!font) return;
-        const std::string text = formatted_angle();
-        SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text.c_str(), value_style_.color);
-        if (!surface) return;
-        SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surface);
-        int w = surface->w;
-        int h = surface->h;
-        SDL_FreeSurface(surface);
-        if (!tex) return;
-        const float rad = angle_deg_ * kDegToRad;
-        const float dir_x = std::cos(rad);
-        const float dir_y = -std::sin(rad);
-        const int text_radius = g.radius + g.knob_size + 12;
-        SDL_Point anchor{
-            g.center.x + static_cast<int>(std::round(dir_x * static_cast<float>(text_radius))), g.center.y + static_cast<int>(std::round(dir_y * static_cast<float>(text_radius))) };
-        SDL_Rect dst{ anchor.x - w / 2, anchor.y - h / 2, w, h };
-        SDL_Point pivot{ w / 2, h / 2 };
-        SDL_RenderCopyEx(renderer, tex, nullptr, &dst, -angle_deg_, &pivot, SDL_FLIP_NONE);
-        SDL_DestroyTexture(tex);
-    }
-
-    std::string formatted_angle() const {
-        char buffer[16]{};
-        std::snprintf(buffer, sizeof(buffer), "%.0f\u00b0", wrap_angle_deg(angle_deg_));
-        return std::string(buffer);
-    }
-
-    bool point_in_dial(SDL_Point p) const {
-        const DialGeometry g = compute_geometry();
-        const int dx = p.x - g.center.x;
-        const int dy = p.y - g.center.y;
-        const int r = g.radius + g.knob_size;
-        return (dx * dx + dy * dy) <= r * r;
-    }
-
-    void update_angle_from_mouse(SDL_Point p) {
-        const DialGeometry g = compute_geometry();
-        const int dx = p.x - g.center.x;
-        const int dy = p.y - g.center.y;
-        if (dx == 0 && dy == 0) {
-            return;
-        }
-        const float deg = std::atan2(static_cast<float>(-dy), static_cast<float>(dx)) * kRadToDeg;
-        set_angle_from_user(deg);
-    }
-
-    void set_angle_from_user(float deg) {
-        const float clamped = clamp_angle_deg(deg, min_deg_, max_deg_);
-        if (std::fabs(clamped - angle_deg_) < 0.0001f) {
-            return;
-        }
-        angle_deg_ = clamped;
-        if (on_change_) {
-            on_change_(angle_deg_);
-        }
-    }
-
-    bool ensure_icon(SDL_Renderer* renderer) const {
-        if (icon_texture_ || icon_load_attempted_) {
-            return icon_texture_ != nullptr;
-        }
-        icon_load_attempted_ = true;
-        SDL_Surface* surface = IMG_Load(kCameraIconPath);
-        if (!surface) {
-            return false;
-        }
-        icon_texture_ = SDL_CreateTextureFromSurface(renderer, surface);
-        if (icon_texture_) {
-            SDL_SetTextureBlendMode(icon_texture_, SDL_BLENDMODE_BLEND);
-        }
-        SDL_FreeSurface(surface);
-        return icon_texture_ != nullptr;
-    }
-
-    SDL_Rect rect_{0, 0, 0, 0};
-    std::string label_;
-    DMLabelStyle label_style_{};
-    DMLabelStyle value_style_{};
-    float angle_deg_ = 0.0f;
-    float min_deg_ = 0.0f;
-    float max_deg_ = 360.0f;
-    bool dragging_ = false;
-    bool hovered_ = false;
-    ChangeCallback on_change_{};
-    mutable SDL_Texture* icon_texture_ = nullptr;
-    mutable bool icon_load_attempted_ = false;
-};
 
 
 
 CameraUIPanel::CameraUIPanel(Assets* assets, int x, int y)
     : DockableCollapsible("Camera Settings", true, x, y),
       assets_(assets) {
-    last_depthcue_enabled_ = devmode::camera_prefs::load_depthcue_enabled();
     set_expanded(true);
     set_visible(false);
     set_padding(16);
@@ -812,42 +514,18 @@ void CameraUIPanel::render(SDL_Renderer* renderer) const {
 }
 
 void CameraUIPanel::layout_custom_content(int screen_w, int screen_h) const {
-
-    if (hero_banner_widget_) {
-        set_drag_handle_rect(hero_banner_widget_->rect());
-    } else {
-        set_drag_handle_rect(SDL_Rect{0,0,0,0});
-    }
+    set_drag_handle_rect(SDL_Rect{0,0,0,0});
 }
 
 void CameraUIPanel::sync_from_camera() {
     if (!assets_) return;
     WarpedScreenGrid& cam = assets_->getView();
-    last_settings_ = cam.realism_settings();
-    bool effects_enabled = cam.realism_enabled() && cam.parallax_enabled();
-    last_realism_enabled_ = effects_enabled;
 
-    if (min_render_size_slider_) min_render_size_slider_->set_value(last_settings_.min_visible_screen_ratio);
-    if (render_quality_slider_) render_quality_slider_->set_value(last_settings_.render_quality_percent);
-    if (cull_margin_slider_) cull_margin_slider_->set_value(last_settings_.extra_cull_margin);
-
+    if (min_render_size_slider_) min_render_size_slider_->set_value(cam.get_settings().min_visible_screen_ratio);
+    if (render_quality_slider_) render_quality_slider_->set_value(cam.get_settings().render_quality_percent);
+    if (cull_margin_slider_) cull_margin_slider_->set_value(cam.get_settings().extra_cull_margin);
     if (meters_slider_) {
-        meters_slider_->set_value(last_settings_.meters_per_100_world_px);
-    }
-    if (foreground_texture_opacity_slider_) {
-        foreground_texture_opacity_slider_->set_value(static_cast<float>(last_settings_.foreground_texture_max_opacity));
-    }
-    if (background_texture_opacity_slider_) {
-        background_texture_opacity_slider_->set_value(static_cast<float>(last_settings_.background_texture_max_opacity));
-    }
-    if (texture_opacity_interp_dropdown_) {
-        texture_opacity_interp_dropdown_->set_selected(static_cast<int>(last_settings_.texture_opacity_falloff_method));
-    }
-    if (realism_enabled_checkbox_) {
-        realism_enabled_checkbox_->set_value(last_realism_enabled_);
-    }
-    if (depthcue_checkbox_) {
-        depthcue_checkbox_->set_value(last_depthcue_enabled_);
+        meters_slider_->set_value(cam.get_settings().meters_per_100_world_px);
     }
 }
 
@@ -860,20 +538,16 @@ void CameraUIPanel::build_ui() {
     set_floating_content_width(460);
 
     header_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::header_gap());
-    hero_banner_widget_ = std::make_unique<PanelBannerWidget>( "Camera realism", "Dial in render buffers and parallax depth without leaving the editor.");
-    realism_enabled_checkbox_ = std::make_unique<DMCheckbox>("Enable Realism Effects", last_realism_enabled_);
-    realism_widget_ = std::make_unique<CheckboxWidget>(realism_enabled_checkbox_.get());
-    realism_widget_->set_tooltip("Toggle perspective effects, grid warping, and parallax depth.");
 
     controls_spacer_ = std::make_unique<SpacerWidget>(DMSpacing::small_gap());
 
-    depthcue_checkbox_ = std::make_unique<DMCheckbox>("Enable Depth Cue", last_depthcue_enabled_);
+    depthcue_checkbox_ = std::make_unique<DMCheckbox>("Enable Depth Cue", false);
     depthcue_widget_ = std::make_unique<CheckboxWidget>(depthcue_checkbox_.get());
     depthcue_widget_->set_tooltip("Toggle depth cue texture compositing.\nDoes not affect parallax or perspective scaling.");
 
-    WarpedScreenGrid::RealismSettings defaults = last_settings_;
+    WarpedScreenGrid::RealismSettings defaults;
     if (assets_) {
-        defaults = assets_->getView().realism_settings();
+        defaults = assets_->getView().get_settings();
     }
     defaults.min_visible_screen_ratio = devmode::camera_prefs::load_min_visible_screen_ratio(defaults.min_visible_screen_ratio);
     defaults.extra_cull_margin = devmode::camera_prefs::load_extra_cull_margin(defaults.extra_cull_margin);
@@ -919,27 +593,6 @@ void CameraUIPanel::build_ui() {
     meters_slider_->set_tooltip("Defines how many meters are represented by 100 world pixels, translating engine space into physical units.");
     meters_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
-    
-
-    const int stored_fg_opacity = devmode::camera_prefs::load_foreground_texture_max_opacity();
-    const int stored_bg_opacity = devmode::camera_prefs::load_background_texture_max_opacity();
-    foreground_texture_opacity_slider_ = std::make_unique<FloatSliderWidget>( "Foreground Texture Max Opacity", 0.0f, 255.0f, 1.0f, static_cast<float>(stored_fg_opacity), 0);
-    foreground_texture_opacity_slider_->set_tooltip("Maximum opacity when blending the foreground texture.");
-    foreground_texture_opacity_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    background_texture_opacity_slider_ = std::make_unique<FloatSliderWidget>( "Background Texture Max Opacity", 0.0f, 255.0f, 1.0f, static_cast<float>(stored_bg_opacity), 0);
-    background_texture_opacity_slider_->set_tooltip("Maximum opacity when blending the background texture.");
-    background_texture_opacity_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
-
-    {
-        const int default_interp_index = std::clamp( static_cast<int>(defaults.texture_opacity_falloff_method), 0, 4);
-        std::vector<std::string> options{ "Linear", "Quadratic", "Cubic", "Logarithmic", "Exponential" };
-        texture_opacity_interp_dropdown_ = std::make_unique<DMDropdown>("Depth Cue Opacity Interpolation", options, default_interp_index);
-        texture_opacity_interp_widget_   = std::make_unique<DropdownWidget>(texture_opacity_interp_dropdown_.get());
-        texture_opacity_interp_widget_->set_tooltip("Curve used when blending precomputed textures by depth.");
-        texture_opacity_interp_dropdown_->set_on_selection_changed([this](int) { on_control_value_changed(); });
-    }
-
     image_effect_button_ = std::make_unique<DMButton>("Configure Image Effects", &DMStyles::AccentButton(), DockableCollapsible::kDefaultFloatingContentWidth, DMButton::height());
     image_effect_widget_ = std::make_unique<ButtonWidget>(image_effect_button_.get(), [this]() {
         if (open_image_effects_cb_) {
@@ -964,8 +617,6 @@ void CameraUIPanel::on_control_value_changed() {
 void CameraUIPanel::rebuild_rows() {
     Rows rows;
     if (header_spacer_) rows.push_back({ header_spacer_.get() });
-    if (hero_banner_widget_) rows.push_back({ hero_banner_widget_.get() });
-    if (realism_widget_) rows.push_back({ realism_widget_.get() });
     if (controls_spacer_) rows.push_back({ controls_spacer_.get() });
     if (depthcue_widget_) rows.push_back({ depthcue_widget_.get() });
 
@@ -983,9 +634,6 @@ void CameraUIPanel::rebuild_rows() {
 
     if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
     if (depthcue_section_expanded_) {
-        if (foreground_texture_opacity_slider_) rows.push_back({ foreground_texture_opacity_slider_.get() });
-        if (background_texture_opacity_slider_) rows.push_back({ background_texture_opacity_slider_.get() });
-        if (texture_opacity_interp_widget_) rows.push_back({ texture_opacity_interp_widget_.get() });
         if (image_effect_widget_) rows.push_back({ image_effect_widget_.get() });
     }
 
@@ -1003,108 +651,19 @@ void CameraUIPanel::apply_settings_if_needed() {
         ~ScopedApplyingGuard() { flag = false; }
     } guard(applying_settings_);
     WarpedScreenGrid& cam = assets_->getView();
-    WarpedScreenGrid::RealismSettings settings = read_settings_from_ui();
-    const bool reported_effects_enabled = realism_enabled_checkbox_
-        ? realism_enabled_checkbox_->value() : last_realism_enabled_;
-    const bool reported_depthcue_enabled = depthcue_checkbox_
-        ? depthcue_checkbox_->value() : last_depthcue_enabled_;
 
-    const bool depth_available = cam.depth_enabled();
-    const bool effects_enabled = depth_available && reported_effects_enabled;
-    const bool depthcue_enabled = depth_available && reported_depthcue_enabled;
+    WarpedScreenGrid::RealismSettings settings;
+    if (min_render_size_slider_) settings.min_visible_screen_ratio = min_render_size_slider_->value();
+    if (render_quality_slider_) settings.render_quality_percent = render_quality_slider_->value();
+    if (cull_margin_slider_) settings.extra_cull_margin = cull_margin_slider_->value();
+    if (meters_slider_) settings.meters_per_100_world_px = meters_slider_->value();
 
-    auto differs = [](float a, float b) {
-        return std::fabs(a - b) > 0.0001f;
-};
-    bool changed = (effects_enabled != last_realism_enabled_) || (depthcue_enabled != last_depthcue_enabled_);
-    const WarpedScreenGrid::RealismSettings& prev = last_settings_;
-    changed = changed || differs(settings.min_visible_screen_ratio, prev.min_visible_screen_ratio);
-    changed = changed || differs(settings.extra_cull_margin, prev.extra_cull_margin);
-    if (render_quality_slider_) {
-        changed = changed || settings.render_quality_percent != prev.render_quality_percent;
-    }
-    changed = changed || differs(settings.meters_per_100_world_px, prev.meters_per_100_world_px);
-    changed = changed || differs(settings.scale_variant_hysteresis_margin, prev.scale_variant_hysteresis_margin);
-    changed = changed || differs(settings.near_camera_max_perspective_scale, prev.near_camera_max_perspective_scale);
-    changed = changed || differs(settings.offscreen_fade_amount_px, prev.offscreen_fade_amount_px);
+    cam.set_realism_settings(settings);
 
-    changed = changed || (settings.foreground_texture_max_opacity != prev.foreground_texture_max_opacity);
-    changed = changed || (settings.background_texture_max_opacity != prev.background_texture_max_opacity);
-    changed = changed || differs(settings.foreground_plane_screen_y, prev.foreground_plane_screen_y);
-    changed = changed || differs(settings.background_plane_screen_y, prev.background_plane_screen_y);
-    changed = changed || static_cast<int>(settings.texture_opacity_falloff_method) != static_cast<int>(prev.texture_opacity_falloff_method);
-
-    if (changed) {
-        apply_settings_to_camera(settings, effects_enabled, depthcue_enabled);
-
-        assets_->on_camera_settings_changed();
-    }
-}
-
-void CameraUIPanel::apply_settings_to_camera(const WarpedScreenGrid::RealismSettings& settings,
-                                             bool effects_enabled,
-                                             bool depthcue_enabled) {
-    if (!assets_) return;
-    WarpedScreenGrid& cam = assets_->getView();
-    WarpedScreenGrid::RealismSettings effective = settings;
-    if (!depthcue_enabled) {
-        effective.foreground_texture_max_opacity = 0;
-        effective.background_texture_max_opacity = 0;
-    }
-    cam.set_realism_settings(effective);
-    cam.set_realism_enabled(effects_enabled);
-    cam.set_parallax_enabled(effects_enabled);
-
-    if (assets_) {
-        assets_->set_depth_effects_enabled(depthcue_enabled);
-        assets_->apply_camera_runtime_settings();
-    } else if (depthcue_enabled != last_depthcue_enabled_) {
-        devmode::camera_prefs::save_depthcue_enabled(depthcue_enabled);
-    }
-    last_settings_ = settings;
-    last_realism_enabled_ = effects_enabled;
-    if (on_realism_enabled_changed_) {
-        on_realism_enabled_changed_(effects_enabled);
-    }
-    if (depthcue_enabled != last_depthcue_enabled_) {
-        if (on_depth_effects_enabled_changed_) {
-            on_depth_effects_enabled_changed_(depthcue_enabled);
-        }
-    }
-    devmode::camera_prefs::save_foreground_texture_max_opacity(settings.foreground_texture_max_opacity);
-    devmode::camera_prefs::save_background_texture_max_opacity(settings.background_texture_max_opacity);
     devmode::camera_prefs::save_min_visible_screen_ratio(settings.min_visible_screen_ratio);
     devmode::camera_prefs::save_extra_cull_margin(settings.extra_cull_margin);
     devmode::camera_prefs::save_meters_per_100_world_px(settings.meters_per_100_world_px);
     devmode::camera_prefs::save_render_quality_percent(settings.render_quality_percent);
-    devmode::camera_prefs::save_texture_warp_percent(settings.texture_warp_percent);
-    devmode::camera_prefs::save_texture_warp_y_offset_px(settings.texture_warp_y_offset_px);
-    devmode::camera_prefs::save_near_camera_max_perspective_scale(settings.near_camera_max_perspective_scale);
-    devmode::camera_prefs::save_offscreen_fade_amount_px(settings.offscreen_fade_amount_px);
-    last_depthcue_enabled_ = depthcue_enabled;
-}
 
-WarpedScreenGrid::RealismSettings CameraUIPanel::read_settings_from_ui() const {
-    WarpedScreenGrid::RealismSettings settings = last_settings_;
-    if (min_render_size_slider_) settings.min_visible_screen_ratio = std::clamp(min_render_size_slider_->value(), 0.0f, 0.5f);
-    if (render_quality_slider_) settings.render_quality_percent = render_quality_slider_->value();
-    if (cull_margin_slider_) settings.extra_cull_margin = std::clamp(cull_margin_slider_->value(), 0.0f, 5000.0f);
-
-    if (meters_slider_) settings.meters_per_100_world_px = std::max(0.01f, meters_slider_->value());
-
-    auto slider_to_opacity = [](const FloatSliderWidget* slider) -> int {
-        if (!slider) return 0;
-        const float clamped = std::clamp(slider->value(), 0.0f, 255.0f);
-        return static_cast<int>(std::round(clamped));
-};
-    settings.foreground_texture_max_opacity = slider_to_opacity(foreground_texture_opacity_slider_.get());
-    settings.background_texture_max_opacity = slider_to_opacity(background_texture_opacity_slider_.get());
-    auto clamp_curve_selection = [](DMDropdown* dropdown) -> WarpedScreenGrid::BlurFalloffMethod {
-        if (!dropdown) return WarpedScreenGrid::BlurFalloffMethod::Linear;
-        int sel = dropdown->selected();
-        sel = std::clamp(sel, 0, 4);
-        return static_cast<WarpedScreenGrid::BlurFalloffMethod>(sel);
-};
-    settings.texture_opacity_falloff_method = clamp_curve_selection(texture_opacity_interp_dropdown_.get());
-    return settings;
+    assets_->on_camera_settings_changed();
 }

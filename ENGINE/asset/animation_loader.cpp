@@ -117,7 +117,6 @@ AnimationChildFrameData make_default_child_frame(int child_index) {
         sample.dz = 0;
         sample.degree = 0.0f;
         sample.visible = false;
-        sample.render_in_front = true;
         return sample;
 }
 
@@ -126,7 +125,7 @@ AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int
         if (node.is_object()) {
                 sample.dx = json_int(node.value("dx", 0), 0);
                 sample.dy = json_int(node.value("dy", 0), 0);
-                sample.dz = json_int(node.value("dz", 0), 0);
+                sample.dz = json_int(node.value("dz", node.value("dy", 0)), 0);
                 if (!node.contains("dz")) {
                         sample.dz = sample.dy;
                         sample.dy = 0;
@@ -137,7 +136,6 @@ AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int
                         sample.degree = json_float(node["rotation"], 0.0f);
                 }
                 sample.visible = json_bool(node.value("visible", sample.visible), sample.visible);
-                sample.render_in_front = json_bool(node.value("render_in_front", node.value("front", sample.render_in_front)), sample.render_in_front);
         } else if (node.is_array()) {
                 if (!node.empty() && node[0].is_number()) {
                         sample.dx = json_int(node[0], 0);
@@ -145,16 +143,13 @@ AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int
                 if (node.size() > 1 && node[1].is_number()) {
                         sample.dy = json_int(node[1], 0);
                 }
-                if (node.size() > 2 && node[2].is_number() && node.size() >= 6) {
-                        sample.dz = json_int(node[2], 0);
-                        if (node.size() > 3 && node[3].is_number()) {
-                                sample.degree = json_float(node[3], 0.0f);
-                        }
-                        if (node.size() > 4) {
-                                sample.visible = json_bool(node[4], sample.visible);
+                if (node.size() > 3 && node[3].is_number()) {
+                        sample.dz = json_int(node[3], 0);
+                        if (node.size() > 4 && node[4].is_number()) {
+                                sample.degree = json_float(node[4], 0.0f);
                         }
                         if (node.size() > 5) {
-                                sample.render_in_front = json_bool(node[5], sample.render_in_front);
+                                sample.visible = json_bool(node[5], sample.visible);
                         }
                 } else {
                         if (node.size() > 2 && node[2].is_number()) {
@@ -162,9 +157,6 @@ AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int
                         }
                         if (node.size() > 3) {
                                 sample.visible = json_bool(node[3], sample.visible);
-                        }
-                        if (node.size() > 4) {
-                                sample.render_in_front = json_bool(node[4], sample.render_in_front);
                         }
                         sample.dz = sample.dy;
                         sample.dy = 0;
@@ -220,7 +212,7 @@ fs::path project_root_path() {
 #endif
 }
 
-constexpr std::array<const char*, 3> kDamageTypeNames = {
+constexpr std::array<const char*, 3> kLegacyDamageTypeNames = {
         "projectile", "melee", "explosion"
 };
 
@@ -255,14 +247,12 @@ int read_int(const nlohmann::json& value, int fallback = 0) {
         return fallback;
 }
 
-void upsert_hit_box(animation_update::FrameHitGeometry& geometry,
-                    const std::string& type,
+void append_hit_box(animation_update::FrameHitGeometry& geometry,
                     const nlohmann::json& node) {
-        if (type.empty() || node.is_null()) {
+        if (node.is_null()) {
                 return;
         }
         animation_update::FrameHitGeometry::HitBox box;
-        box.type = type;
         if (node.is_object()) {
                 box.center_x = read_float(node.value("center_x", 0.0f));
                 const bool has_center_z = node.contains("center_z");
@@ -272,9 +262,6 @@ void upsert_hit_box(animation_update::FrameHitGeometry& geometry,
                 box.half_width = read_float(node.value("half_width", 0.0f));
                 box.half_height = read_float(node.value("half_height", 0.0f));
                 box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
-                if (node.contains("type") && node["type"].is_string()) {
-                        box.type = node["type"].get<std::string>();
-                }
         } else if (node.is_array()) {
                 const auto& arr = node;
                 if (!arr.empty())          box.center_x = read_float(arr[0]);
@@ -295,35 +282,45 @@ void upsert_hit_box(animation_update::FrameHitGeometry& geometry,
         if (box.is_empty()) {
                 return;
         }
-        if (auto* existing = geometry.find_box(box.type)) {
-                *existing = box;
-        } else {
-                geometry.boxes.push_back(box);
-        }
+        geometry.boxes.push_back(box);
 }
 
 void apply_hit_geometry_entry(AnimationFrame& frame, const nlohmann::json& entry) {
         frame.hit_geometry.boxes.clear();
         if (entry.is_object()) {
-                for (const char* type : kDamageTypeNames) {
+                if (entry.contains("boxes") && entry["boxes"].is_array()) {
+                        for (const auto& node : entry["boxes"]) {
+                                append_hit_box(frame.hit_geometry, node);
+                        }
+                        return;
+                }
+                if (entry.contains("center_x") || entry.contains("half_width") || entry.contains("rotation")) {
+                        append_hit_box(frame.hit_geometry, entry);
+                        return;
+                }
+                for (const char* type : kLegacyDamageTypeNames) {
                         auto it = entry.find(type);
                         if (it != entry.end()) {
-                                upsert_hit_box(frame.hit_geometry, type, *it);
+                                append_hit_box(frame.hit_geometry, *it);
                         }
                 }
-        } else if (!entry.is_null()) {
-                upsert_hit_box(frame.hit_geometry, "melee", entry);
+        } else if (entry.is_array()) {
+                if (!entry.empty() && entry.front().is_object()) {
+                        for (const auto& node : entry) {
+                                append_hit_box(frame.hit_geometry, node);
+                        }
+                } else {
+                        append_hit_box(frame.hit_geometry, entry);
+                }
         }
 }
 
 void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
-                          const std::string& type,
                           const nlohmann::json& node) {
-        if (type.empty() || node.is_null()) {
+        if (node.is_null()) {
                 return;
         }
         animation_update::FrameAttackGeometry::Vector vec;
-        vec.type = type;
         if (node.is_object()) {
                 vec.start_x = read_float(node.value("start_x", 0.0f));
                 const bool has_start_z = node.contains("start_z");
@@ -340,7 +337,8 @@ void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
                 } else {
                         vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
                         const float fallback_end_z = read_float(node.value("end_z", read_float(node.value("end_y", 0.0f))));
-                        vec.control_y = 0.0f;
+                        const float fallback_end_y = has_start_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
+                        vec.control_y = (vec.start_y + fallback_end_y) * 0.5f;
                         vec.control_z = (vec.start_z + fallback_end_z) * 0.5f;
                 }
                 vec.end_x   = read_float(node.value("end_x", 0.0f));
@@ -349,9 +347,6 @@ void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
                 vec.end_z   = has_end_z ? read_float(node.value("end_z", 0.0f))
                                         : read_float(node.value("end_y", 0.0f));
                 vec.damage  = read_int(node.value("damage", 0));
-                if (node.contains("type") && node["type"].is_string()) {
-                        vec.type = node["type"].get<std::string>();
-                }
         } else if (node.is_array()) {
                 const auto& arr = node;
                 if (!arr.empty())      vec.start_x = read_float(arr[0]);
@@ -359,26 +354,38 @@ void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
                 if (arr.size() > 2)    vec.end_x   = read_float(arr[2]);
                 if (arr.size() > 3)    vec.end_z   = read_float(arr[3]);
                 vec.control_x = (vec.start_x + vec.end_x) * 0.5f;
+                vec.control_y = 0.0f;
                 vec.control_z = (vec.start_z + vec.end_z) * 0.5f;
                 if (arr.size() > 4)    vec.damage  = read_int(arr[4]);
         } else {
                 return;
         }
-        geometry.add_vector(vec.type, vec);
+        geometry.add_vector(vec);
 }
 
 void apply_attack_geometry_entry(AnimationFrame& frame, const nlohmann::json& entry) {
         frame.attack_geometry.vectors.clear();
-        if (!entry.is_object()) {
+        if (entry.is_object()) {
+                if (entry.contains("vectors") && entry["vectors"].is_array()) {
+                        for (const auto& vec_node : entry["vectors"]) {
+                                append_attack_vector(frame.attack_geometry, vec_node);
+                        }
+                        return;
+                }
+                for (const char* type : kLegacyDamageTypeNames) {
+                        auto it = entry.find(type);
+                        if (it == entry.end() || !it->is_array()) {
+                                continue;
+                        }
+                        for (const auto& vec_node : *it) {
+                                append_attack_vector(frame.attack_geometry, vec_node);
+                        }
+                }
                 return;
         }
-        for (const char* type : kDamageTypeNames) {
-                auto it = entry.find(type);
-                if (it == entry.end() || !it->is_array()) {
-                        continue;
-                }
-                for (const auto& vec_node : *it) {
-                        append_attack_vector(frame.attack_geometry, type, vec_node);
+        if (entry.is_array()) {
+                for (const auto& vec_node : entry) {
+                        append_attack_vector(frame.attack_geometry, vec_node);
                 }
         }
 }
@@ -679,31 +686,22 @@ void AnimationLoader::load(Animation& animation,
                                                                 try { child_data.degree = static_cast<float>(child_entry["rotation"].get<double>()); } catch (...) { child_data.degree = 0.0f; }
                                                         }
                                                         child_data.visible = child_entry.value("visible", true);
-                                                        child_data.render_in_front = child_entry.value("render_in_front", true);
                                                 } else if (child_entry.is_array() && !child_entry.empty()) {
                                                         try { child_data.child_index = child_entry[0].get<int>(); } catch (...) { child_data.child_index = -1; }
                                                         if (child_entry.size() >= 2 && child_entry[1].is_number()) { try { child_data.dx = child_entry[1].get<int>(); } catch (...) { child_data.dx = 0; } }
                                                         if (child_entry.size() >= 3 && child_entry[2].is_number()) { try { child_data.dy = child_entry[2].get<int>(); } catch (...) { child_data.dy = 0; } }
-                                                        if (child_entry.size() >= 4 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                                                        if (child_entry.size() >= 4 && child_entry[3].is_number()) {
                                                                 try { child_data.dz = child_entry[3].get<int>(); } catch (...) { child_data.dz = 0; }
                                                                 if (child_entry.size() >= 5 && child_entry[4].is_number()) { try { child_data.degree = static_cast<float>(child_entry[4].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
                                                                 if (child_entry.size() >= 6) {
                                                                         if (child_entry[5].is_boolean()) child_data.visible = child_entry[5].get<bool>();
                                                                         else if (child_entry[5].is_number_integer()) child_data.visible = child_entry[5].get<int>() != 0;
                                                                 }
-                                                                if (child_entry.size() >= 7) {
-                                                                        if (child_entry[6].is_boolean()) child_data.render_in_front = child_entry[6].get<bool>();
-                                                                        else if (child_entry[6].is_number_integer()) child_data.render_in_front = child_entry[6].get<int>() != 0;
-                                                                }
                                                         } else {
                                                                 if (child_entry.size() >= 4 && child_entry[3].is_number()) { try { child_data.degree = static_cast<float>(child_entry[3].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
                                                                 if (child_entry.size() >= 5) {
                                                                         if (child_entry[4].is_boolean()) child_data.visible = child_entry[4].get<bool>();
                                                                         else if (child_entry[4].is_number_integer()) child_data.visible = child_entry[4].get<int>() != 0;
-                                                                }
-                                                                if (child_entry.size() >= 6) {
-                                                                        if (child_entry[5].is_boolean()) child_data.render_in_front = child_entry[5].get<bool>();
-                                                                        else if (child_entry[5].is_number_integer()) child_data.render_in_front = child_entry[5].get<int>() != 0;
                                                                 }
                                                                 child_data.dz = child_data.dy;
                                                                 child_data.dy = 0;
@@ -761,26 +759,18 @@ void AnimationLoader::load(Animation& animation,
                                         try { child_data.child_index = child_entry[0].get<int>(); } catch (...) { child_data.child_index = -1; }
                                         if (child_entry.size() >= 2 && child_entry[1].is_number()) { try { child_data.dx = child_entry[1].get<int>(); } catch (...) { child_data.dx = 0; } }
                                         if (child_entry.size() >= 3 && child_entry[2].is_number()) { try { child_data.dy = child_entry[2].get<int>(); } catch (...) { child_data.dy = 0; } }
-                                        if (child_entry.size() >= 4 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                                        if (child_entry.size() >= 4 && child_entry[3].is_number()) {
                                                 try { child_data.dz = child_entry[3].get<int>(); } catch (...) { child_data.dz = 0; }
                                                 if (child_entry.size() >= 5 && child_entry[4].is_number()) { try { child_data.degree = static_cast<float>(child_entry[4].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
                                                 if (child_entry.size() >= 6) {
                                                         if (child_entry[5].is_boolean()) child_data.visible = child_entry[5].get<bool>();
                                                         else if (child_entry[5].is_number_integer()) child_data.visible = child_entry[5].get<int>() != 0;
                                                 }
-                                                if (child_entry.size() >= 7) {
-                                                        if (child_entry[6].is_boolean()) child_data.render_in_front = child_entry[6].get<bool>();
-                                                        else if (child_entry[6].is_number_integer()) child_data.render_in_front = child_entry[6].get<int>() != 0;
-                                                }
                                         } else {
                                                 if (child_entry.size() >= 4 && child_entry[3].is_number()) { try { child_data.degree = static_cast<float>(child_entry[3].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
                                                 if (child_entry.size() >= 5) {
                                                         if (child_entry[4].is_boolean()) child_data.visible = child_entry[4].get<bool>();
                                                         else if (child_entry[4].is_number_integer()) child_data.visible = child_entry[4].get<int>() != 0;
-                                                }
-                                                if (child_entry.size() >= 6) {
-                                                        if (child_entry[5].is_boolean()) child_data.render_in_front = child_entry[5].get<bool>();
-                                                        else if (child_entry[5].is_number_integer()) child_data.render_in_front = child_entry[5].get<int>() != 0;
                                                 }
                                                 child_data.dz = child_data.dy;
                                                 child_data.dy = 0;

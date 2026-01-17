@@ -41,6 +41,11 @@ private:
     std::chrono::steady_clock::time_point dashEndTime;
     std::chrono::steady_clock::time_point cooldownEndTime;
 
+    bool canMelee = true;
+    bool isMeleeing = false;
+    float meleeCooldown = 0.5f;
+    std::chrono::steady_clock::time_point meleeCooldownEndTime;
+
     float subpixel_x_ = 0.0f;
     float subpixel_y_ = 0.0f;
 };

@@ -1093,6 +1093,15 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         SDL_GetMouseState(&mx, &my);
     }
 
+    // Track right-click hold for tilt adjustment
+    if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_RIGHT) {
+        right_click_held_for_tilt_ = true;
+        tilt_adjusted_during_right_click_ = false;
+    }
+    if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_RIGHT) {
+        right_click_held_for_tilt_ = false;
+    }
+
     const bool pointer_event =
         (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEMOTION);
     const bool wheel_event = (event.type == SDL_MOUSEWHEEL);
@@ -2442,6 +2451,12 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         return;
     }
 
+    // Track tilt adjustment during right-click
+    right_click_held_for_tilt_ = input.isDown(Input::RIGHT);
+    if (right_click_held_for_tilt_ && input.getScrollY() != 0) {
+        tilt_adjusted_during_right_click_ = true;
+    }
+
     WarpedScreenGrid& cam = assets_->getView();
     const float prev_scale = cam.get_scale();
     const SDL_Point prev_center = cam.get_screen_center();
@@ -2702,12 +2717,7 @@ bool RoomEditor::camera_state_changed(const WarpedScreenGrid& cam) const {
     if (center.x != cached_camera_center_.x || center.y != cached_camera_center_.y) {
         return true;
     }
-    if (cam.parallax_enabled() != cached_camera_parallax_enabled_) {
-        return true;
-    }
-    if (cam.realism_enabled() != cached_camera_realism_enabled_) {
-        return true;
-    }
+
     return false;
 }
 
@@ -2875,8 +2885,7 @@ void RoomEditor::rebuild_spatial_index(const WarpedScreenGrid& cam) const {
 
     cached_camera_scale_ = cam.get_scale();
     cached_camera_center_ = cam.get_screen_center();
-    cached_camera_parallax_enabled_ = cam.parallax_enabled();
-    cached_camera_realism_enabled_ = cam.realism_enabled();
+
     cached_camera_state_valid_ = true;
     spatial_index_dirty_ = false;
 }
@@ -3211,16 +3220,20 @@ void RoomEditor::handle_click(const Input& input) {
         const bool shift_modifier =
             input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
         auto open_library_at = [&](const SDL_Point& point) {
-            pending_spawn_world_pos_ = point;
-            open_asset_library();
-            if (!is_asset_library_open()) {
-                pending_spawn_world_pos_.reset();
+            if (!tilt_adjusted_during_right_click_) {
+                pending_spawn_world_pos_ = point;
+                open_asset_library();
+                if (!is_asset_library_open()) {
+                    pending_spawn_world_pos_.reset();
+                }
             }
 };
 
         if (hovered_asset_) {
             if (shift_modifier) {
-                open_asset_info_editor_for_asset(hovered_asset_);
+                if (!tilt_adjusted_during_right_click_) {
+                    open_asset_info_editor_for_asset(hovered_asset_);
+                }
             } else {
                 open_library_at(world_mouse);
             }
@@ -3232,10 +3245,13 @@ void RoomEditor::handle_click(const Input& input) {
             if (inside_room) {
                 open_library_at(world_mouse);
             } else {
-                pending_spawn_world_pos_.reset();
-                open_asset_library();
+                if (!tilt_adjusted_during_right_click_) {
+                    pending_spawn_world_pos_.reset();
+                    open_asset_library();
+                }
             }
         }
+        tilt_adjusted_during_right_click_ = false;
         return;
     } else {
         rclick_buffer_frames_ = 0;
@@ -3588,12 +3604,17 @@ void RoomEditor::handle_shortcuts(const Input& input) {
             toggle_asset_library();
         }
     }
+
     if (input.wasScancodePressed(SDL_SCANCODE_R)) {
-        if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; shortcut ignored.");
-        } else {
-            toggle_room_config();
-        }
+        if (!current_room_ || !assets_) 
+        std::cout <<"issues sving cam seetings\n";
+        return;
+        // Update JSON with current camera tilt, y offset, and height
+        current_room_->assets_data()["camera_tilt_deg"] = current_room_->camera_tilt_deg;
+        current_room_->assets_data()["camera_y_distance_px"] = current_room_->camera_y_distance_px;
+        current_room_->assets_data()["camera_height_px"] = current_room_->camera_height_px;
+        std::cout <<"saving cam seetings (attempting\n";
+        save_current_room_assets_json();
     }
 }
 

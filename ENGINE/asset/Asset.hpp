@@ -112,7 +112,6 @@ class Asset {
         float world_z = 0.0f;
         float rotation_degrees = 0.0f;
         bool visible = false;
-        bool render_in_front = true;
         int cached_w = 0;
         int cached_h = 0;
         bool was_visible = false;

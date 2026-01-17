@@ -684,7 +684,6 @@ void Asset::initialize_animation_children_recursive() {
                 slot.child_index = static_cast<int>(i);
                 slot.visible = false;
                 slot.was_visible = false;
-                slot.render_in_front = true;
                 slot.last_parent_frame_index = -1;
                 if (!slot.info && library && !slot.asset_name.empty()) {
                         slot.info = library->get(slot.asset_name);

@@ -28,14 +28,6 @@ public:
     static constexpr float kMinPitchDegrees = 0.0f;
     static constexpr float kMaxPitchDegrees = 150.0f;
 
-    enum class BlurFalloffMethod {
-        Linear = 0,
-        Quadratic = 1,
-        Cubic = 2,
-        Logarithmic = 3,
-        Exponential = 4
-};
-
     struct RealismSettings {
 
         float min_visible_screen_ratio     = 0.015f;
@@ -46,17 +38,7 @@ public:
 
         int   render_quality_percent       = 100;
 
-        float scale_variant_hysteresis_margin = 0.05f;
-
         float meters_per_100_world_px         = 1.0f;
-
-        int   foreground_texture_max_opacity  = 255;
-        int   background_texture_max_opacity  = 255;
-        float foreground_plane_screen_y       = 1080.0f;
-        float background_plane_screen_y       = 0.0f;
-        BlurFalloffMethod texture_opacity_falloff_method = BlurFalloffMethod::Linear;
-        float texture_warp_percent            = 100.0f;
-        float texture_warp_y_offset_px        = 0.0f;
 
         float extra_cull_margin = 1000.0f;
         float depth_near_world = 0.0f;
@@ -64,9 +46,6 @@ public:
         float pre_horizon_lock_offset_px = 80.0f;
         float near_camera_max_perspective_scale = 4.0f;
         float offscreen_fade_amount_px = 200.0f;
-
-        camera_effects::ImageEffectSettings foreground_effects{};
-        camera_effects::ImageEffectSettings background_effects{};
 };
 
     struct FloorDepthParams {
@@ -167,17 +146,10 @@ public:
     RealismSettings& get_settings() { return settings_; }
     const RealismSettings& realism_settings() const { return settings_; }
     RealismSettings& realism_settings() { return settings_; }
-    bool is_realism_enabled() const { return realism_enabled_ && depth_enabled_; }
-    bool realism_enabled() const { return is_realism_enabled(); }
-    bool parallax_enabled() const { return is_realism_enabled(); }
-    void set_realism_enabled(bool enabled) {
-        realism_enabled_ = enabled;
-    }
     void set_depth_enabled(bool enabled) { depth_enabled_ = enabled; }
     bool depth_enabled() const { return depth_enabled_; }
     void set_depth_debug_logging(bool enabled) { depth_debug_logging_ = enabled; }
     bool depth_debug_logging() const { return depth_debug_logging_; }
-    void set_parallax_enabled(bool enabled) { set_realism_enabled(enabled); }
     void set_render_areas_enabled(bool enabled) { render_areas_enabled_ = enabled; }
     const Area& get_current_view() const { return current_view_; }
     const Area& get_camera_area() const { return current_view_; }
@@ -191,6 +163,7 @@ public:
     void update();
     void set_tilt_override(std::optional<float> tilt_deg);
     void clear_tilt_override();
+    std::optional<float> tilt_override() const;
     bool has_tilt_override() const { return tilt_override_deg_.has_value(); }
     float tilt_override_deg() const { return tilt_override_deg_.value_or(camera_math::kDefaultCameraTiltDeg); }
     Area frame_to_area(const SDL_Rect& frame) const;
@@ -229,7 +202,6 @@ private:
     int screen_height_ = 0;
     double aspect_ = 1.0;
 
-    bool realism_enabled_ = false;
     bool render_areas_enabled_ = false;
     RealismSettings settings_{};
 

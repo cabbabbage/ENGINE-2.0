@@ -484,15 +484,14 @@ struct ProjectionResult {
         };
     }
 
-    WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
-        int screen_width,
-        int screen_height,
-        const CameraState& cam,
-        bool realism_enabled) {
-        WarpedScreenGrid::FloorDepthParams p{};
-        if (!realism_enabled || !cam.valid) {
-            return p;
-        }
+WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
+    int screen_width,
+    int screen_height,
+    const CameraState& cam) {
+    WarpedScreenGrid::FloorDepthParams p{};
+    if (!cam.valid) {
+        return p;
+    }
 
         const double screen_h = std::max(1.0, static_cast<double>(screen_height));
         constexpr double kMaxHorizonRatio = 0.45;
@@ -616,7 +615,6 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
     runtime_pitch_deg_ = camera_.current_pitch_deg();
     runtime_pitch_rad_ = camera_.current_pitch_rad();
     runtime_anchor_world_y_ = camera_.state().center.y;
-    realism_enabled_ = true;
     depth_enabled_   = true;
 }
 
@@ -984,24 +982,12 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("base_height_px", updated.base_height_px, 1.0f, 100000.0f);
     read_int("render_quality_percent", updated.render_quality_percent, 10, 100);
     read_float("meters_per_100_world_px", updated.meters_per_100_world_px, 0.01f, 1000.0f);
-    read_float("scale_variant_hysteresis_margin", updated.scale_variant_hysteresis_margin, 0.0f, 1.0f);
+
     read_float("extra_cull_margin", updated.extra_cull_margin, 0.0f, 10000.0f);
     read_float("pre_horizon_lock_offset_px", updated.pre_horizon_lock_offset_px, 0.0f, 1000.0f);
     read_float("near_camera_max_perspective_scale", updated.near_camera_max_perspective_scale, 0.0f, 100.0f);
     read_float("offscreen_fade_amount_px", updated.offscreen_fade_amount_px, 0.0f, 1000.0f);
 
-    read_int("foreground_texture_max_opacity", updated.foreground_texture_max_opacity, 0, 255);
-    read_int("background_texture_max_opacity", updated.background_texture_max_opacity, 0, 255);
-    read_float("foreground_plane_screen_y", updated.foreground_plane_screen_y, -10000.0f, 10000.0f);
-    read_float("background_plane_screen_y", updated.background_plane_screen_y, -10000.0f, 10000.0f);
-    int falloff = static_cast<int>(updated.texture_opacity_falloff_method);
-    read_int("texture_opacity_falloff_method", falloff, 0, 4);
-    updated.texture_opacity_falloff_method = static_cast<BlurFalloffMethod>(falloff);
-    read_float("texture_warp_percent", updated.texture_warp_percent, 0.0f, 100.0f);
-    read_float("texture_warp_y_offset_px", updated.texture_warp_y_offset_px, -10000.0f, 10000.0f);
-
-    read_effect_settings("foreground_effects", updated.foreground_effects);
-    read_effect_settings("background_effects", updated.background_effects);
 
     set_realism_settings(updated);
 }
@@ -1012,33 +998,12 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["base_height_px"] = settings_.base_height_px;
     result["render_quality_percent"] = settings_.render_quality_percent;
     result["meters_per_100_world_px"] = settings_.meters_per_100_world_px;
-    result["scale_variant_hysteresis_margin"] = settings_.scale_variant_hysteresis_margin;
     result["extra_cull_margin"] = settings_.extra_cull_margin;
     result["pre_horizon_lock_offset_px"] = settings_.pre_horizon_lock_offset_px;
     result["near_camera_max_perspective_scale"] = settings_.near_camera_max_perspective_scale;
     result["offscreen_fade_amount_px"] = settings_.offscreen_fade_amount_px;
 
-    result["foreground_texture_max_opacity"] = settings_.foreground_texture_max_opacity;
-    result["background_texture_max_opacity"] = settings_.background_texture_max_opacity;
-    result["foreground_plane_screen_y"] = settings_.foreground_plane_screen_y;
-    result["background_plane_screen_y"] = settings_.background_plane_screen_y;
-    result["texture_opacity_falloff_method"] = static_cast<int>(settings_.texture_opacity_falloff_method);
-    result["texture_warp_percent"] = settings_.texture_warp_percent;
-    result["texture_warp_y_offset_px"] = settings_.texture_warp_y_offset_px;
 
-    auto write_effects = [](const camera_effects::ImageEffectSettings& settings) {
-        return nlohmann::json::object({
-            {"contrast", settings.contrast},
-            {"brightness", settings.brightness},
-            {"blur", settings.blur},
-            {"saturation_red", settings.saturation_red},
-            {"saturation_green", settings.saturation_green},
-            {"saturation_blue", settings.saturation_blue},
-            {"hue", settings.hue}
-        });
-    };
-    result["foreground_effects"] = write_effects(settings_.foreground_effects);
-    result["background_effects"] = write_effects(settings_.background_effects);
     return result;
 }
 SDL_FPoint WarpedScreenGrid::get_view_center_f() const {
@@ -1056,7 +1021,7 @@ SDL_FPoint WarpedScreenGrid::get_view_center_f() const {
 WarpedScreenGrid::FloorDepthParams WarpedScreenGrid::compute_floor_depth_params() const {
     const CameraState cam = build_camera_state(
         settings_, aspect_, screen_width_, screen_height_, camera_.state().center, camera_.state().params);
-    return build_floor_params_from_camera_state(screen_width_, screen_height_, cam, realism_enabled_);
+    return build_floor_params_from_camera_state(screen_width_, screen_height_, cam);
 }
 
 float WarpedScreenGrid::warp_floor_screen_y(float world_y, float linear_screen_y) const {
@@ -1674,6 +1639,10 @@ void WarpedScreenGrid::set_tilt_override(std::optional<float> tilt_deg) {
 
 void WarpedScreenGrid::clear_tilt_override() {
     tilt_override_deg_.reset();
+}
+
+std::optional<float> WarpedScreenGrid::tilt_override() const {
+    return tilt_override_deg_;
 }
 
 void WarpedScreenGrid::update() {

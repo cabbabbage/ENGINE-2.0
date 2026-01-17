@@ -39,19 +39,31 @@ class AnimationDocument;
 class PreviewProvider;
 }
 
-struct ChildPreviewContext {
-    SDL_FPoint anchor_world{};
-    float document_scale = 1.0f;
-};
+
 
 class FrameEditorSession {
 public:
     enum class Mode { Movement, StaticChildren, AsyncChildren, AttackGeometry, HitGeometry };
-    enum class EditPlane { XY, XZ };
-    static inline constexpr std::array<const char*, 3> kDamageTypeNames = {
-        "projectile", "melee", "explosion"
-};
-
+    enum class EditPlane { XZ, XY };
+    enum class AdjustmentAxis { X, Y, Z };
+    enum class AdjustmentTarget { None, MovementPoint, ChildPoint, AttackStart, AttackControl, AttackEnd, HitboxCenter };
+    struct AdjustmentSelection {
+        AdjustmentTarget target = AdjustmentTarget::None;
+        AdjustmentAxis axis = AdjustmentAxis::X;
+        int child_index = -1;
+        int attack_vector_index = -1;
+        SDL_FPoint world_pos{};
+        SDL_Point screen_pos{};
+        bool has_value() const { return target != AdjustmentTarget::None; }
+        void reset() {
+            target = AdjustmentTarget::None;
+            axis = AdjustmentAxis::X;
+            child_index = -1;
+            attack_vector_index = -1;
+            world_pos = SDL_FPoint{0.0f, 0.0f};
+            screen_pos = SDL_Point{0, 0};
+        }
+    };
     FrameEditorSession();
     ~FrameEditorSession();
 
@@ -66,48 +78,23 @@ public:
 
     bool is_active() const { return active_; }
     Mode mode() const { return mode_; }
-    EditPlane edit_plane() const { return edit_plane_; }
+    EditPlane edit_plane() const {
+        return (mode_ == Mode::Movement) ? EditPlane::XZ : EditPlane::XY;
+    }
 
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
     void render(SDL_Renderer* renderer) const;
 
     void set_snap_resolution(int r);
-    void set_grid_overlay_enabled_transient(bool enabled);
     bool should_render_asset(const Asset* asset) const;
 
 FRAME_EDITOR_ACCESS:
     bool target_is_alive() const;
-    void center_camera_origin();
-    struct TextureMetrics {
-        int width = 0;
-        int height = 0;
-    };
-    TextureMetrics current_frame_texture_metrics(SDL_Renderer* renderer) const;
-    bool project_texture_bounds(const WarpedScreenGrid& cam,
-                                SDL_Point anchor_world,
-                                const TextureMetrics& metrics,
-                                EditPlane plane,
-                                SDL_FRect& out_bounds) const;
-    double fit_camera_height_for_xy(WarpedScreenGrid& cam,
-                                    SDL_Point anchor_world,
-                                    const TextureMetrics& metrics,
-                                    int screen_w,
-                                    int screen_h) const;
-    double fit_camera_y_distance_for_xz(WarpedScreenGrid& cam,
-                                        SDL_Point anchor_world,
-                                        const TextureMetrics& metrics,
-                                        int screen_w,
-                                        int screen_h) const;
-    void apply_camera_defaults(EditPlane plane);
-    void handle_xz_scroll(WarpedScreenGrid& cam, int wheel_y);
-    void handle_xy_scroll(WarpedScreenGrid& cam, int wheel_y) const;
-    static void render_plane_grid(SDL_Renderer* renderer,
-                                  const WarpedScreenGrid& cam,
-                                  SDL_Point anchor_world,
-                                  EditPlane plane,
-                                  int snap_resolution_r,
-                                  const TextureMetrics& metrics);
+    void capture_camera_state();
+    void lock_camera_state();
+    void restore_camera_state();
+    void enforce_camera_locks(WarpedScreenGrid& cam);
 
     struct ChildFrame {
         int child_index = -1;
@@ -116,7 +103,6 @@ FRAME_EDITOR_ACCESS:
         float dz = 0.0f;
         float degree = 0.0f;
         bool visible = true;
-        bool render_in_front = true;
         bool has_data = false;
 };
     struct MovementFrame {
@@ -128,15 +114,6 @@ FRAME_EDITOR_ACCESS:
 
         animation_update::FrameHitGeometry    hit;
         animation_update::FrameAttackGeometry attack;
-};
-    struct ChildPreviewSlot {
-        std::string asset_name;
-        std::shared_ptr<AssetInfo> info;
-        const Animation* animation = nullptr;
-        const AnimationFrame* frame = nullptr;
-        SDL_Texture* texture = nullptr;
-        int width = 0;
-        int height = 0;
 };
 
     Assets* assets_ = nullptr;
@@ -157,12 +134,12 @@ FRAME_EDITOR_ACCESS:
     bool smooth_enabled_ = false;
     bool curve_enabled_ = false;
     int selected_child_index_ = 0;
-    EditPlane edit_plane_ = EditPlane::XZ;
-    bool grid_overlay_enabled_ = true;
+    bool adjustment_mode_active_ = false;
+    bool adjustment_dirty_ = false;
+    AdjustmentSelection adjustment_selection_;
 
     bool prev_realism_enabled_ = true;
     bool prev_parallax_enabled_ = true;
-    bool prev_grid_overlay_enabled_ = false;
     bool prev_asset_hidden_ = false;
 
     int  snap_resolution_r_ = 0;
@@ -170,23 +147,26 @@ FRAME_EDITOR_ACCESS:
 
     std::vector<MovementFrame> frames_;
     std::vector<SDL_FPoint> rel_positions_;
+    std::vector<float> rel_z_positions_;
 
     mutable std::unique_ptr<DMButton> btn_back_;
     mutable std::unique_ptr<DMButton> btn_movement_;
     mutable std::unique_ptr<DMButton> btn_children_;
     mutable std::unique_ptr<DMButton> btn_attack_geometry_;
     mutable std::unique_ptr<DMButton> btn_hit_geometry_;
-    mutable std::unique_ptr<DMButton> btn_plane_toggle_;
     mutable std::unique_ptr<DMButton> btn_prev_;
     mutable std::unique_ptr<DMButton> btn_next_;
     mutable std::unique_ptr<DMDropdown> dd_animation_select_;
-    mutable std::unique_ptr<class DMCheckbox> cb_grid_overlay_;
     mutable std::unique_ptr<DMNumericStepper> stepper_grid_resolution_;
 
     mutable std::unique_ptr<class DMButton> btn_apply_all_movement_;
+    mutable std::unique_ptr<class DMButton> btn_apply_all_animations_movement_;
     mutable std::unique_ptr<class DMButton> btn_apply_all_children_;
+    mutable std::unique_ptr<class DMButton> btn_apply_all_animations_children_;
     mutable std::unique_ptr<class DMButton> btn_apply_all_hit_;
+    mutable std::unique_ptr<class DMButton> btn_apply_all_animations_hit_;
     mutable std::unique_ptr<class DMButton> btn_apply_all_attack_;
+    mutable std::unique_ptr<class DMButton> btn_apply_all_animations_attack_;
     mutable std::unique_ptr<class DMCheckbox> cb_smooth_;
     mutable std::unique_ptr<class DMCheckbox> cb_curve_;
     mutable std::unique_ptr<class DMCheckbox> cb_show_anim_;
@@ -198,57 +178,67 @@ FRAME_EDITOR_ACCESS:
     mutable std::unique_ptr<class DMButton> btn_child_remove_;
     mutable std::unique_ptr<class DMTextBox> tb_child_dx_;
     mutable std::unique_ptr<class DMTextBox> tb_child_dy_;
+    mutable std::unique_ptr<class DMTextBox> tb_child_dz_;
     mutable std::unique_ptr<class DMTextBox> tb_child_deg_;
     mutable std::unique_ptr<class DMCheckbox> cb_child_visible_;
-    mutable std::unique_ptr<class DMCheckbox> cb_child_render_front_;
 
-    mutable std::unique_ptr<class DMDropdown> dd_hitbox_type_;
     mutable std::unique_ptr<class DMButton> btn_hitbox_add_remove_;
     mutable std::unique_ptr<class DMButton> btn_hitbox_copy_next_;
     mutable std::unique_ptr<class DMTextBox> tb_hit_center_x_;
-    mutable std::unique_ptr<class DMTextBox> tb_hit_center_y_;
+    mutable std::unique_ptr<class DMTextBox> tb_hit_center_z_;
     mutable std::unique_ptr<class DMTextBox> tb_hit_width_;
     mutable std::unique_ptr<class DMTextBox> tb_hit_height_;
     mutable std::unique_ptr<class DMTextBox> tb_hit_rotation_;
 
-    mutable std::unique_ptr<class DMDropdown> dd_attack_type_;
     mutable std::unique_ptr<class DMButton> btn_attack_add_remove_;
     mutable std::unique_ptr<class DMButton> btn_attack_delete_;
     mutable std::unique_ptr<class DMButton> btn_attack_copy_next_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_start_x_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_start_y_;
+    mutable std::unique_ptr<class DMTextBox> tb_attack_start_z_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_control_x_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_control_y_;
+    mutable std::unique_ptr<class DMTextBox> tb_attack_control_z_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_end_x_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_end_y_;
+    mutable std::unique_ptr<class DMTextBox> tb_attack_end_z_;
     mutable std::unique_ptr<class DMTextBox> tb_attack_damage_;
 
     mutable std::unique_ptr<class DMTextBox> tb_total_dx_;
     mutable std::unique_ptr<class DMTextBox> tb_total_dy_;
+    mutable std::unique_ptr<class DMTextBox> tb_frame_dx_;
+    mutable std::unique_ptr<class DMTextBox> tb_frame_dy_;
+    mutable std::unique_ptr<class DMTextBox> tb_frame_dz_;
 
     mutable std::string last_totals_dx_text_{};
     mutable std::string last_totals_dy_text_{};
+    mutable std::string last_frame_dx_text_{};
+    mutable std::string last_frame_dy_text_{};
+    mutable std::string last_frame_dz_text_{};
     mutable bool last_show_anim_value_ = true;
     mutable bool last_show_child_value_ = true;
     mutable std::string last_child_dx_text_{};
     mutable std::string last_child_dy_text_{};
+    mutable std::string last_child_dz_text_{};
     mutable std::string last_child_deg_text_{};
     mutable std::string last_child_name_text_{};
     mutable int last_child_mode_index_ = 0;
     mutable bool last_child_visible_value_ = false;
-    mutable bool last_child_front_value_ = true;
     mutable bool cb_show_anim_targets_parent_label_ = false;
     mutable std::string last_hit_center_x_text_{};
-    mutable std::string last_hit_center_y_text_{};
+    mutable std::string last_hit_center_z_text_{};
     mutable std::string last_hit_width_text_{};
     mutable std::string last_hit_height_text_{};
     mutable std::string last_hit_rotation_text_{};
     mutable std::string last_attack_start_x_text_{};
     mutable std::string last_attack_start_y_text_{};
+    mutable std::string last_attack_start_z_text_{};
     mutable std::string last_attack_control_x_text_{};
     mutable std::string last_attack_control_y_text_{};
+    mutable std::string last_attack_control_z_text_{};
     mutable std::string last_attack_end_x_text_{};
     mutable std::string last_attack_end_y_text_{};
+    mutable std::string last_attack_end_z_text_{};
     mutable std::string last_attack_damage_text_{};
 
     mutable SDL_Rect directory_rect_{0,0,0,0};
@@ -265,10 +255,6 @@ FRAME_EDITOR_ACCESS:
     SDL_Point dir_pos_{0, 0};
     SDL_Point toolbox_pos_{0, 0};
     SDL_Point nav_pos_{0, 0};
-    SDL_FPoint right_pan_start_world_{0.0f, 0.0f};
-    SDL_FPoint right_pan_last_world_{0.0f, 0.0f};
-    SDL_Point right_pan_start_focus_{0, 0};
-    double right_pan_start_distance_ = 0.0;
     bool dragging_dir_ = false;
     bool dragging_toolbox_ = false;
     bool dragging_toolbox_scrollbar_ = false;
@@ -289,31 +275,33 @@ FRAME_EDITOR_ACCESS:
     mutable std::vector<int> thumb_indices_;
 
     mutable class PanAndHeight pan_height_;
-    bool manual_pan_active_ = false;
-    SDL_Point manual_pan_last_center_{0, 0};
-    bool manual_pan_has_last_center_ = false;
-    bool right_pan_active_ = false;
-    SDL_Point right_pan_start_mouse_{0, 0};
-    SDL_Point right_pan_start_center_{0, 0};
-    SDL_Point right_pan_last_center_{0, 0};
-    bool right_pan_has_last_center_ = false;
     int pending_scroll_delta_ = 0;
     bool hover_toolbox_ = false;
     bool hover_toolbox_drag_handle_ = false;
     bool hover_nav_drag_handle_ = false;
+    struct CameraLockState {
+        bool valid = false;
+        bool manual_override_before = false;
+        bool focus_override_before = false;
+        SDL_Point focus_point_before{0, 0};
+        SDL_Point screen_center_before{0, 0};
+        std::optional<float> tilt_override_before{};
+        double camera_y_distance_before = 0.0;
+    };
+    CameraLockState camera_lock_state_;
+    bool camera_y_distance_locked_ = false;
+    double locked_camera_y_distance_ = 0.0;
+    bool tilt_locked_ = false;
+    float locked_tilt_deg_ = 0.0f;
     std::vector<std::string> child_assets_;
     mutable std::vector<AnimationChildMode> child_modes_;
-    std::vector<ChildPreviewSlot> child_preview_slots_;
     std::string document_payload_cache_;
     std::string document_children_signature_;
     std::unordered_map<Asset*, bool> child_hidden_cache_;
     bool last_payload_loaded_ = false;
     mutable std::vector<std::string> animation_dropdown_options_cache_;
     mutable std::vector<std::string> child_dropdown_options_cache_;
-    mutable std::vector<std::string> hitbox_type_labels_;
-    mutable std::vector<std::string> attack_type_labels_;
-
-    int selected_hitbox_type_index_ = 1;
+    int selected_hitbox_index_ = -1;
     enum class HitHandle { None, Move, Left, Right, Top, Bottom, Rotate };
     HitHandle active_hitbox_handle_ = HitHandle::None;
     bool hitbox_dragging_ = false;
@@ -326,8 +314,7 @@ FRAME_EDITOR_ACCESS:
     float hitbox_drag_bottom_ = 0.0f;
     bool hitbox_drag_moved_ = false;
 
-    int selected_attack_type_index_ = 1;
-    std::array<int, kDamageTypeNames.size()> selected_attack_vector_indices_{ { -1, -1, -1 } };
+    int selected_attack_vector_index_ = -1;
     enum class AttackHandle { None, Start, Control, End, Segment };
     AttackHandle active_attack_handle_ = AttackHandle::None;
     bool attack_dragging_ = false;
@@ -346,6 +333,7 @@ FRAME_EDITOR_ACCESS:
     void rebuild_layout() const;
     void render_toolbox(SDL_Renderer* renderer) const;
     void apply_current_mode_to_all_frames();
+    void apply_current_mode_to_all_animations();
     void apply_frame_move_from_base(int index, SDL_FPoint desired_rel, const std::vector<SDL_FPoint>& base_rel);
     void redistribute_frames_from_middle_drag(int adjusted_index);
 
@@ -416,6 +404,11 @@ FRAME_EDITOR_ACCESS:
         int totals_width = 0;
         int total_dx_height = 0;
         int total_dy_height = 0;
+        int frame_field_width = 0;
+        int frame_dx_height = 0;
+        int frame_dy_height = 0;
+        int frame_dz_height = 0;
+        int frame_row_height = 0;
 };
     struct ChildrenToolboxMetrics {
         int padding = 0;
@@ -439,7 +432,6 @@ FRAME_EDITOR_ACCESS:
         int child_dy_height = 0;
         int child_rotation_height = 0;
         int child_visible_checkbox_width = 0;
-        int child_render_checkbox_width = 0;
         int show_parent_checkbox_width = 0;
         int show_child_checkbox_width = 0;
 
@@ -463,9 +455,9 @@ FRAME_EDITOR_ACCESS:
 
     animation_update::FrameHitGeometry::HitBox* current_hit_box();
     const animation_update::FrameHitGeometry::HitBox* current_hit_box() const;
-    animation_update::FrameHitGeometry::HitBox* ensure_hit_box_for_type(const std::string& type);
-    void delete_hit_box_for_type(const std::string& type);
-    std::string current_hitbox_type() const;
+    void clamp_hitbox_selection();
+    animation_update::FrameHitGeometry::HitBox* ensure_hit_box();
+    void delete_current_hit_box();
     void refresh_hitbox_form() const;
     void copy_hit_box_to_next_frame();
     float document_scale_factor() const;
@@ -475,9 +467,8 @@ FRAME_EDITOR_ACCESS:
     bool build_hitbox_visual(const animation_update::FrameHitGeometry::HitBox& box, HitBoxVisual& out) const;
     animation_update::FrameAttackGeometry::Vector* current_attack_vector();
     const animation_update::FrameAttackGeometry::Vector* current_attack_vector() const;
-    animation_update::FrameAttackGeometry::Vector* ensure_attack_vector_for_type(const std::string& type);
+    animation_update::FrameAttackGeometry::Vector* ensure_attack_vector();
     void delete_current_attack_vector();
-    std::string current_attack_type() const;
     int current_attack_vector_index() const;
     void set_current_attack_vector_index(int index);
     void clamp_attack_selection();
@@ -488,23 +479,6 @@ FRAME_EDITOR_ACCESS:
     void update_attack_drag(SDL_Point mouse);
     void end_attack_drag(bool commit);
     float attachment_scale() const;
-    bool is_xy_plane() const;
-    const char* plane_axis_label() const;
-    const char* plane_button_label() const;
-    void toggle_edit_plane();
-    void update_plane_labels() const;
-    float movement_plane_delta(const MovementFrame& frame) const;
-    float& movement_plane_delta(MovementFrame& frame);
-    float child_plane_delta(const ChildFrame& child) const;
-    float& child_plane_delta(ChildFrame& child);
-    float hitbox_plane_center(const animation_update::FrameHitGeometry::HitBox& box) const;
-    float& hitbox_plane_center(animation_update::FrameHitGeometry::HitBox& box);
-    float attack_plane_start(const animation_update::FrameAttackGeometry::Vector& vec) const;
-    float& attack_plane_start(animation_update::FrameAttackGeometry::Vector& vec);
-    float attack_plane_control(const animation_update::FrameAttackGeometry::Vector& vec) const;
-    float& attack_plane_control(animation_update::FrameAttackGeometry::Vector& vec);
-    float attack_plane_end(const animation_update::FrameAttackGeometry::Vector& vec) const;
-    float& attack_plane_end(animation_update::FrameAttackGeometry::Vector& vec);
 
 FRAME_EDITOR_ACCESS:
     void render_directory_panel(SDL_Renderer* renderer);
@@ -513,8 +487,8 @@ FRAME_EDITOR_ACCESS:
     void render_child_guides(SDL_Renderer* renderer, const WarpedScreenGrid& cam);
     void render_hitbox_guides(SDL_Renderer* renderer, const WarpedScreenGrid& cam);
     void render_attack_guides(SDL_Renderer* renderer, const WarpedScreenGrid& cam);
-    ChildPreviewContext build_child_preview_context() const;
-    SDL_FRect child_preview_rect(SDL_FPoint child_world, int texture_w, int texture_h, const ChildPreviewContext& ctx, float scale_override) const;
+
+
     float mirrored_child_rotation(bool parent_is_flipped, float degree) const;
     void apply_child_timelines_from_payload(const nlohmann::json& payload);
     nlohmann::json build_child_timelines_payload(const nlohmann::json& existing_payload) const;
@@ -522,6 +496,16 @@ FRAME_EDITOR_ACCESS:
     static nlohmann::json child_frame_to_json(const ChildFrame& frame);
     static bool timeline_entry_is_static(const nlohmann::json& entry);
     AnimationChildFrameData build_child_frame_descriptor(const MovementFrame& frame, std::size_t child_index) const;
+    void reset_adjustment_selection();
+    void exit_adjustment_mode(bool apply_smoothing = true);
+    void select_adjustment_target(AdjustmentTarget target, int child_index, SDL_FPoint world_pos, SDL_Point screen_pos);
+    void cycle_adjustment_axis();
+    void adjust_selection_axis(int scroll_delta, const WarpedScreenGrid& cam);
+    void ensure_adjustment_auto_select(const WarpedScreenGrid& cam);
+    std::optional<int> hit_test_child_marker(const SDL_Point& mouse, const WarpedScreenGrid& cam, SDL_Point parent_base, float base_adjustment) const;
+    SDL_FPoint movement_point_world_position() const;
+    SDL_FPoint child_world_position(int child_index, float base_adjustment, bool flipped) const;
+    void apply_adjustment_smoothing();
 };
 
 inline std::vector<FrameEditorSession::MovementFrame>
@@ -577,14 +561,15 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         return fallback;
 };
 
-    auto upsert_hit_box = [&](MovementFrame& frame,
-                              const std::string& type,
+    constexpr std::array<const char*, 3> kLegacyDamageTypeNames = {
+        "projectile", "melee", "explosion"
+    };
+    auto append_hit_box = [&](MovementFrame& frame,
                               const nlohmann::json& node) {
-        if (type.empty() || node.is_null()) {
+        if (node.is_null()) {
             return;
         }
         animation_update::FrameHitGeometry::HitBox box;
-        box.type = type;
         if (node.is_object()) {
             box.center_x = read_float(node.value("center_x", 0.0f));
             const bool has_center_z = node.contains("center_z");
@@ -594,9 +579,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
             box.half_width = read_float(node.value("half_width", 0.0f));
             box.half_height = read_float(node.value("half_height", 0.0f));
             box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
-            if (node.contains("type") && node["type"].is_string()) {
-                box.type = node["type"].get<std::string>();
-            }
         } else if (node.is_array()) {
             const auto& arr = node;
             if (!arr.empty())          box.center_x = read_float(arr[0]);
@@ -617,19 +599,13 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         if (box.is_empty()) {
             return;
         }
-        if (auto* existing = frame.hit.find_box(box.type)) {
-            *existing = box;
-        } else {
-            frame.hit.boxes.push_back(box);
-        }
+        frame.hit.boxes.push_back(box);
 };
 
     auto append_attack_vector = [&](MovementFrame& frame,
-                                    const std::string& type,
                                     const nlohmann::json& node) {
-        if (type.empty() || node.is_null()) return;
+        if (node.is_null()) return;
         animation_update::FrameAttackGeometry::Vector vec;
-        vec.type = type;
         if (node.is_object()) {
             vec.start_x = read_float(node.value("start_x", 0.0f));
             const bool has_start_z = node.contains("start_z");
@@ -646,7 +622,8 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
             } else {
                 vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
                 const float fallback_end_z = read_float(node.value("end_z", read_float(node.value("end_y", 0.0f))));
-                vec.control_y = 0.0f;
+                const float fallback_end_y = has_start_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
+                vec.control_y = (vec.start_y + fallback_end_y) * 0.5f;
                 vec.control_z = (vec.start_z + fallback_end_z) * 0.5f;
             }
             vec.end_x   = read_float(node.value("end_x", 0.0f));
@@ -655,9 +632,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
             vec.end_z   = has_end_z ? read_float(node.value("end_z", 0.0f))
                                     : read_float(node.value("end_y", 0.0f));
             vec.damage  = read_int(node.value("damage", 0));
-            if (node.contains("type") && node["type"].is_string()) {
-                vec.type = node["type"].get<std::string>();
-            }
         } else if (node.is_array()) {
             const auto& arr = node;
             if (!arr.empty())      vec.start_x = read_float(arr[0]);
@@ -665,12 +639,13 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
             if (arr.size() > 2)    vec.end_x   = read_float(arr[2]);
             if (arr.size() > 3)    vec.end_z   = read_float(arr[3]);
             vec.control_x = (vec.start_x + vec.end_x) * 0.5f;
+            vec.control_y = 0.0f;
             vec.control_z = (vec.start_z + vec.end_z) * 0.5f;
             if (arr.size() > 4)    vec.damage  = read_int(arr[4]);
         } else {
             return;
         }
-        frame.attack.add_vector(vec.type, vec);
+        frame.attack.add_vector(vec);
 };
 
     std::size_t frame_index = 0;
@@ -707,7 +682,7 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                     if (child_entry.size() > 2 && child_entry[2].is_number()) {
                         child.dy = static_cast<float>(child_entry[2].get<double>());
                     }
-                    if (child_entry.size() > 3 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                    if (child_entry.size() > 3 && child_entry[3].is_number()) {
                         child.dz = static_cast<float>(child_entry[3].get<double>());
                         if (child_entry.size() > 4 && child_entry[4].is_number()) {
                             child.degree = static_cast<float>(child_entry[4].get<double>());
@@ -719,13 +694,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                                 child.visible = child_entry[5].get<int>() != 0;
                             }
                         }
-                        if (child_entry.size() > 6) {
-                            if (child_entry[6].is_boolean()) {
-                                child.render_in_front = child_entry[6].get<bool>();
-                            } else if (child_entry[6].is_number_integer()) {
-                                child.render_in_front = child_entry[6].get<int>() != 0;
-                            }
-                        }
                     } else {
                         if (child_entry.size() > 3 && child_entry[3].is_number()) {
                             child.degree = static_cast<float>(child_entry[3].get<double>());
@@ -735,13 +703,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                                 child.visible = child_entry[4].get<bool>();
                             } else if (child_entry[4].is_number_integer()) {
                                 child.visible = child_entry[4].get<int>() != 0;
-                            }
-                        }
-                        if (child_entry.size() > 5) {
-                            if (child_entry[5].is_boolean()) {
-                                child.render_in_front = child_entry[5].get<bool>();
-                            } else if (child_entry[5].is_number_integer()) {
-                                child.render_in_front = child_entry[5].get<int>() != 0;
                             }
                         }
                         child.dz = child.dy;
@@ -776,7 +737,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                             child.degree = 0.0f;
                         }
                         child.visible = child_entry.value("visible", true);
-                        child.render_in_front = child_entry.value("render_in_front", true);
                         child.has_data = true;
                     } else if (child_entry.is_array()) {
                         try { child.child_index = child_entry[0].get<int>(); } catch (...) { child.child_index = -1; }
@@ -786,7 +746,7 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                         if (child_entry.size() > 2 && child_entry[2].is_number()) {
                             child.dy = static_cast<float>(child_entry[2].get<double>());
                         }
-                        if (child_entry.size() > 3 && child_entry[3].is_number() && child_entry.size() >= 7) {
+                        if (child_entry.size() > 3 && child_entry[3].is_number()) {
                             child.dz = static_cast<float>(child_entry[3].get<double>());
                             if (child_entry.size() > 4 && child_entry[4].is_number()) {
                                 child.degree = static_cast<float>(child_entry[4].get<double>());
@@ -798,13 +758,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                                     child.visible = child_entry[5].get<int>() != 0;
                                 }
                             }
-                            if (child_entry.size() > 6) {
-                                if (child_entry[6].is_boolean()) {
-                                    child.render_in_front = child_entry[6].get<bool>();
-                                } else if (child_entry[6].is_number_integer()) {
-                                    child.render_in_front = child_entry[6].get<int>() != 0;
-                                }
-                            }
                         } else {
                             if (child_entry.size() > 3 && child_entry[3].is_number()) {
                                 child.degree = static_cast<float>(child_entry[3].get<double>());
@@ -814,13 +767,6 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
                                     child.visible = child_entry[4].get<bool>();
                                 } else if (child_entry[4].is_number_integer()) {
                                     child.visible = child_entry[4].get<int>() != 0;
-                                }
-                            }
-                            if (child_entry.size() > 5) {
-                                if (child_entry[5].is_boolean()) {
-                                    child.render_in_front = child_entry[5].get<bool>();
-                                } else if (child_entry[5].is_number_integer()) {
-                                    child.render_in_front = child_entry[5].get<int>() != 0;
                                 }
                             }
                             child.dz = child.dy;
@@ -837,14 +783,28 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         if (hit_geom.is_array() && frame_index < hit_geom.size()) {
             const auto& hit_entry = hit_geom[static_cast<nlohmann::json::size_type>(frame_index)];
             if (hit_entry.is_object()) {
-                for (const char* type : kDamageTypeNames) {
-                    auto it = hit_entry.find(type);
-                    if (it != hit_entry.end()) {
-                        upsert_hit_box(f, type, *it);
+                if (hit_entry.contains("boxes") && hit_entry["boxes"].is_array()) {
+                    for (const auto& node : hit_entry["boxes"]) {
+                        append_hit_box(f, node);
+                    }
+                } else if (hit_entry.contains("center_x") || hit_entry.contains("half_width") || hit_entry.contains("rotation")) {
+                    append_hit_box(f, hit_entry);
+                } else {
+                    for (const char* type : kLegacyDamageTypeNames) {
+                        auto it = hit_entry.find(type);
+                        if (it != hit_entry.end()) {
+                            append_hit_box(f, *it);
+                        }
                     }
                 }
-            } else if (!hit_entry.is_null()) {
-                upsert_hit_box(f, "melee", hit_entry);
+            } else if (hit_entry.is_array()) {
+                if (!hit_entry.empty() && hit_entry.front().is_object()) {
+                    for (const auto& node : hit_entry) {
+                        append_hit_box(f, node);
+                    }
+                } else if (!hit_entry.is_null()) {
+                    append_hit_box(f, hit_entry);
+                }
             }
         }
 
@@ -852,12 +812,22 @@ FrameEditorSession::parse_movement_frames_json(const std::string& payload_json) 
         if (attack_geom.is_array() && frame_index < attack_geom.size()) {
             const auto& attack_entry = attack_geom[static_cast<nlohmann::json::size_type>(frame_index)];
             if (attack_entry.is_object()) {
-                for (const char* type : kDamageTypeNames) {
-                    auto it = attack_entry.find(type);
-                    if (it == attack_entry.end() || !it->is_array()) continue;
-                    for (const auto& vec_node : *it) {
-                        append_attack_vector(f, type, vec_node);
+                if (attack_entry.contains("vectors") && attack_entry["vectors"].is_array()) {
+                    for (const auto& vec_node : attack_entry["vectors"]) {
+                        append_attack_vector(f, vec_node);
                     }
+                } else {
+                    for (const char* type : kLegacyDamageTypeNames) {
+                        auto it = attack_entry.find(type);
+                        if (it == attack_entry.end() || !it->is_array()) continue;
+                        for (const auto& vec_node : *it) {
+                            append_attack_vector(f, vec_node);
+                        }
+                    }
+                }
+            } else if (attack_entry.is_array()) {
+                for (const auto& vec_node : attack_entry) {
+                    append_attack_vector(f, vec_node);
                 }
             }
         }

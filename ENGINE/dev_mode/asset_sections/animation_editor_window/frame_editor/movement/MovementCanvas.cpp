@@ -124,10 +124,7 @@ void MovementCanvas::set_frames(const std::vector<MovementFrame>& frames, bool p
     if (frames_.empty()) {
         frames_.push_back(MovementFrame{});
     }
-    if (!frames_.empty()) {
-        frames_[0].dx = 0.0f;
-        frames_[0].dy = 0.0f;
-    }
+
     drag_base_positions_.clear();
     dragging_frame_ = false;
     selected_index_ = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
@@ -557,10 +554,6 @@ void MovementCanvas::apply_frame_move_from_base(int index, const SDL_FPoint& new
     if (index <= 0) return;
     if (static_cast<size_t>(index) >= frames_.size()) return;
     if (base_positions.size() != frames_.size()) return;
-
-    frames_.front().dx = 0.0f;
-    frames_.front().dy = 0.0f;
-    frames_.front().dz = 0.0f;
 
     if (!smoothing_enabled_) {
         SDL_FPoint prev_abs = base_positions[index - 1];

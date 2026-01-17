@@ -8,7 +8,6 @@
 namespace animation_update {
 
 struct AttackVector {
-    std::string type;
     float start_x = 0.0f;
     float start_y = 0.0f;
     float start_z = 0.0f;
@@ -31,7 +30,6 @@ struct Attack {
     std::string target_asset_name;
 
     int damage_amount = 0;
-    std::string damage_type;
 
     float hit_x = 0.0f;
     float hit_y = 0.0f;
@@ -44,56 +42,17 @@ struct Attack {
     std::uint64_t timestamp = 0;
     std::uint64_t tick = 0;
 
-    std::size_t count_for_type(const std::string& type) const {
-        std::size_t count = 0;
-        for (const auto& vector : vectors) {
-            if (vector.type == type) {
-                ++count;
-            }
-        }
-        return count;
-    }
-
-    AttackVector* vector_at(const std::string& type, std::size_t type_index) {
-        std::size_t seen = 0;
-        for (auto& vector : vectors) {
-            if (vector.type != type) continue;
-            if (seen == type_index) {
-                return &vector;
-            }
-            ++seen;
-        }
-        return nullptr;
-    }
-
-    const AttackVector* vector_at(const std::string& type, std::size_t type_index) const {
-        std::size_t seen = 0;
-        for (const auto& vector : vectors) {
-            if (vector.type != type) continue;
-            if (seen == type_index) {
-                return &vector;
-            }
-            ++seen;
-        }
-        return nullptr;
-    }
-
     AttackVector& add_vector(AttackVector vec = {}) {
         vectors.push_back(vec);
         return vectors.back();
     }
 
-    bool erase_vector(const std::string& type, std::size_t type_index) {
-        std::size_t seen = 0;
-        for (auto it = vectors.begin(); it != vectors.end(); ++it) {
-            if (it->type != type) continue;
-            if (seen == type_index) {
-                vectors.erase(it);
-                return true;
-            }
-            ++seen;
+    bool erase_vector(std::size_t index) {
+        if (index >= vectors.size()) {
+            return false;
         }
-        return false;
+        vectors.erase(vectors.begin() + static_cast<std::ptrdiff_t>(index));
+        return true;
     }
 };
 

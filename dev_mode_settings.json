@@ -19,18 +19,18 @@
             "types": {
                 "area": false,
                 "boundary": false,
-                "enemy": false,
+                "enemy": true,
                 "npc": false,
                 "object": true,
                 "player": true,
-                "texture": false
+                "texture": true
             }
         },
         "grid": {
-            "cell_size_px": 243.0,
+            "cell_size_px": 27.0,
             "overlay": {
                 "enabled": true,
-                "r": 5.0
+                "r": 3.0
             },
             "snap": {
                 "enabled": true
@@ -38,7 +38,7 @@
         },
         "movement": {
             "debug": {
-                "enabled": false
+                "enabled": true
             }
         }
     },
@@ -48,7 +48,7 @@
             "depthcue_enabled": true,
             "extra_cull_margin": 4670.0,
             "foreground_texture_max_opacity": 255.0,
-            "meters_per_100_world_px": 0.5399999618530273,
+            "meters_per_100_world_px": 0.5999999642372131,
             "min_visible_screen_ratio": 0.005000000353902578,
             "near_camera_fade_end_ratio": 1.6699999570846558,
             "near_camera_fade_start_ratio": 0.550000011920929,

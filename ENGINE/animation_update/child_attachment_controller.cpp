@@ -138,7 +138,6 @@ void apply_frame_data(std::vector<Asset::AnimationChildAttachment>& slots,
         slot.last_parent_frame_index = parent_frame_index;
         slot.visible = false;
         slot.rotation_degrees = 0.0f;
-        slot.render_in_front = true;
         if (inactive) {
             continue;
         }
@@ -172,7 +171,6 @@ void apply_frame_data(std::vector<Asset::AnimationChildAttachment>& slots,
         }
         if (!child_data.visible) {
             slot.visible = false;
-            slot.render_in_front = child_data.render_in_front;
             if constexpr (kChildAttachmentDebug) {
                 std::cout << "[ChildAttachments] Setting slot " << slot.child_index << " ('" << slot.asset_name
                           << "') visible=false\n";
@@ -195,14 +193,11 @@ void apply_frame_data(std::vector<Asset::AnimationChildAttachment>& slots,
 
         const int dx = parent_state.flipped
                            ? -static_cast<int>(std::lround(scaled_dx)) : static_cast<int>(std::lround(scaled_dx));
-        const int vertical_offset = (child_data.dy != 0)
-                                        ? static_cast<int>(std::lround(scaled_dy))
-                                        : static_cast<int>(std::lround(scaled_dz));
+        const int vertical_offset = static_cast<int>(std::lround(scaled_dy));
         slot.world_pos.x = parent_state.base_position.x + dx;
         slot.world_pos.y = parent_state.base_position.y + vertical_offset;
         slot.world_z = parent_state.world_z + scaled_dz;
         slot.rotation_degrees = mirrored_child_rotation(parent_state.flipped, child_data.degree);
-        slot.render_in_front = child_data.render_in_front;
     }
     for (auto& slot : slots) {
         slot.was_visible = slot.visible;

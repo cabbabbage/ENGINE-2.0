@@ -10,9 +10,9 @@ AnimationChildFrameData make_sample(int child_index, bool visible = false) {
     AnimationChildFrameData sample{};
     sample.child_index = child_index;
     sample.visible = visible;
-    sample.render_in_front = true;
     sample.dx = 0;
     sample.dy = 0;
+    sample.dz = 0;
     sample.degree = 0.0f;
     return sample;
 }

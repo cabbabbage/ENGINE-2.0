@@ -196,6 +196,7 @@ add_executable(engine_tests
     TESTS/test_animation_child_runtime.cpp
     TESTS/test_animation_child_clone.cpp
     TESTS/test_attack_validation.cpp
+    TESTS/frame_editor_session_test_helpers.cpp
     ENGINE/asset/animation.cpp
     ENGINE/asset/surface_utils.cpp
     ENGINE/asset/animation_cloner.cpp

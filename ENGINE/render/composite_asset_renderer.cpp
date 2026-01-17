@@ -5,7 +5,6 @@
 #include "core/AssetsManager.hpp"
 #include "world/world_grid.hpp"
 #include "world/grid_point.hpp"
-#include "render/light_flicker.hpp"
 #include "render/render.hpp"
 #include "render/warped_screen_grid.hpp"
 
@@ -44,7 +43,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
     if (!renderer_ || !asset) return;
 
     asset->render_package.clear();
-    asset->scene_mask_lights.clear();
 
     asset->composite_scale_ = package_scale;
 
@@ -93,115 +91,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         obj.world_z_offset = world_z_offset;
         asset->render_package.push_back(obj);
     };
-
-    auto add_scene_mask_light = [&](SDL_Texture* tex,
-                                    SDL_Rect rect,
-                                    SDL_Color color = {255, 255, 255, 255},
-                                    SDL_BlendMode blend = SDL_BLENDMODE_BLEND,
-                                    bool apply_scale = true,
-                                    SDL_RendererFlip flip = SDL_FLIP_NONE,
-                                    std::optional<SDL_Point> texture_size = std::nullopt,
-                                    float world_z_offset = 0.0f) {
-        if (!tex) return;
-        if (apply_scale) {
-            rect.w = static_cast<int>(std::lround(static_cast<float>(rect.w) * package_scale));
-            rect.h = static_cast<int>(std::lround(static_cast<float>(rect.h) * package_scale));
-            rect.w = std::max(1, rect.w);
-            rect.h = std::max(1, rect.h);
-        }
-        RenderObject obj{};
-        obj.texture   = tex;
-        obj.screen_rect = rect;
-        obj.color_mod = color;
-        obj.blend_mode = blend;
-        obj.flip       = flip;
-        if (texture_size.has_value()) {
-            obj.texture_w = texture_size->x;
-            obj.texture_h = texture_size->y;
-            obj.has_texture_size = (obj.texture_w > 0 && obj.texture_h > 0);
-        }
-        obj.world_z_offset = world_z_offset;
-        asset->scene_mask_lights.push_back(obj);
-    };
-
-    auto compute_light_color = [&](const LightSource& light) -> std::optional<SDL_Color> {
-        const int raw_intensity = std::clamp(light.intensity, 0, 255);
-        if (raw_intensity <= 0) {
-            return std::nullopt;
-        }
-
-        const float flicker_multiplier =
-            LightFlickerCalculator::compute_multiplier(light, flicker_time_seconds);
-
-        int scaled_intensity = static_cast<int>( std::lround(static_cast<float>(raw_intensity) * flicker_multiplier));
-        scaled_intensity = std::clamp(scaled_intensity, 0, 255);
-        if (scaled_intensity <= 0) {
-            return std::nullopt;
-        }
-
-        const float scale = static_cast<float>(scaled_intensity) / 255.0f;
-        SDL_Color color = light.color;
-
-        auto scale_channel = [&](Uint8 channel) -> Uint8 {
-            const int scaled = static_cast<int>(std::lround(static_cast<float>(channel) * scale));
-            return static_cast<Uint8>(std::clamp(scaled, 0, 255));
-};
-
-        color.r = scale_channel(color.r);
-        color.g = scale_channel(color.g);
-        color.b = scale_channel(color.b);
-        color.a = scale_channel(color.a);
-        if (color.a == 0) {
-            color.a = static_cast<Uint8>(scaled_intensity);
-        }
-
-        return color;
-};
-
-    if (asset->info) {
-        for (const auto& light_source : asset->info->light_sources) {
-            if (light_source.behind && light_source.texture) {
-                const auto light_color = compute_light_color(light_source);
-                if (!light_color) {
-                    continue;
-                }
-
-                int offset_x = light_source.offset_x;
-                if (asset->flipped) {
-                    offset_x = -offset_x;
-                }
-
-                int w, h;
-                SDL_QueryTexture(light_source.texture, nullptr, nullptr, &w, &h);
-                const float light_z = static_cast<float>(light_source.offset_z) * package_scale;
-                SDL_Rect dest_rect = {
-                    static_cast<int>(std::lround(asset->smoothed_translation_x() + offset_x * package_scale)), static_cast<int>(std::lround(asset->smoothed_translation_y())), w, h };
-                SDL_RendererFlip light_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
-
-                add_render_object(light_source.texture,
-                                  dest_rect,
-                                  *light_color,
-                                  SDL_BLENDMODE_ADD,
-                                  true,
-                                  0.0,
-                                  std::nullopt,
-                                  light_flip,
-                                  SDL_Point{w, h},
-                                  light_z);
-
-                if (light_source.render_to_dark_mask) {
-                    add_scene_mask_light(light_source.texture,
-                                         dest_rect,
-                                         *light_color,
-                                         SDL_BLENDMODE_ADD,
-                                         true,
-                                         light_flip,
-                                         SDL_Point{w, h},
-                                         light_z);
-                }
-            }
-        }
-    }
 
     auto emit_child = [&](const Asset::AnimationChildAttachment& slot) {
         if (slot.child_index < 0 || !slot.visible || !slot.animation || !slot.current_frame) {

@@ -23,7 +23,6 @@
 #include "asset/animation_frame_variant.hpp"
 #include "asset/asset_info.hpp"
 #include "core/AssetsManager.hpp"
-#include "core/manifest/manifest_loader.hpp"
 #include "dev_mode/core/dev_json_store.hpp"
 #include "dev_mode/core/manifest_store.hpp"
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
@@ -353,18 +352,27 @@ void FrameEditorSession::begin(Assets* assets,
                 } catch (...) {
                     asset_root.clear();
                 }
-                auto upsert_manifest = [store](const std::string& asset_name, const nlohmann::json& payload) {
+                auto upsert_manifest = [store](const std::string& asset_name, const nlohmann::json& payload) -> bool {
                     auto tx = store->begin_asset_transaction(asset_name, true);
-                    if (!tx) return;
+                    if (!tx) {
+                        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                                     "[FrameEditor] Failed to begin manifest transaction for '%s'", asset_name.c_str());
+                        return false;
+                    }
                     nlohmann::json& draft = tx.data();
                     if (!draft.is_object()) draft = nlohmann::json::object();
                     draft = payload;
-                    tx.finalize();
+                    if (!tx.finalize()) {
+                        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                                     "[FrameEditor] Failed to finalize manifest transaction for '%s'", asset_name.c_str());
+                        return false;
+                    }
                     store->flush();
+                    return true;
                 };
                 document_->load_from_manifest(*view.data, asset_root,
                     [upsert_manifest, asset_name = target_->info->name](const nlohmann::json& payload) {
-                        upsert_manifest(asset_name, payload);
+                        return upsert_manifest(asset_name, payload);
                     });
             }
         }
@@ -498,11 +506,7 @@ void FrameEditorSession::load_animation_data(const std::string& animation_id) {
     if (assets_) {
         assets_->mark_active_assets_dirty();
     }
-    document_payload_cache_.clear();
     document_children_signature_ = document_->animation_children_signature();
-    if (payload_dump) {
-        document_payload_cache_ = *payload_dump;
-    }
     sync_child_frames();
     selected_child_index_ = 0;
     if (frames_.empty()) {
@@ -556,10 +560,7 @@ void FrameEditorSession::end() {
 
     end_hitbox_drag(true);
     end_attack_drag(true);
-    persist_changes(true);
-    if (target_alive && target_ && target_->info) {
-        target_->info->reload_animations_from_disk();
-    }
+    commit_edits(true);
 
     if (assets_ != nullptr) {
         WarpedScreenGrid& cam = assets_->getView();
@@ -582,8 +583,13 @@ void FrameEditorSession::end() {
     last_applied_show_asset_state_ = true;
 
     if (pending_save_ && document_) {
-        pending_save_ = false;
-        document_->save_to_file(true);
+        if (document_->save_to_file_checked(true)) {
+            pending_save_ = false;
+        } else {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "[FrameEditor] Failed to persist pending edits for '%s'",
+                         animation_id_.c_str());
+        }
     }
 
     auto saved_host_callback = std::move(on_host_closed_);
@@ -599,7 +605,6 @@ void FrameEditorSession::end() {
     frames_.clear();
     rel_positions_.clear();
     rel_z_positions_.clear();
-    document_payload_cache_.clear();
     document_children_signature_.clear();
     edited_animation_ids_.clear();
     last_payload_loaded_ = false;
@@ -1098,7 +1103,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     this->ensure_hit_box();
                 }
                 this->refresh_hitbox_form();
-                this->persist_changes();
+                this->commit_edits();
             })) return true;
         if (handle_button(btn_hitbox_copy_next_, [this]() {
                 this->copy_hit_box_to_next_frame();
@@ -1117,13 +1122,13 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 this->end_attack_drag(false);
                 this->ensure_attack_vector();
                 this->refresh_attack_form();
-                this->persist_changes();
+                this->commit_edits();
             })) return true;
         if (handle_button(btn_attack_delete_, [this]() {
                 this->end_attack_drag(false);
                 this->delete_current_attack_vector();
                 this->refresh_attack_form();
-                this->persist_changes();
+                this->commit_edits();
             })) return true;
         if (handle_button(btn_attack_copy_next_, [this]() {
                 this->end_attack_drag(false);
@@ -1193,7 +1198,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                         frames_[last].dx = static_cast<float>(std::lround(frames_[last].dx + need_dx));
                         frames_[last].dz = static_cast<float>(std::lround(frames_[last].dz + need_plane));
                         rebuild_rel_positions();
-                        persist_changes();
+                        commit_edits();
                     }
                 }
             }
@@ -1243,7 +1248,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         if (dd_child_mode_ && dd_child_mode_->handle_event(e)) {
             const int selected = std::clamp(dd_child_mode_->selected(), 0, 1);
             set_child_mode(selected_child_index_, selected == 0 ? AnimationChildMode::Static : AnimationChildMode::Async);
-            persist_changes();
+            commit_edits();
             return true;
         }
 
@@ -1338,7 +1343,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                     if (should_smooth_child) {
                         smooth_child_offsets(selected_child_index_, selected_index_);
                     } else {
-                        persist_changes();
+                        commit_edits();
                     }
                 }
             }
@@ -1411,7 +1416,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 }
                 if (changed) {
                     refresh_hitbox_form();
-                    persist_changes();
+                    commit_edits();
                 }
             }
             return true;
@@ -1524,7 +1529,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
                 }
                 if (changed) {
                     refresh_attack_form();
-                    persist_changes();
+                    commit_edits();
                 }
             }
             return true;
@@ -1782,7 +1787,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
             }
             child->degree += delta;
             child->has_data = true;
-            persist_changes();
+            commit_edits();
             return true;
         }
     }
@@ -3570,7 +3575,7 @@ void FrameEditorSession::copy_attack_vector_to_next_frame() {
     const auto& src_vectors = frames_[frame_index].attack.vectors;
     auto& dest_frame = frames_[next_index];
     dest_frame.attack.vectors = src_vectors;
-    persist_changes();
+    commit_edits();
 }
 
 void FrameEditorSession::copy_hit_box_to_next_frame() {
@@ -3586,7 +3591,7 @@ void FrameEditorSession::copy_hit_box_to_next_frame() {
     auto locked = *source;
     locked.center_y = 0.0f;
     dest_frame.hit.boxes.push_back(locked);
-    persist_changes();
+    commit_edits();
 }
 
 void FrameEditorSession::apply_current_mode_to_all_frames() {
@@ -3602,7 +3607,7 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
             }
             rebuild_rel_positions();
             persist_mode_changes(Mode::Movement);
-            persist_changes();
+            commit_edits();
             break;
         }
         case Mode::StaticChildren:
@@ -3624,7 +3629,7 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
                 }
             }
             persist_mode_changes(mode_);
-            persist_changes();
+            commit_edits();
             break;
         }
         case Mode::HitGeometry: {
@@ -3639,7 +3644,7 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
             }
             refresh_hitbox_form();
             persist_mode_changes(Mode::HitGeometry);
-            persist_changes();
+            commit_edits();
             break;
         }
         case Mode::AttackGeometry: {
@@ -3650,7 +3655,7 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
             }
             refresh_attack_form();
             persist_mode_changes(Mode::AttackGeometry);
-            persist_changes();
+            commit_edits();
             break;
         }
     }
@@ -3666,80 +3671,52 @@ void FrameEditorSession::apply_current_mode_to_all_animations() {
     const int current_frame_idx = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
     const MovementFrame& current_frame_values = frames_[current_frame_idx];
 
+    bool changed_any = false;
     for (const std::string& anim_id : all_animation_ids) {
-        // Skip if not a valid animation
-        if (!animation_supports_frame_editing(document_.get(), anim_id)) continue;
+        if (!animation_supports_frame_editing(document_.get(), anim_id)) {
+            continue;
+        }
 
-        // Load the animation data
-        auto payload_opt = document_->animation_payload(anim_id);
-        if (!payload_opt) continue;
+        auto payload_opt = document_->animation_payload_json(anim_id);
+        if (!payload_opt) {
+            continue;
+        }
 
-        nlohmann::json payload = nlohmann::json::parse(*payload_opt, nullptr, false);
-        if (!payload.is_object()) continue;
-
-        // Get or create movement array
+        nlohmann::json payload = *payload_opt;
         nlohmann::json movement = payload.contains("movement") && payload["movement"].is_array()
                                   ? payload["movement"]
                                   : nlohmann::json::array();
-
         if (movement.empty()) {
-            // Initialize with default frames if empty
-            movement.push_back(nlohmann::json::array({0, 0}));
+            movement.push_back(nlohmann::json::object({{"dx", 0}, {"dy", 0}, {"dz", 0}}));
         }
 
-        // Apply current mode values to all frames in this animation
         switch (mode_) {
             case Mode::Movement: {
                 for (auto& frame_entry : movement) {
-                    if (frame_entry.is_object()) {
-                        frame_entry["dx"] = static_cast<int>(std::lround(current_frame_values.dx));
-                        frame_entry["dy"] = static_cast<int>(std::lround(current_frame_values.dy));
-                        frame_entry["dz"] = static_cast<int>(std::lround(current_frame_values.dz));
-                        if (current_frame_values.resort_z || frame_entry.contains("resort_z")) {
-                            frame_entry["resort_z"] = current_frame_values.resort_z;
-                        }
-                    } else if (frame_entry.is_array()) {
-                        // Convert to object format for better compatibility
-                        nlohmann::json obj = nlohmann::json::object();
-                        obj["dx"] = static_cast<int>(std::lround(current_frame_values.dx));
-                        obj["dy"] = static_cast<int>(std::lround(current_frame_values.dy));
-                        obj["dz"] = static_cast<int>(std::lround(current_frame_values.dz));
-                        if (current_frame_values.resort_z) {
-                            obj["resort_z"] = current_frame_values.resort_z;
-                        }
-                        frame_entry = std::move(obj);
+                    if (!frame_entry.is_object()) {
+                        frame_entry = nlohmann::json::object();
+                    }
+                    frame_entry["dx"] = static_cast<int>(std::lround(current_frame_values.dx));
+                    frame_entry["dy"] = static_cast<int>(std::lround(current_frame_values.dy));
+                    frame_entry["dz"] = static_cast<int>(std::lround(current_frame_values.dz));
+                    if (current_frame_values.resort_z) {
+                        frame_entry["resort_z"] = current_frame_values.resort_z;
+                    } else {
+                        frame_entry.erase("resort_z");
                     }
                 }
                 break;
             }
             case Mode::StaticChildren:
             case Mode::AsyncChildren: {
-                if (child_assets_.empty()) break;
-                const int child_idx = std::clamp(selected_child_index_, 0, static_cast<int>(child_assets_.size()) - 1);
-                if (static_cast<std::size_t>(child_idx) >= current_frame_values.children.size()) break;
-
-                const ChildFrame& child_src = current_frame_values.children[static_cast<std::size_t>(child_idx)];
-                // For children, we need to handle per-animation child indices
-                // This is simplified - assumes same child structure across animations
-                for (auto& frame_entry : movement) {
-                    if (!frame_entry.is_object()) continue;
-                    // Note: This assumes the child structure is consistent across animations
-                    // In practice, this might need more sophisticated handling
-                }
+                // Child timeline edits are handled in the active session payload only.
                 break;
             }
             case Mode::HitGeometry: {
-                nlohmann::json hit_geometry = payload.contains("hit_geometry") && payload["hit_geometry"].is_array()
-                                              ? payload["hit_geometry"]
-                                              : nlohmann::json::array();
-                if (hit_geometry.size() < movement.size()) {
-                    hit_geometry.get_ref<nlohmann::json::array_t&>().resize(movement.size(), nlohmann::json::object());
-                }
-
+                nlohmann::json hit_geometry = nlohmann::json::array();
+                hit_geometry.get_ref<nlohmann::json::array_t&>().resize(movement.size(), nlohmann::json::object());
                 for (std::size_t i = 0; i < hit_geometry.size(); ++i) {
-                    nlohmann::json& frame_hit = hit_geometry[i];
-                    if (!frame_hit.is_object()) frame_hit = nlohmann::json::object();
-
+                    nlohmann::json frame_hit = nlohmann::json::object();
                     nlohmann::json boxes = nlohmann::json::array();
                     for (const auto& box : current_frame_values.hit.boxes) {
                         if (box.is_empty() ||
@@ -3764,17 +3741,10 @@ void FrameEditorSession::apply_current_mode_to_all_animations() {
                 break;
             }
             case Mode::AttackGeometry: {
-                nlohmann::json attack_geometry = payload.contains("attack_geometry") && payload["attack_geometry"].is_array()
-                                                 ? payload["attack_geometry"]
-                                                 : nlohmann::json::array();
-                if (attack_geometry.size() < movement.size()) {
-                    attack_geometry.get_ref<nlohmann::json::array_t&>().resize(movement.size(), nlohmann::json::object());
-                }
-
+                nlohmann::json attack_geometry = nlohmann::json::array();
+                attack_geometry.get_ref<nlohmann::json::array_t&>().resize(movement.size(), nlohmann::json::object());
                 for (std::size_t i = 0; i < attack_geometry.size(); ++i) {
-                    nlohmann::json& frame_attack = attack_geometry[i];
-                    if (!frame_attack.is_object()) frame_attack = nlohmann::json::object();
-
+                    nlohmann::json frame_attack = nlohmann::json::object();
                     nlohmann::json vectors = nlohmann::json::array();
                     for (const auto& vec : current_frame_values.attack.vectors) {
                         if (!std::isfinite(vec.start_x) || !std::isfinite(vec.start_y) || !std::isfinite(vec.start_z) ||
@@ -3803,26 +3773,50 @@ void FrameEditorSession::apply_current_mode_to_all_animations() {
             }
         }
 
-        // Update movement in payload
         payload["movement"] = std::move(movement);
+        int total_dx = 0;
+        int total_dy = 0;
+        if (payload["movement"].is_array()) {
+            for (std::size_t i = 1; i < payload["movement"].size(); ++i) {
+                const auto& entry = payload["movement"][i];
+                if (entry.is_object()) {
+                    if (entry.contains("dx") && entry["dx"].is_number_integer()) total_dx += entry["dx"].get<int>();
+                    else if (entry.contains("dx") && entry["dx"].is_number()) total_dx += static_cast<int>(std::lround(entry["dx"].get<double>()));
+                    if (entry.contains("dy") && entry["dy"].is_number_integer()) total_dy += entry["dy"].get<int>();
+                    else if (entry.contains("dy") && entry["dy"].is_number()) total_dy += static_cast<int>(std::lround(entry["dy"].get<double>()));
+                }
+            }
+        }
+        payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}};
+        payload["number_of_frames"] = payload["movement"].size();
 
-        // Save the updated payload
-        std::string serialized = payload.dump();
-        document_->replace_animation_payload(anim_id, serialized);
-
-        // Mark this animation as edited
-        if (std::find(edited_animation_ids_.begin(), edited_animation_ids_.end(), anim_id) == edited_animation_ids_.end()) {
-            edited_animation_ids_.push_back(anim_id);
+        if (document_->update_animation_payload(anim_id, payload)) {
+            changed_any = true;
+            if (std::find(edited_animation_ids_.begin(), edited_animation_ids_.end(), anim_id) == edited_animation_ids_.end()) {
+                edited_animation_ids_.push_back(anim_id);
+            }
         }
     }
 
-    // Trigger save
-    document_->save_to_file(true);
-    devmode::core::DevJsonStore::instance().flush_all();
+    if (!changed_any) {
+        return;
+    }
 
-    // Reload current animation data to reflect changes
+    const bool saved = document_->save_to_file_checked(true);
+    pending_save_ = !saved;
+    if (!saved) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "[FrameEditor] Failed to persist batch updates for '%s'",
+                     animation_id_.c_str());
+        return;
+    }
+
+    devmode::core::DevJsonStore::instance().flush_all();
     load_animation_data(animation_id_);
-    persist_changes();
+    apply_frames_to_animation();
+    if (target_is_alive() && target_->info) {
+        devmode::refresh_loaded_animation_instances(assets_, target_->info);
+    }
 }
 
 float FrameEditorSession::asset_local_scale() const {
@@ -4230,7 +4224,7 @@ void FrameEditorSession::end_hitbox_drag(bool commit) {
     hitbox_dragging_ = false;
     active_hitbox_handle_ = HitHandle::None;
     if (commit) {
-        persist_changes();
+        commit_edits();
     }
 }
 
@@ -4401,7 +4395,7 @@ void FrameEditorSession::end_attack_drag(bool commit) {
         delete_current_attack_vector();
     }
     refresh_attack_form();
-    persist_changes();
+    commit_edits();
 }
 
 void FrameEditorSession::apply_frame_move_from_base(int index, SDL_FPoint desired_rel, const std::vector<SDL_FPoint>& base_rel) {
@@ -4430,20 +4424,20 @@ void FrameEditorSession::redistribute_frames_from_middle_drag(int adjusted_index
 void FrameEditorSession::redistribute_frames_after_adjustment(int adjusted_index) {
     const size_t count = frames_.size();
     if (count < 3) {
-        persist_changes();
+        commit_edits();
         return;
     }
     const int last_index = static_cast<int>(count) - 1;
     if (adjusted_index <= 0) {
 
-        persist_changes();
+        commit_edits();
         return;
     }
     if (rel_positions_.size() != count) {
         rebuild_rel_positions();
     }
     if (rel_positions_.size() != count) {
-        persist_changes();
+        commit_edits();
         return;
     }
 
@@ -4483,7 +4477,7 @@ void FrameEditorSession::redistribute_frames_after_adjustment(int adjusted_index
         }
     }
     rebuild_rel_positions();
-    persist_changes();
+    commit_edits();
 }
 
 void FrameEditorSession::apply_linear_smoothing(int adjusted_index,
@@ -4582,21 +4576,21 @@ void FrameEditorSession::apply_curved_smoothing(int adjusted_index,
 
 void FrameEditorSession::smooth_child_offsets(int child_index, int adjusted_index) {
     if (frames_.size() < 3) {
-        persist_changes();
+        commit_edits();
         return;
     }
     if (child_index < 0 || adjusted_index <= 0) {
-        persist_changes();
+        commit_edits();
         return;
     }
     const std::size_t frame_count = frames_.size();
     if (static_cast<std::size_t>(child_index) >= child_assets_.size()) {
-        persist_changes();
+        commit_edits();
         return;
     }
     const int last_index = static_cast<int>(frame_count) - 1;
     if (adjusted_index >= static_cast<int>(frame_count)) {
-        persist_changes();
+        commit_edits();
         return;
     }
 
@@ -4626,7 +4620,7 @@ void FrameEditorSession::smooth_child_offsets(int child_index, int adjusted_inde
         child.dz = static_cast<float>(std::round(redistributed[i].y));
         child.has_data = true;
     }
-    persist_changes();
+    commit_edits();
 }
 
 void FrameEditorSession::rebuild_rel_positions() {
@@ -5029,7 +5023,7 @@ void FrameEditorSession::switch_animation(const std::string& animation_id) {
     if (!animation_supports_frame_editing(document_.get(), animation_id)) {
         return;
     }
-    persist_changes();
+    commit_edits();
     end_hitbox_drag(false);
     end_attack_drag(false);
     load_animation_data(animation_id);
@@ -5053,15 +5047,12 @@ void FrameEditorSession::select_child(int index) {
     }
 }
 
-void FrameEditorSession::persist_changes(bool rebuild_animation) {
+bool FrameEditorSession::commit_edits(bool rebuild_animation) {
     if (!document_ || animation_id_.empty()) {
-        return;
+        return false;
     }
     ensure_child_frames_initialized();
 
-    // Keep the runtime Animation object in sync with the edited JSON so that
-    // any fallbacks that read from the live asset (e.g., on restart) see the
-    // latest frames, without forcing a full preview rebuild unless requested.
     apply_frames_to_animation();
     if (rebuild_animation) {
         if (target_is_alive() && target_->info) {
@@ -5078,9 +5069,8 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
     }
 
     nlohmann::json payload = nlohmann::json::object();
-    if (auto j = document_->animation_payload(animation_id_)) {
-        payload = nlohmann::json::parse(*j, nullptr, false);
-        if (!payload.is_object()) payload = nlohmann::json::object();
+    if (auto existing = document_->animation_payload_json(animation_id_)) {
+        payload = *existing;
     }
 
     document_->replace_animation_children(child_assets_);
@@ -5090,90 +5080,37 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
         payload["children"] = child_assets_;
     }
 
-    const std::size_t frame_count = frames_.size();
-    std::unordered_set<int> touched_frames;
+    nlohmann::json movement = nlohmann::json::array();
+    movement.get_ref<nlohmann::json::array_t&>().reserve(frames_.size());
+    nlohmann::json hit_geometry = nlohmann::json::array();
+    nlohmann::json attack_geometry = nlohmann::json::array();
+    hit_geometry.get_ref<nlohmann::json::array_t&>().reserve(frames_.size());
+    attack_geometry.get_ref<nlohmann::json::array_t&>().reserve(frames_.size());
 
-    // Movement: update in place so untouched frames stay byte-for-byte identical (including any
-    // extra fields such as child data or needs_rebuild flags).
-    nlohmann::json movement = (payload.contains("movement") && payload["movement"].is_array())
-                                  ? payload["movement"]
-                                  : nlohmann::json::array();
-    if (movement.size() < frame_count) {
-        movement.get_ref<nlohmann::json::array_t&>().resize(frame_count, nlohmann::json::array({0, 0}));
-    } else if (movement.size() > frame_count) {
-        movement.erase(movement.begin() + static_cast<std::ptrdiff_t>(frame_count), movement.end());
-    }
-
-    for (std::size_t i = 0; i < frame_count; ++i) {
-        const MovementFrame& f = frames_[i];
-        nlohmann::json previous = movement[static_cast<nlohmann::json::array_t::size_type>(i)];
-        int dx = static_cast<int>(std::lround(f.dx));
-        int dy = static_cast<int>(std::lround(f.dy));
-        int dz = static_cast<int>(std::lround(f.dz));
-
-        nlohmann::json entry = movement[static_cast<nlohmann::json::array_t::size_type>(i)];
-        if (entry.is_object()) {
-            entry["dx"] = dx;
-            entry["dy"] = dy;
-            entry["dz"] = dz;
-            if (f.resort_z || entry.contains("resort_z")) {
-                entry["resort_z"] = f.resort_z;
-            }
-        } else {
-            if (!entry.is_array()) {
-                entry = nlohmann::json::array();
-            }
-            const bool should_write_object = entry.size() <= 3 &&
-                                             std::isfinite(f.dz) &&
-                                             std::fabs(f.dz) > 0.01f;
-            if (should_write_object) {
-                nlohmann::json obj = nlohmann::json::object();
-                obj["dx"] = dx;
-                obj["dy"] = dy;
-                obj["dz"] = dz;
-                if (f.resort_z || (entry.size() > 2 && entry[2].is_boolean())) {
-                    obj["resort_z"] = f.resort_z;
-                }
-                entry = std::move(obj);
-            } else {
-                if (entry.size() < 2) {
-                    entry = nlohmann::json::array({0, 0});
-                }
-                entry[0] = dx;
-                entry[1] = dy;
-
-                // Preserve any existing fields beyond index 2 (child data, etc.).
-                if (entry.size() < 3 && f.resort_z) {
-                    entry.insert(entry.begin() + 2, f.resort_z);
-                } else if (entry.size() >= 3) {
-                    entry[2] = f.resort_z;
-                }
-            }
+    int total_dx = 0;
+    int total_dy = 0;
+    for (std::size_t i = 0; i < frames_.size(); ++i) {
+        const MovementFrame& frame = frames_[i];
+        const int dx = static_cast<int>(std::lround(frame.dx));
+        const int dy = static_cast<int>(std::lround(frame.dy));
+        const int dz = static_cast<int>(std::lround(frame.dz));
+        nlohmann::json entry = nlohmann::json::object();
+        entry["dx"] = dx;
+        entry["dy"] = dy;
+        entry["dz"] = dz;
+        if (frame.resort_z) {
+            entry["resort_z"] = frame.resort_z;
         }
-        if (entry != previous) {
-            touched_frames.insert(static_cast<int>(i));
+        movement.push_back(std::move(entry));
+
+        if (i > 0) {
+            total_dx += dx;
+            total_dy += dy;
         }
-        movement[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(entry);
-    }
 
-    // hit_geometry: preserve unknown fields/needs_rebuild, only update hit box numbers.
-    nlohmann::json hit_geometry = (payload.contains("hit_geometry") && payload["hit_geometry"].is_array())
-                                      ? payload["hit_geometry"]
-                                      : nlohmann::json::array();
-    if (hit_geometry.size() < frame_count) {
-        hit_geometry.get_ref<nlohmann::json::array_t&>().resize(frame_count, nlohmann::json::object());
-    } else if (hit_geometry.size() > frame_count) {
-        hit_geometry.erase(hit_geometry.begin() + static_cast<std::ptrdiff_t>(frame_count), hit_geometry.end());
-    }
-    for (std::size_t i = 0; i < frame_count; ++i) {
-        const MovementFrame& f = frames_[i];
-        nlohmann::json existing = hit_geometry[static_cast<nlohmann::json::array_t::size_type>(i)];
-        nlohmann::json previous = existing;
-        if (!existing.is_object()) existing = nlohmann::json::object();
-        auto preserved_needs_rebuild = existing.contains("needs_rebuild") ? existing["needs_rebuild"] : nlohmann::json();
-
+        nlohmann::json hit_entry = nlohmann::json::object();
         nlohmann::json boxes = nlohmann::json::array();
-        for (const auto& box : f.hit.boxes) {
+        for (const auto& box : frame.hit.boxes) {
             if (box.is_empty() ||
                 !std::isfinite(box.center_x) || !std::isfinite(box.center_z) ||
                 !std::isfinite(box.half_width) || !std::isfinite(box.half_height) ||
@@ -5189,37 +5126,12 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
                 {"rotation", box.rotation_degrees}
             });
         }
-        existing["boxes"] = std::move(boxes);
-        existing.erase("projectile");
-        existing.erase("melee");
-        existing.erase("explosion");
-        if (preserved_needs_rebuild.is_boolean()) {
-            existing["needs_rebuild"] = preserved_needs_rebuild;
-        }
-        if (existing != previous) {
-            touched_frames.insert(static_cast<int>(i));
-        }
-        hit_geometry[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(existing);
-    }
+        hit_entry["boxes"] = std::move(boxes);
+        hit_geometry.push_back(std::move(hit_entry));
 
-    // attack_geometry: preserve unknown fields/needs_rebuild, only update vector data.
-    nlohmann::json attack_geometry = (payload.contains("attack_geometry") && payload["attack_geometry"].is_array())
-                                         ? payload["attack_geometry"]
-                                         : nlohmann::json::array();
-    if (attack_geometry.size() < frame_count) {
-        attack_geometry.get_ref<nlohmann::json::array_t&>().resize(frame_count, nlohmann::json::object());
-    } else if (attack_geometry.size() > frame_count) {
-        attack_geometry.erase(attack_geometry.begin() + static_cast<std::ptrdiff_t>(frame_count), attack_geometry.end());
-    }
-    for (std::size_t i = 0; i < frame_count; ++i) {
-        const MovementFrame& f = frames_[i];
-        nlohmann::json existing = attack_geometry[static_cast<nlohmann::json::array_t::size_type>(i)];
-        nlohmann::json previous = existing;
-        if (!existing.is_object()) existing = nlohmann::json::object();
-        auto preserved_needs_rebuild = existing.contains("needs_rebuild") ? existing["needs_rebuild"] : nlohmann::json();
-
+        nlohmann::json attack_entry = nlohmann::json::object();
         nlohmann::json vectors = nlohmann::json::array();
-        for (const auto& vec : f.attack.vectors) {
+        for (const auto& vec : frame.attack.vectors) {
             if (!std::isfinite(vec.start_x) || !std::isfinite(vec.start_y) || !std::isfinite(vec.start_z) ||
                 !std::isfinite(vec.end_x) || !std::isfinite(vec.end_y) || !std::isfinite(vec.end_z) ||
                 !std::isfinite(vec.control_x) || !std::isfinite(vec.control_y) || !std::isfinite(vec.control_z)) {
@@ -5238,33 +5150,14 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
                 {"damage", vec.damage}
             });
         }
-        existing["vectors"] = std::move(vectors);
-        existing.erase("projectile");
-        existing.erase("melee");
-        existing.erase("explosion");
-        if (preserved_needs_rebuild.is_boolean()) {
-            existing["needs_rebuild"] = preserved_needs_rebuild;
-        }
-        if (existing != previous) {
-            touched_frames.insert(static_cast<int>(i));
-        }
-        attack_geometry[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(existing);
+        attack_entry["vectors"] = std::move(vectors);
+        attack_geometry.push_back(std::move(attack_entry));
     }
 
-    // Recompute totals based on the updated movement entries only.
-    int total_dx = 0;
-    int total_dy = 0;
-    for (std::size_t i = 1; i < movement.size(); ++i) {
-        const auto& entry = movement[i];
-        if (entry.is_array()) {
-            if (entry.size() > 0 && entry[0].is_number_integer()) total_dx += entry[0].get<int>();
-            else if (entry.size() > 0 && entry[0].is_number()) total_dx += static_cast<int>(std::lround(entry[0].get<double>()));
-            if (entry.size() > 1 && entry[1].is_number_integer()) total_dy += entry[1].get<int>();
-            else if (entry.size() > 1 && entry[1].is_number()) total_dy += static_cast<int>(std::lround(entry[1].get<double>()));
-        }
+    if (movement.empty()) {
+        movement.push_back(nlohmann::json{{"dx", 0}, {"dy", 0}, {"dz", 0}});
     }
 
-    if (movement.empty()) movement.push_back(nlohmann::json::array({0, 0}));
     payload["movement"] = std::move(movement);
     payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}};
     payload["hit_geometry"] = std::move(hit_geometry);
@@ -5274,59 +5167,32 @@ void FrameEditorSession::persist_changes(bool rebuild_animation) {
     } else {
         payload["child_timelines"] = build_child_timelines_payload(payload);
     }
-
-    // Add the missing number_of_frames field to ensure coerce_payload doesn't truncate data
     payload["number_of_frames"] = frames_.size();
 
-    // Debug logging to track persistence
-    SDL_Log("[FrameEditor] DEBUG: Persisting %zu frames for animation '%s', number_of_frames set to %zu",
-            frames_.size(), animation_id_.c_str(), frames_.size());
-
-    std::string serialized = payload.dump();
-    const bool changed = document_payload_cache_.empty() || serialized != document_payload_cache_;
+    const bool changed = document_->update_animation_payload(animation_id_, payload);
     if (!changed) {
-        return;
+        return false;
     }
 
-    document_->replace_animation_payload(animation_id_, serialized);
     if (std::find(edited_animation_ids_.begin(), edited_animation_ids_.end(), animation_id_) == edited_animation_ids_.end()) {
         edited_animation_ids_.push_back(animation_id_);
     }
-    pending_save_ = true;
-    document_->save_to_file(true);
-    if (auto normalized = document_->animation_payload(animation_id_)) {
-        document_payload_cache_ = *normalized;
-    } else {
-        document_payload_cache_ = serialized;
+
+    const bool saved = document_->save_to_file_checked(true);
+    pending_save_ = !saved;
+    if (!saved) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "[FrameEditor] Failed to persist animation '%s' for asset '%s'",
+                     animation_id_.c_str(),
+                     (target_ && target_->info) ? target_->info->name.c_str() : "<unknown>");
+        return true;
     }
 
     devmode::core::DevJsonStore::instance().flush_all();
-
-
-
-    const std::filesystem::path manifest_path = std::filesystem::absolute(std::filesystem::path(manifest::manifest_path()));
-    std::vector<int> touched_sorted(touched_frames.begin(), touched_frames.end());
-    std::sort(touched_sorted.begin(), touched_sorted.end());
-    if (touched_sorted.empty()) {
-        if (frame_count > 0) {
-            touched_sorted.push_back(std::clamp(selected_index_, 0, static_cast<int>(frame_count) - 1));
-        } else {
-            touched_sorted.push_back(0);
-        }
+    if (target_is_alive() && target_->info) {
+        devmode::refresh_loaded_animation_instances(assets_, target_->info);
     }
-    std::ostringstream frame_label;
-    for (std::size_t i = 0; i < touched_sorted.size(); ++i) {
-        frame_label << touched_sorted[i];
-        if (i + 1 < touched_sorted.size()) {
-            frame_label << ',';
-        }
-    }
-    const std::string asset_name = (target_ && target_->info) ? target_->info->name : std::string{};
-    SDL_Log("[FrameEditor] Wrote %s::%s frame(s) [%s] to %s",
-            asset_name.empty() ? "<unknown>" : asset_name.c_str(),
-            animation_id_.c_str(),
-            frame_label.str().c_str(),
-            manifest_path.string().c_str());
+    return true;
 }
 
 void FrameEditorSession::remap_child_indices(const std::vector<int>& remap) {
@@ -5568,7 +5434,7 @@ void FrameEditorSession::adjust_selection_axis(int scroll_delta, const WarpedScr
 
     if (changed) {
         adjustment_dirty_ = true;
-        persist_changes();
+        commit_edits();
     }
 }
 
@@ -5685,21 +5551,21 @@ void FrameEditorSession::apply_adjustment_smoothing() {
             if (mode_ == Mode::Movement && smooth_enabled_ && selected_index_ > 0) {
                 redistribute_frames_after_adjustment(selected_index_);
             } else {
-                persist_changes();
+                commit_edits();
             }
             break;
         case AdjustmentTarget::ChildPoint:
             if (is_children_mode(mode_) && smooth_enabled_ && selected_index_ > 0) {
                 smooth_child_offsets(selected_child_index_, selected_index_);
             } else {
-                persist_changes();
+                commit_edits();
             }
             break;
         case AdjustmentTarget::AttackStart:
         case AdjustmentTarget::AttackControl:
         case AdjustmentTarget::AttackEnd:
         case AdjustmentTarget::HitboxCenter:
-            persist_changes();
+            commit_edits();
             break;
         case AdjustmentTarget::None:
         default:
@@ -5711,7 +5577,7 @@ void FrameEditorSession::apply_adjustment_smoothing() {
 void FrameEditorSession::persist_mode_changes(Mode mode) {
 
     (void)mode;
-    persist_changes();
+    commit_edits();
 }
 
 void FrameEditorSession::select_frame(int index) {
@@ -5806,7 +5672,7 @@ void FrameEditorSession::apply_child_list_change(const std::vector<std::string>&
     sync_child_frames();
     selected_child_index_ = std::clamp(selected_child_index_, 0, static_cast<int>(child_assets_.size()) - 1);
     child_dropdown_options_cache_.clear();
-    persist_changes();
+    commit_edits();
 }
 
 void FrameEditorSession::add_or_rename_child(const std::string& raw_name) {
@@ -5870,7 +5736,7 @@ void FrameEditorSession::set_child_mode(int child_index, AnimationChildMode mode
         return;
     }
     child_modes_[static_cast<std::size_t>(child_index)] = mode;
-    persist_changes();
+    commit_edits();
 }
 
 void FrameEditorSession::render_attack_geometry(SDL_Renderer* renderer) const {

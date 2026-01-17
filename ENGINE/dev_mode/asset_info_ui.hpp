@@ -49,7 +49,6 @@ class AssetInfoUI {
     void close();
     void toggle();
     bool is_visible() const { return visible_; }
-    bool is_lighting_section_expanded() const;
     bool is_locked() const;
     void update(const Input& input, int screen_w, int screen_h);
     bool handle_event(const SDL_Event& e);
@@ -127,7 +126,6 @@ class AssetInfoUI {
     class Section_BasicInfo* basic_info_section_ = nullptr;
     mutable std::vector<SDL_Rect> section_bounds_;
 
-    class Section_Lighting* lighting_section_ = nullptr;
     class Section_Shading* shading_section_ = nullptr;
     mutable class Asset* target_asset_ = nullptr;
     mutable SDL_Rect animation_editor_rect_{0,0,0,0};
@@ -176,10 +174,6 @@ class AssetInfoUI {
     void clear_delete_state();
     bool handle_delete_modal_event(const SDL_Event& e);
     void update_delete_modal_geometry(int screen_w, int screen_h);
-
-    bool light_drag_active_ = false;
-    int  light_drag_index_ = -1;
-    int  hovered_light_index_ = -1;
 
     SDL_Texture* mask_preview_texture_ = nullptr;
     int mask_preview_w_ = 0;

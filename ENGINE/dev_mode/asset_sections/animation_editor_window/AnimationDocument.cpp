@@ -11,6 +11,8 @@
 #include <unordered_set>
 #include <unordered_map>
 
+#include "dev_mode/core/dev_json_store.hpp"
+
 namespace {
 
 using animation_editor::AnimationDocument;
@@ -631,7 +633,7 @@ void AnimationDocument::load_from_file(const std::filesystem::path& info_path) {
 
 void AnimationDocument::load_from_manifest(const nlohmann::json& asset_json,
                                            const std::filesystem::path& asset_root,
-                                           std::function<void(const nlohmann::json&)> persist_callback) {
+                                           std::function<bool(const nlohmann::json&)> persist_callback) {
     info_path_.clear();
     asset_root_ = asset_root;
     persist_callback_ = std::move(persist_callback);
@@ -697,6 +699,10 @@ void AnimationDocument::load_from_json_object(const nlohmann::json& root) {
 }
 
 void AnimationDocument::save_to_file(bool fire_callback) const {
+    (void)save_to_file_checked(fire_callback);
+}
+
+bool AnimationDocument::save_to_file_checked(bool fire_callback) const {
     nlohmann::json root;
     if (persist_callback_) {
         root = base_data_.is_object() ? base_data_ : nlohmann::json::object();
@@ -750,38 +756,41 @@ void AnimationDocument::save_to_file(bool fire_callback) const {
         root["start"] = start_animation_.has_value() ? *start_animation_ : std::string{};
     }
 
-    auto write_root_to_disk = [&](const std::filesystem::path& path) {
-        if (path.empty()) return;
-        std::ofstream out(path);
-        if (!out.good()) {
-            SDL_Log("AnimationDocument: failed to open %s for writing", path.string().c_str());
-            return;
+    auto write_root_to_disk = [&](const std::filesystem::path& path) -> bool {
+        if (path.empty()) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "AnimationDocument: no output path available for saving.");
+            return false;
         }
-        out << root.dump(4);
+        devmode::core::DevJsonStore::instance().submit(path, root, 4);
+        return true;
     };
 
+    bool saved = true;
     if (persist_callback_) {
-        persist_callback_(root);
-        base_data_ = root;
-
-        // Persist to a concrete file as well so external consumers (e.g., game reload) see changes.
-        if (!info_path_.empty()) {
-            write_root_to_disk(info_path_);
-        } else if (!asset_root_.empty()) {
-            write_root_to_disk(asset_root_ / "manifest.json");
+        saved = persist_callback_(root);
+        if (!saved) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "AnimationDocument: failed to persist manifest update.");
+        } else {
+            base_data_ = root;
         }
     } else {
         if (info_path_.empty()) {
-            SDL_Log("AnimationDocument: no info path available for saving.");
-            return;
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "AnimationDocument: no info path available for saving.");
+            return false;
         }
-        write_root_to_disk(info_path_);
+        saved = write_root_to_disk(info_path_);
         base_data_ = root;
     }
-    dirty_ = false;
-    if (fire_callback && on_saved_callback_) {
+    if (saved) {
+        dirty_ = false;
+    }
+    if (saved && fire_callback && on_saved_callback_) {
         on_saved_callback_();
     }
+    return saved;
 }
 
 bool AnimationDocument::consume_dirty_flag() const {
@@ -989,18 +998,42 @@ void AnimationDocument::replace_animation_payload(const std::string& animation_i
         SDL_Log("AnimationDocument: ignoring invalid payload for '%s'", animation_id.c_str());
         return;
     }
-    std::string normalized = serialize_payload(coerce_payload(animation_id, parsed));
+    (void)update_animation_payload(animation_id, parsed);
+}
+
+bool AnimationDocument::update_animation_payload(const std::string& animation_id, const nlohmann::json& payload) {
+    auto it = animations_.find(animation_id);
+    if (it == animations_.end()) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "AnimationDocument: missing animation '%s' for update.", animation_id.c_str());
+        return false;
+    }
+    if (!payload.is_object()) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "AnimationDocument: payload update for '%s' is not an object.", animation_id.c_str());
+        return false;
+    }
+    std::string normalized = serialize_payload(coerce_payload(animation_id, payload));
     if (it->second == normalized) {
-        return;
+        return false;
     }
     it->second = std::move(normalized);
     mark_dirty();
+    return true;
 }
 
 std::optional<std::string> AnimationDocument::animation_payload(const std::string& animation_id) const {
     auto it = animations_.find(animation_id);
     if (it == animations_.end()) return std::nullopt;
     return it->second;
+}
+
+std::optional<nlohmann::json> AnimationDocument::animation_payload_json(const std::string& animation_id) const {
+    auto it = animations_.find(animation_id);
+    if (it == animations_.end()) {
+        return std::nullopt;
+    }
+    return parse_payload(it->second, animation_id);
 }
 
 namespace {

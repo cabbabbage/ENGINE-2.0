@@ -295,7 +295,6 @@ FRAME_EDITOR_ACCESS:
     float locked_tilt_deg_ = 0.0f;
     std::vector<std::string> child_assets_;
     mutable std::vector<AnimationChildMode> child_modes_;
-    std::string document_payload_cache_;
     std::string document_children_signature_;
     std::unordered_map<Asset*, bool> child_hidden_cache_;
     bool last_payload_loaded_ = false;
@@ -343,7 +342,7 @@ FRAME_EDITOR_ACCESS:
     void rebuild_rel_positions();
     void ensure_child_frames_initialized();
     void smooth_child_offsets(int child_index, int adjusted_index);
-    void persist_changes(bool rebuild_animation = false);
+    bool commit_edits(bool rebuild_animation = false);
 
     void persist_mode_changes(Mode mode);
     void select_frame(int index);

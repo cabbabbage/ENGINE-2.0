@@ -3,7 +3,6 @@
 #include "animation.hpp"
 #include "utils/area.hpp"
 #include "utils/shadow_mask_settings.hpp"
-#include "utils/light_source.hpp"
 #include <map>
 #include <nlohmann/json.hpp>
 #include <cmath>
@@ -60,7 +59,6 @@ class AssetInfo {
     ~AssetInfo();
 
     bool has_tag(const std::string &tag) const;
-    std::vector<LightSource> light_sources;
     std::string name;
     std::string type;
     std::string start_animation;
@@ -147,7 +145,6 @@ class AssetInfo {
 
     void set_children(const std::vector<ChildInfo>& asset_children);
 
-    void set_lighting(const std::vector<LightSource>& lights);
     void set_shadow_mask_settings(const ShadowMaskSettings& settings);
     void set_shading_enabled(bool enabled);
     void set_shading_parallax_amount(float amount);
@@ -212,7 +209,6 @@ class AssetInfo {
     std::unordered_set<std::string> tag_lookup_;
     std::unordered_set<std::string> anti_tag_lookup_;
     friend class AnimationLoader;
-    friend class LightingLoader;
     friend class ChildLoader;
 #if defined(ASSET_INFO_ENABLE_TEST_ACCESS)
     friend struct AssetInfoTestAccess;

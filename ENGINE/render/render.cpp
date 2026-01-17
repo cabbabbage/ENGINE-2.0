@@ -386,14 +386,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
                     }
                 }
             }
-            if (mld.contains("intensity") && mld["intensity"].is_number()) {
-                const int intensity_raw = static_cast<int>(mld["intensity"]);
-                const int clamped       = std::clamp(intensity_raw, 0, 255);
-                map_light_opacity_      = static_cast<float>(clamped) / 255.0f;
-                if (!std::isfinite(map_light_opacity_)) {
-                    map_light_opacity_ = SceneRenderer::kDefaultMapLightOpacity;
-                }
-            }
         }
     }
     if (!color_set) {
@@ -419,7 +411,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 }
 
 SceneRenderer::~SceneRenderer() {
-    destroy_darkness_overlay();
     destroy_sky_texture();
     if (scene_composite_tex_) { SDL_DestroyTexture(scene_composite_tex_); scene_composite_tex_ = nullptr; }
     if (postprocess_tex_)     { SDL_DestroyTexture(postprocess_tex_);     postprocess_tex_     = nullptr; }
@@ -428,16 +419,6 @@ SceneRenderer::~SceneRenderer() {
 
 SDL_Renderer* SceneRenderer::get_renderer() const {
     return renderer_;
-}
-
-void SceneRenderer::set_dark_mask_enabled(bool enabled) {
-    if (dark_mask_enabled_ == enabled) {
-        return;
-    }
-    dark_mask_enabled_ = enabled;
-    if (!dark_mask_enabled_) {
-        destroy_darkness_overlay();
-    }
 }
 
 void SceneRenderer::set_movement_debug_enabled(bool enabled) {
@@ -487,8 +468,6 @@ void SceneRenderer::render() {
     const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
-    std::vector<DarkMaskSprite> dark_mask_sprites;
-    dark_mask_sprites.reserve(std::max<std::size_t>(render_assets.size(), 8u));
     for (Asset* asset : render_assets) {
         if (!asset || asset->is_hidden() || !asset->info) {
             continue;
@@ -516,20 +495,6 @@ void SceneRenderer::render() {
             return color;
         };
 
-        if (dark_mask_enabled_ && !asset->scene_mask_lights.empty()) {
-            for (const RenderObject& mask_obj : asset->scene_mask_lights) {
-                WarpedQuad quad{};
-                if (!build_warped_quad(mask_obj, cam, quad)) {
-                    continue;
-                }
-                DarkMaskSprite sprite;
-                sprite.texture   = mask_obj.texture;
-                sprite.vertices  = quad.vertices;
-                sprite.color_mod = apply_fade_alpha(mask_obj.color_mod);
-                dark_mask_sprites.push_back(sprite);
-            }
-        }
-
         for (const RenderObject& obj : asset->render_package) {
             WarpedQuad quad{};
             if (!build_warped_quad(obj, cam, quad)) {
@@ -544,10 +509,6 @@ void SceneRenderer::render() {
 
             SDL_RenderGeometry(renderer_, obj.texture, quad.vertices.data(), 4, kQuadIndices, 6);
         }
-    }
-
-    if (dark_mask_enabled_) {
-        render_dynamic_darkness_overlay(map_light_opacity_, dark_mask_sprites);
     }
 
     if (debug_auto_paths_ && movement_debug_visible_) {
@@ -637,89 +598,6 @@ void SceneRenderer::render() {
 
         }
     }
-}
-
-bool SceneRenderer::ensure_darkness_overlay() {
-    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
-        return false;
-    }
-    if (darkness_overlay_allocation_failed_) {
-        return false;
-    }
-
-    if (darkness_overlay_texture_ &&
-        darkness_overlay_width_ == screen_width_ &&
-        darkness_overlay_height_ == screen_height_) {
-        return true;
-    }
-
-    // Screen size changed or no texture; rebuild.
-    destroy_darkness_overlay();
-
-    auto try_create = [&](int tex_w, int tex_h) -> SDL_Texture* {
-        tex_w = std::max(tex_w, 1);
-        tex_h = std::max(tex_h, 1);
-        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, tex_w, tex_h);
-        if (!texture) {
-            return nullptr;
-        }
-        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-#if SDL_VERSION_ATLEAST(2, 0, 12)
-        SDL_SetTextureScaleMode(texture, SDL_ScaleModeBest);
-#endif
-        return texture;
-    };
-
-    SDL_Texture* created = nullptr;
-    float        used_scale = 1.0f;
-
-    // Try full size first, then progressively lower resolution to avoid VRAM exhaustion on some drivers.
-    for (float scale : {1.0f, 0.75f, 0.5f, 0.25f}) {
-        const int tex_w = static_cast<int>(std::lround(static_cast<float>(screen_width_) * scale));
-        const int tex_h = static_cast<int>(std::lround(static_cast<float>(screen_height_) * scale));
-        created = try_create(tex_w, tex_h);
-        if (created) {
-            used_scale = scale;
-            break;
-        } else {
-            vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate darkness overlay ("} +
-                              std::to_string(tex_w) + "x" + std::to_string(tex_h) + "): " + SDL_GetError());
-        }
-    }
-
-    if (!created) {
-        darkness_overlay_allocation_failed_ = true;
-        return false;
-    }
-
-    darkness_overlay_texture_      = created;
-    darkness_overlay_width_        = screen_width_;
-    darkness_overlay_height_       = screen_height_;
-    darkness_overlay_tex_width_    = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_width_) * used_scale)));
-    darkness_overlay_tex_height_   = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_height_) * used_scale)));
-    darkness_overlay_scale_used_   = used_scale;
-    darkness_overlay_allocation_failed_ = false;
-
-    if (used_scale < 0.999f) {
-        vibble::log::info(std::string{"[SceneRenderer] Darkness overlay using scaled buffer ("} +
-                          std::to_string(darkness_overlay_tex_width_) + "x" + std::to_string(darkness_overlay_tex_height_) +
-                          ", scale=" + std::to_string(used_scale) + ").");
-    }
-
-    return true;
-}
-
-void SceneRenderer::destroy_darkness_overlay() {
-    if (darkness_overlay_texture_) {
-        SDL_DestroyTexture(darkness_overlay_texture_);
-        darkness_overlay_texture_ = nullptr;
-    }
-    darkness_overlay_width_        = 0;
-    darkness_overlay_height_       = 0;
-    darkness_overlay_tex_width_    = 0;
-    darkness_overlay_tex_height_   = 0;
-    darkness_overlay_scale_used_   = 1.0f;
-    darkness_overlay_allocation_failed_ = false;
 }
 
 bool SceneRenderer::ensure_sky_texture() {
@@ -833,56 +711,3 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
 
 
 
-void SceneRenderer::render_dynamic_darkness_overlay(float map_light_opacity,
-                                                    const std::vector<DarkMaskSprite>& sprites) {
-    if (!renderer_) {
-        return;
-    }
-
-    const float overlay_alpha = std::clamp(map_light_opacity, 0.0f, 1.0f);
-    if (overlay_alpha <= 0.0f) {
-        ++darkness_overlay_skipped_frames_;
-        darkness_overlay_skip_logged_ = true;
-        return;
-    }
-
-    if (!ensure_darkness_overlay()) {
-        ++darkness_overlay_skipped_frames_;
-        darkness_overlay_skip_logged_ = true;
-        return;
-    }
-
-    ++darkness_overlay_rendered_frames_;
-    darkness_overlay_skip_logged_ = false;
-
-    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
-    SDL_SetRenderTarget(renderer_, darkness_overlay_texture_);
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-    const Uint8 overlay_alpha_byte = static_cast<Uint8>(std::clamp(std::lround(overlay_alpha * 255.0f), 0L, 255L));
-    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, overlay_alpha_byte);
-    SDL_RenderClear(renderer_);
-
-    if (!sprites.empty()) {
-        SDL_BlendMode carve_mode = SDL_ComposeCustomBlendMode( SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD, SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
-
-        static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
-        for (const DarkMaskSprite& sprite : sprites) {
-            if (!sprite.texture) {
-                continue;
-            }
-            SDL_SetTextureBlendMode(sprite.texture, carve_mode);
-            SDL_SetTextureColorMod(sprite.texture, sprite.color_mod.r, sprite.color_mod.g, sprite.color_mod.b);
-            SDL_SetTextureAlphaMod(sprite.texture, sprite.color_mod.a);
-            SDL_RenderGeometry(renderer_, sprite.texture, sprite.vertices.data(), 4, kQuadIndices, 6);
-        }
-    }
-
-    SDL_SetRenderTarget(renderer_, previous_target);
-
-    SDL_SetTextureBlendMode(darkness_overlay_texture_, SDL_BLENDMODE_BLEND);
-    SDL_SetTextureAlphaMod(darkness_overlay_texture_, overlay_alpha_byte);
-    SDL_SetTextureColorMod(darkness_overlay_texture_, 0, 0, 0);
-
-    SDL_Rect screen_dst{0, 0, screen_width_, screen_height_};
-    SDL_RenderCopy(renderer_, darkness_overlay_texture_, nullptr, &screen_dst);
-}

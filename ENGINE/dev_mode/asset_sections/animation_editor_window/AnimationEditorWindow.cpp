@@ -493,7 +493,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     auto build_info_snapshot   = [&]() -> nlohmann::json { return snapshot_from_asset_info(*info); };
 
     nlohmann::json snapshot = nlohmann::json::object();
-    std::function<void(const nlohmann::json&)> persist_callback;
+    std::function<bool(const nlohmann::json&)> persist_callback;
     bool seed_transaction_with_recovery = false;
 
     nlohmann::json info_snapshot = build_info_snapshot();
@@ -504,7 +504,7 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
             manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
             if (manifest_transaction_) {
                 using_manifest_store_ = true;
-                persist_callback = [this](const nlohmann::json& payload) { this->persist_manifest_payload(payload); };
+                persist_callback = [this](const nlohmann::json& payload) { return this->persist_manifest_payload(payload); };
             } else {
                 std::cerr << "[AnimationEditor] Failed to open manifest transaction for '" << manifest_asset_key_ << "'\n";
                 manifest_asset_key_.clear();
@@ -1815,7 +1815,7 @@ void AnimationEditorWindow::reload_document() {
                 document_->load_from_manifest(snapshot,
                                               asset_root_path_,
                                               [this](const nlohmann::json& payload) {
-                                                  this->persist_manifest_payload(payload);
+                                                  return this->persist_manifest_payload(payload);
                                               });
             } else {
                 std::cerr << "[AnimationEditor] Failed to reopen manifest transaction for '"

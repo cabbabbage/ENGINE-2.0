@@ -875,7 +875,6 @@ void AnimationRuntime::sync_child_assets() {
         child->alpha_smoothing_.set_params(snap);
         child->alpha_smoothing_.reset(0.0f);
         child->render_package.clear();
-        child->scene_mask_lights.clear();
 };
 
     for (auto& slot : self_->animation_children_) {

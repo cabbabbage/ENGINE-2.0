@@ -35,7 +35,6 @@
 #include "dev_mode_utils.hpp"
 #include "asset_sections/Section_BasicInfo.hpp"
 #include "asset_sections/Section_Tags.hpp"
-#include "asset_sections/Section_Lighting.hpp"
 #include "asset_sections/Section_Shading.hpp"
 #include "asset_sections/Section_Spacing.hpp"
 #include "spawn_group_config/SpawnGroupConfig.hpp"
@@ -553,10 +552,6 @@ void AssetInfoUI::clear_info() {
         forcing_high_quality_rendering_ = false;
     }
     info_.reset();
-    hovered_light_index_ = -1;
-    if (lighting_section_) {
-        lighting_section_->set_highlighted_light(std::nullopt);
-    }
     container_.reset_scroll();
     if (asset_selector_) asset_selector_->close();
     pending_animation_editor_open_ = false;
@@ -613,12 +608,6 @@ void AssetInfoUI::close() {
 
         forcing_high_quality_rendering_ = false;
     }
-    light_drag_active_ = false;
-    light_drag_index_  = -1;
-    hovered_light_index_ = -1;
-    if (lighting_section_) {
-        lighting_section_->set_highlighted_light(std::nullopt);
-    }
 }
 void AssetInfoUI::toggle(){
     if (visible_) {
@@ -653,10 +642,6 @@ bool AssetInfoUI::is_locked() const {
         }
     }
     return false;
-}
-
-bool AssetInfoUI::is_lighting_section_expanded() const {
-    return visible_ && info_ && lighting_section_ && lighting_section_->is_expanded();
 }
 
 void AssetInfoUI::layout_widgets(int screen_w, int screen_h) const {
@@ -831,169 +816,6 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
         }
     }
 
-    auto clear_light_hover = [&]() {
-        if (hovered_light_index_ == -1) {
-            return;
-        }
-        hovered_light_index_ = -1;
-        if (lighting_section_) {
-            lighting_section_->set_highlighted_light(std::nullopt);
-        }
-};
-    if (lighting_section_ && lighting_section_->is_expanded() && info_ && assets_) {
-        const bool pointer_event =
-            (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION);
-        if (pointer_event && target_asset_ && target_asset_->info.get() == info_.get()) {
-            const WarpedScreenGrid& cam = assets_->getView();
-
-            auto compute_light_transform = [&]() {
-                LightTransform out{0.0f, 0.0f, 1.0f, 1.0f};
-
-                int fw = target_asset_->cached_w;
-                int fh = target_asset_->cached_h;
-                if ((fw <= 0 || fh <= 0)) {
-                    if (SDL_Texture* frame = target_asset_->get_current_frame()) {
-                        SDL_QueryTexture(frame, nullptr, nullptr, &fw, &fh);
-                    }
-                }
-                if ((fw <= 0 || fh <= 0) && target_asset_->info) {
-                    fw = target_asset_->info->original_canvas_width;
-                    fh = target_asset_->info->original_canvas_height;
-                }
-                if (target_asset_->cached_w == 0 && fw > 0) target_asset_->cached_w = fw;
-                if (target_asset_->cached_h == 0 && fh > 0) target_asset_->cached_h = fh;
-                if (fw <= 0) fw = 1;
-                if (fh <= 0) fh = 1;
-
-                int base_w = fw;
-                int base_h = fh;
-                if (target_asset_->info) {
-                    if (target_asset_->info->original_canvas_width > 0) base_w = target_asset_->info->original_canvas_width;
-                    if (target_asset_->info->original_canvas_height > 0) base_h = target_asset_->info->original_canvas_height;
-                }
-
-                float package_scale = target_asset_->current_nearest_variant_scale * target_asset_->current_remaining_scale_adjustment;
-                if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
-                    package_scale = 1.0f;
-                }
-
-                SDL_FPoint screen_pos = cam.map_to_screen(SDL_Point{ target_asset_->pos.x, target_asset_->pos.y });
-            float distance_scale = 1.0f;
-            float vertical_scale = 1.0f;
-            if (const auto* gp = cam.grid_point_for_asset(target_asset_)) {
-                screen_pos = gp->screen;
-                distance_scale = std::max(0.0001f, gp->perspective_scale);
-                vertical_scale = std::max(0.0001f, gp->vertical_scale);
-            }
-
-                const float base_sw = static_cast<float>(base_w) * package_scale;
-                const float base_sh = static_cast<float>(base_h) * package_scale;
-
-                const float width_px  = base_sw * distance_scale;
-                const float height_px = base_sh * distance_scale * vertical_scale;
-
-                out.cx = screen_pos.x;
-                out.cy = screen_pos.y;
-                out.sx = (base_w > 0) ? (width_px  / static_cast<float>(base_w)) : package_scale * distance_scale;
-                out.sy = (base_h > 0) ? (height_px / static_cast<float>(base_h)) : package_scale * distance_scale * vertical_scale;
-                return out;
-};
-
-            auto xform = compute_light_transform();
-
-            auto light_screen_pos = [&](const LightSource& light) -> SDL_Point {
-                int offx = light.offset_x;
-                if (target_asset_->flipped) offx = -offx;
-                const float cx = xform.cx + static_cast<float>(offx) * xform.sx;
-                const float cy = xform.cy;
-                return SDL_Point{ static_cast<int>(std::lround(cx)), static_cast<int>(std::lround(cy)) };
-};
-
-            const int mx = (e.type == SDL_MOUSEMOTION) ? e.motion.x : e.button.x;
-            const int my = (e.type == SDL_MOUSEMOTION) ? e.motion.y : e.button.y;
-
-            auto hit_test_index = [&](int sx, int sy) -> int {
-                const int kHitRadius = 10;
-                for (size_t i = 0; i < info_->light_sources.size(); ++i) {
-                    SDL_Point sp = light_screen_pos(info_->light_sources[i]);
-                    const int dx = sp.x - sx;
-                    const int dy = sp.y - sy;
-                    if (dx*dx + dy*dy <= kHitRadius * kHitRadius) {
-                        return static_cast<int>(i);
-                    }
-                }
-                return -1;
-};
-
-            auto set_light_hover = [&](int idx) {
-                if (idx == hovered_light_index_) {
-                    return;
-                }
-                hovered_light_index_ = idx;
-                if (!lighting_section_) return;
-                if (idx >= 0) {
-                    lighting_section_->set_highlighted_light(static_cast<std::size_t>(idx));
-                } else {
-                    lighting_section_->set_highlighted_light(std::nullopt);
-                }
-};
-
-            const int hovered_idx = hit_test_index(mx, my);
-
-            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-                set_light_hover(hovered_idx);
-                    if (hovered_idx >= 0) {
-                        light_drag_active_ = true;
-                        light_drag_index_ = hovered_idx;
-                        lighting_section_->open();
-                        focus_section(lighting_section_);
-                        lighting_section_->expand_light_row(static_cast<std::size_t>(hovered_idx));
-                        return true;
-                    }
-            } else if (e.type == SDL_MOUSEMOTION && light_drag_active_ && light_drag_index_ >= 0 &&
-                       light_drag_index_ < static_cast<int>(info_->light_sources.size())) {
-                auto& L = info_->light_sources[light_drag_index_];
-
-                const float dx_screen = static_cast<float>(mx) - xform.cx;
-                const float dy_screen = static_cast<float>(my) - xform.cy;
-                const float unflipped_x = (xform.sx != 0.0f) ? (dx_screen / xform.sx) : 0.0f;
-                const float new_off_x   = target_asset_->flipped ? -unflipped_x : unflipped_x;
-                const float new_off_z   = (xform.sy != 0.0f) ? (dy_screen / xform.sy) : 0.0f;
-                const int final_off_x = static_cast<int>(std::lround(new_off_x));
-                const int final_off_z = static_cast<int>(std::lround(new_off_z));
-                if (L.offset_x == final_off_x && L.offset_z == final_off_z) {
-                    set_light_hover(light_drag_index_);
-                    return true;
-                }
-                L.offset_x = final_off_x;
-                L.offset_z = final_off_z;
-
-                info_->set_lighting(info_->light_sources);
-                if (lighting_section_) {
-                    lighting_section_->update_light_offsets(static_cast<std::size_t>(light_drag_index_), final_off_x, final_off_z);
-                }
-                set_light_hover(light_drag_index_);
-                this->notify_light_sources_modified(false);
-                (void)info_->commit_manifest();
-                return true;
-            } else if (e.type == SDL_MOUSEMOTION) {
-                set_light_hover(hovered_idx);
-            } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-                if (light_drag_active_) {
-                    light_drag_active_ = false;
-                    if (light_drag_index_ >= 0) {
-                        light_drag_index_ = -1;
-                    }
-                    return true;
-                }
-            }
-        } else if (pointer_event) {
-            clear_light_hover();
-        }
-    } else {
-        clear_light_hover();
-    }
-
     if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
         close();
         return true;
@@ -1079,10 +901,6 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
     last_renderer_ = r;
 
     container_.render(r, screen_w, screen_h);
-    if (lighting_section_) {
-        lighting_section_->render_overlays(r);
-    }
-
     if (animation_editor_window_ && animation_editor_window_->is_visible()) {
         animation_editor_window_->render(r);
     }

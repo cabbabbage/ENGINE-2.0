@@ -11,7 +11,6 @@
 #include <SDL_image.h>
 #include <SDL_mixer.h>
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cctype>
 #include <cstdint>
@@ -212,10 +211,6 @@ fs::path project_root_path() {
 #endif
 }
 
-constexpr std::array<const char*, 3> kLegacyDamageTypeNames = {
-        "projectile", "melee", "explosion"
-};
-
 float read_float(const nlohmann::json& value, float fallback = 0.0f) {
         if (value.is_number()) {
                 try {
@@ -253,32 +248,17 @@ void append_hit_box(animation_update::FrameHitGeometry& geometry,
                 return;
         }
         animation_update::FrameHitGeometry::HitBox box;
-        if (node.is_object()) {
-                box.center_x = read_float(node.value("center_x", 0.0f));
-                const bool has_center_z = node.contains("center_z");
-                box.center_y = has_center_z ? read_float(node.value("center_y", 0.0f)) : 0.0f;
-                box.center_z = has_center_z ? read_float(node.value("center_z", 0.0f))
-                                            : read_float(node.value("center_y", 0.0f));
-                box.half_width = read_float(node.value("half_width", 0.0f));
-                box.half_height = read_float(node.value("half_height", 0.0f));
-                box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
-        } else if (node.is_array()) {
-                const auto& arr = node;
-                if (!arr.empty())          box.center_x = read_float(arr[0]);
-                if (arr.size() > 1)        box.center_z = read_float(arr[1]);
-                if (arr.size() > 2)        box.half_width = read_float(arr[2]);
-                if (arr.size() > 3)        box.half_height = read_float(arr[3]);
-                if (arr.size() > 4 && arr[4].is_number()) {
-                        box.rotation_degrees = read_float(arr[4]);
-                } else if (arr.size() > 5 && arr[5].is_number()) {
-                        box.rotation_degrees = read_float(arr[5]);
-                }
-                if (arr.size() > 4 && arr[4].is_boolean() && !arr[4].get<bool>()) {
-                        return;
-                }
-        } else {
+        if (!node.is_object()) {
                 return;
         }
+        box.center_x = read_float(node.value("center_x", 0.0f));
+        const bool has_center_z = node.contains("center_z");
+        box.center_y = has_center_z ? read_float(node.value("center_y", 0.0f)) : 0.0f;
+        box.center_z = has_center_z ? read_float(node.value("center_z", 0.0f))
+                                    : read_float(node.value("center_y", 0.0f));
+        box.half_width = read_float(node.value("half_width", 0.0f));
+        box.half_height = read_float(node.value("half_height", 0.0f));
+        box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
         if (box.is_empty()) {
                 return;
         }
@@ -298,20 +278,6 @@ void apply_hit_geometry_entry(AnimationFrame& frame, const nlohmann::json& entry
                         append_hit_box(frame.hit_geometry, entry);
                         return;
                 }
-                for (const char* type : kLegacyDamageTypeNames) {
-                        auto it = entry.find(type);
-                        if (it != entry.end()) {
-                                append_hit_box(frame.hit_geometry, *it);
-                        }
-                }
-        } else if (entry.is_array()) {
-                if (!entry.empty() && entry.front().is_object()) {
-                        for (const auto& node : entry) {
-                                append_hit_box(frame.hit_geometry, node);
-                        }
-                } else {
-                        append_hit_box(frame.hit_geometry, entry);
-                }
         }
 }
 
@@ -321,45 +287,34 @@ void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
                 return;
         }
         animation_update::FrameAttackGeometry::Vector vec;
-        if (node.is_object()) {
-                vec.start_x = read_float(node.value("start_x", 0.0f));
-                const bool has_start_z = node.contains("start_z");
-                vec.start_y = has_start_z ? read_float(node.value("start_y", 0.0f)) : 0.0f;
-                vec.start_z = has_start_z ? read_float(node.value("start_z", 0.0f))
-                                          : read_float(node.value("start_y", 0.0f));
-                const bool has_control = node.contains("control_x") || node.contains("control_y") || node.contains("control_z");
-                const bool has_control_z = node.contains("control_z");
-                if (has_control) {
-                        vec.control_x = read_float(node.value("control_x", vec.start_x));
-                        vec.control_y = has_control_z ? read_float(node.value("control_y", vec.start_y)) : 0.0f;
-                        vec.control_z = has_control_z ? read_float(node.value("control_z", vec.start_z))
-                                                      : read_float(node.value("control_y", vec.start_z));
-                } else {
-                        vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
-                        const float fallback_end_z = read_float(node.value("end_z", read_float(node.value("end_y", 0.0f))));
-                        const float fallback_end_y = has_start_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
-                        vec.control_y = (vec.start_y + fallback_end_y) * 0.5f;
-                        vec.control_z = (vec.start_z + fallback_end_z) * 0.5f;
-                }
-                vec.end_x   = read_float(node.value("end_x", 0.0f));
-                const bool has_end_z = node.contains("end_z");
-                vec.end_y   = has_end_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
-                vec.end_z   = has_end_z ? read_float(node.value("end_z", 0.0f))
-                                        : read_float(node.value("end_y", 0.0f));
-                vec.damage  = read_int(node.value("damage", 0));
-        } else if (node.is_array()) {
-                const auto& arr = node;
-                if (!arr.empty())      vec.start_x = read_float(arr[0]);
-                if (arr.size() > 1)    vec.start_z = read_float(arr[1]);
-                if (arr.size() > 2)    vec.end_x   = read_float(arr[2]);
-                if (arr.size() > 3)    vec.end_z   = read_float(arr[3]);
-                vec.control_x = (vec.start_x + vec.end_x) * 0.5f;
-                vec.control_y = 0.0f;
-                vec.control_z = (vec.start_z + vec.end_z) * 0.5f;
-                if (arr.size() > 4)    vec.damage  = read_int(arr[4]);
-        } else {
+        if (!node.is_object()) {
                 return;
         }
+        vec.start_x = read_float(node.value("start_x", 0.0f));
+        const bool has_start_z = node.contains("start_z");
+        vec.start_y = has_start_z ? read_float(node.value("start_y", 0.0f)) : 0.0f;
+        vec.start_z = has_start_z ? read_float(node.value("start_z", 0.0f))
+                                  : read_float(node.value("start_y", 0.0f));
+        const bool has_control = node.contains("control_x") || node.contains("control_y") || node.contains("control_z");
+        const bool has_control_z = node.contains("control_z");
+        if (has_control) {
+                vec.control_x = read_float(node.value("control_x", vec.start_x));
+                vec.control_y = has_control_z ? read_float(node.value("control_y", vec.start_y)) : 0.0f;
+                vec.control_z = has_control_z ? read_float(node.value("control_z", vec.start_z))
+                                              : read_float(node.value("control_y", vec.start_z));
+        } else {
+                vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
+                const float fallback_end_z = read_float(node.value("end_z", read_float(node.value("end_y", 0.0f))));
+                const float fallback_end_y = has_start_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
+                vec.control_y = (vec.start_y + fallback_end_y) * 0.5f;
+                vec.control_z = (vec.start_z + fallback_end_z) * 0.5f;
+        }
+        vec.end_x   = read_float(node.value("end_x", 0.0f));
+        const bool has_end_z = node.contains("end_z");
+        vec.end_y   = has_end_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
+        vec.end_z   = has_end_z ? read_float(node.value("end_z", 0.0f))
+                                : read_float(node.value("end_y", 0.0f));
+        vec.damage  = read_int(node.value("damage", 0));
         geometry.add_vector(vec);
 }
 
@@ -371,21 +326,6 @@ void apply_attack_geometry_entry(AnimationFrame& frame, const nlohmann::json& en
                                 append_attack_vector(frame.attack_geometry, vec_node);
                         }
                         return;
-                }
-                for (const char* type : kLegacyDamageTypeNames) {
-                        auto it = entry.find(type);
-                        if (it == entry.end() || !it->is_array()) {
-                                continue;
-                        }
-                        for (const auto& vec_node : *it) {
-                                append_attack_vector(frame.attack_geometry, vec_node);
-                        }
-                }
-                return;
-        }
-        if (entry.is_array()) {
-                for (const auto& vec_node : entry) {
-                        append_attack_vector(frame.attack_geometry, vec_node);
                 }
         }
 }

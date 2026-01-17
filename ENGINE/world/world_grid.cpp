@@ -585,62 +585,6 @@ std::vector<const GridPoint*> WorldGrid::query_region(const SDL_FRect& world_bou
     return result;
 }
 
-std::vector<WorldGrid::LightInstance> WorldGrid::query_lights(const SDL_FRect& world_bounds,
-                                                             int min_world_z,
-                                                             int max_world_z,
-                                                             bool skip_inactive_branches) {
-    std::vector<LightInstance> results;
-    RegionMetrics metrics{};
-    auto points = query_region(world_bounds,
-                               0,
-                               max_resolution_layers(),
-                               min_world_z,
-                               max_world_z,
-                               skip_inactive_branches,
-                               /*include_empty_nodes=*/false,
-                               &metrics);
-    for (GridPoint* gp : points) {
-        if (!gp) continue;
-        for (const auto& occ : gp->occupants) {
-            Asset* asset = occ.get();
-            if (!asset || !asset->info) continue;
-            if (asset->info->light_sources.empty()) continue;
-            for (const auto& light : asset->info->light_sources) {
-                results.push_back(LightInstance{gp, asset, &light});
-            }
-        }
-    }
-    return results;
-}
-
-std::vector<WorldGrid::LightInstance> WorldGrid::query_lights(const SDL_FRect& world_bounds,
-                                                             int min_world_z,
-                                                             int max_world_z,
-                                                             bool skip_inactive_branches) const {
-    std::vector<LightInstance> results;
-    RegionMetrics metrics{};
-    auto points = query_region(world_bounds,
-                               0,
-                               max_resolution_layers(),
-                               min_world_z,
-                               max_world_z,
-                               skip_inactive_branches,
-                               /*include_empty_nodes=*/false,
-                               &metrics);
-    for (const GridPoint* gp : points) {
-        if (!gp) continue;
-        for (const auto& occ : gp->occupants) {
-            Asset* asset = occ.get();
-            if (!asset || !asset->info) continue;
-            if (asset->info->light_sources.empty()) continue;
-            for (const auto& light : asset->info->light_sources) {
-                results.push_back(LightInstance{gp, asset, &light});
-            }
-        }
-    }
-    return results;
-}
-
 std::unique_ptr<Asset> WorldGrid::extract_from_point(Asset* a, GridPoint& point) {
     if (!a) {
         return nullptr;

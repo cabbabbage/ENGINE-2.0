@@ -26,8 +26,11 @@ class AnimationDocument {
 };
 
     void load_from_file(const std::filesystem::path& info_path);
-    void load_from_manifest(const nlohmann::json& asset_json, const std::filesystem::path& asset_root, std::function<void(const nlohmann::json&)> persist_callback);
+    void load_from_manifest(const nlohmann::json& asset_json,
+                            const std::filesystem::path& asset_root,
+                            std::function<bool(const nlohmann::json&)> persist_callback);
     void save_to_file(bool fire_callback = true) const;
+    bool save_to_file_checked(bool fire_callback = true) const;
 
     bool consume_dirty_flag() const;
 
@@ -40,7 +43,9 @@ class AnimationDocument {
 
     void rename_animation(const std::string& old_id, const std::string& new_id);
     void replace_animation_payload(const std::string& animation_id, const std::string& payload_json);
+    bool update_animation_payload(const std::string& animation_id, const nlohmann::json& payload);
     std::optional<std::string> animation_payload(const std::string& animation_id) const;
+    std::optional<nlohmann::json> animation_payload_json(const std::string& animation_id) const;
     std::vector<std::string> animation_children() const;
     void replace_animation_children(const std::vector<std::string>& children);
     std::string animation_children_signature() const;
@@ -72,9 +77,8 @@ class AnimationDocument {
     std::string container_metadata_;
     mutable bool dirty_ = false;
     mutable nlohmann::json base_data_;
-    std::function<void(const nlohmann::json&)> persist_callback_;
+    std::function<bool(const nlohmann::json&)> persist_callback_;
     std::function<void()> on_saved_callback_;
 };
 
 }
-

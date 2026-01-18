@@ -4,9 +4,11 @@
 #include <cstdint>
 #include <vector>
 
-#include "../../ENGINE/utils/light_source.hpp"
-
 struct AssetInfo {
+    struct LightSource {
+        int intensity = 0;
+        bool active = false;
+    };
     std::vector<LightSource> light_sources;
     bool moving_asset = false;
 };

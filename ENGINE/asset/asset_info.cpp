@@ -647,8 +647,7 @@ AssetInfo::AssetInfo(const std::string &asset_folder_name)
     : AssetInfo(asset_folder_name, nlohmann::json::object()) {}
 
 AssetInfo::AssetInfo(const std::string& asset_folder_name, const nlohmann::json& metadata)
-: has_shading(false)
-, is_light_source(false) {
+{
         nlohmann::json data = metadata.is_object() ? metadata : nlohmann::json::object();
 
         std::string resolved_name = data.value("asset_name", asset_folder_name);
@@ -682,15 +681,10 @@ void AssetInfo::set_manifest_store_provider(ManifestStoreProvider provider) {
 }
 
 AssetInfo::~AssetInfo() {
-	clear_light_textures();
 	for (auto &[key, anim] : animations) {
                 anim.clear_texture_cache();
 	}
 	animations.clear();
-}
-
-void AssetInfo::clear_light_textures() {
-	destroy_light_textures(light_sources);
 }
 
 void AssetInfo::load_base_properties(const nlohmann::json &data) {
@@ -720,7 +714,6 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
                         tillable = info_json_.value("tileable", false);
                 }
         }
-        has_shading = data.value("has_shading", false);
         min_same_type_distance = data.value("min_same_type_distance", 0);
         min_distance_all = data.value("min_distance_all", 0);
         flipable = data.value("can_invert", false);
@@ -1021,72 +1014,6 @@ void AssetInfo::set_tillable(bool v) {
         info_json_["tileable"] = v;
 }
 
-void AssetInfo::set_shadow_mask_settings(const ShadowMaskSettings& settings) {
-        shadow_mask_settings = SanitizeShadowMaskSettings(settings);
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        nlohmann::json serialized = nlohmann::json::object();
-        serialized["expansion_ratio"]  = shadow_mask_settings.expansion_ratio;
-        serialized["blur_scale"]       = shadow_mask_settings.blur_scale;
-        serialized["falloff_start"]    = shadow_mask_settings.falloff_start;
-        serialized["falloff_exponent"] = shadow_mask_settings.falloff_exponent;
-        serialized["alpha_multiplier"] = shadow_mask_settings.alpha_multiplier;
-        info_json_["shadow_mask_settings"] = std::move(serialized);
-}
-
-void AssetInfo::set_shading_enabled(bool enabled) {
-        has_shading = enabled;
-        is_light_source = enabled || !light_sources.empty();
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        info_json_["has_shading"] = enabled;
-}
-
-namespace {
-constexpr float kShadingParallaxMin = 0.0f;
-constexpr float kShadingParallaxMax = 4.0f;
-constexpr float kShadingBrightnessMin = 0.0f;
-constexpr float kShadingBrightnessMax = 4.0f;
-constexpr float kShadingOpacityMin = 0.0f;
-constexpr float kShadingOpacityMax = 4.0f;
-
-float sanitize_shading_ratio(float value, float lo, float hi, float fallback) {
-    if (!std::isfinite(value)) {
-        return fallback;
-    }
-    return std::clamp(value, lo, hi);
-}
-}
-
-void AssetInfo::set_shading_parallax_amount(float amount) {
-        float sanitized = sanitize_shading_ratio(amount, kShadingParallaxMin, kShadingParallaxMax, shading_parallax_amount);
-        shading_parallax_amount = sanitized;
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        info_json_["shading_parallax_amount"] = sanitized;
-}
-
-void AssetInfo::set_shading_screen_brightness_multiplier(float multiplier) {
-        float sanitized = sanitize_shading_ratio( multiplier, kShadingBrightnessMin, kShadingBrightnessMax, shading_screen_brightness_multiplier);
-        shading_screen_brightness_multiplier = sanitized;
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        info_json_["shading_screen_brightness_multiplier"] = sanitized;
-}
-
-void AssetInfo::set_shading_opacity_multiplier(float multiplier) {
-        float sanitized = sanitize_shading_ratio( multiplier, kShadingOpacityMin, kShadingOpacityMax, shading_opacity_multiplier);
-        shading_opacity_multiplier = sanitized;
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        info_json_["shading_opacity_multiplier"] = sanitized;
-}
-
 Area* AssetInfo::find_area(const std::string& name) {
 	for (auto& na : areas) {
 		if (na.name == name) return na.area.get();
@@ -1344,20 +1271,6 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         }
 
         load_base_properties(data);
-        ShadowMaskSettings parsed_settings{};
-        if (data.contains("shadow_mask_settings") && data["shadow_mask_settings"].is_object()) {
-                const auto& json_settings = data["shadow_mask_settings"];
-                parsed_settings.expansion_ratio  = json_settings.value("expansion_ratio", parsed_settings.expansion_ratio);
-                parsed_settings.blur_scale       = json_settings.value("blur_scale", parsed_settings.blur_scale);
-                parsed_settings.falloff_start    = json_settings.value("falloff_start", parsed_settings.falloff_start);
-                parsed_settings.falloff_exponent = json_settings.value("falloff_exponent", parsed_settings.falloff_exponent);
-                parsed_settings.alpha_multiplier = json_settings.value("alpha_multiplier", parsed_settings.alpha_multiplier);
-        }
-        set_shadow_mask_settings(parsed_settings);
-
-        set_shading_parallax_amount(read_float_field(data, "shading_parallax_amount", shading_parallax_amount));
-        set_shading_screen_brightness_multiplier( read_float_field(data, "shading_screen_brightness_multiplier", shading_screen_brightness_multiplier));
-        set_shading_opacity_multiplier( read_float_field(data, "shading_opacity_multiplier", shading_opacity_multiplier));
 
         const auto &ss = data.value("size_settings", nlohmann::json::object());
         scale_factor = ss.value("scale_percentage", 100.0f) / 100.0f;

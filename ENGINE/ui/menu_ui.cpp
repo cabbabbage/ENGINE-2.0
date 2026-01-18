@@ -123,10 +123,7 @@ void MenuUI::game_loop() {
                         }
                 }
 
-                bool scene_presents_itself = (game_assets_ && game_assets_->scene_light_map_only_mode());
-                if (menu_active_ || !scene_presents_itself) {
-                        SDL_RenderPresent(renderer_);
-                }
+                SDL_RenderPresent(renderer_);
 
                 if (input_) input_->update();
 

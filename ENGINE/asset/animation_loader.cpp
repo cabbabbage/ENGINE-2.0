@@ -370,7 +370,6 @@ struct VariantLayerPaths {
         std::string normal_folder;
         std::string foreground_folder;
         std::string background_folder;
-        std::string mask_folder;
 };
 
 VariantLayerPaths build_variant_layer_paths(const std::string& cache_folder,
@@ -382,7 +381,6 @@ VariantLayerPaths build_variant_layer_paths(const std::string& cache_folder,
         paths.normal_folder     = (scale_root / "normal").string();
         paths.foreground_folder = (scale_root / "foreground").string();
         paths.background_folder = (scale_root / "background").string();
-        paths.mask_folder       = (scale_root / "mask").string();
 
         return paths;
 }
@@ -844,10 +842,7 @@ void AnimationLoader::load(Animation& animation,
                 std::vector<std::vector<SDL_Surface*>> variant_surfaces(variant_count);
                 std::vector<std::vector<SDL_Surface*>> foreground_surfaces(variant_count);
                 std::vector<std::vector<SDL_Surface*>> background_surfaces(variant_count);
-                std::vector<std::vector<SDL_Surface*>> mask_surfaces(variant_count);
-
                 bool all_surfaces_loaded = true;
-                const bool needs_masks = info.has_shading;
                 for (std::size_t idx = 0; idx < variant_count; ++idx) {
                         const VariantLayerPaths& paths = variant_paths[idx];
                         std::vector<SDL_Surface*> loaded;
@@ -873,18 +868,6 @@ void AnimationLoader::load(Animation& animation,
                                 background_surfaces[idx] = std::move(bg_loaded);
                         }
 
-                        if (needs_masks) {
-                                std::vector<SDL_Surface*> mask_loaded;
-                                if (CacheManager::load_surface_sequence(paths.mask_folder, frame_count, mask_loaded) &&
-                                    static_cast<int>(mask_loaded.size()) == frame_count) {
-                                        mask_surfaces[idx] = std::move(mask_loaded);
-                                } else {
-                                        all_surfaces_loaded = false;
-                                        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                                  << " missing masks for variant " << idx << " at " << paths.mask_folder << "\n";
-                                        break;
-                                }
-                        }
                 }
 
                 if (!all_surfaces_loaded || variant_surfaces[0].empty() || !variant_surfaces[0][0]) {
@@ -893,7 +876,6 @@ void AnimationLoader::load(Animation& animation,
                         free_surface_lists(variant_surfaces);
                         free_surface_lists(foreground_surfaces);
                         free_surface_lists(background_surfaces);
-                        free_surface_lists(mask_surfaces);
                         flush_diagnostics();
                         return;
                 }
@@ -965,22 +947,6 @@ void AnimationLoader::load(Animation& animation,
                                 }
                                 cache_entry.background_textures[variant_idx] = bg_tex;
 
-                                SDL_Texture* mask_tex = nullptr;
-                                if (frame_idx < mask_surfaces[variant_idx].size() && mask_surfaces[variant_idx][frame_idx]) {
-                                        SDL_Surface* mask_surface = mask_surfaces[variant_idx][frame_idx];
-                                        mask_tex = CacheManager::surface_to_texture(renderer, mask_surface);
-                                        if (mask_tex) {
-                                                apply_scale_mode(mask_tex, info);
-                                        }
-                                        int mask_w = mask_surface->w;
-                                        int mask_h = mask_surface->h;
-                                        cache_entry.mask_widths[variant_idx]  = mask_w;
-                                        cache_entry.mask_heights[variant_idx] = mask_h;
-                                } else {
-                                        cache_entry.mask_widths[variant_idx]  = 0;
-                                        cache_entry.mask_heights[variant_idx] = 0;
-                                }
-                                cache_entry.mask_textures[variant_idx] = mask_tex;
                         }
                         animation.frame_cache_.push_back(std::move(cache_entry));
                 }
@@ -988,8 +954,6 @@ void AnimationLoader::load(Animation& animation,
                 free_surface_lists(variant_surfaces);
                 free_surface_lists(foreground_surfaces);
                 free_surface_lists(background_surfaces);
-                free_surface_lists(mask_surfaces);
-
                 if (animation.reverse_source && !animation.frame_cache_.empty()) {
                         std::reverse(animation.frame_cache_.begin(), animation.frame_cache_.end());
                 }
@@ -1137,7 +1101,6 @@ void AnimationLoader::load(Animation& animation,
                                 variant.base_texture = cache.textures[v];
                                 if (v < cache.foreground_textures.size()) variant.foreground_texture = cache.foreground_textures[v];
                                 if (v < cache.background_textures.size()) variant.background_texture = cache.background_textures[v];
-                                if (v < cache.mask_textures.size()) variant.shadow_mask_texture = cache.mask_textures[v];
                                 f.variants.push_back(variant);
                             }
                         }

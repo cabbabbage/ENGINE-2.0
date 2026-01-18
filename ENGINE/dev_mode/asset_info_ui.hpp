@@ -26,7 +26,6 @@ class Area;
 class Assets;
 class Section_BasicInfo;
 class SearchAssets;
-class Section_Shading;
 class Section_SpawnGroups;
 namespace animation_editor {
 class AnimationEditorWindow;
@@ -69,21 +68,13 @@ class AssetInfoUI {
     void sync_target_tiling_state();
     void request_apply_section(AssetInfoSectionId section_id);
     void set_header_visibility_callback(std::function<void(bool)> cb);
-    void notify_light_sources_modified(bool purge_light_cache);
     void mark_target_asset_composite_dirty();
     void notify_spawn_group_entry_changed(const nlohmann::json& entry);
     void notify_spawn_group_removed(const std::string& spawn_id);
-    void regenerate_shadow_masks();
-    void sync_target_shading_settings();
     void sync_target_spacing_settings();
     void sync_target_tags();
     void sync_animation_children();
     void sync_target_basic_render_settings(bool type_changed);
-    void mark_light_for_rebuild(std::size_t light_index);
-    void mark_lighting_asset_for_rebuild();
-    SDL_Texture* mask_preview_texture() const { return mask_preview_texture_; }
-    int mask_preview_width() const { return mask_preview_w_; }
-    int mask_preview_height() const { return mask_preview_h_; }
 
     void begin_color_sampling(const utils::color::RangedColor& current, std::function<void(SDL_Color)> on_sample, std::function<void()> on_cancel);
     void cancel_color_sampling(bool silent);
@@ -96,7 +87,6 @@ class AssetInfoUI {
     void save_now() const;
     bool apply_section_to_assets(AssetInfoSectionId section_id, const std::vector<std::string>& asset_names);
     static const char* section_display_name(AssetInfoSectionId section_id);
-    void sync_map_light_panel_visibility(bool want_visible);
     bool validate_target_asset() const;
     bool apply_to_assets_with_info(const std::function<void(Asset*)>& fn);
     bool asset_matches_current_info(const Asset* asset) const;
@@ -108,10 +98,6 @@ class AssetInfoUI {
     void clear_section_focus();
     DockableCollapsible* section_at_point(SDL_Point p) const;
     bool handle_section_focus_event(const SDL_Event& e);
-    bool generate_mask_preview();
-    void destroy_mask_preview_texture();
-    bool load_mask_preview_texture(const std::filesystem::path& png_path);
-    std::filesystem::path resolve_mask_preview_frame_path() const;
     void on_animation_children_changed(const std::vector<std::string>& names);
     std::shared_ptr<animation_editor::AnimationDocument> animation_document() const;
 
@@ -126,7 +112,6 @@ class AssetInfoUI {
     class Section_BasicInfo* basic_info_section_ = nullptr;
     mutable std::vector<SDL_Rect> section_bounds_;
 
-    class Section_Shading* shading_section_ = nullptr;
     mutable class Asset* target_asset_ = nullptr;
     mutable SDL_Rect animation_editor_rect_{0,0,0,0};
     int last_screen_w_ = 0;
@@ -143,7 +128,6 @@ class AssetInfoUI {
     std::unique_ptr<animation_editor::AnimationEditorWindow> animation_editor_window_;
     animation_editor::ChildrenTimelinesPanel* children_panel_ = nullptr;
     bool pending_animation_editor_open_ = false;
-    bool map_light_panel_auto_opened_ = false;
     bool forcing_high_quality_rendering_ = false;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     Section_SpawnGroups* spawn_groups_section_ = nullptr;
@@ -175,9 +159,6 @@ class AssetInfoUI {
     bool handle_delete_modal_event(const SDL_Event& e);
     void update_delete_modal_geometry(int screen_w, int screen_h);
 
-    SDL_Texture* mask_preview_texture_ = nullptr;
-    int mask_preview_w_ = 0;
-    int mask_preview_h_ = 0;
 
     bool color_sampling_active_ = false;
     bool color_sampling_preview_valid_ = false;

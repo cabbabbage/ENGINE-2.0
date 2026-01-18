@@ -156,13 +156,6 @@ bool AnimationCloner::Clone(const Animation& source,
             if (src_bg) {
                 dst_cache.background_textures[v] = clone_texture(src_bg, tex_w, tex_h, flip_flags, renderer, info);
             }
-            SDL_Texture* src_mask = (v < src_cache.mask_textures.size()) ? src_cache.mask_textures[v] : nullptr;
-
-            int mask_w = (v < src_cache.mask_widths.size()) ? src_cache.mask_widths[v] : 0;
-            int mask_h = (v < src_cache.mask_heights.size()) ? src_cache.mask_heights[v] : 0;
-            dst_cache.mask_textures[v] = clone_texture(src_mask, mask_w, mask_h, flip_flags, renderer, info, &mask_w, &mask_h);
-            dst_cache.mask_widths[v]   = mask_w;
-            dst_cache.mask_heights[v]  = mask_h;
         }
 
         dest.frame_cache_.push_back(std::move(dst_cache));
@@ -210,8 +203,6 @@ bool AnimationCloner::Clone(const Animation& source,
                 var.base_texture                = (v < dst_cache.textures.size()) ? dst_cache.textures[v] : nullptr;
                 var.foreground_texture          = (v < dst_cache.foreground_textures.size()) ? dst_cache.foreground_textures[v] : nullptr;
                 var.background_texture          = (v < dst_cache.background_textures.size()) ? dst_cache.background_textures[v] : nullptr;
-                var.shadow_mask_texture         = (v < dst_cache.mask_textures.size()) ? dst_cache.mask_textures[v] : nullptr;
-
                 dst_frame.variants.push_back(var);
             }
 

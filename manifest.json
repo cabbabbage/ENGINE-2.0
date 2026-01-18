@@ -1582,29 +1582,11 @@
           "locked": false,
           "loop": true,
           "movement": [
-            [
-              0,
-              0,
-              false,
-              [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ],
-                [
-                  1,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ]
-            ]
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
           ],
           "movement_total": {
             "dx": 0,
@@ -2995,24 +2977,64 @@
           "speed_multiplier": 1.0
         },
         "down": {
+          "attack_geometry": [
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            }
+          ],
           "child_timelines": [],
           "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": false,
             "flipMovementY": true,
-            "flipX": false,
+            "flipX": true,
             "flipY": false,
             "reverse": false
           },
-          "flipped_source": false,
+          "flipped_source": true,
           "frames": [
             {
               "needs_rebuild": true
             }
           ],
+          "hit_geometry": [
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            }
+          ],
           "inherit_source_movement": true,
           "loop": true,
-          "number_of_frames": 1,
+          "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
@@ -3076,30 +3098,36 @@
           "locked": false,
           "loop": true,
           "movement": [
-            [
-              0,
-              0
-            ],
-            [
-              -90,
-              0
-            ],
-            [
-              -90,
-              0
-            ],
-            [
-              -90,
-              0
-            ],
-            [
-              -90,
-              0
-            ],
-            [
-              -90,
-              0
-            ]
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": -90,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": -90,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": -90,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": -90,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": -90,
+              "dy": 0,
+              "dz": 0
+            }
           ],
           "movement_total": {
             "dx": -450,
@@ -3146,34 +3174,100 @@
           "speed_multiplier": 1.0
         },
         "up": {
+          "attack_geometry": [
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            }
+          ],
           "child_timelines": [],
           "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": false,
             "flipMovementY": false,
-            "flipX": true,
+            "flipX": false,
             "flipY": false,
             "reverse": false
           },
-          "flipped_source": true,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": true
             }
           ],
+          "hit_geometry": [
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            }
+          ],
           "inherit_source_movement": false,
           "loop": true,
           "movement": [
-            [
-              0,
-              0
-            ]
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": -46,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": -46,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": -46,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": -46,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": -46,
+              "dz": 0
+            }
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0
+            "dy": -230
           },
-          "number_of_frames": 1,
+          "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,

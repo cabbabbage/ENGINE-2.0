@@ -19,7 +19,6 @@ from PIL import Image
 from apply_color_effects import ApplyEffects
 from effects import EffectsParser
 from gpu_status import detect_torch_gpu, print_gpu_status
-from shadow_mask import ShadowMaskGenerator, ShadowMaskSettings
 
 
 def normalize_variant_steps(steps):
@@ -261,10 +260,8 @@ def process_frame_task(task):
           normal_dir,
           fg_dir,
           bg_dir,
-          mask_dir,
           fg_effects,
           bg_effects,
-          mask_settings,
         )
 
     fg_effects and bg_effects are Effects instances.
@@ -281,10 +278,8 @@ def process_frame_task(task):
         normal_dir,
         fg_dir,
         bg_dir,
-        mask_dir,
         fg_effects,
         bg_effects,
-        mask_settings,
     ) = task
 
     try:
@@ -317,10 +312,6 @@ def process_frame_task(task):
 
             fg_img = _APPLY_EFFECTS.apply_effects(img, fg_effects)
             bg_img = _APPLY_EFFECTS.apply_effects(img, bg_effects)
-            mask_img = None
-            if mask_settings is not None and mask_dir:
-                mask_img = ShadowMaskGenerator.generate_mask_image(img, mask_settings)
-
             for output_idx in output_indices:
                 normal_path = os.path.join(normal_dir, f"{output_idx}.png")
                 fg_path = os.path.join(fg_dir, f"{output_idx}.png")
@@ -328,9 +319,6 @@ def process_frame_task(task):
                 img.save(normal_path, "PNG", optimize=False)
                 fg_img.save(fg_path, "PNG", optimize=False)
                 bg_img.save(bg_path, "PNG", optimize=False)
-                if mask_img is not None and mask_dir:
-                    mask_path = os.path.join(mask_dir, f"{output_idx}.png")
-                    mask_img.save(mask_path, "PNG", optimize=False)
 
         return f"Frame {source_idx}: OK"
     except Exception as exc:
@@ -438,11 +426,6 @@ class AssetTool:
         else:
             animations = [(asset_src_dir, "default")]
 
-        mask_enabled = bool(asset_meta.get("has_shading", False))
-        mask_settings = None
-        if mask_enabled:
-            mask_settings = ShadowMaskSettings.sanitize(asset_meta.get("shadow_mask_settings", {})).as_dict()
-
         steps = self.get_normalized_steps_for_asset(asset_name)
         scale_pcts = [round(s * 100) for s in steps]
         scale_pcts = sorted(set(scale_pcts), reverse=True)
@@ -524,7 +507,6 @@ class AssetTool:
                 normal_dir = scale_dir / "normal"
                 fg_dir = scale_dir / "foreground"
                 bg_dir = scale_dir / "background"
-                mask_dir = scale_dir / "mask"
 
                 flagged_sources = set(flagged_frames)
                 output_groups: Dict[int, List[int]] = {}
@@ -536,27 +518,17 @@ class AssetTool:
                         normal_path = normal_dir / f"{output_idx}.png"
                         fg_path = fg_dir / f"{output_idx}.png"
                         bg_path = bg_dir / f"{output_idx}.png"
-                        mask_path = mask_dir / f"{output_idx}.png"
                         if not normal_path.exists() or not fg_path.exists() or not bg_path.exists():
-                            needs_rebuild = True
-                        elif mask_enabled and not mask_path.exists():
                             needs_rebuild = True
                     if needs_rebuild:
                         output_groups.setdefault(source_idx, []).append(output_idx)
 
                 if not output_groups:
-                    if not mask_enabled and mask_dir.exists():
-                        shutil.rmtree(mask_dir, ignore_errors=True)
                     continue
 
                 os.makedirs(normal_dir, exist_ok=True)
                 os.makedirs(fg_dir, exist_ok=True)
                 os.makedirs(bg_dir, exist_ok=True)
-                if mask_enabled:
-                    os.makedirs(mask_dir, exist_ok=True)
-                else:
-                    if mask_dir.exists():
-                        shutil.rmtree(mask_dir, ignore_errors=True)
 
                 tasks = []
                 scaled_crop = scale_crop_bounds(crop_bounds, scale_factor) if crop_bounds else None
@@ -573,10 +545,8 @@ class AssetTool:
                             str(normal_dir),
                             str(fg_dir),
                             str(bg_dir),
-                            str(mask_dir) if mask_enabled else None,
                             fg_cfg,
                             bg_cfg,
-                            mask_settings,
                         )
                     )
 

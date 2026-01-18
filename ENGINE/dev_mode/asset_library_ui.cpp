@@ -1889,8 +1889,6 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
         manifest_entry["min_same_type_distance"] = 0;
         manifest_entry["min_distance_all"] = 0;
         manifest_entry["can_invert"] = false;
-        manifest_entry["has_shading"] = false;
-        manifest_entry["lighting_info"] = nlohmann::json::array();
         manifest_entry["size_settings"] = {
             {"scale_percentage", 100.0}
 };

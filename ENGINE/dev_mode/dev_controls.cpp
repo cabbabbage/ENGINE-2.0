@@ -712,12 +712,9 @@ void DevControls::set_input(Input* input) {
     if (map_editor_) map_editor_->set_input(input);
 }
 
-void DevControls::set_map_info(nlohmann::json* map_info, MapLightPanel::SaveCallback on_save) {
+void DevControls::set_map_info(nlohmann::json* map_info) {
     map_info_json_ = map_info;
-    map_light_save_cb_ = std::move(on_save);
-    map_grid_save_cb_ = map_light_save_cb_;
     if (map_mode_ui_) {
-        map_mode_ui_->set_light_save_callback(map_light_save_cb_);
         map_mode_ui_->set_map_context(map_info_json_, map_path_);
     }
     other_settings_.set_map_info(map_info_json_);
@@ -920,7 +917,6 @@ void DevControls::set_map_context(nlohmann::json* map_info, const std::string& m
     map_path_ = map_path;
     if (map_mode_ui_) {
         map_mode_ui_->set_map_context(map_info, map_path);
-        map_mode_ui_->set_light_save_callback(map_light_save_cb_);
     }
     if (rooms_ && assets_) {
         const std::string map_id = assets_->map_id();
@@ -1031,7 +1027,6 @@ void DevControls::set_enabled(bool enabled) {
         if (camera_was_visible && camera_panel_) {
             camera_panel_->open();
         }
-        apply_dark_mask_visibility();
         const char* msg_enable_done = "[DevControls] enable flow complete";
         std::cout << msg_enable_done << "\n";
     } else {
@@ -1052,9 +1047,6 @@ void DevControls::set_enabled(bool enabled) {
         }
         close_camera_panel();
         restore_filter_hidden_assets();
-        if (assets_) {
-            assets_->set_render_dark_mask_enabled(true);
-        }
         const char* msg_disable_done = "[DevControls] disable flow complete";
         std::cout << msg_disable_done << "\n";
     }
@@ -1102,12 +1094,7 @@ void DevControls::sync_camera_tilt_override() {
 
 void DevControls::update(const Input& input) {
     if (!enabled_) return;
-    apply_dark_mask_visibility();
-
     const bool ctrl = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
-    if (ctrl && input.wasScancodePressed(SDL_SCANCODE_M)) {
-        toggle_map_light_panel();
-    }
     if (ctrl && input.wasScancodePressed(SDL_SCANCODE_C)) {
         const bool room_editor_active =
             mode_ == Mode::RoomEditor && room_editor_ && room_editor_->is_enabled();
@@ -1781,26 +1768,6 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             frame_editor_session_->render(renderer);
         }
     }
-    if (renderer && map_mode_ui_ && map_mode_ui_->is_light_panel_visible() && assets_) {
-        const WarpedScreenGrid& cam = assets_->getView();
-        SDL_Point screen_center_map = cam.get_screen_center();
-        SDL_FPoint screen_center_f = cam.map_to_screen(screen_center_map);
-        SDL_Point screen_center{static_cast<int>(std::lround(screen_center_f.x)),
-                                static_cast<int>(std::lround(screen_center_f.y))};
-        SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
-        SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
-        Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
-        SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
-        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-        SDL_SetRenderDrawColor(renderer, 220, 32, 32, 230);
-        SDL_RenderDrawLine(renderer, screen_center.x - 6, screen_center.y - 6, screen_center.x + 6, screen_center.y + 6);
-        SDL_RenderDrawLine(renderer, screen_center.x - 6, screen_center.y + 6, screen_center.x + 6, screen_center.y - 6);
-
-        SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
-        SDL_SetRenderDrawBlendMode(renderer, prev_mode);
-    }
-
     if (renderer && camera_panel_ && camera_panel_->is_blur_section_visible() && assets_ && screen_w_ > 0 && screen_h_ > 0) {
         const WarpedScreenGrid& cam = assets_->getView();
         const WarpedScreenGrid::RealismSettings& settings = cam.realism_settings();
@@ -2017,10 +1984,6 @@ bool DevControls::is_asset_info_editor_open() const {
     return room_editor_->is_asset_info_editor_open();
 }
 
-bool DevControls::is_asset_info_lighting_section_expanded() const {
-    return lighting_section_forces_dark_mask();
-}
-
 std::uint64_t DevControls::other_settings_state_version() const {
     return other_settings_.state_version();
 }
@@ -2130,36 +2093,6 @@ void DevControls::configure_header_button_sets() {
         return camera_btn;
 };
 
-    auto make_lighting_button = [this]() {
-        MapModeUI::HeaderButtonConfig lights_btn;
-        lights_btn.id = "lights";
-        lights_btn.label = "Lighting";
-        const bool lights_visible = map_mode_ui_ && map_mode_ui_->is_light_panel_visible();
-        lights_btn.active = lights_visible;
-        lights_btn.style_override = &DMStyles::WarnButton();
-        lights_btn.active_style_override = &DMStyles::AccentButton();
-        lights_btn.on_toggle = [this](bool active) {
-            if (room_editor_) {
-                room_editor_->close_room_config();
-            }
-            if (!map_mode_ui_) {
-                sync_header_button_states();
-                return;
-            }
-            const bool currently_open = map_mode_ui_->is_light_panel_visible();
-            if (active != currently_open) {
-                if (active && !currently_open && is_modal_blocking_panels()) {
-                    pulse_modal_header();
-                    sync_header_button_states();
-                    return;
-                }
-                map_mode_ui_->toggle_light_panel();
-            }
-            sync_header_button_states();
-};
-        return lights_btn;
-};
-
     auto make_layers_button = [this]() {
         MapModeUI::HeaderButtonConfig layers_btn;
         layers_btn.id = "layers";
@@ -2200,7 +2133,6 @@ void DevControls::configure_header_button_sets() {
     std::vector<MapModeUI::HeaderButtonConfig> room_buttons;
 
     map_buttons.push_back(make_camera_button());
-    map_buttons.push_back(make_lighting_button());
     map_buttons.push_back(make_layers_button());
 
     {
@@ -2250,7 +2182,6 @@ void DevControls::configure_header_button_sets() {
     }
 
     room_buttons.push_back(make_camera_button());
-    room_buttons.push_back(make_lighting_button());
     room_buttons.push_back(make_layers_button());
 
     MapModeUI::HeaderButtonConfig room_config_btn;
@@ -2315,9 +2246,6 @@ void DevControls::sync_header_button_states() {
     const bool camera_open = camera_panel_ && camera_panel_->is_visible();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "camera", camera_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Map, "camera", camera_open);
-    const bool lights_open = map_mode_ui_->is_light_panel_visible();
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Map, "lights", lights_open);
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "lights", lights_open);
     const bool layers_open = map_mode_ui_->is_layers_panel_visible();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Map, "layers", layers_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Map, "map_layers", layers_open);
@@ -2333,7 +2261,6 @@ void DevControls::sync_header_button_states() {
     if (room_editor_) {
         room_editor_->set_blocking_panel_visible(RoomEditor::BlockingPanel::AssetLibrary, library_open);
 
-        room_editor_->set_blocking_panel_visible(RoomEditor::BlockingPanel::Lighting, lights_open);
         room_editor_->set_blocking_panel_visible(RoomEditor::BlockingPanel::MapLayers, layers_open);
     }
 
@@ -3087,45 +3014,6 @@ void DevControls::open_regenerate_room_popup() {
                             screen_h_);
 }
 
-void DevControls::toggle_map_light_panel() {
-    if (!map_mode_ui_) {
-        return;
-    }
-    const bool currently_open = map_mode_ui_->is_light_panel_visible();
-    if (!currently_open && is_modal_blocking_panels()) {
-        pulse_modal_header();
-        sync_header_button_states();
-        return;
-    }
-    map_mode_ui_->toggle_light_panel();
-    sync_header_button_states();
-}
-
-void DevControls::set_map_light_panel_visible(bool visible) {
-    if (!map_mode_ui_) {
-        return;
-    }
-    const bool currently_open = map_mode_ui_->is_light_panel_visible();
-    if (visible == currently_open) {
-        return;
-    }
-    if (visible) {
-        if (is_modal_blocking_panels()) {
-            pulse_modal_header();
-            sync_header_button_states();
-            return;
-        }
-        map_mode_ui_->open_light_panel();
-    } else {
-        map_mode_ui_->close_light_panel();
-    }
-    sync_header_button_states();
-}
-
-bool DevControls::is_map_light_panel_visible() const {
-    return map_mode_ui_ && map_mode_ui_->is_light_panel_visible();
-}
-
 void DevControls::toggle_camera_panel() {
     if (!camera_panel_) {
         return;
@@ -3421,29 +3309,6 @@ void DevControls::refresh_active_asset_filters() {
             asset->set_selected(false);
         }
     }
-    apply_dark_mask_visibility();
-}
-
-void DevControls::apply_dark_mask_visibility() {
-    if (!assets_) {
-        return;
-    }
-    const bool force_dark_mask = lighting_section_forces_dark_mask();
-    const bool should_render = other_settings_.render_dark_mask_enabled() || force_dark_mask;
-    assets_->set_render_dark_mask_enabled(should_render);
-}
-
-bool DevControls::lighting_section_forces_dark_mask() const {
-    if (!enabled_) {
-        return false;
-    }
-    if (mode_ != Mode::RoomEditor) {
-        return false;
-    }
-    if (!room_editor_ || !room_editor_->is_enabled()) {
-        return false;
-    }
-    return room_editor_->is_asset_info_lighting_section_expanded();
 }
 
 bool DevControls::should_hide_assets_for_map_mode() const {

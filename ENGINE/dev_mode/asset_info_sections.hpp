@@ -3,7 +3,6 @@
 enum class AssetInfoSectionId {
     BasicInfo,
     Tags,
-    Lighting,
     Spacing,
 
 };

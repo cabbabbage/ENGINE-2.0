@@ -364,34 +364,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   composite_renderer_(renderer, assets)
 {
 
-    bool color_set = false;
-    if (map_manifest.contains("maps") && map_manifest["maps"].contains(map_id)) {
-        const auto& map_data = map_manifest["maps"][map_id];
-        if (map_data.contains("map_light_data") && map_data["map_light_data"].is_object()) {
-            const auto& mld = map_data["map_light_data"];
-            if (mld.contains("map_color")) {
-                const auto& mc = mld["map_color"];
-                if (mc.contains("r") && mc["r"].contains("max") && mc["r"]["max"].is_number_integer() &&
-                    mc.contains("g") && mc["g"].contains("max") && mc["g"]["max"].is_number_integer() &&
-                    mc.contains("b") && mc["b"].contains("max") && mc["b"]["max"].is_number_integer() &&
-                    mc.contains("a") && mc["a"].contains("max") && mc["a"]["max"].is_number_integer()) {
-                    int r_max = mc["r"]["max"];
-                    int g_max = mc["g"]["max"];
-                    int b_max = mc["b"]["max"];
-                    int a_max = mc["a"]["max"];
-                    if (r_max >= 0 && r_max <= 255 && g_max >= 0 && g_max <= 255 &&
-                        b_max >= 0 && b_max <= 255 && a_max >= 0 && a_max <= 255) {
-                        map_clear_color_ = SDL_Color{static_cast<Uint8>(r_max), static_cast<Uint8>(g_max), static_cast<Uint8>(b_max), static_cast<Uint8>(a_max)};
-                        color_set = true;
-                    }
-                }
-            }
-        }
-    }
-    if (!color_set) {
-
-        map_clear_color_ = SDL_Color{69, 101, 74, 255};
-    }
+    map_clear_color_ = SDL_Color{69, 101, 74, 255};
 
     map_radius_world_ = map_layers::map_radius_from_map_info(map_manifest);
     if (!std::isfinite(map_radius_world_) || map_radius_world_ <= 0.0) {
@@ -704,7 +677,6 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
     SDL_SetTextureAlphaMod(sky_texture_, 255);
     SDL_RenderCopyF(renderer_, sky_texture_, nullptr, &dst);
 }
-
 
 
 

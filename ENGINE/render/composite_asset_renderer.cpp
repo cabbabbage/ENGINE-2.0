@@ -234,51 +234,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         emit_child(child_attachment);
     }
 
-    if (asset->info) {
-        for (const auto& light_source : asset->info->light_sources) {
-            if (light_source.in_front && light_source.texture) {
-                const auto light_color = compute_light_color(light_source);
-                if (!light_color) {
-                    continue;
-                }
-
-                int offset_x = light_source.offset_x;
-                if (asset->flipped) {
-                    offset_x = -offset_x;
-                }
-
-                int w, h;
-                SDL_QueryTexture(light_source.texture, nullptr, nullptr, &w, &h);
-                const float light_z = static_cast<float>(light_source.offset_z) * package_scale;
-                SDL_Rect dest_rect = {
-                    static_cast<int>(std::lround(asset->smoothed_translation_x() + offset_x * package_scale)), static_cast<int>(std::lround(asset->smoothed_translation_y())), w, h };
-                SDL_RendererFlip light_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
-
-                add_render_object(light_source.texture,
-                                  dest_rect,
-                                  *light_color,
-                                  SDL_BLENDMODE_ADD,
-                                  true,
-                                  0.0,
-                                  std::nullopt,
-                                  light_flip,
-                                  SDL_Point{w, h},
-                                  light_z);
-
-                if (light_source.render_to_dark_mask) {
-                    add_scene_mask_light(light_source.texture,
-                                         dest_rect,
-                                         *light_color,
-                                         SDL_BLENDMODE_ADD,
-                                         true,
-                                         light_flip,
-                                         SDL_Point{w, h},
-                                         light_z);
-                }
-            }
-        }
-    }
-
     asset->clear_composite_dirty();
     calculate_local_bounds(asset);
 }

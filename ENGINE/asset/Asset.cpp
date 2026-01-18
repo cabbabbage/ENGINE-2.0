@@ -91,13 +91,6 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
         } catch (...) {
 
         }
-        if (info) {
-                try {
-                        has_shading = info->has_shading;
-                } catch (...) {
-                        has_shading = false;
-                }
-        }
         std::string start_id = info->start_animation.empty() ? std::string{"default"} : info->start_animation;
         auto it = info->animations.find(start_id);
         if (it == info->animations.end()) {
@@ -169,7 +162,6 @@ Asset::Asset(const Asset& o)
     , angle_from_camera(o.angle_from_camera)
     , asset_children(o.asset_children)
     , depth(o.depth)
-    , has_shading(o.has_shading)
     , dead(o.dead)
     , static_frame(o.static_frame)
     , needs_target(o.needs_target)
@@ -182,8 +174,6 @@ Asset::Asset(const Asset& o)
     , merged_from_neighbors_(o.merged_from_neighbors_)
     , current_frame(o.current_frame)
     , frame_progress(o.frame_progress)
-    , shading_group(o.shading_group)
-    , shading_group_set(o.shading_group_set)
     , assets_(o.assets_)
     , spawn_id(o.spawn_id)
     , spawn_method(o.spawn_method)
@@ -239,7 +229,6 @@ Asset& Asset::operator=(const Asset& o) {
         angle_from_camera = o.angle_from_camera;
         asset_children       = o.asset_children;
 	depth                = o.depth;
-        has_shading            = o.has_shading;
 	dead                 = o.dead;
 	static_frame         = o.static_frame;
         needs_target        = o.needs_target;
@@ -252,8 +241,6 @@ Asset& Asset::operator=(const Asset& o) {
         merged_from_neighbors_ = o.merged_from_neighbors_;
         current_frame        = o.current_frame;
         frame_progress       = o.frame_progress;
-	shading_group        = o.shading_group;
-	shading_group_set    = o.shading_group_set;
         last_rendered_frame_   = nullptr;
         assets_              = o.assets_;
         spawn_id             = o.spawn_id;
@@ -501,9 +488,6 @@ void Asset::update() {
         const bool moved = (pos.x != previous_pos.x || pos.y != previous_pos.y);
         if (moved) {
             update_neighbor_lists(true);
-            if (assets_) {
-                assets_->notify_light_map_asset_moved(this);
-            }
         }
     }
 
@@ -885,14 +869,6 @@ void Asset::ClearFlipOverrideForSpawnId(const std::string& id) {
         s_flip_overrides_.erase(id);
 }
 
-int  Asset::get_shading_group() const { return shading_group; }
-bool Asset::is_shading_group_set() const { return shading_group_set; }
-
-void Asset::set_shading_group(int x){
-        shading_group = x;
-        shading_group_set = true;
-}
-
 Area Asset::get_area(const std::string& name) const {
         if (!info) {
                 return Area(name, 0);
@@ -915,43 +891,7 @@ void Asset::deactivate() {
         visibility_stamp = 0;
 }
 
-void Asset::MaskRenderMetadata::TextureDefaults::reset() {
-        texture     = nullptr;
-        r           = 255;
-        g           = 255;
-        b           = 255;
-        a           = 255;
-        blend       = SDL_BLENDMODE_BLEND;
-        initialized = false;
-}
-
-void Asset::MaskRenderMetadata::reset() {
-        last_mask_texture = nullptr;
-        mask_w            = 0;
-        mask_h            = 0;
-        has_dimensions    = false;
-        mask_defaults.reset();
-        base_defaults.reset();
-}
-
-void Asset::destroy_render_cache(RenderTextureCache& cache) {
-        if (cache.texture) {
-                SDL_DestroyTexture(cache.texture);
-                cache.texture = nullptr;
-        }
-        cache.width  = 0;
-        cache.height = 0;
-}
-
 void Asset::clear_render_caches() {
-        destroy_render_cache(shadow_mask_cache_);
-        destroy_render_cache(cast_shadow_cache_);
-        reset_mask_render_metadata();
-        render_pipeline::shading::ClearShadowStateFor(this);
-}
-
-void Asset::reset_mask_render_metadata() {
-        mask_render_metadata_.reset();
 }
 
 void Asset::invalidate_downscale_cache() {
@@ -993,12 +933,6 @@ void Asset::on_scale_factor_changed() {
         last_scale_usage_ = {};
 
         refresh_cached_dimensions();
-
-        shadow_mask_cache_.width  = 0;
-        shadow_mask_cache_.height = 0;
-        cast_shadow_cache_.width  = 0;
-        cast_shadow_cache_.height = 0;
-        reset_mask_render_metadata();
 
         mark_composite_dirty();
 
@@ -1092,13 +1026,6 @@ float Asset::smoothed_alpha() const {
         }
         return std::clamp(value, 0.0f, 1.0f);
 }
-
-Asset::RenderTextureCache& Asset::shadow_mask_cache() { return shadow_mask_cache_; }
-Asset::RenderTextureCache& Asset::shadow_mask_cache() const { return shadow_mask_cache_; }
-Asset::RenderTextureCache& Asset::cast_shadow_cache() { return cast_shadow_cache_; }
-Asset::RenderTextureCache& Asset::cast_shadow_cache() const { return cast_shadow_cache_; }
-Asset::MaskRenderMetadata& Asset::mask_render_metadata() { return mask_render_metadata_; }
-Asset::MaskRenderMetadata& Asset::mask_render_metadata() const { return mask_render_metadata_; }
 
 void Asset::Delete() {
         dead = true;

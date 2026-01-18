@@ -2046,10 +2046,6 @@ bool RoomEditor::is_asset_info_editor_open() const {
     return info_ui_ && info_ui_->is_visible();
 }
 
-bool RoomEditor::is_asset_info_lighting_section_expanded() const {
-    return info_ui_ && info_ui_->is_lighting_section_expanded();
-}
-
 bool RoomEditor::has_active_modal() const {
     return active_modal_ != ActiveModal::None;
 }

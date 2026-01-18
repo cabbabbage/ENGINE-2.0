@@ -233,10 +233,8 @@ Assets::Assets(AssetLibrary& library,
         }
     }
     if (scene) {
-        scene->set_dark_mask_enabled(render_dark_mask_enabled_);
         scene->set_movement_debug_enabled(movement_debug_enabled_);
     }
-    apply_map_light_config();
     apply_map_grid_settings(map_grid_settings_, false);
 
     pending_initial_rebuild_ = true;
@@ -343,47 +341,6 @@ void Assets::hydrate_map_info_sections() {
     ensure_map_grid_settings(map_info_json_);
     map_grid_settings_ = MapGridSettings::from_json(&map_info_json_["map_grid_settings"]);
 
-    auto light_it = map_info_json_.find("map_light_data");
-    if (light_it != map_info_json_.end()) {
-        if (!light_it->is_object()) {
-            std::cerr << "[Assets] map_info.map_light_data expected to be an object. Removing invalid value.\n";
-            map_info_json_.erase(light_it);
-        } else {
-            nlohmann::json& D = *light_it;
-            if (!D.contains("radius"))    D["radius"] = 0;
-            if (!D.contains("intensity")) D["intensity"] = 255;
-            if (!D.contains("update_interval")) D["update_interval"] = 10;
-            if (!D.contains("mult"))            D["mult"] = 0.0;
-            if (!D.contains("fall_off"))        D["fall_off"] = 100;
-            utils::color::RangedColor base_range{{255,255},{255,255},{255,255},{255,255}};
-            if (auto parsed = utils::color::ranged_color_from_json(D.value("base_color", nlohmann::json{}))) {
-                base_range = *parsed;
-            }
-            D["base_color"] = utils::color::ranged_color_to_json(base_range);
-
-            if (!D.contains("keys") || !D["keys"].is_array() || D["keys"].empty()) {
-                D["keys"] = nlohmann::json::array();
-                D["keys"].push_back(nlohmann::json::array({ 0.0, D["base_color"] }));
-            } else {
-                auto& keys = D["keys"];
-                for (auto& entry : keys) {
-                    if (entry.is_array() && entry.size() >= 2) {
-                        if (auto parsed = utils::color::ranged_color_from_json(entry[1])) {
-                            entry[1] = utils::color::ranged_color_to_json(*parsed);
-                        }
-                    }
-                }
-            }
-            utils::color::RangedColor default_map_color{{0, 0}, {0, 0}, {0, 0}, {255, 255}};
-            utils::color::RangedColor map_color =
-                utils::color::ranged_color_from_json(D.value("map_color", nlohmann::json{}))
-                    .value_or(default_map_color);
-            map_color = utils::color::clamp_ranged_color(map_color);
-            D["map_color"] = utils::color::ranged_color_to_json(map_color);
-            D.erase("min_opacity");
-            D.erase("max_opacity");
-        }
-    }
 }
 
 void Assets::load_camera_settings_from_json() {
@@ -466,35 +423,6 @@ void Assets::set_movement_debug_visible(bool visible) {
     }
 }
 
-void Assets::apply_map_light_config() {
-    if (!scene) {
-        return;
-    }
-    if (!map_info_json_.is_object()) {
-        return;
-    }
-    auto it = map_info_json_.find("map_light_data");
-    if (it != map_info_json_.end() && it->is_object()) {
-
-    }
-}
-
-bool Assets::on_map_light_changed() {
-    apply_map_light_config();
-    save_map_info_json();
-    return true;
-}
-
-void Assets::set_update_map_light_enabled(bool enabled) {
-    if (scene) {
-
-    }
-}
-
-bool Assets::update_map_light_enabled() const {
-    return false;
-}
-
 Assets::~Assets() {
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
@@ -521,6 +449,9 @@ void Assets::set_rooms(std::vector<Room*> rooms) {
     rooms_ = std::move(rooms);
     mark_camera_dirty();
     notify_rooms_changed();
+}
+
+void Assets::ensure_light_textures_loaded(Asset* /*asset*/) {
 }
 
 std::vector<Room*>& Assets::rooms() {
@@ -665,7 +596,7 @@ void Assets::ensure_dev_controls() {
         dev_controls_->set_screen_dimensions(screen_width, screen_height);
         dev_controls_->set_rooms(&rooms_, rooms_generation_);
         dev_controls_->set_input(input);
-        dev_controls_->set_map_info(&map_info_json_, [this]() { return on_map_light_changed(); });
+        dev_controls_->set_map_info(&map_info_json_);
         dev_controls_->set_map_context(&map_info_json_, map_path_);
 
         suppress_dev_renderer_ = false;
@@ -861,39 +792,6 @@ void Assets::update(const Input& input)
     culled_debug_rects_.clear();
 
     maybe_rebuild_world_grid();
-
-    const std::uint64_t current_light_assets_version = light_assets_version_;
-    if (current_light_assets_version != last_seen_light_assets_version_) {
-        const bool static_changed = (last_static_light_assets_ != active_static_light_assets_);
-        const bool moving_changed = (last_moving_light_assets_ != active_moving_light_assets_);
-
-        if (static_changed) {
-            notify_light_map_static_assets_changed();
-        }
-
-        if (moving_changed) {
-            scratch_moving_light_lookup_.clear();
-            for (Asset* asset : active_moving_light_assets_) {
-                scratch_moving_light_lookup_.insert(asset);
-                if (active_moving_light_lookup_.find(asset) == active_moving_light_lookup_.end()) {
-                    notify_light_map_asset_moved(asset);
-                }
-            }
-
-            for (Asset* asset : active_moving_light_lookup_) {
-                if (scratch_moving_light_lookup_.find(asset) == scratch_moving_light_lookup_.end()) {
-                    notify_light_map_asset_moved(asset);
-                }
-            }
-
-            active_moving_light_lookup_.swap(scratch_moving_light_lookup_);
-            scratch_moving_light_lookup_.clear();
-        }
-
-        last_static_light_assets_ = active_static_light_assets_;
-        last_moving_light_assets_ = active_moving_light_assets_;
-        last_seen_light_assets_version_ = current_light_assets_version;
-    }
 
     update_audio_camera_metrics();
 
@@ -1242,16 +1140,6 @@ void Assets::set_force_high_quality_rendering(bool enable) {
     apply_camera_runtime_settings();
 }
 
-void Assets::set_render_dark_mask_enabled(bool enabled) {
-    if (render_dark_mask_enabled_ == enabled) {
-        return;
-    }
-    render_dark_mask_enabled_ = enabled;
-    if (scene) {
-        scene->set_dark_mask_enabled(enabled);
-    }
-}
-
 void Assets::set_render_suppressed(bool suppressed) {
     if (suppress_render_ == suppressed) {
         return;
@@ -1286,38 +1174,6 @@ void Assets::initialize_active_assets(SDL_Point ) {
         }
     }
 
-    std::vector<Asset*> new_light_assets;
-    std::vector<Asset*> new_static_lights;
-    std::vector<Asset*> new_moving_lights;
-    new_light_assets.reserve(active_assets.size());
-    new_static_lights.reserve(active_assets.size());
-    new_moving_lights.reserve(active_assets.size());
-    for (Asset* asset : active_assets) {
-        if (!asset || !asset->info) {
-            continue;
-        }
-        if (asset->info->light_sources.empty()) {
-            continue;
-        }
-        new_light_assets.push_back(asset);
-        if (asset->info->moving_asset) {
-            new_moving_lights.push_back(asset);
-        } else {
-            new_static_lights.push_back(asset);
-        }
-    }
-
-    const bool light_assets_changed =
-        active_light_assets_ != new_light_assets ||
-        active_static_light_assets_ != new_static_lights ||
-        active_moving_light_assets_ != new_moving_lights;
-
-    active_light_assets_        = std::move(new_light_assets);
-    active_static_light_assets_ = std::move(new_static_lights);
-    active_moving_light_assets_ = std::move(new_moving_lights);
-    if (light_assets_changed) {
-        ++light_assets_version_;
-    }
     active_assets_dirty_.store(false, std::memory_order_release);
     mark_non_player_update_buffer_dirty();
     needs_filtered_active_refresh_ = true;
@@ -1362,8 +1218,6 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     raw = world_grid_.create_asset_at_point(std::move(uptr));
     all.push_back(raw);
 
-    ensure_light_textures_loaded(raw);
-
     queue_asset_dimension_update(raw);
     mark_grid_dirty();
     mark_active_assets_dirty();
@@ -1378,27 +1232,6 @@ void Assets::rebuild_from_grid_state() {
     initialize_active_assets(camera_.get_screen_center());
     refresh_filtered_active_assets();
     mark_non_player_update_buffer_dirty();
-}
-
-void Assets::ensure_light_textures_loaded(Asset* asset) {
-    if (!asset || !asset->info || !renderer()) {
-        return;
-    }
-
-    auto* info = asset->info.get();
-    bool needs_regeneration = false;
-
-    for (std::size_t i = 0; i < info->light_sources.size(); ++i) {
-        if (!info->rebuild_light_texture(renderer(), i)) {
-            needs_regeneration = true;
-        }
-    }
-
-    if (needs_regeneration && !info->ensure_light_textures(renderer())) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[Assets] Failed to regenerate light textures for '%s'", info->name.c_str());
-    }
-
-    asset->mark_composite_dirty();
 }
 
 const std::vector<Asset*>& Assets::get_selected_assets() const {
@@ -1422,14 +1255,6 @@ Asset* Assets::get_hovered_asset() const {
         return dev_controls_->get_hovered_asset();
     }
     return nullptr;
-}
-
-void Assets::notify_light_map_asset_moved(const Asset* ) {
-
-}
-
-void Assets::notify_light_map_static_assets_changed() {
-
 }
 
 void Assets::track_asset_for_grid(Asset* asset) {
@@ -1585,51 +1410,6 @@ bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rec
 
     SDL_FRect combined = sprite_rect;
 
-    if (asset->info && !asset->info->light_sources.empty()) {
-        const int   base_w_px = std::max(1, asset->info->original_canvas_width);
-        const int   base_h_px = std::max(1, asset->info->original_canvas_height);
-        const float sx        = combined.w / static_cast<float>(base_w_px);
-        const float sy        = combined.h / static_cast<float>(base_h_px);
-
-        const float base_center_x = combined.x + combined.w * 0.5f;
-        const float base_center_y = combined.y + combined.h;
-
-        auto expand_to_include = [&](const SDL_FRect& r) {
-            const float left   = std::min(combined.x, r.x);
-            const float top    = std::min(combined.y, r.y);
-            const float right  = std::max(combined.x + combined.w, r.x + r.w);
-            const float bottom = std::max(combined.y + combined.h, r.y + r.h);
-            combined.x = left;
-            combined.y = top;
-            combined.w = std::max(0.0f, right - left);
-            combined.h = std::max(0.0f, bottom - top);
-};
-
-        for (const auto& light : asset->info->light_sources) {
-            const int raw_radius = light.radius;
-            if (raw_radius <= 0) {
-                continue;
-            }
-
-            const float off_x = static_cast<float>(asset->flipped ? -light.offset_x : light.offset_x);
-
-            const float cx = base_center_x + off_x * sx;
-            const float cy = base_center_y;
-
-            const float rx = std::max(1.0f, static_cast<float>(raw_radius) * sx);
-            const float ry = std::max(1.0f, static_cast<float>(raw_radius) * sy);
-
-            SDL_FRect light_rect{
-                cx - rx,
-                cy - ry,
-                rx * 2.0f,
-                ry * 2.0f
-};
-
-            expand_to_include(light_rect);
-        }
-    }
-
     out_rect = combined;
     return true;
 }
@@ -1663,34 +1443,17 @@ bool Assets::process_removals() {
 
         remove_asset_dimension_cache(asset);
 
-        const bool has_light_sources = asset->info && !asset->info->light_sources.empty();
-        const bool moving_light      = has_light_sources && asset->info->moving_asset;
-
-        render_pipeline::shading::ClearShadowStateFor(asset);
         asset->clear_grid_residency_cache();
-
-        if (has_light_sources) {
-            if (moving_light) {
-                notify_light_map_asset_moved(asset);
-            } else {
-                notify_light_map_static_assets_changed();
-            }
-        }
 
         (void)world_grid_.remove_asset(asset);
     }
 
     rebuild_all_assets_from_grid();
     active_assets.clear();
-    active_light_assets_.clear();
-    active_static_light_assets_.clear();
-    active_moving_light_assets_.clear();
     filtered_active_assets.clear();
     moving_assets_for_grid_.clear();
     pending_static_grid_registration_.clear();
     active_points_.clear();
-    active_moving_light_lookup_.clear();
-    scratch_moving_light_lookup_.clear();
     mark_grid_dirty();
     mark_active_assets_dirty();
     mark_non_player_update_buffer_dirty();
@@ -1834,11 +1597,6 @@ SDL_Renderer* Assets::renderer() const {
     return scene ? scene->get_renderer() : nullptr;
 }
 
-bool Assets::scene_light_map_only_mode() const {
-
-    return false;
-}
-
 std::optional<Asset::TilingInfo> Assets::compute_tiling_for_asset(const Asset* asset) const {
     if (!asset || !asset->info) {
         return std::nullopt;
@@ -1934,40 +1692,6 @@ bool Assets::contains_asset(const Asset* asset) const {
     return false;
 }
 
-LightMap* Assets::light_map() {
-    return nullptr;
-}
-
-const LightMap* Assets::light_map() const {
-    return nullptr;
-}
-
-void Assets::force_shaded_assets_rerender() {
-    std::unordered_set<Asset*> visited;
-    auto flush_asset = [&](Asset* asset) {
-        if (!asset || visited.count(asset) > 0) {
-            return;
-        }
-        visited.insert(asset);
-        asset->clear_render_caches();
-};
-
-    for (Asset* asset : all) {
-        flush_asset(asset);
-    }
-    for (Asset* asset : active_assets) {
-        flush_asset(asset);
-    }
-
-    active_assets_dirty_.store(true, std::memory_order_release);
-    mark_non_player_update_buffer_dirty();
-}
-
-bool Assets::apply_lighting_grid_subdivide(int subdivisions) {
-    (void)subdivisions;
-    return false;
-}
-
 void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persist_json) {
     MapGridSettings sanitized = settings;
     sanitized.clamp();
@@ -2004,23 +1728,12 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
     if (resolution_changed) {
         update_max_asset_dimensions();
         world_grid_.update_active_chunks(screen_world_rect(), 0);
-        force_shaded_assets_rerender();
         mark_grid_dirty();
     }
 }
 
 int Assets::map_grid_chunk_resolution() const {
     return std::max(0, map_grid_settings_.grid_resolution);
-}
-
-void Assets::set_map_light_panel_visible(bool visible) {
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        dev_controls_->set_map_light_panel_visible(visible);
-    }
-}
-
-bool Assets::is_map_light_panel_visible() const {
-    return dev_controls_ && dev_controls_->is_enabled() && dev_controls_->is_map_light_panel_visible();
 }
 
 void Assets::toggle_asset_library() {
@@ -2092,11 +1805,6 @@ void Assets::close_asset_info_editor() {
 
 bool Assets::is_asset_info_editor_open() const {
     return dev_controls_ && dev_controls_->is_enabled() && dev_controls_->is_asset_info_editor_open();
-}
-
-bool Assets::is_asset_info_lighting_section_expanded() const {
-
-    return dev_controls_ && dev_controls_->is_enabled() && dev_controls_->is_asset_info_lighting_section_expanded();
 }
 
 void Assets::clear_editor_selection() {
@@ -2301,32 +2009,6 @@ void Assets::rebuild_active_from_screen_grid() {
 
     visible_candidate_buffer_.clear();
 
-    std::vector<Asset*> new_light_assets;
-    std::vector<Asset*> new_static_lights;
-    std::vector<Asset*> new_moving_lights;
-    new_light_assets.reserve(active_assets.size());
-    new_static_lights.reserve(active_assets.size());
-    new_moving_lights.reserve(active_assets.size());
-
-    for (Asset* asset : active_assets) {
-        if (!asset || !asset->info) {
-            continue;
-        }
-        const auto& info = asset->info;
-        if (info->light_sources.empty()) {
-            continue;
-        }
-        new_light_assets.push_back(asset);
-        if (info->moving_asset) {
-            new_moving_lights.push_back(asset);
-        } else {
-            new_static_lights.push_back(asset);
-        }
-    }
-
-    active_light_assets_        = std::move(new_light_assets);
-    active_static_light_assets_ = std::move(new_static_lights);
-    active_moving_light_assets_ = std::move(new_moving_lights);
     active_assets_dirty_.store(false, std::memory_order_release);
     if (active_changed) {
         mark_non_player_update_buffer_dirty();

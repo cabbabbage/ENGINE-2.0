@@ -210,7 +210,6 @@ add_executable(engine_tests
     ENGINE/core/manifest/manifest_loader.cpp
     ENGINE/utils/log.cpp
     ENGINE/utils/cache_manager.cpp
-    ENGINE/utils/generate_faded_mask.cpp
     ENGINE/utils/loading_status_notifier.cpp
   )
 

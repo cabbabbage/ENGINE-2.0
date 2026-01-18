@@ -87,7 +87,6 @@ public:
     void open_asset_info_editor_for_asset(Asset* asset);
     void close_asset_info_editor();
     bool is_asset_info_editor_open() const;
-    bool is_asset_info_lighting_section_expanded() const;
     bool has_active_modal() const;
     void pulse_active_modal_header();
 
@@ -133,7 +132,6 @@ private:
     void ensure_area_anchor_spawn_entry(Room* room, const std::string& area_name);
     enum class BlockingPanel {
         Camera,
-        Lighting,
         MapLayers,
         AssetLibrary,
         Count,

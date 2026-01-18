@@ -13,7 +13,6 @@
 
 #include <nlohmann/json_fwd.hpp>
 
-#include "MapLightPanel.hpp"
 #include "other_settings_and_controls.hpp"
 #include "trail_editor_suite.hpp"
 #include "dev_mode/core/manifest_store.hpp"
@@ -54,7 +53,7 @@ public:
     void set_current_room(Room* room, bool force_refresh = false);
     void set_rooms(std::vector<Room*>* rooms, std::size_t generation = 0);
 
-    void set_map_info(nlohmann::json* map_info, MapLightPanel::SaveCallback on_save);
+    void set_map_info(nlohmann::json* map_info);
     void set_map_context(nlohmann::json* map_info, const std::string& map_path);
 
     Room* resolve_current_room(Room* detected_room);
@@ -84,7 +83,6 @@ public:
     void open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info);
     void close_asset_info_editor();
     bool is_asset_info_editor_open() const;
-    bool is_asset_info_lighting_section_expanded() const;
     std::uint64_t other_settings_state_version() const;
 
     void finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetInfo>& info);
@@ -96,8 +94,6 @@ public:
     void close_room_config();
     bool is_room_config_open() const;
 
-    void set_map_light_panel_visible(bool visible);
-    bool is_map_light_panel_visible() const;
 
     void focus_camera_on_asset(Asset* asset, double height_factor = 0.8, int duration_steps = 0);
 
@@ -130,7 +126,6 @@ private:
     void enter_map_editor_mode();
     void exit_map_editor_mode(bool focus_player, bool restore_previous_state);
     void handle_map_selection();
-    void toggle_map_light_panel();
     void toggle_camera_panel();
     void close_camera_panel();
     void toggle_image_effect_panel();
@@ -163,8 +158,6 @@ private:
     void apply_overlay_grid_resolution(int resolution, bool user_override, bool update_stepper, bool update_footer);
     void apply_grid_resolution_change(int resolution);
     void restore_filter_hidden_assets() const;
-    void apply_dark_mask_visibility();
-    bool lighting_section_forces_dark_mask() const;
     void mark_layout_dirty();
     void rebuild_layout_state();
     void update_header_and_footer_bounds();
@@ -217,8 +210,7 @@ private:
     std::unique_ptr<RoomEditor> room_editor_;
     std::unique_ptr<MapEditor> map_editor_;
     nlohmann::json* map_info_json_ = nullptr;
-    MapLightPanel::SaveCallback map_light_save_cb_;
-    MapLightPanel::SaveCallback map_grid_save_cb_;
+    std::function<bool()> map_grid_save_cb_;
     std::function<void()> map_grid_regen_cb_;
     std::unique_ptr<MapModeUI> map_mode_ui_;
     std::unique_ptr<CameraUIPanel> camera_panel_;

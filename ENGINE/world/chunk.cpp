@@ -36,4 +36,4 @@ void Chunk::releaseTileTextures() {
     }
     tiles.clear();
 }
-
+}

@@ -310,12 +310,6 @@ void MainApp::game_loop() {
 
         vibble::log::info("[MainApp] Game loop started.");
 
-        if (game_assets_) {
-                if (LightMap* map = game_assets_->light_map()) {
-                        map->present_static_previews(renderer_);
-                }
-        }
-
         while (!quit) {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
 
@@ -805,9 +799,8 @@ int main(int argc, char* argv[]) {
 
         vibble::RebuildQueueCoordinator rebuild_queue;
         if (rebuild_cache) {
-                vibble::log::info("[Main] -r detected; queueing full asset/light rebuild.");
+                vibble::log::info("[Main] -r detected; queueing full asset rebuild.");
                 rebuild_queue.request_full_asset_rebuild();
-                rebuild_queue.request_full_light_rebuild();
         }
 
         if (!rebuild_queue.validate_manifest_cache()) {
@@ -823,17 +816,6 @@ int main(int argc, char* argv[]) {
                 }
         } else {
                 vibble::log::info("[Main] No queued asset rebuilds detected.");
-        }
-
-        if (rebuild_queue.has_pending_light_work()) {
-                vibble::log::info("[Main] Processing queued light rebuilds via light_tool.py...");
-                if (rebuild_queue.run_light_tool()) {
-                        vibble::log::info("[Main] Light rebuilds completed.");
-                } else {
-                        vibble::log::warn("[Main] light_tool.py reported an error.");
-                }
-        } else {
-                vibble::log::info("[Main] No queued light rebuilds detected.");
         }
 
         if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {

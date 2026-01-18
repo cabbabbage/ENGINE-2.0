@@ -166,31 +166,15 @@ bool Animation::rebuild_frame(int frame_index,
             apply_scale_mode(bg_tex, info);
         }
 
-        SDL_Texture* mask_tex = nullptr;
-        int mask_w = 0, mask_h = 0;
-        if (info.has_shading) {
-            mask_tex = load_texture_from_path(renderer, paths.mask / (std::to_string(idx) + ".png"), mask_w, mask_h);
-            if (mask_tex) {
-                apply_scale_mode(mask_tex, info);
-            }
-            if (!mask_tex) {
-                success = false;
-            }
-        }
-
         destroy_texture(cache_entry.textures[variant_idx]);
         destroy_texture(cache_entry.foreground_textures[variant_idx]);
         destroy_texture(cache_entry.background_textures[variant_idx]);
-        destroy_texture(cache_entry.mask_textures[variant_idx]);
 
         cache_entry.textures[variant_idx] = base_tex;
         cache_entry.widths[variant_idx] = base_w;
         cache_entry.heights[variant_idx] = base_h;
         cache_entry.foreground_textures[variant_idx] = fg_tex;
         cache_entry.background_textures[variant_idx] = bg_tex;
-        cache_entry.mask_textures[variant_idx] = mask_tex;
-        cache_entry.mask_widths[variant_idx] = mask_w;
-        cache_entry.mask_heights[variant_idx] = mask_h;
     }
 
     for (auto& path : movement_paths_) {
@@ -206,7 +190,6 @@ bool Animation::rebuild_frame(int frame_index,
             variant.base_texture = cache_entry.textures[v];
             variant.foreground_texture = (v < cache_entry.foreground_textures.size()) ? cache_entry.foreground_textures[v] : nullptr;
             variant.background_texture = (v < cache_entry.background_textures.size()) ? cache_entry.background_textures[v] : nullptr;
-            variant.shadow_mask_texture = (v < cache_entry.mask_textures.size()) ? cache_entry.mask_textures[v] : nullptr;
             frame.variants.push_back(variant);
         }
     }
@@ -254,12 +237,6 @@ void Animation::clear_texture_cache() {
             if (tex) {
                 SDL_DestroyTexture(tex);
                 tex = nullptr;
-            }
-        }
-        for (SDL_Texture*& mask_tex : cache_entry.mask_textures) {
-            if (mask_tex) {
-                SDL_DestroyTexture(mask_tex);
-                mask_tex = nullptr;
             }
         }
     }
@@ -415,8 +392,6 @@ void Animation::rebuild_child_start_events_from_timelines() {
 }
 
 void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches,
-                                      std::vector<SDL_Texture*> base_frames,
-                                      std::vector<SDL_Texture*> base_masks,
                                       std::vector<float> variant_steps) {
     clear_texture_cache();
     frame_cache_   = std::move(caches);
@@ -454,8 +429,6 @@ void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches,
                     if (v < cache.background_textures.size()) {
                         variant.background_texture = cache.background_textures[v];
                     }
-                    if (v < cache.mask_textures.size()) variant.shadow_mask_texture = cache.mask_textures[v];
-
                     frame.variants.push_back(variant);
                 }
             }
@@ -578,16 +551,6 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
                 dst_cache.background_textures[variant_idx] = dst_bg;
             }
 
-            SDL_Texture* src_mask = (variant_idx < src_cache.mask_textures.size()) ? src_cache.mask_textures[variant_idx] : nullptr;
-            if (src_mask) {
-                int mask_w = src_cache.mask_widths[variant_idx];
-                int mask_h = src_cache.mask_heights[variant_idx];
-
-                SDL_Texture* dst_mask = clone_texture(src_mask, mask_w, mask_h, flip_flags, &mask_w, &mask_h);
-                dst_cache.mask_textures[variant_idx] = dst_mask;
-                dst_cache.mask_widths[variant_idx] = mask_w;
-                dst_cache.mask_heights[variant_idx] = mask_h;
-            }
         }
 
         frame_cache_.push_back(std::move(dst_cache));

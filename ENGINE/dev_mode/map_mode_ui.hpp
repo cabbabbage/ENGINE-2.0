@@ -17,7 +17,6 @@ namespace devmode::core {
 class ManifestStore;
 }
 class Input;
-class MapLightPanel;
 class MapLayersPreviewPanel;
 class MapLayersPanel;
 class MapLayerControlsDisplay;
@@ -58,16 +57,8 @@ public:
     void render(SDL_Renderer* renderer) const;
 
     void open_layers_panel();
-    void open_light_panel();
-    void close_light_panel();
-    void toggle_light_panel();
     void toggle_layers_panel();
     void close_all_panels();
-
-    bool is_light_panel_visible() const;
-    using LightSaveCallback = std::function<bool()>;
-
-    void set_light_save_callback(LightSaveCallback cb);
 
     void set_map_mode_active(bool active);
 
@@ -114,7 +105,6 @@ private:
     SDL_Point event_point(const SDL_Event& e) const;
     HeaderButtonConfig* find_button(HeaderMode mode, const std::string& id);
     bool ensure_panel_unlocked(DockableCollapsible* panel, const char* panel_name) const;
-    void ensure_light_and_shading_positions();
     void ensure_room_configurator();
     void open_room_configuration(const std::string& room_key, SlidingPanel return_panel = SlidingPanel::RoomsList);
     void close_room_configuration(bool show_rooms_list = false);
@@ -144,7 +134,6 @@ private:
     SDL_Rect sliding_area_bounds_{0, 0, 0, 0};
 
     devmode::core::ManifestStore* manifest_store_ = nullptr;
-    std::unique_ptr<MapLightPanel> light_panel_;
     std::unique_ptr<MapLayersPreviewPanel> layers_preview_panel_;
     std::shared_ptr<MapLayersController> layers_controller_;
     std::unique_ptr<SlidingWindowContainer> room_config_container_;
@@ -167,10 +156,7 @@ private:
     int sliding_header_request_count_ = 0;
     bool dev_sliding_headers_hidden_ = false;
     std::vector<DockableCollapsible*> floating_panels_;
-    LightSaveCallback light_save_callback_;
     std::function<void(HeaderMode)> on_mode_changed_;
-    bool light_panel_centered_ = false;
-    bool last_lights_visible_ = false;
     std::unique_ptr<RoomConfigurator> room_configurator_;
     std::string active_room_config_key_;
     SlidingPanel active_sliding_panel_ = SlidingPanel::None;

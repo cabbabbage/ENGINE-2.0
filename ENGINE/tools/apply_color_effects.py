@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 VIBBLE 2D Game Engine
-Apply color and lighting effects to a single image.
+Apply color effects to a single image.
 
 Usage:
   python apply_color_effects.py <img_path> <output_path> <layer_type>

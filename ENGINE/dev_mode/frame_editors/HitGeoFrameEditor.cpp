@@ -4,10 +4,17 @@ namespace devmode::frame_editors {
 
 void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     context_ = context;
+    selection_state_ = context.selection_state;
+    if (selection_state_) {
+        selection_state_->reset();
+    }
 }
 
 void HitGeoFrameEditor::end() {
-    selection_.reset();
+    if (selection_state_) {
+        selection_state_->reset();
+        selection_state_ = nullptr;
+    }
 }
 
 bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {

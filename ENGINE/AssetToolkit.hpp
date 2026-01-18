@@ -15,6 +15,7 @@ namespace vibble {
 class GPUAccelerator;
 class AnimationProcessor;
 class CacheManager;
+class ImageProcessor;
 
 // Image data structure
 struct ImageData {
@@ -172,6 +173,11 @@ public:
     // Basic image manipulation
     bool resizeImage(ImageData& image, int new_width, int new_height);
     bool cropImage(ImageData& image, int left, int top, int right, int bottom);
+
+    // Image effects
+    bool applyEffects(ImageData& image, const EffectParams& params);
+    bool applyEffectsToFile(const std::string& input_path, const std::string& output_path,
+                          const EffectParams& params, bool is_foreground);
 
     // File system utilities
     bool ensureDirectoryExists(const std::string& path);

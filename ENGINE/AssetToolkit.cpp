@@ -1,4 +1,5 @@
 #include "AssetToolkit.hpp"
+#include "ImageProcessing.hpp"
 #include "utils/log.hpp"
 #include <fstream>
 #include <sstream>
@@ -663,6 +664,72 @@ void AssetToolkit::logWarning(const std::string& message) const {
 // Log error message
 void AssetToolkit::logError(const std::string& message) const {
     vibble::log::error("[AssetToolkit] " + message);
+}
+
+// Apply effects to image data
+bool AssetToolkit::applyEffects(ImageData& image, const EffectParams& params) {
+    if (!initialized_) {
+        setLastError("AssetToolkit not initialized");
+        return false;
+    }
+
+    if (!validateImageData(image)) {
+        setLastError("Invalid image data");
+        return false;
+    }
+
+    if (!params.validate()) {
+        setLastError("Invalid effect parameters");
+        return false;
+    }
+
+    try {
+        ImageProcessor::applyEffects(image, params);
+        logInfo("Applied effects to image");
+        return true;
+    } catch (const std::exception& e) {
+        setLastError("Failed to apply effects: " + std::string(e.what()));
+        return false;
+    }
+}
+
+// Apply effects to file
+bool AssetToolkit::applyEffectsToFile(const std::string& input_path, const std::string& output_path,
+                                    const EffectParams& params, bool is_foreground) {
+    if (!initialized_) {
+        setLastError("AssetToolkit not initialized");
+        return false;
+    }
+
+    if (!validateFilePath(input_path) || !validateFilePath(output_path)) {
+        setLastError("Invalid file paths");
+        return false;
+    }
+
+    try {
+        ImageData image;
+        if (!loadImage(input_path, image)) {
+            return false; // Error already set by loadImage
+        }
+
+        EffectParams effect_params = params;
+        effect_params.is_foreground = is_foreground;
+
+        if (!applyEffects(image, effect_params)) {
+            return false; // Error already set by applyEffects
+        }
+
+        if (!saveImage(image, output_path)) {
+            return false; // Error already set by saveImage
+        }
+
+        logInfo("Applied effects to file: " + input_path + " -> " + output_path);
+        return true;
+
+    } catch (const std::exception& e) {
+        setLastError("Failed to apply effects to file: " + std::string(e.what()));
+        return false;
+    }
 }
 
 } // namespace vibble

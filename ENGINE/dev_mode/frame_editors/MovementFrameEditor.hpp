@@ -21,8 +21,8 @@ public:
 
 private:
     FrameEditorContext context_{};
-    SelectionState selection_{};
-    AxisAdjuster axis_adjuster_;
+    SelectionState* selection_state_ = nullptr;
+    AxisAdjuster* axis_adjuster_ = nullptr;
     bool wants_close_ = false;
 };
 

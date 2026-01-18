@@ -4,11 +4,23 @@ namespace devmode::frame_editors {
 
 void MovementFrameEditor::begin(const FrameEditorContext& context) {
     context_ = context;
+    selection_state_ = context.selection_state;
+    axis_adjuster_ = context.axis_adjuster;
+    if (selection_state_) {
+        selection_state_->reset();
+    }
+    if (axis_adjuster_) {
+        axis_adjuster_->reset_axis(AdjustmentAxis::X);
+    }
 }
 
 void MovementFrameEditor::end() {
     wants_close_ = false;
-    selection_.reset();
+    if (selection_state_) {
+        selection_state_->reset();
+        selection_state_ = nullptr;
+    }
+    axis_adjuster_ = nullptr;
 }
 
 bool MovementFrameEditor::handle_event(const SDL_Event& e) {

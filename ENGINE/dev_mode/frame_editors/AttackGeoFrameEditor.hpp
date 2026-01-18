@@ -17,7 +17,7 @@ public:
 
 private:
     FrameEditorContext context_{};
-    SelectionState selection_{};
+    SelectionState* selection_state_ = nullptr;
 };
 
 }  // namespace devmode::frame_editors

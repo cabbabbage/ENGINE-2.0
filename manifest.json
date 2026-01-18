@@ -1504,9 +1504,9 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": 16,
-                  "dy": -40,
-                  "dz": 24,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 120,
                   "visible": true
                 }
               ],
@@ -3678,16 +3678,16 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 1000,
+          "camera_height_px": 513,
           "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 60.0,
+          "camera_tilt_deg": 45.0,
           "camera_y_distance_px": 0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 101,

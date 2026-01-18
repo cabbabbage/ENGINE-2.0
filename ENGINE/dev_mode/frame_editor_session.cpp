@@ -23,6 +23,7 @@ FrameEditorSession::Mode mode_for_launch(FrameEditorLaunchMode launch_mode) {
     switch (launch_mode) {
         case FrameEditorLaunchMode::Movement: return FrameEditorSession::Mode::Movement;
         case FrameEditorLaunchMode::SyncChildren: return FrameEditorSession::Mode::SyncChildren;
+        case FrameEditorLaunchMode::AsyncChildren: return FrameEditorSession::Mode::AsyncChildren;
         case FrameEditorLaunchMode::AttackGeometry: return FrameEditorSession::Mode::AttackGeometry;
         case FrameEditorLaunchMode::HitGeometry: return FrameEditorSession::Mode::HitGeometry;
     }
@@ -33,7 +34,7 @@ FrameEditorLaunchMode launch_mode_for_mode(FrameEditorSession::Mode mode) {
     switch (mode) {
         case FrameEditorSession::Mode::Movement: return FrameEditorLaunchMode::Movement;
         case FrameEditorSession::Mode::SyncChildren: return FrameEditorLaunchMode::SyncChildren;
-        case FrameEditorSession::Mode::AsyncChildren: return FrameEditorLaunchMode::SyncChildren;
+        case FrameEditorSession::Mode::AsyncChildren: return FrameEditorLaunchMode::AsyncChildren;
         case FrameEditorSession::Mode::AttackGeometry: return FrameEditorLaunchMode::AttackGeometry;
         case FrameEditorSession::Mode::HitGeometry: return FrameEditorLaunchMode::HitGeometry;
     }
@@ -203,10 +204,20 @@ void FrameEditorSession::set_snap_resolution(int r) {
 }
 
 bool FrameEditorSession::should_render_asset(const Asset* asset) const {
-    if (!active_ || !asset || asset != target_) {
+    if (!active_ || !asset || !target_) {
         return false;
     }
-    return true;
+    if (asset == target_) {
+        return true;
+    }
+    const Asset* current = asset->parent;
+    while (current) {
+        if (current == target_) {
+            return true;
+        }
+        current = current->parent;
+    }
+    return false;
 }
 
 void FrameEditorSession::create_and_begin_editor() {
@@ -307,4 +318,8 @@ void FrameEditorSession::enforce_camera_locks(WarpedScreenGrid& cam) {
     if (tilt_locked_) {
         cam.set_tilt_override(locked_tilt_deg_);
     }
+}
+
+std::unique_ptr<devmode::frame_editors::FrameEditorBase> FrameEditorSession::create_editor(Mode mode) {
+    return ::create_editor(mode);
 }

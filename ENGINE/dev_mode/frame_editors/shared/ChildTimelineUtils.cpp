@@ -1,4 +1,4 @@
-#include "shared/ChildTimelineUtils.hpp"
+#include "dev_mode/frame_editors/shared/ChildTimelineUtils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -163,7 +163,7 @@ nlohmann::json build_child_timelines_payload(
         return normalized;
     }
 
-    std::unordered_map<std::string, nlohmann::json> by_asset;
+    std::unordered_map<std::string, std::string> animation_overrides;
     auto it = existing_payload.find("child_timelines");
     if (it != existing_payload.end() && it->is_array()) {
         for (const auto& entry : *it) {
@@ -180,9 +180,10 @@ nlohmann::json build_child_timelines_payload(
             if (asset.empty()) {
                 continue;
             }
-            if (by_asset.find(asset) == by_asset.end()) {
-                by_asset.emplace(asset, entry);
+            if (!entry.contains("animation") || !entry["animation"].is_string()) {
+                continue;
             }
+            animation_overrides.emplace(asset, entry["animation"].get<std::string>());
         }
     }
 
@@ -190,16 +191,11 @@ nlohmann::json build_child_timelines_payload(
     for (std::size_t child_idx = 0; child_idx < child_assets.size(); ++child_idx) {
         const std::string& asset_name = child_assets[child_idx];
         nlohmann::json entry = nlohmann::json::object();
-        auto existing = by_asset.find(asset_name);
-        if (existing != by_asset.end()) {
-            entry = existing->second;
-        }
         entry["child"] = static_cast<int>(child_idx);
         entry["child_index"] = static_cast<int>(child_idx);
         entry["asset"] = asset_name;
-        if (!entry.contains("animation") || !entry["animation"].is_string()) {
-            entry["animation"] = std::string{};
-        }
+        auto animation_override = animation_overrides.find(asset_name);
+        entry["animation"] = (animation_override != animation_overrides.end()) ? animation_override->second : std::string{};
         const bool is_static = (child_idx < child_modes.size()) ? child_modes[child_idx] != AnimationChildMode::Async : true;
         entry["mode"] = is_static ? "static" : "async";
         if (is_static) {
@@ -225,24 +221,7 @@ nlohmann::json build_child_timelines_payload(
             if (has_start && child_idx < async_start_times.size()) {
                 start_time = async_start_times[child_idx];
             }
-            if (existing != by_asset.end()) {
-                const auto& src = existing->second;
-                if (src.contains("start_frame")) {
-                    start_frame = read_int(src["start_frame"], start_frame);
-                    has_start = true;
-                } else if (src.contains("start")) {
-                    start_frame = read_int(src["start"], start_frame);
-                    has_start = true;
-                }
-                if (src.contains("start_time")) {
-                    start_time = read_float(src["start_time"], start_time);
-                    has_start = true;
-                }
-            }
-            if (existing != by_asset.end()) {
-                // reuse payload for async timelines if it already exists
-                entry["frames"] = existing->second.value("frames", nlohmann::json::array());
-            } else if (child_idx < async_timelines_by_child.size()) {
+            if (child_idx < async_timelines_by_child.size()) {
                 nlohmann::json frames = nlohmann::json::array();
                 for (const auto& sample : async_timelines_by_child[child_idx]) {
                     ChildFrameSample entry_sample = sample;

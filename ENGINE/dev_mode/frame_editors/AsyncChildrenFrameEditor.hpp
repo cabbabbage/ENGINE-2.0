@@ -5,6 +5,7 @@
 
 #include "dev_mode/frame_editors/FrameEditorBase.hpp"
 #include "animation_update/child_attachment_controller.hpp"
+#include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "asset/animation_child_data.hpp"
 #include "shared/AxisAdjuster.hpp"
 #include "shared/ChildTimelineUtils.hpp"

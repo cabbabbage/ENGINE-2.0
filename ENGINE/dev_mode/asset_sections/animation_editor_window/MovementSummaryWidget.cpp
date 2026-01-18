@@ -32,6 +32,7 @@ namespace {
 
 const int kButtonHeight = DMButton::height();
 const int kButtonWidth = 160;
+constexpr std::size_t kModeButtonCount = 5;
 
 using animation_editor::strings::trim_copy;
 
@@ -207,13 +208,13 @@ void MovementSummaryWidget::set_bounds(const SDL_Rect& bounds) {
             button_rect_ = SDL_Rect{x, y, width, kButtonHeight};
         } else {
             const int gap = DMSpacing::small_gap();
-            const int available = std::max(0, bounds_.w - padding * 2 - gap * 3);
-            const int width = std::max(kButtonWidth, available / 4);
+            const int available = std::max(0, bounds_.w - padding * 2 - gap * static_cast<int>(kModeButtonCount - 1));
+            const int width = std::clamp(available / static_cast<int>(kModeButtonCount), 90, kButtonWidth);
             const int height = kButtonHeight;
             const int y = bounds_.y + bounds_.h - padding - height;
-            for (int i = 0; i < 4; ++i) {
-                const int x = bounds_.x + padding + i * (width + gap);
-                mode_button_rects_[static_cast<std::size_t>(i)] = SDL_Rect{x, y, width, height};
+            for (std::size_t i = 0; i < kModeButtonCount; ++i) {
+                const int x = bounds_.x + padding + static_cast<int>(i) * (width + gap);
+                mode_button_rects_[i] = SDL_Rect{x, y, width, height};
             }
             button_rect_ = SDL_Rect{0, 0, 0, 0};
         }
@@ -316,13 +317,13 @@ void MovementSummaryWidget::render(SDL_Renderer* renderer) const {
             int label_y = button_rect_.y + (button_rect_.h - button_style.label.font_size) / 2;
             render_summary_label(renderer, button_text, label_x, label_y, button_style.text);
         } else {
-            static const char* kLabels[4] = {"Movement", "Children", "Attack Geo", "Hit Geo"};
-            for (int i = 0; i < 4; ++i) {
-                const SDL_Rect rect = mode_button_rects_[static_cast<std::size_t>(i)];
+            static const char* kLabels[5] = {"Movement", "Sync Child", "Async Child", "Attack Geo", "Hit Geo"};
+            for (std::size_t i = 0; i < kModeButtonCount; ++i) {
+                const SDL_Rect rect = mode_button_rects_[i];
                 SDL_Color button_color = button_style.bg;
-                if (mode_button_pressed_[static_cast<std::size_t>(i)]) {
+                if (mode_button_pressed_[i]) {
                     button_color = button_style.press_bg;
-                } else if (mode_button_hovered_[static_cast<std::size_t>(i)]) {
+                } else if (mode_button_hovered_[i]) {
                     button_color = button_style.hover_bg;
                 }
                 const int button_radius = std::min(DMStyles::CornerRadius(), std::min(rect.w, rect.h) / 2);
@@ -393,8 +394,9 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             bool handled = false;
             handled = handle_mode_button_event(FrameEditorLaunchMode::Movement, 0, p, true) || handled;
             handled = handle_mode_button_event(FrameEditorLaunchMode::SyncChildren, 1, p, true) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 2, p, true) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 3, p, true) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::AsyncChildren, 2, p, true) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 3, p, true) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 4, p, true) || handled;
             return handled;
         }
         case SDL_MOUSEBUTTONUP: {
@@ -421,8 +423,9 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             bool handled = false;
             handled = handle_mode_button_event(FrameEditorLaunchMode::Movement, 0, p, false) || handled;
             handled = handle_mode_button_event(FrameEditorLaunchMode::SyncChildren, 1, p, false) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 2, p, false) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 3, p, false) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::AsyncChildren, 2, p, false) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 3, p, false) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 4, p, false) || handled;
             return handled;
         }
         default:
@@ -475,4 +478,3 @@ void MovementSummaryWidget::apply_resolved_totals(const ResolvedMovement& resolv
 }
 
 }
-

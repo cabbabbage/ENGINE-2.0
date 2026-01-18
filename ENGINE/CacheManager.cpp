@@ -508,7 +508,7 @@ bool CacheManager::compareFileTimestamps(const std::string& source_path, const s
 
         return source_time > cache_time;
     } catch (const std::exception& e) {
-        vibble::log::warn("[CacheManager] Failed to compare file timestamps: " + e.what());
+        vibble::log::warn("[CacheManager] Failed to compare file timestamps: " + std::string(e.what()));
         return false;
     }
 }

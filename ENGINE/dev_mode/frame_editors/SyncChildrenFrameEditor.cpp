@@ -10,6 +10,7 @@
 #include "asset/Asset.hpp"
 #include "asset/animation.hpp"
 #include "asset/animation_frame.hpp"
+#include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "dev_mode/dm_styles.hpp"
 #include "render/warped_screen_grid.hpp"
 
@@ -227,12 +228,10 @@ void SyncChildrenFrameEditor::populate_child_data() {
     }
 
     const auto& timelines = animation.child_timelines();
-    for (const auto& descriptor : timelines) {
-        if (descriptor.child_index < 0 ||
-            descriptor.child_index >= static_cast<int>(child_assets_.size())) {
-            continue;
-        }
-        const std::size_t idx = static_cast<std::size_t>(descriptor.child_index);
+    for (std::size_t child_idx = 0; child_idx < timelines.size(); ++child_idx) {
+        const auto& descriptor = timelines[child_idx];
+        const std::size_t idx = child_idx;
+        if (idx >= child_assets_.size()) continue;
         child_modes_[idx] = descriptor.mode;
         if (descriptor.mode == AnimationChildMode::Async) {
             auto& timeline = async_timelines_by_child_[idx];

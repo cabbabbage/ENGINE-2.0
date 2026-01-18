@@ -10,12 +10,9 @@
 #include "shared/FrameEditorContext.hpp"
 #include "shared/ManifestTransaction.hpp"
 #include "shared/SelectionState.hpp"
+#include "dev_mode/widgets.hpp"
 
 namespace devmode::frame_editors {
-
-class DMButton;
-class DMCheckbox;
-class DMTextBox;
 
 class MovementFrameEditor : public FrameEditorBase {
 public:

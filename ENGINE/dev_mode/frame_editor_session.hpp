@@ -7,7 +7,9 @@
 #include <optional>
 #include <string>
 
+#include "dev_mode/frame_editors/shared/FrameEditorContext.hpp"
 #include "dev_mode/frame_editors/shared/AxisAdjuster.hpp"
+#include "dev_mode/frame_editors/FrameEditorBase.hpp"
 
 class Assets;
 class Asset;
@@ -26,7 +28,6 @@ class PreviewProvider;
 
 namespace devmode::frame_editors {
 class FrameEditorBase;
-struct FrameEditorContext;
 }
 
 class FrameEditorSession {

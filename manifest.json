@@ -1261,6 +1261,8 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [
@@ -1406,6 +1408,8 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [
@@ -1547,6 +1551,8 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [
@@ -1665,6 +1671,8 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [
@@ -1856,6 +1864,8 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [
@@ -2067,6 +2077,8 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [

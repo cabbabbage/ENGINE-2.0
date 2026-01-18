@@ -38,15 +38,15 @@ private:
     std::string cache_path_;
     nlohmann::json manifest_data_;
     nlohmann::json cache_data_;
-    std::string last_error_;
+    mutable std::string last_error_;
 
     // Helper methods
     bool loadManifest();
     bool parseManifestEffects();
     EffectParams extractEffectBlock(const std::string& block_name);
     std::string getDefaultCachePath() const;
-    void setLastError(const std::string& error);
-    void clearLastError();
+    void setLastError(const std::string& error) const;
+    void clearLastError() const;
 };
 
 // Animation frame information

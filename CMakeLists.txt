@@ -52,6 +52,7 @@ file(GLOB_RECURSE ENGINE_SRC CONFIGURE_DEPENDS
 )
 
 list(REMOVE_DUPLICATES ENGINE_SRC)
+list(REMOVE_ITEM ENGINE_SRC "${CMAKE_SOURCE_DIR}/ENGINE/dev_mode/frame_editor_session_child_timelines.cpp")
 
 add_executable(engine ${ENGINE_SRC})
 
@@ -199,7 +200,6 @@ add_executable(engine_tests
     ENGINE/asset/animation_cloner.cpp
     ENGINE/animation_update/child_attachment_controller.cpp
     ENGINE/animation_update/attack_validation.cpp
-    ENGINE/dev_mode/frame_editor_session_child_timelines.cpp
     ENGINE/dev_mode/asset_sections/animation_editor_window/frame_editor/children/FrameChildrenEditor.cpp
     ENGINE/dev_mode/asset_sections/animation_editor_window/AnimationDocument.cpp
     ENGINE/dev_mode/dm_styles.cpp

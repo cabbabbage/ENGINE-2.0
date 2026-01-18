@@ -41,6 +41,7 @@ class ManifestStore;
 enum class FrameEditorLaunchMode {
     Movement,
     SyncChildren,
+    AsyncChildren,
     AttackGeometry,
     HitGeometry
 };
@@ -121,12 +122,6 @@ public:
 
     void focus_camera_on_asset(Asset* a, double height_factor = 0.8, int duration_steps = 25);
 
-    enum class FrameEditorLaunchMode {
-        Movement,
-        SyncChildren,
-        AttackGeometry,
-        HitGeometry
-    };
     void begin_frame_editor_session(Asset* asset,
                                     std::shared_ptr<animation_editor::AnimationDocument> document,
                                     std::shared_ptr<animation_editor::PreviewProvider> preview,

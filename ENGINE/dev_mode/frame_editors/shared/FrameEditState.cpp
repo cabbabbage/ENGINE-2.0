@@ -86,8 +86,9 @@ void upsert_hit_box(MovementFrame& frame, const std::string& type, const nlohman
     if (box.is_empty()) {
         return;
     }
-    if (auto* existing = frame.hit.find_box(box.type)) {
-        *existing = box;
+    auto it = std::find_if(frame.hit.boxes.begin(), frame.hit.boxes.end(), [&](const auto& b) { return b.type == box.type; });
+    if (it != frame.hit.boxes.end()) {
+        *it = box;
     } else {
         frame.hit.boxes.push_back(box);
     }
@@ -125,7 +126,7 @@ void append_attack_vector(MovementFrame& frame, const std::string& type, const n
     } else {
         return;
     }
-    frame.attack.add_vector(vec.type, vec);
+    frame.attack.add_vector(vec);
 }
 
 }  // namespace
@@ -352,7 +353,8 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
         auto preserved_needs_rebuild = existing.contains("needs_rebuild") ? existing["needs_rebuild"] : nlohmann::json();
 
         for (const char* type : kDamageTypeNames) {
-            const auto* box = f.hit.find_box(type);
+            auto it = std::find_if(f.hit.boxes.begin(), f.hit.boxes.end(), [&](const auto& b) { return b.type == type; });
+            const auto* box = (it != f.hit.boxes.end()) ? &*it : nullptr;
             if (!box || box->is_empty() || !std::isfinite(box->center_x) || !std::isfinite(box->center_y) ||
                 !std::isfinite(box->half_width) || !std::isfinite(box->half_height) || !std::isfinite(box->rotation_degrees)) {
                 existing[type] = nullptr;

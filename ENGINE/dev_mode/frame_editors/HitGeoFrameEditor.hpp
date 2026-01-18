@@ -12,11 +12,11 @@
 #include "shared/ManifestTransaction.hpp"
 #include "shared/SelectionState.hpp"
 
-namespace devmode::frame_editors {
-
 class DMButton;
 class DMDropdown;
 class DMTextBox;
+
+namespace devmode::frame_editors {
 
 class HitGeoFrameEditor : public FrameEditorBase {
 public:

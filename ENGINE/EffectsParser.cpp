@@ -242,18 +242,15 @@ std::string EffectsParser::getDefaultCachePath() const {
 }
 
 // Set last error
-void EffectsParser::setLastError(const std::string& error) {
+void EffectsParser::setLastError(const std::string& error) const {
     last_error_ = error;
     vibble::log::error("[EffectsParser] " + error);
 }
 
-// Get last error
-std::string EffectsParser::getLastError() const {
-    return last_error_;
-}
+//// Get last error is inline in header
 
 // Clear last error
-void EffectsParser::clearLastError() {
+void EffectsParser::clearLastError() const {
     last_error_.clear();
 }
 

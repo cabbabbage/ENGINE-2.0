@@ -8,6 +8,7 @@
 
 #include "FrameEditorBase.hpp"
 #include "animation_update/child_attachment_controller.hpp"
+#include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "animation_update/animation_update.hpp"
 #include "asset/animation_child_data.hpp"
 #include "shared/AxisAdjuster.hpp"
@@ -20,7 +21,7 @@ namespace devmode::frame_editors {
 
 class SyncChildrenFrameEditor : public FrameEditorBase {
 public:
-    SyncChildrenFrameEditor() : axis_adjuster_(&selection_) {}
+    SyncChildrenFrameEditor() = default;
 
     void begin(const FrameEditorContext& context) override;
     void end() override;

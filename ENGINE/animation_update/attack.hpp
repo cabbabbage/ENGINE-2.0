@@ -8,6 +8,7 @@
 namespace animation_update {
 
 struct AttackVector {
+    std::string type;
     float start_x = 0.0f;
     float start_y = 0.0f;
     float start_z = 0.0f;

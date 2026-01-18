@@ -402,6 +402,8 @@ void FrameEditorSession::begin(Assets* assets,
     scroll_offset_ = 0;
     dragging_scrollbar_thumb_ = false;
     child_dropdown_options_cache_.clear();
+    child_dropdown_index_map_.clear();
+    child_dropdown_index_map_.clear();
     animation_dropdown_options_cache_.clear();
     last_applied_show_asset_state_ = show_animation_;
     child_hidden_cache_.clear();
@@ -545,6 +547,7 @@ void FrameEditorSession::load_animation_data(const std::string& animation_id) {
     dragging_scrollbar_thumb_ = false;
     dragging_scrollbar_thumb_async_ = false;
     child_dropdown_options_cache_.clear();
+    child_dropdown_index_map_.clear();
     animation_dropdown_options_cache_.clear();
     selected_attack_vector_index_ = -1;
     clamp_attack_selection();
@@ -1334,14 +1337,10 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
 
     if (is_children_mode(mode_)) {
         if (dd_child_select_ && dd_child_select_->handle_event(e)) {
-            int current = dd_child_select_->selected();
-            if (child_assets_.empty()) {
-                current = 0;
-            } else {
-                current = std::clamp(current, 0, static_cast<int>(child_assets_.size()) - 1);
-            }
-            if (current != selected_child_index_) {
-                select_child(current);
+            int selection = dd_child_select_->selected();
+            int actual_child = child_index_for_dropdown_selection(selection);
+            if (actual_child >= 0 && actual_child != selected_child_index_) {
+                select_child(actual_child);
             }
             return true;
         }
@@ -1946,6 +1945,9 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
     if (!active_ || !renderer || !assets_ || !target_) return;
 
     if (!assets_->contains_asset(target_)) return;
+
+    const_cast<FrameEditorSession*>(this)->update_asset_preview_frame();
+    const_cast<FrameEditorSession*>(this)->apply_child_preview_state();
 
     const WarpedScreenGrid& cam = assets_->getView();
     SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*target_, target_->pos);
@@ -2610,6 +2612,36 @@ bool FrameEditorSession::should_render_asset(const Asset* asset) const {
     return std::find(child_assets_.begin(), child_assets_.end(), name) != child_assets_.end();
 }
 
+std::vector<std::string> FrameEditorSession::build_child_dropdown_options() const {
+    child_dropdown_index_map_.clear();
+    std::vector<std::string> options;
+    if (!is_children_mode(mode_) || child_assets_.empty()) {
+        return options;
+    }
+    ensure_child_mode_size();
+    const bool want_async = (mode_ == Mode::AsyncChildren);
+    const bool want_static = (mode_ == Mode::StaticChildren);
+    for (std::size_t child_idx = 0; child_idx < child_assets_.size(); ++child_idx) {
+        const AnimationChildMode slot_mode = child_mode(static_cast<int>(child_idx));
+        if (want_static && slot_mode != AnimationChildMode::Static) {
+            continue;
+        }
+        if (want_async && slot_mode != AnimationChildMode::Async) {
+            continue;
+        }
+        child_dropdown_index_map_.push_back(static_cast<int>(child_idx));
+        options.push_back(child_assets_[child_idx]);
+    }
+    return options;
+}
+
+int FrameEditorSession::child_index_for_dropdown_selection(int selection) const {
+    if (selection < 0 || selection >= static_cast<int>(child_dropdown_index_map_.size())) {
+        return -1;
+    }
+    return child_dropdown_index_map_[selection];
+}
+
 void FrameEditorSession::set_snap_resolution(int r) {
     snap_resolution_r_ = vibble::grid::clamp_resolution(std::max(0, r));
     snap_resolution_override_ = true;
@@ -2671,13 +2703,21 @@ void FrameEditorSession::ensure_widgets() const {
     if (stepper_grid_resolution_ && stepper_grid_resolution_->value() != snap_resolution_r_) {
         stepper_grid_resolution_->set_value(snap_resolution_r_);
     }
-    if (!dd_child_select_ || child_dropdown_options_cache_ != child_assets_) {
-        child_dropdown_options_cache_ = child_assets_;
-        int dropdown_index = selected_child_index_;
-        if (child_assets_.empty()) {
-            dropdown_index = 0;
-        } else {
-            dropdown_index = std::clamp(dropdown_index, 0, static_cast<int>(child_assets_.size()) - 1);
+    const std::vector<std::string> dropdown_options = build_child_dropdown_options();
+    if (!dd_child_select_ || child_dropdown_options_cache_ != dropdown_options) {
+        child_dropdown_options_cache_ = dropdown_options;
+        int dropdown_index = 0;
+        if (!child_dropdown_index_map_.empty()) {
+            auto it = std::find(child_dropdown_index_map_.begin(), child_dropdown_index_map_.end(), selected_child_index_);
+            if (it != child_dropdown_index_map_.end()) {
+                dropdown_index = static_cast<int>(std::distance(child_dropdown_index_map_.begin(), it));
+            } else {
+                const int fallback_child = child_dropdown_index_map_.front();
+                if (fallback_child >= 0 && fallback_child != selected_child_index_) {
+                    const_cast<FrameEditorSession*>(this)->select_child(fallback_child);
+                }
+                dropdown_index = 0;
+            }
         }
         dd_child_select_ = std::make_unique<DMDropdown>("Child", child_dropdown_options_cache_, dropdown_index);
     }
@@ -5515,9 +5555,6 @@ void FrameEditorSession::select_child(int index) {
         selected_async_frame_index_ = selected_index_;
         ensure_selected_async_thumb_visible();
     }
-    if (dd_child_select_) {
-        dd_child_select_->set_selected(clamped);
-    }
 }
 
 bool FrameEditorSession::commit_edits(bool rebuild_animation) {
@@ -6154,6 +6191,81 @@ void FrameEditorSession::update_asset_preview_frame() const {
             target_->current_frame = it->second.frames[parent_frame_index];
         }
     }
+}
+
+void FrameEditorSession::apply_child_preview_state() const {
+    if (!target_ || child_assets_.empty()) {
+        return;
+    }
+    if (!is_children_mode(mode_)) {
+        return;
+    }
+    auto& slots = const_cast<std::vector<Asset::AnimationChildAttachment>&>(target_->animation_children());
+    if (slots.empty()) {
+        return;
+    }
+
+    SDL_Point render_pos{
+        static_cast<int>(std::lround(target_->smoothed_translation_x())),
+        static_cast<int>(std::lround(target_->smoothed_translation_y()))
+    };
+    animation_update::child_attachments::ParentState parent_state{};
+    parent_state.position = render_pos;
+    parent_state.base_position = animation_update::detail::bottom_middle_for(*target_, render_pos);
+    parent_state.scale = target_->smoothed_scale();
+    parent_state.flipped = target_->flipped;
+    parent_state.world_z = target_->world_z_offset();
+    parent_state.animation_id = animation_id_;
+
+    std::vector<AnimationChildFrameData> override_children;
+    override_children.reserve(child_assets_.size());
+    const auto add_override_child = [&](std::size_t child_idx, const ChildFrame& child) {
+        if (!child.has_data) {
+            return;
+        }
+        AnimationChildFrameData entry{};
+        entry.child_index = static_cast<int>(child_idx);
+        entry.dx = static_cast<int>(std::lround(child.dx));
+        entry.dy = static_cast<int>(std::lround(child.dy));
+        entry.dz = static_cast<int>(std::lround(child.dz));
+        entry.degree = child.degree;
+        entry.visible = child.visible;
+        override_children.push_back(entry);
+    };
+
+    if (mode_ == Mode::StaticChildren) {
+        const int parent_frame_index = parent_frame_index_for_display();
+        if (parent_frame_index >= 0 && parent_frame_index < static_cast<int>(frames_.size())) {
+            const auto& frame = frames_[parent_frame_index];
+            for (std::size_t child_idx = 0; child_idx < frame.children.size(); ++child_idx) {
+                if (child_mode(static_cast<int>(child_idx)) == AnimationChildMode::Async) {
+                    continue;
+                }
+                add_override_child(child_idx, frame.children[child_idx]);
+            }
+        }
+    } else if (mode_ == Mode::AsyncChildren) {
+        for (std::size_t child_idx = 0; child_idx < child_assets_.size(); ++child_idx) {
+            if (child_mode(static_cast<int>(child_idx)) != AnimationChildMode::Async) {
+                continue;
+            }
+            if (child_idx >= async_child_frames_.size()) {
+                continue;
+            }
+            const auto& timeline = async_child_frames_[child_idx];
+            if (timeline.empty()) {
+                continue;
+            }
+            const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(timeline.size()) - 1);
+            add_override_child(child_idx, timeline[static_cast<std::size_t>(frame_index)]);
+        }
+    }
+
+    animation_update::child_attachments::apply_frame_data(slots,
+                                                         parent_state,
+                                                         target_->current_frame,
+                                                         override_children.empty() ? nullptr : &override_children);
+    target_->mark_composite_dirty();
 }
 
 int FrameEditorSession::max_scroll_offset() const {

@@ -36,8 +36,6 @@
 #include "asset_sections/Section_BasicInfo.hpp"
 #include "asset_sections/Section_Tags.hpp"
 #include "asset_sections/Section_Spacing.hpp"
-#include "spawn_group_config/SpawnGroupConfig.hpp"
-#include "asset_sections/Section_SpawnGroups.hpp"
 #include "map_generation/room.hpp"
 #include "core/AssetsManager.hpp"
 #include "core/manifest/manifest_loader.hpp"
@@ -389,9 +387,6 @@ void AssetInfoUI::set_assets(Assets* a) {
 
 void AssetInfoUI::set_manifest_store(devmode::core::ManifestStore* store) {
     manifest_store_ = store;
-    if (spawn_groups_section_) {
-        spawn_groups_section_->set_manifest_store(manifest_store_);
-    }
     if (animation_editor_window_) {
         animation_editor_window_->set_manifest_store(manifest_store_);
     }
@@ -448,18 +443,6 @@ void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
     for (auto& s : sections_) {
         try {
             s->set_info(info_);
-
-            bool is_area_asset = false;
-            if (info_) {
-                std::string t = info_->type;
-                std::transform(t.begin(), t.end(), t.begin(), [](unsigned char ch){ return static_cast<char>(std::tolower(ch)); });
-                is_area_asset = (t == "area");
-            }
-            if (is_area_asset) {
-                if (auto* spawns   = dynamic_cast<Section_SpawnGroups*>(s.get())) spawns->set_visible(false);
-            } else {
-                if (auto* spawns   = dynamic_cast<Section_SpawnGroups*>(s.get())) spawns->set_visible(true);
-            }
             s->reset_scroll();
             s->build();
         } catch (const std::exception& ex) {
@@ -1558,7 +1541,6 @@ void AssetInfoUI::rebuild_default_sections() {
     sections_.clear();
     section_bounds_.clear();
     basic_info_section_ = nullptr;
-    spawn_groups_section_ = nullptr;
     focused_section_ = nullptr;
     children_panel_ = nullptr;
 
@@ -1606,20 +1588,6 @@ void AssetInfoUI::rebuild_default_sections() {
     adopt_section(spacing.get());
     finalize_section(spacing.get());
     sections_.push_back(std::move(spacing));
-
-    auto spawns = std::make_unique<Section_SpawnGroups>();
-    spawn_groups_section_ = spawns.get();
-    spawns->set_ui(this);
-    spawns->set_manifest_store(manifest_store_);
-    spawns->set_spawn_config_listener([this](const nlohmann::json& entry) {
-        this->notify_spawn_group_entry_changed(entry);
-    });
-    spawns->set_spawn_group_removed_listener([this](const std::string& spawn_id) {
-        this->notify_spawn_group_removed(spawn_id);
-    });
-    adopt_section(spawn_groups_section_);
-    finalize_section(spawn_groups_section_);
-    sections_.push_back(std::move(spawns));
 
     container_.reset_scroll();
     container_.request_layout();

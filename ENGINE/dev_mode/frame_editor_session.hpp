@@ -323,6 +323,7 @@ FRAME_EDITOR_ACCESS:
     bool last_payload_loaded_ = false;
     mutable std::vector<std::string> animation_dropdown_options_cache_;
     mutable std::vector<std::string> child_dropdown_options_cache_;
+    mutable std::vector<int> child_dropdown_index_map_;
     int selected_hitbox_index_ = -1;
     enum class HitHandle { None, Move, Left, Right, Top, Bottom, Rotate };
     HitHandle active_hitbox_handle_ = HitHandle::None;
@@ -374,6 +375,10 @@ FRAME_EDITOR_ACCESS:
     int  parent_frame_index_for_display() const;
     void select_child(int index);
     void update_asset_preview_frame() const;
+    void apply_child_preview_state() const;
+    float preview_attachment_scale() const;
+    std::vector<std::string> build_child_dropdown_options() const;
+    int child_index_for_dropdown_selection(int selection) const;
     static inline MovementFrame clamp_frame(const MovementFrame& in) {
         MovementFrame f = in;
         if (!std::isfinite(f.dx)) f.dx = 0.0f;

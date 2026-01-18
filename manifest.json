@@ -1505,8 +1505,8 @@
                 {
                   "degree": 0.0,
                   "dx": 8,
-                  "dy": 128,
-                  "dz": 16,
+                  "dy": 32,
+                  "dz": 32,
                   "visible": true
                 }
               ],
@@ -1522,8 +1522,8 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
-                  "visible": false
+                  "dz": -104,
+                  "visible": true
                 }
               ],
               "mode": "async"

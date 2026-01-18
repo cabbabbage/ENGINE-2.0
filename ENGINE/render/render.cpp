@@ -309,8 +309,9 @@ bool build_warped_quad(const RenderObject& obj,
     quad.vertices[1].position = SDL_FPoint{base_screen.x + half_width, base_screen.y - height};
     quad.vertices[2].position = SDL_FPoint{base_screen.x + half_width, base_screen.y};
     quad.vertices[3].position = SDL_FPoint{base_screen.x - half_width, base_screen.y};
+    const SDL_Color vertex_color{255, 255, 255, obj.color_mod.a};
     for (auto& vertex : quad.vertices) {
-        vertex.color = white;
+        vertex.color = vertex_color;
     }
     quad.vertices[0].tex_coord = SDL_FPoint{u0, v0};
     quad.vertices[1].tex_coord = SDL_FPoint{u1, v0};
@@ -677,9 +678,3 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
     SDL_SetTextureAlphaMod(sky_texture_, 255);
     SDL_RenderCopyF(renderer_, sky_texture_, nullptr, &dst);
 }
-
-
-
-
-
-

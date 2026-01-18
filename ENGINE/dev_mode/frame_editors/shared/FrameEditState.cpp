@@ -10,6 +10,7 @@ MovementFrame clamp_frame(const MovementFrame& in) {
     MovementFrame f = in;
     if (!std::isfinite(f.dx)) f.dx = 0.0f;
     if (!std::isfinite(f.dy)) f.dy = 0.0f;
+    if (!std::isfinite(f.dz)) f.dz = 0.0f;
     return f;
 }
 
@@ -60,6 +61,7 @@ void upsert_hit_box(MovementFrame& frame, const std::string& type, const nlohman
     if (node.is_object()) {
         box.center_x = read_float(node.value("center_x", 0.0f));
         box.center_y = read_float(node.value("center_y", 0.0f));
+        box.center_z = read_float(node.value("center_z", 0.0f));
         box.half_width = read_float(node.value("half_width", 0.0f));
         box.half_height = read_float(node.value("half_height", 0.0f));
         box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
@@ -70,12 +72,21 @@ void upsert_hit_box(MovementFrame& frame, const std::string& type, const nlohman
         const auto& arr = node;
         if (!arr.empty()) box.center_x = read_float(arr[0]);
         if (arr.size() > 1) box.center_y = read_float(arr[1]);
-        if (arr.size() > 2) box.half_width = read_float(arr[2]);
-        if (arr.size() > 3) box.half_height = read_float(arr[3]);
-        if (arr.size() > 4 && arr[4].is_number()) {
-            box.rotation_degrees = read_float(arr[4]);
-        } else if (arr.size() > 5 && arr[5].is_number()) {
-            box.rotation_degrees = read_float(arr[5]);
+        if (arr.size() > 5 && arr[2].is_number() && arr[3].is_number() && arr[4].is_number()) {
+            box.center_z = read_float(arr[2]);
+            box.half_width = read_float(arr[3]);
+            box.half_height = read_float(arr[4]);
+            if (arr.size() > 5 && arr[5].is_number()) {
+                box.rotation_degrees = read_float(arr[5]);
+            }
+        } else {
+            if (arr.size() > 2) box.half_width = read_float(arr[2]);
+            if (arr.size() > 3) box.half_height = read_float(arr[3]);
+            if (arr.size() > 4 && arr[4].is_number()) {
+                box.rotation_degrees = read_float(arr[4]);
+            } else if (arr.size() > 5 && arr[5].is_number()) {
+                box.rotation_degrees = read_float(arr[5]);
+            }
         }
         if (arr.size() > 4 && arr[4].is_boolean() && !arr[4].get<bool>()) {
             return;
@@ -101,6 +112,7 @@ void append_attack_vector(MovementFrame& frame, const std::string& type, const n
     if (node.is_object()) {
         vec.start_x = read_float(node.value("start_x", 0.0f));
         vec.start_y = read_float(node.value("start_y", 0.0f));
+        vec.start_z = read_float(node.value("start_z", 0.0f));
         if (node.contains("control_x") || node.contains("control_y")) {
             vec.control_x = read_float(node.value("control_x", (vec.start_x)));
             vec.control_y = read_float(node.value("control_y", (vec.start_y)));
@@ -108,8 +120,10 @@ void append_attack_vector(MovementFrame& frame, const std::string& type, const n
             vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
             vec.control_y = (vec.start_y + read_float(node.value("end_y", 0.0f))) * 0.5f;
         }
+        vec.control_z = read_float(node.value("control_z", vec.start_z));
         vec.end_x = read_float(node.value("end_x", 0.0f));
         vec.end_y = read_float(node.value("end_y", 0.0f));
+        vec.end_z = read_float(node.value("end_z", 0.0f));
         vec.damage = read_int(node.value("damage", 0));
         if (node.contains("type") && node["type"].is_string()) {
             vec.type = node["type"].get<std::string>();
@@ -163,26 +177,28 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
         if (entry.is_array()) {
             if (!entry.empty() && entry[0].is_number()) f.dx = static_cast<float>(entry[0].get<double>());
             if (entry.size() > 1 && entry[1].is_number()) f.dy = static_cast<float>(entry[1].get<double>());
-            if (entry.size() > 2 && entry[2].is_boolean()) f.resort_z = entry[2].get<bool>();
+            if (entry.size() > 2 && entry[2].is_number()) {
+                f.dz = static_cast<float>(entry[2].get<double>());
+            } else if (entry.size() > 2 && entry[2].is_boolean()) {
+                f.resort_z = entry[2].get<bool>();
+            }
+            if (entry.size() > 3 && entry[3].is_boolean()) {
+                f.resort_z = entry[3].get<bool>();
+            }
 
             const nlohmann::json* children_json = nullptr;
-            if (entry.size() > 4 && entry[4].is_array()) {
-                children_json = &entry[4];
-            } else if (entry.size() > 3 && entry[3].is_array()) {
-                const auto& maybe_children = entry[3];
-                if (!maybe_children.empty() && maybe_children[0].is_array()) {
-                    children_json = &maybe_children;
-                }
-            } else if (entry.size() > 2 && entry[2].is_array()) {
-                const auto& maybe_children2 = entry[2];
-                if (!maybe_children2.empty() && maybe_children2[0].is_array()) {
-                    children_json = &maybe_children2;
+            for (const auto& node : entry) {
+                if (!node.is_array()) continue;
+                if (!node.empty() && node[0].is_array()) {
+                    children_json = &node;
+                    break;
                 }
             }
             if (children_json) {
                 for (const auto& child_entry : *children_json) {
                     if (!child_entry.is_array() || child_entry.empty()) continue;
                     ChildFrame child;
+                    bool has_explicit_dz = false;
                     try { child.child_index = child_entry[0].get<int>(); } catch (...) { child.child_index = -1; }
                     if (child_entry.size() > 1 && child_entry[1].is_number()) {
                         child.dx = static_cast<float>(child_entry[1].get<double>());
@@ -191,10 +207,17 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
                         child.dy = static_cast<float>(child_entry[2].get<double>());
                     }
                     if (child_entry.size() > 3 && child_entry[3].is_number()) {
-                        child.degree = static_cast<float>(child_entry[3].get<double>());
+                        if (child_entry.size() > 4 && child_entry[4].is_number()) {
+                            child.dz = static_cast<float>(child_entry[3].get<double>());
+                            has_explicit_dz = true;
+                        } else {
+                            child.degree = static_cast<float>(child_entry[3].get<double>());
+                        }
                     }
                     if (child_entry.size() > 4) {
-                        if (child_entry[4].is_boolean()) {
+                        if (child_entry[4].is_number() && child_entry.size() > 4) {
+                            child.degree = static_cast<float>(child_entry[4].get<double>());
+                        } else if (child_entry[4].is_boolean()) {
                             child.visible = child_entry[4].get<bool>();
                         } else if (child_entry[4].is_number_integer()) {
                             child.visible = child_entry[4].get<int>() != 0;
@@ -207,6 +230,10 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
                             child.render_in_front = child_entry[5].get<int>() != 0;
                         }
                     }
+                    if (!has_explicit_dz) {
+                        child.dz = child.dy;
+                        child.dy = 0.0f;
+                    }
                     child.has_data = true;
                     f.children.push_back(child);
                 }
@@ -214,6 +241,7 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
         } else if (entry.is_object()) {
             f.dx = static_cast<float>(entry.value("dx", 0.0));
             f.dy = static_cast<float>(entry.value("dy", 0.0));
+            f.dz = static_cast<float>(entry.value("dz", 0.0));
             f.resort_z = entry.value("resort_z", false);
             if (entry.contains("children") && entry["children"].is_array()) {
                 for (const auto& child_entry : entry["children"]) {
@@ -223,6 +251,11 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
                         child.child_index = child_entry.value("child_index", -1);
                         child.dx = static_cast<float>(child_entry.value("dx", 0.0));
                         child.dy = static_cast<float>(child_entry.value("dy", 0.0));
+                        child.dz = static_cast<float>(child_entry.value("dz", 0.0));
+                        if (!child_entry.contains("dz")) {
+                            child.dz = child.dy;
+                            child.dy = 0.0f;
+                        }
                         if (child_entry.contains("degree") && child_entry["degree"].is_number()) {
                             child.degree = static_cast<float>(child_entry["degree"].get<double>());
                         } else if (child_entry.contains("rotation") && child_entry["rotation"].is_number()) {
@@ -235,6 +268,7 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
                         child.has_data = true;
                     } else if (child_entry.is_array()) {
                         try { child.child_index = child_entry[0].get<int>(); } catch (...) { child.child_index = -1; }
+                        bool has_explicit_dz = false;
                         if (child_entry.size() > 1 && child_entry[1].is_number()) {
                             child.dx = static_cast<float>(child_entry[1].get<double>());
                         }
@@ -242,10 +276,17 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
                             child.dy = static_cast<float>(child_entry[2].get<double>());
                         }
                         if (child_entry.size() > 3 && child_entry[3].is_number()) {
-                            child.degree = static_cast<float>(child_entry[3].get<double>());
+                            if (child_entry.size() > 4 && child_entry[4].is_number()) {
+                                child.dz = static_cast<float>(child_entry[3].get<double>());
+                                has_explicit_dz = true;
+                            } else {
+                                child.degree = static_cast<float>(child_entry[3].get<double>());
+                            }
                         }
                         if (child_entry.size() > 4) {
-                            if (child_entry[4].is_boolean()) {
+                            if (child_entry[4].is_number() && child_entry.size() > 4) {
+                                child.degree = static_cast<float>(child_entry[4].get<double>());
+                            } else if (child_entry[4].is_boolean()) {
                                 child.visible = child_entry[4].get<bool>();
                             } else if (child_entry[4].is_number_integer()) {
                                 child.visible = child_entry[4].get<int>() != 0;
@@ -257,6 +298,10 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
                             } else if (child_entry[5].is_number_integer()) {
                                 child.render_in_front = child_entry[5].get<int>() != 0;
                             }
+                        }
+                        if (!has_explicit_dz) {
+                            child.dz = child.dy;
+                            child.dy = 0.0f;
                         }
                         child.has_data = true;
                     }
@@ -328,12 +373,43 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
         if (entry.size() < 2) {
             entry = nlohmann::json::array({0, 0});
         }
-        entry[0] = static_cast<int>(std::lround(f.dx));
-        entry[1] = static_cast<int>(std::lround(f.dy));
-        if (entry.size() < 3 && f.resort_z) {
-            entry.insert(entry.begin() + 2, f.resort_z);
-        } else if (entry.size() >= 3) {
-            entry[2] = f.resort_z;
+        nlohmann::json preserved_color;
+        nlohmann::json preserved_children;
+        bool has_color = false;
+        bool has_children = false;
+        bool had_resort = false;
+        if (entry.is_array()) {
+            for (const auto& node : entry) {
+                if (node.is_boolean()) {
+                    had_resort = true;
+                }
+                if (!node.is_array()) {
+                    continue;
+                }
+                const bool looks_color = node.size() == 3 && node[0].is_number() && node[1].is_number() && node[2].is_number();
+                if (looks_color && !has_color) {
+                    preserved_color = node;
+                    has_color = true;
+                    continue;
+                }
+                if (!node.empty() && node[0].is_array() && !has_children) {
+                    preserved_children = node;
+                    has_children = true;
+                }
+            }
+        }
+        entry = nlohmann::json::array();
+        entry.push_back(static_cast<int>(std::lround(f.dx)));
+        entry.push_back(static_cast<int>(std::lround(f.dy)));
+        entry.push_back(static_cast<int>(std::lround(f.dz)));
+        if (f.resort_z || had_resort) {
+            entry.push_back(f.resort_z);
+        }
+        if (has_color) {
+            entry.push_back(std::move(preserved_color));
+        }
+        if (has_children) {
+            entry.push_back(std::move(preserved_children));
         }
         movement[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(entry);
     }
@@ -356,13 +432,15 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
             auto it = std::find_if(f.hit.boxes.begin(), f.hit.boxes.end(), [&](const auto& b) { return b.type == type; });
             const auto* box = (it != f.hit.boxes.end()) ? &*it : nullptr;
             if (!box || box->is_empty() || !std::isfinite(box->center_x) || !std::isfinite(box->center_y) ||
-                !std::isfinite(box->half_width) || !std::isfinite(box->half_height) || !std::isfinite(box->rotation_degrees)) {
+                !std::isfinite(box->center_z) || !std::isfinite(box->half_width) ||
+                !std::isfinite(box->half_height) || !std::isfinite(box->rotation_degrees)) {
                 existing[type] = nullptr;
                 continue;
             }
             existing[type] = nlohmann::json{
                 {"center_x", box->center_x},
                 {"center_y", box->center_y},
+                {"center_z", box->center_z},
                 {"half_width", box->half_width},
                 {"half_height", box->half_height},
                 {"rotation", box->rotation_degrees},
@@ -401,10 +479,13 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
                 type_array.push_back(nlohmann::json{
                     {"start_x", vec.start_x},
                     {"start_y", vec.start_y},
+                    {"start_z", vec.start_z},
                     {"control_x", vec.control_x},
                     {"control_y", vec.control_y},
+                    {"control_z", vec.control_z},
                     {"end_x", vec.end_x},
                     {"end_y", vec.end_y},
+                    {"end_z", vec.end_z},
                     {"damage", vec.damage},
                     {"type", vec.type}
                 });
@@ -419,6 +500,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
 
     int total_dx = 0;
     int total_dy = 0;
+    int total_dz = 0;
     for (std::size_t i = 1; i < movement.size(); ++i) {
         const auto& entry = movement[i];
         if (entry.is_array()) {
@@ -426,12 +508,14 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
             else if (entry.size() > 0 && entry[0].is_number()) total_dx += static_cast<int>(std::lround(entry[0].get<double>()));
             if (entry.size() > 1 && entry[1].is_number_integer()) total_dy += entry[1].get<int>();
             else if (entry.size() > 1 && entry[1].is_number()) total_dy += static_cast<int>(std::lround(entry[1].get<double>()));
+            if (entry.size() > 2 && entry[2].is_number_integer()) total_dz += entry[2].get<int>();
+            else if (entry.size() > 2 && entry[2].is_number()) total_dz += static_cast<int>(std::lround(entry[2].get<double>()));
         }
     }
 
     if (movement.empty()) movement.push_back(nlohmann::json::array({0, 0}));
     payload["movement"] = std::move(movement);
-    payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}};
+    payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}};
     payload["hit_geometry"] = std::move(hit_geometry);
     payload["attack_geometry"] = std::move(attack_geometry);
     return payload;

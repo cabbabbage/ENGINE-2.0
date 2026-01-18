@@ -138,9 +138,10 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             final_h
         };
         SDL_RendererFlip base_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+        const Uint8 asset_alpha = static_cast<Uint8>(std::lround(std::clamp(asset->smoothed_alpha(), 0.0f, 1.0f) * 255.0f));
         add_render_object(base_tex,
                           dest_rect,
-                          SDL_Color{255, 255, 255, 255},
+                          SDL_Color{255, 255, 255, asset_alpha},
                           SDL_BLENDMODE_BLEND,
                           false,
                           0.0,
@@ -149,13 +150,18 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                           SDL_Point{w, h},
                           asset->world_z_offset());
 
-        bool have_depth_cue_distance = false;
-        float asset_distance = 0.0f;
-        if (assets_) {
+        bool have_vertical_distance = false;
+        float vertical_distance_from_center = 0.0f;
+        bool is_above_center = false;
+        if (assets_ && renderer_) {
             const WarpedScreenGrid& cam = assets_->getView();
             if (const auto* gp = cam.grid_point_for_asset(asset)) {
-                asset_distance = gp->distance_to_camera;
-                have_depth_cue_distance = std::isfinite(asset_distance);
+                int screen_width = 0, screen_height = 0;
+                SDL_GetRendererOutputSize(renderer_, &screen_width, &screen_height);
+                const float center_y = static_cast<float>(screen_height) * 0.5f;
+                vertical_distance_from_center = std::abs(gp->screen.y - center_y);
+                is_above_center = gp->screen.y < center_y;
+                have_vertical_distance = std::isfinite(vertical_distance_from_center);
             }
         }
 
@@ -163,28 +169,16 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         float overlay_opacity = 0.0f;
         const float fg_distance = kDepthCueForegroundFullOpacityDistance;
         const float bg_distance = kDepthCueBackgroundFullOpacityDistance;
-        if (have_depth_cue_distance && fg_distance < bg_distance) {
-            const float midpoint = 0.5f * (fg_distance + bg_distance);
-            if (asset_distance <= fg_distance) {
-                overlay_texture = depth_cue_foreground;
-                overlay_opacity = 1.0f;
-            } else if (asset_distance >= bg_distance) {
+        if (have_vertical_distance && vertical_distance_from_center > 0.0f) {
+            if (is_above_center) {
+                // Above center: use background texture, interpolate from center to bg_distance
                 overlay_texture = depth_cue_background;
-                overlay_opacity = 1.0f;
-            } else if (asset_distance < midpoint) {
-                overlay_texture = depth_cue_foreground;
-                const float denom = midpoint - fg_distance;
-                if (denom > 0.0f) {
-                    overlay_opacity = 1.0f - (asset_distance - fg_distance) / denom;
-                }
+                overlay_opacity = std::clamp(vertical_distance_from_center / bg_distance, 0.0f, 1.0f);
             } else {
-                overlay_texture = depth_cue_background;
-                const float denom = bg_distance - midpoint;
-                if (denom > 0.0f) {
-                    overlay_opacity = (asset_distance - midpoint) / denom;
-                }
+                // Below center: use foreground texture, interpolate from center to fg_distance
+                overlay_texture = depth_cue_foreground;
+                overlay_opacity = std::clamp(vertical_distance_from_center / fg_distance, 0.0f, 1.0f);
             }
-            overlay_opacity = std::clamp(overlay_opacity, 0.0f, 1.0f);
         }
 
         if (overlay_texture != nullptr && overlay_opacity > 0.0f) {

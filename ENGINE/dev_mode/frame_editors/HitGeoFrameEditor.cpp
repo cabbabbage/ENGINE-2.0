@@ -42,6 +42,19 @@ float dist_sq(const SDL_FPoint& a, const SDL_FPoint& b) {
     return dx * dx + dy * dy;
 }
 
+int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
+    float precise = wheel.preciseY;
+    int delta = wheel.y;
+    if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+        delta = -delta;
+        precise = -precise;
+    }
+    if (std::fabs(precise) >= 0.01f) {
+        return static_cast<int>(std::lround(precise));
+    }
+    return delta;
+}
+
 }  // namespace
 
 void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
@@ -54,6 +67,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     if (axis_adjuster_) {
         axis_adjuster_->reset_axis(AdjustmentAxis::X);
     }
+    wants_close_ = false;
     selected_index_ = 0;
     selected_hitbox_type_index_ = 1;
     frames_.clear();
@@ -86,6 +100,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     dd_hitbox_type_ = std::make_unique<DMDropdown>(
         "Hitbox Type", hitbox_labels,
         std::clamp(selected_hitbox_type_index_, 0, static_cast<int>(hitbox_labels.size()) - 1));
+    btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
     btn_prev_frame_ = std::make_unique<DMButton>("<", &DMStyles::AccentButton(), 36, DMButton::height());
     btn_next_frame_ = std::make_unique<DMButton>(">", &DMStyles::AccentButton(), 36, DMButton::height());
     btn_add_remove_ = std::make_unique<DMButton>("Add Hit Box", &DMStyles::AccentButton(), 150, DMButton::height());
@@ -93,6 +108,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     btn_apply_all_ = std::make_unique<DMButton>("Apply To All Frames", &DMStyles::HeaderButton(), 180, DMButton::height());
     tb_center_x_ = std::make_unique<DMTextBox>("Center X", "0");
     tb_center_y_ = std::make_unique<DMTextBox>("Center Y", "0");
+    tb_center_z_ = std::make_unique<DMTextBox>("Center Z", "0");
     tb_width_ = std::make_unique<DMTextBox>("Width", "0");
     tb_height_ = std::make_unique<DMTextBox>("Height", "0");
     tb_rotation_ = std::make_unique<DMTextBox>("Rotation", "0");
@@ -112,6 +128,7 @@ void HitGeoFrameEditor::end() {
     }
     axis_adjuster_ = nullptr;
     dd_hitbox_type_.reset();
+    btn_back_.reset();
     btn_prev_frame_.reset();
     btn_next_frame_.reset();
     btn_add_remove_.reset();
@@ -119,9 +136,11 @@ void HitGeoFrameEditor::end() {
     btn_apply_all_.reset();
     tb_center_x_.reset();
     tb_center_y_.reset();
+    tb_center_z_.reset();
     tb_width_.reset();
     tb_height_.reset();
     tb_rotation_.reset();
+    wants_close_ = false;
 }
 
 bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
@@ -134,6 +153,10 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
     }
     if (btn_next_frame_ && btn_next_frame_->handle_event(e)) {
         select_frame(selected_index_ + 1);
+        consumed = true;
+    }
+    if (btn_back_ && btn_back_->handle_event(e)) {
+        wants_close_ = true;
         consumed = true;
     }
     if (dd_hitbox_type_ && dd_hitbox_type_->handle_event(e)) {
@@ -163,6 +186,7 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
 
     if (tb_center_x_ && tb_center_x_->handle_event(e)) { apply_text_fields(); consumed = true; }
     if (tb_center_y_ && tb_center_y_->handle_event(e)) { apply_text_fields(); consumed = true; }
+    if (tb_center_z_ && tb_center_z_->handle_event(e)) { apply_text_fields(); consumed = true; }
     if (tb_width_ && tb_width_->handle_event(e)) { apply_text_fields(); consumed = true; }
     if (tb_height_ && tb_height_->handle_event(e)) { apply_text_fields(); consumed = true; }
     if (tb_rotation_ && tb_rotation_->handle_event(e)) { apply_text_fields(); consumed = true; }
@@ -181,6 +205,14 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
         return consumed;
     }
 
+    if (e.type == SDL_MOUSEWHEEL && selection_state_ && selection_state_->has_target()) {
+        const int steps = resolve_wheel_steps(e.wheel);
+        if (steps != 0) {
+            apply_scroll_adjustment(steps);
+            return true;
+        }
+    }
+
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mp{e.button.x, e.button.y};
         if (ui_contains_point(mp)) {
@@ -188,6 +220,8 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
         }
         if (begin_hitbox_drag(mp)) {
             consumed = true;
+        } else if (selection_state_) {
+            selection_state_->target = SelectionTarget::None;
         }
     } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
         if (dragging_hitbox_) {
@@ -215,6 +249,7 @@ void HitGeoFrameEditor::render_world(SDL_Renderer* renderer) const {
 void HitGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (!renderer) return;
     layout_ui(renderer);
+    if (btn_back_) btn_back_->render(renderer);
     if (btn_prev_frame_) btn_prev_frame_->render(renderer);
     if (btn_next_frame_) btn_next_frame_->render(renderer);
     if (dd_hitbox_type_) dd_hitbox_type_->render(renderer);
@@ -222,6 +257,7 @@ void HitGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (btn_copy_next_) btn_copy_next_->render(renderer);
     if (tb_center_x_) tb_center_x_->render(renderer);
     if (tb_center_y_) tb_center_y_->render(renderer);
+    if (tb_center_z_) tb_center_z_->render(renderer);
     if (tb_width_) tb_width_->render(renderer);
     if (tb_height_) tb_height_->render(renderer);
     if (tb_rotation_) tb_rotation_->render(renderer);
@@ -245,6 +281,10 @@ void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
         cursor_y += h + DMSpacing::small_gap();
         return r;
     };
+
+    if (btn_back_) {
+        btn_back_->set_rect(place_row(DMButton::height()));
+    }
 
     if (btn_prev_frame_ && btn_next_frame_) {
         int half_w = (inner_w - DMSpacing::small_gap()) / 2;
@@ -288,6 +328,9 @@ void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     };
 
     place_pair(tb_center_x_.get(), tb_center_y_.get());
+    if (tb_center_z_) {
+        tb_center_z_->set_rect(place_row(tb_center_z_->height_for_width(inner_w)));
+    }
     place_pair(tb_width_.get(), tb_height_.get());
     if (tb_rotation_) {
         tb_rotation_->set_rect(place_row(tb_rotation_->height_for_width(inner_w)));
@@ -317,6 +360,7 @@ void HitGeoFrameEditor::refresh_hitbox_form() const {
         };
         set_field(tb_center_x_.get(), last_center_x_, std::to_string(static_cast<int>(std::lround(box->center_x))));
         set_field(tb_center_y_.get(), last_center_y_, std::to_string(static_cast<int>(std::lround(box->center_y))));
+        set_field(tb_center_z_.get(), last_center_z_, std::to_string(static_cast<int>(std::lround(box->center_z))));
         set_field(tb_width_.get(), last_width_, std::to_string(static_cast<int>(std::lround(box->half_width * 2.0f))));
         set_field(tb_height_.get(), last_height_, std::to_string(static_cast<int>(std::lround(box->half_height * 2.0f))));
         set_field(tb_rotation_.get(), last_rotation_, std::to_string(static_cast<int>(std::lround(box->rotation_degrees))));
@@ -324,6 +368,7 @@ void HitGeoFrameEditor::refresh_hitbox_form() const {
     } else {
         if (tb_center_x_ && !tb_center_x_->is_editing()) { tb_center_x_->set_value("0"); last_center_x_ = "0"; }
         if (tb_center_y_ && !tb_center_y_->is_editing()) { tb_center_y_->set_value("0"); last_center_y_ = "0"; }
+        if (tb_center_z_ && !tb_center_z_->is_editing()) { tb_center_z_->set_value("0"); last_center_z_ = "0"; }
         if (tb_width_ && !tb_width_->is_editing()) { tb_width_->set_value("0"); last_width_ = "0"; }
         if (tb_height_ && !tb_height_->is_editing()) { tb_height_->set_value("0"); last_height_ = "0"; }
         if (tb_rotation_ && !tb_rotation_->is_editing()) { tb_rotation_->set_value("0"); last_rotation_ = "0"; }
@@ -346,6 +391,11 @@ void HitGeoFrameEditor::apply_text_fields() {
         float v = parse_float(tb_center_y_->value(), box->center_y);
         if (std::fabs(v - box->center_y) > 0.001f) { box->center_y = v; changed = true; }
         last_center_y_ = tb_center_y_->value();
+    }
+    if (tb_center_z_) {
+        float v = parse_float(tb_center_z_->value(), box->center_z);
+        if (std::fabs(v - box->center_z) > 0.001f) { box->center_z = v; changed = true; }
+        last_center_z_ = tb_center_z_->value();
     }
     if (tb_width_) {
         float v = parse_float(tb_width_->value(), box->half_width * 2.0f);
@@ -377,6 +427,27 @@ void HitGeoFrameEditor::persist_changes() {
     }
     refresh_hitbox_form();
     refresh_selection_state();
+}
+
+void HitGeoFrameEditor::apply_scroll_adjustment(int steps) {
+    auto* box = current_hit_box();
+    if (!box || steps == 0) {
+        return;
+    }
+    if (selection_state_) {
+        switch (selection_state_->axis) {
+            case AdjustmentAxis::X:
+                box->center_x += static_cast<float>(steps);
+                break;
+            case AdjustmentAxis::Y:
+                box->center_y += static_cast<float>(steps);
+                break;
+            case AdjustmentAxis::Z:
+                box->center_z += static_cast<float>(steps);
+                break;
+        }
+        persist_changes();
+    }
 }
 
 void HitGeoFrameEditor::apply_hit_to_all_frames() {
@@ -497,6 +568,12 @@ bool HitGeoFrameEditor::begin_hitbox_drag(SDL_Point mouse) {
     if (active_handle_ == HitHandle::None) {
         return false;
     }
+    if (axis_adjuster_) {
+        axis_adjuster_->cycle_axis();
+    }
+    if (selection_state_) {
+        selection_state_->target = SelectionTarget::HitboxCenter;
+    }
     dragging_hitbox_ = true;
     drag_start_mouse_ = mouse;
     drag_start_box_ = *box;
@@ -543,6 +620,10 @@ void HitGeoFrameEditor::update_hitbox_drag(SDL_Point mouse) {
                     new_center.y = drag_start_box_.center_y;
                 } else if (selection_state_->axis == AdjustmentAxis::Y) {
                     new_center.x = drag_start_box_.center_x;
+                } else if (selection_state_->axis == AdjustmentAxis::Z) {
+                    new_center.x = drag_start_box_.center_x;
+                    new_center.y = drag_start_box_.center_y;
+                    box->center_z = drag_start_box_.center_z + (local.y - drag_start_box_.center_y);
                 }
             }
             box->center_x = new_center.x;
@@ -791,13 +872,15 @@ void HitGeoFrameEditor::refresh_selection_state() {
     if (!selection_state_ || !context_.assets || !context_.target) {
         return;
     }
+    if (selection_state_->target != SelectionTarget::HitboxCenter) {
+        return;
+    }
     const auto* box = current_hit_box();
     if (!box) {
         selection_state_->target = SelectionTarget::None;
         selection_state_->attack_vector_index = -1;
         return;
     }
-    selection_state_->target = SelectionTarget::HitboxCenter;
     SDL_Point anchor = asset_anchor_world();
     SDL_FPoint world{
         static_cast<float>(anchor.x) + box->center_x * asset_local_scale(),

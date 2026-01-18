@@ -23,6 +23,7 @@ public:
     void update(const Input& input, float dt) override;
     void render_world(SDL_Renderer* renderer) const override;
     void render_overlays(SDL_Renderer* renderer) const override;
+    bool wants_close() const override { return wants_close_; }
 
 private:
     enum class AttackHandle { None, Start, Control, End, Segment };
@@ -33,6 +34,7 @@ private:
     void refresh_attack_form() const;
     void apply_text_fields();
     void persist_changes();
+    void apply_scroll_adjustment(int steps);
     void apply_attack_to_all_frames();
     void copy_attack_vector_to_next_frame();
     std::string current_attack_type() const;
@@ -62,6 +64,7 @@ private:
     std::array<int, kDamageTypeNames.size()> selected_attack_vector_indices_{{-1, -1, -1}};
 
     std::unique_ptr<DMDropdown> dd_attack_type_;
+    std::unique_ptr<DMButton> btn_back_;
     std::unique_ptr<DMButton> btn_prev_frame_;
     std::unique_ptr<DMButton> btn_next_frame_;
     std::unique_ptr<DMButton> btn_add_remove_;
@@ -70,24 +73,32 @@ private:
     std::unique_ptr<DMButton> btn_apply_all_;
     std::unique_ptr<DMTextBox> tb_start_x_;
     std::unique_ptr<DMTextBox> tb_start_y_;
+    std::unique_ptr<DMTextBox> tb_start_z_;
     std::unique_ptr<DMTextBox> tb_control_x_;
     std::unique_ptr<DMTextBox> tb_control_y_;
+    std::unique_ptr<DMTextBox> tb_control_z_;
     std::unique_ptr<DMTextBox> tb_end_x_;
     std::unique_ptr<DMTextBox> tb_end_y_;
+    std::unique_ptr<DMTextBox> tb_end_z_;
     std::unique_ptr<DMTextBox> tb_damage_;
     mutable std::string last_start_x_{};
     mutable std::string last_start_y_{};
+    mutable std::string last_start_z_{};
     mutable std::string last_control_x_{};
     mutable std::string last_control_y_{};
+    mutable std::string last_control_z_{};
     mutable std::string last_end_x_{};
     mutable std::string last_end_y_{};
+    mutable std::string last_end_z_{};
     mutable std::string last_damage_{};
 
     mutable SDL_Rect ui_rect_{0, 0, 0, 0};
 
     AttackHandle active_handle_ = AttackHandle::None;
+    AttackHandle selected_handle_ = AttackHandle::None;
     bool dragging_attack_ = false;
     bool drag_moved_ = false;
+    bool wants_close_ = false;
     SDL_Point drag_start_mouse_{0, 0};
     SDL_FPoint drag_start_mouse_local_{0.0f, 0.0f};
     animation_update::FrameAttackGeometry::Vector drag_start_vector_{};

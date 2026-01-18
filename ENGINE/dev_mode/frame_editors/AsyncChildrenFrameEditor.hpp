@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -13,6 +14,8 @@
 #include "shared/ManifestTransaction.hpp"
 #include "shared/SelectionState.hpp"
 
+class DMButton;
+
 namespace devmode::frame_editors {
 
 class AsyncChildrenFrameEditor final : public FrameEditorBase {
@@ -23,6 +26,7 @@ public:
     void update(const Input& input, float dt) override;
     void render_world(SDL_Renderer* renderer) const override;
     void render_overlays(SDL_Renderer* renderer) const override;
+    bool wants_close() const override { return wants_close_; }
 
 private:
     void populate_child_data();
@@ -40,6 +44,7 @@ private:
     int start_frame_for_child(int child_index) const;
     void adjust_start_frame(int child_index, int delta_frames);
     void refresh_selection_state();
+    void apply_scroll_adjustment(int steps);
 
     FrameEditorContext context_{};
     SelectionState* selection_state_ = nullptr;
@@ -62,6 +67,9 @@ private:
     SDL_Point drag_start_mouse_{0, 0};
     child_timelines::ChildFrameSample drag_start_sample_{};
     bool data_dirty_ = false;
+    bool wants_close_ = false;
+    std::unique_ptr<DMButton> btn_back_;
+    mutable SDL_Rect back_rect_{0, 0, 0, 0};
 };
 
 }  // namespace devmode::frame_editors

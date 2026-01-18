@@ -110,7 +110,6 @@ void FrameEditorSession::begin(Assets* assets,
 
     mode_ = mode_for_launch(launch_mode_);
     capture_camera_state();
-    lock_camera_state();
     active_ = true;
     create_and_begin_editor();
 }
@@ -127,6 +126,9 @@ void FrameEditorSession::end() {
         target_->set_hidden(prev_asset_hidden_);
     }
     if (assets_) {
+        if (edit_camera_locked_) {
+            restore_edit_camera_state();
+        }
         restore_camera_state();
     }
 
@@ -148,8 +150,10 @@ void FrameEditorSession::end() {
     axis_adjuster_.reset_axis(devmode::frame_editors::AdjustmentAxis::X);
     editor_context_ = {};
     camera_lock_state_.valid = false;
+    edit_camera_state_.valid = false;
     camera_y_distance_locked_ = false;
     tilt_locked_ = false;
+    edit_camera_locked_ = false;
 
     if (saved_host_callback) {
         saved_host_callback(saved_animation_id);
@@ -176,9 +180,23 @@ void FrameEditorSession::update(const Input& input) {
         return;
     }
     if (assets_) {
-        enforce_camera_locks(assets_->getView());
+        const bool should_lock = selection_state_.has_target();
+        WarpedScreenGrid& cam = assets_->getView();
+        if (should_lock && !edit_camera_locked_) {
+            capture_edit_camera_state();
+            lock_camera_state();
+        } else if (!should_lock && edit_camera_locked_) {
+            restore_edit_camera_state();
+        }
+        if (edit_camera_locked_) {
+            enforce_camera_locks(cam);
+        }
     }
     active_editor_->update(input, 0.0f);
+    if (active_editor_ && active_editor_->wants_close()) {
+        end();
+        return;
+    }
 }
 
 bool FrameEditorSession::handle_event(const SDL_Event& e) {
@@ -282,6 +300,7 @@ void FrameEditorSession::lock_camera_state() {
     cam.set_tilt_override(locked_tilt_deg_);
     locked_camera_y_distance_ = cam.camera_y_distance();
     camera_y_distance_locked_ = true;
+    edit_camera_locked_ = true;
 }
 
 void FrameEditorSession::restore_camera_state() {
@@ -305,6 +324,45 @@ void FrameEditorSession::restore_camera_state() {
     camera_lock_state_.valid = false;
     camera_y_distance_locked_ = false;
     tilt_locked_ = false;
+}
+
+void FrameEditorSession::capture_edit_camera_state() {
+    if (!assets_) {
+        return;
+    }
+    WarpedScreenGrid& cam = assets_->getView();
+    edit_camera_state_.manual_override_before = cam.is_manual_height_override();
+    edit_camera_state_.focus_override_before = cam.has_focus_override();
+    edit_camera_state_.focus_point_before = cam.get_focus_override_point();
+    edit_camera_state_.screen_center_before = cam.get_screen_center();
+    edit_camera_state_.tilt_override_before = cam.tilt_override();
+    edit_camera_state_.camera_y_distance_before = cam.camera_y_distance();
+    edit_camera_state_.valid = true;
+}
+
+void FrameEditorSession::restore_edit_camera_state() {
+    if (!assets_ || !edit_camera_state_.valid) {
+        edit_camera_locked_ = false;
+        return;
+    }
+    WarpedScreenGrid& cam = assets_->getView();
+    cam.set_manual_height_override(edit_camera_state_.manual_override_before);
+    if (edit_camera_state_.focus_override_before) {
+        cam.set_focus_override(edit_camera_state_.focus_point_before);
+    } else {
+        cam.clear_focus_override();
+    }
+    cam.set_screen_center(edit_camera_state_.screen_center_before);
+    if (edit_camera_state_.tilt_override_before.has_value()) {
+        cam.set_tilt_override(*edit_camera_state_.tilt_override_before);
+    } else {
+        cam.clear_tilt_override();
+    }
+    cam.set_camera_y_distance(edit_camera_state_.camera_y_distance_before);
+    edit_camera_state_.valid = false;
+    camera_y_distance_locked_ = false;
+    tilt_locked_ = false;
+    edit_camera_locked_ = false;
 }
 
 void FrameEditorSession::enforce_camera_locks(WarpedScreenGrid& cam) {

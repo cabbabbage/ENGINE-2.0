@@ -663,32 +663,37 @@ void AnimationLoader::load(Animation& animation,
                         try { fm.dx = mv[0].get<int>(); } catch (...) { fm.dx = 0; }
                         try { fm.dy = mv[1].get<int>(); } catch (...) { fm.dy = 0; }
                         fm.dz = 0;
-                        if (mv.size() >= 3 && mv[2].is_boolean()) {
+                        if (mv.size() >= 3 && mv[2].is_number()) {
+                                try { fm.dz = mv[2].get<int>(); } catch (...) { fm.dz = 0; }
+                        } else if (mv.size() >= 3 && mv[2].is_boolean()) {
                                 fm.z_resort = mv[2].get<bool>();
+                        }
+                        if (mv.size() >= 4 && mv[3].is_boolean()) {
+                                fm.z_resort = mv[3].get<bool>();
                         }
 
                         bool color_consumed = false;
-                        if (mv.size() >= 4 && mv[3].is_array()) {
-                                const auto& c = mv[3];
-                                const bool looks_color = (c.size() == 3) && c[0].is_number() && c[1].is_number() && c[2].is_number();
+                        for (const auto& node : mv) {
+                                if (!node.is_array()) continue;
+                                const bool looks_color = (node.size() == 3) && node[0].is_number() && node[1].is_number() && node[2].is_number();
                                 if (looks_color) {
                                         int r = 255, g = 255, b = 255;
-                                        try { r = clamp(c[0].get<int>()); } catch (...) { r = 255; }
-                                        try { g = clamp(c[1].get<int>()); } catch (...) { g = 255; }
-                                        try { b = clamp(c[2].get<int>()); } catch (...) { b = 255; }
+                                        try { r = clamp(node[0].get<int>()); } catch (...) { r = 255; }
+                                        try { g = clamp(node[1].get<int>()); } catch (...) { g = 255; }
+                                        try { b = clamp(node[2].get<int>()); } catch (...) { b = 255; }
                                         fm.rgb = SDL_Color{ static_cast<Uint8>(r), static_cast<Uint8>(g), static_cast<Uint8>(b), 255 };
                                         color_consumed = true;
+                                        break;
                                 }
                         }
                         fm.children.clear();
                         const nlohmann::json* children_json = nullptr;
-                        if (mv.size() >= 5 && mv[4].is_array()) {
-                                children_json = &mv[4];
-                        } else if (mv.size() >= 4 && mv[3].is_array() && !color_consumed) {
-                                children_json = &mv[3];
-                        } else if (mv.size() >= 3 && mv[2].is_array() && !(mv.size() >= 3 && mv[2].is_boolean())) {
-
-                                children_json = &mv[2];
+                        for (const auto& node : mv) {
+                                if (!node.is_array()) continue;
+                                if (!node.empty() && node[0].is_array()) {
+                                        children_json = &node;
+                                        break;
+                                }
                         }
                         if (children_json) {
                                 for (const auto& child_entry : *children_json) {

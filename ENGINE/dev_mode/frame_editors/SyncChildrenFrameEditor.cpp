@@ -12,6 +12,7 @@
 #include "asset/animation_frame.hpp"
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "dev_mode/dm_styles.hpp"
+#include "dev_mode/widgets.hpp"
 #include "render/warped_screen_grid.hpp"
 
 namespace devmode::frame_editors {
@@ -19,6 +20,19 @@ namespace devmode::frame_editors {
 namespace {
 SDL_Point round_point(const SDL_FPoint& pt) {
     return SDL_Point{static_cast<int>(std::lround(pt.x)), static_cast<int>(std::lround(pt.y))};
+}
+
+int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
+    float precise = wheel.preciseY;
+    int delta = wheel.y;
+    if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+        delta = -delta;
+        precise = -precise;
+    }
+    if (std::fabs(precise) >= 0.01f) {
+        return static_cast<int>(std::lround(precise));
+    }
+    return delta;
 }
 }  // namespace
 
@@ -32,10 +46,16 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
     if (axis_adjuster_) {
         axis_adjuster_->reset_axis(AdjustmentAxis::X);
     }
+    wants_close_ = false;
     dragging_child_ = false;
     data_dirty_ = true;
     selected_frame_index_ = 0;
     selected_child_index_ = 0;
+    btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
+    back_rect_ = SDL_Rect{DMSpacing::small_gap(), DMSpacing::small_gap(), 80, DMButton::height()};
+    if (btn_back_) {
+        btn_back_->set_rect(back_rect_);
+    }
     if (!context_.target || !context_.document) {
         return;
     }
@@ -52,11 +72,24 @@ void SyncChildrenFrameEditor::end() {
         selection_state_ = nullptr;
     }
     axis_adjuster_ = nullptr;
+    btn_back_.reset();
+    wants_close_ = false;
 }
 
 bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     if (!context_.assets || !context_.target) {
         return false;
+    }
+    if (btn_back_ && btn_back_->handle_event(e)) {
+        wants_close_ = true;
+        return true;
+    }
+    if (e.type == SDL_MOUSEWHEEL && selection_state_ && selection_state_->target == SelectionTarget::ChildPoint) {
+        const int steps = resolve_wheel_steps(e.wheel);
+        if (steps != 0) {
+            apply_scroll_adjustment(steps);
+            return true;
+        }
     }
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mouse{e.button.x, e.button.y};
@@ -67,6 +100,9 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
                 selection_state_->child_index = selected_child_index_;
                 selection_state_->screen_pos = mouse;
                 selection_state_->world_pos = child_world_position(selected_child_index_);
+            }
+            if (axis_adjuster_) {
+                axis_adjuster_->cycle_axis();
             }
             dragging_child_ = true;
             drag_start_mouse_ = mouse;
@@ -79,13 +115,12 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
                 }
             }
             return true;
+        } else if (selection_state_) {
+            selection_state_->target = SelectionTarget::None;
         }
     } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
         if (dragging_child_) {
             dragging_child_ = false;
-            if (selection_state_) {
-                selection_state_->target = SelectionTarget::None;
-            }
             return true;
         }
     } else if (e.type == SDL_MOUSEMOTION) {
@@ -93,13 +128,22 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
             float scale = attachment_scale();
             if (scale <= 0.0f) scale = 1.0f;
             const float dx_screen = static_cast<float>(e.motion.x - drag_start_mouse_.x);
-            const float dz_screen = static_cast<float>(e.motion.y - drag_start_mouse_.y);
+            const float dy_screen = static_cast<float>(e.motion.y - drag_start_mouse_.y);
             const bool flipped = context_.target->flipped;
             float dx_world = dx_screen / scale;
-            float dz_world = dz_screen / scale;
+            float dy_world = dy_screen / scale;
             child_timelines::ChildFrameSample& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
-            sample.dx = drag_start_sample_.dx + (flipped ? -dx_world : dx_world);
-            sample.dz = drag_start_sample_.dz + dz_world;
+            switch (selection_state_ ? selection_state_->axis : AdjustmentAxis::X) {
+                case AdjustmentAxis::X:
+                    sample.dx = drag_start_sample_.dx + (flipped ? -dx_world : dx_world);
+                    break;
+                case AdjustmentAxis::Y:
+                    sample.dy = drag_start_sample_.dy + dy_world;
+                    break;
+                case AdjustmentAxis::Z:
+                    sample.dz = drag_start_sample_.dz + dy_world;
+                    break;
+            }
             sample.has_data = true;
             sample.visible = true;
             data_dirty_ = true;
@@ -131,6 +175,9 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
 void SyncChildrenFrameEditor::update(const Input& /*input*/, float /*dt*/) {
     if (data_dirty_ && context_.target) {
         apply_current_frame_to_children();
+        if (manifest_txn_.active()) {
+            manifest_txn_.commit();
+        }
         data_dirty_ = false;
     }
 }
@@ -139,7 +186,6 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
     if (!renderer || !context_.target || !context_.assets) return;
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_Point anchor = asset_anchor_world();
-    const float scale = attachment_scale();
     const float radius = 6.0f;
     for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
         if (idx >= static_frames_by_child_.size()) continue;
@@ -164,7 +210,11 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
 }
 
 void SyncChildrenFrameEditor::render_overlays(SDL_Renderer* renderer) const {
-    (void)renderer;
+    if (!renderer || !btn_back_) return;
+    SDL_Rect rect{DMSpacing::small_gap(), DMSpacing::small_gap(), 80, DMButton::height()};
+    btn_back_->set_rect(rect);
+    back_rect_ = rect;
+    btn_back_->render(renderer);
 }
 
 void SyncChildrenFrameEditor::populate_child_data() {
@@ -340,9 +390,9 @@ SDL_FPoint SyncChildrenFrameEditor::child_world_position(int child_index) const 
     const auto& sample = timeline[static_cast<std::size_t>(frame_idx)];
     const float scale = attachment_scale();
     const float dx = sample.dx * scale;
-    const float dz = sample.dz * scale;
+    const float dy = sample.dy * scale;
     const float world_dx = context_.target && context_.target->flipped ? -dx : dx;
-    return SDL_FPoint{world_dx, dz};
+    return SDL_FPoint{world_dx, dy};
 }
 
 std::optional<int> SyncChildrenFrameEditor::hit_test_child_marker(const SDL_Point& mouse) const {
@@ -389,6 +439,34 @@ void SyncChildrenFrameEditor::ensure_manifest_transaction() {
             async_timelines_by_child_);
         return context_.document->update_animation_payload(context_.animation_id, payload);
     });
+}
+
+void SyncChildrenFrameEditor::apply_scroll_adjustment(int steps) {
+    if (steps == 0 || selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(static_frames_by_child_.size())) {
+        return;
+    }
+    if (selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_) {
+        return;
+    }
+    auto& timeline = static_frames_by_child_[selected_child_index_];
+    if (selected_frame_index_ >= static_cast<int>(timeline.size())) {
+        return;
+    }
+    auto& sample = timeline[selected_frame_index_];
+    switch (selection_state_ ? selection_state_->axis : AdjustmentAxis::X) {
+        case AdjustmentAxis::X:
+            sample.dx += static_cast<float>(steps);
+            break;
+        case AdjustmentAxis::Y:
+            sample.dy += static_cast<float>(steps);
+            break;
+        case AdjustmentAxis::Z:
+            sample.dz += static_cast<float>(steps);
+            break;
+    }
+    sample.visible = true;
+    sample.has_data = true;
+    data_dirty_ = true;
 }
 
 }  // namespace devmode::frame_editors

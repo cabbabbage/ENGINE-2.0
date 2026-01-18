@@ -1881,8 +1881,9 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
 void DevControls::begin_frame_editor_session(Asset* asset,
                                              std::shared_ptr<animation_editor::AnimationDocument> document,
-                                            std::shared_ptr<animation_editor::PreviewProvider> preview,
+                                             std::shared_ptr<animation_editor::PreviewProvider> preview,
                                              const std::string& animation_id,
+                                             FrameEditorLaunchMode launch_mode,
                                              std::function<void(const std::string&)> on_host_closed) {
     if (!asset || !assets_ || animation_id.empty()) return;
     if (!frame_editor_session_) frame_editor_session_ = std::make_unique<FrameEditorSession>();
@@ -1905,7 +1906,14 @@ void DevControls::begin_frame_editor_session(Asset* asset,
     if (frame_editor_prev_asset_info_open_) {
         frame_editor_asset_for_reopen_ = asset;
     }
-    frame_editor_session_->begin(assets_, asset, std::move(document), std::move(preview), animation_id, std::move(on_host_closed), [this]() {
+    frame_editor_session_->begin(assets_,
+                                 asset,
+                                 std::move(document),
+                                 std::move(preview),
+                                 animation_id,
+                                 launch_mode,
+                                 std::move(on_host_closed),
+                                 [this]() {
 
         this->grid_overlay_enabled_ = this->frame_editor_prev_grid_overlay_;
 

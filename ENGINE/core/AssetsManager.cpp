@@ -1771,10 +1771,16 @@ void Assets::begin_frame_editor_session(Asset* asset,
                                         std::shared_ptr<animation_editor::AnimationDocument> document,
                                         std::shared_ptr<animation_editor::PreviewProvider> preview,
                                         const std::string& animation_id,
+                                        FrameEditorLaunchMode launch_mode,
                                         std::function<void(const std::string&)> on_host_closed) {
     ensure_dev_controls();
     if (dev_controls_) {
-        dev_controls_->begin_frame_editor_session(asset, std::move(document), std::move(preview), animation_id, std::move(on_host_closed));
+        dev_controls_->begin_frame_editor_session(asset,
+                                                  std::move(document),
+                                                  std::move(preview),
+                                                  animation_id,
+                                                  launch_mode,
+                                                  std::move(on_host_closed));
     }
 }
 

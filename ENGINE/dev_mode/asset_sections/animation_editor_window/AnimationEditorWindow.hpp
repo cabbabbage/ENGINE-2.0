@@ -10,6 +10,7 @@
 
 #include "dev_mode/core/manifest_store.hpp"
 #include "dev_mode/widgets.hpp"
+#include "core/AssetsManager.hpp"
 
 #include <nlohmann/json_fwd.hpp>
 
@@ -90,7 +91,7 @@ class AnimationEditorWindow {
     void render_inspector_background(SDL_Renderer* renderer) const;
     bool handle_header_event(const SDL_Event& e);
     void set_status_message(const std::string& message, int frames = 300);
-    void open_frame_editor(const std::string& animation_id);
+    void open_frame_editor(const std::string& animation_id, FrameEditorLaunchMode mode);
     Asset* resolve_frame_editor_asset();
     void create_animation_via_prompt();
     void reload_document();

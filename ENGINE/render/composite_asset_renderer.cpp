@@ -93,6 +93,8 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
     };
 
     SDL_Texture* base_tex = nullptr;
+    SDL_Texture* depth_cue_foreground = nullptr;
+    SDL_Texture* depth_cue_background = nullptr;
 
     if (asset->info) {
         auto anim_it = asset->info->animations.find(asset->current_animation);
@@ -104,6 +106,8 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                     variant_idx = std::clamp(variant_idx, 0, static_cast<int>(variants.size()) - 1);
                     const FrameVariant& variant = variants[static_cast<std::size_t>(variant_idx)];
                     base_tex = variant.get_base_texture();
+                    depth_cue_foreground = variant.get_foreground_texture();
+                    depth_cue_background = variant.get_background_texture();
                 }
             }
         }
@@ -132,7 +136,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             static_cast<int>(std::lround(asset->smoothed_translation_y())),
             final_w,
             final_h
-};
+        };
         SDL_RendererFlip base_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
         add_render_object(base_tex,
                           dest_rect,
@@ -144,6 +148,65 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                           base_flip,
                           SDL_Point{w, h},
                           asset->world_z_offset());
+
+        bool have_depth_cue_distance = false;
+        float asset_distance = 0.0f;
+        if (assets_) {
+            const WarpedScreenGrid& cam = assets_->getView();
+            if (const auto* gp = cam.grid_point_for_asset(asset)) {
+                asset_distance = gp->distance_to_camera;
+                have_depth_cue_distance = std::isfinite(asset_distance);
+            }
+        }
+
+        SDL_Texture* overlay_texture = nullptr;
+        float overlay_opacity = 0.0f;
+        const float fg_distance = kDepthCueForegroundFullOpacityDistance;
+        const float bg_distance = kDepthCueBackgroundFullOpacityDistance;
+        if (have_depth_cue_distance && fg_distance < bg_distance) {
+            const float midpoint = 0.5f * (fg_distance + bg_distance);
+            if (asset_distance <= fg_distance) {
+                overlay_texture = depth_cue_foreground;
+                overlay_opacity = 1.0f;
+            } else if (asset_distance >= bg_distance) {
+                overlay_texture = depth_cue_background;
+                overlay_opacity = 1.0f;
+            } else if (asset_distance < midpoint) {
+                overlay_texture = depth_cue_foreground;
+                const float denom = midpoint - fg_distance;
+                if (denom > 0.0f) {
+                    overlay_opacity = 1.0f - (asset_distance - fg_distance) / denom;
+                }
+            } else {
+                overlay_texture = depth_cue_background;
+                const float denom = bg_distance - midpoint;
+                if (denom > 0.0f) {
+                    overlay_opacity = (asset_distance - midpoint) / denom;
+                }
+            }
+            overlay_opacity = std::clamp(overlay_opacity, 0.0f, 1.0f);
+        }
+
+        if (overlay_texture != nullptr && overlay_opacity > 0.0f) {
+            const Uint8 overlay_alpha = static_cast<Uint8>(std::lround(overlay_opacity * 255.0f));
+            if (overlay_alpha > 0) {
+                int overlay_tex_w = 0;
+                int overlay_tex_h = 0;
+                SDL_QueryTexture(overlay_texture, nullptr, nullptr, &overlay_tex_w, &overlay_tex_h);
+                overlay_tex_w = std::max(1, overlay_tex_w);
+                overlay_tex_h = std::max(1, overlay_tex_h);
+                add_render_object(overlay_texture,
+                                  dest_rect,
+                                  SDL_Color{255, 255, 255, overlay_alpha},
+                                  SDL_BLENDMODE_BLEND,
+                                  false,
+                                  0.0,
+                                  std::nullopt,
+                                  base_flip,
+                                  SDL_Point{overlay_tex_w, overlay_tex_h},
+                                  asset->world_z_offset());
+            }
+        }
     }
 
     asset->clear_composite_dirty();

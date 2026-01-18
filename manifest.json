@@ -160,6 +160,39 @@
           "frames": [
             {
               "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -1267,6 +1300,21 @@
           "frames": [
             {
               "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -1656,6 +1704,27 @@
           "frames": [
             {
               "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
             }
           ],
           "hit_geometry": [
@@ -1873,6 +1942,27 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
             {
               "needs_rebuild": false
             }
@@ -2120,6 +2210,21 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
             {
               "needs_rebuild": false
             }
@@ -3425,17 +3530,37 @@
       "animation_children": [],
       "animations": {
         "default": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "anti_tags": [],
@@ -3481,6 +3606,26 @@
       "asset_name": "yellow_flower",
       "lighting_info": [],
       "start": "default"
+    }
+  },
+  "image_effects": {
+    "background": {
+      "blur": 0.5,
+      "brightness": 0.43999993801116943,
+      "contrast": 0.5,
+      "hue": -91.0,
+      "saturation_blue": -0.06000000238418579,
+      "saturation_green": -0.12000000476837158,
+      "saturation_red": -0.40000003576278687
+    },
+    "foreground": {
+      "blur": 0.4599999189376831,
+      "brightness": 0.4599999189376831,
+      "contrast": 0.5199999809265137,
+      "hue": 120.0,
+      "saturation_blue": -0.6200000047683716,
+      "saturation_green": -0.36000001430511475,
+      "saturation_red": 0.43999993801116943
     }
   },
   "maps": {
@@ -3678,7 +3823,7 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 513,
+          "camera_height_px": 620,
           "camera_pan_y_percent": 0,
           "camera_tilt_deg": 45.0,
           "camera_y_distance_px": 0,
@@ -3716,8 +3861,8 @@
                 }
               ],
               "display_name": "Vibble",
-              "dx": -84,
-              "dy": 1100,
+              "dx": -508,
+              "dy": 2140,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

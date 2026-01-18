@@ -8,6 +8,12 @@ class Assets;
 
 class CompositeAssetRenderer {
 public:
+    // World-pixel distances used by the depth cue overlay blend.
+    // Assets at or closer than the foreground distance render the foreground overlay at full opacity.
+    // Assets at or farther than the background distance render the background overlay at full opacity.
+    static constexpr float kDepthCueForegroundFullOpacityDistance = 900.0f;
+    static constexpr float kDepthCueBackgroundFullOpacityDistance = 3200.0f;
+
     CompositeAssetRenderer(SDL_Renderer* renderer, Assets* assets);
     ~CompositeAssetRenderer();
 

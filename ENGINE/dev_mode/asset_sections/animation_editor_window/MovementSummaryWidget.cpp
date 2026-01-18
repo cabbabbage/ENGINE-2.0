@@ -200,19 +200,40 @@ void MovementSummaryWidget::set_bounds(const SDL_Rect& bounds) {
 
     const int padding = kPanelPadding;
     if (show_button_) {
-        const int width = std::max(kButtonWidth, std::min(bounds_.w - padding * 2, kButtonWidth));
-        const int x = bounds_.x + bounds_.w - padding - width;
-        const int y = bounds_.y + bounds_.h - padding - kButtonHeight;
-        button_rect_ = SDL_Rect{x, y, width, kButtonHeight};
+        if (derived_from_animation_) {
+            const int width = std::max(kButtonWidth, std::min(bounds_.w - padding * 2, kButtonWidth));
+            const int x = bounds_.x + bounds_.w - padding - width;
+            const int y = bounds_.y + bounds_.h - padding - kButtonHeight;
+            button_rect_ = SDL_Rect{x, y, width, kButtonHeight};
+        } else {
+            const int gap = DMSpacing::small_gap();
+            const int available = std::max(0, bounds_.w - padding * 2 - gap * 3);
+            const int width = std::max(kButtonWidth, available / 4);
+            const int height = kButtonHeight;
+            const int y = bounds_.y + bounds_.h - padding - height;
+            for (int i = 0; i < 4; ++i) {
+                const int x = bounds_.x + padding + i * (width + gap);
+                mode_button_rects_[static_cast<std::size_t>(i)] = SDL_Rect{x, y, width, height};
+            }
+            button_rect_ = SDL_Rect{0, 0, 0, 0};
+        }
     } else {
         button_rect_ = SDL_Rect{0, 0, 0, 0};
         button_hovered_ = false;
         button_pressed_ = false;
+        for (auto& r : mode_button_rects_) {
+            r = SDL_Rect{0, 0, 0, 0};
+        }
     }
 }
 
 void MovementSummaryWidget::set_edit_callback(EditCallback callback) {
     edit_callback_ = std::move(callback);
+    refresh_totals();
+}
+
+void MovementSummaryWidget::set_mode_launch_callback(ModeLaunchCallback callback) {
+    mode_launch_callback_ = std::move(callback);
     refresh_totals();
 }
 
@@ -268,33 +289,55 @@ void MovementSummaryWidget::render(SDL_Renderer* renderer) const {
             text_y += label_stride;
         }
     } else {
-        render_summary_label(renderer, "Total ΔX: " + std::to_string(static_cast<int>(std::lround(total_dx_))), text_x, text_y, text_color);
+        render_summary_label(renderer, "Total X: " + std::to_string(static_cast<int>(std::lround(total_dx_))), text_x, text_y, text_color);
         text_y += label_stride;
-        render_summary_label(renderer, "Total ΔY: " + std::to_string(static_cast<int>(std::lround(total_dy_))), text_x, text_y, text_color);
+        render_summary_label(renderer, "Total Y: " + std::to_string(static_cast<int>(std::lround(total_dy_))), text_x, text_y, text_color);
         text_y += label_stride;
     }
 
     if (show_button_) {
         const DMButtonStyle& button_style = DMStyles::AccentButton();
-        SDL_Color button_color = button_style.bg;
-        if (button_pressed_) {
-            button_color = button_style.press_bg;
-        } else if (button_hovered_) {
-            button_color = button_style.hover_bg;
+        if (derived_from_animation_) {
+            SDL_Color button_color = button_style.bg;
+            if (button_pressed_) {
+                button_color = button_style.press_bg;
+            } else if (button_hovered_) {
+                button_color = button_style.hover_bg;
+            }
+            const int button_radius = std::min(DMStyles::CornerRadius(), std::min(button_rect_.w, button_rect_.h) / 2);
+            const int button_bevel = std::min(DMStyles::BevelDepth(), std::max(0, std::min(button_rect_.w, button_rect_.h) / 2));
+            dm_draw::DrawBeveledRect(renderer, button_rect_, button_radius, button_bevel, button_color, button_color, button_color, false, 0.0f, 0.0f);
+            dm_draw::DrawRoundedOutline(renderer, button_rect_, button_radius, 1, button_style.border);
+            const std::string button_text = button_is_go_to_ ? "Go to Source" : "Frame Editor";
+            const SDL_Point label_size = DMFontCache::instance().measure_text(button_style.label, button_text);
+            int label_width = label_size.x;
+            int label_x = button_rect_.x + (button_rect_.w - label_width) / 2;
+            label_x = std::max(label_x, button_rect_.x + 8);
+            int label_y = button_rect_.y + (button_rect_.h - button_style.label.font_size) / 2;
+            render_summary_label(renderer, button_text, label_x, label_y, button_style.text);
+        } else {
+            static const char* kLabels[4] = {"Movement", "Children", "Attack Geo", "Hit Geo"};
+            for (int i = 0; i < 4; ++i) {
+                const SDL_Rect rect = mode_button_rects_[static_cast<std::size_t>(i)];
+                SDL_Color button_color = button_style.bg;
+                if (mode_button_pressed_[static_cast<std::size_t>(i)]) {
+                    button_color = button_style.press_bg;
+                } else if (mode_button_hovered_[static_cast<std::size_t>(i)]) {
+                    button_color = button_style.hover_bg;
+                }
+                const int button_radius = std::min(DMStyles::CornerRadius(), std::min(rect.w, rect.h) / 2);
+                const int button_bevel = std::min(DMStyles::BevelDepth(), std::max(0, std::min(rect.w, rect.h) / 2));
+                dm_draw::DrawBeveledRect(renderer, rect, button_radius, button_bevel, button_color, button_color, button_color, false, 0.0f, 0.0f);
+                dm_draw::DrawRoundedOutline(renderer, rect, button_radius, 1, button_style.border);
+                const std::string button_text = kLabels[i];
+                const SDL_Point label_size = DMFontCache::instance().measure_text(button_style.label, button_text);
+                int label_width = label_size.x;
+                int label_x = rect.x + (rect.w - label_width) / 2;
+                label_x = std::max(label_x, rect.x + 8);
+                int label_y = rect.y + (rect.h - button_style.label.font_size) / 2;
+                render_summary_label(renderer, button_text, label_x, label_y, button_style.text);
+            }
         }
-        const int button_radius = std::min(DMStyles::CornerRadius(), std::min(button_rect_.w, button_rect_.h) / 2);
-        const int button_bevel = std::min(DMStyles::BevelDepth(), std::max(0, std::min(button_rect_.w, button_rect_.h) / 2));
-        dm_draw::DrawBeveledRect( renderer, button_rect_, button_radius, button_bevel, button_color, button_color, button_color, false, 0.0f, 0.0f);
-
-        dm_draw::DrawRoundedOutline( renderer, button_rect_, button_radius, 1, button_style.border);
-
-        const std::string button_text = button_is_go_to_ ? "Go to Source" : "Frame Editor";
-        const SDL_Point label_size = DMFontCache::instance().measure_text(button_style.label, button_text);
-        int label_width = label_size.x;
-        int label_x = button_rect_.x + (button_rect_.w - label_width) / 2;
-        label_x = std::max(label_x, button_rect_.x + 8);
-        int label_y = button_rect_.y + (button_rect_.h - button_style.label.font_size) / 2;
-        render_summary_label(renderer, button_text, label_x, label_y, button_style.text);
     }
 }
 
@@ -304,42 +347,83 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
         button_pressed_ = false;
         return false;
     }
+    auto handle_mode_button_event = [&](FrameEditorLaunchMode mode, std::size_t idx, const SDL_Point& p, bool pressed_only) -> bool {
+        if (idx >= mode_button_rects_.size()) return false;
+        const SDL_Rect& rect = mode_button_rects_[idx];
+        if (rect.w <= 0 || rect.h <= 0) return false;
+        const bool inside = SDL_PointInRect(&p, &rect) != 0;
+        if (pressed_only) {
+            if (inside) {
+                mode_button_pressed_[idx] = true;
+            }
+            return inside;
+        }
+        if (mode_button_pressed_[idx] && inside && mode_launch_callback_) {
+            mode_launch_callback_(animation_id_, mode);
+        }
+        mode_button_pressed_[idx] = false;
+        return inside;
+    };
     switch (e.type) {
         case SDL_MOUSEMOTION: {
             SDL_Point p{e.motion.x, e.motion.y};
-            button_hovered_ = SDL_PointInRect(&p, &button_rect_) != 0;
-            return button_hovered_;
+            if (derived_from_animation_) {
+                button_hovered_ = SDL_PointInRect(&p, &button_rect_) != 0;
+                return button_hovered_;
+            }
+            bool handled = false;
+            for (std::size_t i = 0; i < mode_button_rects_.size(); ++i) {
+                mode_button_hovered_[i] = SDL_PointInRect(&p, &mode_button_rects_[i]) != 0;
+                handled = handled || mode_button_hovered_[i];
+            }
+            return handled;
         }
         case SDL_MOUSEBUTTONDOWN: {
             if (e.button.button != SDL_BUTTON_LEFT) {
                 return false;
             }
             SDL_Point p{e.button.x, e.button.y};
-            if (SDL_PointInRect(&p, &button_rect_)) {
-                button_pressed_ = true;
-                return true;
+            if (derived_from_animation_) {
+                if (SDL_PointInRect(&p, &button_rect_)) {
+                    button_pressed_ = true;
+                    return true;
+                }
+                return false;
             }
-            return false;
+            bool handled = false;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::Movement, 0, p, true) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::SyncChildren, 1, p, true) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 2, p, true) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 3, p, true) || handled;
+            return handled;
         }
         case SDL_MOUSEBUTTONUP: {
             if (e.button.button != SDL_BUTTON_LEFT) {
                 return false;
             }
             SDL_Point p{e.button.x, e.button.y};
-            bool inside = SDL_PointInRect(&p, &button_rect_) != 0;
-            bool was_pressed = button_pressed_;
-            button_pressed_ = false;
-            if (inside && was_pressed) {
-                if (button_is_go_to_) {
-                    if (go_to_source_callback_ && !inherited_source_id_.empty()) {
-                        go_to_source_callback_(inherited_source_id_);
+            if (derived_from_animation_) {
+                bool inside = SDL_PointInRect(&p, &button_rect_) != 0;
+                bool was_pressed = button_pressed_;
+                button_pressed_ = false;
+                if (inside && was_pressed) {
+                    if (button_is_go_to_) {
+                        if (go_to_source_callback_ && !inherited_source_id_.empty()) {
+                            go_to_source_callback_(inherited_source_id_);
+                        }
+                    } else if (edit_callback_) {
+                        edit_callback_(animation_id_);
                     }
-                } else if (edit_callback_) {
-                    edit_callback_(animation_id_);
+                    return true;
                 }
-                return true;
+                return inside;
             }
-            return inside;
+            bool handled = false;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::Movement, 0, p, false) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::SyncChildren, 1, p, false) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 2, p, false) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 3, p, false) || handled;
+            return handled;
         }
         default:
             break;
@@ -377,13 +461,13 @@ void MovementSummaryWidget::apply_resolved_totals(const ResolvedMovement& resolv
             inherited_message_lines_.push_back("Modifiers: (none).");
         }
         inherited_message_lines_.push_back("Edit the source animation to change it.");
-        inherited_message_lines_.push_back("Totals ΔX: " + std::to_string(static_cast<int>(std::lround(total_dx_))) + ", ΔY: " + std::to_string(static_cast<int>(std::lround(total_dy_))) + ".");
+        inherited_message_lines_.push_back("Totals X: " + std::to_string(static_cast<int>(std::lround(total_dx_))) + ", Y: " + std::to_string(static_cast<int>(std::lround(total_dy_))) + ".");
         show_button_ = go_to_source_callback_ && !inherited_source_id_.empty();
         button_is_go_to_ = show_button_;
     } else {
         inherited_source_id_.clear();
         inherited_message_lines_.clear();
-        show_button_ = static_cast<bool>(edit_callback_);
+        show_button_ = static_cast<bool>(mode_launch_callback_);
         button_is_go_to_ = false;
     }
 

@@ -37,6 +37,14 @@ class PreviewProvider;
 namespace devmode::core {
 class ManifestStore;
 }
+
+enum class FrameEditorLaunchMode {
+    Movement,
+    SyncChildren,
+    AttackGeometry,
+    HitGeometry
+};
+
 class Assets {
 public:
     Assets(AssetLibrary& library,
@@ -113,7 +121,18 @@ public:
 
     void focus_camera_on_asset(Asset* a, double height_factor = 0.8, int duration_steps = 25);
 
-    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, std::function<void(const std::string&)> on_host_closed);
+    enum class FrameEditorLaunchMode {
+        Movement,
+        SyncChildren,
+        AttackGeometry,
+        HitGeometry
+    };
+    void begin_frame_editor_session(Asset* asset,
+                                    std::shared_ptr<animation_editor::AnimationDocument> document,
+                                    std::shared_ptr<animation_editor::PreviewProvider> preview,
+                                    const std::string& animation_id,
+                                    FrameEditorLaunchMode launch_mode,
+                                    std::function<void(const std::string&)> on_host_closed);
 
     void log_asset_movement(Asset* asset, SDL_Point previous, SDL_Point current);
     std::uint32_t current_frame_id() const { return frame_id_; }

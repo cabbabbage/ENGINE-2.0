@@ -343,6 +343,11 @@ void AnimationInspectorPanel::set_frame_edit_callback(FrameEditCallback callback
     apply_dependencies();
 }
 
+void AnimationInspectorPanel::set_frame_mode_edit_callback(FrameModeEditCallback callback) {
+    frame_mode_edit_callback_ = std::move(callback);
+    apply_dependencies();
+}
+
 void AnimationInspectorPanel::set_navigate_to_animation_callback(AnimationNavigateCallback callback) {
     navigate_to_animation_callback_ = std::move(callback);
     apply_dependencies();
@@ -1285,6 +1290,11 @@ void AnimationInspectorPanel::apply_dependencies() {
 
     if (movement_summary_) {
         movement_summary_->set_edit_callback(frame_edit_callback_);
+        movement_summary_->set_mode_launch_callback([this](const std::string& id, FrameEditorLaunchMode mode) {
+            if (frame_mode_edit_callback_) {
+                frame_mode_edit_callback_(id, mode);
+            }
+        });
         movement_summary_->set_go_to_source_callback(navigate_to_animation_callback_);
     }
 

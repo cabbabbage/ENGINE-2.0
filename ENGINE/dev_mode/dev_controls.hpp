@@ -13,6 +13,7 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+#include "core/AssetsManager.hpp"
 #include "other_settings_and_controls.hpp"
 #include "trail_editor_suite.hpp"
 #include "dev_mode/core/manifest_store.hpp"
@@ -117,7 +118,12 @@ public:
     bool is_snap_to_grid_enabled() const { return snap_to_grid_enabled_; }
     int  grid_cell_size_px() const { return grid_cell_size_px_; }
 
-    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, std::function<void(const std::string&)> on_host_closed);
+    void begin_frame_editor_session(Asset* asset,
+                                    std::shared_ptr<animation_editor::AnimationDocument> document,
+                                    std::shared_ptr<animation_editor::PreviewProvider> preview,
+                                    const std::string& animation_id,
+                                    FrameEditorLaunchMode launch_mode,
+                                    std::function<void(const std::string&)> on_host_closed);
     void end_frame_editor_session();
     bool is_frame_editor_session_active() const;
 

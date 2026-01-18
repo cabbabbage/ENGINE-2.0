@@ -52,6 +52,7 @@
 #include "core/AssetsManager.hpp"
 #include "dev_mode/asset_paths.hpp"
 #include "dev_mode/animation_runtime_refresh.hpp"
+#include "core/AssetsManager.hpp"
 
 namespace {
 
@@ -777,7 +778,8 @@ void AnimationEditorWindow::configure_inspector_panel() {
     inspector_panel_->set_source_gif_picker([this]() { return this->pick_gif(); });
     inspector_panel_->set_source_png_sequence_picker([this]() { return this->pick_png_sequence(); });
     inspector_panel_->set_source_status_callback([this](const std::string& message) { this->set_status_message(message); });
-    inspector_panel_->set_frame_edit_callback([this](const std::string& id) { this->open_frame_editor(id); });
+    inspector_panel_->set_frame_edit_callback([this](const std::string& id) { this->open_frame_editor(id, FrameEditorLaunchMode::Movement); });
+    inspector_panel_->set_frame_mode_edit_callback([this](const std::string& id, FrameEditorLaunchMode mode) { this->open_frame_editor(id, mode); });
     inspector_panel_->set_navigate_to_animation_callback([this](const std::string& id) {
         this->select_animation(std::optional<std::string>{id}, true);
     });
@@ -1744,7 +1746,7 @@ Asset* AnimationEditorWindow::resolve_frame_editor_asset() {
     return nullptr;
 }
 
-void AnimationEditorWindow::open_frame_editor(const std::string& animation_id) {
+void AnimationEditorWindow::open_frame_editor(const std::string& animation_id, FrameEditorLaunchMode mode) {
     if (animation_id.empty() || !document_) {
         return;
     }
@@ -1760,7 +1762,7 @@ void AnimationEditorWindow::open_frame_editor(const std::string& animation_id) {
     target_asset_ = runtime_asset;
     live_frame_editor_session_active_ = true;
     std::weak_ptr<LiveFrameEditorToken> host_token = live_frame_editor_token_;
-    assets_->begin_frame_editor_session(runtime_asset, document_, preview_provider_, animation_id,
+    assets_->begin_frame_editor_session(runtime_asset, document_, preview_provider_, animation_id, mode,
         [this, host_token](const std::string& closed_animation_id) {
             if (host_token.expired()) return;
             this->on_live_frame_editor_closed(closed_animation_id);

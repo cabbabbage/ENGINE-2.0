@@ -13,6 +13,7 @@
 #include "dev_mode/draw_utils.hpp"
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
+#include "dev_mode/frame_editors/shared/AxisPointRenderer.hpp"
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
@@ -111,8 +112,12 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     cb_curve_ = std::make_unique<DMCheckbox>("Curve", curve_enabled_);
     btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
     btn_apply_all_ = std::make_unique<DMButton>("Apply To All Frames", &DMStyles::HeaderButton(), 180, DMButton::height());
-    btn_prev_frame_ = std::make_unique<DMButton>("<", &DMStyles::AccentButton(), 36, DMButton::height());
-    btn_next_frame_ = std::make_unique<DMButton>(">", &DMStyles::AccentButton(), 36, DMButton::height());
+    frame_navigator_ = std::make_unique<FrameNavigator>();
+    frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
+    frame_navigator_->set_current_frame(selected_index_);
+    frame_navigator_->set_on_frame_changed([this](int frame) {
+        select_frame(frame);
+    });
     tb_dx_ = std::make_unique<DMTextBox>("dx", "0");
     tb_dy_ = std::make_unique<DMTextBox>("dy", "0");
     tb_dz_ = std::make_unique<DMTextBox>("dz", "0");
@@ -136,8 +141,7 @@ void MovementFrameEditor::end() {
     cb_curve_.reset();
     btn_back_.reset();
     btn_apply_all_.reset();
-    btn_prev_frame_.reset();
-    btn_next_frame_.reset();
+
     tb_dx_.reset();
     tb_dy_.reset();
     tb_dz_.reset();
@@ -147,12 +151,7 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
     bool consumed = false;
     apply_text_field_changes();
 
-    if (btn_prev_frame_ && btn_prev_frame_->handle_event(e)) {
-        select_frame(selected_index_ - 1);
-        consumed = true;
-    }
-    if (btn_next_frame_ && btn_next_frame_->handle_event(e)) {
-        select_frame(selected_index_ + 1);
+    if (frame_navigator_ && frame_navigator_->handle_event(e)) {
         consumed = true;
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
@@ -221,9 +220,7 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         }
         if (auto hit = hit_test_point(mp)) {
             select_frame(*hit);
-            if (axis_adjuster_) {
-                axis_adjuster_->cycle_axis();
-            }
+            AxisPointRenderer::cycle_axis_on_selection(selection_state_, axis_adjuster_);
             if (selection_state_) {
                 selection_state_->target = SelectionTarget::MovementPoint;
                 selection_state_->child_index = -1;
@@ -241,33 +238,25 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         if (dragging_point_) {
             SDL_Point mp{e.button.x, e.button.y};
             if (!ui_contains_point(mp)) {
-                SDL_FPoint desired_rel = screen_to_world_relative(mp);
-                float desired_z = drag_start_z_;
-                if (selection_state_) {
-                    const int idx = clamp_index(selected_index_, static_cast<int>(rel_positions_.size()));
-                    if (idx < static_cast<int>(rel_positions_.size())) {
-                        switch (selection_state_->axis) {
-                            case AdjustmentAxis::X:
-                                desired_rel.y = rel_positions_[idx].y;
-                                desired_z = rel_positions_z_[idx];
-                                break;
-                            case AdjustmentAxis::Y:
-                                desired_rel.x = rel_positions_[idx].x;
-                                desired_z = rel_positions_z_[idx];
-                                break;
-                            case AdjustmentAxis::Z:
-                                {
-                                    const float drag_delta = desired_rel.y - drag_start_rel_.y;
-                                    desired_rel.x = rel_positions_[idx].x;
-                                    desired_rel.y = rel_positions_[idx].y;
-                                    desired_z = drag_start_z_ + drag_delta;
-                                }
-                                break;
-                            default:
-                                break;
-                        }
-                    }
+        SDL_FPoint desired_rel = screen_to_world_relative(mp);
+        float desired_z = drag_start_z_;
+        if (selection_state_) {
+            const int idx = clamp_index(selected_index_, static_cast<int>(rel_positions_.size()));
+            if (idx < static_cast<int>(rel_positions_.size())) {
+                SDL_FPoint drag_delta{desired_rel.x - drag_start_rel_.x, desired_rel.y - drag_start_rel_.y};
+                drag_delta = AxisPointRenderer::constrain_drag_delta(drag_delta, selection_state_->axis);
+                desired_rel.x = drag_start_rel_.x + drag_delta.x;
+                desired_rel.y = drag_start_rel_.y + drag_delta.y;
+
+                if (selection_state_->axis == AdjustmentAxis::Z) {
+                    desired_z = drag_start_z_ + drag_delta.y;
+                    desired_rel.x = rel_positions_[idx].x;
+                    desired_rel.y = rel_positions_[idx].y;
+                } else {
+                    desired_z = rel_positions_z_[idx];
                 }
+            }
+        }
                 const std::vector<SDL_FPoint> base = rel_positions_;
                 const std::vector<float> base_z = rel_positions_z_;
                 apply_frame_move_from_base(selected_index_, desired_rel, desired_z, base, base_z);
@@ -291,25 +280,17 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         if (selection_state_) {
             const int idx = clamp_index(selected_index_, static_cast<int>(rel_positions_.size()));
             if (idx < static_cast<int>(rel_positions_.size())) {
-                switch (selection_state_->axis) {
-                    case AdjustmentAxis::X:
-                        desired_rel.y = rel_positions_[idx].y;
-                        desired_z = rel_positions_z_[idx];
-                        break;
-                    case AdjustmentAxis::Y:
-                        desired_rel.x = rel_positions_[idx].x;
-                        desired_z = rel_positions_z_[idx];
-                        break;
-                    case AdjustmentAxis::Z:
-                        {
-                            const float drag_delta = desired_rel.y - drag_start_rel_.y;
-                            desired_rel.x = rel_positions_[idx].x;
-                            desired_rel.y = rel_positions_[idx].y;
-                            desired_z = drag_start_z_ + drag_delta;
-                        }
-                        break;
-                    default:
-                        break;
+                SDL_FPoint drag_delta{desired_rel.x - drag_start_rel_.x, desired_rel.y - drag_start_rel_.y};
+                drag_delta = AxisPointRenderer::constrain_drag_delta(drag_delta, selection_state_->axis);
+                desired_rel.x = drag_start_rel_.x + drag_delta.x;
+                desired_rel.y = drag_start_rel_.y + drag_delta.y;
+
+                if (selection_state_->axis == AdjustmentAxis::Z) {
+                    desired_z = drag_start_z_ + drag_delta.y;
+                    desired_rel.x = rel_positions_[idx].x;
+                    desired_rel.y = rel_positions_[idx].y;
+                } else {
+                    desired_z = rel_positions_z_[idx];
                 }
             }
         }
@@ -333,34 +314,35 @@ void MovementFrameEditor::update(const Input&, float) {
 
 void MovementFrameEditor::render_world(SDL_Renderer* renderer) const {
     if (!renderer || !context_.assets || !context_.target) return;
-    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-    SDL_Point anchor_world = animation_update::detail::bottom_middle_for(*context_.target, context_.target->pos);
+    std::vector<SDL_FPoint> screen_points(rel_positions_.size());
+    std::vector<bool> has_screen(rel_positions_.size(), false);
+    for (std::size_t i = 0; i < rel_positions_.size(); ++i) {
+        SDL_FPoint screen{};
+        if (project_relative_point(i, screen)) {
+            screen_points[i] = screen;
+            has_screen[i] = true;
+        }
+    }
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_Color path_col = DMStyles::AccentButton().bg;
     SDL_SetRenderDrawColor(renderer, path_col.r, path_col.g, path_col.b, 205);
-    for (size_t i = 1; i < rel_positions_.size(); ++i) {
-        SDL_FPoint a = cam.map_to_screen_f(SDL_FPoint{rel_positions_[i - 1].x + anchor_world.x,
-                                                      rel_positions_[i - 1].y + anchor_world.y});
-        SDL_FPoint b = cam.map_to_screen_f(SDL_FPoint{rel_positions_[i].x + anchor_world.x,
-                                                      rel_positions_[i].y + anchor_world.y});
+    for (std::size_t i = 1; i < rel_positions_.size(); ++i) {
+        if (!has_screen[i - 1] || !has_screen[i]) {
+            continue;
+        }
+        SDL_FPoint a = screen_points[i - 1];
+        SDL_FPoint b = screen_points[i];
         SDL_RenderDrawLine(renderer, static_cast<int>(std::lround(a.x)), static_cast<int>(std::lround(a.y)),
                            static_cast<int>(std::lround(b.x)), static_cast<int>(std::lround(b.y)));
     }
 
-    for (size_t i = 0; i < rel_positions_.size(); ++i) {
-        SDL_FPoint p = cam.map_to_screen_f(SDL_FPoint{rel_positions_[i].x + anchor_world.x,
-                                                      rel_positions_[i].y + anchor_world.y});
-        const bool is_current = static_cast<int>(i) == selected_index_;
-        const int r = is_current ? 6 : 4;
-        SDL_Color c = is_current ? DMStyles::AccentButton().hover_bg
-                                 : devmode::utils::with_alpha(DMStyles::AccentButton().bg, 128);
-        SDL_Point cp = round_point(p);
-        SDL_Rect dot{cp.x - r, cp.y - r, r * 2, r * 2};
-        SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-        SDL_RenderFillRect(renderer, &dot);
-        SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g, DMStyles::Border().b,
-                               DMStyles::Border().a);
-        SDL_RenderDrawRect(renderer, &dot);
+    for (std::size_t i = 0; i < rel_positions_.size(); ++i) {
+        if (!has_screen[i]) continue;
+        SDL_FPoint p = screen_points[i];
+        const bool is_selected = (selection_state_ && selection_state_->target == SelectionTarget::MovementPoint &&
+                                 static_cast<int>(i) == selected_index_);
+        const AdjustmentAxis axis = selection_state_ ? selection_state_->axis : AdjustmentAxis::X;
+        AxisPointRenderer::render_axis_point(renderer, p, axis, is_selected);
     }
 }
 
@@ -368,8 +350,7 @@ void MovementFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (!renderer) return;
     layout_ui(renderer);
     if (btn_back_) btn_back_->render(renderer);
-    if (btn_prev_frame_) btn_prev_frame_->render(renderer);
-    if (btn_next_frame_) btn_next_frame_->render(renderer);
+    if (frame_navigator_) frame_navigator_->render(renderer);
     if (cb_smooth_) cb_smooth_->render(renderer);
     if (cb_curve_) cb_curve_->render(renderer);
     if (tb_dx_) tb_dx_->render(renderer);
@@ -401,13 +382,10 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     if (btn_back_) {
         btn_back_->set_rect(place_row(button_h));
     }
-    if (btn_prev_frame_ && btn_next_frame_) {
-        int half_w = (inner_w - DMSpacing::small_gap()) / 2;
-        SDL_Rect left{ x + padding, cursor_y, half_w, button_h };
-        SDL_Rect right{ x + padding + half_w + DMSpacing::small_gap(), cursor_y, half_w, button_h };
-        btn_prev_frame_->set_rect(left);
-        btn_next_frame_->set_rect(right);
-        cursor_y += button_h + DMSpacing::small_gap();
+    if (frame_navigator_) {
+        SDL_Rect nav_rect{x + padding, cursor_y, inner_w, frame_navigator_->get_preferred_rect().h};
+        frame_navigator_->set_rect(nav_rect);
+        cursor_y += nav_rect.h + DMSpacing::small_gap();
     }
 
     if (tb_dx_ && tb_dy_ && tb_dz_) {
@@ -521,13 +499,13 @@ std::optional<int> MovementFrameEditor::hit_test_point(const SDL_Point& screen) 
     if (!context_.assets || !context_.target) {
         return std::nullopt;
     }
-    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-    SDL_Point anchor_world = asset_anchor_world();
     const float radius = 10.0f;
     const float radius_sq = radius * radius;
-    for (size_t i = 0; i < rel_positions_.size(); ++i) {
-        SDL_FPoint p = cam.map_to_screen_f(SDL_FPoint{rel_positions_[i].x + anchor_world.x,
-                                                      rel_positions_[i].y + anchor_world.y});
+    for (std::size_t i = 0; i < rel_positions_.size(); ++i) {
+        SDL_FPoint p{};
+        if (!project_relative_point(i, p)) {
+            continue;
+        }
         const float dx = static_cast<float>(screen.x) - p.x;
         const float dy = static_cast<float>(screen.y) - p.y;
         if ((dx * dx + dy * dy) <= radius_sq) {
@@ -767,9 +745,15 @@ void MovementFrameEditor::refresh_selection_state() {
         static_cast<float>(anchor.x) + (idx < static_cast<int>(rel_positions_.size()) ? rel_positions_[idx].x : 0.0f),
         static_cast<float>(anchor.y) + (idx < static_cast<int>(rel_positions_.size()) ? rel_positions_[idx].y : 0.0f)
     };
-    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-    SDL_FPoint screen = cam.map_to_screen_f(world);
+    const float world_z = base_world_z() +
+        (idx < static_cast<int>(rel_positions_z_.size()) ? rel_positions_z_[idx] : 0.0f);
+    SDL_FPoint screen{};
+    if (!project_relative_point(static_cast<std::size_t>(idx), screen)) {
+        const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+        screen = cam.map_to_screen_f(world);
+    }
     selection_state_->world_pos = world;
+    selection_state_->world_z = world_z;
     selection_state_->screen_pos = round_point(screen);
 }
 
@@ -778,6 +762,31 @@ SDL_Point MovementFrameEditor::asset_anchor_world() const {
         return SDL_Point{0, 0};
     }
     return animation_update::detail::bottom_middle_for(*context_.target, context_.target->pos);
+}
+
+float MovementFrameEditor::base_world_z() const {
+    return context_.target ? context_.target->world_z_offset() : 0.0f;
+}
+
+bool MovementFrameEditor::project_relative_point(std::size_t idx, SDL_FPoint& out) const {
+    if (!context_.assets || !context_.target) {
+        return false;
+    }
+    if (idx >= rel_positions_.size() || idx >= rel_positions_z_.size()) {
+        return false;
+    }
+    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+    SDL_Point anchor = asset_anchor_world();
+    SDL_FPoint world{
+        rel_positions_[idx].x + static_cast<float>(anchor.x),
+        rel_positions_[idx].y + static_cast<float>(anchor.y)
+    };
+    const float world_z = base_world_z() + rel_positions_z_[idx];
+    if (cam.project_world_point(world, world_z, out)) {
+        return true;
+    }
+    out = cam.map_to_screen_f(world);
+    return true;
 }
 
 SDL_FPoint MovementFrameEditor::screen_to_world_relative(const SDL_Point& screen) const {

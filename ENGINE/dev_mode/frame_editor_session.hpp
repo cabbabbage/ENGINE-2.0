@@ -10,6 +10,7 @@
 #include "dev_mode/frame_editors/shared/FrameEditorContext.hpp"
 #include "dev_mode/frame_editors/shared/AxisAdjuster.hpp"
 #include "dev_mode/frame_editors/FrameEditorBase.hpp"
+#include "dev_mode/pan_and_height.hpp"
 
 class Assets;
 class Asset;
@@ -106,4 +107,6 @@ private:
     bool tilt_locked_ = false;
     float locked_tilt_deg_ = 0.0f;
     bool edit_camera_locked_ = false;
+
+    PanAndHeight pan_height_;
 };

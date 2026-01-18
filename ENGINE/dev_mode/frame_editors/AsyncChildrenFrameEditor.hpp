@@ -34,7 +34,11 @@ private:
     void apply_preview();
     float attachment_scale() const;
     SDL_Point asset_anchor_world() const;
-    SDL_FPoint child_world_position(int child_index) const;
+    struct ChildWorldPose {
+        SDL_FPoint pos{0.0f, 0.0f};
+        float z = 0.0f;
+    };
+    ChildWorldPose child_world_pose(int child_index) const;
     std::optional<int> hit_test_child_marker(const SDL_Point& mouse) const;
     child_timelines::ChildFrameSample sample_for_child(int child_index, bool for_preview) const;
     child_timelines::ChildFrameSample default_sample(int child_index) const;

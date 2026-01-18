@@ -9,6 +9,7 @@
 #include "shared/AxisAdjuster.hpp"
 #include "shared/FrameEditState.hpp"
 #include "shared/FrameEditorContext.hpp"
+#include "shared/FrameNavigator.hpp"
 #include "shared/ManifestTransaction.hpp"
 #include "shared/SelectionState.hpp"
 #include "dev_mode/widgets.hpp"
@@ -49,6 +50,8 @@ private:
     void refresh_selection_state();
     SDL_Point asset_anchor_world() const;
     SDL_FPoint screen_to_world_relative(const SDL_Point& screen) const;
+    float base_world_z() const;
+    bool project_relative_point(std::size_t idx, SDL_FPoint& out) const;
     bool ui_contains_point(const SDL_Point& pt) const;
 
     FrameEditorContext context_{};
@@ -69,8 +72,7 @@ private:
     std::unique_ptr<DMCheckbox> cb_curve_;
     std::unique_ptr<DMButton> btn_back_;
     std::unique_ptr<DMButton> btn_apply_all_;
-    std::unique_ptr<DMButton> btn_prev_frame_;
-    std::unique_ptr<DMButton> btn_next_frame_;
+    std::unique_ptr<FrameNavigator> frame_navigator_;
     std::unique_ptr<DMTextBox> tb_dx_;
     std::unique_ptr<DMTextBox> tb_dy_;
     std::unique_ptr<DMTextBox> tb_dz_;

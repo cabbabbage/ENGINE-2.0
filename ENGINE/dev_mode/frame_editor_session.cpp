@@ -16,6 +16,7 @@
 #include "render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
 #include "utils/input.hpp"
+#include "dev_mode/pan_and_height.hpp"
 
 namespace {
 
@@ -109,6 +110,7 @@ void FrameEditorSession::begin(Assets* assets,
     editor_context_.axis_adjuster = &axis_adjuster_;
 
     mode_ = mode_for_launch(launch_mode_);
+    pan_height_.set_height_scale_factor(1.1);
     capture_camera_state();
     active_ = true;
     create_and_begin_editor();
@@ -190,6 +192,19 @@ void FrameEditorSession::update(const Input& input) {
         }
         if (edit_camera_locked_) {
             enforce_camera_locks(cam);
+        } else {
+            pan_height_.handle_input(cam, input, false);
+            // Handle tilt with right click drag
+            if (input.isDown(Input::RIGHT)) {
+                const int dy = input.getDY();
+                if (dy != 0) {
+                    const float delta_deg = -static_cast<float>(dy) * 0.2f;
+                    float current_tilt = cam.current_pitch_degrees();
+                    float new_tilt = current_tilt + delta_deg;
+                    new_tilt = std::clamp(new_tilt, 0.0f, 150.0f);
+                    cam.set_tilt_override(new_tilt);
+                }
+            }
         }
     }
     active_editor_->update(input, 0.0f);

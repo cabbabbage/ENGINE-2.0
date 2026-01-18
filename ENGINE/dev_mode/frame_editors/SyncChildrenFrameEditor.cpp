@@ -13,9 +13,14 @@
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/widgets.hpp"
+#include "dev_mode/frame_editors/shared/AxisPointRenderer.hpp"
 #include "render/warped_screen_grid.hpp"
+#include "render/composite_asset_renderer.hpp"
+#include <SDL_image.h>
 
 namespace devmode::frame_editors {
+
+
 
 namespace {
 SDL_Point round_point(const SDL_FPoint& pt) {
@@ -60,7 +65,55 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         return;
     }
     populate_child_data();
+    frame_navigator_ = std::make_unique<FrameNavigator>();
+    frame_navigator_->set_frame_count(frame_count_);
+    frame_navigator_->set_current_frame(selected_frame_index_);
+    frame_navigator_->set_on_frame_changed([this](int frame) {
+        selected_frame_index_ = frame;
+        data_dirty_ = true;
+        update_text_boxes_from_current_frame();
+    });
+
+    // Initialize child selector dropdown
+    std::vector<std::string> child_labels;
+    for (const auto& child : child_assets_) {
+        child_labels.push_back(child);
+    }
+    if (child_labels.empty()) {
+        child_labels.push_back("No children");
+    }
+    dd_child_selector_ = std::make_unique<DMDropdown>("Child", child_labels, std::min(selected_child_index_, static_cast<int>(child_labels.size()) - 1));
+    dd_child_selector_->set_on_selection_changed([this](int index) {
+        selected_child_index_ = index;
+        if (selection_state_) {
+            selection_state_->child_index = selected_child_index_;
+        }
+        data_dirty_ = true;
+        update_text_boxes_from_current_frame();
+    });
+
+    // Initialize visibility checkbox
+    auto visibility_checkbox = std::make_unique<DMCheckbox>("Visible", true);
+    cb_child_visible_ = std::make_unique<CallbackCheckboxWidget>(
+        std::move(visibility_checkbox),
+        [this](bool visible) {
+            if (selected_child_index_ >= 0 && selected_child_index_ < static_cast<int>(static_frames_by_child_.size()) &&
+                selected_frame_index_ >= 0 && selected_frame_index_ < frame_count_) {
+                auto& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
+                sample.visible = visible;
+                sample.has_data = true;
+                data_dirty_ = true;
+            }
+        });
+
+    // Initialize text boxes
+    tb_dx_ = std::make_unique<DMTextBox>("DX", "0");
+    tb_dy_ = std::make_unique<DMTextBox>("DY", "0");
+    tb_dz_ = std::make_unique<DMTextBox>("DZ", "0");
+    tb_rotation_ = std::make_unique<DMTextBox>("Rotation", "0");
+
     ensure_manifest_transaction();
+    update_text_boxes_from_current_frame();
 }
 
 void SyncChildrenFrameEditor::end() {
@@ -73,6 +126,13 @@ void SyncChildrenFrameEditor::end() {
     }
     axis_adjuster_ = nullptr;
     btn_back_.reset();
+    frame_navigator_.reset();
+    dd_child_selector_.reset();
+    cb_child_visible_.reset();
+    tb_dx_.reset();
+    tb_dy_.reset();
+    tb_dz_.reset();
+    tb_rotation_.reset();
     wants_close_ = false;
 }
 
@@ -80,8 +140,33 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     if (!context_.assets || !context_.target) {
         return false;
     }
+    if (frame_navigator_ && frame_navigator_->handle_event(e)) {
+        return true;
+    }
     if (btn_back_ && btn_back_->handle_event(e)) {
         wants_close_ = true;
+        return true;
+    }
+    if (dd_child_selector_ && dd_child_selector_->handle_event(e)) {
+        return true;
+    }
+    if (cb_child_visible_ && cb_child_visible_->handle_event(e)) {
+        return true;
+    }
+    if (tb_dx_ && tb_dx_->handle_event(e)) {
+        apply_text_box_changes();
+        return true;
+    }
+    if (tb_dy_ && tb_dy_->handle_event(e)) {
+        apply_text_box_changes();
+        return true;
+    }
+    if (tb_dz_ && tb_dz_->handle_event(e)) {
+        apply_text_box_changes();
+        return true;
+    }
+    if (tb_rotation_ && tb_rotation_->handle_event(e)) {
+        apply_text_box_changes();
         return true;
     }
     if (e.type == SDL_MOUSEWHEEL && selection_state_ && selection_state_->target == SelectionTarget::ChildPoint) {
@@ -95,15 +180,15 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         SDL_Point mouse{e.button.x, e.button.y};
         if (auto hit = hit_test_child_marker(mouse)) {
             selected_child_index_ = *hit;
+            update_text_boxes_from_current_frame();
             if (selection_state_) {
                 selection_state_->target = SelectionTarget::ChildPoint;
                 selection_state_->child_index = selected_child_index_;
                 selection_state_->screen_pos = mouse;
-                selection_state_->world_pos = child_world_position(selected_child_index_);
+                const ChildWorldPose pose = child_world_pose(selected_child_index_);
+                selection_state_->world_pos = pose.pos;
             }
-            if (axis_adjuster_) {
-                axis_adjuster_->cycle_axis();
-            }
+            AxisPointRenderer::cycle_axis_on_selection(selection_state_, axis_adjuster_);
             dragging_child_ = true;
             drag_start_mouse_ = mouse;
             if (selected_child_index_ >= 0 && selected_child_index_ < static_frames_by_child_.size()) {
@@ -130,8 +215,11 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
             const float dx_screen = static_cast<float>(e.motion.x - drag_start_mouse_.x);
             const float dy_screen = static_cast<float>(e.motion.y - drag_start_mouse_.y);
             const bool flipped = context_.target->flipped;
-            float dx_world = dx_screen / scale;
-            float dy_world = dy_screen / scale;
+            SDL_FPoint drag_delta{dx_screen, dy_screen};
+            drag_delta = AxisPointRenderer::constrain_drag_delta(drag_delta,
+                                                               selection_state_ ? selection_state_->axis : AdjustmentAxis::X);
+            float dx_world = drag_delta.x / scale;
+            float dy_world = drag_delta.y / scale;
             child_timelines::ChildFrameSample& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
             switch (selection_state_ ? selection_state_->axis : AdjustmentAxis::X) {
                 case AdjustmentAxis::X:
@@ -166,6 +254,7 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
                 selection_state_->child_index = selected_child_index_;
             }
             data_dirty_ = true;
+            update_text_boxes_from_current_frame();
             return true;
         }
     }
@@ -185,36 +274,104 @@ void SyncChildrenFrameEditor::update(const Input& /*input*/, float /*dt*/) {
 void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
     if (!renderer || !context_.target || !context_.assets) return;
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+
+    // Render child assets
+    const auto& slots = context_.target->animation_children();
+    for (const auto& slot : slots) {
+        if (!slot.spawned_asset || !slot.visible) continue;
+        CompositeAssetRenderer composite_renderer(renderer, context_.assets);
+        composite_renderer.update(slot.spawned_asset, 0.0f);
+    }
+
+    // Render axis points
     SDL_Point anchor = asset_anchor_world();
-    const float radius = 6.0f;
     for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
         if (idx >= static_frames_by_child_.size()) continue;
         if (idx >= child_modes_.size()) continue;
         if (child_modes_[idx] == AnimationChildMode::Async) {
             continue;
         }
-        SDL_FPoint child_pos = child_world_position(static_cast<int>(idx));
+        const ChildWorldPose pose = child_world_pose(static_cast<int>(idx));
+        SDL_FPoint child_pos = pose.pos;
         SDL_FPoint world{anchor.x + child_pos.x, anchor.y + child_pos.y};
         SDL_FPoint screen = cam.map_to_screen_f(world);
-        SDL_Point center = round_point(screen);
-        bool is_selected = static_cast<int>(idx) == selected_child_index_;
-        SDL_Rect marker{center.x - static_cast<int>(radius), center.y - static_cast<int>(radius),
-                        static_cast<int>(radius * 2), static_cast<int>(radius * 2)};
-        SDL_Color color = is_selected ? DMStyles::AccentButton().bg : DMStyles::HeaderButton().bg;
-        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 192);
-        SDL_RenderFillRect(renderer, &marker);
-        SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g,
-                               DMStyles::Border().b, 255);
-        SDL_RenderDrawRect(renderer, &marker);
+        const bool is_selected = (selection_state_ && selection_state_->target == SelectionTarget::ChildPoint &&
+                                 static_cast<int>(idx) == selected_child_index_);
+        const AdjustmentAxis axis = selection_state_ ? selection_state_->axis : AdjustmentAxis::X;
+        AxisPointRenderer::render_axis_point(renderer, screen, axis, is_selected);
     }
 }
 
 void SyncChildrenFrameEditor::render_overlays(SDL_Renderer* renderer) const {
-    if (!renderer || !btn_back_) return;
-    SDL_Rect rect{DMSpacing::small_gap(), DMSpacing::small_gap(), 80, DMButton::height()};
-    btn_back_->set_rect(rect);
-    back_rect_ = rect;
-    btn_back_->render(renderer);
+    if (!renderer) return;
+
+    // Layout the UI elements
+    int sw = 0, sh = 0;
+    SDL_GetRendererOutputSize(renderer, &sw, &sh);
+    const int padding = DMSpacing::small_gap();
+    const int width = 280;
+    const int x = padding;
+    const int y = padding;
+    ui_rect_ = SDL_Rect{x, y, width, 0};
+    int cursor_y = y + padding;
+
+    // Back button
+    if (btn_back_) {
+        SDL_Rect back_rect{x + padding, cursor_y, 80, DMButton::height()};
+        btn_back_->set_rect(back_rect);
+        cursor_y += DMButton::height() + DMSpacing::small_gap();
+    }
+
+    // Frame navigator
+    if (frame_navigator_) {
+        SDL_Rect nav_rect{x + padding, cursor_y, width - (padding * 2), frame_navigator_->get_preferred_rect().h};
+        frame_navigator_->set_rect(nav_rect);
+        cursor_y += nav_rect.h + DMSpacing::small_gap();
+    }
+
+    // Child selector
+    if (dd_child_selector_) {
+        SDL_Rect dd_rect{x + padding, cursor_y, width - (padding * 2), DMDropdown::height()};
+        dd_child_selector_->set_rect(dd_rect);
+        cursor_y += DMDropdown::height() + DMSpacing::small_gap();
+    }
+
+    // Visibility checkbox
+    if (cb_child_visible_) {
+        SDL_Rect cb_rect{x + padding, cursor_y, width - (padding * 2), DMCheckbox::height()};
+        cb_child_visible_->set_rect(cb_rect);
+        cursor_y += DMCheckbox::height() + DMSpacing::small_gap();
+    }
+
+    // Text boxes
+    int half_w = (width - padding * 3) / 2;
+    if (tb_dx_ && tb_dy_) {
+        SDL_Rect dx_rect{x + padding, cursor_y, half_w, DMTextBox::height()};
+        SDL_Rect dy_rect{x + padding + half_w + padding, cursor_y, half_w, DMTextBox::height()};
+        tb_dx_->set_rect(dx_rect);
+        tb_dy_->set_rect(dy_rect);
+        cursor_y += DMTextBox::height() + DMSpacing::small_gap();
+    }
+
+    if (tb_dz_ && tb_rotation_) {
+        SDL_Rect dz_rect{x + padding, cursor_y, half_w, DMTextBox::height()};
+        SDL_Rect rot_rect{x + padding + half_w + padding, cursor_y, half_w, DMTextBox::height()};
+        tb_dz_->set_rect(dz_rect);
+        tb_rotation_->set_rect(rot_rect);
+        cursor_y += DMTextBox::height() + DMSpacing::small_gap();
+    }
+
+    ui_rect_.h = cursor_y - y;
+
+    // Render elements
+    if (btn_back_) btn_back_->render(renderer);
+    if (frame_navigator_) frame_navigator_->render(renderer);
+    if (dd_child_selector_) dd_child_selector_->render(renderer);
+    if (cb_child_visible_) cb_child_visible_->render(renderer);
+    if (tb_dx_) tb_dx_->render(renderer);
+    if (tb_dy_) tb_dy_->render(renderer);
+    if (tb_dz_) tb_dz_->render(renderer);
+    if (tb_rotation_) tb_rotation_->render(renderer);
 }
 
 void SyncChildrenFrameEditor::populate_child_data() {
@@ -374,25 +531,27 @@ SDL_Point SyncChildrenFrameEditor::asset_anchor_world() const {
     return animation_update::detail::bottom_middle_for(*context_.target, context_.target->pos);
 }
 
-SDL_FPoint SyncChildrenFrameEditor::child_world_position(int child_index) const {
-    SDL_FPoint world{0.0f, 0.0f};
+SyncChildrenFrameEditor::ChildWorldPose SyncChildrenFrameEditor::child_world_pose(int child_index) const {
+    ChildWorldPose pose{};
     if (child_index < 0 || child_index >= static_cast<int>(static_frames_by_child_.size())) {
-        return world;
+        return pose;
     }
     if (frame_count_ <= 0) {
-        return world;
+        return pose;
     }
     int frame_idx = std::clamp(selected_frame_index_, 0, frame_count_ - 1);
     const auto& timeline = static_frames_by_child_[static_cast<std::size_t>(child_index)];
     if (frame_idx >= static_cast<int>(timeline.size())) {
-        return world;
+        return pose;
     }
     const auto& sample = timeline[static_cast<std::size_t>(frame_idx)];
     const float scale = attachment_scale();
     const float dx = sample.dx * scale;
     const float dy = sample.dy * scale;
     const float world_dx = context_.target && context_.target->flipped ? -dx : dx;
-    return SDL_FPoint{world_dx, dy};
+    pose.pos = SDL_FPoint{world_dx, dy};
+    pose.z = 0.0f;
+    return pose;
 }
 
 std::optional<int> SyncChildrenFrameEditor::hit_test_child_marker(const SDL_Point& mouse) const {
@@ -408,7 +567,8 @@ std::optional<int> SyncChildrenFrameEditor::hit_test_child_marker(const SDL_Poin
         if (child_modes_[idx] == AnimationChildMode::Async) {
             continue;
         }
-        SDL_FPoint world = child_world_position(static_cast<int>(idx));
+        const ChildWorldPose pose = child_world_pose(static_cast<int>(idx));
+        SDL_FPoint world = pose.pos;
         SDL_FPoint world_pos{anchor.x + world.x, anchor.y + world.y};
         SDL_FPoint screen = cam.map_to_screen_f(world_pos);
         const float dx = static_cast<float>(mouse.x) - screen.x;
@@ -467,6 +627,90 @@ void SyncChildrenFrameEditor::apply_scroll_adjustment(int steps) {
     sample.visible = true;
     sample.has_data = true;
     data_dirty_ = true;
+    update_text_boxes_from_current_frame();
+}
+
+void SyncChildrenFrameEditor::apply_text_box_changes() {
+    if (selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(static_frames_by_child_.size()) ||
+        selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_) {
+        return;
+    }
+    auto& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
+    bool changed = false;
+
+    if (tb_dx_) {
+        try {
+            float value = std::stof(tb_dx_->value());
+            if (std::fabs(value - sample.dx) > 0.001f) {
+                sample.dx = value;
+                changed = true;
+            }
+        } catch (...) {}
+    }
+
+    if (tb_dy_) {
+        try {
+            float value = std::stof(tb_dy_->value());
+            if (std::fabs(value - sample.dy) > 0.001f) {
+                sample.dy = value;
+                changed = true;
+            }
+        } catch (...) {}
+    }
+
+    if (tb_dz_) {
+        try {
+            float value = std::stof(tb_dz_->value());
+            if (std::fabs(value - sample.dz) > 0.001f) {
+                sample.dz = value;
+                changed = true;
+            }
+        } catch (...) {}
+    }
+
+    if (tb_rotation_) {
+        try {
+            float value = std::stof(tb_rotation_->value());
+            if (std::fabs(value - sample.degree) > 0.001f) {
+                sample.degree = value;
+                changed = true;
+            }
+        } catch (...) {}
+    }
+
+    if (changed) {
+        sample.visible = true;
+        sample.has_data = true;
+        data_dirty_ = true;
+    }
+}
+
+void SyncChildrenFrameEditor::update_text_boxes_from_current_frame() {
+    if (selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(static_frames_by_child_.size()) ||
+        selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_) {
+        return;
+    }
+    const auto& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
+
+    if (tb_dx_ && !tb_dx_->is_editing()) {
+        tb_dx_->set_value(std::to_string(static_cast<int>(std::lround(sample.dx))));
+    }
+    if (tb_dy_ && !tb_dy_->is_editing()) {
+        tb_dy_->set_value(std::to_string(static_cast<int>(std::lround(sample.dy))));
+    }
+    if (tb_dz_ && !tb_dz_->is_editing()) {
+        tb_dz_->set_value(std::to_string(static_cast<int>(std::lround(sample.dz))));
+    }
+    if (tb_rotation_ && !tb_rotation_->is_editing()) {
+        tb_rotation_->set_value(std::to_string(static_cast<int>(std::lround(sample.degree))));
+    }
+
+    // Update visibility checkbox
+    if (cb_child_visible_) {
+        // This is handled by the callback, but we can update the checkbox value if needed
+        // But since it's CallbackCheckboxWidget, we need to access the internal checkbox
+        // For now, we'll skip as it's handled by the callback
+    }
 }
 
 }  // namespace devmode::frame_editors

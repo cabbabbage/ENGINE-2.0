@@ -12,6 +12,7 @@
 #include "dev_mode/draw_utils.hpp"
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
+#include "dev_mode/frame_editors/shared/AxisPointRenderer.hpp"
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
 
@@ -71,8 +72,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     }
     wants_close_ = false;
     selected_index_ = 0;
-    selected_attack_type_index_ = 1;
-    selected_attack_vector_indices_.fill(-1);
+    selected_attack_vector_index_ = -1;
     frames_.clear();
     selected_handle_ = AttackHandle::None;
 
@@ -96,19 +96,13 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
         return context_.document->update_animation_payload(context_.animation_id, updated);
     });
 
-    std::vector<std::string> attack_type_labels;
-    attack_type_labels.reserve(kDamageTypeNames.size());
-    for (const char* type : kDamageTypeNames) {
-        attack_type_labels.emplace_back(type);
-    }
-
-    dd_attack_type_ = std::make_unique<DMDropdown>("Attack Type",
-                                                   attack_type_labels,
-                                                   std::clamp(selected_attack_type_index_, 0,
-                                                              static_cast<int>(attack_type_labels.size()) - 1));
     btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
-    btn_prev_frame_ = std::make_unique<DMButton>("<", &DMStyles::AccentButton(), 36, DMButton::height());
-    btn_next_frame_ = std::make_unique<DMButton>(">", &DMStyles::AccentButton(), 36, DMButton::height());
+    frame_navigator_ = std::make_unique<FrameNavigator>();
+    frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
+    frame_navigator_->set_current_frame(selected_index_);
+    frame_navigator_->set_on_frame_changed([this](int frame) {
+        select_frame(frame);
+    });
     btn_add_remove_ = std::make_unique<DMButton>("Add Attack", &DMStyles::AccentButton(), 150, DMButton::height());
     btn_delete_ = std::make_unique<DMButton>("Delete Attack", &DMStyles::DeleteButton(), 150, DMButton::height());
     btn_copy_next_ = std::make_unique<DMButton>("Copy To Next", &DMStyles::HeaderButton(), 150, DMButton::height());
@@ -139,10 +133,7 @@ void AttackGeoFrameEditor::end() {
         selection_state_ = nullptr;
     }
     axis_adjuster_ = nullptr;
-    dd_attack_type_.reset();
     btn_back_.reset();
-    btn_prev_frame_.reset();
-    btn_next_frame_.reset();
     btn_add_remove_.reset();
     btn_delete_.reset();
     btn_copy_next_.reset();
@@ -164,24 +155,14 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
     bool consumed = false;
     apply_text_fields();
 
-    if (btn_prev_frame_ && btn_prev_frame_->handle_event(e)) {
-        select_frame(selected_index_ - 1);
-        consumed = true;
-    }
-    if (btn_next_frame_ && btn_next_frame_->handle_event(e)) {
-        select_frame(selected_index_ + 1);
+    if (frame_navigator_ && frame_navigator_->handle_event(e)) {
         consumed = true;
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
         wants_close_ = true;
         consumed = true;
     }
-    if (dd_attack_type_ && dd_attack_type_->handle_event(e)) {
-        selected_attack_type_index_ = std::clamp(dd_attack_type_->selected(), 0, static_cast<int>(kDamageTypeNames.size()) - 1);
-        clamp_attack_selection();
-        refresh_attack_form();
-        consumed = true;
-    }
+
     if (btn_add_remove_ && btn_add_remove_->handle_event(e)) {
         auto* vec = current_attack_vector();
         if (vec) {
@@ -277,9 +258,8 @@ void AttackGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (!renderer) return;
     layout_ui(renderer);
     if (btn_back_) btn_back_->render(renderer);
-    if (btn_prev_frame_) btn_prev_frame_->render(renderer);
-    if (btn_next_frame_) btn_next_frame_->render(renderer);
-    if (dd_attack_type_) dd_attack_type_->render(renderer);
+    if (frame_navigator_) frame_navigator_->render(renderer);
+
     if (btn_add_remove_) btn_add_remove_->render(renderer);
     if (btn_delete_) btn_delete_->render(renderer);
     if (btn_copy_next_) btn_copy_next_->render(renderer);
@@ -318,18 +298,13 @@ void AttackGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
         btn_back_->set_rect(place_row(DMButton::height()));
     }
 
-    if (btn_prev_frame_ && btn_next_frame_) {
-        int half_w = (inner_w - DMSpacing::small_gap()) / 2;
-        SDL_Rect left{x + padding, cursor_y, half_w, DMButton::height()};
-        SDL_Rect right{x + padding + half_w + DMSpacing::small_gap(), cursor_y, half_w, DMButton::height()};
-        btn_prev_frame_->set_rect(left);
-        btn_next_frame_->set_rect(right);
-        cursor_y += DMButton::height() + DMSpacing::small_gap();
+    if (frame_navigator_) {
+        SDL_Rect nav_rect{x + padding, cursor_y, inner_w, frame_navigator_->get_preferred_rect().h};
+        frame_navigator_->set_rect(nav_rect);
+        cursor_y += nav_rect.h + DMSpacing::small_gap();
     }
 
-    if (dd_attack_type_) {
-        dd_attack_type_->set_rect(place_row(DMDropdown::height()));
-    }
+
 
     if (btn_add_remove_ || btn_delete_ || btn_copy_next_) {
         int button_count = 0;
@@ -399,15 +374,10 @@ void AttackGeoFrameEditor::render_attack_geometry(SDL_Renderer* renderer) const 
         return cam.map_to_screen_f(world);
     };
 
-    const std::string current_type = current_attack_type();
-    int current_type_counter = 0;
     const int selected_idx = current_attack_vector_index();
+    std::size_t vec_idx = 0;
     for (const auto& vec : frame.attack.vectors) {
-        bool selected = false;
-        if (vec.type == current_type) {
-            selected = (current_type_counter == selected_idx && selected_idx >= 0);
-            ++current_type_counter;
-        }
+        const bool selected = (static_cast<int>(vec_idx) == selected_idx && selected_idx >= 0);
         SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_y);
         SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_y);
         SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_y);
@@ -432,27 +402,22 @@ void AttackGeoFrameEditor::render_attack_geometry(SDL_Renderer* renderer) const 
             SDL_RenderDrawLineF(renderer, control_screen.x, control_screen.y, end_screen.x, end_screen.y);
         }
 
-        auto draw_node = [&](SDL_FPoint p, bool is_selected_node) {
-            const float radius = is_selected_node ? 10.0f : 8.0f;
-            SDL_Color node_col = is_selected_node ? DMStyles::AccentButton().hover_bg : line_color;
-            SDL_SetRenderDrawColor(renderer, node_col.r, node_col.g, node_col.b, 255);
-            SDL_FRect r{p.x - radius, p.y - radius, radius * 2.0f, radius * 2.0f};
-            SDL_RenderFillRectF(renderer, &r);
-            SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g, DMStyles::Border().b, 255);
-            SDL_RenderDrawRectF(renderer, &r);
-        };
-        draw_node(start_screen, selected);
-        draw_node(end_screen, selected);
-        if (selected) {
-            const float cr = 6.0f;
-            SDL_SetRenderDrawColor(renderer, 200, 200, 200, 255);
-            for (int i = 0; i < 16; ++i) {
-                const float a = (static_cast<float>(i) / 16.0f) * 2.0f * static_cast<float>(M_PI);
-                const float b = (static_cast<float>(i + 1) / 16.0f) * 2.0f * static_cast<float>(M_PI);
-                SDL_RenderDrawLineF(renderer, control_screen.x + std::cos(a) * cr, control_screen.y + std::sin(a) * cr,
-                                    control_screen.x + std::cos(b) * cr, control_screen.y + std::sin(b) * cr);
-            }
-        }
+        // Determine which point is currently selected
+        bool start_selected = selected && selected_handle_ == AttackHandle::Start;
+        bool control_selected = selected && selected_handle_ == AttackHandle::Control;
+        bool end_selected = selected && selected_handle_ == AttackHandle::End;
+
+        // Render all three points as 3D axis points
+        AxisPointRenderer::render_axis_point(renderer, start_screen,
+                                           selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
+                                           start_selected);
+        AxisPointRenderer::render_axis_point(renderer, control_screen,
+                                           selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
+                                           control_selected);
+        AxisPointRenderer::render_axis_point(renderer, end_screen,
+                                           selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
+                                           end_selected);
+        ++vec_idx;
     }
 }
 
@@ -464,29 +429,21 @@ void AttackGeoFrameEditor::select_frame(int index) {
 }
 
 void AttackGeoFrameEditor::clamp_attack_selection() {
-    const std::string type = current_attack_type();
     if (frames_.empty()) {
-        set_current_attack_vector_index(-1);
+        selected_attack_vector_index_ = -1;
         return;
     }
     const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
     if (frame_index >= static_cast<int>(frames_.size())) {
-        set_current_attack_vector_index(-1);
+        selected_attack_vector_index_ = -1;
         return;
     }
-    int count = 0;
-    for (const auto& v : frames_[frame_index].attack.vectors) {
-        if (v.type == type) {
-            ++count;
-        }
-    }
+    const int count = static_cast<int>(frames_[frame_index].attack.vectors.size());
     if (count == 0) {
-        set_current_attack_vector_index(-1);
+        selected_attack_vector_index_ = -1;
         return;
     }
-    int idx = current_attack_vector_index();
-    idx = std::clamp(idx, 0, count - 1);
-    set_current_attack_vector_index(idx);
+    selected_attack_vector_index_ = std::clamp(selected_attack_vector_index_, 0, count - 1);
 }
 
 void AttackGeoFrameEditor::refresh_attack_form() const {
@@ -692,15 +649,10 @@ void AttackGeoFrameEditor::apply_scroll_adjustment(int steps) {
 
 void AttackGeoFrameEditor::apply_attack_to_all_frames() {
     const auto* source = current_attack_vector();
-    const std::string type = current_attack_type();
+    if (!source) return;
     for (auto& f : frames_) {
-        auto& dest_vecs = f.attack.vectors;
-        dest_vecs.erase(std::remove_if(dest_vecs.begin(), dest_vecs.end(),
-                                       [&](const auto& v) { return v.type == type; }),
-                        dest_vecs.end());
-        if (source) {
-            dest_vecs.push_back(*source);
-        }
+        f.attack.vectors.clear();
+        f.attack.vectors.push_back(*source);
     }
     refresh_attack_form();
     persist_changes();
@@ -712,71 +664,50 @@ void AttackGeoFrameEditor::copy_attack_vector_to_next_frame() {
     if (next_index >= static_cast<int>(frames_.size())) {
         return;
     }
-    const std::string type = current_attack_type();
     const auto* source = current_attack_vector();
     if (!source) return;
     auto& dest_vecs = frames_[next_index].attack.vectors;
-    dest_vecs.erase(std::remove_if(dest_vecs.begin(), dest_vecs.end(),
-                                   [&](const auto& v) { return v.type == type; }),
-                    dest_vecs.end());
+    dest_vecs.clear();
     dest_vecs.push_back(*source);
-    set_current_attack_vector_index(static_cast<int>(dest_vecs.size()) - 1);
+    set_current_attack_vector_index(0);
     persist_changes();
 }
 
 std::string AttackGeoFrameEditor::current_attack_type() const {
-    int idx = std::clamp(selected_attack_type_index_, 0, static_cast<int>(kDamageTypeNames.size()) - 1);
-    return kDamageTypeNames[static_cast<std::size_t>(idx)];
+    return "";  // No type system
 }
 
 int AttackGeoFrameEditor::current_attack_vector_index() const {
-    const int type_idx = std::clamp(selected_attack_type_index_, 0, static_cast<int>(kDamageTypeNames.size()) - 1);
-    return selected_attack_vector_indices_[static_cast<std::size_t>(type_idx)];
+    return selected_attack_vector_index_;
 }
 
 void AttackGeoFrameEditor::set_current_attack_vector_index(int index) {
-    const int type_idx = std::clamp(selected_attack_type_index_, 0, static_cast<int>(kDamageTypeNames.size()) - 1);
-    selected_attack_vector_indices_[static_cast<std::size_t>(type_idx)] = index;
+    selected_attack_vector_index_ = index;
 }
 
 animation_update::FrameAttackGeometry::Vector* AttackGeoFrameEditor::current_attack_vector() {
     clamp_attack_selection();
     const int vector_index = current_attack_vector_index();
-    if (frames_.empty()) return nullptr;
+    if (frames_.empty() || vector_index < 0) return nullptr;
     const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
     auto& frame = frames_[frame_index];
-    const std::string type = current_attack_type();
-    int counter = 0;
-    for (auto& v : frame.attack.vectors) {
-        if (v.type != type) continue;
-        if (counter == vector_index) {
-            return &v;
-        }
-        ++counter;
-    }
-    return nullptr;
+    if (vector_index >= static_cast<int>(frame.attack.vectors.size())) return nullptr;
+    return &frame.attack.vectors[static_cast<std::size_t>(vector_index)];
 }
 
 const animation_update::FrameAttackGeometry::Vector* AttackGeoFrameEditor::current_attack_vector() const {
     return const_cast<AttackGeoFrameEditor*>(this)->current_attack_vector();
 }
 
-animation_update::FrameAttackGeometry::Vector* AttackGeoFrameEditor::ensure_attack_vector_for_type(const std::string& type) {
+animation_update::FrameAttackGeometry::Vector* AttackGeoFrameEditor::ensure_attack_vector_for_type(const std::string& /*type*/) {
     if (frames_.empty()) return nullptr;
     const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
     auto& frame = frames_[frame_index];
     animation_update::FrameAttackGeometry::Vector vec;
-    vec.type = type;
+    vec.type = "";  // No type
     frame.attack.vectors.push_back(vec);
-    int type_index = 0;
-    for (const auto& v : frame.attack.vectors) {
-        if (v.type == type) {
-            ++type_index;
-        }
-    }
-    set_current_attack_vector_index(type_index - 1);
-    auto* added = frame.attack.vectors.empty() ? nullptr : &frame.attack.vectors.back();
-    return added;
+    set_current_attack_vector_index(static_cast<int>(frame.attack.vectors.size()) - 1);
+    return &frame.attack.vectors.back();
 }
 
 void AttackGeoFrameEditor::delete_current_attack_vector() {
@@ -784,15 +715,8 @@ void AttackGeoFrameEditor::delete_current_attack_vector() {
     const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
     auto& frame = frames_[frame_index];
     const int index = current_attack_vector_index();
-    const std::string type = current_attack_type();
-    int counter = 0;
-    for (auto it = frame.attack.vectors.begin(); it != frame.attack.vectors.end(); ++it) {
-        if (it->type != type) continue;
-        if (counter == index) {
-            frame.attack.vectors.erase(it);
-            break;
-        }
-        ++counter;
+    if (index >= 0 && index < static_cast<int>(frame.attack.vectors.size())) {
+        frame.attack.vectors.erase(frame.attack.vectors.begin() + index);
     }
     clamp_attack_selection();
     persist_changes();
@@ -803,7 +727,6 @@ bool AttackGeoFrameEditor::begin_attack_drag(SDL_Point mp) {
 
     const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
     auto& frame = frames_[frame_index];
-    const std::string current_type = current_attack_type();
 
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_Point anchor = asset_anchor_world();
@@ -820,39 +743,36 @@ bool AttackGeoFrameEditor::begin_attack_drag(SDL_Point mp) {
     };
     const float node_radius = 12.0f;
 
-    int type_counter = 0;
+    int vec_idx = 0;
     int clicked_vector_index = -1;
     AttackHandle clicked_handle = AttackHandle::None;
 
     for (const auto& vec : frame.attack.vectors) {
-        if (vec.type != current_type) continue;
-
         SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_y);
         SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_y);
         SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_y);
 
         if (point_hit(start_screen, node_radius)) {
-            clicked_vector_index = type_counter;
+            clicked_vector_index = vec_idx;
             clicked_handle = AttackHandle::Start;
             break;
         } else if (point_hit(control_screen, node_radius)) {
-            clicked_vector_index = type_counter;
+            clicked_vector_index = vec_idx;
             clicked_handle = AttackHandle::Control;
             break;
         } else if (point_hit(end_screen, node_radius)) {
-            clicked_vector_index = type_counter;
+            clicked_vector_index = vec_idx;
             clicked_handle = AttackHandle::End;
             break;
         }
-        ++type_counter;
+        ++vec_idx;
     }
 
     if (clicked_vector_index < 0) {
-        type_counter = 0;
+        vec_idx = 0;
         constexpr int segments = 16;
         constexpr float segment_hit_radius = 8.0f;
         for (const auto& vec : frame.attack.vectors) {
-            if (vec.type != current_type) continue;
             SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_y);
             SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_y);
             SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_y);
@@ -863,13 +783,13 @@ bool AttackGeoFrameEditor::begin_attack_drag(SDL_Point mp) {
                     u * u * start_screen.x + 2.0f * u * t * control_screen.x + t * t * end_screen.x,
                     u * u * start_screen.y + 2.0f * u * t * control_screen.y + t * t * end_screen.y};
                 if (point_hit(curve_point, segment_hit_radius)) {
-                    clicked_vector_index = type_counter;
+                    clicked_vector_index = vec_idx;
                     clicked_handle = AttackHandle::Segment;
                     break;
                 }
             }
             if (clicked_vector_index >= 0) break;
-            ++type_counter;
+            ++vec_idx;
         }
     }
 
@@ -881,9 +801,7 @@ bool AttackGeoFrameEditor::begin_attack_drag(SDL_Point mp) {
     refresh_attack_form();
     active_handle_ = clicked_handle;
     selected_handle_ = clicked_handle;
-    if (axis_adjuster_) {
-        axis_adjuster_->cycle_axis();
-    }
+    AxisPointRenderer::cycle_axis_on_selection(selection_state_, axis_adjuster_);
 
     const auto* vec = current_attack_vector();
     if (!vec) {
@@ -946,7 +864,10 @@ void AttackGeoFrameEditor::update_attack_drag(SDL_Point mouse) {
 
     const float delta_x = local.x - drag_start_mouse_local_.x;
     const float delta_y = local.y - drag_start_mouse_local_.y;
-    const float delta_z = delta_y;
+    SDL_FPoint drag_delta{delta_x, delta_y};
+    drag_delta = AxisPointRenderer::constrain_drag_delta(drag_delta,
+                                                       selection_state_ ? selection_state_->axis : AdjustmentAxis::X);
+    const float delta_z = drag_delta.y;  // Z axis uses vertical movement
     auto apply_axis = [&](float& dst_x, float& dst_y, float& dst_z,
                           float src_x, float src_y, float src_z) {
         switch (selection_state_ ? selection_state_->axis : AdjustmentAxis::X) {

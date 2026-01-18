@@ -9,6 +9,7 @@
 #include "shared/AxisAdjuster.hpp"
 #include "shared/FrameEditState.hpp"
 #include "shared/FrameEditorContext.hpp"
+#include "shared/FrameNavigator.hpp"
 #include "shared/ManifestTransaction.hpp"
 #include "shared/SelectionState.hpp"
 #include "dev_mode/widgets.hpp"
@@ -60,13 +61,11 @@ private:
     ManifestTransaction manifest_txn_;
     std::vector<MovementFrame> frames_;
     int selected_index_ = 0;
-    int selected_attack_type_index_ = 1;
-    std::array<int, kDamageTypeNames.size()> selected_attack_vector_indices_{{-1, -1, -1}};
+    int selected_attack_vector_index_ = -1;
 
-    std::unique_ptr<DMDropdown> dd_attack_type_;
+
     std::unique_ptr<DMButton> btn_back_;
-    std::unique_ptr<DMButton> btn_prev_frame_;
-    std::unique_ptr<DMButton> btn_next_frame_;
+    std::unique_ptr<FrameNavigator> frame_navigator_;
     std::unique_ptr<DMButton> btn_add_remove_;
     std::unique_ptr<DMButton> btn_delete_;
     std::unique_ptr<DMButton> btn_copy_next_;

@@ -328,7 +328,12 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
         f.attack.vectors.clear();
         if (attack_geom.is_array() && frame_index < attack_geom.size()) {
             const auto& attack_entry = attack_geom[static_cast<nlohmann::json::size_type>(frame_index)];
-            if (attack_entry.is_object()) {
+            if (attack_entry.is_array()) {
+                for (const auto& vec_node : attack_entry) {
+                    append_attack_vector(f, "", vec_node);
+                }
+            } else if (attack_entry.is_object()) {
+                // Legacy support for typed attacks
                 for (const char* type : kDamageTypeNames) {
                     auto it = attack_entry.find(type);
                     if (it == attack_entry.end() || !it->is_array()) continue;
@@ -463,39 +468,28 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
     }
     for (std::size_t i = 0; i < frame_count; ++i) {
         const MovementFrame& f = frames[i];
-        nlohmann::json existing = attack_geometry[static_cast<nlohmann::json::array_t::size_type>(i)];
-        if (!existing.is_object()) existing = nlohmann::json::object();
-        auto preserved_needs_rebuild = existing.contains("needs_rebuild") ? existing["needs_rebuild"] : nlohmann::json();
-
-        for (const char* type : kDamageTypeNames) {
-            nlohmann::json type_array = nlohmann::json::array();
-            for (const auto& vec : f.attack.vectors) {
-                if (vec.type != type) continue;
-                if (!std::isfinite(vec.start_x) || !std::isfinite(vec.start_y) ||
-                    !std::isfinite(vec.end_x) || !std::isfinite(vec.end_y) ||
-                    !std::isfinite(vec.control_x) || !std::isfinite(vec.control_y)) {
-                    continue;
-                }
-                type_array.push_back(nlohmann::json{
-                    {"start_x", vec.start_x},
-                    {"start_y", vec.start_y},
-                    {"start_z", vec.start_z},
-                    {"control_x", vec.control_x},
-                    {"control_y", vec.control_y},
-                    {"control_z", vec.control_z},
-                    {"end_x", vec.end_x},
-                    {"end_y", vec.end_y},
-                    {"end_z", vec.end_z},
-                    {"damage", vec.damage},
-                    {"type", vec.type}
-                });
+        nlohmann::json attack_array = nlohmann::json::array();
+        for (const auto& vec : f.attack.vectors) {
+            if (!std::isfinite(vec.start_x) || !std::isfinite(vec.start_y) ||
+                !std::isfinite(vec.end_x) || !std::isfinite(vec.end_y) ||
+                !std::isfinite(vec.control_x) || !std::isfinite(vec.control_y)) {
+                continue;
             }
-            existing[type] = std::move(type_array);
+            attack_array.push_back(nlohmann::json{
+                {"start_x", vec.start_x},
+                {"start_y", vec.start_y},
+                {"start_z", vec.start_z},
+                {"control_x", vec.control_x},
+                {"control_y", vec.control_y},
+                {"control_z", vec.control_z},
+                {"end_x", vec.end_x},
+                {"end_y", vec.end_y},
+                {"end_z", vec.end_z},
+                {"damage", vec.damage},
+                {"type", vec.type}
+            });
         }
-        if (preserved_needs_rebuild.is_boolean()) {
-            existing["needs_rebuild"] = preserved_needs_rebuild;
-        }
-        attack_geometry[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(existing);
+        attack_geometry[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(attack_array);
     }
 
     int total_dx = 0;

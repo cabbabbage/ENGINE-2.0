@@ -369,7 +369,6 @@ void AnimationRuntime::update_child_attachments(Animation& anim, float dt) {
     }
     if (!anim.has_child_assets()) {
         destroy_child_assets();
-        sync_child_assets();
         return;
     }
     ensure_child_slots(anim);
@@ -486,13 +485,6 @@ void AnimationRuntime::ensure_child_slots(Animation& anim) {
         }
         if (slot.animation && !slot.current_frame) {
             animation_update::child_attachments::restart(slot);
-        }
-        if (!slot.spawned_asset && slot.info) {
-            Asset* spawned = spawn_child_asset(slot);
-            if (spawned) {
-                spawned->initialize_animation_children_recursive();
-                spawned->set_hidden(true);
-            }
         }
         if (slot.current_frame) {
             animation_update::child_attachments::update_dimensions(slot);
@@ -724,37 +716,6 @@ void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFr
     if (any_changed) {
         self_->mark_composite_dirty();
     }
-    sync_child_assets();
-}
-
-Asset* AnimationRuntime::spawn_child_asset(Asset::AnimationChildAttachment& slot) {
-    if (!assets_owner_ || !self_ || !slot.info) {
-        return nullptr;
-    }
-    if (slot.spawned_asset && slot.spawned_asset->dead) {
-        slot.spawned_asset = nullptr;
-    }
-    if (slot.spawned_asset) {
-        return slot.spawned_asset;
-    }
-
-    SDL_Point spawn_pos{
-        static_cast<int>(std::lround(self_->smoothed_translation_x())), static_cast<int>(std::lround(self_->smoothed_translation_y())) };
-    Asset* child = assets_owner_->spawn_asset(slot.asset_name, spawn_pos);
-    if (!child) {
-        return nullptr;
-    }
-
-    child->parent = self_;
-    child->depth = self_->depth;
-    child->grid_resolution = self_->grid_resolution;
-    if (std::find(self_->asset_children.begin(), self_->asset_children.end(), child) ==
-        self_->asset_children.end()) {
-        self_->add_child(child);
-    }
-
-    slot.spawned_asset = child;
-    return child;
 }
 
 void AnimationRuntime::destroy_child_assets() {
@@ -827,59 +788,6 @@ void AnimationRuntime::restart_child_timeline(Asset::AnimationChildAttachment& s
     slot.timeline_frame_cursor = 0;
     slot.timeline_frame_progress = 0.0f;
     slot.was_visible = false;
-}
-
-void AnimationRuntime::sync_child_assets() {
-    if (!self_) {
-        return;
-    }
-    auto sync_slot = [&](Asset::AnimationChildAttachment& slot) {
-        if (slot.child_index < 0) {
-            if (slot.spawned_asset) {
-                slot.spawned_asset->hidden = true;
-                slot.spawned_asset->alpha_smoothing_.target = 0.0f;
-            }
-            return;
-        }
-        Asset* child = slot.spawned_asset;
-        if (!child && slot.info && slot.visible) {
-            child = spawn_child_asset(slot);
-        }
-        if (!child) {
-            return;
-        }
-        if (child->dead) {
-            slot.spawned_asset = nullptr;
-            return;
-        }
-
-        if (std::find(self_->asset_children.begin(), self_->asset_children.end(), child) ==
-            self_->asset_children.end()) {
-            self_->add_child(child);
-        }
-
-        int child_w = slot.cached_w > 0 ? slot.cached_w : child->cached_w;
-        int child_h = slot.cached_h > 0 ? slot.cached_h : child->cached_h;
-        SDL_Point child_top_left{
-            slot.world_pos.x - child_w / 2,
-            slot.world_pos.y - child_h
-};
-        child->pos = child_top_left;
-        child->grid_resolution = self_->grid_resolution;
-        child->depth = self_->depth;
-        child->flipped = self_->flipped;
-        child->hidden = true;
-        TransformSmoothingParams snap{};
-        snap.method = TransformSmoothingMethod::None;
-        snap.snap_threshold = 0.0f;
-        child->alpha_smoothing_.set_params(snap);
-        child->alpha_smoothing_.reset(0.0f);
-        child->render_package.clear();
-};
-
-    for (auto& slot : self_->animation_children_) {
-        sync_slot(slot);
-    }
 }
 
 SDL_Point AnimationRuntime::bottom_middle(SDL_Point pos) const {

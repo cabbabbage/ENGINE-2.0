@@ -63,9 +63,7 @@ private:
     void       ensure_child_slots(Animation& anim);
     void       advance_child_frames(float dt);
     void       apply_child_frame_data(Animation& anim, const AnimationFrame* frame, float dt);
-    void       sync_child_assets();
     void       advance_child_timelines(float dt);
-    Asset*     spawn_child_asset(Asset::AnimationChildAttachment& slot);
     void       destroy_child_assets();
     void       handle_async_requests(const std::vector<std::string>& requests);
     Asset::AnimationChildAttachment* find_child_slot(const std::string& name);

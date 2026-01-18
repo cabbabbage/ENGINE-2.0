@@ -92,100 +92,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         asset->render_package.push_back(obj);
     };
 
-    auto emit_child = [&](const Asset::AnimationChildAttachment& slot) {
-        if (slot.child_index < 0 || !slot.visible || !slot.animation || !slot.current_frame) {
-            return;
-        }
-
-        float child_base_scale = (slot.info && std::isfinite(slot.info->scale_factor) && slot.info->scale_factor > 0.0f) ? slot.info->scale_factor : 1.0f;
-
-        float child_current_scale = child_base_scale;
-
-        float camera_scale = 1.0f;
-        if (assets_) {
-            camera_scale = std::max(0.0001f, static_cast<float>(assets_->getView().get_scale()));
-        }
-
-        float child_desired_variant_scale = child_current_scale / camera_scale;
-        if (!std::isfinite(child_desired_variant_scale) || child_desired_variant_scale <= 0.0f) {
-            child_desired_variant_scale = child_current_scale;
-        }
-
-        const auto& child_steps = (slot.info && !slot.info->scale_variants.empty()) ? static_cast<const std::vector<float>&>(slot.info->scale_variants) : render_pipeline::ScalingLogic::DefaultScaleSteps();
-
-        auto child_selection = render_pipeline::ScalingLogic::Choose(child_desired_variant_scale, child_steps);
-        float child_nearest_variant_scale = child_selection.stored_scale;
-
-        float child_remaining_adjustment = 1.0f;
-        if (child_nearest_variant_scale > 0.0f) {
-            child_remaining_adjustment = child_current_scale / child_nearest_variant_scale;
-        }
-
-        const FrameVariant* variant =
-            slot.animation->get_frame(slot.current_frame, child_nearest_variant_scale);
-        SDL_Texture* tex = variant ? variant->get_base_texture() : nullptr;
-        if (!tex && slot.current_frame && !slot.current_frame->variants.empty()) {
-            tex = slot.current_frame->variants[0].base_texture;
-        }
-        if (!tex) {
-            return;
-        }
-
-        int tex_w = 0;
-        int tex_h = 0;
-        SDL_QueryTexture(tex, nullptr, nullptr, &tex_w, &tex_h);
-
-        const float base_adjustment = child_remaining_adjustment;
-        float perspective_multiplier = 1.0f;
-        float vertical_multiplier = 1.0f;
-        if (assets_) {
-            const bool apply_distance_scaling = !(slot.info);
-            if (apply_distance_scaling) {
-                SDL_Point world_point{ slot.world_pos.x, slot.world_pos.y };
-                float world_z_value = std::isfinite(slot.world_z) ? slot.world_z : 0.0f;
-                int world_z_int = static_cast<int>(std::lround(world_z_value));
-                const Asset* smoothing_asset = slot.spawned_asset ? slot.spawned_asset : asset;
-                const int smoothing_frame = slot.current_frame ? slot.current_frame->frame_index : 0;
-                const WarpedScreenGrid::RenderSmoothingKey smoothing_key(smoothing_asset, smoothing_frame);
-                const WarpedScreenGrid::RenderEffects effects =
-                    assets_->getView().compute_render_effects(world_point, 0.0f, 0.0f, smoothing_key, world_z_int);
-                if (std::isfinite(effects.distance_scale) && effects.distance_scale > 0.0f) {
-                    perspective_multiplier = effects.distance_scale;
-                }
-                if (std::isfinite(effects.vertical_scale) && effects.vertical_scale > 0.0f) {
-                    vertical_multiplier = effects.vertical_scale;
-                }
-            }
-        }
-
-        float width_px = static_cast<float>(tex_w) * base_adjustment * perspective_multiplier;
-        float height_px = static_cast<float>(tex_h) * base_adjustment * perspective_multiplier * vertical_multiplier;
-        int final_w = static_cast<int>(std::lround(width_px));
-        int final_h = static_cast<int>(std::lround(height_px));
-        final_w = std::max(1, final_w);
-        final_h = std::max(1, final_h);
-
-        SDL_Rect dest_rect{
-            slot.world_pos.x,
-            slot.world_pos.y,
-            final_w,
-            final_h
-};
-        SDL_Point pivot{ final_w / 2, final_h };
-        SDL_RendererFlip flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
-        float world_z_offset = std::isfinite(slot.world_z) ? slot.world_z : 0.0f;
-        add_render_object(tex,
-                          dest_rect,
-                          SDL_Color{255, 255, 255, 255},
-                          SDL_BLENDMODE_BLEND,
-                          false,
-                          static_cast<double>(slot.rotation_degrees),
-                          pivot,
-                          flip,
-                          SDL_Point{tex_w, tex_h},
-                          world_z_offset);
-};
-
     SDL_Texture* base_tex = nullptr;
 
     if (asset->info) {
@@ -227,11 +133,17 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             final_w,
             final_h
 };
-        add_render_object(base_tex, dest_rect, SDL_Color{255, 255, 255, 255}, SDL_BLENDMODE_BLEND, false, 0.0, std::nullopt, SDL_FLIP_NONE, SDL_Point{w, h});
-    }
-
-    for (const auto& child_attachment : asset->animation_children()) {
-        emit_child(child_attachment);
+        SDL_RendererFlip base_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+        add_render_object(base_tex,
+                          dest_rect,
+                          SDL_Color{255, 255, 255, 255},
+                          SDL_BLENDMODE_BLEND,
+                          false,
+                          0.0,
+                          std::nullopt,
+                          base_flip,
+                          SDL_Point{w, h},
+                          asset->world_z_offset());
     }
 
     asset->clear_composite_dirty();

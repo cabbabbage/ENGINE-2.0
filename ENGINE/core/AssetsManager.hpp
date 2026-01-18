@@ -115,6 +115,9 @@ public:
 
     void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, std::function<void(const std::string&)> on_host_closed);
 
+    void log_asset_movement(Asset* asset, SDL_Point previous, SDL_Point current);
+    std::uint32_t current_frame_id() const { return frame_id_; }
+
     devmode::core::ManifestStore* manifest_store();
     const devmode::core::ManifestStore* manifest_store() const;
     void notify_spawn_group_config_changed(const nlohmann::json& entry);

@@ -1504,9 +1504,9 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 120,
+                  "dx": 8,
+                  "dy": 128,
+                  "dz": 16,
                   "visible": true
                 }
               ],

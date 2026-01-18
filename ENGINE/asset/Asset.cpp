@@ -171,7 +171,6 @@ Asset::Asset(const Asset& o)
     , highlighted(o.highlighted)
     , hidden(o.hidden)
     , selected(o.selected)
-    , merged_from_neighbors_(o.merged_from_neighbors_)
     , current_frame(o.current_frame)
     , frame_progress(o.frame_progress)
     , assets_(o.assets_)
@@ -194,6 +193,8 @@ Asset::Asset(const Asset& o)
     , composite_texture_(nullptr)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
+    , composite_scale_(o.composite_scale_)
+    , world_z_offset_(o.world_z_offset_)
     , animation_children_initialized_(o.animation_children_initialized_)
     , initializing_animation_children_(false)
 {
@@ -263,6 +264,11 @@ Asset& Asset::operator=(const Asset& o) {
         finalized_                = o.finalized_;
         base_bounds_local_        = o.base_bounds_local_;
         grid_id_                  = o.grid_id_;
+        composite_texture_        = nullptr;
+        composite_dirty_          = true;
+        composite_rect_           = {0, 0, 0, 0};
+        composite_scale_          = o.composite_scale_;
+        world_z_offset_           = o.world_z_offset_;
         animation_children_initialized_ = o.animation_children_initialized_;
         initializing_animation_children_ = false;
         for (auto& slot : animation_children_) {
@@ -484,6 +490,17 @@ void Asset::update() {
         anim_runtime_->update();
     }
 
+    float resolved_world_z = 0.0f;
+    if (assets_) {
+        const WarpedScreenGrid& cam = assets_->getView();
+        if (const auto* gp = cam.grid_point_for_asset(this)) {
+            resolved_world_z = static_cast<float>(gp->world_z());
+        }
+    }
+    set_world_z_offset(resolved_world_z);
+
+    update_animation_children_state();
+
     if (info->moving_asset) {
         const bool moved = (pos.x != previous_pos.x || pos.y != previous_pos.y);
         if (moved) {
@@ -496,6 +513,50 @@ void Asset::update() {
 }
 
 std::string Asset::get_current_animation() const { return current_animation; }
+
+bool Asset::start_child_async(const std::string& name) {
+        if (name.empty() || !anim_runtime_) {
+                return false;
+        }
+        return anim_runtime_->run_child_animation(name);
+}
+
+bool Asset::stop_child_async(const std::string& name) {
+        if (name.empty()) {
+                return false;
+        }
+        bool stopped = false;
+        for (auto& slot : animation_children_) {
+                if (slot.asset_name != name) {
+                        continue;
+                }
+                if (slot.timeline_mode == AnimationChildMode::Async && slot.timeline_active) {
+                        slot.timeline_active = false;
+                        stopped = true;
+                }
+                slot.visible = false;
+                slot.was_visible = false;
+        }
+        if (stopped) {
+                mark_composite_dirty();
+        }
+        return stopped;
+}
+
+void Asset::stop_all_child_async() {
+        bool any = false;
+        for (auto& slot : animation_children_) {
+                if (slot.timeline_mode == AnimationChildMode::Async && slot.timeline_active) {
+                        slot.timeline_active = false;
+                        any = true;
+                }
+                slot.visible = false;
+                slot.was_visible = false;
+        }
+        if (any) {
+                mark_composite_dirty();
+        }
+}
 
 bool Asset::is_current_animation_locked_in_progress() const {
         if (!info || !current_frame) return false;
@@ -886,9 +947,14 @@ Area Asset::get_area(const std::string& name) const {
 }
 
 void Asset::deactivate() {
-
+        active = false;
+        hidden = true;
+        deactivate_children();
         clear_render_caches();
         visibility_stamp = 0;
+        if (assets_) {
+                assets_->mark_active_assets_dirty();
+        }
 }
 
 void Asset::clear_render_caches() {
@@ -954,8 +1020,7 @@ void Asset::on_scale_factor_changed() {
 void Asset::set_hidden(bool state){ hidden = state; }
 bool  Asset::is_hidden() const { return hidden; }
 
-void Asset::set_merged_from_neighbors(bool state){ merged_from_neighbors_ = state; }
-bool  Asset::merged_from_neighbors() const{ return merged_from_neighbors_; }
+
 
 void Asset::set_highlighted(bool state){ highlighted = state; }
 bool  Asset::is_highlighted(){ return highlighted; }
@@ -986,6 +1051,121 @@ std::vector<animation_update::Attack> Asset::process_pending_attacks() {
         std::vector<animation_update::Attack> attacks;
         attacks.swap(pending_attacks_);
         return attacks;
+}
+
+void Asset::update_animation_children_state() {
+        if (animation_children_.empty()) {
+                return;
+        }
+        if (!animation_children_initialized_ && !initializing_animation_children_) {
+                initialize_animation_children_recursive();
+        }
+        if (!assets_) {
+                return;
+        }
+
+        if (!active) {
+                deactivate_children();
+                return;
+        }
+
+        for (auto& slot : animation_children_) {
+                sync_child_from_slot(slot);
+        }
+}
+
+void Asset::sync_child_from_slot(AnimationChildAttachment& slot) {
+        Asset* child = slot.spawned_asset;
+        if (!slot.info || slot.child_index < 0) {
+                if (child) {
+                        child->active = false;
+                        child->set_hidden(true);
+                }
+                return;
+        }
+
+        if (!child && assets_) {
+                SDL_Point spawn_pos{
+                        static_cast<int>(std::lround(smoothed_translation_x())),
+                        static_cast<int>(std::lround(smoothed_translation_y())) };
+                try {
+                        child = assets_->spawn_asset(slot.asset_name, spawn_pos);
+                } catch (...) {
+                        child = nullptr;
+                }
+                if (child) {
+                        child->parent = this;
+                        child->depth = depth;
+                        child->grid_resolution = grid_resolution;
+                        if (std::find(asset_children.begin(), asset_children.end(), child) == asset_children.end()) {
+                                add_child(child);
+                        }
+                        slot.spawned_asset = child;
+                }
+        }
+
+        if (!child || child->dead) {
+                slot.spawned_asset = nullptr;
+                return;
+        }
+
+        child->parent = this;
+        child->depth = depth;
+        child->grid_resolution = grid_resolution;
+        child->flipped = flipped;
+        child->active = active;
+
+        if (slot.current_frame && (slot.cached_w == 0 || slot.cached_h == 0)) {
+                animation_update::child_attachments::update_dimensions(slot);
+        }
+        if (child->cached_w <= 0 || child->cached_h <= 0) {
+                child->refresh_cached_dimensions();
+        }
+
+        int child_w = slot.cached_w > 0 ? slot.cached_w : child->cached_w;
+        int child_h = slot.cached_h > 0 ? slot.cached_h : child->cached_h;
+        child_w = std::max(1, child_w);
+        child_h = std::max(1, child_h);
+
+        SDL_Point prev_pos{ child->pos.x, child->pos.y };
+        SDL_Point anchor{ slot.world_pos.x, slot.world_pos.y };
+        SDL_Point new_pos{
+                anchor.x - child_w / 2,
+                anchor.y - child_h
+        };
+        child->pos = new_pos;
+        float resolved_child_world_z = std::isfinite(slot.world_z) ? slot.world_z : world_z_offset_;
+        child->set_world_z_offset(resolved_child_world_z);
+
+        child->set_hidden(!slot.visible);
+
+        child->mark_composite_dirty();
+
+        if (assets_ && (prev_pos.x != child->pos.x || prev_pos.y != child->pos.y)) {
+                assets_->log_asset_movement(child, prev_pos, child->pos);
+        }
+
+        child->update();
+}
+
+void Asset::deactivate_children() {
+        for (auto& slot : animation_children_) {
+                slot.visible = false;
+                slot.was_visible = false;
+                slot.timeline_active = false;
+                slot.timeline_frame_cursor = 0;
+                slot.timeline_frame_progress = 0.0f;
+                if (slot.spawned_asset) {
+                        slot.spawned_asset->active = false;
+                        slot.spawned_asset->set_hidden(true);
+                }
+        }
+        for (Asset* child : asset_children) {
+                if (!child) continue;
+                child->active = false;
+                child->set_hidden(true);
+                child->deactivate();
+        }
 }
 
 bool Asset::has_grid_residency_cache() const {

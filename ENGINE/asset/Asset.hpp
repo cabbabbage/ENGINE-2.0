@@ -131,6 +131,9 @@ class Asset {
     bool is_current_animation_locked_in_progress() const;
     bool is_current_animation_last_frame() const;
     bool is_current_animation_looping() const;
+    bool start_child_async(const std::string& name);
+    bool stop_child_async(const std::string& name);
+    void stop_all_child_async();
     const AnimationFrame* current_animation_frame() const { return current_frame; }
     void add_child(Asset* asset_child);
 
@@ -190,6 +193,8 @@ class Asset {
     void set_grid_id(std::uint64_t id);
     std::uint64_t grid_id() const { return grid_id_; }
     void clear_grid_id();
+    void set_world_z_offset(float z) { world_z_offset_ = z; }
+    float world_z_offset() const { return world_z_offset_; }
 
     SDL_Texture* composite_texture() const { return composite_texture_; }
     void set_composite_texture(SDL_Texture* tex);
@@ -319,6 +324,11 @@ private:
     bool         composite_dirty_   = true;
     SDL_Rect     composite_rect_    = {0, 0, 0, 0};
     float        composite_scale_   = 1.0f;
+    float        world_z_offset_    = 0.0f;
+
+    void update_animation_children_state();
+    void sync_child_from_slot(AnimationChildAttachment& slot);
+    void deactivate_children();
 };
 
 #endif

@@ -228,102 +228,6 @@ nlohmann::json normalize_child_timelines(const nlohmann::json& raw,
     return normalized;
 }
 
-const nlohmann::json* find_child_array_const(const nlohmann::json& entry) {
-    auto nested = [](const nlohmann::json& value) -> const nlohmann::json* {
-        if (value.is_array() && !value.empty() && value[0].is_array()) {
-            return &value;
-        }
-        return nullptr;
-};
-    if (entry.is_array()) {
-        if (entry.size() > 4 && entry[4].is_array()) {
-            return &entry[4];
-        }
-        if (entry.size() > 3) {
-            if (const auto* ptr = nested(entry[3])) {
-                return ptr;
-            }
-        }
-        if (entry.size() > 2) {
-            if (const auto* ptr = nested(entry[2])) {
-                return ptr;
-            }
-        }
-    } else if (entry.is_object()) {
-        auto it = entry.find("children");
-        if (it != entry.end() && it->is_array()) {
-            return &(*it);
-        }
-    }
-    return nullptr;
-}
-
-int read_child_index_from_entry(const nlohmann::json& entry) {
-    if (entry.is_object()) {
-        auto it = entry.find("child_index");
-        if (it != entry.end() && it->is_number_integer()) {
-            return it->get<int>();
-        }
-    }
-    if (entry.is_array() && !entry.empty()) {
-        const auto& idx = entry[0];
-        if (idx.is_number_integer()) {
-            return idx.get<int>();
-        }
-        if (idx.is_number()) {
-            return static_cast<int>(idx.get<double>());
-        }
-    }
-    return -1;
-}
-
-nlohmann::json convert_legacy_children_to_timelines(const nlohmann::json& movement,
-                                                    const std::vector<std::string>& child_names,
-                                                    std::size_t static_frame_count) {
-    if (!movement.is_array() || movement.empty() || child_names.empty()) {
-        return nlohmann::json::array();
-    }
-    const std::size_t resolved_static_frames = std::max<std::size_t>(1, static_frame_count);
-    const std::size_t frame_count = std::min(static_cast<std::size_t>(movement.size()), resolved_static_frames);
-    std::vector<std::unordered_map<int, nlohmann::json>> per_frame(frame_count == 0 ? 1 : frame_count);
-    for (std::size_t frame_idx = 0; frame_idx < frame_count; ++frame_idx) {
-        const auto* child_array = find_child_array_const(movement[frame_idx]);
-        if (!child_array) {
-            continue;
-        }
-        for (const auto& entry : *child_array) {
-            int child_index = read_child_index_from_entry(entry);
-            if (child_index < 0 || static_cast<std::size_t>(child_index) >= child_names.size()) {
-                continue;
-            }
-            per_frame[frame_idx][child_index] = normalize_child_frame_json(entry);
-        }
-    }
-
-    nlohmann::json legacy = nlohmann::json::array();
-    legacy.get_ref<nlohmann::json::array_t&>().reserve(child_names.size());
-    for (std::size_t child_idx = 0; child_idx < child_names.size(); ++child_idx) {
-        nlohmann::json frames = nlohmann::json::array();
-        frames.get_ref<nlohmann::json::array_t&>().reserve(resolved_static_frames);
-        for (std::size_t frame_idx = 0; frame_idx < resolved_static_frames; ++frame_idx) {
-            std::size_t actual_frame = 0;
-            if (!per_frame.empty()) {
-                actual_frame = std::min(frame_idx, per_frame.size() - 1);
-            }
-            auto it = per_frame[actual_frame].find(static_cast<int>(child_idx));
-            if (it != per_frame[actual_frame].end()) {
-                frames.push_back(it->second);
-            } else {
-                frames.push_back(default_child_frame_json());
-            }
-        }
-        legacy.push_back(nlohmann::json{{"child", static_cast<int>(child_idx)},
-                                         {"asset", child_names[child_idx]},
-                                         {"mode", "static"},
-                                         {"frames", frames}});
-    }
-    return legacy;
-}
 
 nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::json& source_payload) {
     nlohmann::json payload = source_payload.is_object() ? source_payload : nlohmann::json::object();
@@ -553,10 +457,6 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         static_frame_count = std::max<int>(1, payload.value("number_of_frames", 1));
     }
     nlohmann::json timelines = payload.contains("child_timelines") ? payload["child_timelines"] : nlohmann::json::array();
-    if ((!payload.contains("child_timelines") || !payload["child_timelines"].is_array()) && !child_names.empty()) {
-        const nlohmann::json movement = payload.contains("movement") ? payload["movement"] : nlohmann::json::array();
-        timelines = convert_legacy_children_to_timelines(movement, child_names, static_frame_count);
-    }
     if (child_names.empty()) {
         payload["child_timelines"] = nlohmann::json::array();
     } else {

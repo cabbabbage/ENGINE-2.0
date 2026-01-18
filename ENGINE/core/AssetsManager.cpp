@@ -35,6 +35,7 @@
 #include <mutex>
 #include <execution>
 #include <nlohmann/json.hpp>
+#include <functional>
 #include <thread>
 #include <vector>
 #include <unordered_set>
@@ -521,6 +522,20 @@ void Assets::update_filtered_active_assets() {
     }
 }
 
+void Assets::log_asset_movement(Asset* asset, SDL_Point previous, SDL_Point current) {
+    if (!asset) {
+        return;
+    }
+    if (previous.x == current.x && previous.y == current.y) {
+        return;
+    }
+    movement_commands_buffer_.push_back(GridMovementCommand{
+        asset,
+        previous,
+        current
+    });
+}
+
 void Assets::reset_dev_controls_current_room_cache() {
     dev_controls_last_room_ = nullptr;
 }
@@ -679,6 +694,7 @@ void Assets::update(const Input& input)
     int start_py = player ? player->pos.y : 0;
 
     if (player) {
+        player->active = true;
         if (dev_mode) {
 
             if (player->info) {
@@ -710,11 +726,9 @@ void Assets::update(const Input& input)
         player_moved = moved_during_update || moved_since_last_frame;
         if (!dev_mode && moved_during_update) {
 
-            movement_commands_buffer_.push_back(GridMovementCommand{
-                player,
-                SDL_Point{start_px, start_py},
-                SDL_Point{player->pos.x, player->pos.y}
-            });
+            log_asset_movement(player,
+                               SDL_Point{start_px, start_py},
+                               SDL_Point{player->pos.x, player->pos.y});
         }
     } else {
         last_player_pos_valid_ = false;
@@ -725,6 +739,7 @@ void Assets::update(const Input& input)
     for (Asset* asset : non_player_update_buffer_) {
         if (!asset) continue;
         SDL_Point previous_pos{asset->pos.x, asset->pos.y};
+        asset->active = true;
 
         if (dev_mode) {
 
@@ -738,11 +753,9 @@ void Assets::update(const Input& input)
 
             asset->update();
             if (previous_pos.x != asset->pos.x || previous_pos.y != asset->pos.y) {
-                movement_commands_buffer_.push_back(GridMovementCommand{
-                    asset,
-                    previous_pos,
-                    SDL_Point{asset->pos.x, asset->pos.y}
-                });
+                log_asset_movement(asset,
+                                   previous_pos,
+                                   SDL_Point{asset->pos.x, asset->pos.y});
             }
         }
     }
@@ -837,7 +850,7 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
                       active_assets.begin(),
                       active_assets.end(),
                       [&](Asset* asset) {
-                          if (asset && asset != player) {
+                          if (asset && asset != player && (!asset->parent || asset->parent->dead)) {
                               const std::size_t index = next_index.fetch_add(1, std::memory_order_relaxed);
                               rebuilt[index] = asset;
                           }
@@ -853,7 +866,7 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(active_assets.size());
     for (Asset* asset : active_assets) {
-        if (asset && asset != player) {
+        if (asset && asset != player && (!asset->parent || asset->parent->dead)) {
             non_player_update_buffer_.push_back(asset);
         }
     }
@@ -1871,6 +1884,16 @@ void Assets::rebuild_active_from_screen_grid() {
         return lhs < rhs;
     };
 
+    auto parent_is_active = [&](Asset* asset) -> bool {
+        if (!asset) {
+            return false;
+        }
+        if (!asset->parent) {
+            return true;
+        }
+        return asset->parent->last_active_frame_id == current_frame_id;
+    };
+
     active_assets.erase(std::remove_if(active_assets.begin(),
                                        active_assets.end(),
                                        [&](Asset* asset) {
@@ -1878,10 +1901,12 @@ void Assets::rebuild_active_from_screen_grid() {
                                                return true;
                                            }
                                            const bool is_visible = asset->last_visible_frame_id == current_frame_id;
-                                           if (!is_visible) {
+                                           const bool parent_active = parent_is_active(asset);
+                                           if (!is_visible || !parent_active) {
                                                if (asset->last_active_frame_id == previous_active_frame_id) {
                                                    active_changed = true;
                                                }
+                                               asset->active = false;
                                                return true;
                                            }
                                            const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
@@ -1890,12 +1915,16 @@ void Assets::rebuild_active_from_screen_grid() {
                                                active_changed = true;
                                            }
                                            asset->last_active_frame_id = current_frame_id;
+                                           asset->active = true;
                                            return false;
                                        }),
                         active_assets.end());
 
     for (Asset* asset : visible_candidate_buffer_) {
         if (!asset) {
+            continue;
+        }
+        if (!parent_is_active(asset)) {
             continue;
         }
         if (asset->last_active_frame_id == current_frame_id) {
@@ -1905,6 +1934,8 @@ void Assets::rebuild_active_from_screen_grid() {
         auto insert_pos = std::lower_bound(active_assets.begin(), active_assets.end(), asset, depth_order);
         active_assets.insert(insert_pos, asset);
         asset->last_active_frame_id = current_frame_id;
+        asset->last_visible_frame_id = current_frame_id;
+        asset->active = true;
         if (!was_active) {
             newly_active_assets.push_back(asset);
         }
@@ -1916,6 +1947,44 @@ void Assets::rebuild_active_from_screen_grid() {
     }
 
     visible_candidate_buffer_.clear();
+
+    // Ensure children of active assets become active alongside their parents.
+    {
+        std::vector<Asset*> active_snapshot = active_assets;
+        std::unordered_set<Asset*> visited;
+        visited.reserve(active_assets.size() * 2 + 1);
+        std::function<void(Asset*)> activate_children = [&](Asset* parent) {
+            if (!parent) {
+                return;
+            }
+            for (Asset* child : parent->asset_children) {
+                if (!child || child->dead) {
+                    continue;
+                }
+                if (!visited.insert(child).second) {
+                    continue;
+                }
+                if (child->last_active_frame_id == current_frame_id) {
+                    child->active = true;
+                    activate_children(child);
+                    continue;
+                }
+                child->last_active_frame_id = current_frame_id;
+                child->last_visible_frame_id = current_frame_id;
+                child->active = true;
+                auto insert_pos = std::lower_bound(active_assets.begin(), active_assets.end(), child, depth_order);
+                active_assets.insert(insert_pos, child);
+                newly_active_assets.push_back(child);
+                active_changed = true;
+                activate_children(child);
+            }
+        };
+        for (Asset* asset : active_snapshot) {
+            if (asset && asset->last_active_frame_id == current_frame_id) {
+                activate_children(asset);
+            }
+        }
+    }
 
     active_assets_dirty_.store(false, std::memory_order_release);
     if (active_changed) {

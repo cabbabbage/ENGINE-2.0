@@ -1228,6 +1228,69 @@ bool AnimationLoader::load_child_timelines_from_json(const nlohmann::json& anim_
                         return -1;
 };
 
+                struct StartMetadata {
+                        float time_seconds = 0.0f;
+                        int frame_offset = 0;
+                        bool present = false;
+                };
+
+                auto parse_start_metadata = [&](const nlohmann::json& entry) -> StartMetadata {
+                        StartMetadata meta{};
+                        auto coerce_float = [](const nlohmann::json& value, float fallback) -> float {
+                                if (value.is_number()) {
+                                        try {
+                                                return static_cast<float>(value.get<double>());
+                                        } catch (...) {
+                                        }
+                                } else if (value.is_string()) {
+                                        try {
+                                                return std::stof(value.get<std::string>());
+                                        } catch (...) {
+                                        }
+                                }
+                                return fallback;
+                        };
+                        auto coerce_int = [](const nlohmann::json& value, int fallback) -> int {
+                                if (value.is_number_integer()) {
+                                        try {
+                                                return value.get<int>();
+                                        } catch (...) {
+                                        }
+                                } else if (value.is_number()) {
+                                        try {
+                                                return static_cast<int>(value.get<double>());
+                                        } catch (...) {
+                                        }
+                                } else if (value.is_string()) {
+                                        try {
+                                                return std::stoi(value.get<std::string>());
+                                        } catch (...) {
+                                        }
+                                }
+                                return fallback;
+                        };
+                        if (entry.contains("start_time")) {
+                                meta.time_seconds = coerce_float(entry["start_time"], 0.0f);
+                                meta.present = true;
+                        }
+                        if (entry.contains("start_frame")) {
+                                meta.frame_offset = coerce_int(entry["start_frame"], 0);
+                                meta.present = true;
+                                if (!entry.contains("start_time")) {
+                                        meta.time_seconds = static_cast<float>(meta.frame_offset) / static_cast<float>(kBaseAnimationFps);
+                                }
+                        } else if (entry.contains("start") && entry["start"].is_number()) {
+                                meta.frame_offset = coerce_int(entry["start"], 0);
+                                meta.present = true;
+                                if (!entry.contains("start_time")) {
+                                        meta.time_seconds = static_cast<float>(meta.frame_offset) / static_cast<float>(kBaseAnimationFps);
+                                }
+                        } else if (meta.present && meta.frame_offset == 0) {
+                                meta.frame_offset = static_cast<int>(std::lround(meta.time_seconds * static_cast<float>(kBaseAnimationFps)));
+                        }
+                        return meta;
+                };
+
                 std::unordered_map<int, AnimationChildData> parsed;
                 parsed.reserve(timelines_node->size());
                 bool fatal_error = false;
@@ -1257,6 +1320,15 @@ bool AnimationLoader::load_child_timelines_from_json(const nlohmann::json& anim_
                         }
                         timeline.mode = *mode;
                         timeline.auto_start = entry.value("auto_start", entry.value("autostart", false));
+                        const StartMetadata start_meta = parse_start_metadata(entry);
+                        timeline.has_start_time = start_meta.present;
+                        timeline.start_time = start_meta.time_seconds;
+                        timeline.start_frame = start_meta.present
+                                                   ? start_meta.frame_offset
+                                                   : static_cast<int>(std::lround(timeline.start_time * static_cast<float>(kBaseAnimationFps)));
+                        if (timeline.has_start_time && !timeline.auto_start) {
+                                timeline.auto_start = true;
+                        }
                         const auto frames_it = entry.find("frames");
                         if (frames_it != entry.end() && frames_it->is_array()) {
                                 for (const auto& sample : *frames_it) {
@@ -1300,6 +1372,18 @@ bool AnimationLoader::load_child_timelines_from_json(const nlohmann::json& anim_
                         descriptor.mode = parsed_data ? parsed_data->mode : previous->mode;
                         descriptor.auto_start = parsed_data ? parsed_data->auto_start
                                                             : (previous ? previous->auto_start : (descriptor.mode == AnimationChildMode::Static));
+                        descriptor.start_time = parsed_data ? parsed_data->start_time
+                                                            : (previous ? previous->start_time : 0.0f);
+                        descriptor.start_frame = parsed_data ? parsed_data->start_frame
+                                                             : (previous ? previous->start_frame : 0);
+                        descriptor.has_start_time = parsed_data ? parsed_data->has_start_time
+                                                                 : (previous ? previous->has_start_time : false);
+                        if (descriptor.has_start_time && descriptor.start_frame <= 0) {
+                                descriptor.start_frame = static_cast<int>(std::lround(descriptor.start_time * static_cast<float>(kBaseAnimationFps)));
+                        } else if (descriptor.start_frame > 0 && !descriptor.has_start_time) {
+                                descriptor.start_time = static_cast<float>(descriptor.start_frame) / static_cast<float>(kBaseAnimationFps);
+                                descriptor.has_start_time = true;
+                        }
 
                         if (descriptor.mode == AnimationChildMode::Static) {
                                 const std::size_t sample_count = (parent_frame_count > 0) ? parent_frame_count : ((previous && previous->is_static() && !previous->frames.empty()) ? previous->frames.size() : static_cast<std::size_t>(1));

@@ -298,6 +298,9 @@ void Animation::rebuild_child_timelines_from_frames() {
         descriptor.animation_override = previous ? previous->animation_override : std::string{};
         descriptor.mode = previous ? previous->mode : descriptor.mode;
         descriptor.auto_start = previous ? previous->auto_start : (descriptor.mode == AnimationChildMode::Static);
+        descriptor.start_time = previous ? previous->start_time : 0.0f;
+        descriptor.start_frame = previous ? previous->start_frame : 0;
+        descriptor.has_start_time = previous ? previous->has_start_time : false;
 
         auto make_default_sample = [&](int index) {
             AnimationChildFrameData sample{};

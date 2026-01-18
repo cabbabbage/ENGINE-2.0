@@ -8,16 +8,6 @@
 
 namespace vibble {
 
-// Cache validation result
-enum class CacheValidationResult {
-    VALID,           // Cache is valid and up to date
-    MISSING_FILES,   // Some cache files are missing
-    INVALID_STRUCTURE, // Cache structure is invalid
-    STALE_CONTENT,   // Cache content is stale compared to source
-    UPDATED,         // Cache was updated during validation
-    ERROR            // Validation failed due to error
-};
-
 // Cache file information
 struct CacheFileInfo {
     std::string file_path;
@@ -125,6 +115,8 @@ private:
 
     void setLastError(const std::string& error);
     void clearLastError();
+
+    bool isOrphanedCacheFile(const fs::path& cache_file);
 };
 
 // Complete asset processing pipeline
@@ -167,7 +159,7 @@ public:
 private:
     AssetToolkit& toolkit_;
     CacheManager cache_manager_;
-    EffectsParser effects_parser_;
+    EffectsParser effects_parser_{"", ""};
     AssetProcessor asset_processor_;
     ProcessingStatistics stats_;
     std::string last_error_;
@@ -182,6 +174,12 @@ private:
     bool processAssetIfNeeded(const nlohmann::json& manifest,
                              const std::string& asset_name,
                              const std::string& asset_source_dir);
+    bool processAnimationIfNeeded(const nlohmann::json& manifest,
+                                 const std::string& asset_name,
+                                 const std::string& animation_name,
+                                 const std::string& animation_dir,
+                                 const EffectParams& fg_effects,
+                                 const EffectParams& bg_effects);
     bool updateManifestAfterProcessing(const std::string& manifest_path,
                                      const std::string& asset_name,
                                      const std::string& animation_name,

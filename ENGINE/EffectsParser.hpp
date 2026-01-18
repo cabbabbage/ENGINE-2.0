@@ -46,9 +46,7 @@ private:
     EffectParams extractEffectBlock(const std::string& block_name);
     std::string getDefaultCachePath() const;
     void setLastError(const std::string& error);
-    std::string getLastError() const;
     void clearLastError();
-    bool effectsChanged(const EffectParams& fg_effects, const EffectParams& bg_effects);
 };
 
 // Animation frame information
@@ -96,6 +94,9 @@ public:
     int getTotalProcessedFrames() const { return total_processed_frames_; }
     int getTotalFailedFrames() const { return total_failed_frames_; }
 
+    // Find animation directories (made public for AssetProcessingPipeline)
+    std::vector<std::string> findAnimationDirectories(const std::string& asset_dir);
+
 private:
     AssetToolkit& toolkit_;
     int total_processed_frames_ = 0;
@@ -104,7 +105,6 @@ private:
 
     // Helper methods
     bool loadManifest(const std::string& manifest_path, nlohmann::json& manifest);
-    std::vector<std::string> findAnimationDirectories(const std::string& asset_dir);
     std::vector<AnimationFrameInfo> collectAnimationFrames(const std::string& animation_dir,
                                                          const std::string& cache_dir,
                                                          const std::vector<int>& scale_variants);

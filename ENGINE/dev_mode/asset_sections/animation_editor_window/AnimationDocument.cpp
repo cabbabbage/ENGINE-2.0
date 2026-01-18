@@ -12,6 +12,7 @@
 #include <unordered_map>
 
 #include "dev_mode/core/dev_json_store.hpp"
+#include "asset/animation.hpp"
 
 namespace {
 
@@ -179,6 +180,38 @@ nlohmann::json build_child_timeline_entry(int child_index,
     entry["animation"] = source.value("animation", std::string{});
     std::string mode = sanitize_child_mode_string(source);
     entry["mode"] = mode;
+    const bool has_start_frame_field = source.contains("start_frame") || source.contains("start");
+    const bool has_start_time_field = source.contains("start_time");
+    int start_frame = 0;
+    float start_time = 0.0f;
+    if (has_start_frame_field) {
+        if (source.contains("start_frame")) {
+            start_frame = parse_int(source["start_frame"], 0);
+        } else if (source.contains("start")) {
+            start_frame = parse_int(source["start"], 0);
+        }
+    }
+    if (has_start_time_field) {
+        start_time = parse_float(source["start_time"],
+                                 static_cast<float>(start_frame) / static_cast<float>(kBaseAnimationFps));
+    } else if (has_start_frame_field) {
+        start_time = static_cast<float>(start_frame) / static_cast<float>(kBaseAnimationFps);
+    }
+    if (has_start_frame_field) {
+        entry["start_frame"] = start_frame;
+    }
+    if (has_start_time_field || has_start_frame_field) {
+        entry["start_time"] = start_time;
+    }
+    const bool has_auto_start = source.contains("auto_start") || source.contains("autostart");
+    if (has_auto_start || mode == "static") {
+        const bool auto_start = parse_bool_field(
+            source,
+            "auto_start",
+            parse_bool_field(source, "autostart", mode == "static"));
+        entry["auto_start"] = auto_start;
+        entry["autostart"] = auto_start;
+    }
     const auto frames_it = source.find("frames");
     if (frames_it != source.end()) {
         entry["frames"] = sanitize_child_frames(*frames_it, mode, static_frame_count);

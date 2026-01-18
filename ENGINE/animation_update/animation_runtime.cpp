@@ -641,6 +641,13 @@ void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFr
     parent_state.world_z = parent_world_z();
     parent_state.animation_id = self_->current_animation;
     const int parent_frame_index = frame ? frame->frame_index : -1;
+    const float parent_frame_interval = 1.0f / static_cast<float>(kBaseAnimationFps);
+    float parent_time = (parent_frame_index >= 0)
+                            ? static_cast<float>(parent_frame_index) * parent_frame_interval
+                            : 0.0f;
+    if (self_) {
+        parent_time += std::max(0.0f, self_->frame_progress);
+    }
 
     for (std::size_t i = 0; i < self_->animation_children_.size(); ++i) {
         auto& slot = self_->animation_children_[i];
@@ -687,6 +694,31 @@ void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFr
             sample = frames[sample_idx];
             should_emit = true;
         } else {
+            const bool uses_start_time = slot.timeline && (slot.timeline->has_start_time || slot.timeline->start_frame > 0 || slot.timeline->auto_start);
+            if (uses_start_time) {
+                float start_time = slot.timeline ? slot.timeline->start_time : 0.0f;
+                if (start_time <= 0.0f && slot.timeline && slot.timeline->start_frame > 0) {
+                    start_time = static_cast<float>(slot.timeline->start_frame) / static_cast<float>(kBaseAnimationFps);
+                }
+                const float elapsed = parent_time - start_time;
+                if (elapsed >= 0.0f) {
+                    const float child_frame_f = elapsed * static_cast<float>(kBaseAnimationFps);
+                    const int child_frame_idx = static_cast<int>(std::floor(child_frame_f + 1e-4f));
+                    if (child_frame_idx < static_cast<int>(frames.size())) {
+                        slot.timeline_active = true;
+                        slot.timeline_frame_cursor = child_frame_idx;
+                        slot.timeline_frame_progress = child_frame_f - static_cast<float>(child_frame_idx);
+                    } else {
+                        slot.timeline_active = false;
+                        slot.timeline_frame_cursor = std::max(0, static_cast<int>(frames.size()) - 1);
+                        slot.timeline_frame_progress = 0.0f;
+                    }
+                } else {
+                    slot.timeline_active = false;
+                    slot.timeline_frame_cursor = 0;
+                    slot.timeline_frame_progress = 0.0f;
+                }
+            }
             if (!slot.timeline_active) {
                 continue;
             }

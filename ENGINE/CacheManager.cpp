@@ -322,7 +322,7 @@ bool CacheManager::cleanupStaleCacheFiles(const std::string& cache_root,
             cleanup_path /= asset_name;
 
             if (!animation_name.empty()) {
-                cleanup_path /= "animations" / animation_name;
+                cleanup_path /= "animations/" + animation_name;
             } else {
                 cleanup_path /= "animations";
             }
@@ -668,8 +668,8 @@ bool CacheManager::updateFrameRebuildFlags(nlohmann::json& manifest,
             if (idx >= max_index) max_index = idx + 1;
         }
 
-        if (max_index > static_cast<int>(frames.size())) {
-            frames.resize(max_index);
+        while (static_cast<int>(frames.size()) < max_index) {
+            frames.push_back(nlohmann::json::object());
         }
 
         // Update rebuild flags for specified frames
@@ -743,7 +743,7 @@ void CacheManager::clearLastError() {
 
 // AssetProcessingPipeline implementation
 AssetProcessingPipeline::AssetProcessingPipeline(AssetToolkit& toolkit)
-    : toolkit_(toolkit), cache_manager_(toolkit), asset_processor_(toolkit) {
+    : toolkit_(toolkit), cache_manager_(toolkit), effects_parser_("", ""), asset_processor_(toolkit) {
     vibble::log::info("[AssetProcessingPipeline] Initialized");
 }
 
@@ -849,7 +849,7 @@ bool AssetProcessingPipeline::processAssetsNeedingRebuild(const std::string& man
 
                 std::string source_dir;
                 if (asset_data.contains("asset_directory")) {
-                    source_dir = asset_data["asset_directory"].get<std::string();
+                    source_dir = asset_data["asset_directory"].get<std::string>();
                 } else {
                     fs::path manifest_dir = fs::path(manifest_path).parent_path();
                     source_dir = (manifest_dir / "SRC" / "assets" / asset_name).string();
@@ -1077,7 +1077,7 @@ bool AssetProcessingPipeline::processAnimationIfNeeded(const nlohmann::json& man
             }
 
             updateManifestAfterProcessing(
-                fs::path(animation_dir) / ".." / ".." / ".." / "manifest.json",
+                (fs::path(animation_dir) / ".." / ".." / ".." / "manifest.json").string(),
                 asset_name, animation_name, processed_frames, true);
 
             return true;

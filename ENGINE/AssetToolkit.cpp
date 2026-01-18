@@ -19,6 +19,12 @@
 namespace fs = std::filesystem;
 namespace vibble {
 
+// Define GPUAccelerator to resolve incomplete type
+struct GPUAccelerator {
+    // Placeholder implementation
+    ~GPUAccelerator() = default;
+};
+
 // Constructor
 AssetToolkit::AssetToolkit() {
     logInfo("AssetToolkit constructor called");

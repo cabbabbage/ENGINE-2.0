@@ -1,12 +1,12 @@
 # Ignore vcpkg installed packages and build artifacts
-vcpkg/
+vcpkg
 build/
 cache
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
 Makefile
-vcpkg/
+vcpkg
 vcpkg_installed/
 key.txt
 release/

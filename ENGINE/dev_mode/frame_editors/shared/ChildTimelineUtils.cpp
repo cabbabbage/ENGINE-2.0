@@ -4,6 +4,7 @@
 #include <cmath>
 #include <nlohmann/json.hpp>
 #include <unordered_map>
+#include "asset/animation.hpp"
 
 namespace devmode::frame_editors::child_timelines {
 
@@ -153,7 +154,9 @@ nlohmann::json build_child_timelines_payload(
     const std::vector<std::vector<ChildFrameSample>>& static_frames_by_child,
     const std::vector<std::string>& child_assets,
     const std::vector<AnimationChildMode>& child_modes,
-    const std::vector<std::vector<ChildFrameSample>>& async_timelines_by_child) {
+    const std::vector<std::vector<ChildFrameSample>>& async_timelines_by_child,
+    const std::vector<float>& async_start_times,
+    const std::vector<bool>& async_has_start) {
 
     nlohmann::json normalized = nlohmann::json::array();
     if (child_assets.empty()) {
@@ -216,6 +219,26 @@ nlohmann::json build_child_timelines_payload(
             }
             entry["frames"] = std::move(frames);
         } else {
+            int start_frame = 0;
+            float start_time = 0.0f;
+            bool has_start = (child_idx < async_has_start.size()) ? async_has_start[child_idx] : false;
+            if (has_start && child_idx < async_start_times.size()) {
+                start_time = async_start_times[child_idx];
+            }
+            if (existing != by_asset.end()) {
+                const auto& src = existing->second;
+                if (src.contains("start_frame")) {
+                    start_frame = read_int(src["start_frame"], start_frame);
+                    has_start = true;
+                } else if (src.contains("start")) {
+                    start_frame = read_int(src["start"], start_frame);
+                    has_start = true;
+                }
+                if (src.contains("start_time")) {
+                    start_time = read_float(src["start_time"], start_time);
+                    has_start = true;
+                }
+            }
             if (existing != by_asset.end()) {
                 // reuse payload for async timelines if it already exists
                 entry["frames"] = existing->second.value("frames", nlohmann::json::array());
@@ -239,6 +262,24 @@ nlohmann::json build_child_timelines_payload(
                 fallback.visible = false;
                 entry["frames"] = nlohmann::json::array();
                 entry["frames"].push_back(child_frame_to_json(fallback));
+            }
+            if (has_start) {
+                if (start_frame <= 0 && start_time > 0.0f) {
+                    start_frame = static_cast<int>(std::lround(start_time * static_cast<float>(kBaseAnimationFps)));
+                } else if (start_frame < 0) {
+                    start_frame = 0;
+                }
+                if (start_time <= 0.0f && start_frame > 0) {
+                    start_time = static_cast<float>(start_frame) / static_cast<float>(kBaseAnimationFps);
+                }
+                entry["start_frame"] = start_frame;
+                entry["start_time"] = start_time;
+                if (!entry.contains("auto_start")) {
+                    entry["auto_start"] = true;
+                }
+                if (!entry.contains("autostart")) {
+                    entry["autostart"] = entry.value("auto_start", true);
+                }
             }
         }
         normalized.push_back(std::move(entry));

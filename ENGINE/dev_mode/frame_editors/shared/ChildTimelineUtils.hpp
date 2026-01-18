@@ -29,6 +29,8 @@ nlohmann::json build_child_timelines_payload(
     const std::vector<std::vector<ChildFrameSample>>& static_frames_by_child,
     const std::vector<std::string>& child_assets,
     const std::vector<AnimationChildMode>& child_modes,
-    const std::vector<std::vector<ChildFrameSample>>& async_timelines_by_child = {});
+    const std::vector<std::vector<ChildFrameSample>>& async_timelines_by_child = {},
+    const std::vector<float>& async_start_times = {},
+    const std::vector<bool>& async_has_start = {});
 
 }  // namespace devmode::frame_editors::child_timelines

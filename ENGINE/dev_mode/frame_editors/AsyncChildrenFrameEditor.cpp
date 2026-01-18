@@ -1,19 +1,626 @@
 #include "dev_mode/frame_editors/AsyncChildrenFrameEditor.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <nlohmann/json.hpp>
+
+#include "asset/Asset.hpp"
+#include "asset/animation.hpp"
+#include "asset/animation_frame.hpp"
+#include "animation_update/animation_update.hpp"
+#include "dev_mode/dm_styles.hpp"
+#include "render/warped_screen_grid.hpp"
+
 namespace devmode::frame_editors {
 
-void AsyncChildrenFrameEditor::begin(const FrameEditorContext& /*context*/) {}
+namespace {
+SDL_Point round_point(const SDL_FPoint& pt) {
+    return SDL_Point{static_cast<int>(std::lround(pt.x)), static_cast<int>(std::lround(pt.y))};
+}
 
-void AsyncChildrenFrameEditor::end() {}
+constexpr float kFrameInterval = 1.0f / static_cast<float>(kBaseAnimationFps);
+}  // namespace
 
-bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& /*e*/) {
+void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
+    context_ = context;
+    selection_state_ = context.selection_state;
+    axis_adjuster_ = context.axis_adjuster;
+    if (selection_state_) {
+        selection_state_->reset();
+    }
+    if (axis_adjuster_) {
+        axis_adjuster_->reset_axis(AdjustmentAxis::X);
+    }
+    dragging_child_ = false;
+    data_dirty_ = true;
+    selected_child_index_ = 0;
+    selected_child_frame_index_ = 0;
+    selected_parent_frame_index_ = 0;
+    if (context.target && context.target->current_frame) {
+        selected_parent_frame_index_ = std::max(0, context.target->current_frame->frame_index);
+    }
+    populate_child_data();
+    ensure_manifest_transaction();
+}
+
+void AsyncChildrenFrameEditor::end() {
+    if (manifest_txn_.active()) {
+        manifest_txn_.commit();
+    }
+    if (selection_state_) {
+        selection_state_->reset();
+        selection_state_ = nullptr;
+    }
+    axis_adjuster_ = nullptr;
+}
+
+bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
+    if (!context_.assets || !context_.target) {
+        return false;
+    }
+    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+        SDL_Point mouse{e.button.x, e.button.y};
+        if (auto hit = hit_test_child_marker(mouse)) {
+            selected_child_index_ = *hit;
+            if (selected_child_index_ >= 0 &&
+                selected_child_index_ < static_cast<int>(async_has_start_.size())) {
+                async_has_start_[static_cast<std::size_t>(selected_child_index_)] = true;
+            }
+            selected_child_frame_index_ = std::max(0, mapped_child_frame_index(selected_child_index_));
+            if (selection_state_) {
+                selection_state_->target = SelectionTarget::ChildPoint;
+                selection_state_->child_index = selected_child_index_;
+                selection_state_->screen_pos = mouse;
+                selection_state_->world_pos = child_world_position(selected_child_index_);
+            }
+            dragging_child_ = true;
+            drag_start_mouse_ = mouse;
+            ensure_async_frame_capacity(selected_child_index_, selected_child_frame_index_);
+            drag_start_sample_ = async_frames_by_child_[selected_child_index_][selected_child_frame_index_];
+            return true;
+        }
+    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (dragging_child_) {
+            dragging_child_ = false;
+            if (selection_state_) {
+                selection_state_->target = SelectionTarget::None;
+            }
+            return true;
+        }
+    } else if (e.type == SDL_MOUSEMOTION) {
+        if (dragging_child_ && selected_child_index_ >= 0 &&
+            selected_child_index_ < static_cast<int>(async_frames_by_child_.size())) {
+            float scale = attachment_scale();
+            if (scale <= 0.0f) scale = 1.0f;
+            const float dx_screen = static_cast<float>(e.motion.x - drag_start_mouse_.x);
+            const float dz_screen = static_cast<float>(e.motion.y - drag_start_mouse_.y);
+            const bool flipped = context_.target->flipped;
+            float dx_world = dx_screen / scale;
+            float dz_world = dz_screen / scale;
+            ensure_async_frame_capacity(selected_child_index_, selected_child_frame_index_);
+            auto& sample = async_frames_by_child_[selected_child_index_][selected_child_frame_index_];
+            sample.has_data = true;
+            sample.visible = true;
+            sample.dx = drag_start_sample_.dx + (flipped ? -dx_world : dx_world);
+            sample.dz = drag_start_sample_.dz + dz_world;
+            data_dirty_ = true;
+            refresh_selection_state();
+            return true;
+        }
+    } else if (e.type == SDL_KEYDOWN) {
+        switch (e.key.keysym.sym) {
+            case SDLK_LEFT:
+                selected_parent_frame_index_ = std::max(0, selected_parent_frame_index_ - 1);
+                data_dirty_ = true;
+                return true;
+            case SDLK_RIGHT:
+                selected_parent_frame_index_ = std::min(parent_frame_count_ - 1, selected_parent_frame_index_ + 1);
+                data_dirty_ = true;
+                return true;
+            case SDLK_TAB:
+                selected_child_index_ = (selected_child_index_ + 1) %
+                                        std::max(1, static_cast<int>(child_assets_.size()));
+                selected_child_frame_index_ = std::max(0, mapped_child_frame_index(selected_child_index_));
+                data_dirty_ = true;
+                refresh_selection_state();
+                return true;
+            case SDLK_COMMA:
+                selected_child_frame_index_ = std::max(0, selected_child_frame_index_ - 1);
+                ensure_async_frame_capacity(selected_child_index_, selected_child_frame_index_);
+                data_dirty_ = true;
+                refresh_selection_state();
+                return true;
+            case SDLK_PERIOD:
+                selected_child_frame_index_ = std::min(selected_child_frame_index_ + 1,
+                                                       std::max(0, parent_frame_count_ - 1));
+                ensure_async_frame_capacity(selected_child_index_, selected_child_frame_index_);
+                data_dirty_ = true;
+                refresh_selection_state();
+                return true;
+            case SDLK_LEFTBRACKET:
+                adjust_start_frame(selected_child_index_, -1);
+                return true;
+            case SDLK_RIGHTBRACKET:
+                adjust_start_frame(selected_child_index_, 1);
+                return true;
+            default:
+                break;
+        }
+    }
     return false;
 }
 
-void AsyncChildrenFrameEditor::update(const Input& /*input*/, float /*dt*/) {}
+void AsyncChildrenFrameEditor::update(const Input& /*input*/, float /*dt*/) {
+    if (data_dirty_ && context_.target) {
+        apply_preview();
+        data_dirty_ = false;
+    }
+}
 
-void AsyncChildrenFrameEditor::render_world(SDL_Renderer* /*renderer*/) const {}
+void AsyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
+    if (!renderer || !context_.target || !context_.assets) return;
+    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+    SDL_Point anchor = asset_anchor_world();
+    const float radius = 6.0f;
+    for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
+        if (idx >= child_modes_.size()) continue;
+        if (child_modes_[idx] != AnimationChildMode::Async) continue;
+        SDL_FPoint child_pos = child_world_position(static_cast<int>(idx));
+        SDL_FPoint world{anchor.x + child_pos.x, anchor.y + child_pos.y};
+        SDL_FPoint screen = cam.map_to_screen_f(world);
+        SDL_Point center = round_point(screen);
+        bool is_selected = static_cast<int>(idx) == selected_child_index_;
+        SDL_Rect marker{center.x - static_cast<int>(radius), center.y - static_cast<int>(radius),
+                        static_cast<int>(radius * 2), static_cast<int>(radius * 2)};
+        SDL_Color color = is_selected ? DMStyles::AccentButton().bg : DMStyles::HeaderButton().bg;
+        SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 192);
+        SDL_RenderFillRect(renderer, &marker);
+        SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g,
+                               DMStyles::Border().b, 255);
+        SDL_RenderDrawRect(renderer, &marker);
+    }
+}
 
-void AsyncChildrenFrameEditor::render_overlays(SDL_Renderer* /*renderer*/) const {}
+void AsyncChildrenFrameEditor::render_overlays(SDL_Renderer* renderer) const {
+    (void)renderer;
+}
+
+void AsyncChildrenFrameEditor::populate_child_data() {
+    child_assets_.clear();
+    child_modes_.clear();
+    static_frames_by_child_.clear();
+    async_frames_by_child_.clear();
+    async_start_times_.clear();
+    async_start_frames_.clear();
+    async_has_start_.clear();
+    parent_frame_count_ = 0;
+    if (!context_.target || !context_.document) {
+        return;
+    }
+
+    child_assets_ = context_.document->animation_children();
+    child_modes_.assign(child_assets_.size(), AnimationChildMode::Static);
+    static_frames_by_child_.assign(child_assets_.size(), std::vector<child_timelines::ChildFrameSample>{});
+    async_frames_by_child_.assign(child_assets_.size(), std::vector<child_timelines::ChildFrameSample>{});
+    async_start_times_.assign(child_assets_.size(), 0.0f);
+    async_start_frames_.assign(child_assets_.size(), 0);
+    async_has_start_.assign(child_assets_.size(), false);
+
+    if (!context_.target->info) {
+        return;
+    }
+    auto it = context_.target->info->animations.find(context_.animation_id);
+    if (it == context_.target->info->animations.end()) {
+        return;
+    }
+    const Animation& animation = it->second;
+    const auto& path = animation.movement_path(animation.default_movement_path_index());
+    parent_frame_count_ = static_cast<int>(path.size());
+    if (parent_frame_count_ <= 0) {
+        parent_frame_count_ = 1;
+    }
+    for (auto& timeline : static_frames_by_child_) {
+        timeline.assign(parent_frame_count_, child_timelines::ChildFrameSample{});
+    }
+    for (std::size_t child_idx = 0; child_idx < child_assets_.size(); ++child_idx) {
+        for (int frame_idx = 0; frame_idx < parent_frame_count_; ++frame_idx) {
+            auto& sample = static_frames_by_child_[child_idx][frame_idx];
+            sample.child_index = static_cast<int>(child_idx);
+            sample.visible = false;
+        }
+    }
+
+    for (int frame_idx = 0; frame_idx < parent_frame_count_; ++frame_idx) {
+        if (frame_idx >= static_cast<int>(path.size())) break;
+        const AnimationFrame& src = path[frame_idx];
+        for (const auto& child_src : src.children) {
+            if (child_src.child_index < 0 ||
+                child_src.child_index >= static_cast<int>(child_assets_.size())) {
+                continue;
+            }
+            if (child_modes_[child_src.child_index] == AnimationChildMode::Async) {
+                continue;
+            }
+            auto& sample = static_frames_by_child_[static_cast<std::size_t>(child_src.child_index)][frame_idx];
+            sample.child_index = child_src.child_index;
+            sample.dx = static_cast<float>(child_src.dx);
+            sample.dy = static_cast<float>(child_src.dy);
+            sample.dz = static_cast<float>(child_src.dz);
+            sample.degree = child_src.degree;
+            sample.visible = child_src.visible;
+            sample.has_data = true;
+        }
+    }
+
+    const auto& timelines = animation.child_timelines();
+    for (const auto& descriptor : timelines) {
+        if (descriptor.child_index < 0 ||
+            descriptor.child_index >= static_cast<int>(child_assets_.size())) {
+            continue;
+        }
+        const std::size_t idx = static_cast<std::size_t>(descriptor.child_index);
+        child_modes_[idx] = descriptor.mode;
+            if (descriptor.mode == AnimationChildMode::Async) {
+                auto& timeline = async_frames_by_child_[idx];
+                timeline.clear();
+                for (const auto& frame : descriptor.frames) {
+                    child_timelines::ChildFrameSample sample{};
+                sample.child_index = frame.child_index;
+                sample.dx = static_cast<float>(frame.dx);
+                sample.dy = static_cast<float>(frame.dy);
+                sample.dz = static_cast<float>(frame.dz);
+                sample.degree = frame.degree;
+                sample.visible = frame.visible;
+                sample.has_data = true;
+                timeline.push_back(sample);
+            }
+            if (descriptor.has_start_time || descriptor.start_frame > 0 || descriptor.start_time > 0.0f || descriptor.auto_start) {
+                async_has_start_[idx] = true;
+                async_start_frames_[idx] = std::max(0, descriptor.start_frame);
+                float derived_start = descriptor.start_time;
+                if (derived_start <= 0.0f && descriptor.start_frame > 0) {
+                    derived_start = static_cast<float>(descriptor.start_frame) * kFrameInterval;
+                }
+                async_start_times_[idx] = derived_start;
+            }
+            if (timeline.empty()) {
+                child_timelines::ChildFrameSample fallback{};
+                fallback.child_index = static_cast<int>(idx);
+                fallback.visible = false;
+                timeline.push_back(fallback);
+            }
+        }
+    }
+
+    // Prefer explicit payload metadata for async start offsets if present.
+    if (auto payload_opt = context_.document->animation_payload_json(context_.animation_id)) {
+        const nlohmann::json& payload = *payload_opt;
+        auto timelines_json = payload.find("child_timelines");
+        if (timelines_json != payload.end() && timelines_json->is_array()) {
+            std::unordered_map<std::string, int> index_by_asset;
+            for (std::size_t i = 0; i < child_assets_.size(); ++i) {
+                index_by_asset.emplace(child_assets_[i], static_cast<int>(i));
+            }
+            for (const auto& entry : *timelines_json) {
+                if (!entry.is_object()) continue;
+                std::string asset = entry.value("asset", std::string{});
+                int idx = entry.value("child", entry.value("child_index", -1));
+                if (idx < 0 && !asset.empty()) {
+                    auto it_idx = index_by_asset.find(asset);
+                    if (it_idx != index_by_asset.end()) {
+                        idx = it_idx->second;
+                    }
+                }
+                if (idx < 0 || idx >= static_cast<int>(child_assets_.size())) continue;
+                if (child_timelines::timeline_entry_is_static(entry)) {
+                    continue;
+                }
+                int start_frame = 0;
+                float start_time = 0.0f;
+                bool has_start = false;
+                if (entry.contains("start_frame")) {
+                    start_frame = entry["start_frame"].is_number_integer()
+                                      ? entry["start_frame"].get<int>()
+                                      : 0;
+                    has_start = true;
+                } else if (entry.contains("start")) {
+                    start_frame = entry["start"].is_number_integer() ? entry["start"].get<int>() : 0;
+                    has_start = true;
+                }
+                if (entry.contains("start_time")) {
+                    try {
+                        start_time = static_cast<float>(entry["start_time"].get<double>());
+                        has_start = true;
+                    } catch (...) {
+                    }
+                }
+                if (has_start) {
+                    async_has_start_[static_cast<std::size_t>(idx)] = true;
+                    if (start_frame < 0) start_frame = 0;
+                    async_start_frames_[static_cast<std::size_t>(idx)] = start_frame;
+                    if (start_time <= 0.0f && start_frame > 0) {
+                        start_time = static_cast<float>(start_frame) * kFrameInterval;
+                    }
+                    async_start_times_[static_cast<std::size_t>(idx)] = start_time;
+                } else if (entry.value("auto_start", entry.value("autostart", false))) {
+                    async_has_start_[static_cast<std::size_t>(idx)] = true;
+                    async_start_frames_[static_cast<std::size_t>(idx)] = 0;
+                    async_start_times_[static_cast<std::size_t>(idx)] = 0.0f;
+                }
+            }
+        }
+    }
+
+    if (selected_parent_frame_index_ >= parent_frame_count_) {
+        selected_parent_frame_index_ = std::max(0, parent_frame_count_ - 1);
+    }
+    data_dirty_ = true;
+}
+
+void AsyncChildrenFrameEditor::ensure_manifest_transaction() {
+    if (!context_.document) {
+        return;
+    }
+    manifest_txn_.begin(context_);
+    manifest_txn_.set_apply_callback([this]() -> bool {
+        if (!context_.document) {
+            return false;
+        }
+        // normalize start times from frames when missing
+        std::vector<float> start_times = async_start_times_;
+        if (start_times.size() < async_start_frames_.size()) {
+            start_times.resize(async_start_frames_.size(), 0.0f);
+        }
+        for (std::size_t i = 0; i < start_times.size(); ++i) {
+            if (start_times[i] <= 0.0f && i < async_start_frames_.size() && async_start_frames_[i] > 0) {
+                start_times[i] = static_cast<float>(async_start_frames_[i]) * kFrameInterval;
+            }
+        }
+        const auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
+        nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
+        payload["child_timelines"] = child_timelines::build_child_timelines_payload(
+            payload,
+            static_frames_by_child_,
+            child_assets_,
+            child_modes_,
+            async_frames_by_child_,
+            start_times,
+            async_has_start_);
+        return context_.document->update_animation_payload(context_.animation_id, payload);
+    });
+}
+
+float AsyncChildrenFrameEditor::attachment_scale() const {
+    if (!context_.assets || !context_.target) {
+        return 1.0f;
+    }
+    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+    float perspective_scale = 1.0f;
+    if (const auto* gp = cam.grid_point_for_asset(context_.target)) {
+        perspective_scale = std::max(0.0001f, gp->perspective_scale);
+    }
+    float remainder = context_.target->current_remaining_scale_adjustment;
+    if (!std::isfinite(remainder) || remainder <= 0.0f) {
+        remainder = 1.0f;
+    }
+    float scale = remainder / std::max(0.0001f, perspective_scale);
+    if (!std::isfinite(scale) || scale <= 0.0f) {
+        scale = 1.0f;
+    }
+    return scale;
+}
+
+SDL_Point AsyncChildrenFrameEditor::asset_anchor_world() const {
+    if (!context_.target) {
+        return SDL_Point{0, 0};
+    }
+    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->pos);
+}
+
+SDL_FPoint AsyncChildrenFrameEditor::child_world_position(int child_index) const {
+    SDL_FPoint world{0.0f, 0.0f};
+    auto sample = sample_for_child(child_index, true);
+    if (!context_.target) {
+        return world;
+    }
+    const float scale = attachment_scale();
+    const float dx = sample.dx * scale;
+    const float dz = sample.dz * scale;
+    const float world_dx = context_.target->flipped ? -dx : dx;
+    world.x = world_dx;
+    world.y = dz;
+    return world;
+}
+
+std::optional<int> AsyncChildrenFrameEditor::hit_test_child_marker(const SDL_Point& mouse) const {
+    if (!context_.assets || !context_.target) {
+        return std::nullopt;
+    }
+    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+    SDL_Point anchor = asset_anchor_world();
+    const float radius = 12.0f;
+    const float radius_sq = radius * radius;
+    for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
+        if (idx >= child_modes_.size()) continue;
+        if (child_modes_[idx] != AnimationChildMode::Async) continue;
+        SDL_FPoint world_pos = child_world_position(static_cast<int>(idx));
+        SDL_FPoint world{anchor.x + world_pos.x, anchor.y + world_pos.y};
+        SDL_FPoint screen = cam.map_to_screen_f(world);
+        const float dx = static_cast<float>(mouse.x) - screen.x;
+        const float dy = static_cast<float>(mouse.y) - screen.y;
+        if ((dx * dx + dy * dy) <= radius_sq) {
+            return static_cast<int>(idx);
+        }
+    }
+    return std::nullopt;
+}
+
+child_timelines::ChildFrameSample AsyncChildrenFrameEditor::sample_for_child(int child_index, bool for_preview) const {
+    if (child_index < 0 || child_index >= static_cast<int>(child_modes_.size())) {
+        return child_timelines::ChildFrameSample{};
+    }
+    if (child_modes_[child_index] != AnimationChildMode::Async) {
+        if (child_index < static_cast<int>(static_frames_by_child_.size())) {
+            const auto& timeline = static_frames_by_child_[static_cast<std::size_t>(child_index)];
+            int frame_idx = std::clamp(selected_parent_frame_index_, 0, std::max(0, parent_frame_count_ - 1));
+            if (frame_idx >= 0 && frame_idx < static_cast<int>(timeline.size())) {
+                return timeline[static_cast<std::size_t>(frame_idx)];
+            }
+        }
+        return child_timelines::ChildFrameSample{};
+    }
+
+    const int mapped_idx = mapped_child_frame_index(child_index);
+    if (mapped_idx < 0) {
+        return default_sample(child_index);
+    }
+    const auto& timeline = async_frames_by_child_[static_cast<std::size_t>(child_index)];
+    if (mapped_idx >= static_cast<int>(timeline.size())) {
+        return for_preview ? child_timelines::ChildFrameSample{} : default_sample(child_index);
+    }
+    return timeline[static_cast<std::size_t>(mapped_idx)];
+}
+
+child_timelines::ChildFrameSample AsyncChildrenFrameEditor::default_sample(int child_index) const {
+    child_timelines::ChildFrameSample sample{};
+    sample.child_index = child_index;
+    sample.visible = false;
+    sample.has_data = false;
+    return sample;
+}
+
+int AsyncChildrenFrameEditor::mapped_child_frame_index(int child_index) const {
+    if (child_index < 0 || child_index >= static_cast<int>(child_modes_.size())) {
+        return -1;
+    }
+    if (child_modes_[child_index] != AnimationChildMode::Async) {
+        return selected_parent_frame_index_;
+    }
+    if (child_index >= static_cast<int>(async_has_start_.size()) ||
+        !async_has_start_[static_cast<std::size_t>(child_index)]) {
+        return -1;
+    }
+    const float start_time = start_time_for_child(child_index);
+    const float parent_time = static_cast<float>(selected_parent_frame_index_) * kFrameInterval;
+    const float elapsed = parent_time - start_time;
+    if (elapsed < 0.0f) {
+        return -1;
+    }
+    const int idx = static_cast<int>(std::floor(elapsed * static_cast<float>(kBaseAnimationFps) + 1e-4f));
+    return std::max(0, idx);
+}
+
+void AsyncChildrenFrameEditor::ensure_async_frame_capacity(int child_index, int frame_index) {
+    if (child_index < 0 || child_index >= static_cast<int>(async_frames_by_child_.size())) {
+        return;
+    }
+    auto& timeline = async_frames_by_child_[static_cast<std::size_t>(child_index)];
+    if (frame_index < 0) return;
+    if (static_cast<std::size_t>(frame_index) >= timeline.size()) {
+        const std::size_t desired = static_cast<std::size_t>(frame_index + 1);
+        const std::size_t current = timeline.size();
+        timeline.resize(desired);
+        for (std::size_t i = current; i < timeline.size(); ++i) {
+            timeline[i] = default_sample(child_index);
+            timeline[i].child_index = child_index;
+        }
+    }
+}
+
+float AsyncChildrenFrameEditor::start_time_for_child(int child_index) const {
+    if (child_index < 0 || child_index >= static_cast<int>(child_assets_.size())) {
+        return 0.0f;
+    }
+    float start_time = (child_index < static_cast<int>(async_start_times_.size()))
+                           ? async_start_times_[static_cast<std::size_t>(child_index)]
+                           : 0.0f;
+    if (start_time <= 0.0f && child_index < static_cast<int>(async_start_frames_.size()) &&
+        async_start_frames_[static_cast<std::size_t>(child_index)] > 0) {
+        start_time = static_cast<float>(async_start_frames_[static_cast<std::size_t>(child_index)]) * kFrameInterval;
+    }
+    return start_time;
+}
+
+int AsyncChildrenFrameEditor::start_frame_for_child(int child_index) const {
+    if (child_index < 0 || child_index >= static_cast<int>(child_assets_.size())) {
+        return 0;
+    }
+    int start_frame = (child_index < static_cast<int>(async_start_frames_.size()))
+                          ? async_start_frames_[static_cast<std::size_t>(child_index)]
+                          : 0;
+    if (start_frame <= 0) {
+        const float start_time = start_time_for_child(child_index);
+        if (start_time > 0.0f) {
+            start_frame = static_cast<int>(std::lround(start_time / kFrameInterval));
+        }
+    }
+    return std::max(0, start_frame);
+}
+
+void AsyncChildrenFrameEditor::adjust_start_frame(int child_index, int delta_frames) {
+    if (child_index < 0 || child_index >= static_cast<int>(child_assets_.size())) {
+        return;
+    }
+    if (async_start_frames_.size() < child_assets_.size()) {
+        async_start_frames_.resize(child_assets_.size(), 0);
+    }
+    if (async_start_times_.size() < child_assets_.size()) {
+        async_start_times_.resize(child_assets_.size(), 0.0f);
+    }
+    async_has_start_[static_cast<std::size_t>(child_index)] = true;
+    int next = std::max(0, start_frame_for_child(child_index) + delta_frames);
+    async_start_frames_[static_cast<std::size_t>(child_index)] = next;
+    async_start_times_[static_cast<std::size_t>(child_index)] = static_cast<float>(next) * kFrameInterval;
+    data_dirty_ = true;
+}
+
+void AsyncChildrenFrameEditor::refresh_selection_state() {
+    if (!selection_state_ || selection_state_->target != SelectionTarget::ChildPoint) {
+        return;
+    }
+    selection_state_->child_index = selected_child_index_;
+    selection_state_->world_pos = child_world_position(selected_child_index_);
+}
+
+void AsyncChildrenFrameEditor::apply_preview() {
+    if (!context_.target) return;
+    auto& slots = const_cast<std::vector<Asset::AnimationChildAttachment>&>(context_.target->animation_children());
+    if (slots.empty()) return;
+    SDL_Point render_pos{
+        static_cast<int>(std::lround(context_.target->smoothed_translation_x())),
+        static_cast<int>(std::lround(context_.target->smoothed_translation_y()))
+    };
+    animation_update::child_attachments::ParentState parent_state{};
+    parent_state.position = render_pos;
+    parent_state.base_position = animation_update::detail::bottom_middle_for(*context_.target, render_pos);
+    parent_state.scale = context_.target->smoothed_scale();
+    parent_state.flipped = context_.target->flipped;
+    parent_state.world_z = context_.target->world_z_offset();
+    parent_state.animation_id = context_.animation_id;
+
+    std::vector<AnimationChildFrameData> overrides;
+    for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
+        if (idx >= child_modes_.size()) continue;
+        if (child_modes_[idx] != AnimationChildMode::Async) continue;
+        const auto sample = sample_for_child(static_cast<int>(idx), true);
+        if (!sample.has_data && !sample.visible) {
+            continue;
+        }
+        AnimationChildFrameData entry{};
+        entry.child_index = static_cast<int>(idx);
+        entry.dx = static_cast<int>(std::lround(sample.dx));
+        entry.dy = static_cast<int>(std::lround(sample.dy));
+        entry.dz = static_cast<int>(std::lround(sample.dz));
+        entry.degree = sample.degree;
+        entry.visible = sample.visible;
+        overrides.push_back(entry);
+    }
+    const AnimationFrame* current_frame = context_.target->current_frame;
+    animation_update::child_attachments::apply_frame_data(slots,
+                                                         parent_state,
+                                                         current_frame,
+                                                         overrides.empty() ? nullptr : &overrides);
+    context_.target->mark_composite_dirty();
+}
 
 }  // namespace devmode::frame_editors

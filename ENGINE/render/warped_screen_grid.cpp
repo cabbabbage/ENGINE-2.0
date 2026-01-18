@@ -984,7 +984,6 @@ void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     read_float("meters_per_100_world_px", updated.meters_per_100_world_px, 0.01f, 1000.0f);
 
     read_float("extra_cull_margin", updated.extra_cull_margin, 0.0f, 10000.0f);
-    read_float("pre_horizon_lock_offset_px", updated.pre_horizon_lock_offset_px, 0.0f, 1000.0f);
     read_float("near_camera_max_perspective_scale", updated.near_camera_max_perspective_scale, 0.0f, 100.0f);
     read_float("offscreen_fade_amount_px", updated.offscreen_fade_amount_px, 0.0f, 1000.0f);
 
@@ -999,7 +998,6 @@ nlohmann::json WarpedScreenGrid::camera_settings_to_json() const {
     result["render_quality_percent"] = settings_.render_quality_percent;
     result["meters_per_100_world_px"] = settings_.meters_per_100_world_px;
     result["extra_cull_margin"] = settings_.extra_cull_margin;
-    result["pre_horizon_lock_offset_px"] = settings_.pre_horizon_lock_offset_px;
     result["near_camera_max_perspective_scale"] = settings_.near_camera_max_perspective_scale;
     result["offscreen_fade_amount_px"] = settings_.offscreen_fade_amount_px;
 
@@ -1140,7 +1138,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         return;
     }
     const float horizon_screen_y = static_cast<float>(cam_state.horizon_screen_y);
-    const float pre_horizon_screen_y = horizon_screen_y - std::max(0.0f, settings_.pre_horizon_lock_offset_px);
     const float horizon_band = horizon_fade_for_height(cam_state.camera_height);
 
     const float world_margin_units = std::max(0.0f, settings_.extra_cull_margin);
@@ -1357,18 +1354,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             screen_pos = prev_screen_valid ? prev_screen : SDL_FPoint{0.0f, 0.0f};
         }
 
-        const bool projected_in_pre_horizon =
-            prev_screen_valid &&
-            std::isfinite(horizon_screen_y) &&
-            std::isfinite(pre_horizon_screen_y) &&
-            screen_pos.y >= pre_horizon_screen_y &&
-            screen_pos.y <= horizon_screen_y;
-        const bool prev_in_pre_horizon =
-            prev_screen_valid &&
-            prev_screen.y >= pre_horizon_screen_y &&
-            prev_screen.y <= horizon_screen_y;
-        const bool freeze_screen_position = projected_in_pre_horizon && prev_in_pre_horizon;
-        const SDL_FPoint screen_for_bounds = freeze_screen_position ? prev_screen : screen_pos;
+        const SDL_FPoint screen_for_bounds = screen_pos;
 
         float base_scale = primary_asset->smoothed_scale();
         if (!std::isfinite(base_scale) || base_scale <= 0.0f) {

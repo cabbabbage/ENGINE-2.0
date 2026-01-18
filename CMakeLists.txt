@@ -195,6 +195,7 @@ add_executable(engine_tests
     TESTS/test_animation_child_visibility.cpp
     TESTS/test_animation_child_runtime.cpp
     TESTS/test_animation_child_clone.cpp
+    TESTS/test_frame_editor_async_payload.cpp
     TESTS/test_attack_validation.cpp
     TESTS/frame_editor_session_test_helpers.cpp
     ENGINE/asset/animation.cpp
@@ -203,6 +204,9 @@ add_executable(engine_tests
     ENGINE/animation_update/child_attachment_controller.cpp
     ENGINE/animation_update/attack_validation.cpp
     ENGINE/dev_mode/frame_editor_session_child_timelines.cpp
+    ENGINE/dev_mode/asset_sections/animation_editor_window/frame_editor/children/FrameChildrenEditor.cpp
+    ENGINE/dev_mode/asset_sections/animation_editor_window/AnimationDocument.cpp
+    ENGINE/dev_mode/dm_styles.cpp
     ENGINE/dev_mode/core/dev_json_store.cpp
     ENGINE/dev_mode/core/manifest_store.cpp
     ENGINE/dev_mode/manifest_asset_utils.cpp

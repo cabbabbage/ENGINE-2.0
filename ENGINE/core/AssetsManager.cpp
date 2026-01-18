@@ -18,7 +18,6 @@
 #include "utils/area.hpp"
 #include "utils/input.hpp"
 #include "utils/range_util.hpp"
-#include "utils/text_style.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "utils/quick_task_popup.hpp"
 #include "utils/log.hpp"
@@ -55,23 +54,6 @@ std::uint64_t hash_active_asset_list(const std::vector<Asset*>& list) {
         hash *= prime;
     }
     return hash;
-}
-
-struct SDLSurfaceDeleter {
-    void operator()(SDL_Surface* surface) const {
-        if (surface) {
-            SDL_FreeSurface(surface);
-        }
-    }
-};
-
-TTF_Font* scaling_notice_font() {
-    static std::unique_ptr<TTF_Font, decltype(&TTF_CloseFont)> font(nullptr, TTF_CloseFont);
-    if (!font) {
-        const TextStyle& style = TextStyles::MediumMain();
-        font.reset(style.open_font());
-    }
-    return font.get();
 }
 
 constexpr int kQualityOptions[] = {100, 75, 50, 25, 10};
@@ -1479,6 +1461,8 @@ void Assets::render_overlays(SDL_Renderer* renderer) {
         quick_task_popup_->render(renderer);
     }
 
+    const Uint32 now = SDL_GetTicks();
+    popup_manager_.update(now);
     if (!renderer) {
         return;
     }
@@ -1521,73 +1505,7 @@ void Assets::render_overlays(SDL_Renderer* renderer) {
         }
     }
 
-    if (dev_notice_) {
-        const Uint32 now = SDL_GetTicks();
-        if (now >= dev_notice_->expiry_ms) {
-            dev_notice_->texture.reset();
-            dev_notice_.reset();
-        }
-    }
-
-    if (!dev_notice_) {
-        return;
-    }
-
-    DevNotice& notice = *dev_notice_;
-
-    if (!notice.texture || notice.dirty) {
-        TTF_Font* font = scaling_notice_font();
-        if (!font) {
-            return;
-        }
-
-        SDL_Color color{255, 255, 255, 255};
-        std::unique_ptr<SDL_Surface, SDLSurfaceDeleter> surface( TTF_RenderUTF8_Blended(font, notice.message.c_str(), color));
-        if (!surface) {
-            return;
-        }
-
-        SDL_Texture* rebuilt_texture = SDL_CreateTextureFromSurface(renderer, surface.get());
-        if (!rebuilt_texture) {
-            return;
-        }
-
-        notice.texture.reset(rebuilt_texture);
-        notice.texture_width = surface->w;
-        notice.texture_height = surface->h;
-        notice.dirty = false;
-    }
-
-    SDL_Texture* texture = notice.texture.get();
-    if (!texture) {
-        return;
-    }
-
-    const int padding_x = 16;
-    const int padding_y = 10;
-    SDL_Rect dest{0, 0, notice.texture_width, notice.texture_height};
-    dest.x = (screen_width - dest.w) / 2;
-    dest.x = std::clamp(dest.x, 0, std::max(0, screen_width - dest.w));
-    dest.y = std::max(10, screen_height / 10);
-
-    SDL_Rect background{
-        dest.x - padding_x,
-        dest.y - padding_y,
-        dest.w + padding_x * 2,
-        dest.h + padding_y * 2
-};
-
-    background.x = std::clamp(background.x, 0, std::max(0, screen_width - background.w));
-    background.y = std::clamp(background.y, 0, std::max(0, screen_height - background.h));
-    dest.x = background.x + (background.w - dest.w) / 2;
-    dest.y = background.y + (background.h - dest.h) / 2;
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(renderer, 0, 0, 0, 170);
-    SDL_RenderFillRect(renderer, &background);
-
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-    SDL_RenderCopy(renderer, texture, nullptr, &dest);
+    popup_manager_.render(renderer, screen_width, screen_height, now);
 }
 
 SDL_Renderer* Assets::renderer() const {
@@ -1875,24 +1793,12 @@ void Assets::notify_spawn_group_removed(const std::string& spawn_id) {
 }
 
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {
-    if (message.empty()) {
-        if (dev_notice_) {
-            dev_notice_->texture.reset();
-            dev_notice_.reset();
-        }
-        return;
-    }
+    popup_manager_.show_toast(message, duration_ms);
+}
 
-    if (!dev_notice_) {
-        dev_notice_.emplace();
-    }
-
-    dev_notice_->message = message;
-    dev_notice_->expiry_ms = SDL_GetTicks() + duration_ms;
-    dev_notice_->texture.reset();
-    dev_notice_->texture_width = 0;
-    dev_notice_->texture_height = 0;
-    dev_notice_->dirty = true;
+void Assets::notify_camera_activity(bool active) {
+    const std::string room_label = current_room_ ? current_room_->room_name : std::string();
+    popup_manager_.notify_camera_activity(room_label, active, SDL_GetTicks());
 }
 
 void Assets::set_editor_current_room(Room* room) {
@@ -1900,6 +1806,8 @@ void Assets::set_editor_current_room(Room* room) {
     if (dev_controls_) {
         sync_dev_controls_current_room(room, true);
     }
+    const std::string room_label = current_room_ ? current_room_->room_name : std::string();
+    popup_manager_.notify_room_change(room_label, SDL_GetTicks());
 }
 
 void Assets::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info) {

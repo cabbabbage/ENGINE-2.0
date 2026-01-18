@@ -11,6 +11,12 @@
 
 #include "../../../../../asset/animation_child_data.hpp"
 
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+#define FRAME_CHILDREN_EDITOR_PRIVATE public
+#else
+#define FRAME_CHILDREN_EDITOR_PRIVATE private
+#endif
+
 namespace animation_editor {
 
 class AnimationDocument;
@@ -38,7 +44,7 @@ class FrameChildrenEditor {
     bool handle_event(const SDL_Event& e);
     bool handle_key_event(const SDL_Event& e);
 
-  private:
+  FRAME_CHILDREN_EDITOR_PRIVATE:
     struct ChildFrame {
         int child_index = -1;
         float dx = 0.0f;
@@ -56,7 +62,7 @@ class FrameChildrenEditor {
         std::vector<ChildFrame> children;
 };
 
-  private:
+  FRAME_CHILDREN_EDITOR_PRIVATE:
     void reload_from_document();
     void ensure_child_vectors();
     void refresh_tools_panel() const;
@@ -69,10 +75,12 @@ class FrameChildrenEditor {
     void persist_changes();
     void invalidate_child_caches();
     void ensure_child_mode_size();
+    void ensure_async_timeline_size();
     AnimationChildMode child_mode(int child_index) const;
     int child_mode_index(AnimationChildMode mode) const;
     std::vector<int> build_child_index_remap(const std::vector<std::string>& previous, const std::vector<std::string>& next) const;
     void remap_child_indices(const std::vector<int>& remap);
+    void remap_async_timelines(const std::vector<int>& remap);
     void apply_child_list_change(const std::vector<std::string>& next_children);
     bool timeline_entry_is_static(const nlohmann::json& entry) const;
     ChildFrame child_frame_from_sample(const nlohmann::json& sample, int child_index) const;
@@ -101,7 +109,7 @@ class FrameChildrenEditor {
     std::filesystem::path find_first_frame_in_folder(const std::filesystem::path& folder) const;
     SDL_Texture* acquire_child_texture(SDL_Renderer* renderer, const std::string& child_id, int* tex_w, int* tex_h) const;
 
-  private:
+  FRAME_CHILDREN_EDITOR_PRIVATE:
     std::shared_ptr<AnimationDocument> document_;
     std::shared_ptr<PreviewProvider> preview_;
     FrameToolsPanel* tools_panel_ = nullptr;
@@ -110,6 +118,7 @@ class FrameChildrenEditor {
     std::vector<std::string> child_ids_;
     std::vector<AnimationChildMode> child_modes_;
     std::vector<MovementFrame> frames_;
+    std::vector<std::vector<ChildFrame>> async_child_frames_;
     int selected_frame_index_ = 0;
     int selected_child_index_ = 0;
     bool dragging_child_ = false;
@@ -140,3 +149,5 @@ class FrameChildrenEditor {
 };
 
 }
+
+#undef FRAME_CHILDREN_EDITOR_PRIVATE

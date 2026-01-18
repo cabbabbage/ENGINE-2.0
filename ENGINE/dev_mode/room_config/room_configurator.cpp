@@ -2534,6 +2534,30 @@ bool RoomConfigurator::apply_camera_adjustment(const CameraAdjustment& adjustmen
     return true;
 }
 
+void RoomConfigurator::reload_camera_state_from_room() {
+    if (!state_) {
+        return;
+    }
+    const nlohmann::json& source = live_room_json();
+    state_->camera_height_px = std::max(1, source.value("camera_height_px", state_->camera_height_px));
+    const double tilt_value = source.value("camera_tilt_deg", static_cast<double>(state_->camera_tilt_deg));
+    const double clamped_tilt = std::clamp(tilt_value,
+                                           static_cast<double>(kCameraTiltMinDeg),
+                                           static_cast<double>(kCameraTiltMaxDeg));
+    state_->camera_tilt_deg = static_cast<float>(clamped_tilt);
+    state_->camera_y_distance_px = std::clamp(source.value("camera_y_distance_px", state_->camera_y_distance_px),
+                                              kCameraYDistanceMinPx,
+                                              kCameraYDistanceMaxPx);
+    state_->camera_zoom_percent = std::clamp(source.value("camera_zoom_percent", state_->camera_zoom_percent),
+                                              kCameraZoomMinPercent,
+                                              kCameraZoomMaxPercent);
+    state_->camera_pan_y_percent = std::clamp(source.value("camera_pan_y_percent", state_->camera_pan_y_percent),
+                                              kCameraPanMinPercent,
+                                              kCameraPanMaxPercent);
+    refresh_base_panel_rows();
+    request_container_layout();
+}
+
 void RoomConfigurator::request_camera_live_update() {
     if (!state_) return;
     // Save to room/external json and trigger camera update in dev mode

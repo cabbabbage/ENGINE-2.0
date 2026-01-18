@@ -160,39 +160,6 @@
           "frames": [
             {
               "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
             }
           ],
           "inherit_source_movement": false,
@@ -1537,9 +1504,9 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": -8,
-                  "dy": -144,
-                  "dz": -72,
+                  "dx": 16,
+                  "dy": -40,
+                  "dz": 24,
                   "visible": true
                 }
               ],
@@ -1829,6 +1796,55 @@
                   "dy": 144,
                   "dz": -96,
                   "visible": true
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
                 }
               ],
               "mode": "static"
@@ -1844,7 +1860,7 @@
                   "dx": 0,
                   "dy": 0,
                   "dz": 0,
-                  "visible": false
+                  "visible": true
                 }
               ],
               "mode": "async"
@@ -1900,35 +1916,52 @@
           "locked": false,
           "loop": true,
           "movement": [
-            [
-              0,
-              0,
-              false,
-              [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ],
-                [
-                  1,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ]
-            ]
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
           ],
           "movement_total": {
             "dx": 0,
             "dy": 0
           },
-          "number_of_frames": 1,
+          "number_of_frames": 8,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
@@ -3010,6 +3043,21 @@
           "frames": [
             {
               "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
             }
           ],
           "hit_geometry": [
@@ -3070,6 +3118,21 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
             {
               "needs_rebuild": false
             }
@@ -3205,6 +3268,21 @@
           },
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
             {
               "needs_rebuild": true
             }

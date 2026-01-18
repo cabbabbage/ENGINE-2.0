@@ -404,6 +404,8 @@ private:
 
     double height_scale_factor_ = 1.1;
     PanAndHeight pan_height_;
+    bool camera_pan_active_notified_ = false;
+    bool camera_settings_drag_active_notified_ = false;
     struct CameraLockState {
         bool valid = false;
         bool manual_height_override = false;

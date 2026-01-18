@@ -61,19 +61,7 @@ This file consolidates every task that used to live under `Tasks/`. Each section
 - Removed the redundant manifest store lambda block around lines 360-365 in `ENGINE/dev_mode/frame_editor_session.cpp`; `AnimationDocument::save_to_file()` now exclusively owns persistence. (Status: completed)
 - The payload now sets `payload["number_of_frames"] = frames_.size();` before serialization inside `persist_changes()` around lines 5278-5279, so `coerce_payload()` no longer defaults to a single frame. (Status: completed)
 
-## Fix Lighting Flicker
 
-**Note:** The `Tasks/fix_lighting_flicker` directory contains no `instructions.md` or CSV logs, so no requirements were captured. Follow-up context is required before this task can be migrated into actionable backlog entries.
-
-## Fix Tile Assets Flashing and Visual Artifacts
-
-**Goal:** Stabilize tile rendering by enforcing deterministic world-to-screen positions, depth ordering, and texture lifetime so tiles stop flashing under any camera motion.
-
-**Approach**
-- Audit `ENGINE/render/render.cpp`, `ENGINE/render/warped_screen_grid.cpp`, and `ENGINE/render/composite_asset_renderer.cpp` for non-deterministic transformations.
-- Instrument `GridTileRenderer::render` and the render object queue to log `world_z_offset`, texture pointers, and variant selection so we can correlate flashes to rendering decisions.
-- Clamp projection math, reorder the render queue as needed, and keep `SDL_RenderGeometry` vertices constant so textures are not destroyed/recreated each frame.
-- Verify the artifacts disappear under every camera condition by replaying deterministic frame sequences.
 
 ## Improve Runtime Cache Efficiency
 

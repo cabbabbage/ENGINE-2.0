@@ -20,9 +20,11 @@ void FrameEditorSession::sync_child_frames() {
         for (auto& frame : frames_) {
             frame.children.clear();
         }
+        async_child_frames_.clear();
         selected_child_index_ = 0;
         return;
     }
+    ensure_async_child_frames_initialized();
     for (auto& frame : frames_) {
         std::vector<ChildFrame> normalized(child_assets_.size());
         for (std::size_t i = 0; i < normalized.size(); ++i) {
@@ -80,6 +82,26 @@ void FrameEditorSession::ensure_child_frames_initialized() {
                 last_known[i] = child;
                 last_known[i].has_data = true;
                 has_last[i] = true;
+            }
+        }
+    }
+}
+
+void FrameEditorSession::ensure_async_child_frames_initialized() {
+    const std::size_t desired = child_assets_.size();
+    if (async_child_frames_.size() != desired) {
+        async_child_frames_.resize(desired);
+    }
+    for (std::size_t child_idx = 0; child_idx < desired; ++child_idx) {
+        auto& timeline = async_child_frames_[child_idx];
+        if (timeline.empty()) {
+            ChildFrame sample{};
+            sample.child_index = static_cast<int>(child_idx);
+            sample.visible = false;
+            timeline.push_back(sample);
+        } else {
+            for (auto& frame : timeline) {
+                frame.child_index = static_cast<int>(child_idx);
             }
         }
     }
@@ -254,20 +276,35 @@ void FrameEditorSession::apply_child_timelines_from_payload(const nlohmann::json
         }
         const bool is_static = timeline_entry_is_static(entry);
         child_modes_[static_cast<std::size_t>(child_index)] = is_static ? AnimationChildMode::Static : AnimationChildMode::Async;
-        if (!is_static) {
-            continue;
-        }
         auto frames_it = entry.find("frames");
         if (frames_it == entry.end() || !frames_it->is_array()) {
             continue;
         }
         const auto& samples = *frames_it;
-        for (std::size_t frame_idx = 0; frame_idx < frames_.size(); ++frame_idx) {
-            if (child_index >= static_cast<int>(frames_[frame_idx].children.size())) {
-                continue;
+        if (is_static) {
+            if (child_index >= 0 && static_cast<std::size_t>(child_index) < async_child_frames_.size()) {
+                async_child_frames_[static_cast<std::size_t>(child_index)].clear();
             }
-            ChildFrame sample = (frame_idx < samples.size()) ? child_frame_from_timeline_sample(samples[frame_idx], child_index) : child_frame_from_timeline_sample(nlohmann::json::object(), child_index);
-            frames_[frame_idx].children[child_index] = sample;
+            for (std::size_t frame_idx = 0; frame_idx < frames_.size(); ++frame_idx) {
+                if (child_index >= static_cast<int>(frames_[frame_idx].children.size())) {
+                    continue;
+                }
+                ChildFrame sample = (frame_idx < samples.size()) ? child_frame_from_timeline_sample(samples[frame_idx], child_index) : child_frame_from_timeline_sample(nlohmann::json::object(), child_index);
+                frames_[frame_idx].children[child_index] = sample;
+            }
+        } else {
+            ensure_async_child_frames_initialized();
+            auto& timeline = async_child_frames_[static_cast<std::size_t>(child_index)];
+            timeline.clear();
+            for (const auto& sample_json : samples) {
+                timeline.push_back(child_frame_from_timeline_sample(sample_json, child_index));
+            }
+            if (timeline.empty()) {
+                ChildFrame sample{};
+                sample.child_index = child_index;
+                sample.visible = false;
+                timeline.push_back(sample);
+            }
         }
     }
 }
@@ -335,8 +372,20 @@ nlohmann::json FrameEditorSession::build_child_timelines_payload(const nlohmann:
                 frames.push_back(child_frame_to_json(sample));
             }
             entry["frames"] = std::move(frames);
-        } else if (!entry.contains("frames") || !entry["frames"].is_array()) {
-            entry["frames"] = nlohmann::json::array();
+        } else {
+            nlohmann::json frames = nlohmann::json::array();
+            static const std::vector<ChildFrame> empty_timeline{};
+            const auto& timeline = (child_idx < async_child_frames_.size()) ? async_child_frames_[child_idx] : empty_timeline;
+            for (const auto& sample : timeline) {
+                frames.push_back(child_frame_to_json(sample));
+            }
+            if (frames.empty()) {
+                ChildFrame sample{};
+                sample.child_index = static_cast<int>(child_idx);
+                sample.visible = false;
+                frames.push_back(child_frame_to_json(sample));
+            }
+            entry["frames"] = std::move(frames);
         }
         normalized.push_back(std::move(entry));
     }

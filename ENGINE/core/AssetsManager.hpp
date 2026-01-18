@@ -2,6 +2,7 @@
 
 #include "render/warped_screen_grid.hpp"
 #include "asset/asset_library.hpp"
+#include "core/popup_manager.hpp"
 #include <SDL.h>
 #include <atomic>
 #include <functional>
@@ -120,6 +121,7 @@ public:
     void notify_spawn_group_removed(const std::string& spawn_id);
 
     void show_dev_notice(const std::string& message, Uint32 duration_ms = 2000);
+    void notify_camera_activity(bool active);
 
     void set_dev_grid_overlay_callback(std::function<void()> cb) { dev_grid_overlay_callback_ = cb; }
 
@@ -199,6 +201,7 @@ private:
     DevControls* dev_controls_ = nullptr;
     Room* dev_controls_last_room_ = nullptr;
     std::unique_ptr<QuickTaskPopup> quick_task_popup_;
+    PopupManager popup_manager_;
     WarpedScreenGrid camera_;
     SceneRenderer* scene = nullptr;
     int screen_width;
@@ -289,21 +292,6 @@ private:
     std::uint64_t dev_active_state_version_ = 1;
     std::uint64_t filtered_active_assets_hash_ = 0;
 
-    struct DevNotice {
-        using TexturePtr = std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)>;
-
-        DevNotice()
-            : texture(nullptr, SDL_DestroyTexture) {}
-
-        std::string message;
-        Uint32 expiry_ms = 0;
-        TexturePtr texture;
-        int texture_width = 0;
-        int texture_height = 0;
-        bool dirty = true;
-};
-
-    std::optional<DevNotice> dev_notice_;
     std::function<void()> dev_grid_overlay_callback_;
 
     void rebuild_non_player_update_buffer_if_needed();

@@ -85,6 +85,7 @@ public:
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
     void render(SDL_Renderer* renderer) const;
+    void render_async_navigation_panel(SDL_Renderer* renderer) const;
 
     void set_snap_resolution(int r);
     bool should_render_asset(const Asset* asset) const;
@@ -134,6 +135,8 @@ FRAME_EDITOR_ACCESS:
     bool smooth_enabled_ = false;
     bool curve_enabled_ = false;
     int selected_child_index_ = 0;
+    int selected_async_frame_index_ = 0;
+    int last_non_async_frame_index_ = 0;
     bool adjustment_mode_active_ = false;
     bool adjustment_dirty_ = false;
     AdjustmentSelection adjustment_selection_;
@@ -146,16 +149,20 @@ FRAME_EDITOR_ACCESS:
     bool snap_resolution_override_ = false;
 
     std::vector<MovementFrame> frames_;
+    std::vector<std::vector<ChildFrame>> async_child_frames_;
     std::vector<SDL_FPoint> rel_positions_;
     std::vector<float> rel_z_positions_;
 
     mutable std::unique_ptr<DMButton> btn_back_;
     mutable std::unique_ptr<DMButton> btn_movement_;
-    mutable std::unique_ptr<DMButton> btn_children_;
+    mutable std::unique_ptr<DMButton> btn_children_static_;
+    mutable std::unique_ptr<DMButton> btn_children_async_;
     mutable std::unique_ptr<DMButton> btn_attack_geometry_;
     mutable std::unique_ptr<DMButton> btn_hit_geometry_;
     mutable std::unique_ptr<DMButton> btn_prev_;
     mutable std::unique_ptr<DMButton> btn_next_;
+    mutable std::unique_ptr<DMButton> btn_prev_async_;
+    mutable std::unique_ptr<DMButton> btn_next_async_;
     mutable std::unique_ptr<DMDropdown> dd_animation_select_;
     mutable std::unique_ptr<DMNumericStepper> stepper_grid_resolution_;
 
@@ -246,6 +253,8 @@ FRAME_EDITOR_ACCESS:
     mutable SDL_Rect toolbox_drag_rect_{0,0,0,0};
     mutable SDL_Rect nav_rect_{0,0,0,0};
     mutable SDL_Rect nav_drag_rect_{0,0,0,0};
+    mutable SDL_Rect nav_async_rect_{0,0,0,0};
+    mutable SDL_Rect nav_async_drag_rect_{0,0,0,0};
     mutable std::vector<SDL_Rect> toolbox_widget_rects_;
     mutable int toolbox_scroll_offset_ = 0;
     mutable int toolbox_content_height_ = 0;
@@ -255,30 +264,44 @@ FRAME_EDITOR_ACCESS:
     SDL_Point dir_pos_{0, 0};
     SDL_Point toolbox_pos_{0, 0};
     SDL_Point nav_pos_{0, 0};
+    mutable SDL_Point nav_async_pos_{0, 0};
     bool dragging_dir_ = false;
     bool dragging_toolbox_ = false;
     bool dragging_toolbox_scrollbar_ = false;
     bool dragging_nav_ = false;
+    bool dragging_nav_async_ = false;
     bool dragging_scrollbar_thumb_ = false;
+    bool dragging_scrollbar_thumb_async_ = false;
     SDL_Point drag_offset_dir_{0, 0};
     SDL_Point drag_offset_toolbox_{0, 0};
     SDL_Point drag_offset_nav_{0, 0};
+    SDL_Point drag_offset_nav_async_{0, 0};
     int toolbox_scrollbar_drag_offset_ = 0;
     int scrollbar_drag_offset_x_ = 0;
+    int scrollbar_drag_offset_async_x_ = 0;
     mutable int scroll_offset_ = 0;
+    mutable int scroll_offset_async_ = 0;
     mutable int thumb_content_width_ = 0;
     mutable int thumb_viewport_width_ = 0;
+    mutable int thumb_content_width_async_ = 0;
+    mutable int thumb_viewport_width_async_ = 0;
     mutable SDL_Rect scrollbar_track_{0,0,0,0};
     mutable SDL_Rect scrollbar_thumb_{0,0,0,0};
+    mutable SDL_Rect scrollbar_track_async_{0,0,0,0};
+    mutable SDL_Rect scrollbar_thumb_async_{0,0,0,0};
     mutable bool scrollbar_visible_ = false;
+    mutable bool scrollbar_visible_async_ = false;
     mutable std::vector<SDL_Rect> thumb_rects_;
     mutable std::vector<int> thumb_indices_;
+    mutable std::vector<SDL_Rect> thumb_rects_async_;
+    mutable std::vector<int> thumb_indices_async_;
 
     mutable class PanAndHeight pan_height_;
     int pending_scroll_delta_ = 0;
     bool hover_toolbox_ = false;
     bool hover_toolbox_drag_handle_ = false;
     bool hover_nav_drag_handle_ = false;
+    bool hover_nav_async_drag_handle_ = false;
     struct CameraLockState {
         bool valid = false;
         bool manual_override_before = false;
@@ -341,11 +364,14 @@ FRAME_EDITOR_ACCESS:
     void apply_curved_smoothing(int adjusted_index, const std::vector<SDL_FPoint>& original, std::vector<SDL_FPoint>& redistributed, int last_index) const;
     void rebuild_rel_positions();
     void ensure_child_frames_initialized();
+    void ensure_async_child_frames_initialized();
     void smooth_child_offsets(int child_index, int adjusted_index);
     bool commit_edits(bool rebuild_animation = false);
 
     void persist_mode_changes(Mode mode);
     void select_frame(int index);
+    int  active_frame_count() const;
+    int  parent_frame_index_for_display() const;
     void select_child(int index);
     void update_asset_preview_frame() const;
     static inline MovementFrame clamp_frame(const MovementFrame& in) {
@@ -362,6 +388,7 @@ FRAME_EDITOR_ACCESS:
     const ChildFrame* current_child_frame() const;
     void refresh_child_assets_from_document();
     void rebuild_child_preview_cache();
+    void remap_async_timelines(const std::vector<int>& remap);
     void sync_child_asset_visibility();
     void cache_child_hidden_states();
     void apply_child_hidden_state(bool show_children);
@@ -370,7 +397,10 @@ FRAME_EDITOR_ACCESS:
     void apply_frames_to_animation();
     int max_scroll_offset() const;
     void clamp_scroll_offset() const;
+    int max_scroll_offset_async() const;
+    void clamp_scroll_offset_async() const;
     void ensure_selected_thumb_visible();
+    void ensure_selected_async_thumb_visible();
         void ensure_child_mode_size() const;
     std::vector<int> build_child_index_remap(const std::vector<std::string>& previous, const std::vector<std::string>& next) const;
     void apply_child_list_change(const std::vector<std::string>& next_children);

@@ -1,6 +1,7 @@
 #include "room_editor.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include "asset/Asset.hpp"
 #include "asset/asset_info.hpp"
@@ -60,6 +61,11 @@
 #include <SDL_log.h>
 
 namespace {
+constexpr int kSavedCameraHeightMinPx = 1;
+constexpr float kSavedCameraTiltMinDeg = 0.0f;
+constexpr float kSavedCameraTiltMaxDeg = 150.0f;
+constexpr int kSavedCameraYDistanceMinPx = 0;
+constexpr int kSavedCameraYDistanceMaxPx = 2000;
 
 SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
     MapGridSettings settings;
@@ -2419,6 +2425,16 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
         room_cfg_ui_->apply_camera_adjustment(adjustment);
     }
 
+    if (assets_) {
+        if (camera_settings_drag_.active && !camera_settings_drag_active_notified_) {
+            assets_->notify_camera_activity(true);
+            camera_settings_drag_active_notified_ = true;
+        } else if (!camera_settings_drag_.active && camera_settings_drag_active_notified_) {
+            assets_->notify_camera_activity(false);
+            camera_settings_drag_active_notified_ = false;
+        }
+    }
+
     return consumed;
 }
 
@@ -2445,6 +2461,13 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
     if (handle_camera_settings_mouse_controls(input)) {
         return;
+    }
+
+    const int scroll_y = input.getScrollY();
+    const bool camera_scroll_event = (scroll_y != 0);
+    if (camera_scroll_event && assets_) {
+        assets_->notify_camera_activity(true);
+        assets_->notify_camera_activity(false);
     }
 
     // Track tilt adjustment during right-click
@@ -2475,6 +2498,17 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         cam.get_screen_center().x != prev_center.x ||
         cam.get_screen_center().y != prev_center.y) {
         mark_spatial_index_dirty();
+    }
+
+    if (assets_) {
+        const bool now_panning = pan_height_.is_panning();
+        if (now_panning && !camera_pan_active_notified_) {
+            camera_pan_active_notified_ = true;
+            assets_->notify_camera_activity(true);
+        } else if (!now_panning && camera_pan_active_notified_) {
+            camera_pan_active_notified_ = false;
+            assets_->notify_camera_activity(false);
+        }
     }
 
     const SDL_FPoint world_f = cam.screen_to_map(screen_pt);
@@ -3593,7 +3627,7 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         paste_spawn_group_from_clipboard();
     }
 
-    if (input.wasScancodePressed(SDL_SCANCODE_A)) {
+    if (input.wasScancodePressed(SDL_SCANCODE_L)) {
         if (library_ui_ && library_ui_->is_locked()) {
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Asset library is locked; shortcut ignored.");
         } else {
@@ -3601,16 +3635,40 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         }
     }
 
-    if (input.wasScancodePressed(SDL_SCANCODE_R)) {
-        if (!current_room_ || !assets_) 
-        std::cout <<"issues sving cam seetings\n";
+    if (input.wasScancodePressed(SDL_SCANCODE_A)) {
+        if (!current_room_ || !assets_) {
+            return;
+        }
+        const auto& params = assets_->getView().camera_state().params;
+        if (!std::isfinite(params.height_px) || !std::isfinite(params.tilt_deg) || !std::isfinite(params.y_distance_px)) {
+            return;
+        }
+
+        const int height_px = std::max(kSavedCameraHeightMinPx, static_cast<int>(std::lround(params.height_px)));
+        const float tilt_deg = std::clamp(static_cast<float>(params.tilt_deg), kSavedCameraTiltMinDeg, kSavedCameraTiltMaxDeg);
+        const int y_distance_px = std::clamp(static_cast<int>(std::lround(params.y_distance_px)),
+                                             kSavedCameraYDistanceMinPx,
+                                             kSavedCameraYDistanceMaxPx);
+
+        current_room_->camera_height_px = height_px;
+        current_room_->camera_tilt_deg = tilt_deg;
+        current_room_->camera_y_distance_px = y_distance_px;
+
+        auto& room_data = current_room_->assets_data();
+        room_data["camera_height_px"] = height_px;
+        room_data["camera_tilt_deg"] = tilt_deg;
+        room_data["camera_y_distance_px"] = y_distance_px;
+
+        current_room_->save_assets_json();
+        notify_room_assets_saved();
+
+        if (room_cfg_ui_) {
+            room_cfg_ui_->reload_camera_state_from_room();
+        }
+
+        assets_->mark_camera_dirty();
+        assets_->show_dev_notice("Saved camera defaults for this room.", 2000);
         return;
-        // Update JSON with current camera tilt, y offset, and height
-        current_room_->assets_data()["camera_tilt_deg"] = current_room_->camera_tilt_deg;
-        current_room_->assets_data()["camera_y_distance_px"] = current_room_->camera_y_distance_px;
-        current_room_->assets_data()["camera_height_px"] = current_room_->camera_height_px;
-        std::cout <<"saving cam seetings (attempting\n";
-        save_current_room_assets_json();
     }
 }
 

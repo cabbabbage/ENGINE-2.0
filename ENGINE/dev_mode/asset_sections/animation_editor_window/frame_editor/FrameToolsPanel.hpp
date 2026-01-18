@@ -13,7 +13,7 @@ namespace animation_editor {
 
 class FrameToolsPanel : public DockableCollapsible {
 public:
-    enum class Mode { Movement = 0, StaticChildren = 1, AsyncChildren = 2, AttackGeometry = 3, HitGeometry = 4 };
+    enum class Mode { Movement = 0, SyncChildren = 1, AsyncChildren = 2, AttackGeometry = 3, HitGeometry = 4 };
 
     FrameToolsPanel();
 

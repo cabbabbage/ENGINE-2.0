@@ -88,7 +88,7 @@ TEST_CASE("Hidden child attachments restart from frame zero when revealed") {
 
 TEST_CASE("Shift adjustment scrolls child axis values") {
     FrameEditorSession session;
-    session.mode_ = FrameEditorSession::Mode::StaticChildren;
+    session.mode_ = FrameEditorSession::Mode::SyncChildren;
     FrameEditorSession::MovementFrame frame;
     FrameEditorSession::ChildFrame child;
     child.child_index = 0;

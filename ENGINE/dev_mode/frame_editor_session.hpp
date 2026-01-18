@@ -43,7 +43,7 @@ class PreviewProvider;
 
 class FrameEditorSession {
 public:
-    enum class Mode { Movement, StaticChildren, AsyncChildren, AttackGeometry, HitGeometry };
+    enum class Mode { Movement, SyncChildren, AsyncChildren, AttackGeometry, HitGeometry };
     enum class EditPlane { XZ, XY };
     enum class AdjustmentAxis { X, Y, Z };
     enum class AdjustmentTarget { None, MovementPoint, ChildPoint, AttackStart, AttackControl, AttackEnd, HitboxCenter };

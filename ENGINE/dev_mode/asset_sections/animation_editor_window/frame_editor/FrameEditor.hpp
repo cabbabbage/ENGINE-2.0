@@ -24,7 +24,7 @@ class FrameEditor {
   public:
     enum class Mode {
         Movement = 0,
-        StaticChildren = 1,
+        SyncChildren = 1,
         AsyncChildren = 2,
         AttackGeometry = 3,
         HitGeometry = 4,

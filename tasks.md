@@ -93,7 +93,7 @@ This file consolidates every task that used to live under `Tasks/`. Each section
 
 ## Mode-Specific Behaviors Implementation
 
-**Goal:** Implement per-mode point selection/adjustment semantics so Movement, StaticChildren, AsyncChildren, AttackGeometry, and HitGeometry each get intuitive Shift+click, axis cycling, scrolling, and smoothing behavior.
+**Goal:** Implement per-mode point selection/adjustment semantics so Movement, SyncChildren, AsyncChildren, AttackGeometry, and HitGeometry each get intuitive Shift+click, axis cycling, scrolling, and smoothing behavior.
 
 **Approach**
 - Add mode-specific helpers in `ENGINE/dev_mode/frame_editor_session.cpp` such as `select_movement_point`, `select_child_point`, `select_attack_point`, `select_hitbox_point`, and the corresponding axis-adjustment routines. (Status: pending)

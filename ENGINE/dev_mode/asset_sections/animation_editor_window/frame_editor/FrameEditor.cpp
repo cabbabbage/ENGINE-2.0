@@ -28,7 +28,7 @@ constexpr int kModeControlsYOffset = -4;
 constexpr int kFrameListYOffset    =  4;
 
 bool is_children_mode(FrameEditor::Mode mode) {
-    return mode == FrameEditor::Mode::StaticChildren ||
+    return mode == FrameEditor::Mode::SyncChildren ||
            mode == FrameEditor::Mode::AsyncChildren;
 }
 }
@@ -252,7 +252,7 @@ bool FrameEditor::handle_event(const SDL_Event& e) {
             Mode target_mode;
             switch (i) {
                 case 0: target_mode = Mode::Movement; break;
-                case 1: target_mode = Mode::StaticChildren; break;
+                case 1: target_mode = Mode::SyncChildren; break;
                 case 2: target_mode = Mode::AttackGeometry; break;
                 case 3: target_mode = Mode::HitGeometry; break;
                 default: target_mode = Mode::Movement; break;

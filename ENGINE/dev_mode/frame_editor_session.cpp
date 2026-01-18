@@ -3,7 +3,7 @@
 #include <SDL.h>
 #include <SDL_ttf.h>
 
-#include <algorithm>
+#include <algorithm>asy
 #include <cctype>
 #include <cmath>
 #include <iomanip>
@@ -298,7 +298,7 @@ namespace {
     const char* mode_display_name(FrameEditorSession::Mode mode) {
         switch (mode) {
             case FrameEditorSession::Mode::Movement:        return "Movement";
-            case FrameEditorSession::Mode::StaticChildren:  return "Children (Static)";
+            case FrameEditorSession::Mode::SyncChildren:  return "Children (Static)";
             case FrameEditorSession::Mode::AsyncChildren:   return "Children (Async)";
             case FrameEditorSession::Mode::AttackGeometry:  return "Attack Geometry";
             case FrameEditorSession::Mode::HitGeometry:     return "Hit Geometry";
@@ -307,7 +307,7 @@ namespace {
     }
 
     bool is_children_mode(FrameEditorSession::Mode mode) {
-        return mode == FrameEditorSession::Mode::StaticChildren ||
+        return mode == FrameEditorSession::Mode::SyncChildren ||
                mode == FrameEditorSession::Mode::AsyncChildren;
     }
 }
@@ -1147,7 +1147,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
     if (handle_button(btn_children_static_, [this]() {
             this->persist_mode_changes(this->mode_);
             selected_async_frame_index_ = selected_index_;
-            this->mode_ = Mode::StaticChildren;
+            this->mode_ = Mode::SyncChildren;
             this->end_hitbox_drag(false);
             this->end_attack_drag(false);
             const int parent_count = static_cast<int>(frames_.size());
@@ -1994,7 +1994,7 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
             const float base_adjustment = attachment_scale();
             for (std::size_t i = 0; i < child_assets_.size(); ++i) {
                 const bool is_async_child = child_mode(static_cast<int>(i)) == AnimationChildMode::Async;
-                if (mode_ == Mode::StaticChildren && is_async_child) {
+                if (mode_ == Mode::SyncChildren && is_async_child) {
                     continue;
                 }
                 if (mode_ == Mode::AsyncChildren && !is_async_child) {
@@ -2114,7 +2114,7 @@ void FrameEditorSession::render(SDL_Renderer* renderer) const {
                     const int idx = std::clamp(selected_index_, 0, static_cast<int>(timeline.size()) - 1);
                     child_ptr = &timeline[static_cast<std::size_t>(idx)];
                 }
-            } else if (mode_ == Mode::StaticChildren &&
+            } else if (mode_ == Mode::SyncChildren &&
                        selected_index_ >= 0 &&
                        selected_index_ < static_cast<int>(frames_.size())) {
                 const auto& frame = frames_[selected_index_];
@@ -2620,7 +2620,7 @@ std::vector<std::string> FrameEditorSession::build_child_dropdown_options() cons
     }
     ensure_child_mode_size();
     const bool want_async = (mode_ == Mode::AsyncChildren);
-    const bool want_static = (mode_ == Mode::StaticChildren);
+    const bool want_static = (mode_ == Mode::SyncChildren);
     for (std::size_t child_idx = 0; child_idx < child_assets_.size(); ++child_idx) {
         const AnimationChildMode slot_mode = child_mode(static_cast<int>(child_idx));
         if (want_static && slot_mode != AnimationChildMode::Static) {
@@ -2661,7 +2661,7 @@ void FrameEditorSession::ensure_widgets() const {
     const int bh = DMButton::height();
     if (!btn_back_) btn_back_ = std::make_unique<DMButton>(u8"\u2190 Back", &DMStyles::DeleteButton(), 96, bh);
     if (!btn_movement_) btn_movement_ = std::make_unique<DMButton>("Movement", mode_ == Mode::Movement ? &tab_active : &header, bw, bh);
-    if (!btn_children_static_) btn_children_static_ = std::make_unique<DMButton>("Children (Static)", mode_ == Mode::StaticChildren ? &tab_active : &header, bw, bh);
+    if (!btn_children_static_) btn_children_static_ = std::make_unique<DMButton>("Children (Static)", mode_ == Mode::SyncChildren ? &tab_active : &header, bw, bh);
     if (!btn_children_async_) btn_children_async_ = std::make_unique<DMButton>("Children (Async)", mode_ == Mode::AsyncChildren ? &tab_active : &header, bw, bh);
     if (!btn_attack_geometry_) btn_attack_geometry_ = std::make_unique<DMButton>("Attack Geometry", mode_ == Mode::AttackGeometry ? &tab_active : &header, bw, bh);
     if (!btn_hit_geometry_) btn_hit_geometry_ = std::make_unique<DMButton>("Hit Geometry", mode_ == Mode::HitGeometry ? &tab_active : &header, bw, bh);
@@ -2879,7 +2879,7 @@ void FrameEditorSession::rebuild_layout() const {
         btn->set_style(mode_ == Mode::Movement ? &DMStyles::AccentButton() : &DMStyles::HeaderButton());
     });
     place_button(btn_children_static_, [&](DMButton* btn) {
-        btn->set_style(mode_ == Mode::StaticChildren ? &DMStyles::AccentButton() : &DMStyles::HeaderButton());
+        btn->set_style(mode_ == Mode::SyncChildren ? &DMStyles::AccentButton() : &DMStyles::HeaderButton());
     });
     place_button(btn_children_async_, [&](DMButton* btn) {
         btn->set_style(mode_ == Mode::AsyncChildren ? &DMStyles::AccentButton() : &DMStyles::HeaderButton());
@@ -4015,10 +4015,10 @@ void FrameEditorSession::apply_current_mode_to_all_frames() {
             commit_edits();
             break;
         }
-        case Mode::StaticChildren:
+        case Mode::SyncChildren:
         case Mode::AsyncChildren: {
             if (child_assets_.empty()) break;
-            if (mode_ == Mode::StaticChildren) {
+            if (mode_ == Mode::SyncChildren) {
                 const int frame_index = std::clamp(selected_index_, 0, static_cast<int>(frames_.size()) - 1);
                 const auto& frame = frames_[frame_index];
                 const int child_index = std::clamp(selected_child_index_, 0, static_cast<int>(frame.children.size()) - 1);
@@ -4135,7 +4135,7 @@ void FrameEditorSession::apply_current_mode_to_all_animations() {
                 }
                 break;
             }
-            case Mode::StaticChildren:
+            case Mode::SyncChildren:
             case Mode::AsyncChildren: {
                 // Child timeline edits are handled in the active session payload only.
                 break;
@@ -6021,7 +6021,7 @@ std::optional<int> FrameEditorSession::hit_test_child_marker(const SDL_Point& mo
     int best_index = -1;
     for (std::size_t i = 0; i < child_assets_.size(); ++i) {
         const bool is_async_child = child_mode(static_cast<int>(i)) == AnimationChildMode::Async;
-        if (mode_ == Mode::StaticChildren && is_async_child) continue;
+        if (mode_ == Mode::SyncChildren && is_async_child) continue;
         if (mode_ == Mode::AsyncChildren && !is_async_child) continue;
         const ChildFrame* child_ptr = nullptr;
         if (mode_ == Mode::AsyncChildren) {
@@ -6233,7 +6233,7 @@ void FrameEditorSession::apply_child_preview_state() const {
         override_children.push_back(entry);
     };
 
-    if (mode_ == Mode::StaticChildren) {
+    if (mode_ == Mode::SyncChildren) {
         const int parent_frame_index = parent_frame_index_for_display();
         if (parent_frame_index >= 0 && parent_frame_index < static_cast<int>(frames_.size())) {
             const auto& frame = frames_[parent_frame_index];

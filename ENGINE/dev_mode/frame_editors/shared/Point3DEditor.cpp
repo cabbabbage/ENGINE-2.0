@@ -591,7 +591,26 @@ void Point3DEditor::render_movement_arrows(SDL_Renderer* renderer,
 
 bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                                       const std::vector<SDL_FPoint>& point_screens,
+                                      const std::vector<bool>& point_selectable,
                                       std::function<SDL_FPoint(const SDL_Point&)> screen_to_world) {
+    // Handle hover detection on mouse motion
+    if (e.type == SDL_MOUSEMOTION && !is_dragging_) {
+        SDL_Point mouse_pos = {e.motion.x, e.motion.y};
+        int new_hover = -1;
+
+        for (std::size_t i = 0; i < point_screens.size(); ++i) {
+            const bool is_selectable = (i < point_selectable.size() && point_selectable[i]);
+            if (is_selectable && handle_point_click(mouse_pos, point_screens[i])) {
+                new_hover = static_cast<int>(i);
+                break;
+            }
+        }
+
+        if (new_hover != hovered_point_index_) {
+            hovered_point_index_ = new_hover;
+        }
+    }
+
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mouse_pos = {e.button.x, e.button.y};
         Uint32 current_time = SDL_GetTicks();
@@ -600,6 +619,14 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
         bool clicked_on_point = false;
         for (std::size_t i = 0; i < point_screens.size(); ++i) {
             if (handle_point_click(mouse_pos, point_screens[i])) {
+                // Check if point is selectable
+                const bool is_selectable = (i < point_selectable.size() && point_selectable[i]);
+
+                if (!is_selectable) {
+                    // Don't select non-selectable points, but stop propagation
+                    return false;
+                }
+
                 clicked_on_point = true;
                 const int clicked_index = static_cast<int>(i);
 
@@ -612,10 +639,17 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                     last_click_time_ = 0;  // Reset to prevent triple-click from cycling again
                     last_clicked_point_ = -1;
                 } else {
-                    // Single click - just update tracking, don't change selection
-                    // Selection is only changed via arrow keys
+                    // Single click - select this point and notify callback
                     last_click_time_ = current_time;
                     last_clicked_point_ = clicked_index;
+
+                    // If clicking a different point, select it
+                    if (clicked_index != selected_point_index_) {
+                        selected_point_index_ = clicked_index;
+                        if (on_point_selected_) {
+                            on_point_selected_(clicked_index);
+                        }
+                    }
                 }
 
                 // Start dragging only if this is the selected point
@@ -634,6 +668,7 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
         // Clicked somewhere else (not on any point) - deselect
         if (!clicked_on_point) {
             selected_point_index_ = -1;
+            hovered_point_index_ = -1;
             is_dragging_ = false;
             last_click_time_ = 0;
             last_clicked_point_ = -1;
@@ -679,6 +714,121 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
     // Scroll is NOT handled here anymore - reserved for camera height/tilt
 
     return is_dragging_;
+}
+
+void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,
+                                           SDL_FPoint screen_pos,
+                                           bool is_selected,
+                                           bool is_hovered,
+                                           float radius) {
+    if (!renderer) return;
+
+    const SDL_Color orange{255, 165, 0, 255};
+    const float center_radius = radius * 0.4f;
+
+    // If selected, draw larger outer circle with axis color
+    if (is_selected) {
+        const float outer_radius = radius * 1.5f;
+        SDL_Color axis_color = get_axis_color(selection_ ? selection_->axis : AdjustmentAxis::X);
+
+        // Draw outer circle with axis color
+        SDL_SetRenderDrawColor(renderer, axis_color.r, axis_color.g, axis_color.b, 255);
+        for (float y = -outer_radius; y <= outer_radius; ++y) {
+            for (float x = -outer_radius; x <= outer_radius; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq <= outer_radius * outer_radius) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
+            }
+        }
+
+        // White border
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        const float border_inner = outer_radius;
+        const float border_outer = outer_radius + 1.5f;
+        for (float y = -border_outer; y <= border_outer; ++y) {
+            for (float x = -border_outer; x <= border_outer; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
+            }
+        }
+
+        // Movement arrows
+        render_movement_arrows(renderer, screen_pos, selection_ ? selection_->axis : AdjustmentAxis::X, 32.0f);
+    }
+    // If hovered (but not selected), draw white outline
+    else if (is_hovered) {
+        // Draw orange circle
+        SDL_SetRenderDrawColor(renderer, orange.r, orange.g, orange.b, 255);
+        for (float y = -radius; y <= radius; ++y) {
+            for (float x = -radius; x <= radius; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq <= radius * radius) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
+            }
+        }
+
+        // White outline
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        const float outline_inner = radius;
+        const float outline_outer = radius + 2.0f;
+        for (float y = -outline_outer; y <= outline_outer; ++y) {
+            for (float x = -outline_outer; x <= outline_outer; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq >= outline_inner * outline_inner && dist_sq <= outline_outer * outline_outer) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
+            }
+        }
+    }
+    // Otherwise, just draw orange circle
+    else {
+        SDL_SetRenderDrawColor(renderer, orange.r, orange.g, orange.b, 255);
+        for (float y = -radius; y <= radius; ++y) {
+            for (float x = -radius; x <= radius; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq <= radius * radius) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
+            }
+        }
+    }
+
+    // Always draw white center dot
+    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+    for (float y = -center_radius; y <= center_radius; ++y) {
+        for (float x = -center_radius; x <= center_radius; ++x) {
+            if (x * x + y * y <= center_radius * center_radius) {
+                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+            }
+        }
+    }
+}
+
+void Point3DEditor::render_non_selectable_point(SDL_Renderer* renderer,
+                                                SDL_FPoint screen_pos,
+                                                float radius) {
+    if (!renderer) return;
+
+    const SDL_Color gray{128, 128, 128, 128};
+
+    // Semi-transparent gray circle
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, gray.r, gray.g, gray.b, gray.a);
+
+    for (float y = -radius; y <= radius; ++y) {
+        for (float x = -radius; x <= radius; ++x) {
+            float dist_sq = x * x + y * y;
+            if (dist_sq <= radius * radius) {
+                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+            }
+        }
+    }
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 
 }

@@ -74,6 +74,16 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
         });
 
         point_3d_editor_->set_on_point_selected([this](int index) {
+            if (index < 0) {
+                // Deselecting - clear selection state without changing frame
+                if (selection_state_) {
+                    selection_state_->reset();
+                }
+                selected_handle_ = AttackHandle::None;
+                return;
+            }
+
+            // Selecting an attack handle point
             const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
             auto& frame = frames_[frame_index];
             if (frame.attack.vectors.empty()) return;
@@ -264,8 +274,10 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
                                 case AttackHandle::Start: selection_state_->target = SelectionTarget::AttackStart; break;
                                 case AttackHandle::Control: selection_state_->target = SelectionTarget::AttackControl; break;
                                 case AttackHandle::End: selection_state_->target = SelectionTarget::AttackEnd; break;
+                                default: break;
                             }
                         }
+                        refresh_selection_state();
                     }
                 }
             }
@@ -294,8 +306,10 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
                                 case AttackHandle::Start: selection_state_->target = SelectionTarget::AttackStart; break;
                                 case AttackHandle::Control: selection_state_->target = SelectionTarget::AttackControl; break;
                                 case AttackHandle::End: selection_state_->target = SelectionTarget::AttackEnd; break;
+                                default: break;
                             }
                         }
+                        refresh_selection_state();
                     }
                 }
             }
@@ -324,6 +338,7 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
         const float scale = asset_local_scale();
 
         std::vector<SDL_FPoint> point_screens;
+        std::vector<bool> point_selectable;
         for (const auto& vec : frame.attack.vectors) {
             auto to_screen = [&](float lx, float ly) -> SDL_FPoint {
                 SDL_FPoint world{static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - ly * scale};
@@ -332,10 +347,14 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
             point_screens.push_back(to_screen(vec.start_x, vec.start_y));
             point_screens.push_back(to_screen(vec.control_x, vec.control_y));
             point_screens.push_back(to_screen(vec.end_x, vec.end_y));
+            // All three points of the current frame's attack vectors are selectable
+            point_selectable.push_back(true);
+            point_selectable.push_back(true);
+            point_selectable.push_back(true);
         }
 
         // Only consume event if point editor actually handled it
-        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable, [this](const SDL_Point& p) {
                 return screen_to_world_point(p);
             });
     }
@@ -497,19 +516,15 @@ void AttackGeoFrameEditor::select_frame(int index) {
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
     clamp_attack_selection();
     refresh_attack_form();
-    refresh_selection_state();
 
-    // Update point editor and frame navigator
-    if (point_3d_editor_ && selected_attack_vector_index_ >= 0) {
-        int handle_offset = 0;
-        switch (selected_handle_) {
-            case AttackHandle::Start: handle_offset = 0; break;
-            case AttackHandle::Control: handle_offset = 1; break;
-            case AttackHandle::End: handle_offset = 2; break;
-        }
-        int point_index = selected_attack_vector_index_ * 3 + handle_offset;
-        point_3d_editor_->set_selected_point_index(point_index);
+    // Deselect point when changing frames
+    if (point_3d_editor_) {
+        point_3d_editor_->set_selected_point_index(-1);
     }
+    if (selection_state_) {
+        selection_state_->reset();
+    }
+    selected_handle_ = AttackHandle::None;
 
     if (frame_navigator_) {
         frame_navigator_->set_current_frame(selected_index_);

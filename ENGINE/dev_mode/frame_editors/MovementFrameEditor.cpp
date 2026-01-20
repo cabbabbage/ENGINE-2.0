@@ -103,9 +103,22 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         });
 
         point_3d_editor_->set_on_point_selected([this](int index) {
-            select_frame(index);
-            if (selection_state_) {
-                selection_state_->target = SelectionTarget::MovementPoint;
+            if (index < 0) {
+                // Deselecting - clear selection state
+                if (selection_state_) {
+                    selection_state_->reset();
+                }
+            } else {
+                // Only handle selection if it's the current frame's point
+                if (index == selected_index_) {
+                    if (selection_state_) {
+                        selection_state_->target = SelectionTarget::MovementPoint;
+                    }
+                    if (point_3d_editor_) {
+                        point_3d_editor_->set_selected_point_index(index);
+                    }
+                    refresh_selection_state();
+                }
             }
         });
 
@@ -193,29 +206,9 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_KEYDOWN) {
-        // Arrow keys now navigate between points, not frames
+        // ONLY escape key - no arrow key navigation
         // Use frame navigator buttons/textbox for frame navigation
-        if (e.key.keysym.sym == SDLK_LEFT) {
-            // Navigate to previous point
-            int new_index = selected_index_ - 1;
-            if (new_index >= 0 && new_index < static_cast<int>(frames_.size())) {
-                select_frame(new_index);
-                if (point_3d_editor_) {
-                    point_3d_editor_->set_selected_point_index(new_index);
-                }
-            }
-            consumed = true;
-        } else if (e.key.keysym.sym == SDLK_RIGHT) {
-            // Navigate to next point
-            int new_index = selected_index_ + 1;
-            if (new_index >= 0 && new_index < static_cast<int>(frames_.size())) {
-                select_frame(new_index);
-                if (point_3d_editor_) {
-                    point_3d_editor_->set_selected_point_index(new_index);
-                }
-            }
-            consumed = true;
-        } else if (e.key.keysym.sym == SDLK_ESCAPE) {
+        if (e.key.keysym.sym == SDLK_ESCAPE) {
             wants_close_ = true;
             consumed = true;
         }
@@ -237,15 +230,19 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
 
     if (!ui_contains_point(mouse_pos)) {
         std::vector<SDL_FPoint> point_screens;
+        std::vector<bool> point_selectable;
+
         for (std::size_t i = 0; i < rel_positions_.size(); ++i) {
             SDL_FPoint screen{};
             if (project_relative_point(i, screen)) {
                 point_screens.push_back(screen);
+                // Only current frame's point is selectable
+                point_selectable.push_back(static_cast<int>(i) == selected_index_);
             }
         }
 
         // Only consume event if point editor actually handled it
-        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable, [this](const SDL_Point& p) {
                 const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
                 return cam.screen_to_map(p);
             });
@@ -284,10 +281,17 @@ void MovementFrameEditor::render_world(SDL_Renderer* renderer) const {
     for (std::size_t i = 0; i < rel_positions_.size(); ++i) {
         if (!has_screen[i]) continue;
         SDL_FPoint p = screen_points[i];
-        const bool is_selected = (selection_state_ && selection_state_->target == SelectionTarget::MovementPoint &&
-                                 static_cast<int>(i) == selected_index_);
-        const AdjustmentAxis axis = selection_state_ ? selection_state_->axis : AdjustmentAxis::X;
-        point_3d_editor_->render_axis_point(renderer, p, axis, is_selected);
+        const bool is_current_frame = (static_cast<int>(i) == selected_index_);
+        const bool is_selected = (is_current_frame &&
+                                 selection_state_ &&
+                                 selection_state_->target == SelectionTarget::MovementPoint);
+        const bool is_hovered = (static_cast<int>(i) == point_3d_editor_->get_hovered_point_index());
+
+        if (is_current_frame) {
+            point_3d_editor_->render_selectable_point(renderer, p, is_selected, is_hovered);
+        } else {
+            point_3d_editor_->render_non_selectable_point(renderer, p);
+        }
     }
 }
 
@@ -354,11 +358,14 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 
 void MovementFrameEditor::select_frame(int index) {
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
-    refresh_selection_state();
 
-    // Update point editor to know which point is selected
+    // Don't automatically select/refresh point - that's done explicitly when user clicks or uses arrow keys
+    // Just deselect any current point when changing frames via frame navigator
     if (point_3d_editor_) {
-        point_3d_editor_->set_selected_point_index(selected_index_);
+        point_3d_editor_->set_selected_point_index(-1);
+    }
+    if (selection_state_) {
+        selection_state_->reset();
     }
 
     // Update frame navigator to show correct frame

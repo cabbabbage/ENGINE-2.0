@@ -54,11 +54,24 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
 
-        point_3d_editor_->set_on_point_selected([this](int /*index*/) {
-            if (selection_state_) {
-                selection_state_->target = SelectionTarget::HitboxCenter;
+        point_3d_editor_->set_on_point_selected([this](int index) {
+            if (index < 0) {
+                // Deselecting - clear selection state
+                if (selection_state_) {
+                    selection_state_->reset();
+                }
+            } else {
+                // Only handle selection if it's the current frame's hitbox
+                if (index == selected_index_) {
+                    if (selection_state_) {
+                        selection_state_->target = SelectionTarget::HitboxCenter;
+                    }
+                    if (point_3d_editor_) {
+                        point_3d_editor_->set_selected_point_index(index);
+                    }
+                    refresh_selection_state();
+                }
             }
-            refresh_selection_state();
         });
 
         point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
@@ -205,26 +218,7 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
     }
 
-    if (e.type == SDL_KEYDOWN) {
-        // For HitGeoFrameEditor, arrow keys navigate frames (one point per frame)
-        if (e.key.keysym.sym == SDLK_LEFT) {
-            int new_index = selected_index_ - 1;
-            if (new_index >= 0) {
-                select_frame(new_index);
-                if (point_3d_editor_) {
-                    point_3d_editor_->set_selected_point_index(0);  // Always point 0 (hitbox center)
-                }
-            }
-            consumed = true;
-        } else if (e.key.keysym.sym == SDLK_RIGHT) {
-            int new_index = selected_index_ + 1;
-            select_frame(new_index);
-            if (point_3d_editor_) {
-                point_3d_editor_->set_selected_point_index(0);  // Always point 0 (hitbox center)
-            }
-            consumed = true;
-        }
-    }
+    // No arrow key navigation - use frame navigator buttons only
 
     if (!context_.assets || !context_.target) {
         return consumed;
@@ -240,24 +234,38 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     if (!ui_contains_point(mouse_pos)) {
-        const auto* box = current_hit_box();
         std::vector<SDL_FPoint> point_screens;
-        if (box) {
-            std::array<SDL_FPoint, 4> corners{};
-            std::array<SDL_FPoint, 4> edge_midpoints{};
-            SDL_FPoint rotate_handle{};
-            if (build_hitbox_visual(*box, corners, edge_midpoints, rotate_handle)) {
-                // Point 0 is center
-                SDL_Point anchor = asset_anchor_world();
-                const float scale = asset_local_scale();
-                const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-                SDL_FPoint world{static_cast<float>(anchor.x) + box->center_x * scale, static_cast<float>(anchor.y) - box->center_y * scale};
+        std::vector<bool> point_selectable;
+        const std::string type = current_hitbox_type();
+        SDL_Point anchor = asset_anchor_world();
+        const float scale = asset_local_scale();
+        const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+
+        for (std::size_t i = 0; i < frames_.size(); ++i) {
+            const auto& frame = frames_[i];
+            // Find hitbox of current type in this frame
+            const animation_update::FrameHitGeometry::HitBox* box = nullptr;
+            for (const auto& b : frame.hit.boxes) {
+                if (b.type == type) {
+                    box = &b;
+                    break;
+                }
+            }
+            if (box) {
+                SDL_FPoint world{static_cast<float>(anchor.x) + box->center_x * scale,
+                                static_cast<float>(anchor.y) - box->center_y * scale};
                 point_screens.push_back(cam.map_to_screen_f(world));
+                // Only current frame's hitbox is selectable
+                point_selectable.push_back(static_cast<int>(i) == selected_index_);
+            } else {
+                // No hitbox of this type in this frame - add a dummy off-screen point
+                point_screens.push_back(SDL_FPoint{-10000.0f, -10000.0f});
+                point_selectable.push_back(false);
             }
         }
 
         // Only consume event if point editor actually handled it
-        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable, [this](const SDL_Point& p) {
                 return screen_to_world_point(p);
             });
     }
@@ -356,8 +364,16 @@ void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 
 void HitGeoFrameEditor::select_frame(int index) {
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
+
+    // Deselect point when changing frames
+    if (point_3d_editor_) {
+        point_3d_editor_->set_selected_point_index(-1);
+    }
+    if (selection_state_) {
+        selection_state_->reset();
+    }
+
     refresh_hitbox_form();
-    refresh_selection_state();
 }
 
 void HitGeoFrameEditor::refresh_hitbox_form() const {
@@ -511,6 +527,8 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
     const auto& frame = frames_[frame_index];
     if (frame.hit.boxes.empty()) return;
     const std::string type = current_hitbox_type();
+
+    // Render hitbox rectangles for current frame
     for (const auto& box : frame.hit.boxes) {
         std::array<SDL_FPoint, 4> corners{};
         std::array<SDL_FPoint, 4> edge_midpoints{};
@@ -521,7 +539,7 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
         SDL_Color fill = selected ? DMStyles::AccentButton().bg : DMStyles::HeaderButton().bg;
         fill.a = selected ? 90 : 45;
         SDL_Color outline = selected ? DMStyles::AccentButton().border : DMStyles::Border();
-        
+
         SDL_Vertex verts[4];
         int indices[6] = {0, 1, 2, 0, 2, 3};
         for (int i = 0; i < 4; ++i) {
@@ -537,17 +555,38 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
             const SDL_FPoint& b = corners[(i + 1) % 4];
             SDL_RenderDrawLineF(renderer, a.x, a.y, b.x, b.y);
         }
-        if (selected) {
-            // Render center point
-            SDL_Point anchor = asset_anchor_world();
-            const float scale = asset_local_scale();
-            const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-            SDL_FPoint center_world{static_cast<float>(anchor.x) + box.center_x * scale, static_cast<float>(anchor.y) - box.center_y * scale};
+    }
+
+    // Render center points for all frames' hitboxes of current type
+    SDL_Point anchor = asset_anchor_world();
+    const float scale = asset_local_scale();
+    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+
+    for (std::size_t i = 0; i < frames_.size(); ++i) {
+        const auto& f = frames_[i];
+        const animation_update::FrameHitGeometry::HitBox* box = nullptr;
+        for (const auto& b : f.hit.boxes) {
+            if (b.type == type) {
+                box = &b;
+                break;
+            }
+        }
+        if (box) {
+            SDL_FPoint center_world{static_cast<float>(anchor.x) + box->center_x * scale,
+                                   static_cast<float>(anchor.y) - box->center_y * scale};
             SDL_FPoint center_screen = cam.map_to_screen_f(center_world);
-            
-            point_3d_editor_->render_axis_point(renderer, center_screen,
-                                              selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
-                                              true);
+
+            const bool is_current_frame = (static_cast<int>(i) == selected_index_);
+            const bool is_selected = (is_current_frame &&
+                                     selection_state_ &&
+                                     selection_state_->target == SelectionTarget::HitboxCenter);
+            const bool is_hovered = (static_cast<int>(i) == point_3d_editor_->get_hovered_point_index());
+
+            if (is_current_frame) {
+                point_3d_editor_->render_selectable_point(renderer, center_screen, is_selected, is_hovered);
+            } else {
+                point_3d_editor_->render_non_selectable_point(renderer, center_screen);
+            }
         }
     }
 }

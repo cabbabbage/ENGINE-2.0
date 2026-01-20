@@ -56,6 +56,7 @@ public:
     // Mouse event handling for 3D point manipulation
     bool handle_mouse_event(const SDL_Event& e,
                            const std::vector<SDL_FPoint>& point_screens,
+                           const std::vector<bool>& point_selectable,
                            std::function<SDL_FPoint(const SDL_Point&)> screen_to_world);
 
     // Point rendering methods
@@ -64,6 +65,18 @@ public:
                           AdjustmentAxis axis,
                           bool is_selected,
                           float radius = 8.0f);
+
+    // Render a selectable point (orange)
+    void render_selectable_point(SDL_Renderer* renderer,
+                                 SDL_FPoint screen_pos,
+                                 bool is_selected,
+                                 bool is_hovered,
+                                 float radius = 8.0f);
+
+    // Render a non-selectable point (gray, transparent)
+    void render_non_selectable_point(SDL_Renderer* renderer,
+                                     SDL_FPoint screen_pos,
+                                     float radius = 8.0f);
 
     // Enhanced rendering with depth-based warping for 3D realism
     void render_axis_point_with_depth(SDL_Renderer* renderer,
@@ -101,6 +114,8 @@ public:
         last_clicked_point_ = -1;
     }
 
+    int get_hovered_point_index() const { return hovered_point_index_; }
+
 private:
     SelectionState* selection_ = nullptr;
 
@@ -126,6 +141,7 @@ private:
     // Mouse handling state
     bool is_dragging_ = false;
     int selected_point_index_ = -1;
+    int hovered_point_index_ = -1;
     bool point_already_selected_ = false;  // Track if clicking already-selected point
     SDL_Point drag_start_mouse_pos_;
     SDL_FPoint drag_start_world_pos_;

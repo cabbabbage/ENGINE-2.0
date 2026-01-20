@@ -48,17 +48,26 @@ void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
 
         point_3d_editor_->set_on_point_selected([this](int index) {
-            selected_child_index_ = index;
-            if (selected_child_index_ >= 0 &&
-                selected_child_index_ < static_cast<int>(async_has_start_.size())) {
-                async_has_start_[static_cast<std::size_t>(selected_child_index_)] = true;
+            if (index < 0) {
+                // Deselecting - clear selection state without changing frame
+                if (selection_state_) {
+                    selection_state_->reset();
+                }
+                selected_child_index_ = -1;
+            } else {
+                // Selecting a child point
+                selected_child_index_ = index;
+                if (selected_child_index_ >= 0 &&
+                    selected_child_index_ < static_cast<int>(async_has_start_.size())) {
+                    async_has_start_[static_cast<std::size_t>(selected_child_index_)] = true;
+                }
+                selected_child_frame_index_ = std::max(0, mapped_child_frame_index(selected_child_index_));
+                if (selection_state_) {
+                    selection_state_->target = SelectionTarget::ChildPoint;
+                    selection_state_->child_index = selected_child_index_;
+                }
+                refresh_selection_state();
             }
-            selected_child_frame_index_ = std::max(0, mapped_child_frame_index(selected_child_index_));
-            if (selection_state_) {
-                selection_state_->target = SelectionTarget::ChildPoint;
-                selection_state_->child_index = selected_child_index_;
-            }
-            refresh_selection_state();
         });
 
         point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
@@ -139,6 +148,8 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_Point anchor = asset_anchor_world();
     std::vector<SDL_FPoint> point_screens;
+    std::vector<bool> point_selectable;
+
     for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
         if (idx >= child_modes_.size() || child_modes_[idx] != AnimationChildMode::Async) {
             continue;
@@ -150,10 +161,12 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
             screen = cam.map_to_screen_f(world);
         }
         point_screens.push_back(screen);
+        // Only currently selected child is selectable
+        point_selectable.push_back(static_cast<int>(idx) == selected_child_index_);
     }
 
     // Only consume event if point editor actually handled it
-    if (point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+    if (point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable, [this](const SDL_Point& p) {
             const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
             return cam.screen_to_map(p);
         })) {
@@ -162,20 +175,7 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
 
     if (e.type == SDL_KEYDOWN) {
         switch (e.key.keysym.sym) {
-            case SDLK_LEFT:
-                selected_parent_frame_index_ = std::max(0, selected_parent_frame_index_ - 1);
-                data_dirty_ = true;
-                if (point_3d_editor_) {
-                    point_3d_editor_->set_selected_point_index(0);  // Always point 0 (child attachment)
-                }
-                return true;
-            case SDLK_RIGHT:
-                selected_parent_frame_index_ = std::min(parent_frame_count_ - 1, selected_parent_frame_index_ + 1);
-                data_dirty_ = true;
-                if (point_3d_editor_) {
-                    point_3d_editor_->set_selected_point_index(0);  // Always point 0 (child attachment)
-                }
-                return true;
+            // No LEFT/RIGHT arrow keys - use frame navigator buttons only
             case SDLK_TAB:
                 selected_child_index_ = (selected_child_index_ + 1) %
                                         std::max(1, static_cast<int>(child_assets_.size()));
@@ -226,16 +226,25 @@ void AsyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
     for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
         if (idx >= child_modes_.size()) continue;
         if (child_modes_[idx] != AnimationChildMode::Async) continue;
+
         const ChildWorldPose pose = child_world_pose(static_cast<int>(idx));
         SDL_FPoint world{anchor.x + pose.pos.x, anchor.y + pose.pos.y};
         SDL_FPoint screen{};
         if (!cam.project_world_point(world, pose.z, screen)) {
             screen = cam.map_to_screen_f(world);
         }
-        const bool is_selected = (selection_state_ && selection_state_->target == SelectionTarget::ChildPoint &&
-                                 static_cast<int>(idx) == selected_child_index_);
-        const AdjustmentAxis axis = selection_state_ ? selection_state_->axis : AdjustmentAxis::X;
-        point_3d_editor_->render_axis_point(renderer, screen, axis, is_selected);
+
+        const bool is_current_child = (static_cast<int>(idx) == selected_child_index_);
+        const bool is_selected = (is_current_child &&
+                                 selection_state_ &&
+                                 selection_state_->target == SelectionTarget::ChildPoint);
+        const bool is_hovered = (static_cast<int>(idx) == point_3d_editor_->get_hovered_point_index());
+
+        if (is_current_child) {
+            point_3d_editor_->render_selectable_point(renderer, screen, is_selected, is_hovered);
+        } else {
+            point_3d_editor_->render_non_selectable_point(renderer, screen);
+        }
     }
  }
 

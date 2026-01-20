@@ -222,6 +222,7 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
             point_screens.push_back(screen);
         }
 
+        // Only consume event if point editor actually handled it
         if (point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
                 const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
                 return cam.screen_to_map(p);
@@ -234,11 +235,17 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         if (e.key.keysym.sym == SDLK_LEFT) {
             selected_frame_index_ = std::max(0, selected_frame_index_ - 1);
             data_dirty_ = true;
+            if (point_3d_editor_) {
+                point_3d_editor_->set_selected_point_index(0);  // Always point 0 (child attachment)
+            }
             return true;
         }
         if (e.key.keysym.sym == SDLK_RIGHT) {
             selected_frame_index_ = std::min(frame_count_ - 1, selected_frame_index_ + 1);
             data_dirty_ = true;
+            if (point_3d_editor_) {
+                point_3d_editor_->set_selected_point_index(0);  // Always point 0 (child attachment)
+            }
             return true;
         }
         if (e.key.keysym.sym == SDLK_TAB) {

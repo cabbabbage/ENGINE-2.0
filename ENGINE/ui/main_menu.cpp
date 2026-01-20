@@ -161,81 +161,32 @@ void MainMenu::render() {
 
 void MainMenu::showLoadingScreen() {
 	SDL_SetRenderTarget(renderer_, nullptr);
-        SDL_Texture* bg = cached_bg_tex_;
-        if (!bg) {
-                const fs::path bg_folder = resolve_manifest_path("SRC/misc_content/backgrounds");
-                const fs::path first = firstImageIn(bg_folder);
-                if (!first.empty()) {
-                        bg = loadTexture(first);
-		}
-	}
+
+	// Use the same background as main menu
 	SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
 	SDL_RenderClear(renderer_);
-        if (bg) {
-                renderAnimatedBackground(bg);
-                if (bg != cached_bg_tex_) {
-                        SDL_DestroyTexture(bg);
-                }
-        }
-	drawVignette(110);
-	SDL_Texture* tarot = nullptr;
-	std::string msg;
-	const fs::path image_path = pick_loading_image();
-	if (!image_path.empty()) {
-		tarot = loadTexture(image_path);
-		msg = pickRandomLine(image_path.parent_path() / "messages.csv");
+
+	if (cached_bg_tex_) {
+		renderAnimatedBackground(cached_bg_tex_);
 	}
+
+	drawVignette(110);
+
+	// Show loading text only
 	const std::string loading = "LOADING...";
 	SDL_Point tsize = measureText(Styles::LabelTitle(), loading);
 	const int title_x = (screen_w_ - tsize.x) / 2;
 	const int title_y = std::max(0, (screen_h_ / 2) - screen_h_ / 6 - tsize.y - 24);
 	blitText(renderer_, Styles::LabelTitle(), loading, title_x, title_y, true, SDL_Color{0,0,0,0});
-	if (tarot) {
-		SDL_Rect dst = fitCenter(tarot, screen_w_/3, screen_h_/3, screen_w_/2, screen_h_/2);
-		SDL_RenderCopy(renderer_, tarot, nullptr, &dst);
-		SDL_DestroyTexture(tarot);
-		tarot = nullptr;
-	}
-	if (!msg.empty()) {
-		const int pad = 24;
-		const int mw  = screen_w_/3;
-		const int mx  = (screen_w_ - mw)/2;
-		const int my  = (screen_h_/2) + screen_h_/6 + pad;
-		const int mh  = std::max(0, screen_h_ - my - pad);
-		SDL_Rect mrect{ mx, my, mw, mh };
-		const LabelStyle& L = Styles::LabelSmallSecondary();
-		TTF_Font* f = L.open_font();
-		if (f) {
-			int space_w=0, line_h=0;
-			TTF_SizeText(f, " ", &space_w, &line_h);
-			TTF_CloseFont(f);
-			std::istringstream iss(msg);
-			std::string word, line;
-			int y = mrect.y;
-			while (iss >> word) {
-					std::string test = line.empty()? word : line + " " + word;
-					SDL_Point sz = measureText(L, test);
-					if (sz.x > mrect.w && !line.empty()) {
-								blitText(renderer_, L, line, mrect.x, y, false, SDL_Color{0,0,0,0});
-								y += line_h;
-								line = word;
-					} else {
-								line = std::move(test);
-					}
-					if (y >= mrect.y + mrect.h) break;
-			}
-			if (!line.empty() && y < mrect.y + mrect.h) {
-					blitText(renderer_, L, line, mrect.x, y, false, SDL_Color{0,0,0,0});
-			}
-		}
-	}
+
 	SDL_RenderPresent(renderer_);
 
 	SDL_Event ev;
 	while (SDL_PollEvent(&ev)) {
-
+		// Process events to keep the application responsive
 	}
-	// Background texture already destroyed above
+
+	// No cleanup needed - using cached background texture
 }
 
 SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {

@@ -94,6 +94,13 @@ public:
 
     int get_selected_point_index() const { return selected_point_index_; }
 
+    // Externally set the selected point index (for arrow key navigation)
+    void set_selected_point_index(int index) {
+        selected_point_index_ = index;
+        last_click_time_ = 0;
+        last_clicked_point_ = -1;
+    }
+
 private:
     SelectionState* selection_ = nullptr;
 
@@ -123,6 +130,11 @@ private:
     SDL_Point drag_start_mouse_pos_;
     SDL_FPoint drag_start_world_pos_;
     float drag_start_world_z_ = 0.0f;
+
+    // Double-click detection for axis cycling
+    Uint32 last_click_time_ = 0;
+    int last_clicked_point_ = -1;
+    static constexpr Uint32 DOUBLE_CLICK_THRESHOLD_MS = 300;
 
     // Rendering helper methods
     SDL_Color get_axis_color(AdjustmentAxis axis);

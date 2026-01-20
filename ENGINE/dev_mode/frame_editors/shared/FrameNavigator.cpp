@@ -93,10 +93,7 @@ bool FrameNavigator::handle_event(const SDL_Event& e) {
 
     bool consumed = false;
 
-    // Handle keyboard navigation
-    if (handle_keyboard_navigation(e)) {
-        consumed = true;
-    }
+    // NOTE: Keyboard navigation (arrow keys) removed - now used for point selection in frame editors
 
     // Handle button clicks
     if (btn_prev_ && btn_prev_->handle_event(e)) {

@@ -238,11 +238,67 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_KEYDOWN) {
+        // Arrow keys navigate between points within the frame
+        // Use frame navigator buttons/textbox for frame navigation
         if (e.key.keysym.sym == SDLK_LEFT) {
-            select_frame(selected_index_ - 1);
+            // Navigate to previous point
+            if (point_3d_editor_) {
+                int current_point = point_3d_editor_->get_selected_point_index();
+                const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
+                const auto& frame = frames_[frame_index];
+                int total_points = static_cast<int>(frame.attack.vectors.size()) * 3;
+
+                if (current_point > 0) {
+                    int new_point = current_point - 1;
+                    point_3d_editor_->set_selected_point_index(new_point);
+
+                    // Update selection state
+                    int vec_idx = new_point / 3;
+                    int handle_idx = new_point % 3;
+                    if (vec_idx < static_cast<int>(frame.attack.vectors.size())) {
+                        set_current_attack_vector_index(vec_idx);
+                        selected_handle_ = static_cast<AttackHandle>(handle_idx + 1);
+                        if (selection_state_) {
+                            selection_state_->attack_vector_index = vec_idx;
+                            switch (selected_handle_) {
+                                case AttackHandle::Start: selection_state_->target = SelectionTarget::AttackStart; break;
+                                case AttackHandle::Control: selection_state_->target = SelectionTarget::AttackControl; break;
+                                case AttackHandle::End: selection_state_->target = SelectionTarget::AttackEnd; break;
+                            }
+                        }
+                    }
+                }
+            }
             consumed = true;
         } else if (e.key.keysym.sym == SDLK_RIGHT) {
-            select_frame(selected_index_ + 1);
+            // Navigate to next point
+            if (point_3d_editor_) {
+                int current_point = point_3d_editor_->get_selected_point_index();
+                const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
+                const auto& frame = frames_[frame_index];
+                int total_points = static_cast<int>(frame.attack.vectors.size()) * 3;
+
+                if (current_point < total_points - 1) {
+                    int new_point = current_point + 1;
+                    point_3d_editor_->set_selected_point_index(new_point);
+
+                    // Update selection state
+                    int vec_idx = new_point / 3;
+                    int handle_idx = new_point % 3;
+                    if (vec_idx < static_cast<int>(frame.attack.vectors.size())) {
+                        set_current_attack_vector_index(vec_idx);
+                        selected_handle_ = static_cast<AttackHandle>(handle_idx + 1);
+                        if (selection_state_) {
+                            selection_state_->attack_vector_index = vec_idx;
+                            switch (selected_handle_) {
+                                case AttackHandle::Start: selection_state_->target = SelectionTarget::AttackStart; break;
+                                case AttackHandle::Control: selection_state_->target = SelectionTarget::AttackControl; break;
+                                case AttackHandle::End: selection_state_->target = SelectionTarget::AttackEnd; break;
+                            }
+                        }
+                    }
+                }
+            }
             consumed = true;
         }
     }
@@ -278,11 +334,10 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
             point_screens.push_back(to_screen(vec.end_x, vec.end_y));
         }
 
-        if (point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+        // Only consume event if point editor actually handled it
+        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
                 return screen_to_world_point(p);
-            })) {
-            consumed = true;
-        }
+            });
     }
 
     return consumed;
@@ -443,6 +498,22 @@ void AttackGeoFrameEditor::select_frame(int index) {
     clamp_attack_selection();
     refresh_attack_form();
     refresh_selection_state();
+
+    // Update point editor and frame navigator
+    if (point_3d_editor_ && selected_attack_vector_index_ >= 0) {
+        int handle_offset = 0;
+        switch (selected_handle_) {
+            case AttackHandle::Start: handle_offset = 0; break;
+            case AttackHandle::Control: handle_offset = 1; break;
+            case AttackHandle::End: handle_offset = 2; break;
+        }
+        int point_index = selected_attack_vector_index_ * 3 + handle_offset;
+        point_3d_editor_->set_selected_point_index(point_index);
+    }
+
+    if (frame_navigator_) {
+        frame_navigator_->set_current_frame(selected_index_);
+    }
 }
 
 void AttackGeoFrameEditor::clamp_attack_selection() {

@@ -3441,6 +3441,22 @@
               "required_children": []
             }
           ]
+        },
+        {
+          "bounding_extent": 7071.067811865475,
+          "level": 1,
+          "max_rooms": 1,
+          "min_rooms": 0,
+          "name": "layer_1",
+          "ring_radius": 10461.0,
+          "rooms": [
+            {
+              "max_instances": 1,
+              "min_instances": 0,
+              "name": "yassss",
+              "required_children": []
+            }
+          ]
         }
       ],
       "map_layers_settings": {
@@ -3507,15 +3523,15 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 1462,
+          "camera_height_px": 620,
           "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 33.0,
+          "camera_tilt_deg": 45.0,
           "camera_y_distance_px": 0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            139,
             36,
-            242,
             242,
             255
           ],
@@ -3603,16 +3619,16 @@
                 }
               ],
               "display_name": "trail",
-              "dx": 176,
-              "dy": 2696,
+              "dx": 596,
+              "dy": -484,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6496,
-              "origional_width": 7040,
+              "origional_height": 6376,
+              "origional_width": 6376,
               "position": "Exact",
               "priority": 2,
               "resolution": 3,
@@ -3737,6 +3753,31 @@
               "spawn_id": "spn-c6162102e00c"
             }
           ]
+        },
+        "yassss": {
+          "camera_height_px": 20725,
+          "camera_pan_y_percent": 0,
+          "camera_tilt_deg": 60.0,
+          "camera_y_distance_px": 0,
+          "camera_zoom_percent": 0,
+          "curvyness": 2,
+          "display_color": [
+            138,
+            242,
+            36,
+            255
+          ],
+          "edge_smoothness": 2,
+          "geometry": "Square",
+          "inherits_map_assets": false,
+          "is_boss": false,
+          "is_spawn": false,
+          "max_height": 10000,
+          "max_width": 10000,
+          "min_height": 1500,
+          "min_width": 1500,
+          "name": "yassss",
+          "spawn_groups": []
         }
       },
       "trails_data": {

@@ -261,34 +261,41 @@ void Point3DEditor::render_axis_point(SDL_Renderer* renderer,
     if (!renderer) return;
 
     SDL_Color point_color = get_axis_color(axis);
-    const float outer_radius = radius * 1.5f;  // Larger circle
     const float center_radius = radius * 0.4f;  // Small center point
 
-    // Draw larger outer circle with axis color
-    SDL_SetRenderDrawColor(renderer, point_color.r, point_color.g, point_color.b, is_selected ? 255 : 180);
-    for (float y = -outer_radius; y <= outer_radius; ++y) {
-        for (float x = -outer_radius; x <= outer_radius; ++x) {
-            float dist_sq = x * x + y * y;
-            if (dist_sq <= outer_radius * outer_radius) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+    // Only draw larger outer circle if selected
+    if (is_selected) {
+        const float outer_radius = radius * 1.5f;  // Larger circle
+
+        // Draw larger outer circle with axis color
+        SDL_SetRenderDrawColor(renderer, point_color.r, point_color.g, point_color.b, 255);
+        for (float y = -outer_radius; y <= outer_radius; ++y) {
+            for (float x = -outer_radius; x <= outer_radius; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq <= outer_radius * outer_radius) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
             }
         }
-    }
 
-    // Draw white border around larger circle
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    const float border_inner = outer_radius;
-    const float border_outer = outer_radius + 1.5f;
-    for (float y = -border_outer; y <= border_outer; ++y) {
-        for (float x = -border_outer; x <= border_outer; ++x) {
-            float dist_sq = x * x + y * y;
-            if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+        // Draw white border around larger circle
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        const float border_inner = outer_radius;
+        const float border_outer = outer_radius + 1.5f;
+        for (float y = -border_outer; y <= border_outer; ++y) {
+            for (float x = -border_outer; x <= border_outer; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
             }
         }
+
+        // Draw movement arrows if selected (longer and more pronounced)
+        render_movement_arrows(renderer, screen_pos, axis, 32.0f);
     }
 
-    // Draw small center point (always on top, white)
+    // Always draw small center point (always on top, white)
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     for (float y = -center_radius; y <= center_radius; ++y) {
         for (float x = -center_radius; x <= center_radius; ++x) {
@@ -296,11 +303,6 @@ void Point3DEditor::render_axis_point(SDL_Renderer* renderer,
                 SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
             }
         }
-    }
-
-    // Draw movement arrows if selected (longer and more pronounced)
-    if (is_selected) {
-        render_movement_arrows(renderer, screen_pos, axis, 32.0f);
     }
 }
 
@@ -319,42 +321,50 @@ void Point3DEditor::render_axis_point_with_depth(SDL_Renderer* renderer,
     const float depth_scaled_radius = radius * std::max(0.5f, std::min(1.5f, z_scale_factor));
 
     SDL_Color point_color = get_axis_color(axis);
-    const float outer_radius = depth_scaled_radius * 1.5f;  // Larger circle with depth scaling
     const float center_radius = depth_scaled_radius * 0.4f;  // Small center point with depth scaling
 
-    // Apply subtle depth-based darkening for objects behind
-    const int depth_darkness = static_cast<int>(std::max(0.0f, std::min(50.0f, -world_z * 0.05f)));
+    // Only draw larger outer circle if selected
+    if (is_selected) {
+        const float outer_radius = depth_scaled_radius * 1.5f;  // Larger circle with depth scaling
 
-    // Draw larger outer circle with axis color and depth shading
-    SDL_Color outer_color = point_color;
-    outer_color.r = static_cast<Uint8>(std::max(0, outer_color.r - depth_darkness));
-    outer_color.g = static_cast<Uint8>(std::max(0, outer_color.g - depth_darkness));
-    outer_color.b = static_cast<Uint8>(std::max(0, outer_color.b - depth_darkness));
-    SDL_SetRenderDrawColor(renderer, outer_color.r, outer_color.g, outer_color.b, is_selected ? 255 : 180);
+        // Apply subtle depth-based darkening for objects behind
+        const int depth_darkness = static_cast<int>(std::max(0.0f, std::min(50.0f, -world_z * 0.05f)));
 
-    for (float y = -outer_radius; y <= outer_radius; ++y) {
-        for (float x = -outer_radius; x <= outer_radius; ++x) {
-            float dist_sq = x * x + y * y;
-            if (dist_sq <= outer_radius * outer_radius) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+        // Draw larger outer circle with axis color and depth shading
+        SDL_Color outer_color = point_color;
+        outer_color.r = static_cast<Uint8>(std::max(0, outer_color.r - depth_darkness));
+        outer_color.g = static_cast<Uint8>(std::max(0, outer_color.g - depth_darkness));
+        outer_color.b = static_cast<Uint8>(std::max(0, outer_color.b - depth_darkness));
+        SDL_SetRenderDrawColor(renderer, outer_color.r, outer_color.g, outer_color.b, 255);
+
+        for (float y = -outer_radius; y <= outer_radius; ++y) {
+            for (float x = -outer_radius; x <= outer_radius; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq <= outer_radius * outer_radius) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
             }
         }
-    }
 
-    // Draw white border around larger circle
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    const float border_inner = outer_radius;
-    const float border_outer = outer_radius + 1.5f;
-    for (float y = -border_outer; y <= border_outer; ++y) {
-        for (float x = -border_outer; x <= border_outer; ++x) {
-            float dist_sq = x * x + y * y;
-            if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+        // Draw white border around larger circle
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        const float border_inner = outer_radius;
+        const float border_outer = outer_radius + 1.5f;
+        for (float y = -border_outer; y <= border_outer; ++y) {
+            for (float x = -border_outer; x <= border_outer; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
             }
         }
+
+        // Draw movement arrows if selected (scaled with depth)
+        const float arrow_length = 32.0f * std::max(0.7f, std::min(1.3f, z_scale_factor));
+        render_movement_arrows(renderer, screen_pos, axis, arrow_length);
     }
 
-    // Draw small center point (always on top, white, no depth scaling)
+    // Always draw small center point (always on top, white, no depth scaling)
     // This ensures the center is always clearly visible
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     const float fixed_center_radius = radius * 0.4f;  // Fixed size for center
@@ -364,12 +374,6 @@ void Point3DEditor::render_axis_point_with_depth(SDL_Renderer* renderer,
                 SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
             }
         }
-    }
-
-    // Draw movement arrows if selected (scaled with depth)
-    if (is_selected) {
-        const float arrow_length = 32.0f * std::max(0.7f, std::min(1.3f, z_scale_factor));
-        render_movement_arrows(renderer, screen_pos, axis, arrow_length);
     }
 }
 
@@ -421,40 +425,48 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
     const int total_darkness = height_darkness + depth_darkness;
 
     SDL_Color point_color = get_axis_color(axis);
-    const float outer_radius = camera_scaled_radius * 1.5f;
     const float center_radius = camera_scaled_radius * 0.4f;
 
-    // Apply depth and height shading
-    SDL_Color outer_color = point_color;
-    outer_color.r = static_cast<Uint8>(std::max(0, outer_color.r - total_darkness));
-    outer_color.g = static_cast<Uint8>(std::max(0, outer_color.g - total_darkness));
-    outer_color.b = static_cast<Uint8>(std::max(0, outer_color.b - total_darkness));
-    SDL_SetRenderDrawColor(renderer, outer_color.r, outer_color.g, outer_color.b, is_selected ? 255 : 180);
+    // Only draw larger outer circle if selected
+    if (is_selected) {
+        const float outer_radius = camera_scaled_radius * 1.5f;
 
-    // Draw larger outer circle with camera perspective
-    for (float y = -outer_radius; y <= outer_radius; ++y) {
-        for (float x = -outer_radius; x <= outer_radius; ++x) {
-            float dist_sq = x * x + y * y;
-            if (dist_sq <= outer_radius * outer_radius) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+        // Apply depth and height shading
+        SDL_Color outer_color = point_color;
+        outer_color.r = static_cast<Uint8>(std::max(0, outer_color.r - total_darkness));
+        outer_color.g = static_cast<Uint8>(std::max(0, outer_color.g - total_darkness));
+        outer_color.b = static_cast<Uint8>(std::max(0, outer_color.b - total_darkness));
+        SDL_SetRenderDrawColor(renderer, outer_color.r, outer_color.g, outer_color.b, 255);
+
+        // Draw larger outer circle with camera perspective
+        for (float y = -outer_radius; y <= outer_radius; ++y) {
+            for (float x = -outer_radius; x <= outer_radius; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq <= outer_radius * outer_radius) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
             }
         }
-    }
 
-    // Draw white border
-    SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
-    const float border_inner = outer_radius;
-    const float border_outer = outer_radius + 1.5f;
-    for (float y = -border_outer; y <= border_outer; ++y) {
-        for (float x = -border_outer; x <= border_outer; ++x) {
-            float dist_sq = x * x + y * y;
-            if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+        // Draw white border
+        SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
+        const float border_inner = outer_radius;
+        const float border_outer = outer_radius + 1.5f;
+        for (float y = -border_outer; y <= border_outer; ++y) {
+            for (float x = -border_outer; x <= border_outer; ++x) {
+                float dist_sq = x * x + y * y;
+                if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
+                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                }
             }
         }
+
+        // Draw movement arrows if selected
+        const float arrow_length = 32.0f * perspective_scale;
+        render_movement_arrows(renderer, screen_pos, axis, arrow_length);
     }
 
-    // Draw small center point (always visible, fixed size)
+    // Always draw small center point (always visible, fixed size)
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
     const float fixed_center_radius = radius * 0.4f;
     for (float y = -fixed_center_radius; y <= fixed_center_radius; ++y) {
@@ -463,12 +475,6 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
                 SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
             }
         }
-    }
-
-    // Draw movement arrows if selected
-    if (is_selected) {
-        const float arrow_length = 32.0f * perspective_scale;
-        render_movement_arrows(renderer, screen_pos, axis, arrow_length);
     }
 #else
     // Test stub: just use basic rendering without camera projection
@@ -588,38 +594,54 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                                       std::function<SDL_FPoint(const SDL_Point&)> screen_to_world) {
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mouse_pos = {e.button.x, e.button.y};
+        Uint32 current_time = SDL_GetTicks();
 
-        // Check for point selection
+        // Check if clicking on any point
+        bool clicked_on_point = false;
         for (std::size_t i = 0; i < point_screens.size(); ++i) {
             if (handle_point_click(mouse_pos, point_screens[i])) {
+                clicked_on_point = true;
                 const int clicked_index = static_cast<int>(i);
 
-                // Check if clicking already-selected point
-                if (clicked_index == selected_point_index_) {
-                    // Second click on same point - cycle axis
+                // Check for double-click on the same point for axis cycling
+                if (clicked_index == last_clicked_point_ &&
+                    clicked_index == selected_point_index_ &&
+                    (current_time - last_click_time_) < DOUBLE_CLICK_THRESHOLD_MS) {
+                    // Double-click on same selected point - cycle axis
                     cycle_axis();
+                    last_click_time_ = 0;  // Reset to prevent triple-click from cycling again
+                    last_clicked_point_ = -1;
                 } else {
-                    // First click on new point - select it but don't change axis
-                    selected_point_index_ = clicked_index;
-                    if (on_point_selected_) {
-                        on_point_selected_(clicked_index);
-                    }
+                    // Single click - just update tracking, don't change selection
+                    // Selection is only changed via arrow keys
+                    last_click_time_ = current_time;
+                    last_clicked_point_ = clicked_index;
                 }
 
-                // Start dragging
-                drag_start_mouse_pos_ = mouse_pos;
-                drag_start_world_pos_ = screen_to_world(drag_start_mouse_pos_);
-                if (selection_) {
-                    drag_start_world_z_ = selection_->world_z;
+                // Start dragging only if this is the selected point
+                if (clicked_index == selected_point_index_) {
+                    drag_start_mouse_pos_ = mouse_pos;
+                    drag_start_world_pos_ = screen_to_world(drag_start_mouse_pos_);
+                    if (selection_) {
+                        drag_start_world_z_ = selection_->world_z;
+                    }
+                    is_dragging_ = true;
                 }
-                is_dragging_ = true;
                 return true;
             }
         }
 
-        // If we were already dragging and clicked elsewhere, stop dragging
-        if (is_dragging_) {
+        // Clicked somewhere else (not on any point) - deselect
+        if (!clicked_on_point) {
+            selected_point_index_ = -1;
             is_dragging_ = false;
+            last_click_time_ = 0;
+            last_clicked_point_ = -1;
+            if (on_point_selected_) {
+                on_point_selected_(-1);  // Notify deselection
+            }
+            // Return false to allow frame editors to handle camera panning
+            return false;
         }
     } else if (e.type == SDL_MOUSEMOTION && is_dragging_) {
         SDL_Point current_mouse = {e.motion.x, e.motion.y};

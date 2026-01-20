@@ -206,11 +206,22 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_KEYDOWN) {
+        // For HitGeoFrameEditor, arrow keys navigate frames (one point per frame)
         if (e.key.keysym.sym == SDLK_LEFT) {
-            select_frame(selected_index_ - 1);
+            int new_index = selected_index_ - 1;
+            if (new_index >= 0) {
+                select_frame(new_index);
+                if (point_3d_editor_) {
+                    point_3d_editor_->set_selected_point_index(0);  // Always point 0 (hitbox center)
+                }
+            }
             consumed = true;
         } else if (e.key.keysym.sym == SDLK_RIGHT) {
-            select_frame(selected_index_ + 1);
+            int new_index = selected_index_ + 1;
+            select_frame(new_index);
+            if (point_3d_editor_) {
+                point_3d_editor_->set_selected_point_index(0);  // Always point 0 (hitbox center)
+            }
             consumed = true;
         }
     }
@@ -245,11 +256,10 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
             }
         }
 
-        if (point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+        // Only consume event if point editor actually handled it
+        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
                 return screen_to_world_point(p);
-            })) {
-            consumed = true;
-        }
+            });
     }
 
     return consumed;

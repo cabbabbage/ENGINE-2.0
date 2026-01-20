@@ -180,20 +180,9 @@ void FrameEditorSession::update(const Input& input) {
     }
     if (assets_) {
         WarpedScreenGrid& cam = assets_->getView();
-    // Always allow camera control - no locking when points are selected
-    pan_height_.handle_input(cam, input, false);
-    // Handle tilt with right click drag
-    if (input.isDown(Input::RIGHT)) {
-        const int dy = input.getDY();
-        if (dy != 0) {
-            const float delta_deg = -static_cast<float>(dy) * 0.2f;
-            float current_tilt = cam.current_pitch_degrees();
-            float new_tilt = current_tilt + delta_deg;
-            new_tilt = std::clamp(new_tilt, 0.0f, 150.0f);
-            cam.set_tilt_override(new_tilt);
-        }
+        // Standard camera controls: left-click drag = pan, scroll = height, right-click + scroll = tilt
+        pan_height_.handle_input(cam, input, false);
     }
-}
     active_editor_->update(input, 0.0f);
     if (active_editor_ && active_editor_->wants_close()) {
         end();

@@ -193,11 +193,27 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_KEYDOWN) {
+        // Arrow keys now navigate between points, not frames
+        // Use frame navigator buttons/textbox for frame navigation
         if (e.key.keysym.sym == SDLK_LEFT) {
-            select_frame(selected_index_ - 1);
+            // Navigate to previous point
+            int new_index = selected_index_ - 1;
+            if (new_index >= 0 && new_index < static_cast<int>(frames_.size())) {
+                select_frame(new_index);
+                if (point_3d_editor_) {
+                    point_3d_editor_->set_selected_point_index(new_index);
+                }
+            }
             consumed = true;
         } else if (e.key.keysym.sym == SDLK_RIGHT) {
-            select_frame(selected_index_ + 1);
+            // Navigate to next point
+            int new_index = selected_index_ + 1;
+            if (new_index >= 0 && new_index < static_cast<int>(frames_.size())) {
+                select_frame(new_index);
+                if (point_3d_editor_) {
+                    point_3d_editor_->set_selected_point_index(new_index);
+                }
+            }
             consumed = true;
         } else if (e.key.keysym.sym == SDLK_ESCAPE) {
             wants_close_ = true;
@@ -228,12 +244,11 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
             }
         }
 
-        if (point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+        // Only consume event if point editor actually handled it
+        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
                 const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
                 return cam.screen_to_map(p);
-            })) {
-            consumed = true;
-        }
+            });
     }
 
     return consumed;
@@ -340,6 +355,16 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 void MovementFrameEditor::select_frame(int index) {
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
     refresh_selection_state();
+
+    // Update point editor to know which point is selected
+    if (point_3d_editor_) {
+        point_3d_editor_->set_selected_point_index(selected_index_);
+    }
+
+    // Update frame navigator to show correct frame
+    if (frame_navigator_) {
+        frame_navigator_->set_current_frame(selected_index_);
+    }
 }
 
 void MovementFrameEditor::rebuild_rel_positions() {

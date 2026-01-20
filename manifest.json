@@ -969,6 +969,7 @@
       "start": "default"
     },
     "Grass_1": {
+      "animation_children": [],
       "animations": {
         "default": {
           "frames": [
@@ -1017,12 +1018,24 @@
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "SRC/assets/Grass_1",
       "asset_name": "Grass_1",
+      "async_children": [],
       "lighting_info": [],
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "size_settings": {
+        "scale_percentage": 2.0
+      },
+      "start": "default",
+      "tags": [
+        "#grass",
+        "#green"
+      ],
+      "tillable": false
     },
     "Grass_2": {
+      "animation_children": [],
       "animations": {
         "default": {
           "frames": [
@@ -1071,10 +1084,21 @@
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "SRC/assets/Grass_2",
       "asset_name": "Grass_2",
+      "async_children": [],
       "lighting_info": [],
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "size_settings": {
+        "scale_percentage": 2.0
+      },
+      "start": "default",
+      "tags": [
+        "#grass",
+        "#green"
+      ],
+      "tillable": false
     },
     "Pub": {
       "animations": {
@@ -2767,6 +2791,9 @@
       "animation_children": [],
       "animations": {
         "default": {
+          "attack_geometry": [
+            []
+          ],
           "child_timelines": [],
           "crop_frames": false,
           "flipped_source": false,
@@ -2775,11 +2802,19 @@
               "needs_rebuild": false
             }
           ],
+          "hit_geometry": [
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            }
+          ],
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
             [
+              0,
               0,
               0
             ]
@@ -2885,24 +2920,12 @@
         },
         "left": {
           "attack_geometry": [
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            }
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
           ],
           "child_timelines": [],
           "crop_frames": false,
@@ -2929,62 +2952,80 @@
           ],
           "hit_geometry": [
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             },
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             },
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             },
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             },
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             },
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             }
           ],
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
-            {
-              "dx": 0,
-              "dy": 0,
-              "dz": 0
-            },
-            {
-              "dx": -90,
-              "dy": 0,
-              "dz": 0
-            },
-            {
-              "dx": -90,
-              "dy": 0,
-              "dz": 0
-            },
-            {
-              "dx": -90,
-              "dy": 0,
-              "dz": 0
-            },
-            {
-              "dx": -90,
-              "dy": 0,
-              "dz": 0
-            },
-            {
-              "dx": -90,
-              "dy": 0,
-              "dz": 0
-            }
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              -90,
+              0,
+              0
+            ],
+            [
+              -304,
+              -120,
+              0
+            ],
+            [
+              -90,
+              0,
+              0
+            ],
+            [
+              -90,
+              0,
+              0
+            ],
+            [
+              -90,
+              0,
+              0
+            ]
           ],
           "movement_total": {
-            "dx": -450,
-            "dy": 0
+            "dx": -664,
+            "dy": -120
           },
           "number_of_frames": 6,
           "on_end": "default",
@@ -3363,8 +3404,20 @@
           {
             "candidates": [
               {
-                "chance": 100,
+                "chance": 189,
                 "name": "null"
+              },
+              {
+                "chance": 71,
+                "name": "##grass"
+              },
+              {
+                "chance": 99,
+                "name": "Grass_1"
+              },
+              {
+                "chance": 53,
+                "name": "Grass_2"
               }
             ],
             "display_name": "batch_map_assets",
@@ -3707,8 +3760,8 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -2292,
-              "dy": 140,
+              "dx": -1028,
+              "dy": 1404,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

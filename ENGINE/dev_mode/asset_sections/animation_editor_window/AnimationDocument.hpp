@@ -44,6 +44,7 @@ class AnimationDocument {
     void rename_animation(const std::string& old_id, const std::string& new_id);
     void replace_animation_payload(const std::string& animation_id, const std::string& payload_json);
     bool update_animation_payload(const std::string& animation_id, const nlohmann::json& payload);
+    bool save_animation_payload_immediately(const std::string& animation_id, const nlohmann::json& payload);
     std::optional<std::string> animation_payload(const std::string& animation_id) const;
     std::optional<nlohmann::json> animation_payload_json(const std::string& animation_id) const;
     std::vector<std::string> animation_children() const;

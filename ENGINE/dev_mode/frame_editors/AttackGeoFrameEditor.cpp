@@ -156,6 +156,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     }
 
     manifest_txn_.begin(context_);
+    manifest_txn_.set_immediate_persist(true);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -163,7 +164,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
         auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
         nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
         nlohmann::json updated = build_payload_from_frames(frames_, payload);
-        return context_.document->update_animation_payload(context_.animation_id, updated);
+        return context_.document->save_animation_payload_immediately(context_.animation_id, updated);
     });
 
     btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());

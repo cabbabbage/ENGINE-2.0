@@ -955,6 +955,17 @@ bool AnimationDocument::update_animation_payload(const std::string& animation_id
     return true;
 }
 
+bool AnimationDocument::save_animation_payload_immediately(const std::string& animation_id, const nlohmann::json& payload) {
+    // First update the payload using the regular update method
+    bool update_success = update_animation_payload(animation_id, payload);
+    if (!update_success) {
+        return false;
+    }
+
+    // Immediately persist the changes to disk
+    return save_to_file_checked(true);
+}
+
 std::optional<std::string> AnimationDocument::animation_payload(const std::string& animation_id) const {
     auto it = animations_.find(animation_id);
     if (it == animations_.end()) return std::nullopt;

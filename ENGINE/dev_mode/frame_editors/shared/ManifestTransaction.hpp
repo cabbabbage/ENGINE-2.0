@@ -22,6 +22,9 @@ public:
     void set_validate_callback(ValidateCallback cb) { validate_ = std::move(cb); }
     void set_commit_callback(CommitCallback cb) { commit_ = std::move(cb); }
     void set_rollback_callback(RollbackCallback cb) { rollback_ = std::move(cb); }
+    void set_immediate_persist(bool immediate) { immediate_persist_ = immediate; }
+
+    bool immediate_persist() const { return immediate_persist_; }
 
     bool apply_mode_edits() {
         if (apply_) return apply_();
@@ -54,6 +57,7 @@ private:
     CommitCallback commit_;
     RollbackCallback rollback_;
     bool active_ = false;
+    bool immediate_persist_ = false;
 };
 
 }  // namespace devmode::frame_editors

@@ -431,6 +431,7 @@ void AsyncChildrenFrameEditor::ensure_manifest_transaction() {
         return;
     }
     manifest_txn_.begin(context_);
+    manifest_txn_.set_immediate_persist(true);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -455,7 +456,7 @@ void AsyncChildrenFrameEditor::ensure_manifest_transaction() {
             async_frames_by_child_,
             start_times,
             async_has_start_);
-        return context_.document->update_animation_payload(context_.animation_id, payload);
+        return context_.document->save_animation_payload_immediately(context_.animation_id, payload);
     });
 }
 

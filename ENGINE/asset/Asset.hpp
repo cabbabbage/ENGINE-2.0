@@ -196,10 +196,6 @@ class Asset {
     void set_world_z_offset(float z) { world_z_offset_ = z; }
     float world_z_offset() const { return world_z_offset_; }
 
-    SDL_Texture* fog_texture() const { return fog_texture_; }
-    void set_fog_texture(SDL_Texture* tex, int index) { fog_texture_ = tex; fog_texture_index_ = index; }
-    int fog_texture_index() const { return fog_texture_index_; }
-
     SDL_Texture* composite_texture() const { return composite_texture_; }
     void set_composite_texture(SDL_Texture* tex);
     bool is_composite_dirty() const { return composite_dirty_; }
@@ -329,10 +325,6 @@ private:
     SDL_Rect     composite_rect_    = {0, 0, 0, 0};
     float        composite_scale_   = 1.0f;
     float        world_z_offset_    = 0.0f;
-
-    // Fog texture assigned during finalization
-    SDL_Texture* fog_texture_       = nullptr;
-    int          fog_texture_index_ = -1;  // Index of fog texture (0-9)
 
     void update_animation_children_state();
     void sync_child_from_slot(AnimationChildAttachment& slot);

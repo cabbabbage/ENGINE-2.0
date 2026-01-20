@@ -1,19 +1,20 @@
 #include "render/render.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
-#include <array>
-#include <iostream>
 
 #include <SDL_image.h>
 
@@ -362,10 +363,18 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   screen_height_(screen_height),
   tile_renderer_(std::make_unique<GridTileRenderer>(assets)),
   sky_texture_path_(std::filesystem::path("SRC") / "misc_content" / "sky.png"),
-  composite_renderer_(renderer, assets)
+  composite_renderer_(renderer, assets),
+  dynamic_fog_system_(std::make_unique<DynamicFogSystem>())
 {
 
     map_clear_color_ = SDL_Color{69, 101, 74, 255};
+
+    // Initialize dynamic fog system
+    if (dynamic_fog_system_) {
+        if (!dynamic_fog_system_->initialize(renderer_)) {
+            vibble::log::warn("[SceneRenderer] Failed to initialize dynamic fog system");
+        }
+    }
 
     map_radius_world_ = map_layers::map_radius_from_map_info(map_manifest);
     if (!std::isfinite(map_radius_world_) || map_radius_world_ <= 0.0) {
@@ -442,6 +451,50 @@ void SceneRenderer::render() {
     const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
+    // Update fog system before rendering
+    if (dynamic_fog_system_) {
+        dynamic_fog_system_->update(cam, grid);
+    }
+
+    // Get fog sprites for depth-ordered rendering
+    std::vector<DynamicFogSystem::FogSprite> fog_sprites;
+    if (dynamic_fog_system_) {
+        fog_sprites = dynamic_fog_system_->get_fog_sprites();
+        // Sort fog sprites by world_z for proper depth ordering
+        std::sort(fog_sprites.begin(), fog_sprites.end(),
+            [](const auto& a, const auto& b) { return a.world_z < b.world_z; });
+    }
+    size_t fog_index = 0;
+
+    // Helper to render fog sprites at current z depth
+    auto render_fog_at_z = [&](int current_z) {
+        while (fog_index < fog_sprites.size() && fog_sprites[fog_index].world_z <= current_z) {
+            const auto& sprite = fog_sprites[fog_index];
+            if (sprite.texture) {
+                // Calculate fog size on screen
+                float fog_size = 2048.0f * sprite.scale;
+
+                // Center fog on screen position
+                SDL_FRect fog_rect{
+                    sprite.screen_pos.x - fog_size / 2.0f,
+                    sprite.screen_pos.y - fog_size / 2.0f,
+                    fog_size,
+                    fog_size
+                };
+
+                // Calculate alpha from opacity
+                Uint8 alpha = static_cast<Uint8>(std::lround(sprite.opacity * 255.0f));
+                if (alpha > 0) {
+                    SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
+                    SDL_SetTextureAlphaMod(sprite.texture, alpha);
+                    SDL_SetTextureBlendMode(sprite.texture, SDL_BLENDMODE_BLEND);
+                    SDL_RenderCopyF(renderer_, sprite.texture, nullptr, &fog_rect);
+                }
+            }
+            ++fog_index;
+        }
+    };
+
     for (Asset* asset : render_assets) {
         if (!asset || asset->is_hidden() || !asset->info) {
             continue;
@@ -456,6 +509,9 @@ void SceneRenderer::render() {
         if (!gp || !gp->on_screen) {
             continue;
         }
+
+        // Render fog sprites that should appear behind this asset (by z-order)
+        render_fog_at_z(static_cast<int>(asset->world_z_offset()));
 
         composite_renderer_.update(asset, flicker_time_seconds);
 
@@ -484,6 +540,9 @@ void SceneRenderer::render() {
             SDL_RenderGeometry(renderer_, obj.texture, quad.vertices.data(), 4, kQuadIndices, 6);
         }
     }
+
+    // Render any remaining fog sprites that are in front of all assets
+    render_fog_at_z(std::numeric_limits<int>::max());
 
     if (debug_auto_paths_ && movement_debug_visible_) {
         static const std::array<SDL_Color, 6> kPathColors{{

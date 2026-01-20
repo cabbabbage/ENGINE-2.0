@@ -13,7 +13,6 @@
 #include "utils/grid.hpp"
 #include "utils/transform_smoothing_settings.hpp"
 #include "utils/log.hpp"
-#include "fog_asset_manager.hpp"
 #include <iostream>
 #include <random>
 #include <mutex>
@@ -334,11 +333,6 @@ void Asset::finalize_setup() {
         }
         NeighborSearchRadius = info->NeighborSearchRadius;
         refresh_cached_dimensions();
-
-        // Assign fog texture (excludes animation_timeline_child assets)
-        if (spawn_method != "animation_timeline_child") {
-                FogAssetManager::instance().assign_fog_texture(this);
-        }
 
         finalized_ = true;
 }

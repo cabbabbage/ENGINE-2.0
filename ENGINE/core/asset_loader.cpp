@@ -19,7 +19,6 @@
 #include "asset/Asset.hpp"
 #include "asset/asset_library.hpp"
 #include "asset/asset_types.hpp"
-#include "asset/fog_asset_manager.hpp"
 #include "audio/audio_engine.hpp"
 #include "map_generation/room.hpp"
 #include "utils/area.hpp"
@@ -137,28 +136,7 @@ manifest_store_(manifest_store)
         }
     }
 
-        // Load fog textures
-        if (renderer_) {
-                const auto fog_begin = std::chrono::steady_clock::now();
-                loading_status::notify("Loading fog textures");
-
-                std::string fog_dir = "fog";
-                try {
-                        if (FogAssetManager::instance().initialize(renderer_, fog_dir)) {
-                                const auto fog_end = std::chrono::steady_clock::now();
-                                const double fog_ms = std::chrono::duration_cast<std::chrono::milliseconds>(fog_end - fog_begin).count();
-                                vibble::log::info(std::string("[AssetLoader] Fog textures loaded in ") + std::to_string(fog_ms) + "ms");
-                        } else {
-                                vibble::log::warn("[AssetLoader] Fog textures not available; fog rendering will be disabled.");
-                        }
-                } catch (const std::exception& ex) {
-                        vibble::log::error(std::string("[AssetLoader] Fog texture loading failed: ") + ex.what());
-                } catch (...) {
-                        vibble::log::error("[AssetLoader] Fog texture loading failed with unknown error.");
-                }
-        }
-
-        loading_status::notify("Loading assets");
+    loading_status::notify("Loading assets");
         vibble::log::info("[AssetLoader] Finalizing assets across rooms...");
         try {
                 finalizeAssets();

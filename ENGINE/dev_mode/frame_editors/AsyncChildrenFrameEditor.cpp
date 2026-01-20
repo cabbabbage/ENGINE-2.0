@@ -49,14 +49,20 @@ void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 
         point_3d_editor_->set_on_point_selected([this](int index) {
             if (index < 0) {
-                // Deselecting - clear selection state without changing frame
+                // Deselecting - persist changes before clearing selection state
+                if (data_dirty_ && manifest_txn_.active() && !async_frames_by_child_.empty()) {
+                    manifest_txn_.commit();
+                }
                 if (selection_state_) {
                     selection_state_->reset();
                 }
                 selected_child_index_ = -1;
             } else {
-                // Selecting a child point
-                selected_child_index_ = index;
+                // Selecting a child point - guard against invalid state
+                if (async_frames_by_child_.empty() || child_assets_.empty()) {
+                    return;  // Data not ready
+                }
+                selected_child_index_ = std::clamp(index, 0, static_cast<int>(child_assets_.size()) - 1);
                 if (selected_child_index_ >= 0 &&
                     selected_child_index_ < static_cast<int>(async_has_start_.size())) {
                     async_has_start_[static_cast<std::size_t>(selected_child_index_)] = true;
@@ -71,20 +77,30 @@ void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         });
 
         point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
-            if (selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(async_frames_by_child_.size()))
+            // Guard: Check all necessary data structures exist and are initialized
+            if (selected_child_index_ < 0 ||
+                selected_child_index_ >= static_cast<int>(async_frames_by_child_.size()) ||
+                async_frames_by_child_.empty()) {
                 return;
+            }
 
             float scale = attachment_scale();
             if (scale <= 0.0f) scale = 1.0f;
 
             SDL_Point anchor = asset_anchor_world();
-            const bool flipped = context_.target->flipped;
+            const bool flipped = context_.target && context_.target->flipped;
 
             float dx_world = (new_world_pos.x - static_cast<float>(anchor.x)) / scale;
             float dy_world = (new_world_pos.y - static_cast<float>(anchor.y)) / scale;
             float dz_world = (new_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
             ensure_async_frame_capacity(selected_child_index_, selected_child_frame_index_);
+
+            // Re-check bounds after potential resize
+            if (selected_child_index_ >= static_cast<int>(async_frames_by_child_.size())) {
+                return;
+            }
+
             auto& sample = async_frames_by_child_[selected_child_index_][selected_child_frame_index_];
             sample.has_data = true;
             sample.visible = true;
@@ -132,6 +148,10 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         return false;
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
+        // Save changes before exiting - persist any pending edits
+        if (data_dirty_ && manifest_txn_.active()) {
+            manifest_txn_.commit();
+        }
         wants_close_ = true;
         return true;
     }
@@ -431,7 +451,7 @@ void AsyncChildrenFrameEditor::ensure_manifest_transaction() {
         return;
     }
     manifest_txn_.begin(context_);
-    manifest_txn_.set_immediate_persist(true);
+    manifest_txn_.set_deferred_persist(true);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -456,7 +476,7 @@ void AsyncChildrenFrameEditor::ensure_manifest_transaction() {
             async_frames_by_child_,
             start_times,
             async_has_start_);
-        return context_.document->save_animation_payload_immediately(context_.animation_id, payload);
+        return context_.document->update_animation_payload(context_.animation_id, payload);
     });
 }
 

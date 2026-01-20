@@ -1276,10 +1276,34 @@
       "start": "default"
     },
     "Vibble": {
-      "animation_children": [],
+      "animation_children": [
+        "Vibble_eyes"
+      ],
       "animations": {
         "attack": {
-          "child_timelines": [],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
@@ -1309,7 +1333,17 @@
             [
               0,
               0,
-              []
+              [],
+              [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ]
             ]
           ],
           "movement_total": {
@@ -1370,7 +1404,29 @@
               "projectile": []
             }
           ],
-          "child_timelines": [],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
           "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": false,
@@ -1433,7 +1489,17 @@
             [
               0,
               0,
-              []
+              [],
+              [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ]
             ]
           ],
           "movement_total": {
@@ -1457,7 +1523,29 @@
               "vectors": []
             }
           ],
-          "child_timelines": [],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 98,
+                  "dy": -3,
+                  "dz": 0,
+                  "visible": true
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
@@ -1475,7 +1563,16 @@
           "loop": true,
           "movement": [
             {
-              "children": [],
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
@@ -1539,7 +1636,29 @@
               "projectile": []
             }
           ],
-          "child_timelines": [],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
@@ -1618,7 +1737,17 @@
               0,
               0,
               false,
-              []
+              [],
+              [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ]
             ]
           ],
           "movement_total": {
@@ -1676,7 +1805,78 @@
               "vectors": []
             }
           ],
-          "child_timelines": [],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
@@ -1745,49 +1945,121 @@
           "loop": true,
           "movement": [
             {
-              "children": [],
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [],
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [],
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [],
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [],
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [],
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [],
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [],
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
@@ -1809,7 +2081,29 @@
           "speed_multiplier": 1.0
         },
         "right": {
-          "child_timelines": [],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 100,
+                  "visible": true
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
           "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": true,
@@ -3003,8 +3297,8 @@
               0
             ],
             [
-              -304,
-              -120,
+              66,
+              -121,
               0
             ],
             [
@@ -3013,8 +3307,8 @@
               0
             ],
             [
-              -90,
-              0,
+              -553,
+              6,
               0
             ],
             [
@@ -3024,8 +3318,8 @@
             ]
           ],
           "movement_total": {
-            "dx": -664,
-            "dy": -120
+            "dx": -757,
+            "dy": -115
           },
           "number_of_frames": 6,
           "on_end": "default",

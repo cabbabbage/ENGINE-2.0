@@ -14,11 +14,6 @@ public:
     static constexpr float kDepthCueForegroundFullOpacityDistance = 1800.0f;
     static constexpr float kDepthCueBackgroundFullOpacityDistance = 1200.0f;
 
-    // Fog rendering distances based on distance_from_camera
-    // Fog opacity interpolates linearly from 0% at foreground to 100% at background
-    static constexpr float kFogForegroundDistance = 1200.0f;  // 0% opacity
-    static constexpr float kFogBackgroundDistance = 1800.0f;  // 100% opacity
-
     CompositeAssetRenderer(SDL_Renderer* renderer, Assets* assets);
     ~CompositeAssetRenderer();
 

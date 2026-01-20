@@ -39,14 +39,20 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 
         point_3d_editor_->set_on_point_selected([this](int index) {
             if (index < 0) {
-                // Deselecting - clear selection state without changing frame
+                // Deselecting - persist changes before clearing selection state
+                if (data_dirty_ && manifest_txn_.active() && !static_frames_by_child_.empty()) {
+                    manifest_txn_.commit();
+                }
                 if (selection_state_) {
                     selection_state_->reset();
                 }
                 selected_child_index_ = -1;
             } else {
-                // Selecting a child point
-                selected_child_index_ = index;
+                // Selecting a child point - guard against invalid state
+                if (static_frames_by_child_.empty() || child_assets_.empty()) {
+                    return;  // Data not ready
+                }
+                selected_child_index_ = std::clamp(index, 0, static_cast<int>(child_assets_.size()) - 1);
                 if (selection_state_) {
                     selection_state_->target = SelectionTarget::ChildPoint;
                     selection_state_->child_index = selected_child_index_;
@@ -57,7 +63,13 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 
         point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
             if (selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(static_frames_by_child_.size()) ||
-                selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_) {
+                selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_ || static_frames_by_child_.empty()) {
+                return;
+            }
+
+            // Guard: verify the selected child has a frame at this index
+            const auto& child_frames = static_frames_by_child_[selected_child_index_];
+            if (selected_frame_index_ >= static_cast<int>(child_frames.size())) {
                 return;
             }
 
@@ -71,7 +83,7 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             float dy_world = (new_world_pos.y - static_cast<float>(anchor.y)) / scale;
             float dz_world = new_world_z / scale; // Sync children use Z relative to 0
 
-            auto& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
+            auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
             sample.dx = flipped ? -dx_world : dx_world;
             sample.dy = dy_world;
             sample.dz = dz_world;
@@ -84,7 +96,13 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 
         point_3d_editor_->set_on_coordinates_changed([this]() {
             if (selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(static_frames_by_child_.size()) ||
-                selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_ || !selection_state_) {
+                selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_ || !selection_state_ || static_frames_by_child_.empty()) {
+                return;
+            }
+
+            // Guard: verify the selected child has a frame at this index
+            const auto& child_frames = static_frames_by_child_[selected_child_index_];
+            if (selected_frame_index_ >= static_cast<int>(child_frames.size())) {
                 return;
             }
 
@@ -98,7 +116,7 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             float dy_world = (selection_state_->world_pos.y - static_cast<float>(anchor.y)) / scale;
             float dz_world = selection_state_->world_z / scale;
 
-            auto& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
+            auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
             sample.dx = flipped ? -dx_world : dx_world;
             sample.dy = dy_world;
             sample.dz = dz_world;
@@ -125,6 +143,10 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
     frame_navigator_->set_frame_count(frame_count_);
     frame_navigator_->set_current_frame(selected_frame_index_);
     frame_navigator_->set_on_frame_changed([this](int frame) {
+        // Save changes before changing frames
+        if (manifest_txn_.active() && manifest_txn_.deferred_persist()) {
+            manifest_txn_.commit();
+        }
         selected_frame_index_ = frame;
         data_dirty_ = true;
     });
@@ -152,11 +174,15 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         std::move(visibility_checkbox),
         [this](bool visible) {
             if (selected_child_index_ >= 0 && selected_child_index_ < static_cast<int>(static_frames_by_child_.size()) &&
-                selected_frame_index_ >= 0 && selected_frame_index_ < frame_count_) {
-                auto& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
-                sample.visible = visible;
-                sample.has_data = true;
-                data_dirty_ = true;
+                selected_frame_index_ >= 0 && selected_frame_index_ < frame_count_ && !static_frames_by_child_.empty()) {
+                // Verify the selected child has a frame at this index
+                const auto& child_frames = static_frames_by_child_[selected_child_index_];
+                if (selected_frame_index_ < static_cast<int>(child_frames.size())) {
+                    auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
+                    sample.visible = visible;
+                    sample.has_data = true;
+                    data_dirty_ = true;
+                }
             }
         });
 
@@ -198,6 +224,10 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         return true;
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
+        // Save changes before exiting - persist any pending edits
+        if (data_dirty_ && manifest_txn_.active()) {
+            manifest_txn_.commit();
+        }
         wants_close_ = true;
         return true;
     }
@@ -552,7 +582,7 @@ void SyncChildrenFrameEditor::ensure_manifest_transaction() {
         return;
     }
     manifest_txn_.begin(context_);
-    manifest_txn_.set_immediate_persist(true);
+    manifest_txn_.set_deferred_persist(true);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -565,7 +595,7 @@ void SyncChildrenFrameEditor::ensure_manifest_transaction() {
             child_assets_,
             child_modes_,
             async_timelines_by_child_);
-        return context_.document->save_animation_payload_immediately(context_.animation_id, payload);
+        return context_.document->update_animation_payload(context_.animation_id, payload);
     });
 }
 

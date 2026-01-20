@@ -75,7 +75,10 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
 
         point_3d_editor_->set_on_point_selected([this](int index) {
             if (index < 0) {
-                // Deselecting - clear selection state without changing frame
+                // Deselecting - persist changes before clearing selection state
+                if (!frames_.empty()) {  // Guard: only persist if we have data
+                    persist_changes();
+                }
                 if (selection_state_) {
                     selection_state_->reset();
                 }
@@ -83,7 +86,9 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
                 return;
             }
 
-            // Selecting an attack handle point
+            // Selecting an attack handle point - guard against empty frames
+            if (frames_.empty()) return;
+
             const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
             auto& frame = frames_[frame_index];
             if (frame.attack.vectors.empty()) return;
@@ -220,6 +225,10 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
+        // Save changes before exiting - always commit pending changes
+        if (manifest_txn_.active()) {
+            manifest_txn_.commit();
+        }
         wants_close_ = true;
         consumed = true;
     }
@@ -514,6 +523,11 @@ void AttackGeoFrameEditor::render_attack_geometry(SDL_Renderer* renderer) const 
 }
 
 void AttackGeoFrameEditor::select_frame(int index) {
+    // Save changes before changing frames - always commit (works for both immediate and deferred)
+    if (manifest_txn_.active() && !frames_.empty()) {
+        manifest_txn_.commit();
+    }
+
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
     clamp_attack_selection();
     refresh_attack_form();
@@ -565,6 +579,10 @@ void AttackGeoFrameEditor::refresh_attack_form() const {
 
 
 void AttackGeoFrameEditor::persist_changes() {
+    // Guard: only persist if we have data
+    if (frames_.empty()) {
+        return;
+    }
     if (manifest_txn_.active()) {
         manifest_txn_.commit();
     }

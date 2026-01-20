@@ -3,6 +3,7 @@
 #include <functional>
 
 #include "FrameEditorContext.hpp"
+#include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 
 namespace devmode::frame_editors {
 
@@ -23,8 +24,10 @@ public:
     void set_commit_callback(CommitCallback cb) { commit_ = std::move(cb); }
     void set_rollback_callback(RollbackCallback cb) { rollback_ = std::move(cb); }
     void set_immediate_persist(bool immediate) { immediate_persist_ = immediate; }
+    void set_deferred_persist(bool deferred) { deferred_persist_ = deferred; }
 
     bool immediate_persist() const { return immediate_persist_; }
+    bool deferred_persist() const { return deferred_persist_; }
 
     bool apply_mode_edits() {
         if (apply_) return apply_();
@@ -38,8 +41,38 @@ public:
 
     bool commit() {
         if (!active_) return false;
-        if (commit_) return commit_();
-        return apply_mode_edits() && validate();
+        // Guard against re-entrancy - prevent recursive commits
+        if (committing_) return true;
+        committing_ = true;
+
+        bool result = false;
+        if (commit_) {
+            result = commit_();
+        } else {
+            // For deferred persistence, apply changes and save immediately to disk
+            if (deferred_persist_ && apply_) {
+                if (!apply_()) {
+                    committing_ = false;
+                    return false;
+                }
+                if (!validate_()) {
+                    committing_ = false;
+                    return false;
+                }
+                // Force immediate save to disk for deferred mode
+                if (context_ && context_->document) {
+                    result = context_->document->save_to_file_checked(true);
+                } else {
+                    result = true;
+                }
+            } else {
+                // Regular commit behavior
+                result = apply_mode_edits() && validate();
+            }
+        }
+
+        committing_ = false;
+        return result;
     }
 
     void rollback() {
@@ -58,6 +91,8 @@ private:
     RollbackCallback rollback_;
     bool active_ = false;
     bool immediate_persist_ = false;
+    bool deferred_persist_ = false;
+    bool committing_ = false;  // Re-entrancy guard
 };
 
 }  // namespace devmode::frame_editors

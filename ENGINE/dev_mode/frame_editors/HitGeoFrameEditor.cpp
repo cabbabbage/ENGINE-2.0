@@ -56,13 +56,16 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
 
         point_3d_editor_->set_on_point_selected([this](int index) {
             if (index < 0) {
-                // Deselecting - clear selection state
+                // Deselecting - persist changes before clearing selection state
+                if (!frames_.empty()) {  // Guard: only persist if we have data
+                    persist_changes();
+                }
                 if (selection_state_) {
                     selection_state_->reset();
                 }
             } else {
                 // Only handle selection if it's the current frame's hitbox
-                if (index == selected_index_) {
+                if (index == selected_index_ && !frames_.empty()) {
                     if (selection_state_) {
                         selection_state_->target = SelectionTarget::HitboxCenter;
                     }
@@ -75,6 +78,11 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
         });
 
         point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
+            // Guard: ensure frames exist
+            if (frames_.empty() || selected_index_ < 0 || selected_index_ >= static_cast<int>(frames_.size())) {
+                return;
+            }
+
             auto* box = current_hit_box();
             if (!box) return;
 
@@ -90,6 +98,11 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
         });
 
         point_3d_editor_->set_on_coordinates_changed([this]() {
+            // Guard: ensure frames exist
+            if (frames_.empty() || selected_index_ < 0 || selected_index_ >= static_cast<int>(frames_.size())) {
+                return;
+            }
+
             auto* box = current_hit_box();
             if (!box || !selection_state_) return;
 
@@ -118,7 +131,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     }
 
     manifest_txn_.begin(context_);
-    manifest_txn_.set_immediate_persist(true);
+    manifest_txn_.set_deferred_persist(true);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -126,7 +139,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
         auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
         nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
         nlohmann::json updated = build_payload_from_frames(frames_, payload);
-        return context_.document->save_animation_payload_immediately(context_.animation_id, updated);
+        return context_.document->update_animation_payload(context_.animation_id, updated);
     });
 
     std::vector<std::string> hitbox_labels;
@@ -191,6 +204,10 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
+        // Save changes before exiting - always commit pending changes
+        if (manifest_txn_.active()) {
+            manifest_txn_.commit();
+        }
         wants_close_ = true;
         consumed = true;
     }
@@ -364,6 +381,11 @@ void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 }
 
 void HitGeoFrameEditor::select_frame(int index) {
+    // Save changes before changing frames
+    if (manifest_txn_.active()) {
+        manifest_txn_.commit();
+    }
+
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
 
     // Deselect point when changing frames
@@ -387,6 +409,10 @@ void HitGeoFrameEditor::refresh_hitbox_form() const {
 }
 
 void HitGeoFrameEditor::persist_changes() {
+    // Guard: only persist if we have data
+    if (frames_.empty()) {
+        return;
+    }
     if (manifest_txn_.active()) {
         manifest_txn_.commit();
     }

@@ -76,7 +76,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     refresh_selection_state();
 
     manifest_txn_.begin(context_);
-    manifest_txn_.set_immediate_persist(true);
+    manifest_txn_.set_deferred_persist(true);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -84,7 +84,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
         nlohmann::json existing = payload_opt.value_or(nlohmann::json::object());
         nlohmann::json updated = build_payload_from_frames(frames_, existing);
-        return context_.document->save_animation_payload_immediately(context_.animation_id, updated);
+        return context_.document->update_animation_payload(context_.animation_id, updated);
     });
 
     cb_smooth_ = std::make_unique<DMCheckbox>("Smooth", smooth_enabled_);
@@ -105,7 +105,8 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
 
         point_3d_editor_->set_on_point_selected([this](int index) {
             if (index < 0) {
-                // Deselecting - clear selection state
+                // Deselecting - persist changes before clearing selection state
+                persist_changes();
                 if (selection_state_) {
                     selection_state_->reset();
                 }
@@ -124,10 +125,22 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         });
 
         point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
-            if (frames_.empty() || selected_index_ <= 0) return;
+            // Guard: ensure data structures exist before accessing
+            if (frames_.empty() || selected_index_ <= 0 ||
+                selected_index_ >= static_cast<int>(frames_.size()) ||
+                rel_positions_.empty() || rel_positions_z_.empty()) {
+                return;
+            }
+
+            // Guard: ensure previous position exists
+            if (selected_index_ - 1 >= static_cast<int>(rel_positions_.size()) ||
+                selected_index_ - 1 >= static_cast<int>(rel_positions_z_.size())) {
+                return;
+            }
+
             SDL_Point anchor = asset_anchor_world();
             float base_z = base_world_z();
-            
+
             // Convert world to relative to anchor
             float rel_x = new_world_pos.x - static_cast<float>(anchor.x);
             float rel_y = new_world_pos.y - static_cast<float>(anchor.y);
@@ -185,6 +198,10 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
+        // Save changes before exiting - always persist deferred changes
+        if (manifest_txn_.active()) {
+            manifest_txn_.commit();
+        }
         wants_close_ = true;
         consumed = true;
     }
@@ -358,6 +375,11 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 
 
 void MovementFrameEditor::select_frame(int index) {
+    // Save changes before changing frames
+    if (manifest_txn_.active() && manifest_txn_.deferred_persist()) {
+        manifest_txn_.commit();
+    }
+
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
 
     // Don't automatically select/refresh point - that's done explicitly when user clicks or uses arrow keys
@@ -526,6 +548,10 @@ void MovementFrameEditor::apply_curved_smoothing(int adjusted_index,
 }
 
 void MovementFrameEditor::persist_changes() {
+    // Guard: only persist if we have data
+    if (frames_.empty()) {
+        return;
+    }
     if (manifest_txn_.active()) {
         manifest_txn_.commit();
     }

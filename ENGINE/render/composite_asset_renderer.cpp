@@ -7,7 +7,6 @@
 #include "world/grid_point.hpp"
 #include "render/render.hpp"
 #include "render/warped_screen_grid.hpp"
-#include "render/fog_renderer.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -200,45 +199,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                   base_flip,
                                   SDL_Point{overlay_tex_w, overlay_tex_h},
                                   asset->world_z_offset());
-            }
-        }
-
-        // Render fog overlay based on distance from camera
-        if (SDL_Texture* fog_tex = asset->fog_texture()) {
-            // Calculate fog opacity based on distance_from_camera
-            const float fog_opacity = FogRenderer::calculate_fog_opacity(asset->distance_from_camera);
-
-            if (fog_opacity > 0.0f) {
-                const Uint8 fog_alpha = static_cast<Uint8>(std::lround(fog_opacity * 255.0f));
-
-                if (fog_alpha > 0) {
-                    // Fog texture is sized to match asset's largest dimension as a square
-                    const int max_dim = std::max(final_w, final_h);
-                    const int fog_size = max_dim * 2;
-
-                    // Center the fog texture on the asset
-                    const int fog_x = dest_rect.x + (final_w - fog_size) / 2;
-                    const int fog_y = dest_rect.y + (final_h - fog_size) / 2;
-
-                    SDL_Rect fog_rect = {fog_x, fog_y, fog_size, fog_size};
-
-                    int fog_tex_w = 0;
-                    int fog_tex_h = 0;
-                    SDL_QueryTexture(fog_tex, nullptr, nullptr, &fog_tex_w, &fog_tex_h);
-                    fog_tex_w = std::max(1, fog_tex_w);
-                    fog_tex_h = std::max(1, fog_tex_h);
-
-                    add_render_object(fog_tex,
-                                      fog_rect,
-                                      SDL_Color{255, 255, 255, fog_alpha},
-                                      SDL_BLENDMODE_BLEND,
-                                      false,
-                                      0.0,
-                                      std::nullopt,
-                                      SDL_FLIP_NONE,
-                                      SDL_Point{fog_tex_w, fog_tex_h},
-                                      asset->world_z_offset());
-                }
             }
         }
     }

@@ -13,7 +13,7 @@
 #include "dev_mode/draw_utils.hpp"
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
-#include "dev_mode/frame_editors/shared/AxisPointRenderer.hpp"
+
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
@@ -29,27 +29,6 @@ SDL_Point round_point(const SDL_FPoint& pt) {
 int clamp_index(int idx, int max_value) {
     if (max_value <= 0) return 0;
     return std::clamp(idx, 0, max_value - 1);
-}
-
-float parse_float(const std::string& text, float fallback) {
-    try {
-        return std::stof(text);
-    } catch (...) {
-        return fallback;
-    }
-}
-
-int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
-    float precise = wheel.preciseY;
-    int delta = wheel.y;
-    if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
-        delta = -delta;
-        precise = -precise;
-    }
-    if (std::fabs(precise) >= 0.01f) {
-        return static_cast<int>(std::lround(precise));
-    }
-    return delta;
 }
 
 SDL_FPoint sample_quadratic_by_arclen(const SDL_FPoint& p0,
@@ -70,15 +49,14 @@ SDL_FPoint sample_quadratic_by_arclen(const SDL_FPoint& p0,
 void MovementFrameEditor::begin(const FrameEditorContext& context) {
     context_ = context;
     selection_state_ = context.selection_state;
-    axis_adjuster_ = context.axis_adjuster;
+    point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);
     if (selection_state_) {
         selection_state_->reset();
     }
-    if (axis_adjuster_) {
-        axis_adjuster_->reset_axis(AdjustmentAxis::X);
+    if (point_3d_editor_) {
+        point_3d_editor_->reset_axis(AdjustmentAxis::X);
     }
     wants_close_ = false;
-    dragging_point_ = false;
     selected_index_ = 0;
     frames_.clear();
     rel_positions_.clear();
@@ -118,10 +96,43 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     frame_navigator_->set_on_frame_changed([this](int frame) {
         select_frame(frame);
     });
-    tb_dx_ = std::make_unique<DMTextBox>("dx", "0");
-    tb_dy_ = std::make_unique<DMTextBox>("dy", "0");
-    tb_dz_ = std::make_unique<DMTextBox>("dz", "0");
-    sync_text_fields();
+    
+    if (point_3d_editor_) {
+        point_3d_editor_->set_on_coordinates_changed([this]() {
+            persist_changes();
+        });
+
+        point_3d_editor_->set_on_point_selected([this](int index) {
+            select_frame(index);
+            if (selection_state_) {
+                selection_state_->target = SelectionTarget::MovementPoint;
+            }
+        });
+
+        point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
+            if (frames_.empty() || selected_index_ <= 0) return;
+            SDL_Point anchor = asset_anchor_world();
+            float base_z = base_world_z();
+            
+            // Convert world to relative to anchor
+            float rel_x = new_world_pos.x - static_cast<float>(anchor.x);
+            float rel_y = new_world_pos.y - static_cast<float>(anchor.y);
+            float rel_z = new_world_z - base_z;
+
+            // Previous frame absolute relative position
+            SDL_FPoint prev_rel_abs = rel_positions_[selected_index_ - 1];
+            float prev_rel_z_abs = rel_positions_z_[selected_index_ - 1];
+
+            // New local delta
+            frames_[selected_index_].dx = std::round(rel_x - prev_rel_abs.x);
+            frames_[selected_index_].dy = std::round(rel_y - prev_rel_abs.y);
+            frames_[selected_index_].dz = std::round(rel_z - prev_rel_z_abs);
+
+            rebuild_rel_positions();
+            persist_changes();
+            refresh_selection_state();
+        });
+    }
 }
 
 void MovementFrameEditor::end() {
@@ -136,20 +147,25 @@ void MovementFrameEditor::end() {
         selection_state_->reset();
         selection_state_ = nullptr;
     }
-    axis_adjuster_ = nullptr;
+    point_3d_editor_ = nullptr;
     cb_smooth_.reset();
     cb_curve_.reset();
     btn_back_.reset();
     btn_apply_all_.reset();
-
-    tb_dx_.reset();
-    tb_dy_.reset();
-    tb_dz_.reset();
 }
 
 bool MovementFrameEditor::handle_event(const SDL_Event& e) {
+    // Handle Point3DEditor events
+    if (point_3d_editor_) {
+        int sw = 0, sh = 0;
+        SDL_GetRendererOutputSize(nullptr, &sw, &sh); // Assuming renderer is not available here, but size is same
+        int height = point_3d_editor_->get_overlay_height();
+        SDL_Rect bottom_container{0, sh - height, sw, height};
+        if (point_3d_editor_->handle_event(e, bottom_container)) {
+            return true;
+        }
+    }
     bool consumed = false;
-    apply_text_field_changes();
 
     if (frame_navigator_ && frame_navigator_->handle_event(e)) {
         consumed = true;
@@ -175,18 +191,6 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         if (!smooth_enabled_) cb_curve_->set_value(false);
         consumed = true;
     }
-    if (tb_dx_ && tb_dx_->handle_event(e)) {
-        apply_text_field_changes();
-        consumed = true;
-    }
-    if (tb_dy_ && tb_dy_->handle_event(e)) {
-        apply_text_field_changes();
-        consumed = true;
-    }
-    if (tb_dz_ && tb_dz_->handle_event(e)) {
-        apply_text_field_changes();
-        consumed = true;
-    }
 
     if (e.type == SDL_KEYDOWN) {
         if (e.key.keysym.sym == SDLK_LEFT) {
@@ -205,111 +209,37 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         return consumed;
     }
 
-    if (e.type == SDL_MOUSEWHEEL && selection_state_ && selection_state_->target == SelectionTarget::MovementPoint) {
-        const int steps = resolve_wheel_steps(e.wheel);
-        if (steps != 0) {
-            apply_scroll_adjustment(steps);
-            return true;
-        }
+    // Handle mouse events for 3D point manipulation
+    SDL_Point mouse_pos = {0, 0};
+    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+        mouse_pos = {e.button.x, e.button.y};
+    } else if (e.type == SDL_MOUSEMOTION) {
+        mouse_pos = {e.motion.x, e.motion.y};
+    } else if (e.type == SDL_MOUSEWHEEL) {
+        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point mp{e.button.x, e.button.y};
-        if (ui_contains_point(mp)) {
-            return true;
-        }
-        if (auto hit = hit_test_point(mp)) {
-            select_frame(*hit);
-            AxisPointRenderer::cycle_axis_on_selection(selection_state_, axis_adjuster_);
-            if (selection_state_) {
-                selection_state_->target = SelectionTarget::MovementPoint;
-                selection_state_->child_index = -1;
+    if (!ui_contains_point(mouse_pos)) {
+        std::vector<SDL_FPoint> point_screens;
+        for (std::size_t i = 0; i < rel_positions_.size(); ++i) {
+            SDL_FPoint screen{};
+            if (project_relative_point(i, screen)) {
+                point_screens.push_back(screen);
             }
-            const int idx = clamp_index(selected_index_, static_cast<int>(rel_positions_.size()));
-            drag_start_screen_ = mp;
-            drag_start_rel_ = (idx < static_cast<int>(rel_positions_.size())) ? rel_positions_[idx] : SDL_FPoint{0.0f, 0.0f};
-            drag_start_z_ = (idx < static_cast<int>(rel_positions_z_.size())) ? rel_positions_z_[idx] : 0.0f;
-            dragging_point_ = true;
-            consumed = true;
-        } else if (selection_state_) {
-            selection_state_->target = SelectionTarget::None;
         }
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-        if (dragging_point_) {
-            SDL_Point mp{e.button.x, e.button.y};
-            if (!ui_contains_point(mp)) {
-        SDL_FPoint desired_rel = screen_to_world_relative(mp);
-        float desired_z = drag_start_z_;
-        if (selection_state_) {
-            const int idx = clamp_index(selected_index_, static_cast<int>(rel_positions_.size()));
-            if (idx < static_cast<int>(rel_positions_.size())) {
-                SDL_FPoint drag_delta{desired_rel.x - drag_start_rel_.x, desired_rel.y - drag_start_rel_.y};
-                drag_delta = AxisPointRenderer::constrain_drag_delta(drag_delta, selection_state_->axis);
-                desired_rel.x = drag_start_rel_.x + drag_delta.x;
-                desired_rel.y = drag_start_rel_.y + drag_delta.y;
 
-                if (selection_state_->axis == AdjustmentAxis::Z) {
-                    desired_z = drag_start_z_ + drag_delta.y;
-                    desired_rel.x = rel_positions_[idx].x;
-                    desired_rel.y = rel_positions_[idx].y;
-                } else {
-                    desired_z = rel_positions_z_[idx];
-                }
-            }
-        }
-                const std::vector<SDL_FPoint> base = rel_positions_;
-                const std::vector<float> base_z = rel_positions_z_;
-                apply_frame_move_from_base(selected_index_, desired_rel, desired_z, base, base_z);
-                rebuild_rel_positions();
-                if (smooth_enabled_ && selected_index_ > 0) {
-                    redistribute_frames_after_adjustment(selected_index_);
-                } else {
-                    persist_changes();
-                }
-            }
-            dragging_point_ = false;
+        if (point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+                const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+                return cam.screen_to_map(p);
+            })) {
             consumed = true;
         }
-    } else if (e.type == SDL_MOUSEMOTION && dragging_point_) {
-        SDL_Point mp{e.motion.x, e.motion.y};
-        if (ui_contains_point(mp)) {
-            return true;
-        }
-        SDL_FPoint desired_rel = screen_to_world_relative(mp);
-        float desired_z = drag_start_z_;
-        if (selection_state_) {
-            const int idx = clamp_index(selected_index_, static_cast<int>(rel_positions_.size()));
-            if (idx < static_cast<int>(rel_positions_.size())) {
-                SDL_FPoint drag_delta{desired_rel.x - drag_start_rel_.x, desired_rel.y - drag_start_rel_.y};
-                drag_delta = AxisPointRenderer::constrain_drag_delta(drag_delta, selection_state_->axis);
-                desired_rel.x = drag_start_rel_.x + drag_delta.x;
-                desired_rel.y = drag_start_rel_.y + drag_delta.y;
-
-                if (selection_state_->axis == AdjustmentAxis::Z) {
-                    desired_z = drag_start_z_ + drag_delta.y;
-                    desired_rel.x = rel_positions_[idx].x;
-                    desired_rel.y = rel_positions_[idx].y;
-                } else {
-                    desired_z = rel_positions_z_[idx];
-                }
-            }
-        }
-        const std::vector<SDL_FPoint> base = rel_positions_;
-        const std::vector<float> base_z = rel_positions_z_;
-        apply_frame_move_from_base(selected_index_, desired_rel, desired_z, base, base_z);
-        rebuild_rel_positions();
-        if (!(smooth_enabled_ && selected_index_ > 0)) {
-            persist_changes();
-        }
-        consumed = true;
     }
 
     return consumed;
 }
 
 void MovementFrameEditor::update(const Input&, float) {
-    sync_text_fields();
-    refresh_selection_state();
 }
 
 void MovementFrameEditor::render_world(SDL_Renderer* renderer) const {
@@ -342,7 +272,7 @@ void MovementFrameEditor::render_world(SDL_Renderer* renderer) const {
         const bool is_selected = (selection_state_ && selection_state_->target == SelectionTarget::MovementPoint &&
                                  static_cast<int>(i) == selected_index_);
         const AdjustmentAxis axis = selection_state_ ? selection_state_->axis : AdjustmentAxis::X;
-        AxisPointRenderer::render_axis_point(renderer, p, axis, is_selected);
+        point_3d_editor_->render_axis_point(renderer, p, axis, is_selected);
     }
 }
 
@@ -353,10 +283,16 @@ void MovementFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (frame_navigator_) frame_navigator_->render(renderer);
     if (cb_smooth_) cb_smooth_->render(renderer);
     if (cb_curve_) cb_curve_->render(renderer);
-    if (tb_dx_) tb_dx_->render(renderer);
-    if (tb_dy_) tb_dy_->render(renderer);
-    if (tb_dz_) tb_dz_->render(renderer);
     if (btn_apply_all_) btn_apply_all_->render(renderer);
+
+    // Render Point3DEditor overlays at the bottom
+    if (point_3d_editor_) {
+        int sw = 0, sh = 0;
+        SDL_GetRendererOutputSize(renderer, &sw, &sh);
+        int height = point_3d_editor_->get_overlay_height();
+        SDL_Rect bottom_container{0, sh - height, sw, height};
+        point_3d_editor_->render_overlays(renderer, bottom_container);
+    }
 }
 
 void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
@@ -388,19 +324,6 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
         cursor_y += nav_rect.h + DMSpacing::small_gap();
     }
 
-    if (tb_dx_ && tb_dy_ && tb_dz_) {
-        int third_w = (inner_w - DMSpacing::small_gap() * 2) / 3;
-        SDL_Rect dx_rect{ x + padding, cursor_y, third_w, tb_dx_->height_for_width(third_w) };
-        SDL_Rect dy_rect{ x + padding + third_w + DMSpacing::small_gap(), cursor_y, third_w,
-                          tb_dy_->height_for_width(third_w) };
-        SDL_Rect dz_rect{ x + padding + (third_w + DMSpacing::small_gap()) * 2, cursor_y, third_w,
-                          tb_dz_->height_for_width(third_w) };
-        tb_dx_->set_rect(dx_rect);
-        tb_dy_->set_rect(dy_rect);
-        tb_dz_->set_rect(dz_rect);
-        cursor_y += std::max({dx_rect.h, dy_rect.h, dz_rect.h}) + DMSpacing::small_gap();
-    }
-
     if (cb_smooth_) {
         cb_smooth_->set_rect(place_row(DMCheckbox::height()));
     }
@@ -413,70 +336,10 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     ui_rect_.h = cursor_y - y;
 }
 
-void MovementFrameEditor::sync_text_fields() {
-    const int idx = clamp_index(selected_index_, static_cast<int>(frames_.size()));
-    if (idx >= static_cast<int>(frames_.size())) {
-        return;
-    }
-    const MovementFrame& frame = frames_[idx];
-    const std::string dx_str = std::to_string(static_cast<int>(std::lround(frame.dx)));
-    const std::string dy_str = std::to_string(static_cast<int>(std::lround(frame.dy)));
-    const std::string dz_str = std::to_string(static_cast<int>(std::lround(frame.dz)));
-    if (tb_dx_ && !tb_dx_->is_editing() && dx_str != last_dx_text_) {
-        tb_dx_->set_value(dx_str);
-        last_dx_text_ = dx_str;
-    }
-    if (tb_dy_ && !tb_dy_->is_editing() && dy_str != last_dy_text_) {
-        tb_dy_->set_value(dy_str);
-        last_dy_text_ = dy_str;
-    }
-    if (tb_dz_ && !tb_dz_->is_editing() && dz_str != last_dz_text_) {
-        tb_dz_->set_value(dz_str);
-        last_dz_text_ = dz_str;
-    }
-}
-
-void MovementFrameEditor::apply_text_field_changes() {
-    const int idx = clamp_index(selected_index_, static_cast<int>(frames_.size()));
-    if (idx >= static_cast<int>(frames_.size())) {
-        return;
-    }
-    bool changed = false;
-    if (tb_dx_) {
-        const float value = parse_float(tb_dx_->value(), frames_[idx].dx);
-        if (std::fabs(value - frames_[idx].dx) > 0.001f) {
-            frames_[idx].dx = value;
-            changed = true;
-            last_dx_text_ = tb_dx_->value();
-        }
-    }
-    if (tb_dy_) {
-        const float value = parse_float(tb_dy_->value(), frames_[idx].dy);
-        if (std::fabs(value - frames_[idx].dy) > 0.001f) {
-            frames_[idx].dy = value;
-            changed = true;
-            last_dy_text_ = tb_dy_->value();
-        }
-    }
-    if (tb_dz_) {
-        const float value = parse_float(tb_dz_->value(), frames_[idx].dz);
-        if (std::fabs(value - frames_[idx].dz) > 0.001f) {
-            frames_[idx].dz = value;
-            changed = true;
-            last_dz_text_ = tb_dz_->value();
-        }
-    }
-    if (changed) {
-        rebuild_rel_positions();
-        persist_changes();
-    }
-}
 
 void MovementFrameEditor::select_frame(int index) {
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
-    dragging_point_ = false;
     refresh_selection_state();
-    sync_text_fields();
 }
 
 void MovementFrameEditor::rebuild_rel_positions() {
@@ -492,86 +355,6 @@ void MovementFrameEditor::rebuild_rel_positions() {
         rel_positions_[i].x = rel_positions_[i - 1].x + frames_[i].dx;
         rel_positions_[i].y = rel_positions_[i - 1].y + frames_[i].dy;
         rel_positions_z_[i] = rel_positions_z_[i - 1] + frames_[i].dz;
-    }
-}
-
-std::optional<int> MovementFrameEditor::hit_test_point(const SDL_Point& screen) const {
-    if (!context_.assets || !context_.target) {
-        return std::nullopt;
-    }
-    const float radius = 10.0f;
-    const float radius_sq = radius * radius;
-    for (std::size_t i = 0; i < rel_positions_.size(); ++i) {
-        SDL_FPoint p{};
-        if (!project_relative_point(i, p)) {
-            continue;
-        }
-        const float dx = static_cast<float>(screen.x) - p.x;
-        const float dy = static_cast<float>(screen.y) - p.y;
-        if ((dx * dx + dy * dy) <= radius_sq) {
-            return static_cast<int>(i);
-        }
-    }
-    return std::nullopt;
-}
-
-void MovementFrameEditor::apply_scroll_adjustment(int steps) {
-    if (frames_.empty()) return;
-    const int idx = clamp_index(selected_index_, static_cast<int>(frames_.size()));
-    if (idx <= 0 || idx >= static_cast<int>(rel_positions_.size())) {
-        return;
-    }
-    SDL_FPoint desired_rel = rel_positions_[idx];
-    float desired_z = rel_positions_z_[idx];
-    if (selection_state_) {
-        switch (selection_state_->axis) {
-            case AdjustmentAxis::X:
-                desired_rel.x += static_cast<float>(steps);
-                break;
-            case AdjustmentAxis::Y:
-                desired_rel.y += static_cast<float>(steps);
-                break;
-            case AdjustmentAxis::Z:
-                desired_z += static_cast<float>(steps);
-                break;
-        }
-    }
-    const std::vector<SDL_FPoint> base = rel_positions_;
-    const std::vector<float> base_z = rel_positions_z_;
-    apply_frame_move_from_base(idx, desired_rel, desired_z, base, base_z);
-    rebuild_rel_positions();
-    persist_changes();
-}
-
-void MovementFrameEditor::apply_frame_move_from_base(int index,
-                                                     const SDL_FPoint& desired_rel,
-                                                     float desired_z,
-                                                     const std::vector<SDL_FPoint>& base_rel,
-                                                     const std::vector<float>& base_z) {
-    if (index <= 0) return;
-    if (index >= static_cast<int>(frames_.size())) return;
-    if (base_rel.size() != frames_.size()) return;
-    if (base_z.size() != frames_.size()) return;
-
-    frames_.front().dx = 0.0f;
-    frames_.front().dy = 0.0f;
-    frames_.front().dz = 0.0f;
-
-    SDL_FPoint prev_abs = base_rel[index - 1];
-    const float prev_z = base_z[index - 1];
-    frames_[index].dx = static_cast<float>(std::round(desired_rel.x - prev_abs.x));
-    frames_[index].dy = static_cast<float>(std::round(desired_rel.y - prev_abs.y));
-    frames_[index].dz = static_cast<float>(std::round(desired_z - prev_z));
-
-    SDL_FPoint last_abs = desired_rel;
-    float last_z = desired_z;
-    for (int j = index + 1; j < static_cast<int>(frames_.size()); ++j) {
-        const SDL_FPoint desired = base_rel[j];
-        frames_[j].dx = static_cast<float>(std::round(desired.x - last_abs.x));
-        frames_[j].dy = static_cast<float>(std::round(desired.y - last_abs.y));
-        frames_[j].dz = static_cast<float>(std::round(base_z[j] - last_z));
-        last_abs = desired;
-        last_z = base_z[j];
     }
 }
 
@@ -714,7 +497,6 @@ void MovementFrameEditor::persist_changes() {
         manifest_txn_.commit();
     }
     refresh_selection_state();
-    sync_text_fields();
 }
 
 void MovementFrameEditor::apply_to_all_frames() {

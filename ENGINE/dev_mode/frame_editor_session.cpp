@@ -107,7 +107,6 @@ void FrameEditorSession::begin(Assets* assets,
     editor_context_.snap_resolution = snap_resolution_r_;
     editor_context_.snap_override = snap_resolution_override_;
     editor_context_.selection_state = &selection_state_;
-    editor_context_.axis_adjuster = &axis_adjuster_;
 
     mode_ = mode_for_launch(launch_mode_);
     pan_height_.set_height_scale_factor(1.1);
@@ -148,8 +147,6 @@ void FrameEditorSession::end() {
     snap_resolution_override_ = false;
     snap_resolution_r_ = 0;
     selection_state_.reset();
-    axis_adjuster_.set_selection(&selection_state_);
-    axis_adjuster_.reset_axis(devmode::frame_editors::AdjustmentAxis::X);
     editor_context_ = {};
     camera_lock_state_.valid = false;
     edit_camera_state_.valid = false;
@@ -182,31 +179,21 @@ void FrameEditorSession::update(const Input& input) {
         return;
     }
     if (assets_) {
-        const bool should_lock = selection_state_.has_target();
         WarpedScreenGrid& cam = assets_->getView();
-        if (should_lock && !edit_camera_locked_) {
-            capture_edit_camera_state();
-            lock_camera_state();
-        } else if (!should_lock && edit_camera_locked_) {
-            restore_edit_camera_state();
-        }
-        if (edit_camera_locked_) {
-            enforce_camera_locks(cam);
-        } else {
-            pan_height_.handle_input(cam, input, false);
-            // Handle tilt with right click drag
-            if (input.isDown(Input::RIGHT)) {
-                const int dy = input.getDY();
-                if (dy != 0) {
-                    const float delta_deg = -static_cast<float>(dy) * 0.2f;
-                    float current_tilt = cam.current_pitch_degrees();
-                    float new_tilt = current_tilt + delta_deg;
-                    new_tilt = std::clamp(new_tilt, 0.0f, 150.0f);
-                    cam.set_tilt_override(new_tilt);
-                }
-            }
+    // Always allow camera control - no locking when points are selected
+    pan_height_.handle_input(cam, input, false);
+    // Handle tilt with right click drag
+    if (input.isDown(Input::RIGHT)) {
+        const int dy = input.getDY();
+        if (dy != 0) {
+            const float delta_deg = -static_cast<float>(dy) * 0.2f;
+            float current_tilt = cam.current_pitch_degrees();
+            float new_tilt = current_tilt + delta_deg;
+            new_tilt = std::clamp(new_tilt, 0.0f, 150.0f);
+            cam.set_tilt_override(new_tilt);
         }
     }
+}
     active_editor_->update(input, 0.0f);
     if (active_editor_ && active_editor_->wants_close()) {
         end();
@@ -268,10 +255,7 @@ void FrameEditorSession::create_and_begin_editor() {
     editor_context_.snap_override = snap_resolution_override_;
 
     selection_state_.reset();
-    axis_adjuster_.set_selection(&selection_state_);
-    axis_adjuster_.reset_axis(devmode::frame_editors::AdjustmentAxis::X);
     editor_context_.selection_state = &selection_state_;
-    editor_context_.axis_adjuster = &axis_adjuster_;
 
     active_editor_ = create_editor(mode_);
     if (active_editor_) {
@@ -299,23 +283,6 @@ void FrameEditorSession::capture_camera_state() {
     camera_lock_state_.tilt_override_before = cam.tilt_override();
     camera_lock_state_.camera_y_distance_before = cam.camera_y_distance();
     camera_lock_state_.valid = true;
-}
-
-void FrameEditorSession::lock_camera_state() {
-    if (!assets_) {
-        return;
-    }
-    WarpedScreenGrid& cam = assets_->getView();
-    const SDL_Point center = cam.get_screen_center();
-    locked_tilt_deg_ = cam.current_pitch_degrees();
-    tilt_locked_ = true;
-    cam.set_manual_height_override(true);
-    cam.set_focus_override(center);
-    cam.set_screen_center(center);
-    cam.set_tilt_override(locked_tilt_deg_);
-    locked_camera_y_distance_ = cam.camera_y_distance();
-    camera_y_distance_locked_ = true;
-    edit_camera_locked_ = true;
 }
 
 void FrameEditorSession::restore_camera_state() {
@@ -380,18 +347,6 @@ void FrameEditorSession::restore_edit_camera_state() {
     edit_camera_locked_ = false;
 }
 
-void FrameEditorSession::enforce_camera_locks(WarpedScreenGrid& cam) {
-    if (camera_y_distance_locked_) {
-        constexpr double kCameraDistanceEpsilon = 1e-3;
-        const double distance_delta = std::fabs(cam.camera_y_distance() - locked_camera_y_distance_);
-        if (distance_delta > kCameraDistanceEpsilon) {
-            cam.set_camera_y_distance(locked_camera_y_distance_);
-        }
-    }
-    if (tilt_locked_) {
-        cam.set_tilt_override(locked_tilt_deg_);
-    }
-}
 
 std::unique_ptr<devmode::frame_editors::FrameEditorBase> FrameEditorSession::create_editor(Mode mode) {
     return ::create_editor(mode);

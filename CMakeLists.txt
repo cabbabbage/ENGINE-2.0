@@ -207,6 +207,10 @@ add_executable(engine_tests
     ENGINE/dev_mode/core/manifest_store.cpp
     ENGINE/dev_mode/manifest_asset_utils.cpp
     ENGINE/dev_mode/tag_utils.cpp
+    ENGINE/dev_mode/draw_utils.cpp
+    ENGINE/dev_mode/font_cache.cpp
+    ENGINE/dev_mode/widgets.cpp
+    ENGINE/dev_mode/frame_editors/shared/Point3DEditor.cpp
     ENGINE/core/manifest/manifest_loader.cpp
     ENGINE/utils/log.cpp
     ENGINE/utils/cache_manager.cpp
@@ -280,4 +284,3 @@ target_link_libraries(engine_world_tests
     PRIVATE
         SDL2::SDL2 ${_SDL2MAIN_TARGET}
 )
-

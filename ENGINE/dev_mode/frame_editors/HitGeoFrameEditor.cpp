@@ -42,30 +42,40 @@ float dist_sq(const SDL_FPoint& a, const SDL_FPoint& b) {
     return dx * dx + dy * dy;
 }
 
-int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
-    float precise = wheel.preciseY;
-    int delta = wheel.y;
-    if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
-        delta = -delta;
-        precise = -precise;
-    }
-    if (std::fabs(precise) >= 0.01f) {
-        return static_cast<int>(std::lround(precise));
-    }
-    return delta;
-}
-
 }  // namespace
 
 void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     context_ = context;
     selection_state_ = context.selection_state;
-    axis_adjuster_ = context.axis_adjuster;
+    point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);
     if (selection_state_) {
         selection_state_->reset();
     }
-    if (axis_adjuster_) {
-        axis_adjuster_->reset_axis(AdjustmentAxis::X);
+    if (point_3d_editor_) {
+        point_3d_editor_->reset_axis(AdjustmentAxis::X);
+
+        point_3d_editor_->set_on_point_selected([this](int /*index*/) {
+            if (selection_state_) {
+                selection_state_->target = SelectionTarget::HitboxCenter;
+            }
+            refresh_selection_state();
+        });
+
+        point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
+            auto* box = current_hit_box();
+            if (!box) return;
+
+            SDL_Point anchor = asset_anchor_world();
+            float scale = asset_local_scale();
+
+            box->center_x = (new_world_pos.x - static_cast<float>(anchor.x)) / scale;
+            box->center_y = (static_cast<float>(anchor.y) - new_world_pos.y) / scale;
+            box->center_z = (new_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+
+            refresh_hitbox_form();
+            persist_changes();
+            refresh_selection_state();
+        });
     }
     wants_close_ = false;
     selected_index_ = 0;
@@ -126,7 +136,7 @@ void HitGeoFrameEditor::end() {
         selection_state_->reset();
         selection_state_ = nullptr;
     }
-    axis_adjuster_ = nullptr;
+    point_3d_editor_ = nullptr;
     dd_hitbox_type_.reset();
     btn_back_.reset();
     btn_prev_frame_.reset();
@@ -205,32 +215,37 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
         return consumed;
     }
 
-    if (e.type == SDL_MOUSEWHEEL && selection_state_ && selection_state_->has_target()) {
-        const int steps = resolve_wheel_steps(e.wheel);
-        if (steps != 0) {
-            apply_scroll_adjustment(steps);
-            return true;
-        }
+    SDL_Point mouse_pos = {0, 0};
+    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+        mouse_pos = {e.button.x, e.button.y};
+    } else if (e.type == SDL_MOUSEMOTION) {
+        mouse_pos = {e.motion.x, e.motion.y};
+    } else if (e.type == SDL_MOUSEWHEEL) {
+        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point mp{e.button.x, e.button.y};
-        if (ui_contains_point(mp)) {
-            return true;
+    if (!ui_contains_point(mouse_pos)) {
+        const auto* box = current_hit_box();
+        std::vector<SDL_FPoint> point_screens;
+        if (box) {
+            std::array<SDL_FPoint, 4> corners{};
+            std::array<SDL_FPoint, 4> edge_midpoints{};
+            SDL_FPoint rotate_handle{};
+            if (build_hitbox_visual(*box, corners, edge_midpoints, rotate_handle)) {
+                // Point 0 is center
+                SDL_Point anchor = asset_anchor_world();
+                const float scale = asset_local_scale();
+                const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+                SDL_FPoint world{static_cast<float>(anchor.x) + box->center_x * scale, static_cast<float>(anchor.y) - box->center_y * scale};
+                point_screens.push_back(cam.map_to_screen_f(world));
+            }
         }
-        if (begin_hitbox_drag(mp)) {
+
+        if (point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+                return screen_to_world_point(p);
+            })) {
             consumed = true;
-        } else if (selection_state_) {
-            selection_state_->target = SelectionTarget::None;
         }
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-        if (dragging_hitbox_) {
-            end_hitbox_drag(true);
-            consumed = true;
-        }
-    } else if (e.type == SDL_MOUSEMOTION && dragging_hitbox_) {
-        update_hitbox_drag(SDL_Point{e.motion.x, e.motion.y});
-        consumed = true;
     }
 
     return consumed;
@@ -343,7 +358,6 @@ void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 
 void HitGeoFrameEditor::select_frame(int index) {
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
-    dragging_hitbox_ = false;
     refresh_hitbox_form();
     refresh_selection_state();
 }
@@ -429,25 +443,8 @@ void HitGeoFrameEditor::persist_changes() {
     refresh_selection_state();
 }
 
-void HitGeoFrameEditor::apply_scroll_adjustment(int steps) {
-    auto* box = current_hit_box();
-    if (!box || steps == 0) {
-        return;
-    }
-    if (selection_state_) {
-        switch (selection_state_->axis) {
-            case AdjustmentAxis::X:
-                box->center_x += static_cast<float>(steps);
-                break;
-            case AdjustmentAxis::Y:
-                box->center_y += static_cast<float>(steps);
-                break;
-            case AdjustmentAxis::Z:
-                box->center_z += static_cast<float>(steps);
-                break;
-        }
-        persist_changes();
-    }
+float HitGeoFrameEditor::base_world_z() const {
+    return context_.target ? context_.target->world_z_offset() : 0.0f;
 }
 
 void HitGeoFrameEditor::apply_hit_to_all_frames() {
@@ -528,168 +525,6 @@ void HitGeoFrameEditor::delete_hit_box_for_type(const std::string& type) {
     persist_changes();
 }
 
-bool HitGeoFrameEditor::begin_hitbox_drag(SDL_Point mouse) {
-    auto* box = current_hit_box();
-    if (!box) return false;
-    std::array<SDL_FPoint, 4> corners{};
-    std::array<SDL_FPoint, 4> edge_midpoints{};
-    SDL_FPoint rotate_handle{};
-    if (!build_hitbox_visual(*box, corners, edge_midpoints, rotate_handle)) return false;
-    active_handle_ = HitHandle::None;
-    const int handle_size = 12;
-    auto point_in_rect = [&](const SDL_FPoint& center) {
-        SDL_Rect r{static_cast<int>(std::round(center.x)) - handle_size / 2,
-                   static_cast<int>(std::round(center.y)) - handle_size / 2, handle_size, handle_size};
-        return SDL_PointInRect(&mouse, &r) == SDL_TRUE;
-    };
-    SDL_FPoint mouse_f{static_cast<float>(mouse.x), static_cast<float>(mouse.y)};
-    const float rotate_radius = 12.0f;
-    if (dist_sq(mouse_f, rotate_handle) <= rotate_radius * rotate_radius) {
-        active_handle_ = HitHandle::Rotate;
-    } else {
-        if (point_in_rect(edge_midpoints[3])) active_handle_ = HitHandle::Left;
-        else if (point_in_rect(edge_midpoints[1])) active_handle_ = HitHandle::Right;
-        else if (point_in_rect(edge_midpoints[0])) active_handle_ = HitHandle::Top;
-        else if (point_in_rect(edge_midpoints[2])) active_handle_ = HitHandle::Bottom;
-        else {
-            bool inside = false;
-            for (int i = 0, j = 3; i < 4; j = i++) {
-                const SDL_FPoint& a = corners[i];
-                const SDL_FPoint& b = corners[j];
-                const bool intersect = ((a.y > mouse_f.y) != (b.y > mouse_f.y)) &&
-                                       (mouse_f.x < (b.x - a.x) * (mouse_f.y - a.y) / (b.y - a.y + 0.0001f) + a.x);
-                if (intersect) inside = !inside;
-            }
-            if (inside) {
-                active_handle_ = HitHandle::Move;
-            }
-        }
-    }
-    if (active_handle_ == HitHandle::None) {
-        return false;
-    }
-    if (axis_adjuster_) {
-        axis_adjuster_->cycle_axis();
-    }
-    if (selection_state_) {
-        selection_state_->target = SelectionTarget::HitboxCenter;
-    }
-    dragging_hitbox_ = true;
-    drag_start_mouse_ = mouse;
-    drag_start_box_ = *box;
-    drag_left_ = -box->half_width;
-    drag_right_ = box->half_width;
-    drag_top_ = box->half_height;
-    drag_bottom_ = -box->half_height;
-    SDL_FPoint local_mouse{};
-    if (!screen_to_local(mouse, local_mouse)) {
-        dragging_hitbox_ = false;
-        active_handle_ = HitHandle::None;
-        return false;
-    }
-    drag_grab_offset_.x = local_mouse.x - box->center_x;
-    drag_grab_offset_.y = local_mouse.y - box->center_y;
-    return true;
-}
-
-void HitGeoFrameEditor::update_hitbox_drag(SDL_Point mouse) {
-    if (!dragging_hitbox_) return;
-    auto* box = current_hit_box();
-    if (!box) return;
-    SDL_FPoint local{};
-    if (!screen_to_local(mouse, local)) {
-        return;
-    }
-    constexpr float kMinHalf = 2.0f;
-    const float rotation = drag_start_box_.rotation_degrees;
-    const float cos_r = std::cos(rotation * static_cast<float>(M_PI) / 180.0f);
-    const float sin_r = std::sin(rotation * static_cast<float>(M_PI) / 180.0f);
-    auto rotate_to_box = [&](float dx, float dy) -> SDL_FPoint {
-        return SDL_FPoint{dx * cos_r + dy * sin_r, -dx * sin_r + dy * cos_r};
-    };
-    auto rotate_to_world = [&](SDL_FPoint v) -> SDL_FPoint {
-        return SDL_FPoint{v.x * cos_r - v.y * sin_r, v.x * sin_r + v.y * cos_r};
-    };
-    SDL_FPoint delta{local.x - drag_start_box_.center_x, local.y - drag_start_box_.center_y};
-    SDL_FPoint aligned = rotate_to_box(delta.x, delta.y);
-    switch (active_handle_) {
-        case HitHandle::Move: {
-            SDL_FPoint new_center{local.x - drag_grab_offset_.x, local.y - drag_grab_offset_.y};
-            if (selection_state_) {
-                if (selection_state_->axis == AdjustmentAxis::X) {
-                    new_center.y = drag_start_box_.center_y;
-                } else if (selection_state_->axis == AdjustmentAxis::Y) {
-                    new_center.x = drag_start_box_.center_x;
-                } else if (selection_state_->axis == AdjustmentAxis::Z) {
-                    new_center.x = drag_start_box_.center_x;
-                    new_center.y = drag_start_box_.center_y;
-                    box->center_z = drag_start_box_.center_z + (local.y - drag_start_box_.center_y);
-                }
-            }
-            box->center_x = new_center.x;
-            box->center_y = new_center.y;
-            break;
-        }
-        case HitHandle::Left:
-        case HitHandle::Right: {
-            float left = drag_left_;
-            float right = drag_right_;
-            if (active_handle_ == HitHandle::Left) {
-                left = std::min(aligned.x, right - kMinHalf * 2.0f);
-            } else {
-                right = std::max(aligned.x, left + kMinHalf * 2.0f);
-            }
-            const float width = std::max(kMinHalf * 2.0f, right - left);
-            const float center_offset = (right + left) * 0.5f;
-            SDL_FPoint offset_world = rotate_to_world(SDL_FPoint{center_offset, 0.0f});
-            box->center_x = drag_start_box_.center_x + offset_world.x;
-            box->center_y = drag_start_box_.center_y + offset_world.y;
-            box->half_width = width * 0.5f;
-            break;
-        }
-        case HitHandle::Top:
-        case HitHandle::Bottom: {
-            float bottom = drag_bottom_;
-            float top = drag_top_;
-            if (active_handle_ == HitHandle::Top) {
-                top = std::max(aligned.y, bottom + kMinHalf * 2.0f);
-            } else {
-                bottom = std::min(aligned.y, top - kMinHalf * 2.0f);
-            }
-            const float height = std::max(kMinHalf * 2.0f, top - bottom);
-            const float center_offset = (top + bottom) * 0.5f;
-            SDL_FPoint offset_world = rotate_to_world(SDL_FPoint{0.0f, center_offset});
-            box->center_x = drag_start_box_.center_x + offset_world.x;
-            box->center_y = drag_start_box_.center_y + offset_world.y;
-            box->half_height = height * 0.5f;
-            break;
-        }
-        case HitHandle::Rotate: {
-            SDL_FPoint rel{local.x - box->center_x, local.y - box->center_y};
-            box->rotation_degrees = std::atan2(rel.y, rel.x) * 180.0f / static_cast<float>(M_PI);
-            break;
-        }
-        case HitHandle::None:
-        default:
-            break;
-    }
-    refresh_hitbox_form();
-    persist_changes();
-}
-
-void HitGeoFrameEditor::end_hitbox_drag(bool commit) {
-    if (!dragging_hitbox_) return;
-    dragging_hitbox_ = false;
-    if (!commit) {
-        if (auto* box = current_hit_box()) {
-            *box = drag_start_box_;
-            refresh_hitbox_form();
-        }
-        return;
-    }
-    refresh_hitbox_form();
-    persist_changes();
-}
 
 bool HitGeoFrameEditor::build_hitbox_visual(const animation_update::FrameHitGeometry::HitBox& box,
                                             std::array<SDL_FPoint, 4>& corners,
@@ -749,38 +584,10 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
         if (!build_hitbox_visual(box, corners, edge_midpoints, rotate_handle)) continue;
         const bool selected = (box.type == type);
 
-        bool hovered_any = false;
-        int hovered_edge_index = -1;
-        bool hovered_rotate = false;
-        if (selected) {
-            SDL_Point mp{0, 0};
-            SDL_GetMouseState(&mp.x, &mp.y);
-            const int handle_size = 12;
-            auto point_in_rect = [&](const SDL_FPoint& center) {
-                SDL_Rect r{static_cast<int>(std::round(center.x)) - handle_size / 2,
-                           static_cast<int>(std::round(center.y)) - handle_size / 2, handle_size, handle_size};
-                return SDL_PointInRect(&mp, &r) == SDL_TRUE;
-            };
-
-            SDL_FPoint mpf{static_cast<float>(mp.x), static_cast<float>(mp.y)};
-            const float rotate_radius = 12.0f;
-            if (dist_sq(mpf, rotate_handle) <= rotate_radius * rotate_radius) {
-                hovered_any = true;
-                hovered_rotate = true;
-            } else {
-                if (point_in_rect(edge_midpoints[3])) { hovered_any = true; hovered_edge_index = 3; }
-                else if (point_in_rect(edge_midpoints[1])) { hovered_any = true; hovered_edge_index = 1; }
-                else if (point_in_rect(edge_midpoints[0])) { hovered_any = true; hovered_edge_index = 0; }
-                else if (point_in_rect(edge_midpoints[2])) { hovered_any = true; hovered_edge_index = 2; }
-            }
-        }
-
         SDL_Color fill = selected ? DMStyles::AccentButton().bg : DMStyles::HeaderButton().bg;
         fill.a = selected ? 90 : 45;
         SDL_Color outline = selected ? DMStyles::AccentButton().border : DMStyles::Border();
-        if (selected && hovered_any) {
-            outline = SDL_Color{255, 255, 255, 255};
-        }
+        
         SDL_Vertex verts[4];
         int indices[6] = {0, 1, 2, 0, 2, 3};
         for (int i = 0; i < 4; ++i) {
@@ -797,34 +604,16 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
             SDL_RenderDrawLineF(renderer, a.x, a.y, b.x, b.y);
         }
         if (selected) {
-            const int base_handle_size = 10;
-            for (int i = 0; i < 4; ++i) {
-                const bool is_hovered_handle = (i == hovered_edge_index);
-                const int handle_size = is_hovered_handle ? (base_handle_size + 2) : base_handle_size;
-                SDL_FRect r{edge_midpoints[i].x - handle_size * 0.5f,
-                            edge_midpoints[i].y - handle_size * 0.5f,
-                            static_cast<float>(handle_size),
-                            static_cast<float>(handle_size)};
-                SDL_Color node_col = is_hovered_handle ? SDL_Color{255, 255, 255, 255}
-                                                       : DMStyles::AccentButton().hover_bg;
-                SDL_SetRenderDrawColor(renderer, node_col.r, node_col.g, node_col.b, 255);
-                SDL_RenderFillRectF(renderer, &r);
-            }
-
-            const SDL_FPoint top_mid = edge_midpoints[0];
-            SDL_SetRenderDrawColor(renderer, (hovered_rotate ? 255 : DMStyles::AccentButton().hover_bg.r),
-                                   (hovered_rotate ? 255 : DMStyles::AccentButton().hover_bg.g),
-                                   (hovered_rotate ? 255 : DMStyles::AccentButton().hover_bg.b), 255);
-            SDL_RenderDrawLineF(renderer, top_mid.x, top_mid.y, rotate_handle.x, rotate_handle.y);
-            const float radius = 8.0f;
-            for (int i = 0; i < 16; ++i) {
-                const float a = (static_cast<float>(i) / 16.0f) * 2.0f * static_cast<float>(M_PI);
-                const float b = (static_cast<float>(i + 1) / 16.0f) * 2.0f * static_cast<float>(M_PI);
-                SDL_RenderDrawLineF(renderer, rotate_handle.x + std::cos(a) * radius,
-                                    rotate_handle.y + std::sin(a) * radius,
-                                    rotate_handle.x + std::cos(b) * radius,
-                                    rotate_handle.y + std::sin(b) * radius);
-            }
+            // Render center point
+            SDL_Point anchor = asset_anchor_world();
+            const float scale = asset_local_scale();
+            const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+            SDL_FPoint center_world{static_cast<float>(anchor.x) + box.center_x * scale, static_cast<float>(anchor.y) - box.center_y * scale};
+            SDL_FPoint center_screen = cam.map_to_screen_f(center_world);
+            
+            point_3d_editor_->render_axis_point(renderer, center_screen,
+                                              selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
+                                              true);
         }
     }
 }
@@ -868,6 +657,12 @@ bool HitGeoFrameEditor::screen_to_local(SDL_Point screen, SDL_FPoint& out_local)
     return std::isfinite(out_local.x) && std::isfinite(out_local.y);
 }
 
+SDL_FPoint HitGeoFrameEditor::screen_to_world_point(const SDL_Point& screen) const {
+    if (!context_.assets || !context_.target) return SDL_FPoint{0,0};
+    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+    return cam.screen_to_map(screen);
+}
+
 void HitGeoFrameEditor::refresh_selection_state() {
     if (!selection_state_ || !context_.assets || !context_.target) {
         return;
@@ -878,21 +673,22 @@ void HitGeoFrameEditor::refresh_selection_state() {
     const auto* box = current_hit_box();
     if (!box) {
         selection_state_->target = SelectionTarget::None;
-        selection_state_->attack_vector_index = -1;
         return;
     }
     SDL_Point anchor = asset_anchor_world();
+    float scale = asset_local_scale();
     SDL_FPoint world{
-        static_cast<float>(anchor.x) + box->center_x * asset_local_scale(),
-        static_cast<float>(anchor.y) - box->center_y * asset_local_scale()};
+        static_cast<float>(anchor.x) + box->center_x * scale,
+        static_cast<float>(anchor.y) - box->center_y * scale};
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint screen = cam.map_to_screen_f(world);
     selection_state_->world_pos = world;
+    selection_state_->world_z = base_world_z() + box->center_z * scale;
     selection_state_->screen_pos = round_point(screen);
 }
 
-bool HitGeoFrameEditor::ui_contains_point(const SDL_Point& p) const {
-    return SDL_PointInRect(&p, &ui_rect_) == SDL_TRUE;
+bool HitGeoFrameEditor::ui_contains_point(const SDL_Point& pt) const {
+    return SDL_PointInRect(&pt, &ui_rect_) == SDL_TRUE;
 }
 
 

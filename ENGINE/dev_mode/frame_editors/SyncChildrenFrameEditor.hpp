@@ -12,7 +12,7 @@
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "animation_update/animation_update.hpp"
 #include "asset/animation_child_data.hpp"
-#include "shared/AxisAdjuster.hpp"
+#include "shared/Point3DEditor.hpp"
 #include "shared/ChildTimelineUtils.hpp"
 #include "shared/FrameEditorContext.hpp"
 #include "shared/FrameNavigator.hpp"
@@ -51,15 +51,14 @@ private:
         float z = 0.0f;
     };
     ChildWorldPose child_world_pose(int child_index) const;
-    std::optional<int> hit_test_child_marker(const SDL_Point& mouse) const;
     void ensure_manifest_transaction();
-    void apply_scroll_adjustment(int steps);
     void apply_text_box_changes();
     void update_text_boxes_from_current_frame();
+    void refresh_selection_state();
 
     FrameEditorContext context_{};
     SelectionState* selection_state_ = nullptr;
-    AxisAdjuster* axis_adjuster_ = nullptr;
+    std::unique_ptr<Point3DEditor> point_3d_editor_;
     ManifestTransaction manifest_txn_;
 
     std::vector<std::string> child_assets_;
@@ -69,9 +68,6 @@ private:
     int frame_count_ = 0;
     int selected_frame_index_ = 0;
     int selected_child_index_ = 0;
-    bool dragging_child_ = false;
-    SDL_Point drag_start_mouse_{0, 0};
-    child_timelines::ChildFrameSample drag_start_sample_{};
     bool data_dirty_ = false;
     bool wants_close_ = false;
     std::unique_ptr<DMButton> btn_back_;

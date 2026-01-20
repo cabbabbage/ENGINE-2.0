@@ -8,7 +8,7 @@
 #include "animation_update/child_attachment_controller.hpp"
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "asset/animation_child_data.hpp"
-#include "shared/AxisAdjuster.hpp"
+#include "shared/Point3DEditor.hpp"
 #include "shared/ChildTimelineUtils.hpp"
 #include "shared/FrameEditorContext.hpp"
 #include "shared/ManifestTransaction.hpp"
@@ -48,11 +48,10 @@ private:
     int start_frame_for_child(int child_index) const;
     void adjust_start_frame(int child_index, int delta_frames);
     void refresh_selection_state();
-    void apply_scroll_adjustment(int steps);
 
     FrameEditorContext context_{};
     SelectionState* selection_state_ = nullptr;
-    AxisAdjuster* axis_adjuster_ = nullptr;
+    std::unique_ptr<Point3DEditor> point_3d_editor_;
     ManifestTransaction manifest_txn_;
 
     std::vector<std::string> child_assets_;
@@ -67,9 +66,6 @@ private:
     int selected_parent_frame_index_ = 0;
     int selected_child_index_ = 0;
     int selected_child_frame_index_ = 0;
-    bool dragging_child_ = false;
-    SDL_Point drag_start_mouse_{0, 0};
-    child_timelines::ChildFrameSample drag_start_sample_{};
     bool data_dirty_ = false;
     bool wants_close_ = false;
     std::unique_ptr<DMButton> btn_back_;

@@ -20,8 +20,6 @@ class PreviewProvider;
 
 namespace devmode::frame_editors {
 
-class AxisAdjuster;
-
 struct FrameEditorContext {
     Assets* assets = nullptr;
     Asset* target = nullptr;
@@ -35,7 +33,6 @@ struct FrameEditorContext {
     int snap_resolution = 0;
     bool snap_override = false;
     SelectionState* selection_state = nullptr;
-    AxisAdjuster* axis_adjuster = nullptr;
 };
 
 }  // namespace devmode::frame_editors

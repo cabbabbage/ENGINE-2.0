@@ -8,7 +8,7 @@
 #include <string>
 
 #include "dev_mode/frame_editors/shared/FrameEditorContext.hpp"
-#include "dev_mode/frame_editors/shared/AxisAdjuster.hpp"
+
 #include "dev_mode/frame_editors/FrameEditorBase.hpp"
 #include "dev_mode/pan_and_height.hpp"
 
@@ -89,7 +89,6 @@ private:
     std::unique_ptr<devmode::frame_editors::FrameEditorBase> active_editor_;
     devmode::frame_editors::FrameEditorContext editor_context_{};
     devmode::frame_editors::SelectionState selection_state_{};
-    devmode::frame_editors::AxisAdjuster axis_adjuster_{&selection_state_};
 
     struct CameraLockState {
         bool valid = false;

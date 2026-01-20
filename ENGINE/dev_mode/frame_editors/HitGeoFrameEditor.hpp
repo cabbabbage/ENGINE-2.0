@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "FrameEditorBase.hpp"
-#include "shared/AxisAdjuster.hpp"
+#include "shared/Point3DEditor.hpp"
 #include "shared/FrameEditState.hpp"
 #include "shared/FrameEditorContext.hpp"
 #include "shared/ManifestTransaction.hpp"
@@ -29,24 +29,19 @@ public:
     bool wants_close() const override { return wants_close_; }
 
 private:
-    enum class HitHandle { None, Move, Left, Right, Top, Bottom, Rotate };
-
     void layout_ui(SDL_Renderer* renderer) const;
     void select_frame(int index);
     void refresh_hitbox_form() const;
     void apply_text_fields();
     void persist_changes();
-    void apply_scroll_adjustment(int steps);
     void apply_hit_to_all_frames();
     void copy_hit_box_to_next_frame();
     std::string current_hitbox_type() const;
+    float base_world_z() const;
     animation_update::FrameHitGeometry::HitBox* current_hit_box();
     const animation_update::FrameHitGeometry::HitBox* current_hit_box() const;
     animation_update::FrameHitGeometry::HitBox* ensure_hit_box_for_type(const std::string& type);
     void delete_hit_box_for_type(const std::string& type);
-    bool begin_hitbox_drag(SDL_Point mouse);
-    void update_hitbox_drag(SDL_Point mouse);
-    void end_hitbox_drag(bool commit);
     bool build_hitbox_visual(const animation_update::FrameHitGeometry::HitBox& box,
                              std::array<SDL_FPoint, 4>& corners,
                              std::array<SDL_FPoint, 4>& edge_midpoints,
@@ -55,12 +50,13 @@ private:
     SDL_Point asset_anchor_world() const;
     float asset_local_scale() const;
     bool screen_to_local(SDL_Point screen, SDL_FPoint& out_local) const;
+    SDL_FPoint screen_to_world_point(const SDL_Point& screen) const;
     void refresh_selection_state();
     bool ui_contains_point(const SDL_Point& p) const;
 
     FrameEditorContext context_{};
     SelectionState* selection_state_ = nullptr;
-    AxisAdjuster* axis_adjuster_ = nullptr;
+    std::unique_ptr<Point3DEditor> point_3d_editor_;
     ManifestTransaction manifest_txn_;
     std::vector<MovementFrame> frames_;
     int selected_index_ = 0;
@@ -88,17 +84,7 @@ private:
 
     mutable SDL_Rect ui_rect_{0, 0, 0, 0};
 
-    HitHandle active_handle_ = HitHandle::None;
-    bool dragging_hitbox_ = false;
-    bool drag_moved_ = false;
     bool wants_close_ = false;
-    SDL_Point drag_start_mouse_{0, 0};
-    SDL_FPoint drag_grab_offset_{0.0f, 0.0f};
-    animation_update::FrameHitGeometry::HitBox drag_start_box_{};
-    float drag_left_ = 0.0f;
-    float drag_right_ = 0.0f;
-    float drag_top_ = 0.0f;
-    float drag_bottom_ = 0.0f;
 };
 
 }  // namespace devmode::frame_editors

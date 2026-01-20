@@ -1986,7 +1986,7 @@
                   "center_z": 1230.8443603515625,
                   "half_height": 702.7274780273438,
                   "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007812
+                  "rotation": -178.48147583007813
                 }
               ]
             },
@@ -2572,7 +2572,7 @@
                   "center_z": 5163.4951171875,
                   "half_height": 1570.3231201171875,
                   "half_width": 5179.4228515625,
-                  "rotation": -93.25064086914062
+                  "rotation": -93.25064086914063
                 }
               ]
             }
@@ -3837,14 +3837,14 @@
           ],
           "camera_height_px": 1462,
           "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 45.0,
+          "camera_tilt_deg": 33.0,
           "camera_y_distance_px": 0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 101,

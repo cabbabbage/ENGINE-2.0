@@ -12,7 +12,7 @@
 #include "dev_mode/draw_utils.hpp"
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
-#include "dev_mode/frame_editors/shared/AxisPointRenderer.hpp"
+
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
 
@@ -63,12 +63,72 @@ int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
 void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     context_ = context;
     selection_state_ = context.selection_state;
-    axis_adjuster_ = context.axis_adjuster;
+    point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);
     if (selection_state_) {
         selection_state_->reset();
     }
-    if (axis_adjuster_) {
-        axis_adjuster_->reset_axis(AdjustmentAxis::X);
+    if (point_3d_editor_) {
+        point_3d_editor_->reset_axis(AdjustmentAxis::X);
+        point_3d_editor_->set_on_coordinates_changed([this]() {
+            persist_changes();
+        });
+
+        point_3d_editor_->set_on_point_selected([this](int index) {
+            const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
+            auto& frame = frames_[frame_index];
+            if (frame.attack.vectors.empty()) return;
+
+            int vec_idx = index / 3;
+            int handle_idx = index % 3;
+
+            if (vec_idx < static_cast<int>(frame.attack.vectors.size())) {
+                set_current_attack_vector_index(vec_idx);
+                selected_handle_ = static_cast<AttackHandle>(handle_idx + 1); // Start=1, Control=2, End=3
+
+                if (selection_state_) {
+                    selection_state_->attack_vector_index = vec_idx;
+                    switch (selected_handle_) {
+                        case AttackHandle::Start: selection_state_->target = SelectionTarget::AttackStart; break;
+                        case AttackHandle::Control: selection_state_->target = SelectionTarget::AttackControl; break;
+                        case AttackHandle::End: selection_state_->target = SelectionTarget::AttackEnd; break;
+                        default: break;
+                    }
+                }
+                refresh_selection_state();
+            }
+        });
+
+        point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
+            auto* vec = current_attack_vector();
+            if (!vec) return;
+            SDL_Point anchor = asset_anchor_world();
+            float scale = asset_local_scale();
+            SDL_FPoint local;
+            local.x = (new_world_pos.x - static_cast<float>(anchor.x)) / scale;
+            local.y = (static_cast<float>(anchor.y) - new_world_pos.y) / scale;
+            float local_z = (new_world_z - base_world_z()) / scale;
+            switch (selected_handle_) {
+                case AttackHandle::Start:
+                    vec->start_x = local.x;
+                    vec->start_y = local.y;
+                    vec->start_z = local_z;
+                    break;
+                case AttackHandle::Control:
+                    vec->control_x = local.x;
+                    vec->control_y = local.y;
+                    vec->control_z = local_z;
+                    break;
+                case AttackHandle::End:
+                    vec->end_x = local.x;
+                    vec->end_y = local.y;
+                    vec->end_z = local_z;
+                    break;
+                default:
+                    break;
+            }
+            refresh_attack_form();
+            persist_changes();
+        });
     }
     wants_close_ = false;
     selected_index_ = 0;
@@ -107,16 +167,6 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     btn_delete_ = std::make_unique<DMButton>("Delete Attack", &DMStyles::DeleteButton(), 150, DMButton::height());
     btn_copy_next_ = std::make_unique<DMButton>("Copy To Next", &DMStyles::HeaderButton(), 150, DMButton::height());
     btn_apply_all_ = std::make_unique<DMButton>("Apply To All Frames", &DMStyles::HeaderButton(), 180, DMButton::height());
-    tb_start_x_ = std::make_unique<DMTextBox>("Start X", "0");
-    tb_start_y_ = std::make_unique<DMTextBox>("Start Y", "0");
-    tb_start_z_ = std::make_unique<DMTextBox>("Start Z", "0");
-    tb_control_x_ = std::make_unique<DMTextBox>("Control X", "0");
-    tb_control_y_ = std::make_unique<DMTextBox>("Control Y", "0");
-    tb_control_z_ = std::make_unique<DMTextBox>("Control Z", "0");
-    tb_end_x_ = std::make_unique<DMTextBox>("End X", "0");
-    tb_end_y_ = std::make_unique<DMTextBox>("End Y", "0");
-    tb_end_z_ = std::make_unique<DMTextBox>("End Z", "0");
-    tb_damage_ = std::make_unique<DMTextBox>("Damage", "0");
 
     clamp_attack_selection();
     refresh_attack_form();
@@ -132,28 +182,28 @@ void AttackGeoFrameEditor::end() {
         selection_state_->reset();
         selection_state_ = nullptr;
     }
-    axis_adjuster_ = nullptr;
+    point_3d_editor_ = nullptr;
     btn_back_.reset();
     btn_add_remove_.reset();
     btn_delete_.reset();
     btn_copy_next_.reset();
     btn_apply_all_.reset();
-    tb_start_x_.reset();
-    tb_start_y_.reset();
-    tb_start_z_.reset();
-    tb_control_x_.reset();
-    tb_control_y_.reset();
-    tb_control_z_.reset();
-    tb_end_x_.reset();
-    tb_end_y_.reset();
-    tb_end_z_.reset();
-    tb_damage_.reset();
     wants_close_ = false;
 }
 
 bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
+    // Handle Point3DEditor events first
+    if (point_3d_editor_) {
+        int sw = 0, sh = 0;
+        SDL_GetRendererOutputSize(nullptr, &sw, &sh);
+        int height = point_3d_editor_->get_overlay_height();
+        SDL_Rect bottom_container{0, sh - height, sw, height};
+        if (point_3d_editor_->handle_event(e, bottom_container)) {
+            return true;
+        }
+    }
+
     bool consumed = false;
-    apply_text_fields();
 
     if (frame_navigator_ && frame_navigator_->handle_event(e)) {
         consumed = true;
@@ -187,17 +237,6 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
     }
 
-    if (tb_start_x_ && tb_start_x_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_start_y_ && tb_start_y_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_start_z_ && tb_start_z_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_control_x_ && tb_control_x_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_control_y_ && tb_control_y_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_control_z_ && tb_control_z_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_end_x_ && tb_end_x_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_end_y_ && tb_end_y_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_end_z_ && tb_end_z_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_damage_ && tb_damage_->handle_event(e)) { apply_text_fields(); consumed = true; }
-
     if (e.type == SDL_KEYDOWN) {
         if (e.key.keysym.sym == SDLK_LEFT) {
             select_frame(selected_index_ - 1);
@@ -212,33 +251,38 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
         return consumed;
     }
 
-    if (e.type == SDL_MOUSEWHEEL && selection_state_ && selection_state_->has_target()) {
-        const int steps = resolve_wheel_steps(e.wheel);
-        if (steps != 0) {
-            apply_scroll_adjustment(steps);
-            return true;
-        }
+    SDL_Point mouse_pos = {0, 0};
+    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+        mouse_pos = {e.button.x, e.button.y};
+    } else if (e.type == SDL_MOUSEMOTION) {
+        mouse_pos = {e.motion.x, e.motion.y};
+    } else if (e.type == SDL_MOUSEWHEEL) {
+        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point mp{e.button.x, e.button.y};
-        if (ui_contains_point(mp)) {
-            return true;
+    if (!ui_contains_point(mouse_pos)) {
+        const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
+        const auto& frame = frames_[frame_index];
+        const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+        SDL_Point anchor = asset_anchor_world();
+        const float scale = asset_local_scale();
+
+        std::vector<SDL_FPoint> point_screens;
+        for (const auto& vec : frame.attack.vectors) {
+            auto to_screen = [&](float lx, float ly) -> SDL_FPoint {
+                SDL_FPoint world{static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - ly * scale};
+                return cam.map_to_screen_f(world);
+            };
+            point_screens.push_back(to_screen(vec.start_x, vec.start_y));
+            point_screens.push_back(to_screen(vec.control_x, vec.control_y));
+            point_screens.push_back(to_screen(vec.end_x, vec.end_y));
         }
-        if (begin_attack_drag(mp)) {
+
+        if (point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+                return screen_to_world_point(p);
+            })) {
             consumed = true;
-        } else if (selection_state_) {
-            selection_state_->target = SelectionTarget::None;
-            selected_handle_ = AttackHandle::None;
         }
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-        if (dragging_attack_) {
-            end_attack_drag(true);
-            consumed = true;
-        }
-    } else if (e.type == SDL_MOUSEMOTION && dragging_attack_) {
-        update_attack_drag(SDL_Point{e.motion.x, e.motion.y});
-        consumed = true;
     }
 
     return consumed;
@@ -263,17 +307,16 @@ void AttackGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (btn_add_remove_) btn_add_remove_->render(renderer);
     if (btn_delete_) btn_delete_->render(renderer);
     if (btn_copy_next_) btn_copy_next_->render(renderer);
-    if (tb_start_x_) tb_start_x_->render(renderer);
-    if (tb_start_y_) tb_start_y_->render(renderer);
-    if (tb_start_z_) tb_start_z_->render(renderer);
-    if (tb_control_x_) tb_control_x_->render(renderer);
-    if (tb_control_y_) tb_control_y_->render(renderer);
-    if (tb_control_z_) tb_control_z_->render(renderer);
-    if (tb_end_x_) tb_end_x_->render(renderer);
-    if (tb_end_y_) tb_end_y_->render(renderer);
-    if (tb_end_z_) tb_end_z_->render(renderer);
-    if (tb_damage_) tb_damage_->render(renderer);
     if (btn_apply_all_) btn_apply_all_->render(renderer);
+
+    // Render Point3DEditor overlays at the bottom
+    if (point_3d_editor_) {
+        int sw = 0, sh = 0;
+        SDL_GetRendererOutputSize(renderer, &sw, &sh);
+        int height = point_3d_editor_->get_overlay_height();
+        SDL_Rect bottom_container{0, sh - height, sw, height};
+        point_3d_editor_->render_overlays(renderer, bottom_container);
+    }
 }
 
 void AttackGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
@@ -325,33 +368,7 @@ void AttackGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
         place_btn(btn_copy_next_.get());
     }
 
-    auto place_pair = [&](DMTextBox* a, DMTextBox* b) {
-        if (!a || !b) return;
-        int half_w = (inner_w - DMSpacing::small_gap()) / 2;
-        int h_a = a->height_for_width(half_w);
-        int h_b = b->height_for_width(half_w);
-        int h = std::max(h_a, h_b);
-        a->set_rect(SDL_Rect{x + padding, cursor_y, half_w, h});
-        b->set_rect(SDL_Rect{x + padding + half_w + DMSpacing::small_gap(), cursor_y, half_w, h});
-        cursor_y += h + DMSpacing::small_gap();
-    };
 
-    auto place_single = [&](DMTextBox* box) {
-        if (!box) return;
-        int h = box->height_for_width(inner_w);
-        box->set_rect(SDL_Rect{x + padding, cursor_y, inner_w, h});
-        cursor_y += h + DMSpacing::small_gap();
-    };
-
-    place_pair(tb_start_x_.get(), tb_start_y_.get());
-    place_single(tb_start_z_.get());
-    place_pair(tb_control_x_.get(), tb_control_y_.get());
-    place_single(tb_control_z_.get());
-    place_pair(tb_end_x_.get(), tb_end_y_.get());
-    place_single(tb_end_z_.get());
-    if (tb_damage_) {
-        tb_damage_->set_rect(place_row(tb_damage_->height_for_width(inner_w)));
-    }
     if (btn_apply_all_) {
         btn_apply_all_->set_rect(place_row(DMButton::height()));
     }
@@ -408,15 +425,15 @@ void AttackGeoFrameEditor::render_attack_geometry(SDL_Renderer* renderer) const 
         bool end_selected = selected && selected_handle_ == AttackHandle::End;
 
         // Render all three points as 3D axis points
-        AxisPointRenderer::render_axis_point(renderer, start_screen,
-                                           selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
-                                           start_selected);
-        AxisPointRenderer::render_axis_point(renderer, control_screen,
-                                           selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
-                                           control_selected);
-        AxisPointRenderer::render_axis_point(renderer, end_screen,
-                                           selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
-                                           end_selected);
+        point_3d_editor_->render_axis_point(renderer, start_screen,
+                                          selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
+                                          start_selected);
+        point_3d_editor_->render_axis_point(renderer, control_screen,
+                                          selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
+                                          control_selected);
+        point_3d_editor_->render_axis_point(renderer, end_screen,
+                                          selection_state_ ? selection_state_->axis : AdjustmentAxis::X,
+                                          end_selected);
         ++vec_idx;
     }
 }
@@ -450,154 +467,15 @@ void AttackGeoFrameEditor::refresh_attack_form() const {
     const_cast<AttackGeoFrameEditor*>(this)->clamp_attack_selection();
     const auto* vec = current_attack_vector();
     if (vec) {
-        if (tb_start_x_ && !tb_start_x_->is_editing()) {
-            std::string text = std::to_string(static_cast<int>(std::lround(vec->start_x)));
-            if (text != last_start_x_) {
-                tb_start_x_->set_value(text);
-                last_start_x_ = text;
-            }
-        }
-        if (tb_start_y_ && !tb_start_y_->is_editing()) {
-            std::string text = std::to_string(static_cast<int>(std::lround(vec->start_y)));
-            if (text != last_start_y_) {
-                tb_start_y_->set_value(text);
-                last_start_y_ = text;
-            }
-        }
-        if (tb_start_z_ && !tb_start_z_->is_editing()) {
-            std::string text = std::to_string(static_cast<int>(std::lround(vec->start_z)));
-            if (text != last_start_z_) {
-                tb_start_z_->set_value(text);
-                last_start_z_ = text;
-            }
-        }
-        if (tb_control_x_ && !tb_control_x_->is_editing()) {
-            std::string text = std::to_string(static_cast<int>(std::lround(vec->control_x)));
-            if (text != last_control_x_) {
-                tb_control_x_->set_value(text);
-                last_control_x_ = text;
-            }
-        }
-        if (tb_control_y_ && !tb_control_y_->is_editing()) {
-            std::string text = std::to_string(static_cast<int>(std::lround(vec->control_y)));
-            if (text != last_control_y_) {
-                tb_control_y_->set_value(text);
-                last_control_y_ = text;
-            }
-        }
-        if (tb_control_z_ && !tb_control_z_->is_editing()) {
-            std::string text = std::to_string(static_cast<int>(std::lround(vec->control_z)));
-            if (text != last_control_z_) {
-                tb_control_z_->set_value(text);
-                last_control_z_ = text;
-            }
-        }
-        if (tb_end_x_ && !tb_end_x_->is_editing()) {
-            std::string text = std::to_string(static_cast<int>(std::lround(vec->end_x)));
-            if (text != last_end_x_) {
-                tb_end_x_->set_value(text);
-                last_end_x_ = text;
-            }
-        }
-        if (tb_end_y_ && !tb_end_y_->is_editing()) {
-            std::string text = std::to_string(static_cast<int>(std::lround(vec->end_y)));
-            if (text != last_end_y_) {
-                tb_end_y_->set_value(text);
-                last_end_y_ = text;
-            }
-        }
-        if (tb_end_z_ && !tb_end_z_->is_editing()) {
-            std::string text = std::to_string(static_cast<int>(std::lround(vec->end_z)));
-            if (text != last_end_z_) {
-                tb_end_z_->set_value(text);
-                last_end_z_ = text;
-            }
-        }
-        if (tb_damage_ && !tb_damage_->is_editing()) {
-            std::string text = std::to_string(vec->damage);
-            if (text != last_damage_) {
-                tb_damage_->set_value(text);
-                last_damage_ = text;
-            }
-        }
         if (btn_add_remove_) btn_add_remove_->set_text("Delete Attack");
         if (btn_delete_) btn_delete_->set_text("Delete Attack");
     } else {
-        if (tb_start_x_ && !tb_start_x_->is_editing()) { tb_start_x_->set_value("0"); last_start_x_ = "0"; }
-        if (tb_start_y_ && !tb_start_y_->is_editing()) { tb_start_y_->set_value("0"); last_start_y_ = "0"; }
-        if (tb_start_z_ && !tb_start_z_->is_editing()) { tb_start_z_->set_value("0"); last_start_z_ = "0"; }
-        if (tb_control_x_ && !tb_control_x_->is_editing()) { tb_control_x_->set_value("0"); last_control_x_ = "0"; }
-        if (tb_control_y_ && !tb_control_y_->is_editing()) { tb_control_y_->set_value("0"); last_control_y_ = "0"; }
-        if (tb_control_z_ && !tb_control_z_->is_editing()) { tb_control_z_->set_value("0"); last_control_z_ = "0"; }
-        if (tb_end_x_ && !tb_end_x_->is_editing()) { tb_end_x_->set_value("0"); last_end_x_ = "0"; }
-        if (tb_end_y_ && !tb_end_y_->is_editing()) { tb_end_y_->set_value("0"); last_end_y_ = "0"; }
-        if (tb_end_z_ && !tb_end_z_->is_editing()) { tb_end_z_->set_value("0"); last_end_z_ = "0"; }
-        if (tb_damage_ && !tb_damage_->is_editing()) { tb_damage_->set_value("0"); last_damage_ = "0"; }
         if (btn_add_remove_) btn_add_remove_->set_text("Add Attack");
         if (btn_delete_) btn_delete_->set_text("Delete Attack");
     }
 }
 
-void AttackGeoFrameEditor::apply_text_fields() {
-    auto* vec = current_attack_vector();
-    if (!vec) {
-        return;
-    }
-    bool changed = false;
-    if (tb_start_x_) {
-        float v = parse_float(tb_start_x_->value(), vec->start_x);
-        if (std::fabs(v - vec->start_x) > 0.001f) { vec->start_x = v; changed = true; }
-        last_start_x_ = tb_start_x_->value();
-    }
-    if (tb_start_y_) {
-        float v = parse_float(tb_start_y_->value(), vec->start_y);
-        if (std::fabs(v - vec->start_y) > 0.001f) { vec->start_y = v; changed = true; }
-        last_start_y_ = tb_start_y_->value();
-    }
-    if (tb_start_z_) {
-        float v = parse_float(tb_start_z_->value(), vec->start_z);
-        if (std::fabs(v - vec->start_z) > 0.001f) { vec->start_z = v; changed = true; }
-        last_start_z_ = tb_start_z_->value();
-    }
-    if (tb_control_x_) {
-        float v = parse_float(tb_control_x_->value(), vec->control_x);
-        if (std::fabs(v - vec->control_x) > 0.001f) { vec->control_x = v; changed = true; }
-        last_control_x_ = tb_control_x_->value();
-    }
-    if (tb_control_y_) {
-        float v = parse_float(tb_control_y_->value(), vec->control_y);
-        if (std::fabs(v - vec->control_y) > 0.001f) { vec->control_y = v; changed = true; }
-        last_control_y_ = tb_control_y_->value();
-    }
-    if (tb_control_z_) {
-        float v = parse_float(tb_control_z_->value(), vec->control_z);
-        if (std::fabs(v - vec->control_z) > 0.001f) { vec->control_z = v; changed = true; }
-        last_control_z_ = tb_control_z_->value();
-    }
-    if (tb_end_x_) {
-        float v = parse_float(tb_end_x_->value(), vec->end_x);
-        if (std::fabs(v - vec->end_x) > 0.001f) { vec->end_x = v; changed = true; }
-        last_end_x_ = tb_end_x_->value();
-    }
-    if (tb_end_y_) {
-        float v = parse_float(tb_end_y_->value(), vec->end_y);
-        if (std::fabs(v - vec->end_y) > 0.001f) { vec->end_y = v; changed = true; }
-        last_end_y_ = tb_end_y_->value();
-    }
-    if (tb_end_z_) {
-        float v = parse_float(tb_end_z_->value(), vec->end_z);
-        if (std::fabs(v - vec->end_z) > 0.001f) { vec->end_z = v; changed = true; }
-        last_end_z_ = tb_end_z_->value();
-    }
-    if (tb_damage_) {
-        int v = parse_int(tb_damage_->value(), vec->damage);
-        if (v != vec->damage) { vec->damage = v; changed = true; }
-        last_damage_ = tb_damage_->value();
-    }
-    if (changed) {
-        persist_changes();
-    }
-}
+
 
 void AttackGeoFrameEditor::persist_changes() {
     if (manifest_txn_.active()) {
@@ -608,43 +486,8 @@ void AttackGeoFrameEditor::persist_changes() {
     refresh_selection_state();
 }
 
-void AttackGeoFrameEditor::apply_scroll_adjustment(int steps) {
-    auto* vec = current_attack_vector();
-    if (!vec || steps == 0) return;
-    AdjustmentAxis axis = selection_state_ ? selection_state_->axis : AdjustmentAxis::X;
-    auto apply_axis = [&](float& x, float& y, float& z) {
-        switch (axis) {
-            case AdjustmentAxis::X:
-                x += static_cast<float>(steps);
-                break;
-            case AdjustmentAxis::Y:
-                y += static_cast<float>(steps);
-                break;
-            case AdjustmentAxis::Z:
-                z += static_cast<float>(steps);
-                break;
-        }
-    };
-    if (selected_handle_ == AttackHandle::Segment) {
-        apply_axis(vec->start_x, vec->start_y, vec->start_z);
-        apply_axis(vec->control_x, vec->control_y, vec->control_z);
-        apply_axis(vec->end_x, vec->end_y, vec->end_z);
-    } else if (selection_state_) {
-        switch (selection_state_->target) {
-            case SelectionTarget::AttackStart:
-                apply_axis(vec->start_x, vec->start_y, vec->start_z);
-                break;
-            case SelectionTarget::AttackControl:
-                apply_axis(vec->control_x, vec->control_y, vec->control_z);
-                break;
-            case SelectionTarget::AttackEnd:
-                apply_axis(vec->end_x, vec->end_y, vec->end_z);
-                break;
-            default:
-                break;
-        }
-    }
-    persist_changes();
+float AttackGeoFrameEditor::base_world_z() const {
+    return context_.target ? context_.target->world_z_offset() : 0.0f;
 }
 
 void AttackGeoFrameEditor::apply_attack_to_all_frames() {
@@ -722,234 +565,6 @@ void AttackGeoFrameEditor::delete_current_attack_vector() {
     persist_changes();
 }
 
-bool AttackGeoFrameEditor::begin_attack_drag(SDL_Point mp) {
-    if (!context_.assets || !context_.target || frames_.empty()) return false;
-
-    const int frame_index = clamp_index(selected_index_, static_cast<int>(frames_.size()));
-    auto& frame = frames_[frame_index];
-
-    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-    SDL_Point anchor = asset_anchor_world();
-    const float scale = asset_local_scale();
-    auto to_screen = [&](float lx, float ly) -> SDL_FPoint {
-        SDL_FPoint world{static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - ly * scale};
-        return cam.map_to_screen_f(world);
-    };
-
-    auto point_hit = [&](SDL_FPoint p, float radius) -> bool {
-        const float dx = static_cast<float>(mp.x) - p.x;
-        const float dy = static_cast<float>(mp.y) - p.y;
-        return dx * dx + dy * dy <= radius * radius;
-    };
-    const float node_radius = 12.0f;
-
-    int vec_idx = 0;
-    int clicked_vector_index = -1;
-    AttackHandle clicked_handle = AttackHandle::None;
-
-    for (const auto& vec : frame.attack.vectors) {
-        SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_y);
-        SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_y);
-        SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_y);
-
-        if (point_hit(start_screen, node_radius)) {
-            clicked_vector_index = vec_idx;
-            clicked_handle = AttackHandle::Start;
-            break;
-        } else if (point_hit(control_screen, node_radius)) {
-            clicked_vector_index = vec_idx;
-            clicked_handle = AttackHandle::Control;
-            break;
-        } else if (point_hit(end_screen, node_radius)) {
-            clicked_vector_index = vec_idx;
-            clicked_handle = AttackHandle::End;
-            break;
-        }
-        ++vec_idx;
-    }
-
-    if (clicked_vector_index < 0) {
-        vec_idx = 0;
-        constexpr int segments = 16;
-        constexpr float segment_hit_radius = 8.0f;
-        for (const auto& vec : frame.attack.vectors) {
-            SDL_FPoint start_screen = to_screen(vec.start_x, vec.start_y);
-            SDL_FPoint control_screen = to_screen(vec.control_x, vec.control_y);
-            SDL_FPoint end_screen = to_screen(vec.end_x, vec.end_y);
-            for (int i = 0; i <= segments; ++i) {
-                const float t = static_cast<float>(i) / static_cast<float>(segments);
-                const float u = 1.0f - t;
-                SDL_FPoint curve_point{
-                    u * u * start_screen.x + 2.0f * u * t * control_screen.x + t * t * end_screen.x,
-                    u * u * start_screen.y + 2.0f * u * t * control_screen.y + t * t * end_screen.y};
-                if (point_hit(curve_point, segment_hit_radius)) {
-                    clicked_vector_index = vec_idx;
-                    clicked_handle = AttackHandle::Segment;
-                    break;
-                }
-            }
-            if (clicked_vector_index >= 0) break;
-            ++vec_idx;
-        }
-    }
-
-    if (clicked_vector_index < 0 || clicked_handle == AttackHandle::None) {
-        return false;
-    }
-    set_current_attack_vector_index(clicked_vector_index);
-    clamp_attack_selection();
-    refresh_attack_form();
-    active_handle_ = clicked_handle;
-    selected_handle_ = clicked_handle;
-    AxisPointRenderer::cycle_axis_on_selection(selection_state_, axis_adjuster_);
-
-    const auto* vec = current_attack_vector();
-    if (!vec) {
-        active_handle_ = AttackHandle::None;
-        selected_handle_ = AttackHandle::None;
-        return false;
-    }
-    SDL_FPoint mouse_local{};
-    if (!screen_to_local(mp, mouse_local)) {
-        active_handle_ = AttackHandle::None;
-        return false;
-    }
-    dragging_attack_ = true;
-    drag_moved_ = false;
-    drag_start_mouse_ = mp;
-    drag_start_mouse_local_ = mouse_local;
-    drag_start_vector_ = *vec;
-    if (selection_state_) {
-        selection_state_->attack_vector_index = current_attack_vector_index();
-        switch (clicked_handle) {
-            case AttackHandle::Start:
-                selection_state_->target = SelectionTarget::AttackStart;
-                break;
-            case AttackHandle::Control:
-                selection_state_->target = SelectionTarget::AttackControl;
-                break;
-            case AttackHandle::End:
-                selection_state_->target = SelectionTarget::AttackEnd;
-                break;
-            case AttackHandle::Segment:
-                selection_state_->target = SelectionTarget::AttackStart;
-                break;
-            case AttackHandle::None:
-            default:
-                selection_state_->target = SelectionTarget::None;
-                break;
-        }
-    }
-    refresh_selection_state();
-    return true;
-}
-
-void AttackGeoFrameEditor::update_attack_drag(SDL_Point mouse) {
-    if (!dragging_attack_) return;
-    auto* vec = current_attack_vector();
-    if (!vec) {
-        dragging_attack_ = false;
-        active_handle_ = AttackHandle::None;
-        return;
-    }
-    SDL_FPoint local{};
-    if (!screen_to_local(mouse, local)) {
-        return;
-    }
-    const float move_threshold = 1.5f;
-    if (std::fabs(local.x - drag_start_mouse_local_.x) > move_threshold ||
-        std::fabs(local.y - drag_start_mouse_local_.y) > move_threshold) {
-        drag_moved_ = true;
-    }
-
-    const float delta_x = local.x - drag_start_mouse_local_.x;
-    const float delta_y = local.y - drag_start_mouse_local_.y;
-    SDL_FPoint drag_delta{delta_x, delta_y};
-    drag_delta = AxisPointRenderer::constrain_drag_delta(drag_delta,
-                                                       selection_state_ ? selection_state_->axis : AdjustmentAxis::X);
-    const float delta_z = drag_delta.y;  // Z axis uses vertical movement
-    auto apply_axis = [&](float& dst_x, float& dst_y, float& dst_z,
-                          float src_x, float src_y, float src_z) {
-        switch (selection_state_ ? selection_state_->axis : AdjustmentAxis::X) {
-            case AdjustmentAxis::X:
-                dst_x = src_x;
-                break;
-            case AdjustmentAxis::Y:
-                dst_y = src_y;
-                break;
-            case AdjustmentAxis::Z:
-                dst_z = src_z;
-                break;
-        }
-    };
-
-    switch (active_handle_) {
-        case AttackHandle::Start:
-            {
-                float next_x = drag_start_vector_.start_x + delta_x;
-                float next_y = drag_start_vector_.start_y + delta_y;
-                float next_z = drag_start_vector_.start_z + delta_z;
-                apply_axis(vec->start_x, vec->start_y, vec->start_z, next_x, next_y, next_z);
-            }
-            break;
-        case AttackHandle::Control:
-            {
-                float next_x = drag_start_vector_.control_x + delta_x;
-                float next_y = drag_start_vector_.control_y + delta_y;
-                float next_z = drag_start_vector_.control_z + delta_z;
-                apply_axis(vec->control_x, vec->control_y, vec->control_z, next_x, next_y, next_z);
-            }
-            break;
-        case AttackHandle::End:
-            {
-                float next_x = drag_start_vector_.end_x + delta_x;
-                float next_y = drag_start_vector_.end_y + delta_y;
-                float next_z = drag_start_vector_.end_z + delta_z;
-                apply_axis(vec->end_x, vec->end_y, vec->end_z, next_x, next_y, next_z);
-            }
-            break;
-        case AttackHandle::Segment: {
-            apply_axis(vec->start_x, vec->start_y, vec->start_z,
-                       drag_start_vector_.start_x + delta_x,
-                       drag_start_vector_.start_y + delta_y,
-                       drag_start_vector_.start_z + delta_z);
-            apply_axis(vec->control_x, vec->control_y, vec->control_z,
-                       drag_start_vector_.control_x + delta_x,
-                       drag_start_vector_.control_y + delta_y,
-                       drag_start_vector_.control_z + delta_z);
-            apply_axis(vec->end_x, vec->end_y, vec->end_z,
-                       drag_start_vector_.end_x + delta_x,
-                       drag_start_vector_.end_y + delta_y,
-                       drag_start_vector_.end_z + delta_z);
-            break;
-        }
-        case AttackHandle::None:
-        default:
-            break;
-    }
-    refresh_attack_form();
-    persist_changes();
-}
-
-void AttackGeoFrameEditor::end_attack_drag(bool commit) {
-    if (!dragging_attack_) return;
-    AttackHandle handle = active_handle_;
-    dragging_attack_ = false;
-    active_handle_ = AttackHandle::None;
-    if (!commit) {
-        if (auto* vec = current_attack_vector()) {
-            *vec = drag_start_vector_;
-            refresh_attack_form();
-        }
-        return;
-    }
-    if (!drag_moved_ && (handle == AttackHandle::Start || handle == AttackHandle::End)) {
-        delete_current_attack_vector();
-    } else {
-        refresh_attack_form();
-        persist_changes();
-    }
-}
 
 SDL_Point AttackGeoFrameEditor::asset_anchor_world() const {
     if (!context_.target) {
@@ -988,6 +603,14 @@ bool AttackGeoFrameEditor::screen_to_local(SDL_Point screen, SDL_FPoint& out_loc
     out_local.x = (world.x - static_cast<float>(anchor.x)) / scale;
     out_local.y = (static_cast<float>(anchor.y) - world.y) / scale;
     return std::isfinite(out_local.x) && std::isfinite(out_local.y);
+}
+
+SDL_FPoint AttackGeoFrameEditor::screen_to_world_point(const SDL_Point& screen) const {
+    SDL_FPoint local;
+    if (!screen_to_local(screen, local)) return SDL_FPoint{0.0f, 0.0f};
+    SDL_Point anchor = asset_anchor_world();
+    float scale = asset_local_scale();
+    return SDL_FPoint{static_cast<float>(anchor.x) + local.x * scale, static_cast<float>(anchor.y) - local.y * scale};
 }
 
 void AttackGeoFrameEditor::refresh_selection_state() {

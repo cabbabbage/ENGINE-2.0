@@ -13,7 +13,7 @@
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/widgets.hpp"
-#include "dev_mode/frame_editors/shared/AxisPointRenderer.hpp"
+#include "dev_mode/frame_editors/shared/Point3DRenderer.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "render/composite_asset_renderer.hpp"
 #include <SDL_image.h>
@@ -26,33 +26,57 @@ namespace {
 SDL_Point round_point(const SDL_FPoint& pt) {
     return SDL_Point{static_cast<int>(std::lround(pt.x)), static_cast<int>(std::lround(pt.y))};
 }
-
-int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
-    float precise = wheel.preciseY;
-    int delta = wheel.y;
-    if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
-        delta = -delta;
-        precise = -precise;
-    }
-    if (std::fabs(precise) >= 0.01f) {
-        return static_cast<int>(std::lround(precise));
-    }
-    return delta;
-}
 }  // namespace
 
 void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
     context_ = context;
     selection_state_ = context.selection_state;
-    axis_adjuster_ = context.axis_adjuster;
+    point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);
     if (selection_state_) {
         selection_state_->reset();
     }
-    if (axis_adjuster_) {
-        axis_adjuster_->reset_axis(AdjustmentAxis::X);
+    if (point_3d_editor_) {
+        point_3d_editor_->reset_axis(AdjustmentAxis::X);
+
+        point_3d_editor_->set_on_point_selected([this](int index) {
+            selected_child_index_ = index;
+            update_text_boxes_from_current_frame();
+            if (selection_state_) {
+                selection_state_->target = SelectionTarget::ChildPoint;
+                selection_state_->child_index = selected_child_index_;
+            }
+            refresh_selection_state();
+        });
+
+        point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
+            if (selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(static_frames_by_child_.size()) ||
+                selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_) {
+                return;
+            }
+
+            float scale = attachment_scale();
+            if (scale <= 0.0f) scale = 1.0f;
+
+            SDL_Point anchor = asset_anchor_world();
+            const bool flipped = context_.target && context_.target->flipped;
+
+            float dx_world = (new_world_pos.x - static_cast<float>(anchor.x)) / scale;
+            float dy_world = (new_world_pos.y - static_cast<float>(anchor.y)) / scale;
+            float dz_world = new_world_z / scale; // Sync children use Z relative to 0
+
+            auto& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
+            sample.dx = flipped ? -dx_world : dx_world;
+            sample.dy = dy_world;
+            sample.dz = dz_world;
+            sample.has_data = true;
+            sample.visible = true;
+
+            data_dirty_ = true;
+            update_text_boxes_from_current_frame();
+            refresh_selection_state();
+        });
     }
     wants_close_ = false;
-    dragging_child_ = false;
     data_dirty_ = true;
     selected_frame_index_ = 0;
     selected_child_index_ = 0;
@@ -124,7 +148,7 @@ void SyncChildrenFrameEditor::end() {
         selection_state_->reset();
         selection_state_ = nullptr;
     }
-    axis_adjuster_ = nullptr;
+    point_3d_editor_ = nullptr;
     btn_back_.reset();
     frame_navigator_.reset();
     dd_child_selector_.reset();
@@ -169,75 +193,39 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         apply_text_box_changes();
         return true;
     }
-    if (e.type == SDL_MOUSEWHEEL && selection_state_ && selection_state_->target == SelectionTarget::ChildPoint) {
-        const int steps = resolve_wheel_steps(e.wheel);
-        if (steps != 0) {
-            apply_scroll_adjustment(steps);
+
+    SDL_Point mouse_pos = {0, 0};
+    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+        mouse_pos = {e.button.x, e.button.y};
+    } else if (e.type == SDL_MOUSEMOTION) {
+        mouse_pos = {e.motion.x, e.motion.y};
+    } else if (e.type == SDL_MOUSEWHEEL) {
+        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+    }
+
+    if (SDL_PointInRect(&mouse_pos, &back_rect_) == SDL_FALSE && SDL_PointInRect(&mouse_pos, &ui_rect_) == SDL_FALSE) {
+        const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+        SDL_Point anchor = asset_anchor_world();
+        std::vector<SDL_FPoint> point_screens;
+        for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
+            if (idx >= child_modes_.size() || child_modes_[idx] == AnimationChildMode::Async) {
+                continue;
+            }
+            const ChildWorldPose pose = child_world_pose(static_cast<int>(idx));
+            SDL_FPoint world_pos{anchor.x + pose.pos.x, anchor.y + pose.pos.y};
+            SDL_FPoint screen = cam.map_to_screen_f(world_pos);
+            point_screens.push_back(screen);
+        }
+
+        if (point_3d_editor_->handle_mouse_event(e, point_screens, [this](const SDL_Point& p) {
+                const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+                return cam.screen_to_map(p);
+            })) {
             return true;
         }
     }
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point mouse{e.button.x, e.button.y};
-        if (auto hit = hit_test_child_marker(mouse)) {
-            selected_child_index_ = *hit;
-            update_text_boxes_from_current_frame();
-            if (selection_state_) {
-                selection_state_->target = SelectionTarget::ChildPoint;
-                selection_state_->child_index = selected_child_index_;
-                selection_state_->screen_pos = mouse;
-                const ChildWorldPose pose = child_world_pose(selected_child_index_);
-                selection_state_->world_pos = pose.pos;
-            }
-            AxisPointRenderer::cycle_axis_on_selection(selection_state_, axis_adjuster_);
-            dragging_child_ = true;
-            drag_start_mouse_ = mouse;
-            if (selected_child_index_ >= 0 && selected_child_index_ < static_frames_by_child_.size()) {
-                const auto& timeline = static_frames_by_child_[selected_child_index_];
-                if (selected_frame_index_ < static_cast<int>(timeline.size())) {
-                    drag_start_sample_ = timeline[selected_frame_index_];
-                } else {
-                    drag_start_sample_ = child_timelines::ChildFrameSample{};
-                }
-            }
-            return true;
-        } else if (selection_state_) {
-            selection_state_->target = SelectionTarget::None;
-        }
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-        if (dragging_child_) {
-            dragging_child_ = false;
-            return true;
-        }
-    } else if (e.type == SDL_MOUSEMOTION) {
-        if (dragging_child_ && selected_child_index_ >= 0 && selected_child_index_ < static_cast<int>(child_assets_.size())) {
-            float scale = attachment_scale();
-            if (scale <= 0.0f) scale = 1.0f;
-            const float dx_screen = static_cast<float>(e.motion.x - drag_start_mouse_.x);
-            const float dy_screen = static_cast<float>(e.motion.y - drag_start_mouse_.y);
-            const bool flipped = context_.target->flipped;
-            SDL_FPoint drag_delta{dx_screen, dy_screen};
-            drag_delta = AxisPointRenderer::constrain_drag_delta(drag_delta,
-                                                               selection_state_ ? selection_state_->axis : AdjustmentAxis::X);
-            float dx_world = drag_delta.x / scale;
-            float dy_world = drag_delta.y / scale;
-            child_timelines::ChildFrameSample& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
-            switch (selection_state_ ? selection_state_->axis : AdjustmentAxis::X) {
-                case AdjustmentAxis::X:
-                    sample.dx = drag_start_sample_.dx + (flipped ? -dx_world : dx_world);
-                    break;
-                case AdjustmentAxis::Y:
-                    sample.dy = drag_start_sample_.dy + dy_world;
-                    break;
-                case AdjustmentAxis::Z:
-                    sample.dz = drag_start_sample_.dz + dy_world;
-                    break;
-            }
-            sample.has_data = true;
-            sample.visible = true;
-            data_dirty_ = true;
-            return true;
-        }
-    } else if (e.type == SDL_KEYDOWN) {
+
+    if (e.type == SDL_KEYDOWN) {
         if (e.key.keysym.sym == SDLK_LEFT) {
             selected_frame_index_ = std::max(0, selected_frame_index_ - 1);
             data_dirty_ = true;
@@ -298,7 +286,7 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
         const bool is_selected = (selection_state_ && selection_state_->target == SelectionTarget::ChildPoint &&
                                  static_cast<int>(idx) == selected_child_index_);
         const AdjustmentAxis axis = selection_state_ ? selection_state_->axis : AdjustmentAxis::X;
-        AxisPointRenderer::render_axis_point(renderer, screen, axis, is_selected);
+        point_3d_editor_->render_axis_point(renderer, screen, axis, is_selected);
     }
 }
 
@@ -554,31 +542,6 @@ SyncChildrenFrameEditor::ChildWorldPose SyncChildrenFrameEditor::child_world_pos
     return pose;
 }
 
-std::optional<int> SyncChildrenFrameEditor::hit_test_child_marker(const SDL_Point& mouse) const {
-    if (!context_.assets || !context_.target) {
-        return std::nullopt;
-    }
-    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-    SDL_Point anchor = asset_anchor_world();
-    const float radius = 12.0f;
-    const float radius_sq = radius * radius;
-    for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
-        if (idx >= child_modes_.size()) continue;
-        if (child_modes_[idx] == AnimationChildMode::Async) {
-            continue;
-        }
-        const ChildWorldPose pose = child_world_pose(static_cast<int>(idx));
-        SDL_FPoint world = pose.pos;
-        SDL_FPoint world_pos{anchor.x + world.x, anchor.y + world.y};
-        SDL_FPoint screen = cam.map_to_screen_f(world_pos);
-        const float dx = static_cast<float>(mouse.x) - screen.x;
-        const float dy = static_cast<float>(mouse.y) - screen.y;
-        if ((dx * dx + dy * dy) <= radius_sq) {
-            return static_cast<int>(idx);
-        }
-    }
-    return std::nullopt;
-}
 
 void SyncChildrenFrameEditor::ensure_manifest_transaction() {
     if (!context_.document) {
@@ -599,35 +562,6 @@ void SyncChildrenFrameEditor::ensure_manifest_transaction() {
             async_timelines_by_child_);
         return context_.document->update_animation_payload(context_.animation_id, payload);
     });
-}
-
-void SyncChildrenFrameEditor::apply_scroll_adjustment(int steps) {
-    if (steps == 0 || selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(static_frames_by_child_.size())) {
-        return;
-    }
-    if (selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_) {
-        return;
-    }
-    auto& timeline = static_frames_by_child_[selected_child_index_];
-    if (selected_frame_index_ >= static_cast<int>(timeline.size())) {
-        return;
-    }
-    auto& sample = timeline[selected_frame_index_];
-    switch (selection_state_ ? selection_state_->axis : AdjustmentAxis::X) {
-        case AdjustmentAxis::X:
-            sample.dx += static_cast<float>(steps);
-            break;
-        case AdjustmentAxis::Y:
-            sample.dy += static_cast<float>(steps);
-            break;
-        case AdjustmentAxis::Z:
-            sample.dz += static_cast<float>(steps);
-            break;
-    }
-    sample.visible = true;
-    sample.has_data = true;
-    data_dirty_ = true;
-    update_text_boxes_from_current_frame();
 }
 
 void SyncChildrenFrameEditor::apply_text_box_changes() {
@@ -711,6 +645,22 @@ void SyncChildrenFrameEditor::update_text_boxes_from_current_frame() {
         // But since it's CallbackCheckboxWidget, we need to access the internal checkbox
         // For now, we'll skip as it's handled by the callback
     }
+}
+
+void SyncChildrenFrameEditor::refresh_selection_state() {
+    if (!selection_state_ || !context_.target || !context_.assets ||
+        selection_state_->target != SelectionTarget::ChildPoint) {
+        return;
+    }
+    selection_state_->child_index = selected_child_index_;
+    const ChildWorldPose pose = child_world_pose(selected_child_index_);
+    selection_state_->world_pos = pose.pos;
+    selection_state_->world_z = pose.z;
+    SDL_Point anchor = asset_anchor_world();
+    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+    SDL_FPoint world{anchor.x + pose.pos.x, anchor.y + pose.pos.y};
+    SDL_FPoint screen = cam.map_to_screen_f(world);
+    selection_state_->screen_pos = round_point(screen);
 }
 
 }  // namespace devmode::frame_editors

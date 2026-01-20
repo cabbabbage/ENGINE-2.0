@@ -203,7 +203,7 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
             state.screen_zoom = 1.0;
         }
         state.inv_screen_zoom = 1.0 / state.screen_zoom;
-        state.screen_pan_y_px = static_cast<double>(screen_height) * std::clamp(safe_params.pan_y_percent, -100.0, 100.0) * 0.01;
+
         state.near_camera_max_perspective_scale = settings.near_camera_max_perspective_scale;
         state.offscreen_fade_amount_px = settings.offscreen_fade_amount_px;
 
@@ -688,7 +688,7 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         cur_params.tilt_deg = cur->camera_tilt_deg;
         cur_params.y_distance_px = cur->camera_y_distance_px;
         cur_params.zoom_percent = cur->camera_zoom_percent;
-        cur_params.pan_y_percent = cur->camera_pan_y_percent;
+  
     }
     Room* neigh = nullptr;
     if (finder) {
@@ -700,7 +700,7 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         neigh_params.tilt_deg = neigh->camera_tilt_deg;
         neigh_params.y_distance_px = neigh->camera_y_distance_px;
         neigh_params.zoom_percent = neigh->camera_zoom_percent;
-        neigh_params.pan_y_percent = neigh->camera_pan_y_percent;
+
     }
     if (tilt_override_deg_) {
         cur_params.tilt_deg = *tilt_override_deg_;

@@ -155,7 +155,7 @@ std::vector<std::unique_ptr<Room>> GenerateTrails::generate_trails(
                                            trail_room->camera_tilt_deg = std::clamp(config.value("camera_tilt_deg", 60.0f), 0.0f, 150.0f);
                                            trail_room->camera_y_distance_px = std::clamp(config.value("camera_y_distance_px", 0), 0, 2000);
                                            trail_room->camera_zoom_percent = std::clamp(config.value("camera_zoom_percent", 0), 0, 100);
-                                           trail_room->camera_pan_y_percent = std::clamp(config.value("camera_pan_y_percent", 0), -100, 100);
+
                                        }
                         }
                 }

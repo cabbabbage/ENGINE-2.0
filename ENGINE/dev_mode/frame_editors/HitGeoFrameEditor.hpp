@@ -32,7 +32,6 @@ private:
     void layout_ui(SDL_Renderer* renderer) const;
     void select_frame(int index);
     void refresh_hitbox_form() const;
-    void apply_text_fields();
     void persist_changes();
     void apply_hit_to_all_frames();
     void copy_hit_box_to_next_frame();
@@ -69,18 +68,6 @@ private:
     std::unique_ptr<DMButton> btn_add_remove_;
     std::unique_ptr<DMButton> btn_copy_next_;
     std::unique_ptr<DMButton> btn_apply_all_;
-    std::unique_ptr<DMTextBox> tb_center_x_;
-    std::unique_ptr<DMTextBox> tb_center_y_;
-    std::unique_ptr<DMTextBox> tb_center_z_;
-    std::unique_ptr<DMTextBox> tb_width_;
-    std::unique_ptr<DMTextBox> tb_height_;
-    std::unique_ptr<DMTextBox> tb_rotation_;
-    mutable std::string last_center_x_;
-    mutable std::string last_center_y_;
-    mutable std::string last_center_z_;
-    mutable std::string last_width_;
-    mutable std::string last_height_;
-    mutable std::string last_rotation_;
 
     mutable SDL_Rect ui_rect_{0, 0, 0, 0};
 

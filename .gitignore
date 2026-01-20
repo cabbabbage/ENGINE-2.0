@@ -11,6 +11,7 @@ vcpkg_installed/
 key.txt
 release/
 Tasks/
+.claude
 .clinerules/
 Demo and Tutorial.mp4
 *.exe

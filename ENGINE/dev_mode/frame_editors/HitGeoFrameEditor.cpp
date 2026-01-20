@@ -72,9 +72,22 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             box->center_y = (static_cast<float>(anchor.y) - new_world_pos.y) / scale;
             box->center_z = (new_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
-            refresh_hitbox_form();
             persist_changes();
             refresh_selection_state();
+        });
+
+        point_3d_editor_->set_on_coordinates_changed([this]() {
+            auto* box = current_hit_box();
+            if (!box || !selection_state_) return;
+
+            SDL_Point anchor = asset_anchor_world();
+            float scale = asset_local_scale();
+
+            box->center_x = (selection_state_->world_pos.x - static_cast<float>(anchor.x)) / scale;
+            box->center_y = (static_cast<float>(anchor.y) - selection_state_->world_pos.y) / scale;
+            box->center_z = (selection_state_->world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+
+            persist_changes();
         });
     }
     wants_close_ = false;
@@ -116,12 +129,6 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     btn_add_remove_ = std::make_unique<DMButton>("Add Hit Box", &DMStyles::AccentButton(), 150, DMButton::height());
     btn_copy_next_ = std::make_unique<DMButton>("Copy To Next", &DMStyles::HeaderButton(), 150, DMButton::height());
     btn_apply_all_ = std::make_unique<DMButton>("Apply To All Frames", &DMStyles::HeaderButton(), 180, DMButton::height());
-    tb_center_x_ = std::make_unique<DMTextBox>("Center X", "0");
-    tb_center_y_ = std::make_unique<DMTextBox>("Center Y", "0");
-    tb_center_z_ = std::make_unique<DMTextBox>("Center Z", "0");
-    tb_width_ = std::make_unique<DMTextBox>("Width", "0");
-    tb_height_ = std::make_unique<DMTextBox>("Height", "0");
-    tb_rotation_ = std::make_unique<DMTextBox>("Rotation", "0");
 
     refresh_hitbox_form();
     refresh_selection_state();
@@ -144,18 +151,22 @@ void HitGeoFrameEditor::end() {
     btn_add_remove_.reset();
     btn_copy_next_.reset();
     btn_apply_all_.reset();
-    tb_center_x_.reset();
-    tb_center_y_.reset();
-    tb_center_z_.reset();
-    tb_width_.reset();
-    tb_height_.reset();
-    tb_rotation_.reset();
     wants_close_ = false;
 }
 
 bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
+    // Handle Point3DEditor events first
+    if (point_3d_editor_) {
+        int sw = 0, sh = 0;
+        SDL_GetRendererOutputSize(nullptr, &sw, &sh);
+        int height = point_3d_editor_->get_overlay_height();
+        SDL_Rect bottom_container{0, sh - height, sw, height};
+        if (point_3d_editor_->handle_event(e, bottom_container)) {
+            return true;
+        }
+    }
+
     bool consumed = false;
-    apply_text_fields();
 
     if (btn_prev_frame_ && btn_prev_frame_->handle_event(e)) {
         select_frame(selected_index_ - 1);
@@ -193,13 +204,6 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
         apply_hit_to_all_frames();
         consumed = true;
     }
-
-    if (tb_center_x_ && tb_center_x_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_center_y_ && tb_center_y_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_center_z_ && tb_center_z_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_width_ && tb_width_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_height_ && tb_height_->handle_event(e)) { apply_text_fields(); consumed = true; }
-    if (tb_rotation_ && tb_rotation_->handle_event(e)) { apply_text_fields(); consumed = true; }
 
     if (e.type == SDL_KEYDOWN) {
         if (e.key.keysym.sym == SDLK_LEFT) {
@@ -270,13 +274,16 @@ void HitGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (dd_hitbox_type_) dd_hitbox_type_->render(renderer);
     if (btn_add_remove_) btn_add_remove_->render(renderer);
     if (btn_copy_next_) btn_copy_next_->render(renderer);
-    if (tb_center_x_) tb_center_x_->render(renderer);
-    if (tb_center_y_) tb_center_y_->render(renderer);
-    if (tb_center_z_) tb_center_z_->render(renderer);
-    if (tb_width_) tb_width_->render(renderer);
-    if (tb_height_) tb_height_->render(renderer);
-    if (tb_rotation_) tb_rotation_->render(renderer);
     if (btn_apply_all_) btn_apply_all_->render(renderer);
+
+    // Render Point3DEditor overlays at the bottom
+    if (point_3d_editor_) {
+        int sw = 0, sh = 0;
+        SDL_GetRendererOutputSize(renderer, &sw, &sh);
+        int height = point_3d_editor_->get_overlay_height();
+        SDL_Rect bottom_container{0, sh - height, sw, height};
+        point_3d_editor_->render_overlays(renderer, bottom_container);
+    }
 }
 
 void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
@@ -331,25 +338,6 @@ void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
         }
     }
 
-    auto place_pair = [&](DMTextBox* a, DMTextBox* b) {
-        if (!a || !b) return;
-        int half_w = (inner_w - DMSpacing::small_gap()) / 2;
-        int h_a = a->height_for_width(half_w);
-        int h_b = b->height_for_width(half_w);
-        int h = std::max(h_a, h_b);
-        a->set_rect(SDL_Rect{x + padding, cursor_y, half_w, h});
-        b->set_rect(SDL_Rect{x + padding + half_w + DMSpacing::small_gap(), cursor_y, half_w, h});
-        cursor_y += h + DMSpacing::small_gap();
-    };
-
-    place_pair(tb_center_x_.get(), tb_center_y_.get());
-    if (tb_center_z_) {
-        tb_center_z_->set_rect(place_row(tb_center_z_->height_for_width(inner_w)));
-    }
-    place_pair(tb_width_.get(), tb_height_.get());
-    if (tb_rotation_) {
-        tb_rotation_->set_rect(place_row(tb_rotation_->height_for_width(inner_w)));
-    }
     if (btn_apply_all_) {
         btn_apply_all_->set_rect(place_row(DMButton::height()));
     }
@@ -365,73 +353,9 @@ void HitGeoFrameEditor::select_frame(int index) {
 void HitGeoFrameEditor::refresh_hitbox_form() const {
     const auto* box = current_hit_box();
     if (box) {
-        auto set_field = [](DMTextBox* tb, std::string& cache, const std::string& value) {
-            if (!tb || tb->is_editing()) return;
-            if (cache != value) {
-                tb->set_value(value);
-                cache = value;
-            }
-        };
-        set_field(tb_center_x_.get(), last_center_x_, std::to_string(static_cast<int>(std::lround(box->center_x))));
-        set_field(tb_center_y_.get(), last_center_y_, std::to_string(static_cast<int>(std::lround(box->center_y))));
-        set_field(tb_center_z_.get(), last_center_z_, std::to_string(static_cast<int>(std::lround(box->center_z))));
-        set_field(tb_width_.get(), last_width_, std::to_string(static_cast<int>(std::lround(box->half_width * 2.0f))));
-        set_field(tb_height_.get(), last_height_, std::to_string(static_cast<int>(std::lround(box->half_height * 2.0f))));
-        set_field(tb_rotation_.get(), last_rotation_, std::to_string(static_cast<int>(std::lround(box->rotation_degrees))));
         if (btn_add_remove_) btn_add_remove_->set_text("Delete Hit Box");
     } else {
-        if (tb_center_x_ && !tb_center_x_->is_editing()) { tb_center_x_->set_value("0"); last_center_x_ = "0"; }
-        if (tb_center_y_ && !tb_center_y_->is_editing()) { tb_center_y_->set_value("0"); last_center_y_ = "0"; }
-        if (tb_center_z_ && !tb_center_z_->is_editing()) { tb_center_z_->set_value("0"); last_center_z_ = "0"; }
-        if (tb_width_ && !tb_width_->is_editing()) { tb_width_->set_value("0"); last_width_ = "0"; }
-        if (tb_height_ && !tb_height_->is_editing()) { tb_height_->set_value("0"); last_height_ = "0"; }
-        if (tb_rotation_ && !tb_rotation_->is_editing()) { tb_rotation_->set_value("0"); last_rotation_ = "0"; }
         if (btn_add_remove_) btn_add_remove_->set_text("Add Hit Box");
-    }
-}
-
-void HitGeoFrameEditor::apply_text_fields() {
-    auto* box = current_hit_box();
-    if (!box) {
-        return;
-    }
-    bool changed = false;
-    if (tb_center_x_) {
-        float v = parse_float(tb_center_x_->value(), box->center_x);
-        if (std::fabs(v - box->center_x) > 0.001f) { box->center_x = v; changed = true; }
-        last_center_x_ = tb_center_x_->value();
-    }
-    if (tb_center_y_) {
-        float v = parse_float(tb_center_y_->value(), box->center_y);
-        if (std::fabs(v - box->center_y) > 0.001f) { box->center_y = v; changed = true; }
-        last_center_y_ = tb_center_y_->value();
-    }
-    if (tb_center_z_) {
-        float v = parse_float(tb_center_z_->value(), box->center_z);
-        if (std::fabs(v - box->center_z) > 0.001f) { box->center_z = v; changed = true; }
-        last_center_z_ = tb_center_z_->value();
-    }
-    if (tb_width_) {
-        float v = parse_float(tb_width_->value(), box->half_width * 2.0f);
-        if (v < 0.0f) v = 0.0f;
-        float half = v * 0.5f;
-        if (std::fabs(half - box->half_width) > 0.001f) { box->half_width = half; changed = true; }
-        last_width_ = tb_width_->value();
-    }
-    if (tb_height_) {
-        float v = parse_float(tb_height_->value(), box->half_height * 2.0f);
-        if (v < 0.0f) v = 0.0f;
-        float half = v * 0.5f;
-        if (std::fabs(half - box->half_height) > 0.001f) { box->half_height = half; changed = true; }
-        last_height_ = tb_height_->value();
-    }
-    if (tb_rotation_) {
-        float v = parse_float(tb_rotation_->value(), box->rotation_degrees);
-        if (std::fabs(v - box->rotation_degrees) > 0.001f) { box->rotation_degrees = v; changed = true; }
-        last_rotation_ = tb_rotation_->value();
-    }
-    if (changed) {
-        persist_changes();
     }
 }
 

@@ -52,8 +52,6 @@ private:
     };
     ChildWorldPose child_world_pose(int child_index) const;
     void ensure_manifest_transaction();
-    void apply_text_box_changes();
-    void update_text_boxes_from_current_frame();
     void refresh_selection_state();
 
     FrameEditorContext context_{};
@@ -74,10 +72,6 @@ private:
     std::unique_ptr<FrameNavigator> frame_navigator_;
     std::unique_ptr<DMDropdown> dd_child_selector_;
     std::unique_ptr<CallbackCheckboxWidget> cb_child_visible_;
-    std::unique_ptr<DMTextBox> tb_dx_;
-    std::unique_ptr<DMTextBox> tb_dy_;
-    std::unique_ptr<DMTextBox> tb_dz_;
-    std::unique_ptr<DMTextBox> tb_rotation_;
     mutable SDL_Rect back_rect_{0, 0, 0, 0};
     mutable SDL_Rect ui_rect_{0, 0, 0, 0};
 };

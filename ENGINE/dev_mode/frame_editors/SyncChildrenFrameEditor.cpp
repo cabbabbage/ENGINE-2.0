@@ -13,7 +13,6 @@
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/widgets.hpp"
-#include "dev_mode/frame_editors/shared/Point3DRenderer.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "render/composite_asset_renderer.hpp"
 #include <SDL_image.h>
@@ -40,7 +39,6 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 
         point_3d_editor_->set_on_point_selected([this](int index) {
             selected_child_index_ = index;
-            update_text_boxes_from_current_frame();
             if (selection_state_) {
                 selection_state_->target = SelectionTarget::ChildPoint;
                 selection_state_->child_index = selected_child_index_;
@@ -72,8 +70,33 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             sample.visible = true;
 
             data_dirty_ = true;
-            update_text_boxes_from_current_frame();
             refresh_selection_state();
+        });
+
+        point_3d_editor_->set_on_coordinates_changed([this]() {
+            if (selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(static_frames_by_child_.size()) ||
+                selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_ || !selection_state_) {
+                return;
+            }
+
+            float scale = attachment_scale();
+            if (scale <= 0.0f) scale = 1.0f;
+
+            SDL_Point anchor = asset_anchor_world();
+            const bool flipped = context_.target && context_.target->flipped;
+
+            float dx_world = (selection_state_->world_pos.x - static_cast<float>(anchor.x)) / scale;
+            float dy_world = (selection_state_->world_pos.y - static_cast<float>(anchor.y)) / scale;
+            float dz_world = selection_state_->world_z / scale;
+
+            auto& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
+            sample.dx = flipped ? -dx_world : dx_world;
+            sample.dy = dy_world;
+            sample.dz = dz_world;
+            sample.has_data = true;
+            sample.visible = true;
+
+            data_dirty_ = true;
         });
     }
     wants_close_ = false;
@@ -95,7 +118,6 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
     frame_navigator_->set_on_frame_changed([this](int frame) {
         selected_frame_index_ = frame;
         data_dirty_ = true;
-        update_text_boxes_from_current_frame();
     });
 
     // Initialize child selector dropdown
@@ -113,7 +135,6 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             selection_state_->child_index = selected_child_index_;
         }
         data_dirty_ = true;
-        update_text_boxes_from_current_frame();
     });
 
     // Initialize visibility checkbox
@@ -130,14 +151,7 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             }
         });
 
-    // Initialize text boxes
-    tb_dx_ = std::make_unique<DMTextBox>("DX", "0");
-    tb_dy_ = std::make_unique<DMTextBox>("DY", "0");
-    tb_dz_ = std::make_unique<DMTextBox>("DZ", "0");
-    tb_rotation_ = std::make_unique<DMTextBox>("Rotation", "0");
-
     ensure_manifest_transaction();
-    update_text_boxes_from_current_frame();
 }
 
 void SyncChildrenFrameEditor::end() {
@@ -153,14 +167,21 @@ void SyncChildrenFrameEditor::end() {
     frame_navigator_.reset();
     dd_child_selector_.reset();
     cb_child_visible_.reset();
-    tb_dx_.reset();
-    tb_dy_.reset();
-    tb_dz_.reset();
-    tb_rotation_.reset();
     wants_close_ = false;
 }
 
 bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
+    // Handle Point3DEditor events first
+    if (point_3d_editor_) {
+        int sw = 0, sh = 0;
+        SDL_GetRendererOutputSize(nullptr, &sw, &sh);
+        int height = point_3d_editor_->get_overlay_height();
+        SDL_Rect bottom_container{0, sh - height, sw, height};
+        if (point_3d_editor_->handle_event(e, bottom_container)) {
+            return true;
+        }
+    }
+
     if (!context_.assets || !context_.target) {
         return false;
     }
@@ -175,22 +196,6 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         return true;
     }
     if (cb_child_visible_ && cb_child_visible_->handle_event(e)) {
-        return true;
-    }
-    if (tb_dx_ && tb_dx_->handle_event(e)) {
-        apply_text_box_changes();
-        return true;
-    }
-    if (tb_dy_ && tb_dy_->handle_event(e)) {
-        apply_text_box_changes();
-        return true;
-    }
-    if (tb_dz_ && tb_dz_->handle_event(e)) {
-        apply_text_box_changes();
-        return true;
-    }
-    if (tb_rotation_ && tb_rotation_->handle_event(e)) {
-        apply_text_box_changes();
         return true;
     }
 
@@ -242,7 +247,6 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
                 selection_state_->child_index = selected_child_index_;
             }
             data_dirty_ = true;
-            update_text_boxes_from_current_frame();
             return true;
         }
     }
@@ -331,24 +335,6 @@ void SyncChildrenFrameEditor::render_overlays(SDL_Renderer* renderer) const {
         cursor_y += DMCheckbox::height() + DMSpacing::small_gap();
     }
 
-    // Text boxes
-    int half_w = (width - padding * 3) / 2;
-    if (tb_dx_ && tb_dy_) {
-        SDL_Rect dx_rect{x + padding, cursor_y, half_w, DMTextBox::height()};
-        SDL_Rect dy_rect{x + padding + half_w + padding, cursor_y, half_w, DMTextBox::height()};
-        tb_dx_->set_rect(dx_rect);
-        tb_dy_->set_rect(dy_rect);
-        cursor_y += DMTextBox::height() + DMSpacing::small_gap();
-    }
-
-    if (tb_dz_ && tb_rotation_) {
-        SDL_Rect dz_rect{x + padding, cursor_y, half_w, DMTextBox::height()};
-        SDL_Rect rot_rect{x + padding + half_w + padding, cursor_y, half_w, DMTextBox::height()};
-        tb_dz_->set_rect(dz_rect);
-        tb_rotation_->set_rect(rot_rect);
-        cursor_y += DMTextBox::height() + DMSpacing::small_gap();
-    }
-
     ui_rect_.h = cursor_y - y;
 
     // Render elements
@@ -356,10 +342,15 @@ void SyncChildrenFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (frame_navigator_) frame_navigator_->render(renderer);
     if (dd_child_selector_) dd_child_selector_->render(renderer);
     if (cb_child_visible_) cb_child_visible_->render(renderer);
-    if (tb_dx_) tb_dx_->render(renderer);
-    if (tb_dy_) tb_dy_->render(renderer);
-    if (tb_dz_) tb_dz_->render(renderer);
-    if (tb_rotation_) tb_rotation_->render(renderer);
+
+    // Render Point3DEditor overlays at the bottom
+    if (point_3d_editor_) {
+        int sw = 0, sh = 0;
+        SDL_GetRendererOutputSize(renderer, &sw, &sh);
+        int height = point_3d_editor_->get_overlay_height();
+        SDL_Rect bottom_container{0, sh - height, sw, height};
+        point_3d_editor_->render_overlays(renderer, bottom_container);
+    }
 }
 
 void SyncChildrenFrameEditor::populate_child_data() {
@@ -562,89 +553,6 @@ void SyncChildrenFrameEditor::ensure_manifest_transaction() {
             async_timelines_by_child_);
         return context_.document->update_animation_payload(context_.animation_id, payload);
     });
-}
-
-void SyncChildrenFrameEditor::apply_text_box_changes() {
-    if (selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(static_frames_by_child_.size()) ||
-        selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_) {
-        return;
-    }
-    auto& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
-    bool changed = false;
-
-    if (tb_dx_) {
-        try {
-            float value = std::stof(tb_dx_->value());
-            if (std::fabs(value - sample.dx) > 0.001f) {
-                sample.dx = value;
-                changed = true;
-            }
-        } catch (...) {}
-    }
-
-    if (tb_dy_) {
-        try {
-            float value = std::stof(tb_dy_->value());
-            if (std::fabs(value - sample.dy) > 0.001f) {
-                sample.dy = value;
-                changed = true;
-            }
-        } catch (...) {}
-    }
-
-    if (tb_dz_) {
-        try {
-            float value = std::stof(tb_dz_->value());
-            if (std::fabs(value - sample.dz) > 0.001f) {
-                sample.dz = value;
-                changed = true;
-            }
-        } catch (...) {}
-    }
-
-    if (tb_rotation_) {
-        try {
-            float value = std::stof(tb_rotation_->value());
-            if (std::fabs(value - sample.degree) > 0.001f) {
-                sample.degree = value;
-                changed = true;
-            }
-        } catch (...) {}
-    }
-
-    if (changed) {
-        sample.visible = true;
-        sample.has_data = true;
-        data_dirty_ = true;
-    }
-}
-
-void SyncChildrenFrameEditor::update_text_boxes_from_current_frame() {
-    if (selected_child_index_ < 0 || selected_child_index_ >= static_cast<int>(static_frames_by_child_.size()) ||
-        selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_) {
-        return;
-    }
-    const auto& sample = static_frames_by_child_[selected_child_index_][selected_frame_index_];
-
-    if (tb_dx_ && !tb_dx_->is_editing()) {
-        tb_dx_->set_value(std::to_string(static_cast<int>(std::lround(sample.dx))));
-    }
-    if (tb_dy_ && !tb_dy_->is_editing()) {
-        tb_dy_->set_value(std::to_string(static_cast<int>(std::lround(sample.dy))));
-    }
-    if (tb_dz_ && !tb_dz_->is_editing()) {
-        tb_dz_->set_value(std::to_string(static_cast<int>(std::lround(sample.dz))));
-    }
-    if (tb_rotation_ && !tb_rotation_->is_editing()) {
-        tb_rotation_->set_value(std::to_string(static_cast<int>(std::lround(sample.degree))));
-    }
-
-    // Update visibility checkbox
-    if (cb_child_visible_) {
-        // This is handled by the callback, but we can update the checkbox value if needed
-        // But since it's CallbackCheckboxWidget, we need to access the internal checkbox
-        // For now, we'll skip as it's handled by the callback
-    }
 }
 
 void SyncChildrenFrameEditor::refresh_selection_state() {

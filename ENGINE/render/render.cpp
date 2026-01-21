@@ -21,6 +21,7 @@
 #include "asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "render/warped_screen_grid.hpp"
+#include "render/dynamic_fog_system.hpp"
 #include "animation_update/animation_update.hpp"
 #include "tiling/grid_tile.hpp"
 #include "asset/animation.hpp"
@@ -460,36 +461,63 @@ void SceneRenderer::render() {
     std::vector<DynamicFogSystem::FogSprite> fog_sprites;
     if (dynamic_fog_system_) {
         fog_sprites = dynamic_fog_system_->get_fog_sprites();
-        // Sort fog sprites by world_z for proper depth ordering
+        // Sort fog sprites by world_pos.y descending (matching asset depth order: higher Y = farther/behind)
         std::sort(fog_sprites.begin(), fog_sprites.end(),
-            [](const auto& a, const auto& b) { return a.world_z < b.world_z; });
+            [](const auto& a, const auto& b) { return a.world_pos.y > b.world_pos.y; });
     }
     size_t fog_index = 0;
 
-    // Helper to render fog sprites at current z depth
-    auto render_fog_at_z = [&](int current_z) {
-        while (fog_index < fog_sprites.size() && fog_sprites[fog_index].world_z <= current_z) {
+    // Helper to render fog sprites at current Y depth (matching asset depth sorting)
+    auto render_fog_at_y = [&](float current_y) {
+        while (fog_index < fog_sprites.size() && fog_sprites[fog_index].world_pos.y > current_y) {
             const auto& sprite = fog_sprites[fog_index];
-            if (sprite.texture) {
-                // Calculate fog size on screen
-                float fog_size = 2048.0f * sprite.scale;
+            if (sprite.texture && sprite.texture_w > 0 && sprite.texture_h > 0) {
+                // Build warped quad for fog sprite (matching asset rendering)
+                const float world_x = sprite.world_pos.x;
+                const float world_y = sprite.world_pos.y;
+                const float world_z = static_cast<float>(sprite.world_z);
 
-                // Center fog on screen position
-                SDL_FRect fog_rect{
-                    sprite.screen_pos.x - fog_size / 2.0f,
-                    sprite.screen_pos.y - fog_size / 2.0f,
-                    fog_size,
-                    fog_size
-                };
+                // Calculate fog size in world units based on texture size and scale percentage
+                // Size = texture_size * kFogSizeScale (from header) * sprite.scale (perspective)
+                const float fog_world_width = static_cast<float>(sprite.texture_w) * DynamicFogSystem::kFogSizeScale * sprite.scale;
+                const float fog_world_height = static_cast<float>(sprite.texture_h) * DynamicFogSystem::kFogSizeScale * sprite.scale;
+                const float half_width = fog_world_width * 0.5f;
+                const float height = fog_world_height;
 
-                // Calculate alpha from opacity
-                Uint8 alpha = static_cast<Uint8>(std::lround(sprite.opacity * 255.0f));
-                if (alpha > 0) {
-                    SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
-                    SDL_SetTextureAlphaMod(sprite.texture, alpha);
-                    SDL_SetTextureBlendMode(sprite.texture, SDL_BLENDMODE_BLEND);
-                    SDL_RenderCopyF(renderer_, sprite.texture, nullptr, &fog_rect);
+                // Project center point with Z-depth
+                SDL_FPoint base_screen{};
+                if (!project_world_point(cam, world_x, world_y, world_z, base_screen)) {
+                    ++fog_index;
+                    continue;
                 }
+
+                // Build warped quad vertices
+                const float padding_x = 0.5f / static_cast<float>(sprite.texture_w);
+                const float padding_y = 0.5f / static_cast<float>(sprite.texture_h);
+                const float u0 = padding_x;
+                const float u1 = 1.0f - padding_x;
+                const float v0 = padding_y;
+                const float v1 = 1.0f - padding_y;
+
+                SDL_Vertex vertices[4]{};
+                vertices[0].position = SDL_FPoint{base_screen.x - half_width, base_screen.y - height};
+                vertices[1].position = SDL_FPoint{base_screen.x + half_width, base_screen.y - height};
+                vertices[2].position = SDL_FPoint{base_screen.x + half_width, base_screen.y};
+                vertices[3].position = SDL_FPoint{base_screen.x - half_width, base_screen.y};
+
+                const SDL_Color white{255, 255, 255, 255};
+                vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
+
+                vertices[0].tex_coord = SDL_FPoint{u0, v0};
+                vertices[1].tex_coord = SDL_FPoint{u1, v0};
+                vertices[2].tex_coord = SDL_FPoint{u1, v1};
+                vertices[3].tex_coord = SDL_FPoint{u0, v1};
+
+                // Render fog quad with full opacity
+                SDL_SetTextureBlendMode(sprite.texture, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
+                SDL_SetTextureAlphaMod(sprite.texture, 255);
+                SDL_RenderGeometry(renderer_, sprite.texture, vertices, 4, kQuadIndices, 6);
             }
             ++fog_index;
         }
@@ -510,8 +538,8 @@ void SceneRenderer::render() {
             continue;
         }
 
-        // Render fog sprites that should appear behind this asset (by z-order)
-        render_fog_at_z(static_cast<int>(asset->world_z_offset()));
+        // Render fog sprites that should appear behind this asset (by Y depth)
+        render_fog_at_y(static_cast<float>(asset->pos.y));
 
         composite_renderer_.update(asset, flicker_time_seconds);
 
@@ -541,8 +569,8 @@ void SceneRenderer::render() {
         }
     }
 
-    // Render any remaining fog sprites that are in front of all assets
-    render_fog_at_z(std::numeric_limits<int>::max());
+    // Render any remaining fog sprites that are in front of all assets (lowest Y values)
+    render_fog_at_y(std::numeric_limits<float>::lowest());
 
     if (debug_auto_paths_ && movement_debug_visible_) {
         static const std::array<SDL_Color, 6> kPathColors{{

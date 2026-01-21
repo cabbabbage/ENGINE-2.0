@@ -18,8 +18,9 @@ public:
         SDL_FPoint world_pos{0.0f, 0.0f};
         SDL_FPoint screen_pos{0.0f, 0.0f};
         float scale = 1.0f;
-        float opacity = 1.0f;
         int world_z = 0;
+        int texture_w = 0;
+        int texture_h = 0;
     };
 
     DynamicFogSystem();
@@ -37,12 +38,27 @@ public:
     // Get fog sprites for rendering in z-order with assets
     const std::vector<FogSprite>& get_fog_sprites() const { return active_fog_sprites_; }
 
+    // ========================================================================
+    // FOG PLACEMENT SETTINGS - Adjust grid spacing here
+    // ========================================================================
+    // Grid spacing in world pixels (how far apart fog sprites are placed)
+    // Smaller = denser fog, Larger = sparser fog
+    // Examples: 243 (dense), 729 (medium), 2187 (sparse)
+    static constexpr int kFogGridSpacing = 1458;
+
+    // ========================================================================
+    // FOG SIZE SETTINGS - Adjust fog size here
+    // ========================================================================
+    // Base size multiplier as a percentage of original texture size
+    // This value multiplies the texture dimensions to get world size
+    // Examples: 2.0f (200% = 2x texture size), 4.0f (400% = 4x texture size)
+    static constexpr float kFogSizeScale = 3.0f;
+
+    // Resolution layer for fog texture assignment (affects hashing for random but consistent placement)
+    static constexpr int kFogResolutionLayer = 4;
+
 private:
     static constexpr int kNumFogTextures = 20;
-    static constexpr int kFogResolutionLayer = 4;  // Changed from 6 to 4 for sparser grid (729px vs 81px spacing)
-    static constexpr float kBaseFogSize = 2048.0f *2;  // Changed from 512 to 2048 for much larger fog
-    static constexpr float kNearFogDistance = 1200.0f;  // 0% opacity
-    static constexpr float kFarFogDistance = 1800.0f;   // 100% opacity
 
     // Fog textures (10 base textures loaded once)
     std::vector<SDL_Texture*> fog_textures_;
@@ -57,7 +73,6 @@ private:
     SDL_Renderer* renderer_ = nullptr;
 
     // Helper methods
-    float calculate_fog_opacity(float distance_to_camera) const;
     std::uint64_t make_grid_point_hash(int world_x, int world_y, int world_z, int layer) const;
     int assign_fog_texture_for_point(int world_x, int world_y, int world_z, int layer);
 };

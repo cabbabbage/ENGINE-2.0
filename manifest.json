@@ -3871,16 +3871,16 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 395,
+          "camera_height_px": 607,
           "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 13.0,
-          "camera_y_distance_px": 374,
+          "camera_tilt_deg": 45.0,
+          "camera_y_distance_px": 0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            139,
+            36,
             242,
-            36,
-            36,
             255
           ],
           "edge_smoothness": 101,
@@ -3967,8 +3967,8 @@
                 }
               ],
               "display_name": "Casino",
-              "dx": -908,
-              "dy": 388,
+              "dx": -836,
+              "dy": -508,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -4081,9 +4081,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            138,
+            242,
             36,
-            242,
-            242,
             255
           ],
           "edge_smoothness": 2,

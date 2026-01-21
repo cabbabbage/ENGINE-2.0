@@ -115,6 +115,7 @@ public:
     const AnimationChildData* find_child_timeline(std::string_view child_name) const;
     AnimationChildData* find_child_timeline(std::string_view child_name);
     void rebuild_child_timelines_from_frames();
+    void rebuild_frames_from_child_timelines();
     void refresh_child_start_events() { rebuild_child_start_events_from_timelines(); }
 private:
     std::vector<FrameCache> frame_cache_;

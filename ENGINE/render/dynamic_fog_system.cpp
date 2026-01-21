@@ -85,18 +85,8 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
     double view_height = cam.view_height_world();
     const auto& settings = cam.realism_settings();
 
-    // Calculate grid spacing for layer 4
-    // Grid spacing formula: 3^(max_layers - layer)
-    // For layer 4 with max_layers=10: 3^(10-4) = 3^6 = 729 pixels
-    constexpr int kMaxLayers = 10;
-    constexpr int kExponent = kMaxLayers - kFogResolutionLayer;
-    int grid_spacing = 1;
-    for (int i = 0; i < kExponent; ++i) {
-        grid_spacing *= 3;
-    }
-    if (grid_spacing <= 0) {
-        return;
-    }
+    // Use configured grid spacing (set in header file)
+    const int grid_spacing = kFogGridSpacing;
 
     // Expand visible bounds to ensure coverage
     const float margin = view_height * 0.5f;
@@ -122,28 +112,6 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
         // Iterate over grid positions at layer 4 spacing (729 pixels)
         for (int world_x = start_x; world_x <= end_x; world_x += grid_spacing) {
             for (int world_y = start_y; world_y <= end_y; world_y += grid_spacing) {
-                // Calculate 3D distance from camera
-                float dx = world_x - view_center.x;
-                float dy = world_y - view_center.y;
-                float dz = static_cast<float>(world_z);
-                float distance_to_camera = std::sqrt(dx * dx + dy * dy + dz * dz);
-
-                // Calculate opacity - skip if too close (opacity would be 0)
-                float opacity = calculate_fog_opacity(distance_to_camera);
-                if (opacity <= 0.01f) {
-                    continue;
-                }
-
-                // Calculate perspective scale (objects further away appear smaller)
-                // Use exponential decay for more realistic perspective
-                const float scale_reference_distance = 1500.0f;
-                float perspective_scale = std::exp(-distance_to_camera / scale_reference_distance);
-                perspective_scale = std::clamp(perspective_scale, 0.1f, 2.0f);
-
-                // Project world position to screen
-                SDL_FPoint world_pos{static_cast<float>(world_x), static_cast<float>(world_y)};
-                SDL_FPoint screen_pos = cam.map_to_screen_f(world_pos);
-
                 // Assign fog texture for this grid point (memoized random assignment)
                 int fog_index = assign_fog_texture_for_point(world_x, world_y, world_z, kFogResolutionLayer);
                 if (fog_index < 0 || fog_index >= static_cast<int>(fog_textures_.size())) {
@@ -155,14 +123,31 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
                     continue;
                 }
 
-                // Create fog sprite
+                // Get texture dimensions
+                int tex_w = 0, tex_h = 0;
+                if (SDL_QueryTexture(fog_tex, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+                    continue;
+                }
+
+                // Project world position to screen with proper Z-depth
+                SDL_FPoint world_pos{static_cast<float>(world_x), static_cast<float>(world_y)};
+                SDL_FPoint screen_pos{};
+                if (!cam.project_world_point(world_pos, static_cast<float>(world_z), screen_pos)) {
+                    continue;
+                }
+                if (!std::isfinite(screen_pos.x) || !std::isfinite(screen_pos.y)) {
+                    continue;
+                }
+
+                // Create fog sprite (scale will be calculated during rendering based on projection)
                 FogSprite sprite;
                 sprite.texture = fog_tex;
                 sprite.world_pos = world_pos;
                 sprite.screen_pos = screen_pos;
-                sprite.scale = perspective_scale;
-                sprite.opacity = opacity;
+                sprite.scale = 1.0f;  // Base scale, warping will handle perspective
                 sprite.world_z = world_z;
+                sprite.texture_w = tex_w;
+                sprite.texture_h = tex_h;
 
                 active_fog_sprites_.push_back(sprite);
             }
@@ -171,63 +156,8 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
 }
 
 void DynamicFogSystem::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam) {
-    if (!renderer || active_fog_sprites_.empty()) {
-        return;
-    }
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-    for (const FogSprite& sprite : active_fog_sprites_) {
-        if (!sprite.texture) {
-            continue;
-        }
-
-        // Get texture dimensions
-        int tex_w = 0, tex_h = 0;
-        SDL_QueryTexture(sprite.texture, nullptr, nullptr, &tex_w, &tex_h);
-        if (tex_w <= 0 || tex_h <= 0) {
-            continue;
-        }
-
-        // Calculate fog size on screen
-        float fog_size = kBaseFogSize * sprite.scale;
-
-        // Center fog on grid point screen position
-        SDL_FRect fog_rect{
-            sprite.screen_pos.x - fog_size / 2.0f,
-            sprite.screen_pos.y - fog_size / 2.0f,
-            fog_size,
-            fog_size
-        };
-
-        // Calculate alpha from opacity
-        Uint8 alpha = static_cast<Uint8>(std::lround(sprite.opacity * 255.0f));
-        if (alpha == 0) {
-            continue;
-        }
-
-        // Set texture color modulation
-        SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
-        SDL_SetTextureAlphaMod(sprite.texture, alpha);
-        SDL_SetTextureBlendMode(sprite.texture, SDL_BLENDMODE_BLEND);
-
-        // Render fog texture
-        SDL_RenderCopyF(renderer, sprite.texture, nullptr, &fog_rect);
-    }
-}
-
-float DynamicFogSystem::calculate_fog_opacity(float distance_to_camera) const {
-    if (distance_to_camera <= kNearFogDistance) {
-        return 0.0f;  // No fog near camera
-    }
-    if (distance_to_camera >= kFarFogDistance) {
-        return 1.0f;  // Full fog at horizon
-    }
-
-    // Linear interpolation between near and far
-    const float range = kFarFogDistance - kNearFogDistance;
-    const float normalized = (distance_to_camera - kNearFogDistance) / range;
-    return std::clamp(normalized, 0.0f, 1.0f);
+    // Note: Fog rendering is now handled in SceneRenderer::render() with depth-sorted warped quads.
+    // This method is kept for API compatibility but is no longer used.
 }
 
 std::uint64_t DynamicFogSystem::make_grid_point_hash(int world_x, int world_y, int world_z, int layer) const {

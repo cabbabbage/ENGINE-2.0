@@ -355,6 +355,42 @@ void Animation::rebuild_child_timelines_from_frames() {
     rebuild_child_start_events_from_timelines();
 }
 
+void Animation::rebuild_frames_from_child_timelines() {
+    // Populate AnimationFrame::children from Animation::child_data_ timelines
+    // This is the REVERSE of rebuild_child_timelines_from_frames()
+
+    if (child_data_.empty() || frames.empty()) {
+        return;
+    }
+
+    // For each frame, clear existing children and rebuild from timelines
+    for (std::size_t frame_idx = 0; frame_idx < frames.size(); ++frame_idx) {
+        AnimationFrame* frame = frames[frame_idx];
+        if (!frame) {
+            continue;
+        }
+
+        frame->children.clear();
+
+        // For each child timeline, get the frame data for this frame index
+        for (std::size_t child_idx = 0; child_idx < child_data_.size(); ++child_idx) {
+            const AnimationChildData& timeline = child_data_[child_idx];
+
+            // Skip async children - they don't use per-frame data
+            if (timeline.mode == AnimationChildMode::Async) {
+                continue;
+            }
+
+            // For static children, get the frame sample at this index
+            if (timeline.is_static() && frame_idx < timeline.frames.size()) {
+                const AnimationChildFrameData& sample = timeline.frames[frame_idx];
+                // Add the sample to the frame's children vector
+                frame->children.push_back(sample);
+            }
+        }
+    }
+}
+
 void Animation::rebuild_child_start_events_from_timelines() {
     for (AnimationFrame* frame : frames) {
         if (frame) {

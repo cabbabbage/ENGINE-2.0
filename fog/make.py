@@ -3,214 +3,158 @@
 import os
 import numpy as np
 from PIL import Image, ImageFilter
-import math
-# Height is fixed
-HEIGHT = 720
-
-# Width is random: between 1x and 2x the height (inclusive)
-WIDTH_MIN = HEIGHT
-WIDTH_MAX = HEIGHT * 2
-
-# Output folder = folder this script lives in
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-OUTPUT_FOLDER = SCRIPT_DIR
 
 NUM_IMAGES = 10
-
-# Fog shaping
-ALPHA_GAMMA = 2.2   # higher => less mid haze
-ALPHA_GAIN = 1.35   # overall strength
-
-# Edge fade: keep full opacity inside the inner 90% region,
-# fade to 0 at the edges across the outer 5% per side.
-EDGE_FULL_PAD_FRAC = 0.05  # 5% per side
+HEIGHT = 720
+WIDTH_MIN_MULT = 1.0
+WIDTH_MAX_MULT = 2.0
 
 
-def _random_warp_field(h: int, w: int, rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray]:
-    """Smooth random displacement field (dx, dy) in pixels."""
-    base = rng.random((h, w), dtype=np.float32)
-    img = Image.fromarray((base * 255).astype(np.uint8), mode="L").filter(
-        ImageFilter.GaussianBlur(radius=max(12, min(h, w) / 30))
-    )
-    f = np.array(img, dtype=np.float32) / 255.0
-
-    base2 = rng.random((h, w), dtype=np.float32)
-    img2 = Image.fromarray((base2 * 255).astype(np.uint8), mode="L").filter(
-        ImageFilter.GaussianBlur(radius=max(14, min(h, w) / 26))
-    )
-    g = np.array(img2, dtype=np.float32) / 255.0
-
-    amp = float(rng.uniform(10.0, 28.0))
-    dx = (f * 2.0 - 1.0) * amp
-    dy = (g * 2.0 - 1.0) * amp
-    return dx, dy
+def smoothstep(edge0, edge1, x):
+    t = np.clip((x - edge0) / (edge1 - edge0 + 1e-8), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
 
 
-def _apply_displacement(field: np.ndarray, dx: np.ndarray, dy: np.ndarray) -> np.ndarray:
-    """Bilinear sampling using pixel displacement dx/dy (field float32 0..1)."""
-    h, w = field.shape
-    yy, xx = np.meshgrid(
-        np.arange(h, dtype=np.float32),
-        np.arange(w, dtype=np.float32),
-        indexing="ij",
-    )
+def noise_layer(h, w, grid, blur_radius, rng):
+    gh = max(2, int(np.ceil(h / grid)))
+    gw = max(2, int(np.ceil(w / grid)))
+    small = rng.random((gh, gw), dtype=np.float32)
 
-    sx = np.clip(xx + dx, 0.0, w - 1.001)
-    sy = np.clip(yy + dy, 0.0, h - 1.001)
+    im = Image.fromarray((small * 255.0).astype(np.uint8), mode="L")
+    im = im.resize((w, h), resample=Image.BILINEAR)
+    if blur_radius > 0.0:
+        im = im.filter(ImageFilter.GaussianBlur(radius=blur_radius))
 
-    x0 = np.floor(sx).astype(np.int32)
-    y0 = np.floor(sy).astype(np.int32)
+    return np.asarray(im, dtype=np.float32) / 255.0
+
+
+def bilinear_sample(img, x, y):
+    h, w = img.shape
+    x = np.clip(x, 0.0, w - 1.001)
+    y = np.clip(y, 0.0, h - 1.001)
+
+    x0 = np.floor(x).astype(np.int32)
+    y0 = np.floor(y).astype(np.int32)
     x1 = np.clip(x0 + 1, 0, w - 1)
     y1 = np.clip(y0 + 1, 0, h - 1)
 
-    fx = sx - x0
-    fy = sy - y0
+    fx = x - x0
+    fy = y - y0
 
-    a = field[y0, x0]
-    b = field[y0, x1]
-    c = field[y1, x0]
-    d = field[y1, x1]
+    a = img[y0, x0]
+    b = img[y0, x1]
+    c = img[y1, x0]
+    d = img[y1, x1]
 
-    ab = a * (1.0 - fx) + b * fx
-    cd = c * (1.0 - fx) + d * fx
-    return ab * (1.0 - fy) + cd * fy
-
-
-def _vertical_falloff(height: int, width: int, rng: np.random.Generator) -> np.ndarray:
-    """
-    Stronger fog at bottom, fading upward.
-    Adds slight horizontal waviness so it isn't a perfect straight gradient.
-    """
-    y = np.linspace(0.0, 1.0, height, dtype=np.float32)[:, None]  # 0 top, 1 bottom
-    base = y ** float(rng.uniform(1.6, 2.6))
-
-    x = np.linspace(0.0, 1.0, width, dtype=np.float32)[None, :]
-    wav = 0.10 * np.sin((x * rng.uniform(6.0, 14.0) + rng.uniform(0.0, 6.28318)) * 2.0 * np.pi)
-    return np.clip(base + wav, 0.0, 1.0)
+    ab = a + (b - a) * fx
+    cd = c + (d - c) * fx
+    return ab + (cd - ab) * fy
 
 
-def _edge_fade_mask(width: int, height: int, full_pad_frac: float) -> np.ndarray:
-    """
-    1.0 in the inner region, fades to 0.0 at the image borders.
-    full_pad_frac is the fraction per side that stays at full strength
-    before the fade begins.
-    """
-    full_pad_frac = float(np.clip(full_pad_frac, 0.0, 0.49))
+def make_fog_image(width, height, seed):
+    rng = np.random.default_rng(seed)
 
-    # Coordinate in [0..1]
-    x = np.linspace(0.0, 1.0, width, dtype=np.float32)[None, :]
-    y = np.linspace(0.0, 1.0, height, dtype=np.float32)[:, None]
+    # Step 1: Create the raw rectangular fog field (no fades, no geometry)
+    big = noise_layer(height, width, grid=int(max(height, width) / 6), blur_radius=9.0, rng=rng)
+    med = noise_layer(height, width, grid=int(max(height, width) / 14), blur_radius=4.5, rng=rng)
+    fine = noise_layer(height, width, grid=int(max(height, width) / 38), blur_radius=1.6, rng=rng)
 
-    # Distance to nearest edge in normalized units
-    dx = np.minimum(x, 1.0 - x)
-    dy = np.minimum(y, 1.0 - y)
+    fog = (0.55 * big + 0.30 * med + 0.15 * fine).astype(np.float32)
+    fog = np.clip(fog, 0.0, 1.0)
 
-    # Start fading when we enter the outer band
-    # inner boundary distance in normalized units:
-    # for 5% padding, inner boundary is at 0.05 from each side
-    inner = full_pad_frac
-    outer = 0.0
+    warp_a = noise_layer(height, width, grid=int(max(height, width) / 10), blur_radius=5.5, rng=rng)
+    warp_b = noise_layer(height, width, grid=int(max(height, width) / 10), blur_radius=5.5, rng=rng)
+    warp_a = (warp_a - 0.5) * 2.0
+    warp_b = (warp_b - 0.5) * 2.0
 
-    def ramp(d: np.ndarray) -> np.ndarray:
-        # d in [0..0.5], want:
-        # d >= inner -> 1
-        # d <= outer -> 0
-        t = (d - outer) / max(inner - outer, 1e-6)
-        return np.clip(t, 0.0, 1.0)
+    y, x = np.mgrid[0:height, 0:width].astype(np.float32)
+    warp_px = 10.0 + rng.random() * 10.0
+    xs = x + warp_a * warp_px
+    ys = y + warp_b * warp_px
+    fog = bilinear_sample(fog, xs, ys).astype(np.float32)
+    fog = np.clip(fog, 0.0, 1.0)
 
-    mx = ramp(dx)
-    my = ramp(dy)
+    # Step 2: Apply a vertical opacity gradient (bottom full, fades upward)
+    y01 = (np.arange(height, dtype=np.float32) / max(1, height - 1)).reshape(height, 1)  # 0 top, 1 bottom
+    vertical_mask = smoothstep(0.03, 1.0, y01)
+    vertical_mask = vertical_mask ** 1.85
+    fog2 = fog * vertical_mask
 
-    # Multiply so corners also fade naturally
-    m = mx * my
+    # Step 3: Apply the random curved shape mask (sideways oval, wider at bottom, slightly distorted, stays in bounds)
+    cx = (width - 1) * 0.5
+    cy = (height - 1) * 0.62
 
-    # Smooth the curve so the fade looks soft
-    m = m ** 1.8
-    return m.astype(np.float32)
+    x_limit = min(cx - 2.0, (width - 1) - cx - 2.0)
+    y_limit = min(cy - 2.0, (height - 1) - cy - 2.0)
+    x_limit = max(10.0, x_limit)
+    y_limit = max(10.0, y_limit)
 
+    bottom_stretch = 0.70
+    max_widen = 1.0 + bottom_stretch * 1.0
 
-def generate_fog_alpha(width: int, height: int, rng: np.random.Generator) -> np.ndarray:
-    """
-    Alpha-only fog field (white color, varying alpha).
-    Random internal shape (warped), bottom-heavy, and edge-faded.
-    """
-    # Big shapes
-    n1 = rng.random((height, width), dtype=np.float32)
-    img1 = Image.fromarray((n1 * 255).astype(np.uint8), mode="L").filter(
-        ImageFilter.GaussianBlur(radius=rng.uniform(20.0, 34.0))
-    )
-    a1 = np.array(img1, dtype=np.float32) / 255.0
+    rx_base = min(x_limit / max_widen, min(width, height) * (0.58 + 0.06 * rng.random()))
+    ry = min(y_limit, min(width, height) * (0.33 + 0.05 * rng.random()))
 
-    # Medium shapes
-    n2 = rng.random((height, width), dtype=np.float32)
-    img2 = Image.fromarray((n2 * 255).astype(np.uint8), mode="L").filter(
-        ImageFilter.GaussianBlur(radius=rng.uniform(8.0, 14.0))
-    )
-    a2 = np.array(img2, dtype=np.float32) / 255.0
+    rx_base = max(20.0, rx_base * 0.98)
+    ry = max(20.0, ry * 0.98)
 
-    # Fine detail
-    n3 = rng.random((height, width), dtype=np.float32)
-    img3 = Image.fromarray((n3 * 255).astype(np.uint8), mode="L").filter(
-        ImageFilter.GaussianBlur(radius=rng.uniform(2.0, 4.0))
-    )
-    a3 = np.array(img3, dtype=np.float32) / 255.0
+    dx = x - cx
+    dy = y - cy
+    y01_full = y / max(1.0, float(height - 1))
+    widen = 1.0 + bottom_stretch * y01_full
 
-    # Mix
-    alpha = 0.62 * a1 + 0.26 * a2 + 0.12 * a3
+    dnoise = noise_layer(height, width, grid=int(max(height, width) / 7), blur_radius=10.0, rng=rng)
+    dnoise = (dnoise - 0.5) * 2.0
+    wobble = 0.06 * dnoise
 
-    # Warp to reduce circular look
-    dx, dy = _random_warp_field(height, width, rng)
-    alpha = _apply_displacement(alpha.astype(np.float32), dx, dy)
+    nx = dx / (rx_base * widen + 1e-8)
+    ny = dy / (ry + 1e-8)
+    r_ell = np.sqrt(nx * nx + ny * ny)
 
-    # Wispy modulation
-    streak = rng.random((height, width), dtype=np.float32)
-    streak_img = Image.fromarray((streak * 255).astype(np.uint8), mode="L").filter(
-        ImageFilter.GaussianBlur(radius=rng.uniform(6.0, 12.0))
-    )
-    streak_f = np.array(streak_img, dtype=np.float32) / 255.0
-    dx2, dy2 = _random_warp_field(height, width, rng)
-    streak_f = _apply_displacement(streak_f.astype(np.float32), dx2 * 0.6, dy2 * 0.6)
-    alpha *= (0.75 + 0.5 * streak_f)
+    dist_norm = (1.0 - r_ell) + wobble
+    aa = 0.010
+    shape_mask = smoothstep(-aa, aa, dist_norm)
+    fog3 = fog2 * shape_mask
 
-    # Normalize 0..1
-    alpha -= float(alpha.min())
-    mx = float(alpha.max())
-    if mx > 1e-8:
-        alpha /= mx
+    # Step 4: Apply a gradient fade around the silhouette edge (soft perimeter, long fade inward)
+    fade_to_center = 0.95
+    edge_fade = smoothstep(0.0, fade_to_center, np.clip(dist_norm, 0.0, 1.0))
+    edge_fade = edge_fade ** 1.15
 
-    # Bottom-heavy fade
-    alpha *= _vertical_falloff(height, width, rng)
+    final_alpha = np.clip(fog3 * edge_fade, 0.0, 1.0)
 
-    # Edge fade so it doesn't look cut off
-    alpha *= _edge_fade_mask(width, height, EDGE_FULL_PAD_FRAC)
+    rgb = np.full((height, width, 3), 255, dtype=np.uint8)
+    a = (final_alpha * 255.0).astype(np.uint8)
+    rgba = np.dstack([rgb, a])
 
-    # Contrast shaping
-    alpha = np.clip(alpha * ALPHA_GAIN, 0.0, 1.0)
-    alpha = alpha ** ALPHA_GAMMA
+    # Final: crop away all fully transparent rows/cols on every side (tight bbox around alpha>0)
+    alpha = rgba[:, :, 3]
 
-    return (alpha * 255.0).clip(0, 255).astype(np.uint8)
+    rows_have_alpha = (alpha.max(axis=1) > 0)
+    cols_have_alpha = (alpha.max(axis=0) > 0)
+
+    if np.any(rows_have_alpha) and np.any(cols_have_alpha):
+        top = int(np.where(rows_have_alpha)[0].min())
+        bottom = int(np.where(rows_have_alpha)[0].max())
+        left = int(np.where(cols_have_alpha)[0].min())
+        right = int(np.where(cols_have_alpha)[0].max())
+
+        rgba = rgba[top:bottom + 1, left:right + 1, :]
 
 
-def build_fog_texture(width: int, height: int, index: int, rng: np.random.Generator) -> None:
-    alpha = generate_fog_alpha(width, height, rng)
-
-    rgb = np.full((height, width), 255, dtype=np.uint8)
-    rgba = np.dstack([rgb, rgb, rgb, (alpha//10)])
-
-    img = Image.fromarray(rgba, mode="RGBA")
-
-    os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-    out_path = os.path.join(OUTPUT_FOLDER, f"fog_{index}.png")
-    img.save(out_path, format="PNG")
-    print(f"Saved {out_path}  ({width}x{height})")
+    return Image.fromarray(rgba, mode="RGBA")
 
 
 def main():
-    rng = np.random.default_rng()
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    master_rng = np.random.default_rng()
 
     for i in range(1, NUM_IMAGES + 1):
-        w = int(rng.integers(WIDTH_MIN, WIDTH_MAX + 1))
-        build_fog_texture(w, HEIGHT, i, rng)
+        w = int(round(HEIGHT * master_rng.uniform(WIDTH_MIN_MULT, WIDTH_MAX_MULT)))
+        seed = int(master_rng.integers(0, 2**31 - 1))
+        img = make_fog_image(w, HEIGHT, seed=seed)
+        out_path = os.path.join(script_dir, f"fog_{i}.png")
+        img.save(out_path)
 
 
 if __name__ == "__main__":

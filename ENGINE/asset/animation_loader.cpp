@@ -1147,6 +1147,9 @@ void AnimationLoader::load(Animation& animation,
                 animation.rebuild_child_timelines_from_frames();
                 }
         } else {
+                // Successfully loaded child_timelines from JSON
+                // CRITICAL: Populate AnimationFrame::children from the loaded timelines
+                animation.rebuild_frames_from_child_timelines();
                 animation.refresh_child_start_events();
         }
         if (trigger == "default" && !animation.frames.empty() && !animation.frames[0]->variants.empty()) {

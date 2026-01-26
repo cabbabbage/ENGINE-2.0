@@ -15,6 +15,10 @@ WIDTH_MAX_MULT = 2.0
 # When true, generate solid random-color test rectangles instead of fog
 CREATE_TEST_IMAGES = False
 
+# Final opacity multiplier applied as the LAST step (0.0 to 1.0)
+# Example: 0.75 = reduce final opacity to 75%
+FINAL_OPACITY_MULT = 0.25
+
 
 def smoothstep(edge0, edge1, x):
     t = np.clip((x - edge0) / (edge1 - edge0 + 1e-8), 0.0, 1.0)
@@ -55,6 +59,19 @@ def bilinear_sample(img, x, y):
     ab = a + (b - a) * fx
     cd = c + (d - c) * fx
     return ab + (cd - ab) * fy
+
+
+def apply_final_opacity(img_rgba: Image.Image, mult: float) -> Image.Image:
+    mult = float(np.clip(mult, 0.0, 1.0))
+    if mult >= 0.999999:
+        return img_rgba
+
+    a = np.array(img_rgba.getchannel("A"), dtype=np.float32)
+    a = np.clip(a * mult, 0.0, 255.0).astype(np.uint8)
+
+    out = img_rgba.copy()
+    out.putalpha(Image.fromarray(a, mode="L"))
+    return out
 
 
 def make_test_image(width, height, seed):
@@ -172,6 +189,9 @@ def main():
             img = make_test_image(w, HEIGHT, seed=seed)
         else:
             img = make_fog_image(w, HEIGHT, seed=seed)
+
+        # LAST STEP: reduce opacity for the final image (applies to both test + fog)
+        img = apply_final_opacity(img, FINAL_OPACITY_MULT)
 
         out_path = os.path.join(script_dir, f"fog_{i}.png")
         img.save(out_path)

@@ -29,6 +29,8 @@ public:
 
     void set_axis_from_textbox_click(int textbox_index);
 
+    void set_grid_resolution(int resolution);
+
     // UI rendering and event handling
     bool handle_event(const SDL_Event& e, const SDL_Rect& container);
     void render_overlays(SDL_Renderer* renderer, const SDL_Rect& container);
@@ -56,8 +58,7 @@ public:
     // Mouse event handling for 3D point manipulation
     bool handle_mouse_event(const SDL_Event& e,
                            const std::vector<SDL_FPoint>& point_screens,
-                           const std::vector<bool>& point_selectable,
-                           std::function<SDL_FPoint(const SDL_Point&)> screen_to_world);
+                           const std::vector<bool>& point_selectable);
 
     // Point rendering methods
     void render_axis_point(SDL_Renderer* renderer,
@@ -139,13 +140,12 @@ private:
     std::function<void(int index)> on_point_selected_;
 
     // Mouse handling state
-    bool is_dragging_ = false;
     int selected_point_index_ = -1;
     int hovered_point_index_ = -1;
-    bool point_already_selected_ = false;  // Track if clicking already-selected point
-    SDL_Point drag_start_mouse_pos_;
-    SDL_FPoint drag_start_world_pos_;
-    float drag_start_world_z_ = 0.0f;
+    bool is_dragging_ = false;  // Mouse drag state for potential dragging interactions.
+
+    int grid_resolution_ = 0;
+    float grid_step_world_ = 1.0f;
 
     // Double-click detection for axis cycling
     Uint32 last_click_time_ = 0;

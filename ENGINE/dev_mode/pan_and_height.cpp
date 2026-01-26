@@ -17,9 +17,10 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam,
     const SDL_Point mouse{ input.getX(), input.getY() };
     const int wheel_y = scroll_override.has_value() ? *scroll_override : input.getScrollY();
     const bool left_down = input.isDown(Input::LEFT);
-    const bool right_down = input.isDown(Input::RIGHT);
+    const bool alt_down =
+        input.isScancodeDown(SDL_SCANCODE_LALT) || input.isScancodeDown(SDL_SCANCODE_RALT);
     if (wheel_y != 0) {
-        if (right_down && !pan_blocked) {
+        if (alt_down && !pan_blocked) {
             constexpr float kTiltStepDegrees = 2.0f;
             const float tilt_delta = -static_cast<float>(wheel_y) * kTiltStepDegrees;
             const float base_tilt = cam.tilt_override_deg();

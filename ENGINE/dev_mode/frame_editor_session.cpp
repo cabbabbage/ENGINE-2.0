@@ -180,7 +180,7 @@ void FrameEditorSession::update(const Input& input) {
     }
     if (assets_) {
         WarpedScreenGrid& cam = assets_->getView();
-        // Standard camera controls: left-click drag = pan, scroll = height, right-click + scroll = tilt
+        // Standard camera controls: left-click drag = pan, scroll = height, Alt + scroll = tilt
         pan_height_.handle_input(cam, input, false);
     }
     active_editor_->update(input, 0.0f);

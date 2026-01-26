@@ -69,6 +69,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     }
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
+        point_3d_editor_->set_grid_resolution(context_.snap_resolution);
         point_3d_editor_->set_on_coordinates_changed([this]() {
             persist_changes();
         });
@@ -364,9 +365,7 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
         }
 
         // Only consume event if point editor actually handled it
-        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable, [this](const SDL_Point& p) {
-                return screen_to_world_point(p);
-            });
+        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable);
     }
 
     return consumed;

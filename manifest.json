@@ -951,8 +951,8 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": -33,
-                  "dy": -40,
+                  "dx": 199,
+                  "dy": -213,
                   "dz": 67,
                   "visible": true
                 }

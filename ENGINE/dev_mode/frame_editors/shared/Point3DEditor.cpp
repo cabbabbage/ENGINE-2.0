@@ -1,11 +1,13 @@
 #include "Point3DEditor.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/dm_styles.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "world/grid_point.hpp"
+#include "utils/grid.hpp"
 #include "asset/Asset.hpp"
 
 namespace devmode::frame_editors {
@@ -59,6 +61,13 @@ void Point3DEditor::set_axis_from_textbox_click(int textbox_index) {
         case 2: new_axis = AdjustmentAxis::Z; break; // dz
     }
     reset_axis(new_axis);
+}
+
+void Point3DEditor::set_grid_resolution(int resolution) {
+    const int clamped = vibble::grid::clamp_resolution(std::max(0, resolution));
+    grid_resolution_ = clamped;
+    const int step = vibble::grid::delta(clamped);
+    grid_step_world_ = static_cast<float>(step > 0 ? step : 1);
 }
 
 bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) {
@@ -124,6 +133,29 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
     if (tb_dz_ && tb_dz_->handle_event(e)) {
         apply_textbox_changes();
         consumed = true;
+    }
+
+    if (!consumed && e.type == SDL_KEYDOWN &&
+        (e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) {
+        if (selection_ && selection_->has_target() && selected_point_index_ >= 0 && on_position_changed_) {
+            const float step = (grid_step_world_ > 0.0f) ? grid_step_world_ : 1.0f;
+            const float direction = (e.key.keysym.sym == SDLK_UP) ? 1.0f : -1.0f;
+            SDL_FPoint new_world = selection_->world_pos;
+            float new_world_z = selection_->world_z;
+            switch (selection_->axis) {
+                case AdjustmentAxis::X:
+                    new_world.x += direction * step;
+                    break;
+                case AdjustmentAxis::Y:
+                    new_world.y += direction * step;
+                    break;
+                case AdjustmentAxis::Z:
+                    new_world_z += direction * step;
+                    break;
+            }
+            on_position_changed_(new_world, new_world_z);
+            consumed = true;
+        }
     }
 
     return consumed;
@@ -591,10 +623,8 @@ void Point3DEditor::render_movement_arrows(SDL_Renderer* renderer,
 
 bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                                       const std::vector<SDL_FPoint>& point_screens,
-                                      const std::vector<bool>& point_selectable,
-                                      std::function<SDL_FPoint(const SDL_Point&)> screen_to_world) {
-    // Handle hover detection on mouse motion
-    if (e.type == SDL_MOUSEMOTION && !is_dragging_) {
+                                      const std::vector<bool>& point_selectable) {
+    if (e.type == SDL_MOUSEMOTION) {
         SDL_Point mouse_pos = {e.motion.x, e.motion.y};
         int new_hover = -1;
 
@@ -615,35 +645,24 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
         SDL_Point mouse_pos = {e.button.x, e.button.y};
         Uint32 current_time = SDL_GetTicks();
 
-        // Check if clicking on any point
-        bool clicked_on_point = false;
         for (std::size_t i = 0; i < point_screens.size(); ++i) {
             if (handle_point_click(mouse_pos, point_screens[i])) {
-                // Check if point is selectable
                 const bool is_selectable = (i < point_selectable.size() && point_selectable[i]);
-
                 if (!is_selectable) {
-                    // Don't select non-selectable points, but stop propagation
                     return false;
                 }
-
-                clicked_on_point = true;
                 const int clicked_index = static_cast<int>(i);
 
-                // Check for double-click on the same point for axis cycling
                 if (clicked_index == last_clicked_point_ &&
                     clicked_index == selected_point_index_ &&
                     (current_time - last_click_time_) < DOUBLE_CLICK_THRESHOLD_MS) {
-                    // Double-click on same selected point - cycle axis
                     cycle_axis();
-                    last_click_time_ = 0;  // Reset to prevent triple-click from cycling again
+                    last_click_time_ = 0;
                     last_clicked_point_ = -1;
                 } else {
-                    // Single click - select this point and notify callback
                     last_click_time_ = current_time;
                     last_clicked_point_ = clicked_index;
 
-                    // If clicking a different point, select it
                     if (clicked_index != selected_point_index_) {
                         selected_point_index_ = clicked_index;
                         if (on_point_selected_) {
@@ -651,69 +670,21 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                         }
                     }
                 }
-
-                // Start dragging only if this is the selected point
-                if (clicked_index == selected_point_index_) {
-                    drag_start_mouse_pos_ = mouse_pos;
-                    drag_start_world_pos_ = screen_to_world(drag_start_mouse_pos_);
-                    if (selection_) {
-                        drag_start_world_z_ = selection_->world_z;
-                    }
-                    is_dragging_ = true;
-                }
                 return true;
             }
         }
 
-        // Clicked somewhere else (not on any point) - deselect
-        if (!clicked_on_point) {
-            selected_point_index_ = -1;
-            hovered_point_index_ = -1;
-            is_dragging_ = false;
-            last_click_time_ = 0;
-            last_clicked_point_ = -1;
-            if (on_point_selected_) {
-                on_point_selected_(-1);  // Notify deselection
-            }
-            // Return false to allow frame editors to handle camera panning
-            return false;
+        selected_point_index_ = -1;
+        hovered_point_index_ = -1;
+        last_click_time_ = 0;
+        last_clicked_point_ = -1;
+        if (on_point_selected_) {
+            on_point_selected_(-1);
         }
-    } else if (e.type == SDL_MOUSEMOTION && is_dragging_) {
-        SDL_Point current_mouse = {e.motion.x, e.motion.y};
-        SDL_FPoint screen_delta = {static_cast<float>(current_mouse.x - drag_start_mouse_pos_.x),
-                                  static_cast<float>(current_mouse.y - drag_start_mouse_pos_.y)};
-
-        SDL_FPoint delta;
-        if (selection_ && selection_->axis == AdjustmentAxis::Z) {
-            delta = {0.0f, screen_delta.y};
-        } else {
-            SDL_FPoint current_world = screen_to_world(current_mouse);
-            delta = {current_world.x - drag_start_world_pos_.x, current_world.y - drag_start_world_pos_.y};
-        }
-
-        SDL_FPoint constrained_delta = constrain_drag_delta(delta, axis());
-
-        if (selection_ && selection_->axis == AdjustmentAxis::Z) {
-            float new_world_z = drag_start_world_z_ - constrained_delta.y; // Invert screen Y for world Z
-            if (on_position_changed_) {
-                on_position_changed_(drag_start_world_pos_, new_world_z);
-            }
-        } else {
-            SDL_FPoint new_world_pos = {drag_start_world_pos_.x + constrained_delta.x,
-                                       drag_start_world_pos_.y + constrained_delta.y};
-            if (on_position_changed_) {
-                on_position_changed_(new_world_pos, drag_start_world_z_);
-            }
-        }
-        return true;
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT && is_dragging_) {
-        is_dragging_ = false;
-        return true;
+        return false;
     }
 
-    // Scroll is NOT handled here anymore - reserved for camera height/tilt
-
-    return is_dragging_;
+    return false;
 }
 
 void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,

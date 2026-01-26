@@ -7,14 +7,14 @@
 
 struct GlassButtonStyle {
 
-    int   radius = 20;
+    int   radius = 10;
 
     float refraction_strength = 0.055f;
 
     float rough_scale   = 0.035f;
     float rough_ampl_px = 3.50f;
 
-    int   diffusion_taps    = 9;
+    int   diffusion_taps    = 90;
     float diffusion_radius  = 2.8f;
 
     float chroma_strength   = 0.70f;

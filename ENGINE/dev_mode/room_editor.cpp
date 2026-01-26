@@ -1099,15 +1099,6 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         SDL_GetMouseState(&mx, &my);
     }
 
-    // Track right-click hold for tilt adjustment
-    if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_RIGHT) {
-        right_click_held_for_tilt_ = true;
-        tilt_adjusted_during_right_click_ = false;
-    }
-    if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_RIGHT) {
-        right_click_held_for_tilt_ = false;
-    }
-
     const bool pointer_event =
         (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEMOTION);
     const bool wheel_event = (event.type == SDL_MOUSEWHEEL);
@@ -2470,12 +2461,6 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         assets_->notify_camera_activity(false);
     }
 
-    // Track tilt adjustment during right-click
-    right_click_held_for_tilt_ = input.isDown(Input::RIGHT);
-    if (right_click_held_for_tilt_ && input.getScrollY() != 0) {
-        tilt_adjusted_during_right_click_ = true;
-    }
-
     WarpedScreenGrid& cam = assets_->getView();
     const float prev_scale = cam.get_scale();
     const SDL_Point prev_center = cam.get_screen_center();
@@ -3250,20 +3235,16 @@ void RoomEditor::handle_click(const Input& input) {
         const bool shift_modifier =
             input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
         auto open_library_at = [&](const SDL_Point& point) {
-            if (!tilt_adjusted_during_right_click_) {
-                pending_spawn_world_pos_ = point;
-                open_asset_library();
-                if (!is_asset_library_open()) {
-                    pending_spawn_world_pos_.reset();
-                }
+            pending_spawn_world_pos_ = point;
+            open_asset_library();
+            if (!is_asset_library_open()) {
+                pending_spawn_world_pos_.reset();
             }
 };
 
         if (hovered_asset_) {
             if (shift_modifier) {
-                if (!tilt_adjusted_during_right_click_) {
-                    open_asset_info_editor_for_asset(hovered_asset_);
-                }
+                open_asset_info_editor_for_asset(hovered_asset_);
             } else {
                 open_library_at(world_mouse);
             }
@@ -3275,13 +3256,10 @@ void RoomEditor::handle_click(const Input& input) {
             if (inside_room) {
                 open_library_at(world_mouse);
             } else {
-                if (!tilt_adjusted_during_right_click_) {
-                    pending_spawn_world_pos_.reset();
-                    open_asset_library();
-                }
+                pending_spawn_world_pos_.reset();
+                open_asset_library();
             }
         }
-        tilt_adjusted_during_right_click_ = false;
         return;
     } else {
         rclick_buffer_frames_ = 0;

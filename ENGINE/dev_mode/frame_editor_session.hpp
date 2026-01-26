@@ -57,7 +57,6 @@ public:
     void render(SDL_Renderer* renderer) const;
 
     void set_snap_resolution(int r);
-    bool should_render_asset(const Asset* asset) const;
 
 private:
     void create_and_begin_editor();
@@ -70,6 +69,7 @@ private:
     void capture_edit_camera_state();
     void restore_edit_camera_state();
     void enforce_camera_locks(WarpedScreenGrid& cam);
+    bool should_render_asset(const Asset* asset) const;
 
     Assets* assets_ = nullptr;
     Asset* target_ = nullptr;

@@ -70,9 +70,13 @@ public:
     static float base_size_scale();
     static void set_vertical_offset(float offset);
     static float vertical_offset();
+    static void set_max_random_jitter(float jitter);
+    static float max_random_jitter();
 
 private:
     static constexpr int kNumFogTextures = 10;
+    static constexpr float kMinRandomJitter = 0.0f;
+    static constexpr float kMaxRandomJitter = 500.0f;
 
     // Fog textures (10 base textures loaded once)
     std::vector<SDL_Texture*> fog_textures_;
@@ -94,6 +98,9 @@ private:
         float grid_spacing_multiplier = kDefaultGridSpacingMultiplier;
         float base_size_scale = kDefaultBaseSizeScale;
         float vertical_offset = kDefaultVerticalOffset;
+        float max_random_jitter = 0.0f;
     };
     static FogConfig& config();
+
+    SDL_FPoint sample_jitter_offset(int world_x, int world_y, int world_z, int layer, float max_jitter) const;
 };

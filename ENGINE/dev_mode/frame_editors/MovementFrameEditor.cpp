@@ -55,6 +55,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     }
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
+        point_3d_editor_->set_grid_resolution(context_.snap_resolution);
     }
     wants_close_ = false;
     selected_index_ = 0;
@@ -260,10 +261,7 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         }
 
         // Only consume event if point editor actually handled it
-        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable, [this](const SDL_Point& p) {
-                const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-                return cam.screen_to_map(p);
-            });
+        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable);
     }
 
     return consumed;

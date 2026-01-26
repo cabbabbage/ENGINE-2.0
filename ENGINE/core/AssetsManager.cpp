@@ -170,7 +170,9 @@ Assets::Assets(AssetLibrary& library,
     hydrate_map_info_sections();
     depth_effects_enabled_ = false;
 
+    vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
     InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_y, map_radius);
+    vibble::log::info("[Assets] Constructor: InitializeAssets complete");
 
     finder_ = new CurrentRoomFinder(rooms_, player);
     if (finder_) {
@@ -209,10 +211,15 @@ Assets::Assets(AssetLibrary& library,
     if (!renderer) {
         vibble::log::error("[Assets] SceneRenderer not created: SDL_Renderer pointer is null.");
     } else {
+        vibble::log::info("[Assets] Constructor: Creating SceneRenderer");
         try {
             scene = new SceneRenderer(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
+            vibble::log::info("[Assets] Constructor: SceneRenderer created successfully");
         } catch (const std::exception& ex) {
             vibble::log::error(std::string{"[Assets] SceneRenderer initialization failed: "} + ex.what());
+            scene = nullptr;
+        } catch (...) {
+            vibble::log::error("[Assets] SceneRenderer initialization failed with unknown exception");
             scene = nullptr;
         }
     }
@@ -230,10 +237,12 @@ Assets::Assets(AssetLibrary& library,
     movement_commands_buffer_.reserve(all.size());
     grid_registration_buffer_.clear();
     grid_registration_buffer_.reserve(4);
+    vibble::log::info("[Assets] Constructor: Setting up assets (" + std::to_string(all.size()) + " total)");
     for (Asset* a : all) {
         if (!a) continue;
         a->set_assets(this);
     }
+    vibble::log::info("[Assets] Constructor: Asset finalization complete");
     register_pending_static_assets();
 
     update_filtered_active_assets();
@@ -243,6 +252,7 @@ Assets::Assets(AssetLibrary& library,
         quick_task_popup_->set_manifest_store(manifest_store_fallback_.get());
     }
 
+    vibble::log::info("[Assets] Constructor: Initialization complete");
 }
 
 std::vector<const Room::NamedArea*> Assets::current_room_trigger_areas() const {

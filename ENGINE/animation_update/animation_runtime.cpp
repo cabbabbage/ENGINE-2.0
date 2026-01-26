@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include "asset/Asset.hpp"
+#include "utils/log.hpp"
 #include "asset/animation.hpp"
 #include "asset/animation_frame.hpp"
 #include "asset/asset_info.hpp"
@@ -463,21 +464,28 @@ void AnimationRuntime::ensure_child_slots(Animation& anim) {
         }
         if (!slot.info && library && !slot.asset_name.empty()) {
             slot.info = library->get(slot.asset_name);
+            if (!slot.info) {
+                vibble::log::warn("[AnimationRuntime] Child asset '" + slot.asset_name + "' not found in library");
+            }
         }
         if (!slot.animation && slot.info) {
-            auto child_anim_it =
-                slot.info->animations.find(animation_update::detail::kDefaultAnimation);
-            if (child_anim_it == slot.info->animations.end() && !slot.info->animations.empty()) {
-                child_anim_it = slot.info->animations.begin();
-            }
-            if (child_anim_it != slot.info->animations.end()) {
-                slot.animation = &child_anim_it->second;
-                slot.current_frame = nullptr;
-                slot.frame_progress = 0.0f;
-                slot.cached_w = 0;
-                slot.cached_h = 0;
-                slot.was_visible = false;
-                slot.last_parent_frame_index = -1;
+            if (!slot.info->animations.empty()) {
+                auto child_anim_it =
+                    slot.info->animations.find(animation_update::detail::kDefaultAnimation);
+                if (child_anim_it == slot.info->animations.end()) {
+                    child_anim_it = slot.info->animations.begin();
+                }
+                if (child_anim_it != slot.info->animations.end()) {
+                    slot.animation = &child_anim_it->second;
+                    slot.current_frame = nullptr;
+                    slot.frame_progress = 0.0f;
+                    slot.cached_w = 0;
+                    slot.cached_h = 0;
+                    slot.was_visible = false;
+                    slot.last_parent_frame_index = -1;
+                }
+            } else {
+                vibble::log::warn("[AnimationRuntime] Child asset '" + slot.asset_name + "' has no animations");
             }
         }
         if (slot.animation && !slot.current_frame) {

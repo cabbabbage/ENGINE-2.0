@@ -305,7 +305,12 @@ void Asset::finalize_setup() {
                         }
                 }
 	}
-        ensure_animation_runtime(false);
+        if (!current_animation.empty() && info->animations.count(current_animation) &&
+            !info->animations[current_animation].frames.empty()) {
+            ensure_animation_runtime(false);
+        } else {
+            vibble::log::warn("[Asset] Cannot create animation runtime: animation '" + current_animation + "' is missing or has no frames");
+        }
         if (assets_ && !controller_) {
                 ControllerFactory cf(assets_);
                 controller_ = cf.create_for_asset(this);

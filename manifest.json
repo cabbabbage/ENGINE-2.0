@@ -730,17 +730,47 @@
       "start": "default"
     },
     "Vibble": {
+      "animation_children": [
+        "Vibble_eyes"
+      ],
       "animations": {
         "attack": {
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {}
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
             [
               0,
               0,
+              [],
               [],
               [
                 [
@@ -759,11 +789,15 @@
             "dy": 0
           },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "attack"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "backward": {
           "attack_geometry": [
@@ -808,6 +842,30 @@
               "projectile": []
             }
           ],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
+          "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": false,
             "flipMovementY": false,
@@ -815,6 +873,7 @@
             "flipY": false,
             "reverse": false
           },
+          "flipped_source": true,
           "frames": [
             {
               "needs_rebuild": true
@@ -862,34 +921,18 @@
               "projectile": null
             }
           ],
+          "inherit_source_movement": true,
           "loop": true,
-          "movement": [
-            [
-              0,
-              0,
-              [],
-              [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ]
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "animation",
             "name": "forward",
             "path": ""
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "default": {
           "attack_geometry": [
@@ -897,6 +940,31 @@
               "vectors": []
             }
           ],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {}
           ],
@@ -905,6 +973,7 @@
               "boxes": []
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
@@ -929,11 +998,15 @@
             "dy": 0
           },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "forward": {
           "attack_geometry": [
@@ -978,6 +1051,31 @@
               "projectile": []
             }
           ],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {}
           ],
@@ -1023,6 +1121,7 @@
               "projectile": null
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
@@ -1048,11 +1147,15 @@
             "dy": 0
           },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "forward"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "left": {
           "attack_geometry": [
@@ -1094,6 +1197,80 @@
               "vectors": []
             }
           ],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {},
             {},
@@ -1113,7 +1290,7 @@
                   "center_z": 1230.8443603515625,
                   "half_height": 702.7274780273438,
                   "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007812
+                  "rotation": -178.48147583007813
                 }
               ]
             },
@@ -1139,6 +1316,7 @@
               "boxes": []
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
@@ -1268,13 +1446,41 @@
             "dy": 0
           },
           "number_of_frames": 8,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "left"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "right": {
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
+          "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": true,
             "flipMovementY": false,
@@ -1282,18 +1488,24 @@
             "flipY": false,
             "reverse": false
           },
+          "flipped_source": true,
           "frames": [
             {
               "needs_rebuild": true
             }
           ],
+          "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "animation",
             "name": "left",
             "path": ""
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "anti_tags": [],
@@ -1302,6 +1514,7 @@
       "asset_directory": "SRC/assets/Vibble",
       "asset_name": "Vibble",
       "asset_type": "player",
+      "async_children": [],
       "can_invert": false,
       "lighting_info": [],
       "neighbor_search_distance": 500,
@@ -1641,7 +1854,7 @@
                   "center_z": 5163.4951171875,
                   "half_height": 1570.3231201171875,
                   "half_width": 5179.4228515625,
-                  "rotation": -93.25064086914062
+                  "rotation": -93.25064086914063
                 }
               ]
             }

@@ -75,18 +75,24 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
         return false;
     }
 
+    // Use cached container if passed container is invalid (zero dimensions)
+    // This happens when handle_event is called without renderer access
+    const SDL_Rect& effective_container = (container.w > 0 && container.h > 0)
+        ? container
+        : cached_container_;
+
     // Check for textbox clicks to set axis
     bool pointer_clicked_textbox = false;
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mouse_pos = {e.button.x, e.button.y};
         const int padding = DMSpacing::small_gap();
-        const int inner_w = container.w - padding * 2;
+        const int inner_w = effective_container.w - padding * 2;
         const int third_w = (inner_w - DMSpacing::small_gap() * 2) / 3;
-        int y = container.y + padding;
+        int y = effective_container.y + padding;
 
         if (tb_dx_) {
             SDL_Rect dx_rect{
-                container.x + padding,
+                effective_container.x + padding,
                 y,
                 third_w,
                 tb_dx_->height_for_width(third_w)
@@ -99,7 +105,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
 
         if (tb_dy_) {
             SDL_Rect dy_rect{
-                container.x + padding + third_w + DMSpacing::small_gap(),
+                effective_container.x + padding + third_w + DMSpacing::small_gap(),
                 y,
                 third_w,
                 tb_dy_->height_for_width(third_w)
@@ -112,7 +118,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
 
         if (tb_dz_) {
             SDL_Rect dz_rect{
-                container.x + padding + (third_w + DMSpacing::small_gap()) * 2,
+                effective_container.x + padding + (third_w + DMSpacing::small_gap()) * 2,
                 y,
                 third_w,
                 tb_dz_->height_for_width(third_w)
@@ -173,6 +179,9 @@ void Point3DEditor::render_overlays(SDL_Renderer* renderer, const SDL_Rect& cont
     if (!renderer || !selection_ || !selection_->has_target()) {
         return;
     }
+
+    // Cache the container rect for use in handle_event
+    cached_container_ = container;
 
     sync_textboxes_from_selection();
 

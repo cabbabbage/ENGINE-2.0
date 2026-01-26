@@ -117,6 +117,9 @@ public:
 
     int get_hovered_point_index() const { return hovered_point_index_; }
 
+    // Get the cached container rect from last render (for overlay hit testing)
+    const SDL_Rect& get_cached_container() const { return cached_container_; }
+
 private:
     SelectionState* selection_ = nullptr;
 
@@ -151,6 +154,9 @@ private:
     Uint32 last_click_time_ = 0;
     int last_clicked_point_ = -1;
     static constexpr Uint32 DOUBLE_CLICK_THRESHOLD_MS = 300;
+
+    // Cached container rect from last render for event handling
+    SDL_Rect cached_container_{0, 0, 0, 0};
 
     // Rendering helper methods
     SDL_Color get_axis_color(AdjustmentAxis axis);

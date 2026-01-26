@@ -15,7 +15,7 @@ constexpr float kMaxBaseScale = 12.0f;
 constexpr float kBaseScaleStep = 0.25f;
 
 constexpr float kMinVerticalOffset = -300.0f;
-constexpr float kMaxVerticalOffset = 300.0f;
+constexpr float kMaxVerticalOffset = 900.0f;
 constexpr float kVerticalOffsetStep = 1.0f;
 constexpr float kMinRandomJitter = 0.0f;
 constexpr float kMaxRandomJitter = 500.0f;

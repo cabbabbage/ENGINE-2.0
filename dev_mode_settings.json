@@ -64,7 +64,7 @@
             "base_size_scale": 1.5,
             "grid_spacing_multiplier": 1.25,
             "max_random_jitter": 35.0,
-            "vertical_offset": 222.0
+            "vertical_offset": 300.0
         },
         "lighting": {
             "map_panel": {

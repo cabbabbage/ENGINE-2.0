@@ -221,13 +221,10 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
     bool overlay_valid = false;
     // Handle Point3DEditor events
     if (point_3d_editor_) {
-        int sw = 0, sh = 0;
-        SDL_GetRendererOutputSize(nullptr, &sw, &sh); // Assuming renderer is not available here, but size is same
-        int height = point_3d_editor_->get_overlay_height(sw);
-        if (height > 0) {
-            overlay_rect = SDL_Rect{0, sh - height, sw, height};
-            overlay_valid = true;
-        }
+        // Use the cached container from Point3DEditor (set during render_overlays)
+        // This avoids issues with SDL_GetRendererOutputSize(nullptr, ...) failing
+        overlay_rect = point_3d_editor_->get_cached_container();
+        overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
         if (point_3d_editor_->handle_event(e, overlay_rect)) {
             return true;
         }

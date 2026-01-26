@@ -97,7 +97,7 @@ Replace every legacy child handling path with a flat, timeline-driven child asse
 
 ## Definition of Done
 - Only `child_timelines` survive as child data; legacy entries are removed or updated to the new format.
-- Parents only activate children once and otherwise ignore them.
+- Parents only activate children once and otherwise ignore them (no longer handle anything in the update code or resulting code).
 - Children read their parent timeline data during their own `Asset::update()` and skip recursive parent-driven updates.
 - Async timelines require explicit trigger, play fully, and stop/hide until retriggered.
 - Child attachment evaluation runs in one place, with no duplicated logic or legacy helpers remaining.

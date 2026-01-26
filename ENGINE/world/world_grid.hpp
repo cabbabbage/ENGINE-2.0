@@ -135,6 +135,7 @@ public:
                                                bool include_empty_nodes,
                                                RegionMetrics* metrics = nullptr) const;
     int max_resolution_layers() const;
+    int grid_spacing_for_layer(int layer) const;
 
 private:
     void remove_from_chunk(Asset* a, Chunk* c);
@@ -150,7 +151,6 @@ private:
     void prune_empty_points();
     std::unique_ptr<Asset> extract_from_point(Asset* a, GridPoint& point);
     int default_resolution_layer() const;
-    int grid_spacing_for_layer(int layer) const;
     int distance_for_layer(int layer) const;
     static int power_of_three(int exponent);
 

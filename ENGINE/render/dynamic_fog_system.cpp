@@ -14,7 +14,6 @@
 namespace fs = std::filesystem;
 
 namespace {
-DynamicFogSystem::FogConfig g_fog_config{};
 constexpr float kMinGridMultiplier = 0.25f;
 constexpr float kMaxGridMultiplier = 8.0f;
 constexpr float kMinBaseScale = 0.25f;
@@ -208,24 +207,25 @@ void DynamicFogSystem::set_grid_spacing_multiplier(float multiplier) {
     if (!std::isfinite(multiplier)) {
         return;
     }
-    g_fog_config.grid_spacing_multiplier = std::clamp(multiplier, kMinGridMultiplier, kMaxGridMultiplier);
+    config().grid_spacing_multiplier = std::clamp(multiplier, kMinGridMultiplier, kMaxGridMultiplier);
 }
 
 float DynamicFogSystem::grid_spacing_multiplier() {
-    return g_fog_config.grid_spacing_multiplier;
+    return config().grid_spacing_multiplier;
 }
 
 void DynamicFogSystem::set_base_size_scale(float scale) {
     if (!std::isfinite(scale)) {
         return;
     }
-    g_fog_config.base_size_scale = std::clamp(scale, kMinBaseScale, kMaxBaseScale);
+    config().base_size_scale = std::clamp(scale, kMinBaseScale, kMaxBaseScale);
 }
 
 float DynamicFogSystem::base_size_scale() {
-    return g_fog_config.base_size_scale;
+    return config().base_size_scale;
 }
 
 DynamicFogSystem::FogConfig& DynamicFogSystem::config() {
-    return g_fog_config;
+    static FogConfig cfg{};
+    return cfg;
 }

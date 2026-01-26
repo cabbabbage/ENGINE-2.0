@@ -302,10 +302,20 @@ bool build_warped_quad(const RenderObject& obj,
 
     const SDL_Color white{255, 255, 255, 255};
 
-    SDL_FPoint base_screen{};
-    if (!project_world_point(cam, world_x, world_y, base_z, base_screen)) {
+    // Treat world_z_offset as vertical height (not forward depth).
+    // Project the ground point for depth/parallax, then apply only the vertical lift
+    // from the height projection so height doesn't move the sprite “forward”.
+    SDL_FPoint ground_screen{};
+    if (!project_world_point(cam, world_x, world_y, 0.0f, ground_screen)) {
         return false;
     }
+    SDL_FPoint height_screen = ground_screen;
+    if (std::fabs(base_z) > 0.0001f) {
+        // If the height projection fails, fall back to ground so we still render.
+        project_world_point(cam, world_x, world_y, base_z, height_screen);
+    }
+    SDL_FPoint base_screen = ground_screen;
+    base_screen.y = height_screen.y;  // apply vertical lift only
 
     quad.vertices[0].position = SDL_FPoint{base_screen.x - half_width, base_screen.y - height};
     quad.vertices[1].position = SDL_FPoint{base_screen.x + half_width, base_screen.y - height};

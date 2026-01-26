@@ -27,10 +27,10 @@
             }
         },
         "grid": {
-            "cell_size_px": 3.0,
+            "cell_size_px": 27.0,
             "overlay": {
                 "enabled": true,
-                "r": 1.0
+                "r": 3.0
             },
             "snap": {
                 "enabled": true
@@ -61,10 +61,10 @@
             "texture_warp_y_offset_px": 0.0
         },
         "fog": {
-            "base_size_scale": 0.75,
-            "grid_spacing_multiplier": 2.0,
+            "base_size_scale": 1.25,
+            "grid_spacing_multiplier": 4.0,
             "max_random_jitter": 27.0,
-            "vertical_offset": 609.0
+            "vertical_offset": 806.0
         },
         "lighting": {
             "map_panel": {

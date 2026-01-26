@@ -6,8 +6,8 @@
 namespace animation_update::child_3d {
 
 /**
- * Represents a 3D world position where Z-axis is up/down (vertical depth).
- * X/Y coordinates are in screen/world space, Z is depth for layering.
+ * Represents a 3D world position where Z-axis is up/down (height above ground).
+ * X/Y coordinates are in world space, Y is depth along the floor plane, Z is height.
  */
 struct WorldPosition3D {
     float x = 0.0f;
@@ -62,11 +62,12 @@ struct Parent3DState {
 /**
  * Child 3D displacement data (local to parent).
  * Represents how far the child is positioned relative to parent's anchor.
+ * Note: Y = depth (into the scene), Z = height (up from the ground).
  */
 struct Child3DDisplacement {
     float dx = 0.0f;  // X displacement from parent anchor (screen-space units)
     float dy = 0.0f;  // Y displacement from parent anchor (screen-space units)
-    float dz = 0.0f;  // Z displacement from parent Z (depth)
+    float dz = 0.0f;  // Z displacement from parent Z (height)
 
     Child3DDisplacement() = default;
 

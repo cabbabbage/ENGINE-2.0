@@ -1503,7 +1503,7 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 1,
-                  "dz": 184,
+                  "dz": 143,
                   "visible": true
                 }
               ],
@@ -3841,9 +3841,9 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 607,
+          "camera_height_px": 1216,
           "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 50.400001525878906,
+          "camera_tilt_deg": 71.4000015258789,
           "camera_y_distance_px": 0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
@@ -3879,8 +3879,8 @@
                 }
               ],
               "display_name": "Vibble",
-              "dx": -508,
-              "dy": 2140,
+              "dx": -972,
+              "dy": 540,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

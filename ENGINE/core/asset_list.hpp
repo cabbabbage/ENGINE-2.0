@@ -26,9 +26,6 @@ public:
 
     AssetList(const AssetList& parent_list, Asset* center_asset, int search_radius, const std::vector<std::string>& required_tags, const std::vector<std::string>& top_bucket_tags, const std::vector<std::string>& bottom_bucket_tags, std::function<bool(const Asset*)> eligibility_filter, bool inherit_parent_view);
 
-    void add_child(std::unique_ptr<AssetList> child);
-    const std::vector<std::unique_ptr<AssetList>>& children() const;
-
     const std::vector<Asset*>& top_unsorted() const;
     const std::vector<Asset*>& middle_sorted() const;
     const std::vector<Asset*>& bottom_unsorted() const;
@@ -88,8 +85,6 @@ private:
 
     std::vector<Asset*> list_always_ineligible_;
     std::unordered_set<Asset*> list_always_ineligible_lookup_;
-
-    std::vector<std::unique_ptr<AssetList>> children_;
 
     std::function<bool(const Asset*)> eligibility_filter_;
 

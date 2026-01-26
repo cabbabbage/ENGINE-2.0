@@ -140,16 +140,6 @@ AssetList::AssetList(const AssetList& parent_list,
     rebuild_from_scratch();
 }
 
-void AssetList::add_child(std::unique_ptr<AssetList> child) {
-    if (child) {
-        children_.push_back(std::move(child));
-    }
-}
-
-const std::vector<std::unique_ptr<AssetList>>& AssetList::children() const {
-    return children_;
-}
-
 const std::vector<Asset*>& AssetList::top_unsorted() const {
     return list_top_unsorted_;
 }
@@ -238,12 +228,6 @@ void AssetList::update() {
 
     previous_center_point_ = current_center;
     previous_search_radius_ = search_radius_;
-
-    for (const auto& child : children_) {
-        if (child) {
-            child->update();
-        }
-    }
 }
 
 void AssetList::update(SDL_Point new_center) {

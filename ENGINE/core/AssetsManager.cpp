@@ -409,10 +409,6 @@ void Assets::set_movement_debug_visible(bool visible) {
 Assets::~Assets() {
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
-    for (Asset* child : child_timeline_assets_) {
-        delete child;
-    }
-    child_timeline_assets_.clear();
 
     if (input) {
         input->clear_screen_to_world_mapper();
@@ -1172,15 +1168,10 @@ const std::vector<Asset*>& Assets::getFilteredActiveAssets() const {
 void Assets::initialize_active_assets(SDL_Point ) {
 
     active_assets.clear();
-    active_assets.reserve(all.size() + child_timeline_assets_.size());
+    active_assets.reserve(all.size());
     for (Asset* a : all) {
         if (a) {
             active_assets.push_back(a);
-        }
-    }
-    for (Asset* child : child_timeline_assets_) {
-        if (child) {
-            active_assets.push_back(child);
         }
     }
 
@@ -1264,23 +1255,27 @@ void Assets::request_child_timeline_creation(Asset* parent) {
         int depth = parent->depth;
         int grid_res = parent->grid_resolution;
         auto uptr = std::make_unique<Asset>(info, spawn_area, parent->pos, depth, parent, std::string{}, std::string{"ChildTimeline"}, grid_res);
-        Asset* raw = uptr.release();
+        Asset* raw = uptr.get();
         if (!raw) {
             continue;
         }
         raw->set_assets(this);
         raw->set_camera(&camera_);
         raw->finalize_setup();
-        raw->active = true;
-        raw->is_child_timeline_asset_ = true;
         raw->child_timeline_index_ = static_cast<int>(i);
 
-        child_timeline_assets_.push_back(raw);
-        active_assets.push_back(raw);
+        raw = world_grid_.create_asset_at_point(std::move(uptr));
+        if (!raw) {
+            continue;
+        }
+        all.push_back(raw);
+        queue_asset_dimension_update(raw);
         created_any = true;
     }
 
     if (created_any) {
+        mark_grid_dirty();
+        mark_active_assets_dirty();
         mark_non_player_update_buffer_dirty();
         needs_filtered_active_refresh_ = true;
         touch_dev_active_state_version();
@@ -1291,12 +1286,12 @@ Asset* Assets::find_child_timeline_asset(const Asset* parent, int slot_index) co
     if (!parent || slot_index < 0) {
         return nullptr;
     }
-    for (Asset* child : child_timeline_assets_) {
-        if (!child || child->dead) {
+    for (Asset* asset : all) {
+        if (!asset || asset->dead) {
             continue;
         }
-        if (child->parent == parent && child->child_timeline_index() == slot_index) {
-            return child;
+        if (asset->parent == parent && asset->child_timeline_index() == slot_index) {
+            return asset;
         }
     }
     return nullptr;
@@ -1304,10 +1299,6 @@ Asset* Assets::find_child_timeline_asset(const Asset* parent, int slot_index) co
 
 void Assets::rebuild_from_grid_state() {
     ++frame_id_;
-    for (Asset* child : child_timeline_assets_) {
-        delete child;
-    }
-    child_timeline_assets_.clear();
     rebuild_all_assets_from_grid();
     initialize_active_assets(camera_.get_screen_center());
     refresh_filtered_active_assets();
@@ -1516,40 +1507,13 @@ bool Assets::process_removals() {
         return false;
     }
 
-    std::vector<Asset*> active_only_removals;
     std::vector<Asset*> grid_removals;
-    active_only_removals.reserve(pending_removals.size());
     grid_removals.reserve(pending_removals.size());
     for (Asset* asset : pending_removals) {
         if (!asset) {
             continue;
         }
-        if (asset->is_child_timeline_asset()) {
-            active_only_removals.push_back(asset);
-        } else {
-            grid_removals.push_back(asset);
-        }
-    }
-
-    if (!active_only_removals.empty()) {
-        for (Asset* asset : active_only_removals) {
-            remove_asset_dimension_cache(asset);
-            asset->clear_grid_residency_cache();
-            child_timeline_assets_.erase(std::remove(child_timeline_assets_.begin(),
-                                                     child_timeline_assets_.end(),
-                                                     asset),
-                                         child_timeline_assets_.end());
-            active_assets.erase(std::remove(active_assets.begin(), active_assets.end(), asset), active_assets.end());
-            filtered_active_assets.erase(std::remove(filtered_active_assets.begin(), filtered_active_assets.end(), asset), filtered_active_assets.end());
-            delete asset;
-        }
-        mark_non_player_update_buffer_dirty();
-        needs_filtered_active_refresh_ = true;
-        touch_dev_active_state_version();
-    }
-
-    if (grid_removals.empty()) {
-        return !active_only_removals.empty();
+        grid_removals.push_back(asset);
     }
 
     for (Asset* asset : grid_removals) {
@@ -2008,16 +1972,6 @@ void Assets::rebuild_active_from_screen_grid() {
         return lhs < rhs;
     };
 
-    auto parent_is_active = [&](Asset* asset) -> bool {
-        if (!asset) {
-            return false;
-        }
-        if (!asset->parent) {
-            return true;
-        }
-        return asset->parent->last_active_frame_id == current_frame_id;
-    };
-
     active_assets.erase(std::remove_if(active_assets.begin(),
                                        active_assets.end(),
                                        [&](Asset* asset) {
@@ -2027,19 +1981,8 @@ void Assets::rebuild_active_from_screen_grid() {
                                            if (asset->dead) {
                                                return true;
                                            }
-                                           if (asset->is_child_timeline_asset()) {
-                                               const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
-                                               if (!was_active) {
-                                                   newly_active_assets.push_back(asset);
-                                                   active_changed = true;
-                                               }
-                                               asset->last_active_frame_id = current_frame_id;
-                                               asset->active = true;
-                                               return false;
-                                           }
                                            const bool is_visible = asset->last_visible_frame_id == current_frame_id;
-                                           const bool parent_active = parent_is_active(asset);
-                                           if (!is_visible || !parent_active) {
+                                           if (!is_visible) {
                                                if (asset->last_active_frame_id == previous_active_frame_id) {
                                                    active_changed = true;
                                                }
@@ -2060,9 +2003,6 @@ void Assets::rebuild_active_from_screen_grid() {
 
     for (Asset* asset : visible_candidate_buffer_) {
         if (!asset) {
-            continue;
-        }
-        if (!parent_is_active(asset)) {
             continue;
         }
         if (asset->last_active_frame_id == current_frame_id) {

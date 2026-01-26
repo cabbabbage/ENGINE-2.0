@@ -280,7 +280,7 @@ private:
     Assets* assets_ = nullptr;
     std::unique_ptr<AssetController>   controller_;
     std::unique_ptr<AssetList> neighbors;
-    AssetList* impassable_naighbors = nullptr;
+    std::unique_ptr<AssetList> impassable_naighbors;
 
 
 

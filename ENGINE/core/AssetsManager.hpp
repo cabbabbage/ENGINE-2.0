@@ -246,7 +246,6 @@ private:
     std::vector<world::GridPoint*> active_points_;
     std::vector<Asset*> removal_queue;
     std::mutex removal_queue_mutex_;
-    std::vector<Asset*> child_timeline_assets_;
     std::vector<Asset*> non_player_update_buffer_;
     std::atomic<bool> non_player_update_buffer_dirty_{true};
 

@@ -239,6 +239,10 @@ Asset& Asset::operator=(const Asset& o) {
         owning_room_name_    = o.owning_room_name_;
         controller_.reset();
         anim_.reset();
+        neighbors.reset();
+        impassable_naighbors.reset();
+        neighbor_lists_initialized_ = false;
+        last_neighbor_origin_ = SDL_Point{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min() };
         tiling_info_         = o.tiling_info_;
         last_scaled_texture_      = nullptr;
         last_scaled_source_       = nullptr;
@@ -415,74 +419,22 @@ void Asset::update() {
 
 
     bool uses_parent_world_z = false;
-    if (is_child_timeline_asset_ && (!parent || parent->dead || !parent->active)) {
-        child_timeline_index_ = -1;
-        Delete();
-        return;
-    }
-
-    // Early step: if this asset has a parent, sample the parent's child_timeline slot
     if (parent && !parent->dead) {
-        // Check if parent is inactive - if so, self-delete
-        if (!parent->active) {
-            child_timeline_index_ = -1;
-            Delete();
-            return;
-        }
-
-        // Find our slot in the parent's animation_children_
-        AnimationChildAttachment* our_slot = nullptr;
-        if (child_timeline_index_ >= 0 &&
-            static_cast<std::size_t>(child_timeline_index_) < parent->animation_children_.size()) {
-            auto& slot = parent->animation_children_[child_timeline_index_];
-            if (slot.child_index == child_timeline_index_) {
-                our_slot = &slot;
-            }
-        }
-        if (!our_slot && info) {
-            for (auto& slot : parent->animation_children_) {
-                if (slot.child_index < 0) {
-                    continue;
-                }
-                if (slot.asset_name == info->name) {
-                    our_slot = &slot;
+        const AnimationFrame* parent_frame = parent->current_frame;
+        if (parent_frame && child_timeline_index_ >= 0) {
+            const AnimationChildFrameData* child_frame = nullptr;
+            for (const auto& entry : parent_frame->children) {
+                if (entry.child_index == child_timeline_index_) {
+                    child_frame = &entry;
                     break;
                 }
             }
-        }
-
-        if (our_slot && our_slot->child_index >= 0) {
-            // Compute visibility: respect parent hidden/inactive state
-            const bool parent_visible = !parent->hidden && parent->active;
-            const bool should_be_visible = parent_visible && our_slot->visible;
-            hidden = !should_be_visible;
-
-            // Set world position from parent's child timeline data
-            if (our_slot->cached_w == 0 || our_slot->cached_h == 0) {
-                animation_update::child_attachments::update_dimensions(*our_slot);
+            if (child_frame) {
+                pos.x = parent->pos.x + child_frame->dx;
+                pos.y = parent->pos.y + child_frame->dy;
+                set_world_z_offset(parent->world_z_offset() + static_cast<float>(child_frame->dz));
+                uses_parent_world_z = true;
             }
-            int child_w = our_slot->cached_w > 0 ? our_slot->cached_w : cached_w;
-            int child_h = our_slot->cached_h > 0 ? our_slot->cached_h : cached_h;
-            child_w = std::max(1, child_w);
-            child_h = std::max(1, child_h);
-
-            SDL_Point anchor{ our_slot->world_pos.x, our_slot->world_pos.y };
-            pos.x = anchor.x - child_w / 2;
-            pos.y = anchor.y - child_h;
-
-            // Apply world_z from parent's slot data
-            float resolved_world_z = std::isfinite(our_slot->world_z) ? our_slot->world_z : parent->world_z_offset_;
-            set_world_z_offset(resolved_world_z);
-            uses_parent_world_z = true;
-
-            // Inherit parent's flip state
-            flipped = parent->flipped;
-            depth = parent->depth;
-            grid_resolution = parent->grid_resolution;
-        } else {
-            child_timeline_index_ = -1;
-            Delete();
-            return;
         }
     }
 
@@ -647,7 +599,7 @@ void Asset::set_assets(Assets* a) {
             controller_ = cf.create_for_asset(this);
     }
     neighbors.reset();
-    impassable_naighbors = nullptr;
+    impassable_naighbors.reset();
     neighbor_lists_initialized_ = false;
     last_neighbor_origin_ = SDL_Point{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min() };
 
@@ -684,8 +636,8 @@ void Asset::ensure_animation_runtime(bool force_recreate) {
 
 AssetList* Asset::get_neighbors_list() { return neighbors.get(); }
 const AssetList* Asset::get_neighbors_list() const { return neighbors.get(); }
-AssetList* Asset::get_impassable_naighbors() { return impassable_naighbors; }
-const AssetList* Asset::get_impassable_naighbors() const { return impassable_naighbors; }
+AssetList* Asset::get_impassable_naighbors() { return impassable_naighbors.get(); }
+const AssetList* Asset::get_impassable_naighbors() const { return impassable_naighbors.get(); }
 
 void Asset::update_neighbor_lists(bool force_update) {
     if (!assets_ || !info || !info->moving_asset) {
@@ -728,7 +680,7 @@ void Asset::update_neighbor_lists(bool force_update) {
     const auto& candidates = assets_->getActiveRaw();
     if (candidates.empty()) {
         neighbors.reset();
-        impassable_naighbors = nullptr;
+        impassable_naighbors.reset();
         neighbor_lists_initialized_ = false;
         return;
     }
@@ -739,6 +691,7 @@ void Asset::update_neighbor_lists(bool force_update) {
         return;
     }
 
+    impassable_naighbors.reset();
     neighbors = std::make_unique<AssetList>(
         candidates,
         this,
@@ -757,11 +710,8 @@ void Asset::update_neighbor_lists(bool force_update) {
             std::vector<std::string>{},
             std::vector<std::string>{},
             impassable_filter,
-            true );
-        impassable_naighbors = imp_child.get();
-        neighbors->add_child(std::move(imp_child));
-    } else {
-        impassable_naighbors = nullptr;
+            true);
+        impassable_naighbors = std::move(imp_child);
     }
 
     last_neighbor_origin_ = pos;
@@ -830,11 +780,6 @@ void Asset::deactivate() {
         child_creation_requested_ = false;
         if (assets_) {
                 assets_->mark_active_assets_dirty();
-        }
-
-        if (is_child_timeline_asset_) {
-                child_timeline_index_ = -1;
-                Delete();
         }
 }
 

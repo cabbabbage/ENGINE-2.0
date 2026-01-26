@@ -4,7 +4,6 @@
 #include <sstream>
 #include <random>
 #include <iostream>
-#include <cmath>
 #include <algorithm>
 #include <cctype>
 #include "font_paths.hpp"
@@ -132,15 +131,6 @@ void LoadingScreen::render_justified_text(TTF_Font* font, const std::string& tex
 	}
 }
 
-void LoadingScreen::render_scaled_center(SDL_Texture* tex, int target_w, int target_h, int cx, int cy, double angle) {
-        if (!tex) return; int w,h; SDL_QueryTexture(tex,nullptr,nullptr,&w,&h);
-        if(w<=0||h<=0)return; double ar=(double)w/h;
-        int dw=target_w; int dh=(int)(dw/ar);
-        if(dh>target_h){dh=target_h; dw=(int)(dh*ar);}
-        SDL_Rect dst{cx-dw/2, cy-dh/2, dw, dh};
-        SDL_RenderCopyEx(renderer_,tex,nullptr,&dst,angle,nullptr,SDL_FLIP_NONE);
-}
-
 void LoadingScreen::init() {
         if (current_texture_) {
                 SDL_DestroyTexture(current_texture_);
@@ -162,8 +152,6 @@ void LoadingScreen::init() {
         }
 
         status_text_.clear();
-        rotation_angle_ = 0.0;
-        last_frame_time_ = SDL_GetTicks();
 }
 
 void LoadingScreen::set_status(std::string status) {
@@ -174,12 +162,6 @@ void LoadingScreen::draw_frame() {
 
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 255);
         SDL_RenderClear(renderer_);
-
-        const double rotation_speed = 20.0;
-        Uint32 now = SDL_GetTicks();
-        Uint32 delta = last_frame_time_ ? (now - last_frame_time_) : 0;
-        last_frame_time_ = now;
-        rotation_angle_ = std::fmod(rotation_angle_ + (delta * rotation_speed) / 1000.0, 360.0);
 
         if (!selected_image_path_.empty()) {
                 if (!current_texture_ || selected_image_path_ != current_texture_path_) {
@@ -229,7 +211,8 @@ void LoadingScreen::draw_frame() {
         }
 
         if (current_texture_) {
-                render_scaled_center(current_texture_, screen_w_ / 3, screen_h_ / 3, screen_w_ / 2, screen_h_ / 2, rotation_angle_);
+                SDL_Rect dst = coverDest(current_texture_);
+                SDL_RenderCopy(renderer_, current_texture_, nullptr, &dst);
         }
 
         const bool has_message = !message_.empty();
@@ -241,4 +224,19 @@ void LoadingScreen::draw_frame() {
                         TTF_CloseFont(body_font);
                 }
         }
+}
+
+SDL_Rect LoadingScreen::coverDest(SDL_Texture* tex) const {
+        if (!tex) return SDL_Rect{0, 0, screen_w_, screen_h_};
+        int tw = 0; int th = 0;
+        SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+        if (tw <= 0 || th <= 0) return SDL_Rect{0, 0, screen_w_, screen_h_};
+        const double ar = static_cast<double>(tw) / static_cast<double>(th);
+        int w = screen_w_;
+        int h = static_cast<int>(w / ar);
+        if (h < screen_h_) {
+                h = screen_h_;
+                w = static_cast<int>(h * ar);
+        }
+        return SDL_Rect{ (screen_w_ - w) / 2, (screen_h_ - h) / 2, w, h };
 }

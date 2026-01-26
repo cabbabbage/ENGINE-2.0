@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-#include "dev_mode/pan_and_height.hpp"
+#include "dev_mode/dev_camera_controls.hpp"
 #include "utils/input.hpp"
 
 class Asset;
@@ -403,15 +403,17 @@ private:
     std::unordered_map<Room*, LabelCacheEntry> label_cache_;
 
     double height_scale_factor_ = 1.1;
-    PanAndHeight pan_height_;
+    DevCameraControls camera_controls_;
     bool camera_pan_active_notified_ = false;
     bool camera_settings_drag_active_notified_ = false;
     struct CameraLockState {
         bool valid = false;
         bool manual_height_override = false;
+        bool manual_zoom_override = false;
         bool had_focus_override = false;
         SDL_Point focus_point{0, 0};
         SDL_Point screen_center{0, 0};
+        double camera_zoom_percent = 0.0;
     };
     CameraLockState camera_lock_restore_{};
     bool camera_settings_lock_active_ = false;

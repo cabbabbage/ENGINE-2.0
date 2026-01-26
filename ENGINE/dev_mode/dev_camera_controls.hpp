@@ -6,7 +6,7 @@
 class WarpedScreenGrid;
 class Input;
 
-class PanAndHeight {
+class DevCameraControls {
 public:
     void set_height_scale_factor(double factor);
 
@@ -23,8 +23,11 @@ private:
     double height_scale_factor_ = 1.1;
     bool panning_ = false;
     bool pan_drag_pending_ = false;
+    bool tilting_ = false;
     SDL_Point pan_start_mouse_screen_{0, 0};
     SDL_Point pan_start_center_{0, 0};
     SDL_Point last_pan_center_{0, 0};
     bool has_last_pan_center_ = false;
+    SDL_Point tilt_start_mouse_screen_{0, 0};
+    float tilt_start_degrees_ = 0.0f;
 };

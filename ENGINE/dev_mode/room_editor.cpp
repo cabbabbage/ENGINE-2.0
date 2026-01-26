@@ -66,6 +66,8 @@ constexpr float kSavedCameraTiltMinDeg = 0.0f;
 constexpr float kSavedCameraTiltMaxDeg = 150.0f;
 constexpr int kSavedCameraYDistanceMinPx = 0;
 constexpr int kSavedCameraYDistanceMaxPx = 2000;
+constexpr int kSavedCameraZoomMinPercent = 0;
+constexpr int kSavedCameraZoomMaxPercent = 100;
 
 SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
     MapGridSettings settings;
@@ -842,6 +844,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
     if (enabled_) {
         if (cam && !preserve_camera_state) {
             cam->set_manual_height_override(false);
+            cam->set_manual_zoom_override(false);
         }
         close_asset_info_editor();
         ensure_room_configurator();
@@ -853,6 +856,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
     } else {
         if (cam && !preserve_camera_state) {
             cam->set_manual_height_override(false);
+            cam->set_manual_zoom_override(false);
             cam->clear_focus_override();
         }
         if (library_ui_) library_ui_->close();
@@ -910,7 +914,7 @@ void RoomEditor::update(const Input& input) {
     if (!should_enable_mouse_controls()) {
         enforce_mouse_controls_disabled();
         if (cam && !camera_settings_lock_active_) {
-            pan_height_.cancel(*cam);
+            camera_controls_.cancel(*cam);
         }
         mouse_controls_enabled_last_frame_ = false;
         return;
@@ -921,7 +925,7 @@ void RoomEditor::update(const Input& input) {
     if (!ui_blocked || dragging_) {
         handle_mouse_input(input);
     } else if (cam && !camera_settings_lock_active_) {
-        pan_height_.cancel(*cam);
+        camera_controls_.cancel(*cam);
     }
 
     if (camera_settings_lock_active_ && cam) {
@@ -1280,19 +1284,24 @@ void RoomEditor::set_camera_settings_lock(bool active) {
         camera_settings_drag_ = CameraSettingsDragState{};
         camera_lock_restore_.valid = true;
         camera_lock_restore_.manual_height_override = cam->is_manual_height_override();
+        camera_lock_restore_.manual_zoom_override = cam->is_manual_zoom_override();
         camera_lock_restore_.had_focus_override = cam->has_focus_override();
         if (camera_lock_restore_.had_focus_override) {
             camera_lock_restore_.focus_point = cam->get_focus_override_point();
         }
         camera_lock_restore_.screen_center = cam->get_screen_center();
-        // Keep live camera updates while locked by clearing manual zoom overrides.
+        camera_lock_restore_.camera_zoom_percent = cam->get_zoom_percent();
+        // Keep live camera updates while locked by clearing manual overrides.
         cam->set_manual_height_override(false);
+        cam->set_manual_zoom_override(false);
         apply_camera_settings_lock(*cam);
     } else {
         camera_settings_drag_ = CameraSettingsDragState{};
         const SDL_Point previous_center = cam->get_screen_center();
         if (camera_lock_restore_.valid) {
             cam->set_manual_height_override(camera_lock_restore_.manual_height_override);
+            cam->set_zoom_percent(camera_lock_restore_.camera_zoom_percent);
+            cam->set_manual_zoom_override(camera_lock_restore_.manual_zoom_override);
             if (camera_lock_restore_.had_focus_override) {
                 cam->set_focus_override(camera_lock_restore_.focus_point);
             } else {
@@ -2340,7 +2349,7 @@ void RoomEditor::purge_asset(Asset* asset) {
 
 void RoomEditor::set_height_scale_factor(double factor) {
     height_scale_factor_ = (factor > 0.0) ? factor : 1.0;
-    pan_height_.set_height_scale_factor(height_scale_factor_);
+    camera_controls_.set_height_scale_factor(height_scale_factor_);
 }
 
 bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
@@ -2477,7 +2486,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
                                     (shift_down && hit_before_pan && !hit_before_pan->spawn_id.empty() && (left_down || left_pressed_this_frame));
 
     if (!camera_settings_lock_active_) {
-        pan_height_.handle_input(cam, input, pointer_blocks_pan);
+        camera_controls_.handle_input(cam, input, pointer_blocks_pan);
     }
     if (std::fabs(cam.get_scale() - prev_scale) > 1e-6 ||
         cam.get_screen_center().x != prev_center.x ||
@@ -2486,7 +2495,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     }
 
     if (assets_) {
-        const bool now_panning = pan_height_.is_panning();
+        const bool now_panning = camera_controls_.is_panning();
         if (now_panning && !camera_pan_active_notified_) {
             camera_pan_active_notified_ = true;
             assets_->notify_camera_activity(true);
@@ -3618,7 +3627,8 @@ void RoomEditor::handle_shortcuts(const Input& input) {
             return;
         }
         const auto& params = assets_->getView().camera_state().params;
-        if (!std::isfinite(params.height_px) || !std::isfinite(params.tilt_deg) || !std::isfinite(params.y_distance_px)) {
+        if (!std::isfinite(params.height_px) || !std::isfinite(params.tilt_deg) ||
+            !std::isfinite(params.y_distance_px) || !std::isfinite(params.zoom_percent)) {
             return;
         }
 
@@ -3627,15 +3637,20 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         const int y_distance_px = std::clamp(static_cast<int>(std::lround(params.y_distance_px)),
                                              kSavedCameraYDistanceMinPx,
                                              kSavedCameraYDistanceMaxPx);
+        const int zoom_percent = std::clamp(static_cast<int>(std::lround(params.zoom_percent)),
+                                            kSavedCameraZoomMinPercent,
+                                            kSavedCameraZoomMaxPercent);
 
         current_room_->camera_height_px = height_px;
         current_room_->camera_tilt_deg = tilt_deg;
         current_room_->camera_y_distance_px = y_distance_px;
+        current_room_->camera_zoom_percent = zoom_percent;
 
         auto& room_data = current_room_->assets_data();
         room_data["camera_height_px"] = height_px;
         room_data["camera_tilt_deg"] = tilt_deg;
         room_data["camera_y_distance_px"] = y_distance_px;
+        room_data["camera_zoom_percent"] = zoom_percent;
 
         current_room_->save_assets_json();
         notify_room_assets_saved();
@@ -3665,6 +3680,7 @@ void RoomEditor::ensure_room_configurator() {
         room_cfg_ui_->set_on_camera_changed([this](Room* changed_room) {
             if (assets_ && (!changed_room || changed_room == current_room_)) {
                 assets_->getView().set_manual_height_override(false);
+                assets_->getView().set_manual_zoom_override(false);
                 assets_->mark_camera_dirty();
                 mark_spatial_index_dirty();
             }

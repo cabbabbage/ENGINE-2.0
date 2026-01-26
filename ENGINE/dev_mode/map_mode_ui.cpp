@@ -1159,6 +1159,7 @@ void MapModeUI::ensure_room_configurator() {
             if (assets_) {
                 if (!room || room == assets_->current_room()) {
                     assets_->getView().set_manual_height_override(false);
+                    assets_->getView().set_manual_zoom_override(false);
                     assets_->mark_camera_dirty();
                 }
             }

@@ -1,4 +1,4 @@
-#include "pan_and_height.hpp"
+#include "dev_camera_controls.hpp"
 
 #include "render/warped_screen_grid.hpp"
 #include "utils/input.hpp"
@@ -6,30 +6,36 @@
 #include <algorithm>
 #include <cmath>
 
-void PanAndHeight::set_height_scale_factor(double factor) {
+namespace {
+constexpr float kTiltDegreesPerPixel = 0.2f;
+constexpr double kZoomStepPercent = 5.0;
+constexpr double kMinZoomPercent = 0.0;
+constexpr double kMaxZoomPercent = 100.0;
+}
+
+void DevCameraControls::set_height_scale_factor(double factor) {
     height_scale_factor_ = (factor > 0.0) ? factor : 1.0;
 }
 
-void PanAndHeight::handle_input(WarpedScreenGrid& cam,
-                               const Input& input,
-                               bool pan_blocked,
-                               std::optional<int> scroll_override) {
+void DevCameraControls::handle_input(WarpedScreenGrid& cam,
+                                     const Input& input,
+                                     bool pan_blocked,
+                                     std::optional<int> scroll_override) {
     const SDL_Point mouse{ input.getX(), input.getY() };
     const int wheel_y = scroll_override.has_value() ? *scroll_override : input.getScrollY();
     const bool left_down = input.isDown(Input::LEFT);
-    const bool alt_down =
-        input.isScancodeDown(SDL_SCANCODE_LALT) || input.isScancodeDown(SDL_SCANCODE_RALT);
+    const bool ctrl_down =
+        input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
+
     if (wheel_y != 0) {
-        if (alt_down && !pan_blocked) {
-            constexpr float kTiltStepDegrees = 2.0f;
-            const float tilt_delta = -static_cast<float>(wheel_y) * kTiltStepDegrees;
-            const float base_tilt = cam.tilt_override_deg();
-            const float target_tilt = std::clamp(
-                base_tilt + tilt_delta,
-                WarpedScreenGrid::kMinPitchDegrees,
-                WarpedScreenGrid::kMaxPitchDegrees);
-            if (std::abs(target_tilt - base_tilt) > 1e-4f) {
-                cam.set_tilt_override(target_tilt);
+        if (ctrl_down && !pan_blocked) {
+            const int ticks = std::abs(wheel_y);
+            const double direction = (wheel_y < 0) ? 1.0 : -1.0;
+            const double delta = direction * kZoomStepPercent * static_cast<double>(ticks);
+            const double base_zoom = std::clamp(cam.get_zoom_percent(), kMinZoomPercent, kMaxZoomPercent);
+            const double target_zoom = std::clamp(base_zoom + delta, kMinZoomPercent, kMaxZoomPercent);
+            if (std::abs(target_zoom - base_zoom) > 1e-6) {
+                cam.set_zoom_percent(target_zoom);
             }
         } else {
             const double step = (height_scale_factor_ > 0.0) ? height_scale_factor_ : 1.0;
@@ -57,10 +63,29 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam,
         panning_ = false;
         pan_drag_pending_ = false;
         has_last_pan_center_ = false;
+        tilting_ = false;
     }
 
     if (input.wasPressed(Input::LEFT)) {
-        if (!pan_blocked) {
+        if (ctrl_down) {
+            if (!pan_blocked) {
+                tilting_ = true;
+                tilt_start_mouse_screen_ = mouse;
+                const auto tilt_override = cam.tilt_override();
+                const float start_tilt = tilt_override.has_value()
+                    ? *tilt_override
+                    : cam.current_pitch_degrees();
+                tilt_start_degrees_ = std::clamp(
+                    start_tilt,
+                    WarpedScreenGrid::kMinPitchDegrees,
+                    WarpedScreenGrid::kMaxPitchDegrees);
+            } else {
+                tilting_ = false;
+            }
+            pan_drag_pending_ = false;
+            panning_ = false;
+            has_last_pan_center_ = false;
+        } else if (!pan_blocked) {
             pan_drag_pending_ = true;
             pan_start_mouse_screen_ = mouse;
             pan_start_center_ = cam.get_screen_center();
@@ -72,13 +97,38 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam,
 
     if (!left_down) {
         pan_drag_pending_ = false;
+        tilting_ = false;
+    }
+
+    if (ctrl_down && !panning_) {
+        pan_drag_pending_ = false;
     }
 
     if (pan_blocked && !panning_) {
         pan_drag_pending_ = false;
     }
 
-    if (!panning_ && pan_drag_pending_ && left_down) {
+    if (tilting_) {
+        if (pan_blocked || !ctrl_down || !left_down) {
+            tilting_ = false;
+        } else {
+            const int dy = mouse.y - tilt_start_mouse_screen_.y;
+            const float tilt_delta = -static_cast<float>(dy) * kTiltDegreesPerPixel;
+            const float base_tilt = tilt_start_degrees_;
+            const float target_tilt = std::clamp(
+                base_tilt + tilt_delta,
+                WarpedScreenGrid::kMinPitchDegrees,
+                WarpedScreenGrid::kMaxPitchDegrees);
+            if (std::abs(target_tilt - base_tilt) > 1e-4f) {
+                cam.set_tilt_override(target_tilt);
+            }
+        }
+        if (tilting_) {
+            return;
+        }
+    }
+
+    if (!panning_ && pan_drag_pending_ && left_down && !ctrl_down) {
         const int dx = mouse.x - pan_start_mouse_screen_.x;
         const int dy = mouse.y - pan_start_mouse_screen_.y;
         if (dx != 0 || dy != 0) {
@@ -115,14 +165,16 @@ void PanAndHeight::handle_input(WarpedScreenGrid& cam,
     has_last_pan_center_ = true;
 }
 
-void PanAndHeight::cancel(WarpedScreenGrid& cam) {
+void DevCameraControls::cancel(WarpedScreenGrid& cam) {
     pan_drag_pending_ = false;
+    tilting_ = false;
     if (!panning_) {
         return;
     }
     panning_ = false;
     has_last_pan_center_ = false;
     cam.set_manual_height_override(false);
+    cam.set_manual_zoom_override(false);
     cam.clear_focus_override();
     cam.clear_tilt_override();
 }

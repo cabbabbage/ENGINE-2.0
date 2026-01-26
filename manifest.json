@@ -951,7 +951,7 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": 199,
+                  "dx": 221,
                   "dy": -213,
                   "dz": 67,
                   "visible": true
@@ -3049,14 +3049,14 @@
           ],
           "camera_height_px": 607,
           "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 45.0,
+          "camera_tilt_deg": 50.400001525878906,
           "camera_y_distance_px": 0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            139,
-            36,
             242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -3257,9 +3257,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            138,
-            242,
             36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 2,

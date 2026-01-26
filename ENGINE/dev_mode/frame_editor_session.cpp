@@ -16,7 +16,7 @@
 #include "render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
 #include "utils/input.hpp"
-#include "dev_mode/pan_and_height.hpp"
+#include "dev_mode/dev_camera_controls.hpp"
 
 namespace {
 
@@ -109,7 +109,7 @@ void FrameEditorSession::begin(Assets* assets,
     editor_context_.selection_state = &selection_state_;
 
     mode_ = mode_for_launch(launch_mode_);
-    pan_height_.set_height_scale_factor(1.1);
+    camera_controls_.set_height_scale_factor(1.1);
     capture_camera_state();
     active_ = true;
     create_and_begin_editor();
@@ -180,8 +180,8 @@ void FrameEditorSession::update(const Input& input) {
     }
     if (assets_) {
         WarpedScreenGrid& cam = assets_->getView();
-        // Standard camera controls: left-click drag = pan, scroll = height, Alt + scroll = tilt
-        pan_height_.handle_input(cam, input, false);
+        // Standard camera controls: left-click drag = pan, scroll = height, Ctrl + drag for tilt, Ctrl + scroll for zoom
+        camera_controls_.handle_input(cam, input, false);
     }
     active_editor_->update(input, 0.0f);
     if (active_editor_ && active_editor_->wants_close()) {
@@ -271,6 +271,8 @@ void FrameEditorSession::capture_camera_state() {
     camera_lock_state_.screen_center_before = cam.get_screen_center();
     camera_lock_state_.tilt_override_before = cam.tilt_override();
     camera_lock_state_.camera_y_distance_before = cam.camera_y_distance();
+    camera_lock_state_.manual_zoom_override_before = cam.is_manual_zoom_override();
+    camera_lock_state_.camera_zoom_percent_before = cam.get_zoom_percent();
     camera_lock_state_.valid = true;
 }
 
@@ -292,6 +294,8 @@ void FrameEditorSession::restore_camera_state() {
         cam.clear_tilt_override();
     }
     cam.set_camera_y_distance(camera_lock_state_.camera_y_distance_before);
+    cam.set_zoom_percent(camera_lock_state_.camera_zoom_percent_before);
+    cam.set_manual_zoom_override(camera_lock_state_.manual_zoom_override_before);
     camera_lock_state_.valid = false;
     camera_y_distance_locked_ = false;
     tilt_locked_ = false;
@@ -308,6 +312,8 @@ void FrameEditorSession::capture_edit_camera_state() {
     edit_camera_state_.screen_center_before = cam.get_screen_center();
     edit_camera_state_.tilt_override_before = cam.tilt_override();
     edit_camera_state_.camera_y_distance_before = cam.camera_y_distance();
+    edit_camera_state_.manual_zoom_override_before = cam.is_manual_zoom_override();
+    edit_camera_state_.camera_zoom_percent_before = cam.get_zoom_percent();
     edit_camera_state_.valid = true;
 }
 
@@ -330,6 +336,8 @@ void FrameEditorSession::restore_edit_camera_state() {
         cam.clear_tilt_override();
     }
     cam.set_camera_y_distance(edit_camera_state_.camera_y_distance_before);
+    cam.set_zoom_percent(edit_camera_state_.camera_zoom_percent_before);
+    cam.set_manual_zoom_override(edit_camera_state_.manual_zoom_override_before);
     edit_camera_state_.valid = false;
     camera_y_distance_locked_ = false;
     tilt_locked_ = false;

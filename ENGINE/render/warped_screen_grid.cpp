@@ -1597,6 +1597,14 @@ void WarpedScreenGrid::set_manual_height_override(bool v) {
     camera_.set_manual_height_override(v);
 }
 
+bool WarpedScreenGrid::is_manual_zoom_override() const {
+    return camera_.manual_zoom_override();
+}
+
+void WarpedScreenGrid::set_manual_zoom_override(bool v) {
+    camera_.set_manual_zoom_override(v);
+}
+
 double WarpedScreenGrid::get_scale() const {
     return std::max(1.0, camera_.current_height());
 }
@@ -1607,6 +1615,20 @@ void WarpedScreenGrid::set_scale(double s) {
     params.height_px = clamped;
     camera_.set_params(params);
     runtime_camera_height_ = camera_.current_height();
+}
+
+double WarpedScreenGrid::get_zoom_percent() const {
+    return camera_.state().params.zoom_percent;
+}
+
+void WarpedScreenGrid::set_zoom_percent(double percent) {
+    camera_.set_zoom_percent(percent);
+}
+
+void WarpedScreenGrid::adjust_zoom_percent(double delta_percent) {
+    const double current = std::clamp(camera_.state().params.zoom_percent, 0.0, 100.0);
+    const double target = std::clamp(current + delta_percent, 0.0, 100.0);
+    camera_.set_zoom_percent(target);
 }
 
 double WarpedScreenGrid::camera_y_distance() const {

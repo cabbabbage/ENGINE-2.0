@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "dev_mode/pan_and_height.hpp"
+#include "dev_mode/dev_camera_controls.hpp"
 
 class Assets;
 class Input;
@@ -79,6 +79,7 @@ private:
     Bounds bounds_{};
 
     bool prev_manual_override_ = false;
+    bool prev_manual_zoom_override_ = false;
     bool prev_focus_override_ = false;
     SDL_Point prev_focus_point_{0, 0};
     bool has_entry_center_ = false;
@@ -87,7 +88,7 @@ private:
     TTF_Font* label_font_ = nullptr;
 
     Room* pending_selection_ = nullptr;
-    PanAndHeight pan_height_;
+    DevCameraControls camera_controls_;
     std::vector<std::pair<Room*, SDL_Rect>> label_rects_;
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;
     mutable SDL_Rect active_label_bounds_{0,0,0,0};

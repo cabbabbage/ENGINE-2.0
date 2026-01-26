@@ -74,6 +74,7 @@ void MapEditor::enter() {
 
     if (WarpedScreenGrid* cam = active_camera()) {
         prev_manual_override_ = cam->is_manual_height_override();
+        prev_manual_zoom_override_ = cam->is_manual_zoom_override();
         prev_focus_override_ = cam->has_focus_override();
         if (prev_focus_override_) {
             prev_focus_point_ = cam->get_focus_override_point();
@@ -129,7 +130,7 @@ void MapEditor::update(const Input& input) {
     const bool left_down = input.isDown(Input::LEFT);
     const bool left_pressed = input.wasPressed(Input::LEFT);
     const bool pan_blocked = pointer_over_ui || (shift_down && hit != nullptr && (left_down || left_pressed));
-    pan_height_.handle_input(*cam, input, pan_blocked);
+    camera_controls_.handle_input(*cam, input, pan_blocked);
 
     if (pointer_over_ui) {
         return;
@@ -348,6 +349,7 @@ void MapEditor::restore_camera_state(bool focus_player, bool restore_previous_st
     if (focus_player) {
         cam->clear_focus_override();
         cam->set_manual_height_override(false);
+        cam->set_manual_zoom_override(false);
         return;
     }
 
@@ -356,6 +358,7 @@ void MapEditor::restore_camera_state(bool focus_player, bool restore_previous_st
     }
 
     cam->set_manual_height_override(prev_manual_override_);
+    cam->set_manual_zoom_override(prev_manual_zoom_override_);
     if (prev_focus_override_) {
         cam->set_focus_override(prev_focus_point_);
     } else {

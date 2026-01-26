@@ -27,6 +27,8 @@ namespace {
 SDL_Point round_point(const SDL_FPoint& pt) {
     return SDL_Point{static_cast<int>(std::lround(pt.x)), static_cast<int>(std::lround(pt.y))};
 }
+
+constexpr float kLockedDepthValue = 1.0f;  // Sync child timelines keep Y (depth) fixed
 }  // namespace
 
 void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
@@ -46,8 +48,22 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             cached_perspective_scale_ = std::max(0.0001f, gp->perspective_scale);
         }
     }
+    cached_attachment_scale_ = 1.0f;
+    if (context_.target) {
+        float remainder = context_.target->current_remaining_scale_adjustment;
+        if (!std::isfinite(remainder) || remainder <= 0.0f) {
+            remainder = 1.0f;
+        }
+        cached_attachment_scale_ = remainder / std::max(0.0001f, cached_perspective_scale_);
+        if (!std::isfinite(cached_attachment_scale_) || cached_attachment_scale_ <= 0.0f) {
+            cached_attachment_scale_ = 1.0f;
+        }
+    }
 
     if (point_3d_editor_) {
+        // Depth axis is locked in sync child mode
+        point_3d_editor_->set_axis_locked_value(AdjustmentAxis::Y, kLockedDepthValue);
+        point_3d_editor_->set_axis_enabled(AdjustmentAxis::Y, false);
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
 
@@ -104,7 +120,7 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             const bool flipped = context_.target && context_.target->flipped;
 
             float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
-            float dy_world = (snapped_world.y - static_cast<float>(anchor.y)) / scale;
+            float dy_world = kLockedDepthValue;
             float dz_world = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
             auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
@@ -141,7 +157,7 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             const bool flipped = context_.target && context_.target->flipped;
 
             float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
-            float dy_world = (snapped_world.y - static_cast<float>(anchor.y)) / scale;
+            float dy_world = kLockedDepthValue;
             float dz_world = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
             auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
@@ -554,6 +570,7 @@ void SyncChildrenFrameEditor::populate_child_data() {
         for (int frame_idx = 0; frame_idx < frame_count_; ++frame_idx) {
             auto& sample = static_frames_by_child_[child_idx][frame_idx];
             sample.child_index = static_cast<int>(child_idx);
+            sample.dy = kLockedDepthValue;
             sample.visible = false;
         }
     }
@@ -572,7 +589,7 @@ void SyncChildrenFrameEditor::populate_child_data() {
             auto& sample = static_frames_by_child_[static_cast<std::size_t>(child_src.child_index)][frame_idx];
             sample.child_index = child_src.child_index;
             sample.dx = static_cast<float>(child_src.dx);
-            sample.dy = static_cast<float>(child_src.dy);
+            sample.dy = kLockedDepthValue;
             sample.dz = static_cast<float>(child_src.dz);
             sample.degree = child_src.degree;
             sample.visible = child_src.visible;
@@ -657,21 +674,10 @@ void SyncChildrenFrameEditor::apply_current_frame_to_children() {
 }
 
 float SyncChildrenFrameEditor::attachment_scale() const {
-    if (!context_.target) {
+    if (!std::isfinite(cached_attachment_scale_) || cached_attachment_scale_ <= 0.0f) {
         return 1.0f;
     }
-    // Use cached perspective scale from session start to prevent camera movement
-    // from affecting child position calculations
-    float perspective_scale = cached_perspective_scale_;
-    float remainder = context_.target->current_remaining_scale_adjustment;
-    if (!std::isfinite(remainder) || remainder <= 0.0f) {
-        remainder = 1.0f;
-    }
-    float scale = remainder / std::max(0.0001f, perspective_scale);
-    if (!std::isfinite(scale) || scale <= 0.0f) {
-        scale = 1.0f;
-    }
-    return scale;
+    return cached_attachment_scale_;
 }
 
 SDL_Point SyncChildrenFrameEditor::asset_anchor_world() const {
@@ -864,7 +870,7 @@ void SyncChildrenFrameEditor::reset_current_frame() {
         auto& sample = timeline[static_cast<std::size_t>(selected_frame_index_)];
         sample.child_index = static_cast<int>(child_idx);
         sample.dx = 0.0f;
-        sample.dy = 0.0f;
+        sample.dy = kLockedDepthValue;
         sample.dz = 0.0f;
         sample.degree = 0.0f;
         sample.visible = true;

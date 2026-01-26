@@ -1,8 +1,10 @@
 #pragma once
 
 #include <SDL.h>
+#include <array>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "SelectionState.hpp"
@@ -30,6 +32,11 @@ public:
     void set_axis_from_textbox_click(int textbox_index);
 
     void set_grid_resolution(int resolution);
+
+    // Axis enable/lock controls (e.g., to freeze depth in sync-child mode)
+    void set_axis_enabled(AdjustmentAxis axis, bool enabled);
+    void set_axis_locked_value(AdjustmentAxis axis, std::optional<float> locked_value);
+    bool is_axis_enabled(AdjustmentAxis axis) const;
 
     // UI rendering and event handling
     bool handle_event(const SDL_Event& e, const SDL_Rect& container);
@@ -150,6 +157,10 @@ private:
     int grid_resolution_ = 0;
     float grid_step_world_ = 1.0f;
 
+    // Axis configuration (enabled/locked values)
+    std::array<bool, 3> axis_enabled_{{true, true, true}};
+    std::array<std::optional<float>, 3> axis_locked_values_{};
+
     // Double-click detection for axis cycling
     Uint32 last_click_time_ = 0;
     int last_clicked_point_ = -1;
@@ -164,6 +175,10 @@ private:
                                SDL_FPoint center,
                                AdjustmentAxis axis,
                                float length = 32.0f);
+
+    AdjustmentAxis first_enabled_axis() const;
+    AdjustmentAxis next_enabled_axis(AdjustmentAxis current) const;
+    int axis_to_index(AdjustmentAxis axis) const;
 };
 
 }

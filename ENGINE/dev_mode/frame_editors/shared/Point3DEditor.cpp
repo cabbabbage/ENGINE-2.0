@@ -40,16 +40,13 @@ void Point3DEditor::set_selection(SelectionState* selection) {
 
 void Point3DEditor::cycle_axis() {
     if (!selection_) return;
-    switch (selection_->axis) {
-        case AdjustmentAxis::X: selection_->axis = AdjustmentAxis::Y; break;
-        case AdjustmentAxis::Y: selection_->axis = AdjustmentAxis::Z; break;
-        case AdjustmentAxis::Z: selection_->axis = AdjustmentAxis::X; break;
-    }
+    selection_->axis = next_enabled_axis(selection_->axis);
 }
 
 void Point3DEditor::reset_axis(AdjustmentAxis axis) {
     if (selection_) {
-        selection_->axis = axis;
+        // If requested axis is disabled, fall back to first enabled axis
+        selection_->axis = is_axis_enabled(axis) ? axis : first_enabled_axis();
     }
 }
 
@@ -60,7 +57,9 @@ void Point3DEditor::set_axis_from_textbox_click(int textbox_index) {
         case 1: new_axis = AdjustmentAxis::Y; break; // dy
         case 2: new_axis = AdjustmentAxis::Z; break; // dz
     }
-    reset_axis(new_axis);
+    if (is_axis_enabled(new_axis)) {
+        reset_axis(new_axis);
+    }
 }
 
 void Point3DEditor::set_grid_resolution(int resolution) {
@@ -68,6 +67,51 @@ void Point3DEditor::set_grid_resolution(int resolution) {
     grid_resolution_ = clamped;
     const int step = vibble::grid::delta(clamped);
     grid_step_world_ = static_cast<float>(step > 0 ? step : 1);
+}
+
+void Point3DEditor::set_axis_enabled(AdjustmentAxis axis, bool enabled) {
+    axis_enabled_[axis_to_index(axis)] = enabled;
+    // If the current axis becomes disabled, move to the first enabled axis
+    if (selection_ && !is_axis_enabled(selection_->axis)) {
+        selection_->axis = first_enabled_axis();
+    }
+}
+
+void Point3DEditor::set_axis_locked_value(AdjustmentAxis axis, std::optional<float> locked_value) {
+    axis_locked_values_[axis_to_index(axis)] = locked_value;
+}
+
+bool Point3DEditor::is_axis_enabled(AdjustmentAxis axis) const {
+    return axis_enabled_[axis_to_index(axis)];
+}
+
+int Point3DEditor::axis_to_index(AdjustmentAxis axis) const {
+    switch (axis) {
+        case AdjustmentAxis::X: return 0;
+        case AdjustmentAxis::Y: return 1;
+        case AdjustmentAxis::Z: return 2;
+    }
+    return 0;
+}
+
+AdjustmentAxis Point3DEditor::first_enabled_axis() const {
+    for (int i = 0; i < 3; ++i) {
+        if (axis_enabled_[i]) {
+            return static_cast<AdjustmentAxis>(i);
+        }
+    }
+    return AdjustmentAxis::X;
+}
+
+AdjustmentAxis Point3DEditor::next_enabled_axis(AdjustmentAxis current) const {
+    int idx = axis_to_index(current);
+    for (int step = 1; step <= 3; ++step) {
+        const int next_idx = (idx + step) % 3;
+        if (axis_enabled_[next_idx]) {
+            return static_cast<AdjustmentAxis>(next_idx);
+        }
+    }
+    return current;
 }
 
 bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) {
@@ -97,7 +141,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
                 third_w,
                 tb_dx_->height_for_width(third_w)
             };
-            if (SDL_PointInRect(&mouse_pos, &dx_rect)) {
+            if (SDL_PointInRect(&mouse_pos, &dx_rect) && is_axis_enabled(AdjustmentAxis::X)) {
                 set_axis_from_textbox_click(0);
                 pointer_clicked_textbox = true;
             }
@@ -110,7 +154,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
                 third_w,
                 tb_dy_->height_for_width(third_w)
             };
-            if (SDL_PointInRect(&mouse_pos, &dy_rect)) {
+            if (SDL_PointInRect(&mouse_pos, &dy_rect) && is_axis_enabled(AdjustmentAxis::Y)) {
                 set_axis_from_textbox_click(1);
                 pointer_clicked_textbox = true;
             }
@@ -123,7 +167,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
                 third_w,
                 tb_dz_->height_for_width(third_w)
             };
-            if (SDL_PointInRect(&mouse_pos, &dz_rect)) {
+            if (SDL_PointInRect(&mouse_pos, &dz_rect) && is_axis_enabled(AdjustmentAxis::Z)) {
                 set_axis_from_textbox_click(2);
                 pointer_clicked_textbox = true;
             }
@@ -132,15 +176,19 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
 
     bool consumed = false;
 
-    if (tb_dx_ && tb_dx_->handle_event(e)) {
+    const bool dx_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::X)].has_value();
+    const bool dy_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::Y)].has_value();
+    const bool dz_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::Z)].has_value();
+
+    if (tb_dx_ && is_axis_enabled(AdjustmentAxis::X) && !dx_locked && tb_dx_->handle_event(e)) {
         apply_textbox_changes();
         consumed = true;
     }
-    if (tb_dy_ && tb_dy_->handle_event(e)) {
+    if (tb_dy_ && is_axis_enabled(AdjustmentAxis::Y) && !dy_locked && tb_dy_->handle_event(e)) {
         apply_textbox_changes();
         consumed = true;
     }
-    if (tb_dz_ && tb_dz_->handle_event(e)) {
+    if (tb_dz_ && is_axis_enabled(AdjustmentAxis::Z) && !dz_locked && tb_dz_->handle_event(e)) {
         apply_textbox_changes();
         consumed = true;
     }
@@ -152,6 +200,10 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
     if (!consumed && e.type == SDL_KEYDOWN &&
         (e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) {
         if (selection_ && selection_->has_target() && selected_point_index_ >= 0 && on_position_changed_) {
+            if (!is_axis_enabled(selection_->axis) ||
+                axis_locked_values_[axis_to_index(selection_->axis)].has_value()) {
+                return consumed;
+            }
             const float step = (grid_step_world_ > 0.0f) ? grid_step_world_ : 1.0f;
             const float direction = (e.key.keysym.sym == SDLK_UP) ? 1.0f : -1.0f;
             SDL_FPoint new_world = selection_->world_pos;
@@ -232,27 +284,49 @@ void Point3DEditor::sync_textboxes_from_selection() {
     const SDL_FPoint rel_pos = selection_->relative_world_pos();
     const float rel_z = selection_->relative_world_z();
 
-    if (tb_dx_ && !tb_dx_->is_editing()) {
-        const std::string dx_str = std::to_string(static_cast<int>(std::lround(rel_pos.x)));
-        if (dx_str != last_dx_text_) {
+    const auto locked_x = axis_locked_values_[axis_to_index(AdjustmentAxis::X)];
+    const auto locked_y = axis_locked_values_[axis_to_index(AdjustmentAxis::Y)];
+    const auto locked_z = axis_locked_values_[axis_to_index(AdjustmentAxis::Z)];
+
+    if (tb_dx_) {
+        const float display_x = locked_x.value_or(rel_pos.x);
+        const std::string dx_str = std::to_string(static_cast<int>(std::lround(display_x)));
+        if (!tb_dx_->is_editing() && dx_str != last_dx_text_) {
             tb_dx_->set_value(dx_str);
             last_dx_text_ = dx_str;
         }
-    }
-
-    if (tb_dy_ && !tb_dy_->is_editing()) {
-        const std::string dy_str = std::to_string(static_cast<int>(std::lround(rel_pos.y)));
-        if (dy_str != last_dy_text_) {
-            tb_dy_->set_value(dy_str);
-            last_dy_text_ = dy_str;
+        if (!is_axis_enabled(AdjustmentAxis::X)) {
+            tb_dx_->set_label_color_override(SDL_Color{160, 160, 160, 255});
+        } else {
+            tb_dx_->clear_label_color_override();
         }
     }
 
-    if (tb_dz_ && !tb_dz_->is_editing()) {
-        const std::string dz_str = std::to_string(static_cast<int>(std::lround(rel_z)));
-        if (dz_str != last_dz_text_) {
+    if (tb_dy_) {
+        const float display_y = locked_y.value_or(rel_pos.y);
+        const std::string dy_str = std::to_string(static_cast<int>(std::lround(display_y)));
+        if (!tb_dy_->is_editing() && dy_str != last_dy_text_) {
+            tb_dy_->set_value(dy_str);
+            last_dy_text_ = dy_str;
+        }
+        if (!is_axis_enabled(AdjustmentAxis::Y)) {
+            tb_dy_->set_label_color_override(SDL_Color{160, 160, 160, 255});
+        } else {
+            tb_dy_->clear_label_color_override();
+        }
+    }
+
+    if (tb_dz_) {
+        const float display_z = locked_z.value_or(rel_z);
+        const std::string dz_str = std::to_string(static_cast<int>(std::lround(display_z)));
+        if (!tb_dz_->is_editing() && dz_str != last_dz_text_) {
             tb_dz_->set_value(dz_str);
             last_dz_text_ = dz_str;
+        }
+        if (!is_axis_enabled(AdjustmentAxis::Z)) {
+            tb_dz_->set_label_color_override(SDL_Color{160, 160, 160, 255});
+        } else {
+            tb_dz_->clear_label_color_override();
         }
     }
 }
@@ -268,8 +342,12 @@ void Point3DEditor::apply_textbox_changes() {
     const float rel_z = selection_->relative_world_z();
     const float anchor_z = selection_->anchor_z_point();
 
-    if (tb_dx_) {
-        const float value = parse_float(tb_dx_->value(), rel_pos.x);
+    const auto locked_x = axis_locked_values_[axis_to_index(AdjustmentAxis::X)];
+    const auto locked_y = axis_locked_values_[axis_to_index(AdjustmentAxis::Y)];
+    const auto locked_z = axis_locked_values_[axis_to_index(AdjustmentAxis::Z)];
+
+    if (tb_dx_ && is_axis_enabled(AdjustmentAxis::X)) {
+        const float value = locked_x.value_or(parse_float(tb_dx_->value(), rel_pos.x));
         const float new_world_x = anchor.x + value;
         if (std::fabs(new_world_x - selection_->world_pos.x) > 0.001f) {
             selection_->world_pos.x = new_world_x;
@@ -278,8 +356,8 @@ void Point3DEditor::apply_textbox_changes() {
         }
     }
 
-    if (tb_dy_) {
-        const float value = parse_float(tb_dy_->value(), rel_pos.y);
+    if (tb_dy_ && is_axis_enabled(AdjustmentAxis::Y)) {
+        const float value = locked_y.value_or(parse_float(tb_dy_->value(), rel_pos.y));
         const float new_world_y = anchor.y + value;
         if (std::fabs(new_world_y - selection_->world_pos.y) > 0.001f) {
             selection_->world_pos.y = new_world_y;
@@ -288,8 +366,8 @@ void Point3DEditor::apply_textbox_changes() {
         }
     }
 
-    if (tb_dz_) {
-        const float value = parse_float(tb_dz_->value(), rel_z);
+    if (tb_dz_ && is_axis_enabled(AdjustmentAxis::Z)) {
+        const float value = locked_z.value_or(parse_float(tb_dz_->value(), rel_z));
         const float new_world_z = anchor_z + value;
         if (std::fabs(new_world_z - selection_->world_z) > 0.001f) {
             selection_->world_z = new_world_z;

@@ -87,6 +87,8 @@ private:
     // Cache the camera perspective scale from session start to prevent camera movement
     // from affecting child position calculations
     float cached_perspective_scale_ = 1.0f;
+    // Cache the full attachment scale at session start so edits stay stable if the camera moves
+    float cached_attachment_scale_ = 1.0f;
 };
 
 }  // namespace devmode::frame_editors

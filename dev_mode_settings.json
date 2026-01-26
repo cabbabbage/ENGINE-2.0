@@ -63,8 +63,8 @@
         "fog": {
             "base_size_scale": 0.75,
             "grid_spacing_multiplier": 2.0,
-            "max_random_jitter": 38.0,
-            "vertical_offset": 154.0
+            "max_random_jitter": 27.0,
+            "vertical_offset": 609.0
         },
         "lighting": {
             "map_panel": {

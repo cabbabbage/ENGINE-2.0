@@ -3338,24 +3338,12 @@
         },
         "up": {
           "attack_geometry": [
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            }
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
           ],
           "child_timelines": [],
           "crop_frames": false,
@@ -3389,26 +3377,80 @@
           ],
           "hit_geometry": [
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             },
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             },
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             },
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             },
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             },
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             }
           ],
-          "inherit_source_movement": true,
+          "inherit_source_movement": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
           "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
@@ -3559,8 +3601,8 @@
   "image_effects": {
     "background": {
       "blur": 1.950000004768376,
-      "brightness": -0.599999904632568,
-      "contrast": -0.5,
+      "brightness": -0.899999904632568,
+      "contrast": -0.2,
       "hue": 0.0,
       "saturation_blue": 0.3,
       "saturation_green": 0.3,

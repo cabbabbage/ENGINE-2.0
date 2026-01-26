@@ -466,6 +466,8 @@ void SceneRenderer::render() {
             [](const auto& a, const auto& b) { return a.world_pos.y > b.world_pos.y; });
     }
     size_t fog_index = 0;
+    const float fog_size_scale = DynamicFogSystem::base_size_scale();
+    const float fog_cull_margin = 64.0f;
 
     // Helper to render fog sprites at current Y depth (matching asset depth sorting)
     auto render_fog_at_y = [&](float current_y) {
@@ -478,15 +480,24 @@ void SceneRenderer::render() {
                 const float world_z = static_cast<float>(sprite.world_z);
 
                 // Calculate fog size in world units based on texture size and scale percentage
-                // Size = texture_size * kFogSizeScale (from header) * sprite.scale (perspective)
-                const float fog_world_width = static_cast<float>(sprite.texture_w) * DynamicFogSystem::kFogSizeScale * sprite.scale;
-                const float fog_world_height = static_cast<float>(sprite.texture_h) * DynamicFogSystem::kFogSizeScale * sprite.scale;
+                // Size = texture_size * base_size_scale * sprite.scale (perspective)
+                const float fog_world_width = static_cast<float>(sprite.texture_w) * fog_size_scale * sprite.scale;
+                const float fog_world_height = static_cast<float>(sprite.texture_h) * fog_size_scale * sprite.scale;
                 const float half_width = fog_world_width * 0.5f;
                 const float height = fog_world_height;
 
                 // Project center point with Z-depth
                 SDL_FPoint base_screen{};
                 if (!project_world_point(cam, world_x, world_y, world_z, base_screen)) {
+                    ++fog_index;
+                    continue;
+                }
+                const float left = base_screen.x - half_width;
+                const float right = base_screen.x + half_width;
+                const float top = base_screen.y - height;
+                const float bottom = base_screen.y;
+                if (right < -fog_cull_margin || left > static_cast<float>(screen_width_) + fog_cull_margin ||
+                    bottom < -fog_cull_margin || top > static_cast<float>(screen_height_) + fog_cull_margin) {
                     ++fog_index;
                     continue;
                 }

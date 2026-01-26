@@ -44,7 +44,7 @@ public:
     // Grid spacing in world pixels (how far apart fog sprites are placed)
     // Smaller = denser fog, Larger = sparser fog
     // Examples: 243 (dense), 729 (medium), 2187 (sparse)
-    static constexpr int kFogGridSpacing = 1458;
+    static constexpr float kDefaultGridSpacingMultiplier = 2.0f;
 
     // ========================================================================
     // FOG SIZE SETTINGS - Adjust fog size here
@@ -52,13 +52,19 @@ public:
     // Base size multiplier as a percentage of original texture size
     // This value multiplies the texture dimensions to get world size
     // Examples: 2.0f (200% = 2x texture size), 4.0f (400% = 4x texture size)
-    static constexpr float kFogSizeScale = 3.0f;
+    static constexpr float kDefaultBaseSizeScale = 3.0f;
 
     // Resolution layer for fog texture assignment (affects hashing for random but consistent placement)
     static constexpr int kFogResolutionLayer = 4;
 
+    // Runtime configuration
+    static void set_grid_spacing_multiplier(float multiplier);
+    static float grid_spacing_multiplier();
+    static void set_base_size_scale(float scale);
+    static float base_size_scale();
+
 private:
-    static constexpr int kNumFogTextures = 20;
+    static constexpr int kNumFogTextures = 10;
 
     // Fog textures (10 base textures loaded once)
     std::vector<SDL_Texture*> fog_textures_;
@@ -75,4 +81,10 @@ private:
     // Helper methods
     std::uint64_t make_grid_point_hash(int world_x, int world_y, int world_z, int layer) const;
     int assign_fog_texture_for_point(int world_x, int world_y, int world_z, int layer);
+
+    struct FogConfig {
+        float grid_spacing_multiplier = kDefaultGridSpacingMultiplier;
+        float base_size_scale = kDefaultBaseSizeScale;
+    };
+    static FogConfig& config();
 };

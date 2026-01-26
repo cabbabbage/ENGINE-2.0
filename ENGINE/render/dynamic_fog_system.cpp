@@ -13,6 +13,14 @@
 
 namespace fs = std::filesystem;
 
+namespace {
+DynamicFogSystem::FogConfig g_fog_config{};
+constexpr float kMinGridMultiplier = 0.25f;
+constexpr float kMaxGridMultiplier = 8.0f;
+constexpr float kMinBaseScale = 0.25f;
+constexpr float kMaxBaseScale = 12.0f;
+}
+
 DynamicFogSystem::DynamicFogSystem() = default;
 
 DynamicFogSystem::~DynamicFogSystem() {
@@ -85,8 +93,14 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
     double view_height = cam.view_height_world();
     const auto& settings = cam.realism_settings();
 
-    // Use configured grid spacing (set in header file)
-    const int grid_spacing = kFogGridSpacing;
+    // Use grid-resolution aware spacing, scaled by dev-configured multiplier
+    const int resolution_layer = std::clamp(grid.grid_resolution(), 0, grid.max_resolution_layers());
+    int base_spacing = grid.grid_spacing_for_layer(resolution_layer);
+    if (base_spacing <= 0 || base_spacing > 20000) {
+        base_spacing = grid.grid_spacing_for_layer(kFogResolutionLayer);
+    }
+    const float spacing_multiplier = std::clamp(config().grid_spacing_multiplier, kMinGridMultiplier, kMaxGridMultiplier);
+    const int grid_spacing = std::max(1, static_cast<int>(std::lround(static_cast<float>(base_spacing) * spacing_multiplier)));
 
     // Expand visible bounds to ensure coverage
     const float margin = view_height * 0.5f;
@@ -97,8 +111,9 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
         static_cast<float>(view_height * 2.0 + margin * 2.0)
     };
 
-    int min_world_z = static_cast<int>(settings.depth_near_world);
-    int max_world_z = static_cast<int>(settings.depth_far_world);
+    // Render fog on the map floor
+    int min_world_z = 0;
+    int max_world_z = 0;
 
     // Snap to grid alignment
     int start_x = static_cast<int>(std::floor(visible_bounds.x / grid_spacing)) * grid_spacing;
@@ -187,4 +202,30 @@ int DynamicFogSystem::assign_fog_texture_for_point(int world_x, int world_y, int
 
     fog_assignments_[hash] = fog_index;
     return fog_index;
+}
+
+void DynamicFogSystem::set_grid_spacing_multiplier(float multiplier) {
+    if (!std::isfinite(multiplier)) {
+        return;
+    }
+    g_fog_config.grid_spacing_multiplier = std::clamp(multiplier, kMinGridMultiplier, kMaxGridMultiplier);
+}
+
+float DynamicFogSystem::grid_spacing_multiplier() {
+    return g_fog_config.grid_spacing_multiplier;
+}
+
+void DynamicFogSystem::set_base_size_scale(float scale) {
+    if (!std::isfinite(scale)) {
+        return;
+    }
+    g_fog_config.base_size_scale = std::clamp(scale, kMinBaseScale, kMaxBaseScale);
+}
+
+float DynamicFogSystem::base_size_scale() {
+    return g_fog_config.base_size_scale;
+}
+
+DynamicFogSystem::FogConfig& DynamicFogSystem::config() {
+    return g_fog_config;
 }

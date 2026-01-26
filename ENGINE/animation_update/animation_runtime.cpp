@@ -404,9 +404,6 @@ void AnimationRuntime::ensure_child_slots(Animation& anim) {
             slot.visible = false;
             slot.was_visible = false;
             slot.last_parent_frame_index = -1;
-            if (slot.spawned_asset) {
-                slot.spawned_asset->set_hidden(true);
-            }
         }
         return;
     }
@@ -501,9 +498,6 @@ void AnimationRuntime::ensure_child_slots(Animation& anim) {
         slot.timeline_active = false;
         slot.timeline_frame_cursor = 0;
         slot.timeline_frame_progress = 0.0f;
-        if (slot.spawned_asset) {
-            slot.spawned_asset->set_hidden(true);
-        }
     }
 }
 
@@ -768,9 +762,6 @@ void AnimationRuntime::destroy_child_assets() {
             slot.current_frame = slot.animation->get_first_frame();
         } else {
             slot.current_frame = nullptr;
-        }
-        if (slot.spawned_asset) {
-            slot.spawned_asset->set_hidden(true);
         }
 };
 

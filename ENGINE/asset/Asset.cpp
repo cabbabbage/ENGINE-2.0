@@ -185,8 +185,10 @@ Asset::Asset(const Asset& o)
     , composite_rect_({0, 0, 0, 0})
     , composite_scale_(o.composite_scale_)
     , world_z_offset_(o.world_z_offset_)
-    , animation_children_initialized_(o.animation_children_initialized_)
-    , initializing_animation_children_(false)
+    , animation_children_(o.animation_children_)
+    , child_creation_requested_(o.child_creation_requested_)
+    , is_child_timeline_asset_(o.is_child_timeline_asset_)
+    , child_timeline_index_(o.child_timeline_index_)
 {
 
         clear_render_caches();
@@ -195,7 +197,6 @@ Asset::Asset(const Asset& o)
         cached_grid_residency_    = o.cached_grid_residency_;
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
-        animation_children_       = o.animation_children_;
         finalized_                = o.finalized_;
         for (auto& slot : animation_children_) {
                 slot.timeline = nullptr;
@@ -249,7 +250,6 @@ Asset& Asset::operator=(const Asset& o) {
         cached_grid_residency_    = o.cached_grid_residency_;
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
-        animation_children_       = o.animation_children_;
         finalized_                = o.finalized_;
         base_bounds_local_        = o.base_bounds_local_;
         grid_id_                  = o.grid_id_;
@@ -258,8 +258,10 @@ Asset& Asset::operator=(const Asset& o) {
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
         world_z_offset_           = o.world_z_offset_;
-        animation_children_initialized_ = o.animation_children_initialized_;
-        initializing_animation_children_ = false;
+        animation_children_       = o.animation_children_;
+        child_creation_requested_ = o.child_creation_requested_;
+        is_child_timeline_asset_ = o.is_child_timeline_asset_;
+        child_timeline_index_ = o.child_timeline_index_;
         for (auto& slot : animation_children_) {
                 slot.timeline = nullptr;
                 slot.timeline_active = false;
@@ -300,9 +302,6 @@ void Asset::finalize_setup() {
                 }
 	}
         ensure_animation_runtime(false);
-        if (!animation_children_initialized_) {
-                initialize_animation_children_recursive();
-        }
         if (assets_ && !controller_) {
                 ControllerFactory cf(assets_);
                 controller_ = cf.create_for_asset(this);
@@ -415,21 +414,40 @@ void Asset::update() {
     if (!info) return;
 
 
+    bool uses_parent_world_z = false;
+    if (is_child_timeline_asset_ && (!parent || parent->dead || !parent->active)) {
+        child_timeline_index_ = -1;
+        Delete();
+        return;
+    }
+
     // Early step: if this asset has a parent, sample the parent's child_timeline slot
     if (parent && !parent->dead) {
-        // Check if parent is inactive - if so, self-deactivate
+        // Check if parent is inactive - if so, self-delete
         if (!parent->active) {
-            this->active = false;
-            this->deactivate();
+            child_timeline_index_ = -1;
+            Delete();
             return;
         }
 
         // Find our slot in the parent's animation_children_
         AnimationChildAttachment* our_slot = nullptr;
-        for (auto& slot : parent->animation_children_) {
-            if (slot.spawned_asset == this) {
+        if (child_timeline_index_ >= 0 &&
+            static_cast<std::size_t>(child_timeline_index_) < parent->animation_children_.size()) {
+            auto& slot = parent->animation_children_[child_timeline_index_];
+            if (slot.child_index == child_timeline_index_) {
                 our_slot = &slot;
-                break;
+            }
+        }
+        if (!our_slot && info) {
+            for (auto& slot : parent->animation_children_) {
+                if (slot.child_index < 0) {
+                    continue;
+                }
+                if (slot.asset_name == info->name) {
+                    our_slot = &slot;
+                    break;
+                }
             }
         }
 
@@ -455,14 +473,16 @@ void Asset::update() {
             // Apply world_z from parent's slot data
             float resolved_world_z = std::isfinite(our_slot->world_z) ? our_slot->world_z : parent->world_z_offset_;
             set_world_z_offset(resolved_world_z);
+            uses_parent_world_z = true;
 
             // Inherit parent's flip state
             flipped = parent->flipped;
             depth = parent->depth;
             grid_resolution = parent->grid_resolution;
-        } else if (!our_slot) {
-            // If we can't find our slot, respect parent's active/hidden state
-            hidden = parent->hidden || !parent->active;
+        } else {
+            child_timeline_index_ = -1;
+            Delete();
+            return;
         }
     }
 
@@ -521,14 +541,18 @@ void Asset::update() {
         anim_runtime_->update();
     }
 
-    float resolved_world_z = 0.0f;
-    if (assets_) {
-        const WarpedScreenGrid& cam = assets_->getView();
-        if (const auto* gp = cam.grid_point_for_asset(this)) {
-            resolved_world_z = static_cast<float>(gp->world_z());
+    request_child_timeline_creation_if_needed();
+
+    if (!uses_parent_world_z) {
+        float resolved_world_z = 0.0f;
+        if (assets_) {
+            const WarpedScreenGrid& cam = assets_->getView();
+            if (const auto* gp = cam.grid_point_for_asset(this)) {
+                resolved_world_z = static_cast<float>(gp->world_z());
+            }
         }
+        set_world_z_offset(resolved_world_z);
     }
-    set_world_z_offset(resolved_world_z);
 
 
 
@@ -544,6 +568,33 @@ void Asset::update() {
 }
 
 std::string Asset::get_current_animation() const { return current_animation; }
+
+const std::vector<Asset::AnimationChildAttachment>& Asset::animation_children() const {
+    return animation_children_;
+}
+
+std::vector<Asset::AnimationChildAttachment>& Asset::animation_children() {
+    return animation_children_;
+}
+
+void Asset::request_child_timeline_creation_if_needed() {
+    if (!assets_ || parent || dead || !active) {
+        return;
+    }
+    if (child_creation_requested_) {
+        return;
+    }
+    const bool has_child_slots = std::any_of(animation_children_.begin(),
+                                             animation_children_.end(),
+                                             [](const AnimationChildAttachment& slot) {
+                                                 return slot.child_index >= 0 && slot.timeline;
+                                             });
+    if (!has_child_slots) {
+        return;
+    }
+    child_creation_requested_ = true;
+    assets_->request_child_timeline_creation(this);
+}
 
 
 
@@ -625,10 +676,6 @@ void Asset::ensure_animation_runtime(bool force_recreate) {
     }
     anim_runtime_.reset();
     anim_.reset();
-    if (force_recreate) {
-        animation_children_initialized_ = false;
-        initializing_animation_children_ = false;
-    }
     anim_runtime_ = std::make_unique<AnimationRuntime>(this, assets_);
     anim_ = std::make_unique<AnimationUpdate>(this, assets_);
     if (anim_runtime_) anim_runtime_->set_planner(anim_.get());
@@ -780,12 +827,13 @@ void Asset::deactivate() {
         hidden = true;
         clear_render_caches();
         visibility_stamp = 0;
+        child_creation_requested_ = false;
         if (assets_) {
                 assets_->mark_active_assets_dirty();
         }
 
-        // If this is a transient child, self-delete after being removed from active list
-        if (is_transient_child_) {
+        if (is_child_timeline_asset_) {
+                child_timeline_index_ = -1;
                 Delete();
         }
 }
@@ -920,26 +968,11 @@ float Asset::smoothed_alpha() const {
 void Asset::Delete() {
         dead = true;
         hidden = true;
-
-        // If I'm a transient child, clear parent's slot reference
-        if (parent && is_transient_child_) {
-                for (auto& slot : parent->animation_children_) {
-                        if (slot.spawned_asset == this) {
-                                slot.spawned_asset = nullptr;
-                                break;
-                        }
-                }
-        }
+        child_timeline_index_ = -1;
+        child_creation_requested_ = false;
 
         if (assets_) {
                 assets_->mark_active_assets_dirty();
-                // Transient children are not in world grid or 'all' list,
-                // so they use a separate deletion queue
-                if (is_transient_child_) {
-                        assets_->schedule_transient_child_deletion(this);
-                } else {
-                        // Normal assets go through the removal queue
-                        assets_->schedule_removal(this);
-                }
+                assets_->schedule_removal(this);
         }
 }

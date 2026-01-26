@@ -1441,7 +1441,6 @@ void AssetInfoUI::sync_animation_children() {
             asset->info->set_animation_children(info_->animation_children);
         }
         asset->rebuild_animation_runtime();
-        asset->initialize_animation_children_recursive();
     });
 
     if (updated_any && assets_) {

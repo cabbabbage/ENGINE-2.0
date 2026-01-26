@@ -48,14 +48,6 @@ void InitializeAssets::initialize(Assets& assets,
                     raw->finalize_setup();
                 }
 
-                if (raw->info && !raw->info->animation_children.empty()) {
-                    try {
-                        raw->initialize_animation_children_recursive();
-                    } catch (...) {
-
-                    }
-                }
-
                 try {
                     if (raw->info && raw->info->tillable) {
                         auto t = assets.compute_tiling_for_asset(raw);

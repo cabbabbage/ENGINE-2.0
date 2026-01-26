@@ -188,10 +188,8 @@ public:
     Asset* player = nullptr;
 
     Asset* spawn_asset(const std::string& name, SDL_Point world_pos);
-
-    // Spawn a transient child asset that is NOT added to world grid or 'all' list.
-    // These assets are added to active_assets only and self-delete when deactivated.
-    Asset* spawn_transient_child_asset(const std::string& name, SDL_Point world_pos, Asset* parent);
+    void request_child_timeline_creation(Asset* parent);
+    Asset* find_child_timeline_asset(const Asset* parent, int slot_index) const;
 
     void rebuild_from_grid_state();
 
@@ -203,7 +201,6 @@ private:
     void load_camera_settings_from_json();
     void write_camera_settings_to_json();
     void schedule_removal(Asset* a);
-    void schedule_transient_child_deletion(Asset* a);
 
     bool process_removals();
     void addAsset(const std::string& name, SDL_Point g);
@@ -249,8 +246,7 @@ private:
     std::vector<world::GridPoint*> active_points_;
     std::vector<Asset*> removal_queue;
     std::mutex removal_queue_mutex_;
-    std::vector<Asset*> transient_child_deletion_queue_;
-    std::mutex transient_child_deletion_mutex_;
+    std::vector<Asset*> child_timeline_assets_;
     std::vector<Asset*> non_player_update_buffer_;
     std::atomic<bool> non_player_update_buffer_dirty_{true};
 

@@ -304,10 +304,13 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
 
     // Render child assets
     const auto& slots = context_.target->animation_children();
-    for (const auto& slot : slots) {
-        if (!slot.spawned_asset || !slot.visible) continue;
+    for (std::size_t i = 0; i < slots.size(); ++i) {
+        const auto& slot = slots[i];
+        if (!slot.visible) continue;
+        Asset* child = context_.assets->find_child_timeline_asset(context_.target, static_cast<int>(i));
+        if (!child) continue;
         CompositeAssetRenderer composite_renderer(renderer, context_.assets);
-        composite_renderer.update(slot.spawned_asset, 0.0f);
+        composite_renderer.update(child, 0.0f);
     }
 
     // Render axis points

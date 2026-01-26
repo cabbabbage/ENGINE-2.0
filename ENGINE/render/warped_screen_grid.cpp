@@ -1442,16 +1442,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             ++last_depth_culled_;
         }
 
-        frustum_hits.clear();
-        for (const auto& owned : gp->occupants) {
-            if (owned) {
-                asset_to_point_[owned.get()] = gp;
-                if (asset_in_frustum(owned.get(), gp)) {
-                    frustum_hits.push_back(owned.get());
-                }
-            }
-        }
-
         gp->screen             = screen_for_bounds;
         gp->parallax_dx        = 0.0f;
         gp->vertical_scale     = proj.vertical_scale;
@@ -1461,7 +1451,21 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         gp->perspective_scale  = proj.perspective_scale;
         gp->distance_to_camera = distance_to_cam;
         gp->tilt_radians       = static_cast<float>(runtime_pitch_rad_);
-        gp->on_screen          = !frustum_hits.empty();
+
+        frustum_hits.clear();
+        for (const auto& owned : gp->occupants) {
+            if (!owned) {
+                continue;
+            }
+
+            asset_to_point_[owned.get()] = gp;
+            owned->update_scale_values();
+            if (asset_in_frustum(owned.get(), gp)) {
+                frustum_hits.push_back(owned.get());
+            }
+        }
+
+        gp->on_screen = !frustum_hits.empty();
         gp->mark_screen_data_updated(frame_stamp);
 
         warped_points_.push_back(gp);

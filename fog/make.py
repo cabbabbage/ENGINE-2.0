@@ -4,10 +4,16 @@ import os
 import numpy as np
 from PIL import Image, ImageFilter
 
+# -----------------------------
+# Config
+# -----------------------------
 NUM_IMAGES = 10
 HEIGHT = 720
 WIDTH_MIN_MULT = 1.0
 WIDTH_MAX_MULT = 2.0
+
+# When true, generate solid random-color test rectangles instead of fog
+CREATE_TEST_IMAGES = False
 
 
 def smoothstep(edge0, edge1, x):
@@ -49,6 +55,18 @@ def bilinear_sample(img, x, y):
     ab = a + (b - a) * fx
     cd = c + (d - c) * fx
     return ab + (cd - ab) * fy
+
+
+def make_test_image(width, height, seed):
+    rng = np.random.default_rng(seed)
+
+    # Solid random RGB, full alpha
+    color = rng.integers(0, 256, size=(3,), dtype=np.uint8)
+    rgb = np.full((height, width, 3), color, dtype=np.uint8)
+    a = np.full((height, width, 1), 255, dtype=np.uint8)
+
+    rgba = np.concatenate([rgb, a], axis=2)
+    return Image.fromarray(rgba, mode="RGBA")
 
 
 def make_fog_image(width, height, seed):
@@ -129,7 +147,6 @@ def make_fog_image(width, height, seed):
 
     # Final: crop away all fully transparent rows/cols on every side (tight bbox around alpha>0)
     alpha = rgba[:, :, 3]
-
     rows_have_alpha = (alpha.max(axis=1) > 0)
     cols_have_alpha = (alpha.max(axis=0) > 0)
 
@@ -138,9 +155,7 @@ def make_fog_image(width, height, seed):
         bottom = int(np.where(rows_have_alpha)[0].max())
         left = int(np.where(cols_have_alpha)[0].min())
         right = int(np.where(cols_have_alpha)[0].max())
-
         rgba = rgba[top:bottom + 1, left:right + 1, :]
-
 
     return Image.fromarray(rgba, mode="RGBA")
 
@@ -152,7 +167,12 @@ def main():
     for i in range(1, NUM_IMAGES + 1):
         w = int(round(HEIGHT * master_rng.uniform(WIDTH_MIN_MULT, WIDTH_MAX_MULT)))
         seed = int(master_rng.integers(0, 2**31 - 1))
-        img = make_fog_image(w, HEIGHT, seed=seed)
+
+        if CREATE_TEST_IMAGES:
+            img = make_test_image(w, HEIGHT, seed=seed)
+        else:
+            img = make_fog_image(w, HEIGHT, seed=seed)
+
         out_path = os.path.join(script_dir, f"fog_{i}.png")
         img.save(out_path)
 

@@ -426,12 +426,6 @@ void SceneRenderer::render() {
     assets_->rebuild_active_from_screen_grid();
 
     const auto& render_assets = assets_->getActive();
-    for (Asset* asset : render_assets) {
-        if (!asset || !asset->info) {
-            continue;
-        }
-        asset->update_scale_values();
-    }
 
     SDL_SetRenderTarget(renderer_, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -457,136 +451,157 @@ void SceneRenderer::render() {
         dynamic_fog_system_->update(cam, grid);
     }
 
-    // Get fog sprites for depth-ordered rendering
+    const double anchor_world_y = cam.anchor_world_y();
+    auto depth_from_anchor = [&](double world_y) {
+        return anchor_world_y - world_y;
+    };
+
     std::vector<DynamicFogSystem::FogSprite> fog_sprites;
     if (dynamic_fog_system_) {
         fog_sprites = dynamic_fog_system_->get_fog_sprites();
-        // Sort fog sprites by world_pos.y descending (matching asset depth order: higher Y = farther/behind)
         std::sort(fog_sprites.begin(), fog_sprites.end(),
-            [](const auto& a, const auto& b) { return a.world_pos.y > b.world_pos.y; });
+            [&](const auto& a, const auto& b) {
+                const double da = depth_from_anchor(static_cast<double>(a.world_pos.y));
+                const double db = depth_from_anchor(static_cast<double>(b.world_pos.y));
+                if (da != db) {
+                    return da > db;
+                }
+                return a.world_pos.x < b.world_pos.x;
+            });
     }
     size_t fog_index = 0;
     const float fog_size_scale = DynamicFogSystem::base_size_scale();
     const float fog_cull_margin = 64.0f;
 
-    // Helper to render fog sprites at current Y depth (matching asset depth sorting)
-    auto render_fog_at_y = [&](float current_y) {
-        while (fog_index < fog_sprites.size() && fog_sprites[fog_index].world_pos.y > current_y) {
-            const auto& sprite = fog_sprites[fog_index];
-            if (sprite.texture && sprite.texture_w > 0 && sprite.texture_h > 0) {
-                // Build warped quad for fog sprite (matching asset rendering)
-                const float world_x = sprite.world_pos.x;
-                const float world_y = sprite.world_pos.y;
-                const float world_z = static_cast<float>(sprite.world_z);
+    const float fog_vertical_offset = DynamicFogSystem::vertical_offset();
 
-                // Calculate fog size in world units based on texture size and scale percentage
-                // Size = texture_size * base_size_scale * sprite.scale (perspective)
-                const float fog_world_width = static_cast<float>(sprite.texture_w) * fog_size_scale * sprite.scale;
-                const float fog_world_height = static_cast<float>(sprite.texture_h) * fog_size_scale * sprite.scale;
-                const float half_width = fog_world_width * 0.5f;
-                const float height = fog_world_height;
-
-                // Project center point with Z-depth
-                SDL_FPoint base_screen{};
-                if (!project_world_point(cam, world_x, world_y, world_z, base_screen)) {
-                    ++fog_index;
-                    continue;
-                }
-
-                // Apply vertical offset (positive moves down)
-                const float fog_vertical_offset = DynamicFogSystem::vertical_offset();
-                const float adjusted_y = base_screen.y + fog_vertical_offset;
-
-                const float left = base_screen.x - half_width;
-                const float right = base_screen.x + half_width;
-                const float top = adjusted_y - height;
-                const float bottom = adjusted_y;
-                if (right < -fog_cull_margin || left > static_cast<float>(screen_width_) + fog_cull_margin ||
-                    bottom < -fog_cull_margin || top > static_cast<float>(screen_height_) + fog_cull_margin) {
-                    ++fog_index;
-                    continue;
-                }
-
-                // Build warped quad vertices
-                const float padding_x = 0.5f / static_cast<float>(sprite.texture_w);
-                const float padding_y = 0.5f / static_cast<float>(sprite.texture_h);
-                const float u0 = padding_x;
-                const float u1 = 1.0f - padding_x;
-                const float v0 = padding_y;
-                const float v1 = 1.0f - padding_y;
-
-                SDL_Vertex vertices[4]{};
-                vertices[0].position = SDL_FPoint{base_screen.x - half_width, adjusted_y - height};
-                vertices[1].position = SDL_FPoint{base_screen.x + half_width, adjusted_y - height};
-                vertices[2].position = SDL_FPoint{base_screen.x + half_width, adjusted_y};
-                vertices[3].position = SDL_FPoint{base_screen.x - half_width, adjusted_y};
-
-                const SDL_Color white{255, 255, 255, 255};
-                vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
-
-                vertices[0].tex_coord = SDL_FPoint{u0, v0};
-                vertices[1].tex_coord = SDL_FPoint{u1, v0};
-                vertices[2].tex_coord = SDL_FPoint{u1, v1};
-                vertices[3].tex_coord = SDL_FPoint{u0, v1};
-
-                // Render fog quad with full opacity
-                SDL_SetTextureBlendMode(sprite.texture, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
-                SDL_SetTextureAlphaMod(sprite.texture, 255);
-                SDL_RenderGeometry(renderer_, sprite.texture, vertices, 4, kQuadIndices, 6);
-            }
-            ++fog_index;
-        }
+    struct AssetRenderCandidate {
+        Asset* asset = nullptr;
+        world::GridPoint* grid_point = nullptr;
+        double depth = 0.0;
     };
 
-    for (Asset* asset : render_assets) {
-        if (!asset || asset->is_hidden() || !asset->info) {
-            continue;
-        }
+    const auto depth_from_asset = [&](const Asset* asset) {
+        return depth_from_anchor(static_cast<double>(asset->pos.y));
+    };
 
-        if (const auto& tiling = asset->tiling_info(); tiling && tiling->is_valid()) {
-
-            continue;
-        }
-
-        world::GridPoint* gp = cam.grid_point_for_asset(asset);
-        if (!gp || !gp->on_screen) {
-            continue;
-        }
-
-        // Render fog sprites that should appear behind this asset (by Y depth)
-        render_fog_at_y(static_cast<float>(asset->pos.y));
-
-        composite_renderer_.update(asset, flicker_time_seconds);
-
-        const float fade_alpha = std::clamp(gp->horizon_fade_alpha * gp->near_camera_fade_alpha, 0.0f, 1.0f);
-        auto apply_fade_alpha = [&](SDL_Color color) {
-            if (fade_alpha >= 0.999f) {
-                return color;
-            }
-            const int scaled = static_cast<int>(std::lround(static_cast<float>(color.a) * fade_alpha));
-            color.a = static_cast<Uint8>(std::clamp(scaled, 0, 255));
-            return color;
-        };
-
-        for (const RenderObject& obj : asset->render_package) {
-            WarpedQuad quad{};
-            if (!build_warped_quad(obj, cam, quad)) {
+    size_t asset_index = 0;
+    auto advance_asset_candidate = [&]() -> std::optional<AssetRenderCandidate> {
+        while (asset_index < render_assets.size()) {
+            Asset* asset = render_assets[asset_index++];
+            if (!asset || asset->is_hidden() || !asset->info) {
                 continue;
             }
+            if (const auto& tiling = asset->tiling_info(); tiling && tiling->is_valid()) {
+                continue;
+            }
+            world::GridPoint* gp = cam.grid_point_for_asset(asset);
+            if (!gp || !gp->on_screen) {
+                continue;
+            }
+            return AssetRenderCandidate{asset, gp, depth_from_asset(asset)};
+        }
+        return std::nullopt;
+    };
 
-            const SDL_Color color_mod = apply_fade_alpha(obj.color_mod);
-            SDL_SetTextureBlendMode(obj.texture, obj.blend_mode);
+    auto next_asset = advance_asset_candidate();
 
-            SDL_SetTextureColorMod(obj.texture, color_mod.r, color_mod.g, color_mod.b);
-            SDL_SetTextureAlphaMod(obj.texture, color_mod.a);
+    auto render_fog_sprite = [&](const DynamicFogSystem::FogSprite& sprite) {
+        if (!sprite.texture || sprite.texture_w <= 0 || sprite.texture_h <= 0) {
+            return;
+        }
 
-            SDL_RenderGeometry(renderer_, obj.texture, quad.vertices.data(), 4, kQuadIndices, 6);
+        const float world_x = sprite.world_pos.x;
+        const float world_y = sprite.world_pos.y;
+        const float world_z = static_cast<float>(sprite.world_z);
+        const float fog_world_width = static_cast<float>(sprite.texture_w) * fog_size_scale * sprite.scale;
+        const float fog_world_height = static_cast<float>(sprite.texture_h) * fog_size_scale * sprite.scale;
+        const float half_width = fog_world_width * 0.5f;
+        const float height = fog_world_height;
+
+        SDL_FPoint base_screen{};
+        if (!project_world_point(cam, world_x, world_y, world_z, base_screen)) {
+            return;
+        }
+
+        const float adjusted_y = base_screen.y + fog_vertical_offset;
+        const float left = base_screen.x - half_width;
+        const float right = base_screen.x + half_width;
+        const float top = adjusted_y - height;
+        const float bottom = adjusted_y;
+        if (right < -fog_cull_margin || left > static_cast<float>(screen_width_) + fog_cull_margin ||
+            bottom < -fog_cull_margin || top > static_cast<float>(screen_height_) + fog_cull_margin) {
+            return;
+        }
+
+        const float padding_x = 0.5f / static_cast<float>(sprite.texture_w);
+        const float padding_y = 0.5f / static_cast<float>(sprite.texture_h);
+        const float u0 = padding_x;
+        const float u1 = 1.0f - padding_x;
+        const float v0 = padding_y;
+        const float v1 = 1.0f - padding_y;
+
+        SDL_Vertex vertices[4]{};
+        vertices[0].position = SDL_FPoint{base_screen.x - half_width, adjusted_y - height};
+        vertices[1].position = SDL_FPoint{base_screen.x + half_width, adjusted_y - height};
+        vertices[2].position = SDL_FPoint{base_screen.x + half_width, adjusted_y};
+        vertices[3].position = SDL_FPoint{base_screen.x - half_width, adjusted_y};
+        const SDL_Color white{255, 255, 255, 255};
+        vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
+        vertices[0].tex_coord = SDL_FPoint{u0, v0};
+        vertices[1].tex_coord = SDL_FPoint{u1, v0};
+        vertices[2].tex_coord = SDL_FPoint{u1, v1};
+        vertices[3].tex_coord = SDL_FPoint{u0, v1};
+
+        SDL_SetTextureBlendMode(sprite.texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
+        SDL_SetTextureAlphaMod(sprite.texture, 255);
+        SDL_RenderGeometry(renderer_, sprite.texture, vertices, 4, kQuadIndices, 6);
+    };
+
+    while (next_asset || fog_index < fog_sprites.size()) {
+        const double asset_depth = next_asset ? next_asset->depth : std::numeric_limits<double>::lowest();
+        const double fog_depth = fog_index < fog_sprites.size()
+            ? depth_from_anchor(static_cast<double>(fog_sprites[fog_index].world_pos.y))
+            : std::numeric_limits<double>::lowest();
+
+        if (next_asset && (fog_index >= fog_sprites.size() || asset_depth >= fog_depth)) {
+            const AssetRenderCandidate candidate = *next_asset;
+
+            composite_renderer_.update(candidate.asset, flicker_time_seconds);
+
+            const float fade_alpha = std::clamp(candidate.grid_point->horizon_fade_alpha * candidate.grid_point->near_camera_fade_alpha, 0.0f, 1.0f);
+            auto apply_fade_alpha = [&](SDL_Color color) {
+                if (fade_alpha >= 0.999f) {
+                    return color;
+                }
+                const int scaled = static_cast<int>(std::lround(static_cast<float>(color.a) * fade_alpha));
+                color.a = static_cast<Uint8>(std::clamp(scaled, 0, 255));
+                return color;
+            };
+
+            for (const RenderObject& obj : candidate.asset->render_package) {
+                WarpedQuad quad{};
+                if (!build_warped_quad(obj, cam, quad)) {
+                    continue;
+                }
+
+                const SDL_Color color_mod = apply_fade_alpha(obj.color_mod);
+                SDL_SetTextureBlendMode(obj.texture, obj.blend_mode);
+                SDL_SetTextureColorMod(obj.texture, color_mod.r, color_mod.g, color_mod.b);
+                SDL_SetTextureAlphaMod(obj.texture, color_mod.a);
+
+                SDL_RenderGeometry(renderer_, obj.texture, quad.vertices.data(), 4, kQuadIndices, 6);
+            }
+
+            next_asset = advance_asset_candidate();
+        } else if (fog_index < fog_sprites.size()) {
+            render_fog_sprite(fog_sprites[fog_index]);
+            ++fog_index;
+        } else {
+            break;
         }
     }
-
-    // Render any remaining fog sprites that are in front of all assets (lowest Y values)
-    render_fog_at_y(std::numeric_limits<float>::lowest());
 
     if (debug_auto_paths_ && movement_debug_visible_) {
         static const std::array<SDL_Color, 6> kPathColors{{

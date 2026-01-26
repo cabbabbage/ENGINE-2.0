@@ -364,6 +364,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   screen_height_(screen_height),
   tile_renderer_(std::make_unique<GridTileRenderer>(assets)),
   sky_texture_path_(std::filesystem::path("SRC") / "misc_content" / "sky.png"),
+  floor_gradient_path_(std::filesystem::path("SRC") / "misc_content" / "floor_gradient.png"),
   composite_renderer_(renderer, assets),
   dynamic_fog_system_(std::make_unique<DynamicFogSystem>())
 {
@@ -396,6 +397,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 
 SceneRenderer::~SceneRenderer() {
     destroy_sky_texture();
+    destroy_floor_gradient_texture();
     if (scene_composite_tex_) { SDL_DestroyTexture(scene_composite_tex_); scene_composite_tex_ = nullptr; }
     if (postprocess_tex_)     { SDL_DestroyTexture(postprocess_tex_);     postprocess_tex_     = nullptr; }
     if (blur_tex_)            { SDL_DestroyTexture(blur_tex_);            blur_tex_            = nullptr; }
@@ -431,6 +433,8 @@ void SceneRenderer::render() {
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, map_clear_color_.a);
     SDL_RenderClear(renderer_);
+
+    render_floor_gradient();
 
     const bool depth_effects_enabled = assets_->depth_effects_enabled();
     render_sky_layer(cam, depth_effects_enabled);
@@ -795,4 +799,81 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
     SDL_SetTextureColorMod(sky_texture_, 255, 255, 255);
     SDL_SetTextureAlphaMod(sky_texture_, 255);
     SDL_RenderCopyF(renderer_, sky_texture_, nullptr, &dst);
+}
+
+bool SceneRenderer::ensure_floor_gradient_texture() {
+    if (floor_gradient_texture_ || floor_gradient_failed_) {
+        return floor_gradient_texture_ != nullptr;
+    }
+    if (!renderer_) {
+        return false;
+    }
+
+    std::filesystem::path path = floor_gradient_path_;
+    if (!path.is_absolute()) {
+        path = std::filesystem::current_path() / path;
+    }
+
+    const std::string path_str = path.string();
+    SDL_Texture* tex = IMG_LoadTexture(renderer_, path_str.c_str());
+    if (!tex) {
+        vibble::log::warn(std::string{"[SceneRenderer] Failed to load floor gradient texture '"} +
+                          path_str + "': " + IMG_GetError());
+        floor_gradient_failed_ = true;
+        return false;
+    }
+
+    int tex_w = 0;
+    int tex_h = 0;
+    if (SDL_QueryTexture(tex, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+        vibble::log::warn(std::string{"[SceneRenderer] Invalid floor gradient texture '"} +
+                          path_str + "': " + SDL_GetError());
+        SDL_DestroyTexture(tex);
+        floor_gradient_failed_ = true;
+        return false;
+    }
+
+    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
+    floor_gradient_texture_  = tex;
+    floor_gradient_width_    = tex_w;
+    floor_gradient_height_   = tex_h;
+    return true;
+}
+
+void SceneRenderer::destroy_floor_gradient_texture() {
+    if (floor_gradient_texture_) {
+        SDL_DestroyTexture(floor_gradient_texture_);
+        floor_gradient_texture_ = nullptr;
+    }
+    floor_gradient_width_  = 0;
+    floor_gradient_height_ = 0;
+}
+
+void SceneRenderer::render_floor_gradient() {
+    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
+        return;
+    }
+
+    if (!ensure_floor_gradient_texture() || !floor_gradient_texture_) {
+        return;
+    }
+
+    const float tex_w = static_cast<float>(floor_gradient_width_);
+    const float tex_h = static_cast<float>(floor_gradient_height_);
+    if (tex_w <= 0.0f || tex_h <= 0.0f) {
+        return;
+    }
+
+    const float scale = static_cast<float>(screen_width_) / tex_w;
+    const float target_w = tex_w * scale;
+    const float target_h = tex_h * scale;
+    if (!std::isfinite(target_h) || target_h <= 0.0f || !std::isfinite(scale)) {
+        return;
+    }
+
+    SDL_FRect dst{0.0f, 0.0f, target_w, target_h};
+
+    SDL_SetTextureColorMod(floor_gradient_texture_, 255, 255, 255);
+    SDL_SetTextureAlphaMod(floor_gradient_texture_, 255);
+    SDL_RenderCopyF(renderer_, floor_gradient_texture_, nullptr, &dst);
 }

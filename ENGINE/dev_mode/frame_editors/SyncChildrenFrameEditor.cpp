@@ -186,6 +186,7 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             point_3d_editor_->set_selected_point_index(-1);
         }
         sync_visibility_checkbox();
+        apply_current_frame_to_children();
         refresh_selection_state();
     });
 
@@ -200,25 +201,6 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
     dd_child_selector_ = std::make_unique<DMDropdown>("Child", child_labels, std::min(selected_child_index_, static_cast<int>(child_labels.size()) - 1));
     dd_child_selector_->set_on_selection_changed([this](int index) {
         selected_child_index_ = index;
-
-        // Auto-initialize child data if not set yet (make it visible at 0,0,0)
-        if (selected_child_index_ >= 0 && selected_child_index_ < static_cast<int>(static_frames_by_child_.size()) &&
-            selected_frame_index_ >= 0 && selected_frame_index_ < frame_count_) {
-            auto& timeline = static_frames_by_child_[selected_child_index_];
-            if (selected_frame_index_ < static_cast<int>(timeline.size())) {
-                auto& sample = timeline[selected_frame_index_];
-                if (!sample.has_data) {
-                    // Initialize to visible at parent anchor (0,0,0 displacement)
-                    sample.child_index = selected_child_index_;
-                    sample.dx = 0.0f;
-                    sample.dy = 0.0f;
-                    sample.dz = 0.0f;
-                    sample.degree = 0.0f;
-                    sample.visible = true;
-                    sample.has_data = true;
-                }
-            }
-        }
 
         if (selection_state_) {
             selection_state_->target = SelectionTarget::ChildPoint;
@@ -258,26 +240,6 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 
     // Initial sync of visibility checkbox with current frame/child state
     sync_visibility_checkbox();
-
-    // Auto-initialize the first child if it has no data yet (make it visible at 0,0,0)
-    if (selected_child_index_ >= 0 && selected_child_index_ < static_cast<int>(static_frames_by_child_.size()) &&
-        selected_frame_index_ >= 0 && selected_frame_index_ < frame_count_) {
-        auto& timeline = static_frames_by_child_[selected_child_index_];
-        if (selected_frame_index_ < static_cast<int>(timeline.size())) {
-            auto& sample = timeline[selected_frame_index_];
-            if (!sample.has_data) {
-                // Initialize to visible at parent anchor (0,0,0 displacement)
-                sample.child_index = selected_child_index_;
-                sample.dx = 0.0f;
-                sample.dy = 0.0f;
-                sample.dz = 0.0f;
-                sample.degree = 0.0f;
-                sample.visible = true;
-                sample.has_data = true;
-                data_dirty_ = true;
-            }
-        }
-    }
 
     // If we didn't initialize anything, mark as clean
     // If we did initialize, data_dirty_ is already true
@@ -401,24 +363,38 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
     if (!renderer || !context_.target || !context_.assets || !point_3d_editor_) return;
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
 
-    // Render child assets - sync their positions from slot data first
-    const auto& slots = context_.target->animation_children();
-    for (std::size_t i = 0; i < slots.size(); ++i) {
-        const auto& slot = slots[i];
-        if (!slot.visible) continue;
+    // Render child assets - sync their positions from selected frame data first
+    SDL_Point anchor = asset_anchor_world();
+    for (std::size_t i = 0; i < child_assets_.size(); ++i) {
+        if (i >= static_frames_by_child_.size() || i >= child_modes_.size()) {
+            continue;
+        }
+        if (child_modes_[i] == AnimationChildMode::Async) {
+            continue;
+        }
+        if (selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_) {
+            continue;
+        }
+        const auto& timeline = static_frames_by_child_[i];
+        if (selected_frame_index_ >= static_cast<int>(timeline.size())) {
+            continue;
+        }
+        const auto& sample = timeline[static_cast<std::size_t>(selected_frame_index_)];
+        if (!sample.visible) {
+            continue;
+        }
         Asset* child = context_.assets->find_child_timeline_asset(context_.target, static_cast<int>(i));
         if (!child) continue;
-        // Explicitly sync child asset position from slot data during frame editing
-        // This ensures the child renders at the correct position even without calling Asset::update()
-        child->pos = slot.world_pos;
-        child->set_world_z_offset(slot.world_z);
+        const ChildWorldPose pose = child_world_pose(static_cast<int>(i));
+        child->pos = SDL_Point{static_cast<int>(std::lround(anchor.x + pose.pos.x)),
+                               static_cast<int>(std::lround(anchor.y + pose.pos.y))};
+        child->set_world_z_offset(pose.z);
         child->mark_composite_dirty();
         CompositeAssetRenderer composite_renderer(renderer, context_.assets);
         composite_renderer.update(child, 0.0f);
     }
 
     // Render axis points - always render them so user can see and edit them
-    SDL_Point anchor = asset_anchor_world();
     for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
         if (idx >= static_frames_by_child_.size()) continue;
         if (idx >= child_modes_.size()) continue;
@@ -640,7 +616,7 @@ void SyncChildrenFrameEditor::apply_current_frame_to_children() {
     animation_update::child_attachments::ParentState parent_state{};
     parent_state.position = render_pos;
     parent_state.base_position = animation_update::detail::bottom_middle_for(*context_.target, render_pos);
-    parent_state.scale = context_.target->smoothed_scale();
+    parent_state.scale = attachment_scale();
     parent_state.flipped = context_.target->flipped;
     parent_state.world_z = context_.target->world_z_offset();
     parent_state.animation_id = context_.animation_id;
@@ -668,6 +644,11 @@ void SyncChildrenFrameEditor::apply_current_frame_to_children() {
         overrides.push_back(entry);
     }
     const AnimationFrame* current_frame = context_.target->current_frame;
+    AnimationFrame frame_stub{};
+    if (selected_frame_index_ >= 0 && selected_frame_index_ < frame_count_) {
+        frame_stub.frame_index = selected_frame_index_;
+        current_frame = &frame_stub;
+    }
     animation_update::child_attachments::apply_frame_data(slots,
                                                          parent_state,
                                                          current_frame,

@@ -407,6 +407,7 @@
       "start": "default"
     },
     "Casino": {
+      "animation_children": [],
       "animations": {
         "default": {
           "frames": [
@@ -425,6 +426,7 @@
       "anti_tags": [],
       "asset_directory": "SRC/assets/Casino",
       "asset_name": "Casino",
+      "async_children": [],
       "lighting_info": [],
       "neighbor_search_distance": 500,
       "shading_opacity_multiplier": 1.0,
@@ -438,7 +440,7 @@
         "falloff_start": 0.0
       },
       "size_settings": {
-        "scale_percentage": 105.0
+        "scale_percentage": 148.0
       },
       "spawn_groups": [],
       "start": "default",
@@ -1501,7 +1503,7 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 1,
-                  "dz": 140,
+                  "dz": 184,
                   "visible": true
                 }
               ],

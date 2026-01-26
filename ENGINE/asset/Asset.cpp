@@ -7,6 +7,7 @@
 #include "render/render.hpp"
 #include "animation_update/animation_runtime.hpp"
 #include "animation_update/child_attachment_controller.hpp"
+#include "animation_update/child_3d_world_position.hpp"
 #include "animation_update/animation_update.hpp"
 #include "utils/area_helpers.hpp"
 #include "asset/asset_types.hpp"
@@ -470,9 +471,42 @@ void Asset::update() {
                     visible_from_parent = child_frame->visible;
                     resolved_from_parent = true;
                     if (child_frame->visible) {
-                        pos.x = parent->pos.x + child_frame->dx;
-                        pos.y = parent->pos.y + child_frame->dy;
-                        set_world_z_offset(parent->world_z_offset() + static_cast<float>(child_frame->dz));
+                        auto compute_parent_attachment_scale = [&]() -> float {
+                            float perspective_scale = 1.0f;
+                            if (assets_) {
+                                const WarpedScreenGrid& cam = assets_->getView();
+                                if (const auto* gp = cam.grid_point_for_asset(parent)) {
+                                    perspective_scale = std::max(0.0001f, gp->perspective_scale);
+                                }
+                            }
+                            float remainder = parent->current_remaining_scale_adjustment;
+                            if (!std::isfinite(remainder) || remainder <= 0.0f) {
+                                remainder = 1.0f;
+                            }
+                            float scale = remainder / std::max(0.0001f, perspective_scale);
+                            if (!std::isfinite(scale) || scale <= 0.0f) {
+                                scale = 1.0f;
+                            }
+                            return scale;
+                        };
+
+                        const SDL_Point parent_anchor = animation_update::detail::bottom_middle_for(*parent, parent->pos);
+                        const animation_update::child_3d::Parent3DState parent_state{
+                            SDL_FPoint{static_cast<float>(parent_anchor.x), static_cast<float>(parent_anchor.y)},
+                            parent->world_z_offset(),
+                            compute_parent_attachment_scale(),
+                            parent->flipped
+                        };
+                        const animation_update::child_3d::Child3DDisplacement displacement{
+                            static_cast<float>(child_frame->dx),
+                            static_cast<float>(child_frame->dy),
+                            static_cast<float>(child_frame->dz)
+                        };
+                        const auto world_pos_3d = animation_update::child_3d::calculate_child_world_position(
+                            parent_state, displacement);
+                        pos = SDL_Point{static_cast<int>(std::lround(world_pos_3d.x)),
+                                        static_cast<int>(std::lround(world_pos_3d.y))};
+                        set_world_z_offset(world_pos_3d.z);
                         uses_parent_world_z = true;
                     }
                 }

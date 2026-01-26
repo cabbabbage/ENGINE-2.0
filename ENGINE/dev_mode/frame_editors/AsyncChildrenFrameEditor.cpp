@@ -11,6 +11,7 @@
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/widgets.hpp"
+#include "dev_mode/frame_editors/shared/SnapUtils.hpp"
 
 #include "render/warped_screen_grid.hpp"
 
@@ -51,8 +52,8 @@ void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         point_3d_editor_->set_on_point_selected([this](int index) {
             if (index < 0) {
                 // Deselecting - persist changes before clearing selection state
-                if (data_dirty_ && manifest_txn_.active() && !async_frames_by_child_.empty()) {
-                    manifest_txn_.commit();
+                if (data_dirty_ && !async_frames_by_child_.empty()) {
+                    apply_live_changes();
                 }
                 if (selection_state_) {
                     selection_state_->reset();
@@ -88,12 +89,14 @@ void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             float scale = attachment_scale();
             if (scale <= 0.0f) scale = 1.0f;
 
+            SDL_FPoint snapped_world = snap_world_point_to_grid(new_world_pos, context_.snap_resolution);
+            float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
             SDL_Point anchor = asset_anchor_world();
             const bool flipped = context_.target && context_.target->flipped;
 
-            float dx_world = (new_world_pos.x - static_cast<float>(anchor.x)) / scale;
-            float dy_world = (new_world_pos.y - static_cast<float>(anchor.y)) / scale;
-            float dz_world = (new_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+            float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            float dy_world = (snapped_world.y - static_cast<float>(anchor.y)) / scale;
+            float dz_world = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
             ensure_async_frame_capacity(selected_child_index_, selected_child_frame_index_);
 
@@ -132,9 +135,6 @@ void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 }
 
 void AsyncChildrenFrameEditor::end() {
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit();
-    }
     if (selection_state_) {
         selection_state_->reset();
         selection_state_ = nullptr;
@@ -148,11 +148,21 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     if (!context_.assets || !context_.target) {
         return false;
     }
-    if (btn_back_ && btn_back_->handle_event(e)) {
-        // Save changes before exiting - persist any pending edits
-        if (data_dirty_ && manifest_txn_.active()) {
-            manifest_txn_.commit();
+    SDL_Rect overlay_rect{0, 0, 0, 0};
+    bool overlay_valid = false;
+    if (point_3d_editor_) {
+        int sw = 0, sh = 0;
+        SDL_GetRendererOutputSize(nullptr, &sw, &sh);
+        int height = point_3d_editor_->get_overlay_height(sw);
+        if (height > 0) {
+            overlay_rect = SDL_Rect{0, sh - height, sw, height};
+            overlay_valid = true;
         }
+        if (point_3d_editor_->handle_event(e, overlay_rect)) {
+            return true;
+        }
+    }
+    if (btn_back_ && btn_back_->handle_event(e)) {
         wants_close_ = true;
         return true;
     }
@@ -186,9 +196,12 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         point_selectable.push_back(static_cast<int>(idx) == selected_child_index_);
     }
 
+    const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
     // Only consume event if point editor actually handled it
-    if (point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable)) {
-        return true;
+    if (!pointer_in_overlay) {
+        if (point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable)) {
+            return true;
+        }
     }
 
     if (e.type == SDL_KEYDOWN) {
@@ -230,9 +243,7 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
 void AsyncChildrenFrameEditor::update(const Input& /*input*/, float /*dt*/) {
     if (data_dirty_ && context_.target) {
         apply_preview();
-        if (manifest_txn_.active()) {
-            manifest_txn_.commit();
-        }
+        apply_live_changes();
         data_dirty_ = false;
     }
 }
@@ -478,6 +489,27 @@ void AsyncChildrenFrameEditor::ensure_manifest_transaction() {
     });
 }
 
+void AsyncChildrenFrameEditor::apply_live_changes() {
+    if (manifest_txn_.active()) {
+        manifest_txn_.commit(false);
+    }
+    invalidate_preview();
+}
+
+void AsyncChildrenFrameEditor::persist_pending_changes() {
+    if (!manifest_txn_.active()) {
+        return;
+    }
+    manifest_txn_.commit(true);
+    invalidate_preview();
+}
+
+void AsyncChildrenFrameEditor::invalidate_preview() const {
+    if (context_.preview && !context_.animation_id.empty()) {
+        context_.preview->invalidate(context_.animation_id);
+    }
+}
+
 float AsyncChildrenFrameEditor::attachment_scale() const {
     if (!context_.assets || !context_.target) {
         return 1.0f;
@@ -673,16 +705,18 @@ void AsyncChildrenFrameEditor::refresh_selection_state() {
     }
     selection_state_->child_index = selected_child_index_;
     const ChildWorldPose pose = child_world_pose(selected_child_index_);
-    selection_state_->world_pos = pose.pos;
-    selection_state_->world_z = pose.z;
     SDL_Point anchor = asset_anchor_world();
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint world{anchor.x + pose.pos.x, anchor.y + pose.pos.y};
+    const float base_z = context_.target ? context_.target->world_z_offset() : 0.0f;
+    selection_state_->world_pos = world;
+    selection_state_->world_z = pose.z;
     SDL_FPoint screen{};
     if (!cam.project_world_point(world, pose.z, screen)) {
         screen = cam.map_to_screen_f(world);
     }
     selection_state_->screen_pos = round_point(screen);
+    selection_state_->set_anchor_world(anchor, base_z);
 }
 
 void AsyncChildrenFrameEditor::apply_preview() {

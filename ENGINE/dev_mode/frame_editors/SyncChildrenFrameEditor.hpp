@@ -38,6 +38,7 @@ public:
     void update(const Input& input, float dt) override;
     void render_world(SDL_Renderer* renderer) const override;
     void render_overlays(SDL_Renderer* renderer) const override;
+    void persist_pending_changes() override;
     bool wants_close() const override { return wants_close_; }
 
 private:
@@ -55,6 +56,8 @@ private:
     int child_index_from_point_index(int point_index) const;
     int point_index_for_child(int child_index) const;
     void ensure_manifest_transaction();
+    void apply_live_changes();
+    void invalidate_preview() const;
     void refresh_selection_state();
     void sync_visibility_checkbox();
 

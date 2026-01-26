@@ -120,7 +120,7 @@ void FrameEditorSession::end() {
         return;
     }
 
-    destroy_editor();
+    destroy_editor(true);
 
     const bool target_alive = assets_ && target_ && assets_->contains_asset(target_);
     if (target_alive) {
@@ -230,7 +230,7 @@ bool FrameEditorSession::should_render_asset(const Asset* asset) const {
 }
 
 void FrameEditorSession::create_and_begin_editor() {
-    destroy_editor();
+    destroy_editor(false);
     editor_context_.launch_mode = launch_mode_for_mode(mode_);
     editor_context_.animation_id = animation_id_;
     editor_context_.camera = assets_ ? &assets_->getView() : nullptr;
@@ -252,9 +252,12 @@ void FrameEditorSession::create_and_begin_editor() {
     }
 }
 
-void FrameEditorSession::destroy_editor() {
+void FrameEditorSession::destroy_editor(bool persist_changes) {
     if (!active_editor_) {
         return;
+    }
+    if (persist_changes) {
+        active_editor_->persist_pending_changes();
     }
     active_editor_->end();
     active_editor_.reset();

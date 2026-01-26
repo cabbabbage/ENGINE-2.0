@@ -4,16 +4,36 @@
       "animations": {
         "back": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -24,12 +44,24 @@
         },
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -40,12 +72,24 @@
         },
         "forward": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -56,18 +100,42 @@
         },
         "right": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -86,7 +154,42 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -118,18 +221,42 @@
       "animations": {
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -148,16 +275,36 @@
       "animations": {
         "back": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -168,7 +315,9 @@
         },
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -179,12 +328,24 @@
         },
         "forward": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -195,18 +356,42 @@
         },
         "right": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -225,7 +410,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -262,18 +449,42 @@
       "animations": {
         "back": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -284,30 +495,78 @@
         },
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -318,18 +577,42 @@
         },
         "forward": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -340,18 +623,42 @@
         },
         "right": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -370,18 +677,42 @@
       "animations": {
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -400,7 +731,9 @@
       "animations": {
         "Default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -411,12 +744,24 @@
         },
         "Move Forward": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -427,18 +772,42 @@
         },
         "Move Left": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -457,16 +826,36 @@
       "animations": {
         "back": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -477,7 +866,9 @@
         },
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -488,12 +879,24 @@
         },
         "forward": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -504,18 +907,42 @@
         },
         "right": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -534,18 +961,42 @@
       "animations": {
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -574,18 +1025,42 @@
       "animations": {
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -614,7 +1089,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -633,7 +1110,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -652,30 +1131,78 @@
       "animations": {
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -694,7 +1221,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -713,7 +1242,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -761,7 +1292,24 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "inherit_source_movement": false,
           "locked": false,
@@ -951,9 +1499,9 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": 221,
-                  "dy": -213,
-                  "dz": 67,
+                  "dx": -33,
+                  "dy": 11,
+                  "dz": 211,
                   "visible": true
                 }
               ],
@@ -966,7 +1514,9 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "hit_geometry": [
             {
@@ -1077,7 +1627,30 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "hit_geometry": [
             {
@@ -1272,14 +1845,30 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "hit_geometry": [
             {
@@ -1586,7 +2175,24 @@
             }
           ],
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "hit_geometry": [
             {
@@ -1682,14 +2288,40 @@
       "tillable": false
     },
     "Vibble_eyes": {
-      "animation_children": [],
+      "animation_children": [
+        "Vibble_eyes"
+      ],
       "animations": {
         "default": {
-          "child_timelines": [],
+          "child_timelines": [
+            {
+              "animation": "",
+              "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
+              "child": 0,
+              "child_index": 0,
+              "frames": [
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                }
+              ],
+              "mode": "static"
+            }
+          ],
+          "children": [
+            "Vibble_eyes"
+          ],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "inherit_source_movement": false,
           "locked": false,
@@ -1697,7 +2329,17 @@
           "movement": [
             [
               0,
-              0
+              0,
+              [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ]
             ]
           ],
           "movement_total": {
@@ -1720,6 +2362,7 @@
       "asset_directory": "SRC/assets/Vibble_eyes",
       "asset_name": "Vibble_eyes",
       "asset_type": "object",
+      "async_children": [],
       "lighting_info": [],
       "neighbor_search_distance": 500,
       "shading_opacity_multiplier": 1.0,
@@ -1744,23 +2387,57 @@
       "animations": {
         "damaged": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1852,7 +2529,9 @@
             }
           ],
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "hit_geometry": [
             {
@@ -1917,7 +2596,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1936,7 +2617,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1955,7 +2638,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1974,7 +2659,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1993,7 +2680,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2012,7 +2701,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2031,7 +2722,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2050,7 +2743,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2069,7 +2764,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2088,7 +2785,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2107,7 +2806,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2126,7 +2827,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2145,7 +2848,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2164,7 +2869,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2183,7 +2890,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2202,7 +2911,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2221,7 +2932,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2240,7 +2953,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2259,7 +2974,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2278,7 +2995,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2297,7 +3016,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2316,7 +3037,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2338,7 +3061,9 @@
             []
           ],
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "hit_geometry": [
             {
@@ -2453,12 +3178,24 @@
             []
           ],
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
           ],
           "hit_geometry": [
             {
@@ -2702,7 +3439,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2721,7 +3460,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2740,7 +3481,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2788,7 +3531,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": false
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2810,7 +3555,7 @@
       "brightness": -0.05999999046325684,
       "contrast": 0.0,
       "hue": 0.0,
-      "saturation_blue": 0.0,
+      "saturation_blue": 1.0,
       "saturation_green": 0.0,
       "saturation_red": -0.3
     },

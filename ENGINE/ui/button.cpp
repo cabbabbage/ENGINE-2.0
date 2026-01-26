@@ -1,4 +1,5 @@
 #include "button.hpp"
+#include "button_settings.hpp"
 
 #include <algorithm>
 #include <array>
@@ -423,7 +424,7 @@ Button Button::get_exit_button(const std::string& text) {
 Button::Button() = default;
 
 Button::Button(const std::string& text, const ButtonStyle* style, int w, int h)
-: rect_{0,0,w,h}, label_(text), style_(style), glass_style_(default_glass_style()) {}
+: rect_{0,0,w,h}, label_(text), style_(style) {}
 
 void Button::set_position(SDL_Point p) { rect_.x = p.x; rect_.y = p.y; }
 void Button::set_rect(const SDL_Rect& r) { rect_ = r; }
@@ -488,8 +489,7 @@ void Button::draw_deco(SDL_Renderer* r, const SDL_Rect& b, bool hovered) const {
 }
 
 const GlassButtonStyle& Button::default_glass_style() {
-    static const GlassButtonStyle kDefault{};
-    return kDefault;
+    return ButtonSettings::instance().style();
 }
 
 void Button::refresh_glass_overlay() {
@@ -507,9 +507,19 @@ void Button::refresh_glass_overlay() {
 }
 
 void Button::enable_glass_style(bool enabled) { glass_enabled_ = enabled; }
-void Button::set_glass_style(const GlassButtonStyle& style) { glass_style_ = style; }
+void Button::set_glass_style(const GlassButtonStyle& style) {
+    glass_style_override_ = style;
+    has_glass_override_ = true;
+}
+void Button::reset_glass_style_override() {
+    has_glass_override_ = false;
+}
+const GlassButtonStyle& Button::current_glass_style() const {
+    return has_glass_override_ ? glass_style_override_ : ButtonSettings::instance().style();
+}
 
 void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
+    const GlassButtonStyle& style = current_glass_style();
     SDL_Rect r = adjusted_for_state(rect, hovered_, pressed_);
 
     SDL_Rect cap{ r.x - kCaptureBleed, r.y - kCaptureBleed, r.w + kCaptureBleed * 2, r.h + kCaptureBleed * 2 };
@@ -542,22 +552,22 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
     const float inv_cx = (cx > 0.0f) ? 1.0f / cx : 0.0f;
     const float inv_cy = (cy > 0.0f) ? 1.0f / cy : 0.0f;
 
-    const float ref_base = glass_style_.refraction_strength * (hovered_ ? 1.18f : 1.0f) * (pressed_ ? 0.90f : 1.0f);
-    const float chroma   = glass_style_.chroma_strength * (pressed_ ? 0.85f : 1.0f);
-    const float mix_state = pressed_ ? glass_style_.mix_pressed
-                                     : (hovered_ ? glass_style_.mix_hover : glass_style_.mix_normal);
+    const float ref_base = style.refraction_strength * (hovered_ ? 1.18f : 1.0f) * (pressed_ ? 0.90f : 1.0f);
+    const float chroma   = style.chroma_strength * (pressed_ ? 0.85f : 1.0f);
+    const float mix_state = pressed_ ? style.mix_pressed
+                                     : (hovered_ ? style.mix_hover : style.mix_normal);
     const float brightness_boost = pressed_ ? 0.94f : (hovered_ ? 1.05f : 1.0f);
-    float blur_mix = glass_style_.motion_blur_mix * (hovered_ ? 1.10f : (pressed_ ? 0.85f : 1.0f));
+    float blur_mix = style.motion_blur_mix * (hovered_ ? 1.10f : (pressed_ ? 0.85f : 1.0f));
     blur_mix = std::clamp(blur_mix, 0.0f, 0.9f);
-    const int blur_radius = std::max(1, glass_style_.motion_blur_radius);
-    const float ray_threshold = std::clamp(glass_style_.ray_threshold, 0.0f, 0.99f);
-    float ray_intensity = glass_style_.ray_intensity * (hovered_ ? 1.15f : (pressed_ ? 0.85f : 1.0f));
+    const int blur_radius = std::max(1, style.motion_blur_radius);
+    const float ray_threshold = std::clamp(style.ray_threshold, 0.0f, 0.99f);
+    float ray_intensity = style.ray_intensity * (hovered_ ? 1.15f : (pressed_ ? 0.85f : 1.0f));
     ray_intensity = std::max(0.0f, ray_intensity);
-    const int ray_steps = std::max(1, glass_style_.ray_steps);
-    const float ray_length = std::max(0.0f, glass_style_.ray_length) * static_cast<float>(std::min(w, h));
-    const float rough_scale = glass_style_.rough_scale * 120.0f;
-    const float rough_px = glass_style_.rough_ampl_px * (hovered_ ? 1.08f : (pressed_ ? 0.82f : 1.0f));
-    const float diff_radius = glass_style_.diffusion_radius * (hovered_ ? 1.10f : (pressed_ ? 0.90f : 1.0f));
+    const int ray_steps = std::max(1, style.ray_steps);
+    const float ray_length = std::max(0.0f, style.ray_length) * static_cast<float>(std::min(w, h));
+    const float rough_scale = style.rough_scale * 120.0f;
+    const float rough_px = style.rough_ampl_px * (hovered_ ? 1.08f : (pressed_ ? 0.82f : 1.0f));
+    const float diff_radius = style.diffusion_radius * (hovered_ ? 1.10f : (pressed_ ? 0.90f : 1.0f));
 
     const size_t stride = static_cast<size_t>(w);
     const size_t total = stride * static_cast<size_t>(h);
@@ -565,7 +575,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
     std::vector<Float3> rays(total);
     std::vector<Float3> blurred(total);
 
-    const std::vector<Float4>& overlay_pixels = scaled_overlay_pixels(glass_style_, w, h);
+    const std::vector<Float4>& overlay_pixels = scaled_overlay_pixels(style, w, h);
     const bool have_overlay = !overlay_pixels.empty();
 
     for (int y = 0; y < h; ++y) {
@@ -645,7 +655,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
         }
     }
 
-    const int taps = std::max(3, glass_style_.diffusion_taps);
+    const int taps = std::max(3, style.diffusion_taps);
     std::vector<std::array<float,2>> kernel;
     kernel.reserve(taps);
     for (int i = 0; i < taps; ++i) {
@@ -678,7 +688,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
 
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
-            float cov = rr_coverage_px(x, y, w, h, glass_style_.radius);
+                float cov = rr_coverage_px(x, y, w, h, style.radius);
             if (cov <= 0.001f) {
                 dst[y * dpitch + x] = 0;
                 continue;
@@ -727,7 +737,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
             SDL_Color orig = unpack(src[sy_o * spitch + sx_o]);
             Float3 origF = make_float3(orig.r / 255.0f, orig.g / 255.0f, orig.b / 255.0f);
 
-            const float fres = std::pow(std::clamp(r1, 0.0f, 1.0f), glass_style_.fresnel_power) * glass_style_.fresnel_intensity;
+            const float fres = std::pow(std::clamp(r1, 0.0f, 1.0f), style.fresnel_power) * style.fresnel_intensity;
             float mix_w = std::clamp(mix_state + fres, 0.0f, 1.0f);
 
             Float3 final_col = lerp(origF, refr, mix_w);
@@ -765,7 +775,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
 
 void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const {
     if (label_.empty()) return;
-    TTF_Font* font = style_->label.open_font();
+    TTF_Font* font = Styles::LabelSmallMain().open_font();;
     if (!font) return;
 
     SDL_Rect rr = adjusted_for_state(rect, hovered_, pressed_);
@@ -774,8 +784,9 @@ void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const
     const int x = rr.x + (rr.w - tw)/2;
     const int y = rr.y + (rr.h - th)/2;
 
-    SDL_Color text = glass_style_.text_color;
-    SDL_Color stroke = glass_style_.text_stroke;
+    const GlassButtonStyle& text_style = current_glass_style();
+    SDL_Color text = text_style.text_color;
+    SDL_Color stroke = text_style.text_stroke;
 
     if (hovered_ && !pressed_) {
         text.r = clamp8(text.r + 8); text.g = clamp8(text.g + 8); text.b = clamp8(text.b + 8);

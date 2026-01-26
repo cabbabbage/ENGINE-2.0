@@ -92,6 +92,7 @@ public:
 
     void enable_glass_style(bool enabled);
     void set_glass_style(const GlassButtonStyle& style);
+    void reset_glass_style_override();
 
 private:
 
@@ -109,8 +110,10 @@ private:
     const ButtonStyle* style_ = nullptr;
 
     bool            glass_enabled_ = false;
-    GlassButtonStyle glass_style_{};
+    bool            has_glass_override_ = false;
+    GlassButtonStyle glass_style_override_{};
 
     mutable float   glass_luminance_ = 0.0f;
     mutable bool    glass_has_luminance_ = false;
+    const GlassButtonStyle& current_glass_style() const;
 };

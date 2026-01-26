@@ -12,6 +12,7 @@
 
 #include "styles.hpp"
 #include "button.hpp"
+#include "glass_button_tweaker.hpp"
 
 class MainMenu {
 
@@ -61,6 +62,7 @@ class MainMenu {
     std::filesystem::path manifest_root_;
     SDL_Texture* cached_bg_tex_ = nullptr;
     Uint64 animation_start_ticks_ = 0;
+    GlassButtonTweaker button_tweaker_;
 
     std::filesystem::path resolve_manifest_path(const std::string& forward_path) const;
 };

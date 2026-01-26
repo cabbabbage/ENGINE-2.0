@@ -26,11 +26,14 @@ public:
     void update(const Input& input, float dt) override;
     void render_world(SDL_Renderer* renderer) const override;
     void render_overlays(SDL_Renderer* renderer) const override;
+    void persist_pending_changes() override;
     bool wants_close() const override { return wants_close_; }
 
 private:
     void populate_child_data();
     void ensure_manifest_transaction();
+    void apply_live_changes();
+    void invalidate_preview() const;
     void apply_preview();
     float attachment_scale() const;
     SDL_Point asset_anchor_world() const;

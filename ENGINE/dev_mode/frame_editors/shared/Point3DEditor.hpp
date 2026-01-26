@@ -34,7 +34,7 @@ public:
     // UI rendering and event handling
     bool handle_event(const SDL_Event& e, const SDL_Rect& container);
     void render_overlays(SDL_Renderer* renderer, const SDL_Rect& container);
-    int get_overlay_height() const;
+    int get_overlay_height(int container_width) const;
 
     // Coordinate synchronization
     void sync_textboxes_from_selection();

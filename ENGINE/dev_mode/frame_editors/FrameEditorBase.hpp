@@ -22,6 +22,7 @@ public:
     virtual void update(const Input& input, float dt) = 0;
     virtual void render_world(SDL_Renderer* renderer) const = 0;
     virtual void render_overlays(SDL_Renderer* renderer) const = 0;
+    virtual void persist_pending_changes() {}
     virtual bool wants_close() const { return false; }
 };
 

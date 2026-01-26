@@ -13,6 +13,7 @@
 #include "dev_mode/draw_utils.hpp"
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
+#include "dev_mode/frame_editors/shared/SnapUtils.hpp"
 
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
@@ -101,7 +102,41 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     
     if (point_3d_editor_) {
         point_3d_editor_->set_on_coordinates_changed([this]() {
-            persist_changes();
+            if (!selection_state_) {
+                return;
+            }
+            if (frames_.empty() || selected_index_ <= 0 ||
+                selected_index_ >= static_cast<int>(frames_.size()) ||
+                rel_positions_.empty() || rel_positions_z_.empty()) {
+                return;
+            }
+            if (selected_index_ - 1 >= static_cast<int>(rel_positions_.size()) ||
+                selected_index_ - 1 >= static_cast<int>(rel_positions_z_.size())) {
+                return;
+            }
+
+            SDL_FPoint snapped_world = snap_world_point_to_grid(selection_state_->world_pos, context_.snap_resolution);
+            float snapped_world_z = snap_world_z_to_grid(selection_state_->world_z, context_.snap_resolution);
+            selection_state_->world_pos = snapped_world;
+            selection_state_->world_z = snapped_world_z;
+
+            SDL_Point anchor = asset_anchor_world();
+            float base_z = base_world_z();
+
+            float rel_x = snapped_world.x - static_cast<float>(anchor.x);
+            float rel_y = snapped_world.y - static_cast<float>(anchor.y);
+            float rel_z = snapped_world_z - base_z;
+
+            SDL_FPoint prev_rel_abs = rel_positions_[selected_index_ - 1];
+            float prev_rel_z_abs = rel_positions_z_[selected_index_ - 1];
+
+            frames_[selected_index_].dx = std::round(rel_x - prev_rel_abs.x);
+            frames_[selected_index_].dy = std::round(rel_y - prev_rel_abs.y);
+            frames_[selected_index_].dz = std::round(rel_z - prev_rel_z_abs);
+
+            rebuild_rel_positions();
+            apply_live_changes();
+            refresh_selection_state();
         });
 
         point_3d_editor_->set_on_point_selected([this](int index) {
@@ -139,13 +174,15 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
                 return;
             }
 
+            SDL_FPoint snapped_world = snap_world_point_to_grid(new_world_pos, context_.snap_resolution);
+            float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
             SDL_Point anchor = asset_anchor_world();
             float base_z = base_world_z();
 
             // Convert world to relative to anchor
-            float rel_x = new_world_pos.x - static_cast<float>(anchor.x);
-            float rel_y = new_world_pos.y - static_cast<float>(anchor.y);
-            float rel_z = new_world_z - base_z;
+            float rel_x = snapped_world.x - static_cast<float>(anchor.x);
+            float rel_y = snapped_world.y - static_cast<float>(anchor.y);
+            float rel_z = snapped_world_z - base_z;
 
             // Previous frame absolute relative position
             SDL_FPoint prev_rel_abs = rel_positions_[selected_index_ - 1];
@@ -157,16 +194,13 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
             frames_[selected_index_].dz = std::round(rel_z - prev_rel_z_abs);
 
             rebuild_rel_positions();
-            persist_changes();
+            apply_live_changes();
             refresh_selection_state();
         });
     }
 }
 
 void MovementFrameEditor::end() {
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit();
-    }
     wants_close_ = false;
     frames_.clear();
     rel_positions_.clear();
@@ -183,13 +217,18 @@ void MovementFrameEditor::end() {
 }
 
 bool MovementFrameEditor::handle_event(const SDL_Event& e) {
+    SDL_Rect overlay_rect{0, 0, 0, 0};
+    bool overlay_valid = false;
     // Handle Point3DEditor events
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
         SDL_GetRendererOutputSize(nullptr, &sw, &sh); // Assuming renderer is not available here, but size is same
-        int height = point_3d_editor_->get_overlay_height();
-        SDL_Rect bottom_container{0, sh - height, sw, height};
-        if (point_3d_editor_->handle_event(e, bottom_container)) {
+        int height = point_3d_editor_->get_overlay_height(sw);
+        if (height > 0) {
+            overlay_rect = SDL_Rect{0, sh - height, sw, height};
+            overlay_valid = true;
+        }
+        if (point_3d_editor_->handle_event(e, overlay_rect)) {
             return true;
         }
     }
@@ -197,12 +236,10 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
 
     if (frame_navigator_ && frame_navigator_->handle_event(e)) {
         consumed = true;
+        if (selection_state_) selection_state_->reset();
+        if (point_3d_editor_) point_3d_editor_->set_selected_point_index(-1);
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
-        // Save changes before exiting - always persist deferred changes
-        if (manifest_txn_.active()) {
-            manifest_txn_.commit();
-        }
         wants_close_ = true;
         consumed = true;
     }
@@ -247,7 +284,8 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
-    if (!ui_contains_point(mouse_pos)) {
+    const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
+    if (!ui_contains_point(mouse_pos) && !pointer_in_overlay) {
         std::vector<SDL_FPoint> point_screens;
         std::vector<bool> point_selectable;
 
@@ -324,7 +362,7 @@ void MovementFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
         SDL_GetRendererOutputSize(renderer, &sw, &sh);
-        int height = point_3d_editor_->get_overlay_height();
+        int height = point_3d_editor_->get_overlay_height(sw);
         SDL_Rect bottom_container{0, sh - height, sw, height};
         point_3d_editor_->render_overlays(renderer, bottom_container);
     }
@@ -374,9 +412,7 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 
 void MovementFrameEditor::select_frame(int index) {
     // Save changes before changing frames
-    if (manifest_txn_.active() && manifest_txn_.deferred_persist()) {
-        manifest_txn_.commit();
-    }
+    persist_pending_changes();
 
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
 
@@ -550,10 +586,16 @@ void MovementFrameEditor::persist_changes() {
     if (frames_.empty()) {
         return;
     }
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit();
-    }
+    apply_live_changes();
     refresh_selection_state();
+}
+
+void MovementFrameEditor::persist_pending_changes() {
+    if (!manifest_txn_.active()) {
+        return;
+    }
+    manifest_txn_.commit(true);
+    invalidate_preview();
 }
 
 void MovementFrameEditor::apply_to_all_frames() {
@@ -570,6 +612,19 @@ void MovementFrameEditor::apply_to_all_frames() {
     persist_changes();
 }
 
+void MovementFrameEditor::apply_live_changes() {
+    if (manifest_txn_.active()) {
+        manifest_txn_.commit(false);
+    }
+    invalidate_preview();
+}
+
+void MovementFrameEditor::invalidate_preview() const {
+    if (context_.preview && !context_.animation_id.empty()) {
+        context_.preview->invalidate(context_.animation_id);
+    }
+}
+
 void MovementFrameEditor::refresh_selection_state() {
     if (!selection_state_ || !context_.assets || !context_.target) {
         return;
@@ -580,11 +635,12 @@ void MovementFrameEditor::refresh_selection_state() {
     const int idx = clamp_index(selected_index_, static_cast<int>(rel_positions_.size()));
     selection_state_->child_index = -1;
     SDL_Point anchor = asset_anchor_world();
+    const float base_z = base_world_z();
     SDL_FPoint world{
         static_cast<float>(anchor.x) + (idx < static_cast<int>(rel_positions_.size()) ? rel_positions_[idx].x : 0.0f),
         static_cast<float>(anchor.y) + (idx < static_cast<int>(rel_positions_.size()) ? rel_positions_[idx].y : 0.0f)
     };
-    const float world_z = base_world_z() +
+    const float world_z = base_z +
         (idx < static_cast<int>(rel_positions_z_.size()) ? rel_positions_z_[idx] : 0.0f);
     SDL_FPoint screen{};
     if (!project_relative_point(static_cast<std::size_t>(idx), screen)) {
@@ -594,6 +650,7 @@ void MovementFrameEditor::refresh_selection_state() {
     selection_state_->world_pos = world;
     selection_state_->world_z = world_z;
     selection_state_->screen_pos = round_point(screen);
+    selection_state_->set_anchor_world(anchor, base_z);
 }
 
 SDL_Point MovementFrameEditor::asset_anchor_world() const {

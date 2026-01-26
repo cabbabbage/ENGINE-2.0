@@ -13,7 +13,7 @@ static const SDL_Color kTeal      = make_color( 40,110,120,255);
 static const SDL_Color kSlate     = make_color( 28, 32, 36,230);
 static const SDL_Color kCoal      = make_color( 12, 16, 18,255);
 static const SDL_Color kNight     = make_color(  8, 12, 18,255);
-static const SDL_Color kFog       = make_color(220,220,200,255);
+static const SDL_Color kFog       = make_color(201,210,110,255);
 static const SDL_Color kMist      = make_color(140,160,160,255);
 static const SDL_Color kIvory     = make_color(200,200,255,200);
 

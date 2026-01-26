@@ -76,6 +76,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
     }
 
     // Check for textbox clicks to set axis
+    bool pointer_clicked_textbox = false;
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mouse_pos = {e.button.x, e.button.y};
         const int padding = DMSpacing::small_gap();
@@ -92,6 +93,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
             };
             if (SDL_PointInRect(&mouse_pos, &dx_rect)) {
                 set_axis_from_textbox_click(0);
+                pointer_clicked_textbox = true;
             }
         }
 
@@ -104,6 +106,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
             };
             if (SDL_PointInRect(&mouse_pos, &dy_rect)) {
                 set_axis_from_textbox_click(1);
+                pointer_clicked_textbox = true;
             }
         }
 
@@ -116,6 +119,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
             };
             if (SDL_PointInRect(&mouse_pos, &dz_rect)) {
                 set_axis_from_textbox_click(2);
+                pointer_clicked_textbox = true;
             }
         }
     }
@@ -132,6 +136,10 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
     }
     if (tb_dz_ && tb_dz_->handle_event(e)) {
         apply_textbox_changes();
+        consumed = true;
+    }
+
+    if (pointer_clicked_textbox) {
         consumed = true;
     }
 
@@ -212,8 +220,11 @@ void Point3DEditor::sync_textboxes_from_selection() {
     }
 
     // Only update if not currently editing
+    const SDL_FPoint rel_pos = selection_->relative_world_pos();
+    const float rel_z = selection_->relative_world_z();
+
     if (tb_dx_ && !tb_dx_->is_editing()) {
-        const std::string dx_str = std::to_string(static_cast<int>(std::lround(selection_->world_pos.x)));
+        const std::string dx_str = std::to_string(static_cast<int>(std::lround(rel_pos.x)));
         if (dx_str != last_dx_text_) {
             tb_dx_->set_value(dx_str);
             last_dx_text_ = dx_str;
@@ -221,7 +232,7 @@ void Point3DEditor::sync_textboxes_from_selection() {
     }
 
     if (tb_dy_ && !tb_dy_->is_editing()) {
-        const std::string dy_str = std::to_string(static_cast<int>(std::lround(selection_->world_pos.y)));
+        const std::string dy_str = std::to_string(static_cast<int>(std::lround(rel_pos.y)));
         if (dy_str != last_dy_text_) {
             tb_dy_->set_value(dy_str);
             last_dy_text_ = dy_str;
@@ -229,7 +240,7 @@ void Point3DEditor::sync_textboxes_from_selection() {
     }
 
     if (tb_dz_ && !tb_dz_->is_editing()) {
-        const std::string dz_str = std::to_string(static_cast<int>(std::lround(selection_->world_z)));
+        const std::string dz_str = std::to_string(static_cast<int>(std::lround(rel_z)));
         if (dz_str != last_dz_text_) {
             tb_dz_->set_value(dz_str);
             last_dz_text_ = dz_str;
@@ -243,29 +254,36 @@ void Point3DEditor::apply_textbox_changes() {
     }
 
     bool changed = false;
+    const SDL_FPoint anchor = selection_->anchor_point();
+    const SDL_FPoint rel_pos = selection_->relative_world_pos();
+    const float rel_z = selection_->relative_world_z();
+    const float anchor_z = selection_->anchor_z_point();
 
     if (tb_dx_) {
-        const float value = parse_float(tb_dx_->value(), selection_->world_pos.x);
-        if (std::fabs(value - selection_->world_pos.x) > 0.001f) {
-            selection_->world_pos.x = value;
+        const float value = parse_float(tb_dx_->value(), rel_pos.x);
+        const float new_world_x = anchor.x + value;
+        if (std::fabs(new_world_x - selection_->world_pos.x) > 0.001f) {
+            selection_->world_pos.x = new_world_x;
             changed = true;
             last_dx_text_ = tb_dx_->value();
         }
     }
 
     if (tb_dy_) {
-        const float value = parse_float(tb_dy_->value(), selection_->world_pos.y);
-        if (std::fabs(value - selection_->world_pos.y) > 0.001f) {
-            selection_->world_pos.y = value;
+        const float value = parse_float(tb_dy_->value(), rel_pos.y);
+        const float new_world_y = anchor.y + value;
+        if (std::fabs(new_world_y - selection_->world_pos.y) > 0.001f) {
+            selection_->world_pos.y = new_world_y;
             changed = true;
             last_dy_text_ = tb_dy_->value();
         }
     }
 
     if (tb_dz_) {
-        const float value = parse_float(tb_dz_->value(), selection_->world_z);
-        if (std::fabs(value - selection_->world_z) > 0.001f) {
-            selection_->world_z = value;
+        const float value = parse_float(tb_dz_->value(), rel_z);
+        const float new_world_z = anchor_z + value;
+        if (std::fabs(new_world_z - selection_->world_z) > 0.001f) {
+            selection_->world_z = new_world_z;
             changed = true;
             last_dz_text_ = tb_dz_->value();
         }
@@ -276,13 +294,24 @@ void Point3DEditor::apply_textbox_changes() {
     }
 }
 
-int Point3DEditor::get_overlay_height() const {
-    if (!selection_ || !selection_->has_target()) {
-        return 0;
+int Point3DEditor::get_overlay_height(int container_width) const {
+    const int padding = DMSpacing::small_gap();
+    const int inner_w = std::max(0, container_width - padding * 2);
+    const int third_w = std::max(0, (inner_w - DMSpacing::small_gap() * 2) / 3);
+
+    int textbox_height = DMTextBox::height();
+    if (tb_dx_) {
+        textbox_height = std::max(textbox_height, tb_dx_->height_for_width(third_w));
+    }
+    if (tb_dy_) {
+        textbox_height = std::max(textbox_height, tb_dy_->height_for_width(third_w));
+    }
+    if (tb_dz_) {
+        textbox_height = std::max(textbox_height, tb_dz_->height_for_width(third_w));
     }
 
-    // Return height needed for the three textboxes with extra padding
-    return DMTextBox::height() + DMSpacing::small_gap() * 4;
+    // Keep the previous extra padding below the textboxes for consistency
+    return textbox_height + DMSpacing::small_gap() * 4;
 }
 
 void Point3DEditor::render_axis_point(SDL_Renderer* renderer,

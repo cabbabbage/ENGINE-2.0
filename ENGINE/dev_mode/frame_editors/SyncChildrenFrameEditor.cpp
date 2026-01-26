@@ -13,6 +13,7 @@
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/widgets.hpp"
+#include "dev_mode/frame_editors/shared/SnapUtils.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "render/composite_asset_renderer.hpp"
 #include <SDL_image.h>
@@ -41,8 +42,8 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         point_3d_editor_->set_on_point_selected([this](int index) {
             if (index < 0) {
                 // Deselecting - persist changes before clearing selection state
-                if (data_dirty_ && manifest_txn_.active() && !static_frames_by_child_.empty()) {
-                    manifest_txn_.commit();
+                if (data_dirty_ && !static_frames_by_child_.empty()) {
+                    apply_live_changes();
                 }
                 if (selection_state_) {
                     selection_state_->reset();
@@ -85,12 +86,14 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             float scale = attachment_scale();
             if (scale <= 0.0f) scale = 1.0f;
 
+            SDL_FPoint snapped_world = snap_world_point_to_grid(new_world_pos, context_.snap_resolution);
+            float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
             SDL_Point anchor = asset_anchor_world();
             const bool flipped = context_.target && context_.target->flipped;
 
-            float dx_world = (new_world_pos.x - static_cast<float>(anchor.x)) / scale;
-            float dy_world = (new_world_pos.y - static_cast<float>(anchor.y)) / scale;
-            float dz_world = (new_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+            float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            float dy_world = (snapped_world.y - static_cast<float>(anchor.y)) / scale;
+            float dz_world = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
             auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
             sample.dx = flipped ? -dx_world : dx_world;
@@ -118,12 +121,16 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             float scale = attachment_scale();
             if (scale <= 0.0f) scale = 1.0f;
 
+            SDL_FPoint snapped_world = snap_world_point_to_grid(selection_state_->world_pos, context_.snap_resolution);
+            float snapped_world_z = snap_world_z_to_grid(selection_state_->world_z, context_.snap_resolution);
+            selection_state_->world_pos = snapped_world;
+            selection_state_->world_z = snapped_world_z;
             SDL_Point anchor = asset_anchor_world();
             const bool flipped = context_.target && context_.target->flipped;
 
-            float dx_world = (selection_state_->world_pos.x - static_cast<float>(anchor.x)) / scale;
-            float dy_world = (selection_state_->world_pos.y - static_cast<float>(anchor.y)) / scale;
-            float dz_world = (selection_state_->world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+            float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            float dy_world = (snapped_world.y - static_cast<float>(anchor.y)) / scale;
+            float dz_world = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
             auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
             sample.dx = flipped ? -dx_world : dx_world;
@@ -153,9 +160,7 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
     frame_navigator_->set_current_frame(selected_frame_index_);
     frame_navigator_->set_on_frame_changed([this](int frame) {
         // Save changes before changing frames
-        if (manifest_txn_.active() && manifest_txn_.deferred_persist()) {
-            manifest_txn_.commit();
-        }
+        persist_pending_changes();
         selected_frame_index_ = frame;
         data_dirty_ = true;
         sync_visibility_checkbox();
@@ -212,9 +217,6 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 }
 
 void SyncChildrenFrameEditor::end() {
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit();
-    }
     if (selection_state_) {
         selection_state_->reset();
         selection_state_ = nullptr;
@@ -229,12 +231,17 @@ void SyncChildrenFrameEditor::end() {
 
 bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     // Handle Point3DEditor events first
+    SDL_Rect overlay_rect{0, 0, 0, 0};
+    bool overlay_valid = false;
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
         SDL_GetRendererOutputSize(nullptr, &sw, &sh);
-        int height = point_3d_editor_->get_overlay_height();
-        SDL_Rect bottom_container{0, sh - height, sw, height};
-        if (point_3d_editor_->handle_event(e, bottom_container)) {
+        int height = point_3d_editor_->get_overlay_height(sw);
+        if (height > 0) {
+            overlay_rect = SDL_Rect{0, sh - height, sw, height};
+            overlay_valid = true;
+        }
+        if (point_3d_editor_->handle_event(e, overlay_rect)) {
             return true;
         }
     }
@@ -243,13 +250,11 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         return false;
     }
     if (frame_navigator_ && frame_navigator_->handle_event(e)) {
+        if (selection_state_) selection_state_->reset();
+        if (point_3d_editor_) point_3d_editor_->set_selected_point_index(-1);
         return true;
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
-        // Save changes before exiting - persist any pending edits
-        if (data_dirty_ && manifest_txn_.active()) {
-            manifest_txn_.commit();
-        }
         wants_close_ = true;
         return true;
     }
@@ -269,7 +274,10 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
-    if (SDL_PointInRect(&mouse_pos, &back_rect_) == SDL_FALSE && SDL_PointInRect(&mouse_pos, &ui_rect_) == SDL_FALSE) {
+    const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
+    if (SDL_PointInRect(&mouse_pos, &back_rect_) == SDL_FALSE &&
+        SDL_PointInRect(&mouse_pos, &ui_rect_) == SDL_FALSE &&
+        !pointer_in_overlay) {
         const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
         SDL_Point anchor = asset_anchor_world();
         std::vector<SDL_FPoint> point_screens;
@@ -312,9 +320,7 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
 void SyncChildrenFrameEditor::update(const Input& /*input*/, float /*dt*/) {
     if (data_dirty_ && context_.target) {
         apply_current_frame_to_children();
-        if (manifest_txn_.active()) {
-            manifest_txn_.commit();
-        }
+        apply_live_changes();
         data_dirty_ = false;
     }
 }
@@ -423,7 +429,7 @@ void SyncChildrenFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
         SDL_GetRendererOutputSize(renderer, &sw, &sh);
-        int height = point_3d_editor_->get_overlay_height();
+        int height = point_3d_editor_->get_overlay_height(sw);
         SDL_Rect bottom_container{0, sh - height, sw, height};
         point_3d_editor_->render_overlays(renderer, bottom_container);
     }
@@ -666,6 +672,27 @@ void SyncChildrenFrameEditor::ensure_manifest_transaction() {
     });
 }
 
+void SyncChildrenFrameEditor::apply_live_changes() {
+    if (manifest_txn_.active()) {
+        manifest_txn_.commit(false);
+    }
+    invalidate_preview();
+}
+
+void SyncChildrenFrameEditor::persist_pending_changes() {
+    if (!manifest_txn_.active()) {
+        return;
+    }
+    manifest_txn_.commit(true);
+    invalidate_preview();
+}
+
+void SyncChildrenFrameEditor::invalidate_preview() const {
+    if (context_.preview && !context_.animation_id.empty()) {
+        context_.preview->invalidate(context_.animation_id);
+    }
+}
+
 void SyncChildrenFrameEditor::refresh_selection_state() {
     if (!selection_state_ || !context_.target || !context_.assets ||
         selection_state_->target != SelectionTarget::ChildPoint) {
@@ -674,6 +701,7 @@ void SyncChildrenFrameEditor::refresh_selection_state() {
     selection_state_->child_index = selected_child_index_;
     const ChildWorldPose pose = child_world_pose(selected_child_index_);
     SDL_Point anchor = asset_anchor_world();
+    const float base_z = context_.target ? context_.target->world_z_offset() : 0.0f;
     // Store ABSOLUTE world position (anchor + offset) so callbacks can correctly convert back to offsets
     selection_state_->world_pos = SDL_FPoint{
         static_cast<float>(anchor.x) + pose.pos.x,
@@ -686,6 +714,7 @@ void SyncChildrenFrameEditor::refresh_selection_state() {
         screen = cam.map_to_screen_f(selection_state_->world_pos);
     }
     selection_state_->screen_pos = round_point(screen);
+    selection_state_->set_anchor_world(anchor, base_z);
 }
 
 void SyncChildrenFrameEditor::sync_visibility_checkbox() {

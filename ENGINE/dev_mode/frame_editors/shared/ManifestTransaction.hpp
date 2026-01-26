@@ -17,6 +17,7 @@ public:
     void begin(const FrameEditorContext& context) {
         context_ = &context;
         active_ = true;
+        pending_persist_ = false;
     }
 
     void set_apply_callback(ApplyCallback cb) { apply_ = std::move(cb); }
@@ -39,35 +40,29 @@ public:
         return true;
     }
 
-    bool commit() {
+    bool commit(bool persist_to_disk = false) {
         if (!active_) return false;
         // Guard against re-entrancy - prevent recursive commits
         if (committing_) return true;
         committing_ = true;
 
-        bool result = false;
+        bool result = true;
         if (commit_) {
             result = commit_();
         } else {
-            // For deferred persistence, apply changes and save immediately to disk
-            if (deferred_persist_ && apply_) {
-                if (!apply_()) {
-                    committing_ = false;
-                    return false;
+            const bool applied = apply_mode_edits();
+            if (applied) {
+                pending_persist_ = true;
+            }
+            if (!validate()) {
+                committing_ = false;
+                return false;
+            }
+            if (persist_to_disk && context_ && context_->document) {
+                result = context_->document->save_to_file_checked(true);
+                if (result) {
+                    pending_persist_ = false;
                 }
-                if (validate_ && !validate_()) {
-                    committing_ = false;
-                    return false;
-                }
-                // Force immediate save to disk for deferred mode
-                if (context_ && context_->document) {
-                    result = context_->document->save_to_file_checked(true);
-                } else {
-                    result = true;
-                }
-            } else {
-                // Regular commit behavior
-                result = apply_mode_edits() && validate();
             }
         }
 
@@ -93,6 +88,7 @@ private:
     bool immediate_persist_ = false;
     bool deferred_persist_ = false;
     bool committing_ = false;  // Re-entrancy guard
+    bool pending_persist_ = false;
 };
 
 }  // namespace devmode::frame_editors

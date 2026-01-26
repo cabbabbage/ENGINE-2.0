@@ -34,6 +34,7 @@
 #include <memory>
 #include <mutex>
 #include <execution>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <thread>
@@ -1247,6 +1248,9 @@ void Assets::request_child_timeline_creation(Asset* parent) {
         if (slot.child_index < 0 || slot.asset_name.empty() || !slot.timeline) {
             continue;
         }
+        if (find_child_timeline_asset(parent, static_cast<int>(i))) {
+            continue;
+        }
         std::shared_ptr<AssetInfo> info = slot.info ? slot.info : library_.get(slot.asset_name);
         if (!info) {
             continue;
@@ -1507,9 +1511,35 @@ bool Assets::process_removals() {
         return false;
     }
 
-    std::vector<Asset*> grid_removals;
-    grid_removals.reserve(pending_removals.size());
+    std::unordered_set<Asset*> removal_set;
+    removal_set.reserve(pending_removals.size());
     for (Asset* asset : pending_removals) {
+        if (asset) {
+            removal_set.insert(asset);
+        }
+    }
+
+    if (!removal_set.empty()) {
+        bool added = true;
+        while (added) {
+            added = false;
+            const std::vector<Asset*> all_assets = world_grid_.all_assets();
+            for (Asset* asset : all_assets) {
+                if (!asset || !asset->parent) {
+                    continue;
+                }
+                if (removal_set.find(asset->parent) != removal_set.end()) {
+                    if (removal_set.insert(asset).second) {
+                        added = true;
+                    }
+                }
+            }
+        }
+    }
+
+    std::vector<Asset*> grid_removals;
+    grid_removals.reserve(removal_set.size());
+    for (Asset* asset : removal_set) {
         if (!asset) {
             continue;
         }

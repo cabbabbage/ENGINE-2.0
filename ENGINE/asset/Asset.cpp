@@ -420,21 +420,63 @@ void Asset::update() {
 
     bool uses_parent_world_z = false;
     if (parent && !parent->dead) {
-        const AnimationFrame* parent_frame = parent->current_frame;
-        if (parent_frame && child_timeline_index_ >= 0) {
-            const AnimationChildFrameData* child_frame = nullptr;
-            for (const auto& entry : parent_frame->children) {
-                if (entry.child_index == child_timeline_index_) {
-                    child_frame = &entry;
-                    break;
+        const bool parent_hidden = parent->is_hidden();
+        bool resolved_from_parent = false;
+        bool visible_from_parent = false;
+
+        if (child_timeline_index_ >= 0) {
+            const auto& parent_slots = parent->animation_children_;
+            const Asset::AnimationChildAttachment* slot = nullptr;
+            if (child_timeline_index_ < static_cast<int>(parent_slots.size()) &&
+                parent_slots[child_timeline_index_].child_index == child_timeline_index_) {
+                slot = &parent_slots[child_timeline_index_];
+            } else {
+                auto it = std::find_if(parent_slots.begin(), parent_slots.end(),
+                                       [&](const AnimationChildAttachment& entry) {
+                                           return entry.child_index == child_timeline_index_;
+                                       });
+                if (it != parent_slots.end()) {
+                    slot = &(*it);
                 }
             }
-            if (child_frame) {
-                pos.x = parent->pos.x + child_frame->dx;
-                pos.y = parent->pos.y + child_frame->dy;
-                set_world_z_offset(parent->world_z_offset() + static_cast<float>(child_frame->dz));
-                uses_parent_world_z = true;
+
+            if (slot) {
+                visible_from_parent = slot->visible;
+                resolved_from_parent = true;
+                if (slot->visible) {
+                    pos = slot->world_pos;
+                    set_world_z_offset(slot->world_z);
+                    uses_parent_world_z = true;
+                }
             }
+        }
+
+        if (!resolved_from_parent) {
+            const AnimationFrame* parent_frame = parent->current_frame;
+            if (parent_frame && child_timeline_index_ >= 0) {
+                const AnimationChildFrameData* child_frame = nullptr;
+                for (const auto& entry : parent_frame->children) {
+                    if (entry.child_index == child_timeline_index_) {
+                        child_frame = &entry;
+                        break;
+                    }
+                }
+                if (child_frame) {
+                    visible_from_parent = child_frame->visible;
+                    resolved_from_parent = true;
+                    if (child_frame->visible) {
+                        pos.x = parent->pos.x + child_frame->dx;
+                        pos.y = parent->pos.y + child_frame->dy;
+                        set_world_z_offset(parent->world_z_offset() + static_cast<float>(child_frame->dz));
+                        uses_parent_world_z = true;
+                    }
+                }
+            }
+        }
+
+        if (child_timeline_index_ >= 0) {
+            const bool should_hide = parent_hidden || !resolved_from_parent || !visible_from_parent;
+            set_hidden(should_hide);
         }
     }
 

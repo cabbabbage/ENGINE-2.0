@@ -144,22 +144,6 @@ class CacheValidator:
             yield asset_name, asset_meta
 
     @staticmethod
-    def _normalize_lighting_entries(asset_meta: Dict) -> List[Dict]:
-        lights = asset_meta.get("lighting_info")
-        if isinstance(lights, dict):
-            lights = [lights]
-        if not isinstance(lights, list):
-            lights = []
-        normalized: List[Dict] = []
-        for entry in lights:
-            if not isinstance(entry, dict):
-                continue
-            entry.setdefault("needs_rebuild", False)
-            normalized.append(entry)
-        asset_meta["lighting_info"] = normalized
-        return normalized
-
-    @staticmethod
     def _set_needs_rebuild(entry: Dict) -> bool:
         if not isinstance(entry, dict):
             return False
@@ -169,7 +153,7 @@ class CacheValidator:
         return True
 
     @staticmethod
-    def _animation_output_exists(anim_cache_root: Path, output_idx: int, has_mask: bool) -> bool:
+    def _animation_output_exists(anim_cache_root: Path, output_idx: int) -> bool:
         for scale_pct in ANIMATION_SCALE_PCTS:
             scale_dir = anim_cache_root / f"scale_{scale_pct}"
             if not scale_dir.is_dir():
@@ -178,10 +162,6 @@ class CacheValidator:
                 frame_path = scale_dir / variant / f"{output_idx}.png"
                 if not frame_path.is_file():
                     return False
-            if has_mask:
-                mask_path = scale_dir / "mask" / f"{output_idx}.png"
-                if not mask_path.is_file():
-                    return False
         return True
 
     @staticmethod
@@ -189,18 +169,6 @@ class CacheValidator:
         changed = False
         for frame in frames:
             if CacheValidator._set_needs_rebuild(frame):
-                changed = True
-        return changed
-
-    @staticmethod
-    def _mark_light_entries_missing(entries: List[Dict]) -> bool:
-        changed = False
-        for entry in entries:
-            if not isinstance(entry, dict):
-                continue
-            if not entry.get("has_light_source"):
-                continue
-            if CacheValidator._set_needs_rebuild(entry):
                 changed = True
         return changed
 
@@ -237,7 +205,6 @@ class CacheValidator:
         if not frame_sequence:
             return False
 
-        has_mask = bool(asset_meta.get("has_shading"))
         changed = False
         for output_idx, source_idx in enumerate(frame_sequence):
             if source_idx < 0 or source_idx >= len(frames):
@@ -247,35 +214,8 @@ class CacheValidator:
                 continue
             if bool(frame_entry.get("needs_rebuild")):
                 continue
-            if not self._animation_output_exists(anim_cache_root, output_idx, has_mask):
+            if not self._animation_output_exists(anim_cache_root, output_idx):
                 frame_entry["needs_rebuild"] = True
-                changed = True
-        return changed
-
-    def _validate_light_cache(self, asset_name: str, asset_meta: Dict, cache_root: Path) -> bool:
-        entries = self._normalize_lighting_entries(asset_meta)
-        if not entries:
-            return False
-
-        cache_dir = cache_root / asset_name / "lights"
-        if not cache_dir.is_dir():
-            return self._mark_light_entries_missing(entries)
-
-        metadata = self._load_metadata(cache_dir / "metadata.json")
-        if metadata is None or metadata.get("version") != LIGHT_CACHE_VERSION:
-            return self._mark_light_entries_missing(entries)
-
-        changed = False
-        for idx, entry in enumerate(entries):
-            if not isinstance(entry, dict):
-                continue
-            if bool(entry.get("needs_rebuild")):
-                continue
-            if not entry.get("has_light_source"):
-                continue
-            frame_path = cache_dir / f"light_{idx}.png"
-            if not frame_path.is_file():
-                entry["needs_rebuild"] = True
                 changed = True
         return changed
 
@@ -284,9 +224,6 @@ class CacheValidator:
         changed = False
         for asset_name, asset_meta, anim_name, anim_meta in self._each_animation():
             if self._validate_animation_cache(asset_name, asset_meta, anim_name, anim_meta, root):
-                changed = True
-        for asset_name, asset_meta in self._each_asset():
-            if self._validate_light_cache(asset_name, asset_meta, root):
                 changed = True
         return changed
 

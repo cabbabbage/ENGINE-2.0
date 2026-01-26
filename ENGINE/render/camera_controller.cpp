@@ -52,10 +52,7 @@ CameraParams camera_math::sanitize_camera_params(const CameraParams& raw, double
         params.zoom_percent = 0.0;
     }
     params.zoom_percent = std::clamp(params.zoom_percent, 0.0, 100.0);
-    if (!std::isfinite(params.pan_y_percent)) {
-        params.pan_y_percent = 0.0;
-    }
-    params.pan_y_percent = std::clamp(params.pan_y_percent, -100.0, 100.0);
+
     return params;
 }
 
@@ -180,7 +177,6 @@ void CameraController::apply_room_targets(const CameraParams& cur,
     blended.tilt_deg = lerp(cur_params.tilt_deg, neigh_params.tilt_deg, t);
     blended.y_distance_px = lerp(cur_params.y_distance_px, neigh_params.y_distance_px, t);
     blended.zoom_percent = lerp(cur_params.zoom_percent, neigh_params.zoom_percent, t);
-    blended.pan_y_percent = lerp(cur_params.pan_y_percent, neigh_params.pan_y_percent, t);
     blended = camera_math::sanitize_camera_params(blended, fallback_height_px_);
 
     if (manual_height_override_) {

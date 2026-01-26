@@ -125,44 +125,6 @@ class SetRebuildValues:
                 continue
             yield asset_name, asset_meta
 
-    @staticmethod
-    def _normalize_lighting_entries(asset_meta: Dict) -> List[Dict]:
-        lights = asset_meta.get("lighting_info")
-        if isinstance(lights, dict):
-            lights = [lights]
-        if not isinstance(lights, list):
-            lights = []
-        normalized: List[Dict] = []
-        for entry in lights:
-            if not isinstance(entry, dict):
-                continue
-            entry.setdefault("needs_rebuild", False)
-            normalized.append(entry)
-        asset_meta["lighting_info"] = normalized
-        return normalized
-
-    def rebuild_all_lights(self) -> None:
-        for _, asset_meta in self._each_asset():
-            entries = self._normalize_lighting_entries(asset_meta)
-            for light in entries:
-                light["needs_rebuild"] = True
-
-    def rebuild_asset_lights(self, asset_name: str) -> None:
-        for a_name, asset_meta in self._each_asset():
-            if a_name != asset_name:
-                continue
-            entries = self._normalize_lighting_entries(asset_meta)
-            for light in entries:
-                light["needs_rebuild"] = True
-
-    def rebuild_light(self, asset_name: str, light_index: int) -> None:
-        for a_name, asset_meta in self._each_asset():
-            if a_name != asset_name:
-                continue
-            entries = self._normalize_lighting_entries(asset_meta)
-            if 0 <= light_index < len(entries):
-                entries[light_index]["needs_rebuild"] = True
-
     def save(self) -> None:
         self._save_manifest()
 
@@ -176,9 +138,6 @@ def _parse_args() -> argparse.Namespace:
             "asset",
             "animation",
             "frame",
-            "lighting_all",
-            "lighting_asset",
-            "lighting_light",
         ],
         help="Target to rebuild",
     )
@@ -188,7 +147,7 @@ def _parse_args() -> argparse.Namespace:
         "index",
         nargs="?",
         type=int,
-        help="Frame index for mode 'frame' or light index for 'lighting_light'",
+        help="Frame index for mode 'frame'",
     )
     parser.add_argument("--manifest", dest="manifest", help="Path to manifest.json")
     return parser.parse_args()
@@ -215,17 +174,6 @@ def main() -> None:
         if args.index is None or not args.asset or not args.animation:
             raise SystemExit("asset, animation, and frame_index are required for mode 'frame'")
         setter.rebuild_frame(args.asset, args.animation, args.index)
-    elif args.mode == "lighting_all":
-        setter.rebuild_all_lights()
-    elif args.mode == "lighting_asset":
-        if not args.asset:
-            raise SystemExit("asset name is required for mode 'lighting_asset'")
-        setter.rebuild_asset_lights(args.asset)
-    elif args.mode == "lighting_light":
-        if args.index is None or not args.asset:
-            raise SystemExit("asset and index are required for mode 'lighting_light'")
-        setter.rebuild_light(args.asset, args.index)
-
     setter.save()
 
 

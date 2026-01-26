@@ -35,11 +35,7 @@
 #include "dev_mode_utils.hpp"
 #include "asset_sections/Section_BasicInfo.hpp"
 #include "asset_sections/Section_Tags.hpp"
-#include "asset_sections/Section_Lighting.hpp"
-#include "asset_sections/Section_Shading.hpp"
 #include "asset_sections/Section_Spacing.hpp"
-#include "spawn_group_config/SpawnGroupConfig.hpp"
-#include "asset_sections/Section_SpawnGroups.hpp"
 #include "map_generation/room.hpp"
 #include "core/AssetsManager.hpp"
 #include "core/manifest/manifest_loader.hpp"
@@ -62,7 +58,6 @@
 #include "dev_mode/asset_paths.hpp"
 
 #include "dev_mode/animation_runtime_refresh.hpp"
-#include "utils/rebuild_queue.hpp"
 
 namespace asset_paths = devmode::asset_paths;
 
@@ -78,53 +73,6 @@ std::optional<long long> file_mtime_ns(const std::filesystem::path& path) {
     }
     const auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(time.time_since_epoch()).count();
     return static_cast<long long>(ns);
-}
-
-bool mask_preview_up_to_date(const std::filesystem::path& input_png,
-                             const std::filesystem::path& output_png,
-                             const std::filesystem::path& meta_path,
-                             const ShadowMaskSettings& settings) {
-    std::error_code ec;
-    if (!std::filesystem::exists(output_png, ec) || ec) {
-        return false;
-    }
-    if (!std::filesystem::exists(meta_path, ec) || ec) {
-        return false;
-    }
-    if (!std::filesystem::exists(input_png, ec) || ec) {
-        return false;
-    }
-
-    try {
-        const auto meta = nlohmann::json::parse(std::ifstream(meta_path));
-        if (!meta.is_object() || meta.value("version", 0) != 1) {
-            return false;
-        }
-
-        const auto file_size = static_cast<long long>(std::filesystem::file_size(input_png, ec));
-        if (ec) {
-            return false;
-        }
-        const auto mtime = file_mtime_ns(input_png);
-        if (!mtime.has_value()) {
-            return false;
-        }
-
-        nlohmann::json settings_json = {
-            {"expansion_ratio", settings.expansion_ratio},
-            {"blur_scale", settings.blur_scale},
-            {"falloff_start", settings.falloff_start},
-            {"falloff_exponent", settings.falloff_exponent},
-            {"alpha_multiplier", settings.alpha_multiplier},
-            {"chunk_resolution", settings.chunk_resolution},
-        };
-
-        return meta.value("input_size", -1) == file_size
-            && meta.value("input_mtime_ns", -1LL) == *mtime
-            && meta.value("settings", nlohmann::json::object()) == settings_json;
-    } catch (...) {
-        return false;
-    }
 }
 
 void configure_panel_for_container(DockableCollapsible* panel) {
@@ -226,9 +174,6 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
             changed |= copy_key("tags");
             changed |= copy_key("anti_tags");
             break;
-        case AssetInfoSectionId::Lighting:
-            changed |= copy_key("lighting_info");
-            break;
         case AssetInfoSectionId::Spacing:
             changed |= copy_key("min_same_type_distance");
             changed |= copy_key("min_distance_all");
@@ -236,13 +181,6 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
     }
     return changed;
 }
-
-struct LightTransform {
-    float cx = 0.0f;
-    float cy = 0.0f;
-    float sx = 1.0f;
-    float sy = 1.0f;
-};
 
 }
 
@@ -409,7 +347,6 @@ AssetInfoUI::AssetInfoUI() {
 
 AssetInfoUI::~AssetInfoUI() {
     apply_camera_override(false);
-    sync_map_light_panel_visibility(false);
     if (assets_) {
 
     }
@@ -422,7 +359,6 @@ AssetInfoUI::~AssetInfoUI() {
         SDL_FreeCursor(color_sampling_cursor_handle_);
         color_sampling_cursor_handle_ = nullptr;
     }
-    destroy_mask_preview_texture();
 }
 
 void AssetInfoUI::set_assets(Assets* a) {
@@ -434,10 +370,6 @@ void AssetInfoUI::set_assets(Assets* a) {
 
     if (assets_) {
 
-    }
-    if (map_light_panel_auto_opened_ && assets_) {
-        assets_->set_map_light_panel_visible(false);
-        map_light_panel_auto_opened_ = false;
     }
     if (camera_override_active_) {
         apply_camera_override(false);
@@ -455,9 +387,6 @@ void AssetInfoUI::set_assets(Assets* a) {
 
 void AssetInfoUI::set_manifest_store(devmode::core::ManifestStore* store) {
     manifest_store_ = store;
-    if (spawn_groups_section_) {
-        spawn_groups_section_->set_manifest_store(manifest_store_);
-    }
     if (animation_editor_window_) {
         animation_editor_window_->set_manifest_store(manifest_store_);
     }
@@ -475,7 +404,6 @@ void AssetInfoUI::set_target_asset(Asset* a) {
 }
 
 void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
-    destroy_mask_preview_texture();
     info_ = info;
     container_.reset_scroll();
     if (asset_selector_) asset_selector_->close();
@@ -515,22 +443,6 @@ void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
     for (auto& s : sections_) {
         try {
             s->set_info(info_);
-
-            bool is_area_asset = false;
-            if (info_) {
-                std::string t = info_->type;
-                std::transform(t.begin(), t.end(), t.begin(), [](unsigned char ch){ return static_cast<char>(std::tolower(ch)); });
-                is_area_asset = (t == "area");
-            }
-            if (is_area_asset) {
-                if (auto* lighting = dynamic_cast<Section_Lighting*>(s.get())) lighting->set_visible(false);
-                if (auto* shading  = dynamic_cast<Section_Shading*>(s.get()))  shading->set_visible(false);
-                if (auto* spawns   = dynamic_cast<Section_SpawnGroups*>(s.get())) spawns->set_visible(false);
-            } else {
-                if (auto* lighting = dynamic_cast<Section_Lighting*>(s.get())) lighting->set_visible(true);
-                if (auto* shading  = dynamic_cast<Section_Shading*>(s.get()))  shading->set_visible(true);
-                if (auto* spawns   = dynamic_cast<Section_SpawnGroups*>(s.get())) spawns->set_visible(true);
-            }
             s->reset_scroll();
             s->build();
         } catch (const std::exception& ex) {
@@ -543,8 +455,6 @@ void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
 }
 
 void AssetInfoUI::clear_info() {
-    sync_map_light_panel_visibility(false);
-    destroy_mask_preview_texture();
     if (assets_) {
 
     }
@@ -553,10 +463,6 @@ void AssetInfoUI::clear_info() {
         forcing_high_quality_rendering_ = false;
     }
     info_.reset();
-    hovered_light_index_ = -1;
-    if (lighting_section_) {
-        lighting_section_->set_highlighted_light(std::nullopt);
-    }
     container_.reset_scroll();
     if (asset_selector_) asset_selector_->close();
     pending_animation_editor_open_ = false;
@@ -602,7 +508,6 @@ void AssetInfoUI::close() {
     visible_ = false;
     container_.close();
     clear_section_focus();
-    sync_map_light_panel_visibility(false);
     if (assets_) {
 
     }
@@ -612,12 +517,6 @@ void AssetInfoUI::close() {
     if (assets_ && forcing_high_quality_rendering_) {
 
         forcing_high_quality_rendering_ = false;
-    }
-    light_drag_active_ = false;
-    light_drag_index_  = -1;
-    hovered_light_index_ = -1;
-    if (lighting_section_) {
-        lighting_section_->set_highlighted_light(std::nullopt);
     }
 }
 void AssetInfoUI::toggle(){
@@ -653,10 +552,6 @@ bool AssetInfoUI::is_locked() const {
         }
     }
     return false;
-}
-
-bool AssetInfoUI::is_lighting_section_expanded() const {
-    return visible_ && info_ && lighting_section_ && lighting_section_->is_expanded();
 }
 
 void AssetInfoUI::layout_widgets(int screen_w, int screen_h) const {
@@ -831,169 +726,6 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
         }
     }
 
-    auto clear_light_hover = [&]() {
-        if (hovered_light_index_ == -1) {
-            return;
-        }
-        hovered_light_index_ = -1;
-        if (lighting_section_) {
-            lighting_section_->set_highlighted_light(std::nullopt);
-        }
-};
-    if (lighting_section_ && lighting_section_->is_expanded() && info_ && assets_) {
-        const bool pointer_event =
-            (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION);
-        if (pointer_event && target_asset_ && target_asset_->info.get() == info_.get()) {
-            const WarpedScreenGrid& cam = assets_->getView();
-
-            auto compute_light_transform = [&]() {
-                LightTransform out{0.0f, 0.0f, 1.0f, 1.0f};
-
-                int fw = target_asset_->cached_w;
-                int fh = target_asset_->cached_h;
-                if ((fw <= 0 || fh <= 0)) {
-                    if (SDL_Texture* frame = target_asset_->get_current_frame()) {
-                        SDL_QueryTexture(frame, nullptr, nullptr, &fw, &fh);
-                    }
-                }
-                if ((fw <= 0 || fh <= 0) && target_asset_->info) {
-                    fw = target_asset_->info->original_canvas_width;
-                    fh = target_asset_->info->original_canvas_height;
-                }
-                if (target_asset_->cached_w == 0 && fw > 0) target_asset_->cached_w = fw;
-                if (target_asset_->cached_h == 0 && fh > 0) target_asset_->cached_h = fh;
-                if (fw <= 0) fw = 1;
-                if (fh <= 0) fh = 1;
-
-                int base_w = fw;
-                int base_h = fh;
-                if (target_asset_->info) {
-                    if (target_asset_->info->original_canvas_width > 0) base_w = target_asset_->info->original_canvas_width;
-                    if (target_asset_->info->original_canvas_height > 0) base_h = target_asset_->info->original_canvas_height;
-                }
-
-                float package_scale = target_asset_->current_nearest_variant_scale * target_asset_->current_remaining_scale_adjustment;
-                if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
-                    package_scale = 1.0f;
-                }
-
-                SDL_FPoint screen_pos = cam.map_to_screen(SDL_Point{ target_asset_->pos.x, target_asset_->pos.y });
-            float distance_scale = 1.0f;
-            float vertical_scale = 1.0f;
-            if (const auto* gp = cam.grid_point_for_asset(target_asset_)) {
-                screen_pos = gp->screen;
-                distance_scale = std::max(0.0001f, gp->perspective_scale);
-                vertical_scale = std::max(0.0001f, gp->vertical_scale);
-            }
-
-                const float base_sw = static_cast<float>(base_w) * package_scale;
-                const float base_sh = static_cast<float>(base_h) * package_scale;
-
-                const float width_px  = base_sw * distance_scale;
-                const float height_px = base_sh * distance_scale * vertical_scale;
-
-                out.cx = screen_pos.x;
-                out.cy = screen_pos.y;
-                out.sx = (base_w > 0) ? (width_px  / static_cast<float>(base_w)) : package_scale * distance_scale;
-                out.sy = (base_h > 0) ? (height_px / static_cast<float>(base_h)) : package_scale * distance_scale * vertical_scale;
-                return out;
-};
-
-            auto xform = compute_light_transform();
-
-            auto light_screen_pos = [&](const LightSource& light) -> SDL_Point {
-                int offx = light.offset_x;
-                if (target_asset_->flipped) offx = -offx;
-                const float cx = xform.cx + static_cast<float>(offx) * xform.sx;
-                const float cy = xform.cy;
-                return SDL_Point{ static_cast<int>(std::lround(cx)), static_cast<int>(std::lround(cy)) };
-};
-
-            const int mx = (e.type == SDL_MOUSEMOTION) ? e.motion.x : e.button.x;
-            const int my = (e.type == SDL_MOUSEMOTION) ? e.motion.y : e.button.y;
-
-            auto hit_test_index = [&](int sx, int sy) -> int {
-                const int kHitRadius = 10;
-                for (size_t i = 0; i < info_->light_sources.size(); ++i) {
-                    SDL_Point sp = light_screen_pos(info_->light_sources[i]);
-                    const int dx = sp.x - sx;
-                    const int dy = sp.y - sy;
-                    if (dx*dx + dy*dy <= kHitRadius * kHitRadius) {
-                        return static_cast<int>(i);
-                    }
-                }
-                return -1;
-};
-
-            auto set_light_hover = [&](int idx) {
-                if (idx == hovered_light_index_) {
-                    return;
-                }
-                hovered_light_index_ = idx;
-                if (!lighting_section_) return;
-                if (idx >= 0) {
-                    lighting_section_->set_highlighted_light(static_cast<std::size_t>(idx));
-                } else {
-                    lighting_section_->set_highlighted_light(std::nullopt);
-                }
-};
-
-            const int hovered_idx = hit_test_index(mx, my);
-
-            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-                set_light_hover(hovered_idx);
-                    if (hovered_idx >= 0) {
-                        light_drag_active_ = true;
-                        light_drag_index_ = hovered_idx;
-                        lighting_section_->open();
-                        focus_section(lighting_section_);
-                        lighting_section_->expand_light_row(static_cast<std::size_t>(hovered_idx));
-                        return true;
-                    }
-            } else if (e.type == SDL_MOUSEMOTION && light_drag_active_ && light_drag_index_ >= 0 &&
-                       light_drag_index_ < static_cast<int>(info_->light_sources.size())) {
-                auto& L = info_->light_sources[light_drag_index_];
-
-                const float dx_screen = static_cast<float>(mx) - xform.cx;
-                const float dy_screen = static_cast<float>(my) - xform.cy;
-                const float unflipped_x = (xform.sx != 0.0f) ? (dx_screen / xform.sx) : 0.0f;
-                const float new_off_x   = target_asset_->flipped ? -unflipped_x : unflipped_x;
-                const float new_off_z   = (xform.sy != 0.0f) ? (dy_screen / xform.sy) : 0.0f;
-                const int final_off_x = static_cast<int>(std::lround(new_off_x));
-                const int final_off_z = static_cast<int>(std::lround(new_off_z));
-                if (L.offset_x == final_off_x && L.offset_z == final_off_z) {
-                    set_light_hover(light_drag_index_);
-                    return true;
-                }
-                L.offset_x = final_off_x;
-                L.offset_z = final_off_z;
-
-                info_->set_lighting(info_->light_sources);
-                if (lighting_section_) {
-                    lighting_section_->update_light_offsets(static_cast<std::size_t>(light_drag_index_), final_off_x, final_off_z);
-                }
-                set_light_hover(light_drag_index_);
-                this->notify_light_sources_modified(false);
-                (void)info_->commit_manifest();
-                return true;
-            } else if (e.type == SDL_MOUSEMOTION) {
-                set_light_hover(hovered_idx);
-            } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
-                if (light_drag_active_) {
-                    light_drag_active_ = false;
-                    if (light_drag_index_ >= 0) {
-                        light_drag_index_ = -1;
-                    }
-                    return true;
-                }
-            }
-        } else if (pointer_event) {
-            clear_light_hover();
-        }
-    } else {
-        clear_light_hover();
-    }
-
     if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
         close();
         return true;
@@ -1024,16 +756,8 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
         }
     }
 
-    sync_map_light_panel_visibility(false);
 
-    bool shading_requires_high_quality = false;
-    if (visible_ && info_) {
-        if (shading_section_ && shading_section_->is_expanded()) {
-            shading_requires_high_quality = shading_section_->shading_enabled();
-        }
-    }
-
-    const bool need_high_quality = shading_requires_high_quality;
+    const bool need_high_quality = false;
     if (assets_) {
         if (need_high_quality != forcing_high_quality_rendering_) {
 
@@ -1079,10 +803,6 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
     last_renderer_ = r;
 
     container_.render(r, screen_w, screen_h);
-    if (lighting_section_) {
-        lighting_section_->render_overlays(r);
-    }
-
     if (animation_editor_window_ && animation_editor_window_->is_visible()) {
         animation_editor_window_->render(r);
     }
@@ -1321,95 +1041,6 @@ void AssetInfoUI::render_world_overlay(SDL_Renderer* r, const WarpedScreenGrid& 
         basic_info_section_->render_world_overlay(r, cam, target_asset_, reference_screen_height);
     }
 
-    if (lighting_section_ && lighting_section_->is_expanded() && target_asset_ && target_asset_->info.get() == info_.get()) {
-        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-        const SDL_Color lh = DMStyles::AccentButton().hover_bg;
-        SDL_SetRenderDrawColor(r, lh.r, lh.g, lh.b, 220);
-
-        const WarpedScreenGrid& cam = assets_->getView();
-        auto compute_light_transform = [&]() {
-            LightTransform out{0.0f, 0.0f, 1.0f, 1.0f};
-            int fw = target_asset_->cached_w;
-            int fh = target_asset_->cached_h;
-            if ((fw <= 0 || fh <= 0)) {
-                if (SDL_Texture* frame = target_asset_->get_current_frame()) {
-                    SDL_QueryTexture(frame, nullptr, nullptr, &fw, &fh);
-                }
-            }
-            if ((fw <= 0 || fh <= 0) && target_asset_->info) {
-                fw = target_asset_->info->original_canvas_width;
-                fh = target_asset_->info->original_canvas_height;
-            }
-            if (target_asset_->cached_w == 0 && fw > 0) target_asset_->cached_w = fw;
-            if (target_asset_->cached_h == 0 && fh > 0) target_asset_->cached_h = fh;
-            if (fw <= 0) fw = 1;
-            if (fh <= 0) fh = 1;
-
-            int base_w = fw;
-            int base_h = fh;
-            if (target_asset_->info) {
-                if (target_asset_->info->original_canvas_width > 0) base_w = target_asset_->info->original_canvas_width;
-                if (target_asset_->info->original_canvas_height > 0) base_h = target_asset_->info->original_canvas_height;
-            }
-
-            float package_scale = target_asset_->current_nearest_variant_scale * target_asset_->current_remaining_scale_adjustment;
-            if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
-                package_scale = 1.0f;
-            }
-
-            SDL_FPoint screen_pos = cam.map_to_screen(SDL_Point{ target_asset_->pos.x, target_asset_->pos.y });
-                float distance_scale = 1.0f;
-                float vertical_scale = 1.0f;
-                if (const auto* gp = cam.grid_point_for_asset(target_asset_)) {
-                    screen_pos = gp->screen;
-                    distance_scale = std::max(0.0001f, gp->perspective_scale);
-                    vertical_scale = std::max(0.0001f, gp->vertical_scale);
-                }
-
-            const float base_sw = static_cast<float>(base_w) * package_scale;
-            const float base_sh = static_cast<float>(base_h) * package_scale;
-
-            const float width_px  = base_sw * distance_scale;
-            const float height_px = base_sh * distance_scale * vertical_scale;
-
-            out.cx = screen_pos.x;
-            out.cy = screen_pos.y;
-            out.sx = (base_w > 0) ? (width_px  / static_cast<float>(base_w)) : package_scale * distance_scale;
-            out.sy = (base_h > 0) ? (height_px / static_cast<float>(base_h)) : package_scale * distance_scale * vertical_scale;
-            return out;
-        }();
-
-        const int crosshair_arm_px = 6;
-        const int crosshair_thickness_px = 3;
-        const int offset_start = -crosshair_thickness_px / 2;
-        const int offset_end = crosshair_thickness_px / 2;
-        auto draw_thick_line = [&](int x1, int y1, int x2, int y2) {
-            if (y1 == y2) {
-                for (int offset = offset_start; offset <= offset_end; ++offset) {
-                    SDL_RenderDrawLine(r, x1, y1 + offset, x2, y2 + offset);
-                }
-                return;
-            }
-            for (int offset = offset_start; offset <= offset_end; ++offset) {
-                SDL_RenderDrawLine(r, x1 + offset, y1, x2 + offset, y2);
-            }
-};
-
-        for (const auto& light : info_->light_sources) {
-            int offx = light.offset_x;
-            if (target_asset_->flipped) {
-                offx = -offx;
-            }
-            const float cx = compute_light_transform.cx + static_cast<float>(offx) * compute_light_transform.sx;
-            const float cy = compute_light_transform.cy;
-
-            const int ix = static_cast<int>(std::lround(cx));
-            const int iy = static_cast<int>(std::lround(cy));
-            draw_thick_line(ix - crosshair_arm_px, iy, ix + crosshair_arm_px, iy);
-            draw_thick_line(ix, iy - crosshair_arm_px, ix, iy + crosshair_arm_px);
-        }
-    }
-
 }
 
 void AssetInfoUI::refresh_target_asset_scale() {
@@ -1631,35 +1262,6 @@ void AssetInfoUI::sync_target_tiling_state() {
     }
 }
 
-void AssetInfoUI::sync_map_light_panel_visibility(bool want_visible) {
-    if (!assets_) {
-        map_light_panel_auto_opened_ = false;
-        return;
-    }
-
-    bool panel_visible = assets_->is_map_light_panel_visible();
-
-    if (want_visible) {
-        if (!panel_visible) {
-            assets_->set_map_light_panel_visible(true);
-            panel_visible = assets_->is_map_light_panel_visible();
-        }
-        map_light_panel_auto_opened_ = panel_visible;
-        if (!panel_visible) {
-            map_light_panel_auto_opened_ = false;
-        }
-        return;
-    }
-
-    if (map_light_panel_auto_opened_ && panel_visible) {
-        assets_->set_map_light_panel_visible(false);
-        panel_visible = assets_->is_map_light_panel_visible();
-    }
-    if (!panel_visible) {
-        map_light_panel_auto_opened_ = false;
-    }
-}
-
 bool AssetInfoUI::validate_target_asset() const {
     if (!target_asset_) {
         return false;
@@ -1776,138 +1378,12 @@ void AssetInfoUI::set_header_visibility_callback(std::function<void(bool)> cb) {
     container_.set_header_visibility_controller(std::move(cb));
 }
 
-void AssetInfoUI::notify_light_sources_modified(bool purge_light_cache) {
-    if (!info_) {
-        return;
-    }
-
-    bool updated_any = apply_to_assets_with_info([&](Asset* asset) {
-        if (asset->info) {
-            asset->info->set_lighting(info_->light_sources);
-            asset->info->is_light_source = info_->is_light_source;
-            asset->info->moving_asset = info_->moving_asset;
-        }
-        asset->has_shading = info_->has_shading;
-        asset->mark_composite_dirty();
-        asset->clear_render_caches();
-        if (assets_) {
-            assets_->ensure_light_textures_loaded(asset);
-
-            assets_->notify_light_map_asset_moved(asset);
-        }
-    });
-
-    if (updated_any && assets_) {
-        assets_->mark_active_assets_dirty();
-        assets_->notify_light_map_static_assets_changed();
-    }
-
-    if (!purge_light_cache) {
-        return;
-    }
-
-    std::error_code ec;
-    std::filesystem::path cache_dir = std::filesystem::path("cache") / info_->name / "lights";
-    std::filesystem::remove_all(cache_dir, ec);
-}
-
 void AssetInfoUI::mark_target_asset_composite_dirty() {
     if (!assets_ || !target_asset_) {
         return;
     }
     target_asset_->mark_composite_dirty();
     assets_->mark_active_assets_dirty();
-}
-
-void AssetInfoUI::mark_light_for_rebuild(std::size_t light_index) {
-    if (!info_) {
-        return;
-    }
-    vibble::RebuildQueueCoordinator coordinator;
-    coordinator.request_light_entry(info_->name, static_cast<int>(light_index));
-    coordinator.run_light_tool();
-
-    SDL_Renderer* renderer = assets_ ? assets_->renderer() : nullptr;
-    if (renderer) {
-        info_->rebuild_light_texture(renderer, light_index);
-    }
-
-    apply_to_assets_with_info([&](Asset* asset) {
-        if (!asset || !asset->info) return;
-        asset->info->set_lighting(info_->light_sources);
-        asset->info->moving_asset = info_->moving_asset;
-        if (renderer && assets_) {
-            assets_->ensure_light_textures_loaded(asset);
-        }
-        asset->clear_render_caches();
-        if (assets_) {
-            assets_->notify_light_map_asset_moved(asset);
-        }
-    });
-
-    if (assets_) {
-        assets_->mark_active_assets_dirty();
-        assets_->notify_light_map_static_assets_changed();
-    }
-}
-
-void AssetInfoUI::mark_lighting_asset_for_rebuild() {
-    if (!info_) {
-        return;
-    }
-    vibble::RebuildQueueCoordinator coordinator;
-    coordinator.request_light(info_->name);
-    coordinator.run_light_tool();
-
-    SDL_Renderer* renderer = assets_ ? assets_->renderer() : nullptr;
-    if (renderer) {
-        for (std::size_t i = 0; i < info_->light_sources.size(); ++i) {
-            info_->rebuild_light_texture(renderer, i);
-        }
-    }
-
-    apply_to_assets_with_info([&](Asset* asset) {
-        if (!asset || !asset->info) return;
-        asset->info->set_lighting(info_->light_sources);
-        asset->info->is_light_source = info_->is_light_source;
-        asset->info->moving_asset = info_->moving_asset;
-        if (renderer && assets_) {
-            assets_->ensure_light_textures_loaded(asset);
-        }
-        asset->clear_render_caches();
-        if (assets_) {
-            assets_->notify_light_map_asset_moved(asset);
-        }
-    });
-
-    if (assets_) {
-        assets_->mark_active_assets_dirty();
-        assets_->notify_light_map_static_assets_changed();
-    }
-}
-
-void AssetInfoUI::sync_target_shading_settings() {
-    if (!info_) {
-        return;
-    }
-
-    bool updated_any = apply_to_assets_with_info([&](Asset* asset) {
-        if (!asset->info) {
-            return;
-        }
-        asset->info->set_shading_enabled(info_->has_shading);
-        asset->info->set_shadow_mask_settings(info_->shadow_mask_settings);
-        asset->info->set_shading_parallax_amount(info_->shading_parallax_amount);
-        asset->info->set_shading_screen_brightness_multiplier(info_->shading_screen_brightness_multiplier);
-        asset->info->set_shading_opacity_multiplier(info_->shading_opacity_multiplier);
-        asset->has_shading = info_->has_shading;
-        asset->clear_render_caches();
-    });
-
-    if (updated_any && assets_) {
-        assets_->force_shaded_assets_rerender();
-        assets_->mark_active_assets_dirty();
-    }
 }
 
 void AssetInfoUI::sync_target_spacing_settings() {
@@ -2008,183 +1484,10 @@ void AssetInfoUI::notify_spawn_group_removed(const std::string& spawn_id) {
     assets_->notify_spawn_group_removed(spawn_id);
 }
 
-void AssetInfoUI::regenerate_shadow_masks() {
-    if (!info_) {
-        return;
-    }
-
-    destroy_mask_preview_texture();
-
-    SDL_Renderer* renderer = last_renderer_;
-    if (!renderer && assets_) {
-        renderer = assets_->renderer();
-    }
-
-    if (!renderer) {
-        return;
-    }
-    last_renderer_ = renderer;
-
-    vibble::RebuildQueueCoordinator coordinator;
-    coordinator.request_asset(info_->name);
-    std::cout << "[AssetInfoUI] Marked " << info_->name
-              << " for mask regeneration. Run Rebuild Assets to process queued work." << "\n";
-
-    info_->loadAnimations(renderer);
-    (void)generate_mask_preview();
-    refresh_loaded_asset_instances();
-}
-
-void AssetInfoUI::destroy_mask_preview_texture() {
-    if (mask_preview_texture_) {
-        SDL_DestroyTexture(mask_preview_texture_);
-        mask_preview_texture_ = nullptr;
-    }
-    mask_preview_w_ = 0;
-    mask_preview_h_ = 0;
-}
-
-bool AssetInfoUI::load_mask_preview_texture(const std::filesystem::path& png_path) {
-    if (!last_renderer_) {
-        return false;
-    }
-    SDL_Surface* surface = CacheManager::load_surface(png_path.generic_string());
-    if (!surface) {
-        return false;
-    }
-    SDL_Texture* tex = CacheManager::surface_to_texture(last_renderer_, surface);
-    int w = surface->w;
-    int h = surface->h;
-    SDL_FreeSurface(surface);
-    if (!tex) {
-        return false;
-    }
-    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
-    destroy_mask_preview_texture();
-    mask_preview_texture_ = tex;
-    mask_preview_w_ = w;
-    mask_preview_h_ = h;
-    return true;
-}
-
-std::filesystem::path AssetInfoUI::resolve_mask_preview_frame_path() const {
-    if (!info_) {
-        return {};
-    }
-    const std::filesystem::path root = std::filesystem::path(manifest::manifest_path()).parent_path();
-    std::filesystem::path cache_root = root / "cache" / info_->name / "animations";
-    auto try_animation = [&](const std::string& anim_id) -> std::filesystem::path {
-        if (anim_id.empty()) return {};
-        std::filesystem::path candidate = cache_root / anim_id / "scale_100" / "normal" / "0.png";
-        std::error_code ec;
-        if (std::filesystem::exists(candidate, ec) && !ec) {
-            return candidate;
-        }
-        std::filesystem::path anim_root = cache_root / anim_id;
-        if (!std::filesystem::exists(anim_root, ec) || ec) {
-            return {};
-        }
-        for (const auto& entry : std::filesystem::directory_iterator(anim_root, ec)) {
-            if (ec) break;
-            if (!entry.is_directory()) continue;
-            std::filesystem::path alt = entry.path() / "normal" / "0.png";
-            if (std::filesystem::exists(alt, ec) && !ec) {
-                return alt;
-            }
-        }
-        return {};
-};
-
-    std::string preferred = info_->start_animation.empty() ? std::string{"default"} : info_->start_animation;
-    std::filesystem::path path = try_animation(preferred);
-    if (!path.empty()) {
-        return path;
-    }
-    if (preferred != "default") {
-        path = try_animation("default");
-        if (!path.empty()) return path;
-    }
-    std::error_code ec;
-    if (std::filesystem::exists(cache_root, ec) && !ec) {
-        for (const auto& entry : std::filesystem::directory_iterator(cache_root, ec)) {
-            if (ec) break;
-            if (!entry.is_directory()) continue;
-            std::filesystem::path alt = entry.path() / "scale_100" / "normal" / "0.png";
-            if (std::filesystem::exists(alt, ec) && !ec) {
-                return alt;
-            }
-        }
-    }
-    return {};
-}
-
-bool AssetInfoUI::generate_mask_preview() {
-    if (!info_ || !info_->has_shading) {
-        destroy_mask_preview_texture();
-        return false;
-    }
-    SDL_Renderer* renderer = last_renderer_;
-    if (!renderer && assets_) {
-        renderer = assets_->renderer();
-    }
-    if (!renderer) {
-        return false;
-    }
-    last_renderer_ = renderer;
-
-    std::filesystem::path input_png = resolve_mask_preview_frame_path();
-    if (input_png.empty()) {
-        std::cerr << "[AssetInfoUI] Unable to locate cached frame for mask preview of "
-                  << info_->name << "\n";
-        return false;
-    }
-
-    try {
-        const ShadowMaskSettings settings = SanitizeShadowMaskSettings(info_->shadow_mask_settings);
-        const std::filesystem::path manifest_path = manifest::manifest_path();
-        const std::filesystem::path root          = manifest_path.parent_path();
-        const std::filesystem::path script        = root / "tools" / "shadow_mask.py";
-        const std::filesystem::path output_png    = root / "cache" / info_->name / "mask_preview.png";
-        const std::filesystem::path meta_path     = root / "cache" / info_->name / "mask_preview_meta.json";
-
-        if (!std::filesystem::exists(script)) {
-            std::cerr << "[AssetInfoUI] shadow_mask.py missing; cannot generate mask preview for "
-                      << info_->name << "\n";
-            return false;
-        }
-
-        if (mask_preview_up_to_date(input_png, output_png, meta_path, settings)) {
-            return load_mask_preview_texture(output_png);
-        }
-
-        std::ostringstream cmd;
-        cmd << "python \"" << script.string() << "\" " << "\"" << input_png.string() << "\" " << "\"" << output_png.string() << "\" " << settings.expansion_ratio << " " << settings.blur_scale << " " << settings.falloff_start << " " << settings.falloff_exponent << " " << settings.alpha_multiplier << " " << "\"" << meta_path.string() << "\"";
-
-        const std::string command = cmd.str();
-        std::cout << "[AssetInfoUI] Generating mask preview with: " << command << "\n";
-        int ret = std::system(command.c_str());
-        if (ret != 0) {
-            std::cerr << "[AssetInfoUI] shadow_mask.py exited with " << ret
-                      << " while generating mask preview for " << info_->name << "\n";
-            return false;
-        }
-
-        return load_mask_preview_texture(output_png);
-    } catch (const std::exception& ex) {
-        std::cerr << "[AssetInfoUI] Failed to generate mask preview for " << info_->name
-                  << ": " << ex.what() << "\n";
-    } catch (...) {
-        std::cerr << "[AssetInfoUI] Unknown error while generating mask preview for "
-                  << info_->name << "\n";
-    }
-    return false;
-}
-
 const char* AssetInfoUI::section_display_name(AssetInfoSectionId section_id) {
     switch (section_id) {
         case AssetInfoSectionId::BasicInfo:   return "Basic Info";
         case AssetInfoSectionId::Tags:        return "Tags";
-        case AssetInfoSectionId::Lighting:    return "Lighting";
         case AssetInfoSectionId::Spacing:     return "Spacing";
     }
     return "Settings";
@@ -2238,9 +1541,6 @@ void AssetInfoUI::rebuild_default_sections() {
     sections_.clear();
     section_bounds_.clear();
     basic_info_section_ = nullptr;
-    lighting_section_ = nullptr;
-    shading_section_ = nullptr;
-    spawn_groups_section_ = nullptr;
     focused_section_ = nullptr;
     children_panel_ = nullptr;
 
@@ -2283,39 +1583,11 @@ void AssetInfoUI::rebuild_default_sections() {
     finalize_section(children_panel_);
     sections_.push_back(std::move(children_panel));
 
-    auto lighting = std::make_unique<Section_Lighting>();
-    lighting->set_ui(this);
-    lighting_section_ = lighting.get();
-    adopt_section(lighting_section_);
-    finalize_section(lighting_section_);
-    sections_.push_back(std::move(lighting));
-
-    auto shading = std::make_unique<Section_Shading>();
-    shading->set_ui(this);
-    shading_section_ = shading.get();
-    adopt_section(shading_section_);
-    finalize_section(shading_section_);
-    sections_.push_back(std::move(shading));
-
     auto spacing = std::make_unique<Section_Spacing>();
     spacing->set_ui(this);
     adopt_section(spacing.get());
     finalize_section(spacing.get());
     sections_.push_back(std::move(spacing));
-
-    auto spawns = std::make_unique<Section_SpawnGroups>();
-    spawn_groups_section_ = spawns.get();
-    spawns->set_ui(this);
-    spawns->set_manifest_store(manifest_store_);
-    spawns->set_spawn_config_listener([this](const nlohmann::json& entry) {
-        this->notify_spawn_group_entry_changed(entry);
-    });
-    spawns->set_spawn_group_removed_listener([this](const std::string& spawn_id) {
-        this->notify_spawn_group_removed(spawn_id);
-    });
-    adopt_section(spawn_groups_section_);
-    finalize_section(spawn_groups_section_);
-    sections_.push_back(std::move(spawns));
 
     container_.reset_scroll();
     container_.request_layout();

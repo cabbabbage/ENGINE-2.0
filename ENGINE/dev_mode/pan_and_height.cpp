@@ -10,9 +10,12 @@ void PanAndHeight::set_height_scale_factor(double factor) {
     height_scale_factor_ = (factor > 0.0) ? factor : 1.0;
 }
 
-void PanAndHeight::handle_input(WarpedScreenGrid& cam, const Input& input, bool pan_blocked) {
+void PanAndHeight::handle_input(WarpedScreenGrid& cam,
+                               const Input& input,
+                               bool pan_blocked,
+                               std::optional<int> scroll_override) {
     const SDL_Point mouse{ input.getX(), input.getY() };
-    const int wheel_y = input.getScrollY();
+    const int wheel_y = scroll_override.has_value() ? *scroll_override : input.getScrollY();
     const bool left_down = input.isDown(Input::LEFT);
     const bool right_down = input.isDown(Input::RIGHT);
     if (wheel_y != 0) {

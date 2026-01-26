@@ -11,7 +11,6 @@
 #include <SDL_image.h>
 #include <SDL_mixer.h>
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <cctype>
 #include <cstdint>
@@ -212,10 +211,6 @@ fs::path project_root_path() {
 #endif
 }
 
-constexpr std::array<const char*, 3> kLegacyDamageTypeNames = {
-        "projectile", "melee", "explosion"
-};
-
 float read_float(const nlohmann::json& value, float fallback = 0.0f) {
         if (value.is_number()) {
                 try {
@@ -253,32 +248,17 @@ void append_hit_box(animation_update::FrameHitGeometry& geometry,
                 return;
         }
         animation_update::FrameHitGeometry::HitBox box;
-        if (node.is_object()) {
-                box.center_x = read_float(node.value("center_x", 0.0f));
-                const bool has_center_z = node.contains("center_z");
-                box.center_y = has_center_z ? read_float(node.value("center_y", 0.0f)) : 0.0f;
-                box.center_z = has_center_z ? read_float(node.value("center_z", 0.0f))
-                                            : read_float(node.value("center_y", 0.0f));
-                box.half_width = read_float(node.value("half_width", 0.0f));
-                box.half_height = read_float(node.value("half_height", 0.0f));
-                box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
-        } else if (node.is_array()) {
-                const auto& arr = node;
-                if (!arr.empty())          box.center_x = read_float(arr[0]);
-                if (arr.size() > 1)        box.center_z = read_float(arr[1]);
-                if (arr.size() > 2)        box.half_width = read_float(arr[2]);
-                if (arr.size() > 3)        box.half_height = read_float(arr[3]);
-                if (arr.size() > 4 && arr[4].is_number()) {
-                        box.rotation_degrees = read_float(arr[4]);
-                } else if (arr.size() > 5 && arr[5].is_number()) {
-                        box.rotation_degrees = read_float(arr[5]);
-                }
-                if (arr.size() > 4 && arr[4].is_boolean() && !arr[4].get<bool>()) {
-                        return;
-                }
-        } else {
+        if (!node.is_object()) {
                 return;
         }
+        box.center_x = read_float(node.value("center_x", 0.0f));
+        const bool has_center_z = node.contains("center_z");
+        box.center_y = has_center_z ? read_float(node.value("center_y", 0.0f)) : 0.0f;
+        box.center_z = has_center_z ? read_float(node.value("center_z", 0.0f))
+                                    : read_float(node.value("center_y", 0.0f));
+        box.half_width = read_float(node.value("half_width", 0.0f));
+        box.half_height = read_float(node.value("half_height", 0.0f));
+        box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
         if (box.is_empty()) {
                 return;
         }
@@ -298,20 +278,6 @@ void apply_hit_geometry_entry(AnimationFrame& frame, const nlohmann::json& entry
                         append_hit_box(frame.hit_geometry, entry);
                         return;
                 }
-                for (const char* type : kLegacyDamageTypeNames) {
-                        auto it = entry.find(type);
-                        if (it != entry.end()) {
-                                append_hit_box(frame.hit_geometry, *it);
-                        }
-                }
-        } else if (entry.is_array()) {
-                if (!entry.empty() && entry.front().is_object()) {
-                        for (const auto& node : entry) {
-                                append_hit_box(frame.hit_geometry, node);
-                        }
-                } else {
-                        append_hit_box(frame.hit_geometry, entry);
-                }
         }
 }
 
@@ -321,45 +287,34 @@ void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
                 return;
         }
         animation_update::FrameAttackGeometry::Vector vec;
-        if (node.is_object()) {
-                vec.start_x = read_float(node.value("start_x", 0.0f));
-                const bool has_start_z = node.contains("start_z");
-                vec.start_y = has_start_z ? read_float(node.value("start_y", 0.0f)) : 0.0f;
-                vec.start_z = has_start_z ? read_float(node.value("start_z", 0.0f))
-                                          : read_float(node.value("start_y", 0.0f));
-                const bool has_control = node.contains("control_x") || node.contains("control_y") || node.contains("control_z");
-                const bool has_control_z = node.contains("control_z");
-                if (has_control) {
-                        vec.control_x = read_float(node.value("control_x", vec.start_x));
-                        vec.control_y = has_control_z ? read_float(node.value("control_y", vec.start_y)) : 0.0f;
-                        vec.control_z = has_control_z ? read_float(node.value("control_z", vec.start_z))
-                                                      : read_float(node.value("control_y", vec.start_z));
-                } else {
-                        vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
-                        const float fallback_end_z = read_float(node.value("end_z", read_float(node.value("end_y", 0.0f))));
-                        const float fallback_end_y = has_start_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
-                        vec.control_y = (vec.start_y + fallback_end_y) * 0.5f;
-                        vec.control_z = (vec.start_z + fallback_end_z) * 0.5f;
-                }
-                vec.end_x   = read_float(node.value("end_x", 0.0f));
-                const bool has_end_z = node.contains("end_z");
-                vec.end_y   = has_end_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
-                vec.end_z   = has_end_z ? read_float(node.value("end_z", 0.0f))
-                                        : read_float(node.value("end_y", 0.0f));
-                vec.damage  = read_int(node.value("damage", 0));
-        } else if (node.is_array()) {
-                const auto& arr = node;
-                if (!arr.empty())      vec.start_x = read_float(arr[0]);
-                if (arr.size() > 1)    vec.start_z = read_float(arr[1]);
-                if (arr.size() > 2)    vec.end_x   = read_float(arr[2]);
-                if (arr.size() > 3)    vec.end_z   = read_float(arr[3]);
-                vec.control_x = (vec.start_x + vec.end_x) * 0.5f;
-                vec.control_y = 0.0f;
-                vec.control_z = (vec.start_z + vec.end_z) * 0.5f;
-                if (arr.size() > 4)    vec.damage  = read_int(arr[4]);
-        } else {
+        if (!node.is_object()) {
                 return;
         }
+        vec.start_x = read_float(node.value("start_x", 0.0f));
+        const bool has_start_z = node.contains("start_z");
+        vec.start_y = has_start_z ? read_float(node.value("start_y", 0.0f)) : 0.0f;
+        vec.start_z = has_start_z ? read_float(node.value("start_z", 0.0f))
+                                  : read_float(node.value("start_y", 0.0f));
+        const bool has_control = node.contains("control_x") || node.contains("control_y") || node.contains("control_z");
+        const bool has_control_z = node.contains("control_z");
+        if (has_control) {
+                vec.control_x = read_float(node.value("control_x", vec.start_x));
+                vec.control_y = has_control_z ? read_float(node.value("control_y", vec.start_y)) : 0.0f;
+                vec.control_z = has_control_z ? read_float(node.value("control_z", vec.start_z))
+                                              : read_float(node.value("control_y", vec.start_z));
+        } else {
+                vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
+                const float fallback_end_z = read_float(node.value("end_z", read_float(node.value("end_y", 0.0f))));
+                const float fallback_end_y = has_start_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
+                vec.control_y = (vec.start_y + fallback_end_y) * 0.5f;
+                vec.control_z = (vec.start_z + fallback_end_z) * 0.5f;
+        }
+        vec.end_x   = read_float(node.value("end_x", 0.0f));
+        const bool has_end_z = node.contains("end_z");
+        vec.end_y   = has_end_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
+        vec.end_z   = has_end_z ? read_float(node.value("end_z", 0.0f))
+                                : read_float(node.value("end_y", 0.0f));
+        vec.damage  = read_int(node.value("damage", 0));
         geometry.add_vector(vec);
 }
 
@@ -371,21 +326,6 @@ void apply_attack_geometry_entry(AnimationFrame& frame, const nlohmann::json& en
                                 append_attack_vector(frame.attack_geometry, vec_node);
                         }
                         return;
-                }
-                for (const char* type : kLegacyDamageTypeNames) {
-                        auto it = entry.find(type);
-                        if (it == entry.end() || !it->is_array()) {
-                                continue;
-                        }
-                        for (const auto& vec_node : *it) {
-                                append_attack_vector(frame.attack_geometry, vec_node);
-                        }
-                }
-                return;
-        }
-        if (entry.is_array()) {
-                for (const auto& vec_node : entry) {
-                        append_attack_vector(frame.attack_geometry, vec_node);
                 }
         }
 }
@@ -430,7 +370,6 @@ struct VariantLayerPaths {
         std::string normal_folder;
         std::string foreground_folder;
         std::string background_folder;
-        std::string mask_folder;
 };
 
 VariantLayerPaths build_variant_layer_paths(const std::string& cache_folder,
@@ -442,7 +381,6 @@ VariantLayerPaths build_variant_layer_paths(const std::string& cache_folder,
         paths.normal_folder     = (scale_root / "normal").string();
         paths.foreground_folder = (scale_root / "foreground").string();
         paths.background_folder = (scale_root / "background").string();
-        paths.mask_folder       = (scale_root / "mask").string();
 
         return paths;
 }
@@ -725,32 +663,37 @@ void AnimationLoader::load(Animation& animation,
                         try { fm.dx = mv[0].get<int>(); } catch (...) { fm.dx = 0; }
                         try { fm.dy = mv[1].get<int>(); } catch (...) { fm.dy = 0; }
                         fm.dz = 0;
-                        if (mv.size() >= 3 && mv[2].is_boolean()) {
+                        if (mv.size() >= 3 && mv[2].is_number()) {
+                                try { fm.dz = mv[2].get<int>(); } catch (...) { fm.dz = 0; }
+                        } else if (mv.size() >= 3 && mv[2].is_boolean()) {
                                 fm.z_resort = mv[2].get<bool>();
+                        }
+                        if (mv.size() >= 4 && mv[3].is_boolean()) {
+                                fm.z_resort = mv[3].get<bool>();
                         }
 
                         bool color_consumed = false;
-                        if (mv.size() >= 4 && mv[3].is_array()) {
-                                const auto& c = mv[3];
-                                const bool looks_color = (c.size() == 3) && c[0].is_number() && c[1].is_number() && c[2].is_number();
+                        for (const auto& node : mv) {
+                                if (!node.is_array()) continue;
+                                const bool looks_color = (node.size() == 3) && node[0].is_number() && node[1].is_number() && node[2].is_number();
                                 if (looks_color) {
                                         int r = 255, g = 255, b = 255;
-                                        try { r = clamp(c[0].get<int>()); } catch (...) { r = 255; }
-                                        try { g = clamp(c[1].get<int>()); } catch (...) { g = 255; }
-                                        try { b = clamp(c[2].get<int>()); } catch (...) { b = 255; }
+                                        try { r = clamp(node[0].get<int>()); } catch (...) { r = 255; }
+                                        try { g = clamp(node[1].get<int>()); } catch (...) { g = 255; }
+                                        try { b = clamp(node[2].get<int>()); } catch (...) { b = 255; }
                                         fm.rgb = SDL_Color{ static_cast<Uint8>(r), static_cast<Uint8>(g), static_cast<Uint8>(b), 255 };
                                         color_consumed = true;
+                                        break;
                                 }
                         }
                         fm.children.clear();
                         const nlohmann::json* children_json = nullptr;
-                        if (mv.size() >= 5 && mv[4].is_array()) {
-                                children_json = &mv[4];
-                        } else if (mv.size() >= 4 && mv[3].is_array() && !color_consumed) {
-                                children_json = &mv[3];
-                        } else if (mv.size() >= 3 && mv[2].is_array() && !(mv.size() >= 3 && mv[2].is_boolean())) {
-
-                                children_json = &mv[2];
+                        for (const auto& node : mv) {
+                                if (!node.is_array()) continue;
+                                if (!node.empty() && node[0].is_array()) {
+                                        children_json = &node;
+                                        break;
+                                }
                         }
                         if (children_json) {
                                 for (const auto& child_entry : *children_json) {
@@ -904,10 +847,7 @@ void AnimationLoader::load(Animation& animation,
                 std::vector<std::vector<SDL_Surface*>> variant_surfaces(variant_count);
                 std::vector<std::vector<SDL_Surface*>> foreground_surfaces(variant_count);
                 std::vector<std::vector<SDL_Surface*>> background_surfaces(variant_count);
-                std::vector<std::vector<SDL_Surface*>> mask_surfaces(variant_count);
-
                 bool all_surfaces_loaded = true;
-                const bool needs_masks = info.has_shading;
                 for (std::size_t idx = 0; idx < variant_count; ++idx) {
                         const VariantLayerPaths& paths = variant_paths[idx];
                         std::vector<SDL_Surface*> loaded;
@@ -933,18 +873,6 @@ void AnimationLoader::load(Animation& animation,
                                 background_surfaces[idx] = std::move(bg_loaded);
                         }
 
-                        if (needs_masks) {
-                                std::vector<SDL_Surface*> mask_loaded;
-                                if (CacheManager::load_surface_sequence(paths.mask_folder, frame_count, mask_loaded) &&
-                                    static_cast<int>(mask_loaded.size()) == frame_count) {
-                                        mask_surfaces[idx] = std::move(mask_loaded);
-                                } else {
-                                        all_surfaces_loaded = false;
-                                        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                                  << " missing masks for variant " << idx << " at " << paths.mask_folder << "\n";
-                                        break;
-                                }
-                        }
                 }
 
                 if (!all_surfaces_loaded || variant_surfaces[0].empty() || !variant_surfaces[0][0]) {
@@ -953,7 +881,6 @@ void AnimationLoader::load(Animation& animation,
                         free_surface_lists(variant_surfaces);
                         free_surface_lists(foreground_surfaces);
                         free_surface_lists(background_surfaces);
-                        free_surface_lists(mask_surfaces);
                         flush_diagnostics();
                         return;
                 }
@@ -1025,22 +952,6 @@ void AnimationLoader::load(Animation& animation,
                                 }
                                 cache_entry.background_textures[variant_idx] = bg_tex;
 
-                                SDL_Texture* mask_tex = nullptr;
-                                if (frame_idx < mask_surfaces[variant_idx].size() && mask_surfaces[variant_idx][frame_idx]) {
-                                        SDL_Surface* mask_surface = mask_surfaces[variant_idx][frame_idx];
-                                        mask_tex = CacheManager::surface_to_texture(renderer, mask_surface);
-                                        if (mask_tex) {
-                                                apply_scale_mode(mask_tex, info);
-                                        }
-                                        int mask_w = mask_surface->w;
-                                        int mask_h = mask_surface->h;
-                                        cache_entry.mask_widths[variant_idx]  = mask_w;
-                                        cache_entry.mask_heights[variant_idx] = mask_h;
-                                } else {
-                                        cache_entry.mask_widths[variant_idx]  = 0;
-                                        cache_entry.mask_heights[variant_idx] = 0;
-                                }
-                                cache_entry.mask_textures[variant_idx] = mask_tex;
                         }
                         animation.frame_cache_.push_back(std::move(cache_entry));
                 }
@@ -1048,8 +959,6 @@ void AnimationLoader::load(Animation& animation,
                 free_surface_lists(variant_surfaces);
                 free_surface_lists(foreground_surfaces);
                 free_surface_lists(background_surfaces);
-                free_surface_lists(mask_surfaces);
-
                 if (animation.reverse_source && !animation.frame_cache_.empty()) {
                         std::reverse(animation.frame_cache_.begin(), animation.frame_cache_.end());
                 }
@@ -1197,7 +1106,6 @@ void AnimationLoader::load(Animation& animation,
                                 variant.base_texture = cache.textures[v];
                                 if (v < cache.foreground_textures.size()) variant.foreground_texture = cache.foreground_textures[v];
                                 if (v < cache.background_textures.size()) variant.background_texture = cache.background_textures[v];
-                                if (v < cache.mask_textures.size()) variant.shadow_mask_texture = cache.mask_textures[v];
                                 f.variants.push_back(variant);
                             }
                         }
@@ -1239,6 +1147,9 @@ void AnimationLoader::load(Animation& animation,
                 animation.rebuild_child_timelines_from_frames();
                 }
         } else {
+                // Successfully loaded child_timelines from JSON
+                // CRITICAL: Populate AnimationFrame::children from the loaded timelines
+                animation.rebuild_frames_from_child_timelines();
                 animation.refresh_child_start_events();
         }
         if (trigger == "default" && !animation.frames.empty() && !animation.frames[0]->variants.empty()) {
@@ -1325,6 +1236,69 @@ bool AnimationLoader::load_child_timelines_from_json(const nlohmann::json& anim_
                         return -1;
 };
 
+                struct StartMetadata {
+                        float time_seconds = 0.0f;
+                        int frame_offset = 0;
+                        bool present = false;
+                };
+
+                auto parse_start_metadata = [&](const nlohmann::json& entry) -> StartMetadata {
+                        StartMetadata meta{};
+                        auto coerce_float = [](const nlohmann::json& value, float fallback) -> float {
+                                if (value.is_number()) {
+                                        try {
+                                                return static_cast<float>(value.get<double>());
+                                        } catch (...) {
+                                        }
+                                } else if (value.is_string()) {
+                                        try {
+                                                return std::stof(value.get<std::string>());
+                                        } catch (...) {
+                                        }
+                                }
+                                return fallback;
+                        };
+                        auto coerce_int = [](const nlohmann::json& value, int fallback) -> int {
+                                if (value.is_number_integer()) {
+                                        try {
+                                                return value.get<int>();
+                                        } catch (...) {
+                                        }
+                                } else if (value.is_number()) {
+                                        try {
+                                                return static_cast<int>(value.get<double>());
+                                        } catch (...) {
+                                        }
+                                } else if (value.is_string()) {
+                                        try {
+                                                return std::stoi(value.get<std::string>());
+                                        } catch (...) {
+                                        }
+                                }
+                                return fallback;
+                        };
+                        if (entry.contains("start_time")) {
+                                meta.time_seconds = coerce_float(entry["start_time"], 0.0f);
+                                meta.present = true;
+                        }
+                        if (entry.contains("start_frame")) {
+                                meta.frame_offset = coerce_int(entry["start_frame"], 0);
+                                meta.present = true;
+                                if (!entry.contains("start_time")) {
+                                        meta.time_seconds = static_cast<float>(meta.frame_offset) / static_cast<float>(kBaseAnimationFps);
+                                }
+                        } else if (entry.contains("start") && entry["start"].is_number()) {
+                                meta.frame_offset = coerce_int(entry["start"], 0);
+                                meta.present = true;
+                                if (!entry.contains("start_time")) {
+                                        meta.time_seconds = static_cast<float>(meta.frame_offset) / static_cast<float>(kBaseAnimationFps);
+                                }
+                        } else if (meta.present && meta.frame_offset == 0) {
+                                meta.frame_offset = static_cast<int>(std::lround(meta.time_seconds * static_cast<float>(kBaseAnimationFps)));
+                        }
+                        return meta;
+                };
+
                 std::unordered_map<int, AnimationChildData> parsed;
                 parsed.reserve(timelines_node->size());
                 bool fatal_error = false;
@@ -1354,6 +1328,15 @@ bool AnimationLoader::load_child_timelines_from_json(const nlohmann::json& anim_
                         }
                         timeline.mode = *mode;
                         timeline.auto_start = entry.value("auto_start", entry.value("autostart", false));
+                        const StartMetadata start_meta = parse_start_metadata(entry);
+                        timeline.has_start_time = start_meta.present;
+                        timeline.start_time = start_meta.time_seconds;
+                        timeline.start_frame = start_meta.present
+                                                   ? start_meta.frame_offset
+                                                   : static_cast<int>(std::lround(timeline.start_time * static_cast<float>(kBaseAnimationFps)));
+                        if (timeline.has_start_time && !timeline.auto_start) {
+                                timeline.auto_start = true;
+                        }
                         const auto frames_it = entry.find("frames");
                         if (frames_it != entry.end() && frames_it->is_array()) {
                                 for (const auto& sample : *frames_it) {
@@ -1397,6 +1380,18 @@ bool AnimationLoader::load_child_timelines_from_json(const nlohmann::json& anim_
                         descriptor.mode = parsed_data ? parsed_data->mode : previous->mode;
                         descriptor.auto_start = parsed_data ? parsed_data->auto_start
                                                             : (previous ? previous->auto_start : (descriptor.mode == AnimationChildMode::Static));
+                        descriptor.start_time = parsed_data ? parsed_data->start_time
+                                                            : (previous ? previous->start_time : 0.0f);
+                        descriptor.start_frame = parsed_data ? parsed_data->start_frame
+                                                             : (previous ? previous->start_frame : 0);
+                        descriptor.has_start_time = parsed_data ? parsed_data->has_start_time
+                                                                 : (previous ? previous->has_start_time : false);
+                        if (descriptor.has_start_time && descriptor.start_frame <= 0) {
+                                descriptor.start_frame = static_cast<int>(std::lround(descriptor.start_time * static_cast<float>(kBaseAnimationFps)));
+                        } else if (descriptor.start_frame > 0 && !descriptor.has_start_time) {
+                                descriptor.start_time = static_cast<float>(descriptor.start_frame) / static_cast<float>(kBaseAnimationFps);
+                                descriptor.has_start_time = true;
+                        }
 
                         if (descriptor.mode == AnimationChildMode::Static) {
                                 const std::size_t sample_count = (parent_frame_count > 0) ? parent_frame_count : ((previous && previous->is_static() && !previous->frames.empty()) ? previous->frames.size() : static_cast<std::size_t>(1));

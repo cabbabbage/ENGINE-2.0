@@ -72,39 +72,12 @@ void RebuildQueueCoordinator::request_frame(const std::string& asset_name,
     mark_frame_for_rebuild(asset_name, animation, frame_index);
 }
 
-void RebuildQueueCoordinator::request_full_light_rebuild() const {
-    mark_all_lights_for_rebuild();
-}
-
-void RebuildQueueCoordinator::request_light(const std::string& asset_name) const {
-    if (asset_name.empty()) {
-        return;
-    }
-    mark_asset_lights_for_rebuild(asset_name);
-}
-
-void RebuildQueueCoordinator::request_light_entry(const std::string& asset_name, int light_index) const {
-    if (asset_name.empty() || light_index < 0) {
-        return;
-    }
-    mark_light_for_rebuild(asset_name, light_index);
-}
-
 bool RebuildQueueCoordinator::has_pending_asset_work() const {
     return manifest_has_needs_rebuild();
 }
 
-bool RebuildQueueCoordinator::has_pending_light_work() const {
-    return manifest_has_light_needs_rebuild();
-}
-
 bool RebuildQueueCoordinator::run_asset_tool(const std::string& command_prefix) const {
     const fs::path script = script_path(repo_root_, "asset_tool.py");
-    return run_python_script(script, {}, command_prefix);
-}
-
-bool RebuildQueueCoordinator::run_light_tool(const std::string& command_prefix) const {
-    const fs::path script = script_path(repo_root_, "light_tool.py");
     return run_python_script(script, {}, command_prefix);
 }
 
@@ -135,22 +108,6 @@ void RebuildQueueCoordinator::mark_frame_for_rebuild(const std::string& asset_na
                       "");
 }
 
-void RebuildQueueCoordinator::mark_light_for_rebuild(const std::string& asset_name, int light_index) const {
-    const fs::path script = script_path(repo_root_, "set_rebuild_values.py");
-    run_python_script(script,
-                      {"lighting_light", asset_name, std::to_string(light_index), "--manifest", manifest_path_.string()},
-                      "");
-}
-
-void RebuildQueueCoordinator::mark_asset_lights_for_rebuild(const std::string& asset_name) const {
-    const fs::path script = script_path(repo_root_, "set_rebuild_values.py");
-    run_python_script(script, {"lighting_asset", asset_name, "--manifest", manifest_path_.string()}, "");
-}
-
-void RebuildQueueCoordinator::mark_all_lights_for_rebuild() const {
-    const fs::path script = script_path(repo_root_, "set_rebuild_values.py");
-    run_python_script(script, {"lighting_all", "--manifest", manifest_path_.string()}, "");
-}
 
 bool RebuildQueueCoordinator::manifest_has_needs_rebuild() const {
     std::ifstream in(manifest_path_);
@@ -201,51 +158,6 @@ bool RebuildQueueCoordinator::manifest_has_needs_rebuild() const {
     return false;
 }
 
-bool RebuildQueueCoordinator::manifest_has_light_needs_rebuild() const {
-    std::ifstream in(manifest_path_);
-    if (!in.good()) {
-        return false;
-    }
-    json manifest_json;
-    try {
-        in >> manifest_json;
-    } catch (...) {
-        return false;
-    }
-    auto assets_it = manifest_json.find("assets");
-    if (assets_it == manifest_json.end() || !assets_it->is_object()) {
-        return false;
-    }
-    for (auto it = assets_it->begin(); it != assets_it->end(); ++it) {
-        if (!it->is_object()) {
-            continue;
-        }
-        auto lights_it = it->find("lighting_info");
-        if (lights_it == it->end()) {
-            continue;
-        }
-        if (lights_it->is_object()) {
-            const auto& light = *lights_it;
-            auto flag = light.find("needs_rebuild");
-            if (flag != light.end() && flag->is_boolean() && flag->get<bool>()) {
-                return true;
-            }
-        }
-        if (!lights_it->is_array()) {
-            continue;
-        }
-        for (const auto& light : *lights_it) {
-            if (!light.is_object()) {
-                continue;
-            }
-            auto flag = light.find("needs_rebuild");
-            if (flag != light.end() && flag->is_boolean() && flag->get<bool>()) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
 
 bool RebuildQueueCoordinator::run_python_script(const fs::path& script,
                                                 const std::vector<std::string>& args,
@@ -272,9 +184,8 @@ bool RebuildQueueCoordinator::run_python_script(const fs::path& script,
 
 bool RebuildQueueCoordinator::validate_manifest_cache(const std::string& command_prefix) const {
     if (!fs::is_directory(cache_root_)) {
-        vibble::log::warn("[RebuildQueue] Cache root missing; queueing full asset/light rebuild.");
+        vibble::log::warn("[RebuildQueue] Cache root missing; queueing full asset rebuild.");
         mark_all_frames_for_rebuild();
-        mark_all_lights_for_rebuild();
     }
     const fs::path script = script_path(repo_root_, "cache_validator.py");
     return run_python_script(script, {"--manifest", manifest_path_.string()}, command_prefix);

@@ -1,25 +1,27 @@
 #include "render/render.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <filesystem>
+#include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
-#include <array>
-#include <iostream>
 
 #include <SDL_image.h>
 
 #include "asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "render/warped_screen_grid.hpp"
+#include "render/dynamic_fog_system.hpp"
 #include "animation_update/animation_update.hpp"
 #include "tiling/grid_tile.hpp"
 #include "asset/animation.hpp"
@@ -309,8 +311,9 @@ bool build_warped_quad(const RenderObject& obj,
     quad.vertices[1].position = SDL_FPoint{base_screen.x + half_width, base_screen.y - height};
     quad.vertices[2].position = SDL_FPoint{base_screen.x + half_width, base_screen.y};
     quad.vertices[3].position = SDL_FPoint{base_screen.x - half_width, base_screen.y};
+    const SDL_Color vertex_color{255, 255, 255, obj.color_mod.a};
     for (auto& vertex : quad.vertices) {
-        vertex.color = white;
+        vertex.color = vertex_color;
     }
     quad.vertices[0].tex_coord = SDL_FPoint{u0, v0};
     quad.vertices[1].tex_coord = SDL_FPoint{u1, v0};
@@ -361,44 +364,17 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   screen_height_(screen_height),
   tile_renderer_(std::make_unique<GridTileRenderer>(assets)),
   sky_texture_path_(std::filesystem::path("SRC") / "misc_content" / "sky.png"),
-  composite_renderer_(renderer, assets)
+  composite_renderer_(renderer, assets),
+  dynamic_fog_system_(std::make_unique<DynamicFogSystem>())
 {
 
-    bool color_set = false;
-    if (map_manifest.contains("maps") && map_manifest["maps"].contains(map_id)) {
-        const auto& map_data = map_manifest["maps"][map_id];
-        if (map_data.contains("map_light_data") && map_data["map_light_data"].is_object()) {
-            const auto& mld = map_data["map_light_data"];
-            if (mld.contains("map_color")) {
-                const auto& mc = mld["map_color"];
-                if (mc.contains("r") && mc["r"].contains("max") && mc["r"]["max"].is_number_integer() &&
-                    mc.contains("g") && mc["g"].contains("max") && mc["g"]["max"].is_number_integer() &&
-                    mc.contains("b") && mc["b"].contains("max") && mc["b"]["max"].is_number_integer() &&
-                    mc.contains("a") && mc["a"].contains("max") && mc["a"]["max"].is_number_integer()) {
-                    int r_max = mc["r"]["max"];
-                    int g_max = mc["g"]["max"];
-                    int b_max = mc["b"]["max"];
-                    int a_max = mc["a"]["max"];
-                    if (r_max >= 0 && r_max <= 255 && g_max >= 0 && g_max <= 255 &&
-                        b_max >= 0 && b_max <= 255 && a_max >= 0 && a_max <= 255) {
-                        map_clear_color_ = SDL_Color{static_cast<Uint8>(r_max), static_cast<Uint8>(g_max), static_cast<Uint8>(b_max), static_cast<Uint8>(a_max)};
-                        color_set = true;
-                    }
-                }
-            }
-            if (mld.contains("intensity") && mld["intensity"].is_number()) {
-                const int intensity_raw = static_cast<int>(mld["intensity"]);
-                const int clamped       = std::clamp(intensity_raw, 0, 255);
-                map_light_opacity_      = static_cast<float>(clamped) / 255.0f;
-                if (!std::isfinite(map_light_opacity_)) {
-                    map_light_opacity_ = SceneRenderer::kDefaultMapLightOpacity;
-                }
-            }
-        }
-    }
-    if (!color_set) {
+    map_clear_color_ = SDL_Color{69, 101, 74, 255};
 
-        map_clear_color_ = SDL_Color{69, 101, 74, 255};
+    // Initialize dynamic fog system
+    if (dynamic_fog_system_) {
+        if (!dynamic_fog_system_->initialize(renderer_)) {
+            vibble::log::warn("[SceneRenderer] Failed to initialize dynamic fog system");
+        }
     }
 
     map_radius_world_ = map_layers::map_radius_from_map_info(map_manifest);
@@ -419,7 +395,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 }
 
 SceneRenderer::~SceneRenderer() {
-    destroy_darkness_overlay();
     destroy_sky_texture();
     if (scene_composite_tex_) { SDL_DestroyTexture(scene_composite_tex_); scene_composite_tex_ = nullptr; }
     if (postprocess_tex_)     { SDL_DestroyTexture(postprocess_tex_);     postprocess_tex_     = nullptr; }
@@ -428,16 +403,6 @@ SceneRenderer::~SceneRenderer() {
 
 SDL_Renderer* SceneRenderer::get_renderer() const {
     return renderer_;
-}
-
-void SceneRenderer::set_dark_mask_enabled(bool enabled) {
-    if (dark_mask_enabled_ == enabled) {
-        return;
-    }
-    dark_mask_enabled_ = enabled;
-    if (!dark_mask_enabled_) {
-        destroy_darkness_overlay();
-    }
 }
 
 void SceneRenderer::set_movement_debug_enabled(bool enabled) {
@@ -487,8 +452,77 @@ void SceneRenderer::render() {
     const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
-    std::vector<DarkMaskSprite> dark_mask_sprites;
-    dark_mask_sprites.reserve(std::max<std::size_t>(render_assets.size(), 8u));
+    // Update fog system before rendering
+    if (dynamic_fog_system_) {
+        dynamic_fog_system_->update(cam, grid);
+    }
+
+    // Get fog sprites for depth-ordered rendering
+    std::vector<DynamicFogSystem::FogSprite> fog_sprites;
+    if (dynamic_fog_system_) {
+        fog_sprites = dynamic_fog_system_->get_fog_sprites();
+        // Sort fog sprites by world_pos.y descending (matching asset depth order: higher Y = farther/behind)
+        std::sort(fog_sprites.begin(), fog_sprites.end(),
+            [](const auto& a, const auto& b) { return a.world_pos.y > b.world_pos.y; });
+    }
+    size_t fog_index = 0;
+
+    // Helper to render fog sprites at current Y depth (matching asset depth sorting)
+    auto render_fog_at_y = [&](float current_y) {
+        while (fog_index < fog_sprites.size() && fog_sprites[fog_index].world_pos.y > current_y) {
+            const auto& sprite = fog_sprites[fog_index];
+            if (sprite.texture && sprite.texture_w > 0 && sprite.texture_h > 0) {
+                // Build warped quad for fog sprite (matching asset rendering)
+                const float world_x = sprite.world_pos.x;
+                const float world_y = sprite.world_pos.y;
+                const float world_z = static_cast<float>(sprite.world_z);
+
+                // Calculate fog size in world units based on texture size and scale percentage
+                // Size = texture_size * kFogSizeScale (from header) * sprite.scale (perspective)
+                const float fog_world_width = static_cast<float>(sprite.texture_w) * DynamicFogSystem::kFogSizeScale * sprite.scale;
+                const float fog_world_height = static_cast<float>(sprite.texture_h) * DynamicFogSystem::kFogSizeScale * sprite.scale;
+                const float half_width = fog_world_width * 0.5f;
+                const float height = fog_world_height;
+
+                // Project center point with Z-depth
+                SDL_FPoint base_screen{};
+                if (!project_world_point(cam, world_x, world_y, world_z, base_screen)) {
+                    ++fog_index;
+                    continue;
+                }
+
+                // Build warped quad vertices
+                const float padding_x = 0.5f / static_cast<float>(sprite.texture_w);
+                const float padding_y = 0.5f / static_cast<float>(sprite.texture_h);
+                const float u0 = padding_x;
+                const float u1 = 1.0f - padding_x;
+                const float v0 = padding_y;
+                const float v1 = 1.0f - padding_y;
+
+                SDL_Vertex vertices[4]{};
+                vertices[0].position = SDL_FPoint{base_screen.x - half_width, base_screen.y - height};
+                vertices[1].position = SDL_FPoint{base_screen.x + half_width, base_screen.y - height};
+                vertices[2].position = SDL_FPoint{base_screen.x + half_width, base_screen.y};
+                vertices[3].position = SDL_FPoint{base_screen.x - half_width, base_screen.y};
+
+                const SDL_Color white{255, 255, 255, 255};
+                vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
+
+                vertices[0].tex_coord = SDL_FPoint{u0, v0};
+                vertices[1].tex_coord = SDL_FPoint{u1, v0};
+                vertices[2].tex_coord = SDL_FPoint{u1, v1};
+                vertices[3].tex_coord = SDL_FPoint{u0, v1};
+
+                // Render fog quad with full opacity
+                SDL_SetTextureBlendMode(sprite.texture, SDL_BLENDMODE_BLEND);
+                SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
+                SDL_SetTextureAlphaMod(sprite.texture, 255);
+                SDL_RenderGeometry(renderer_, sprite.texture, vertices, 4, kQuadIndices, 6);
+            }
+            ++fog_index;
+        }
+    };
+
     for (Asset* asset : render_assets) {
         if (!asset || asset->is_hidden() || !asset->info) {
             continue;
@@ -504,6 +538,9 @@ void SceneRenderer::render() {
             continue;
         }
 
+        // Render fog sprites that should appear behind this asset (by Y depth)
+        render_fog_at_y(static_cast<float>(asset->pos.y));
+
         composite_renderer_.update(asset, flicker_time_seconds);
 
         const float fade_alpha = std::clamp(gp->horizon_fade_alpha * gp->near_camera_fade_alpha, 0.0f, 1.0f);
@@ -515,20 +552,6 @@ void SceneRenderer::render() {
             color.a = static_cast<Uint8>(std::clamp(scaled, 0, 255));
             return color;
         };
-
-        if (dark_mask_enabled_ && !asset->scene_mask_lights.empty()) {
-            for (const RenderObject& mask_obj : asset->scene_mask_lights) {
-                WarpedQuad quad{};
-                if (!build_warped_quad(mask_obj, cam, quad)) {
-                    continue;
-                }
-                DarkMaskSprite sprite;
-                sprite.texture   = mask_obj.texture;
-                sprite.vertices  = quad.vertices;
-                sprite.color_mod = apply_fade_alpha(mask_obj.color_mod);
-                dark_mask_sprites.push_back(sprite);
-            }
-        }
 
         for (const RenderObject& obj : asset->render_package) {
             WarpedQuad quad{};
@@ -546,9 +569,8 @@ void SceneRenderer::render() {
         }
     }
 
-    if (dark_mask_enabled_) {
-        render_dynamic_darkness_overlay(map_light_opacity_, dark_mask_sprites);
-    }
+    // Render any remaining fog sprites that are in front of all assets (lowest Y values)
+    render_fog_at_y(std::numeric_limits<float>::lowest());
 
     if (debug_auto_paths_ && movement_debug_visible_) {
         static const std::array<SDL_Color, 6> kPathColors{{
@@ -637,89 +659,6 @@ void SceneRenderer::render() {
 
         }
     }
-}
-
-bool SceneRenderer::ensure_darkness_overlay() {
-    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
-        return false;
-    }
-    if (darkness_overlay_allocation_failed_) {
-        return false;
-    }
-
-    if (darkness_overlay_texture_ &&
-        darkness_overlay_width_ == screen_width_ &&
-        darkness_overlay_height_ == screen_height_) {
-        return true;
-    }
-
-    // Screen size changed or no texture; rebuild.
-    destroy_darkness_overlay();
-
-    auto try_create = [&](int tex_w, int tex_h) -> SDL_Texture* {
-        tex_w = std::max(tex_w, 1);
-        tex_h = std::max(tex_h, 1);
-        SDL_Texture* texture = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, tex_w, tex_h);
-        if (!texture) {
-            return nullptr;
-        }
-        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-#if SDL_VERSION_ATLEAST(2, 0, 12)
-        SDL_SetTextureScaleMode(texture, SDL_ScaleModeBest);
-#endif
-        return texture;
-    };
-
-    SDL_Texture* created = nullptr;
-    float        used_scale = 1.0f;
-
-    // Try full size first, then progressively lower resolution to avoid VRAM exhaustion on some drivers.
-    for (float scale : {1.0f, 0.75f, 0.5f, 0.25f}) {
-        const int tex_w = static_cast<int>(std::lround(static_cast<float>(screen_width_) * scale));
-        const int tex_h = static_cast<int>(std::lround(static_cast<float>(screen_height_) * scale));
-        created = try_create(tex_w, tex_h);
-        if (created) {
-            used_scale = scale;
-            break;
-        } else {
-            vibble::log::warn(std::string{"[SceneRenderer] Failed to allocate darkness overlay ("} +
-                              std::to_string(tex_w) + "x" + std::to_string(tex_h) + "): " + SDL_GetError());
-        }
-    }
-
-    if (!created) {
-        darkness_overlay_allocation_failed_ = true;
-        return false;
-    }
-
-    darkness_overlay_texture_      = created;
-    darkness_overlay_width_        = screen_width_;
-    darkness_overlay_height_       = screen_height_;
-    darkness_overlay_tex_width_    = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_width_) * used_scale)));
-    darkness_overlay_tex_height_   = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_height_) * used_scale)));
-    darkness_overlay_scale_used_   = used_scale;
-    darkness_overlay_allocation_failed_ = false;
-
-    if (used_scale < 0.999f) {
-        vibble::log::info(std::string{"[SceneRenderer] Darkness overlay using scaled buffer ("} +
-                          std::to_string(darkness_overlay_tex_width_) + "x" + std::to_string(darkness_overlay_tex_height_) +
-                          ", scale=" + std::to_string(used_scale) + ").");
-    }
-
-    return true;
-}
-
-void SceneRenderer::destroy_darkness_overlay() {
-    if (darkness_overlay_texture_) {
-        SDL_DestroyTexture(darkness_overlay_texture_);
-        darkness_overlay_texture_ = nullptr;
-    }
-    darkness_overlay_width_        = 0;
-    darkness_overlay_height_       = 0;
-    darkness_overlay_tex_width_    = 0;
-    darkness_overlay_tex_height_   = 0;
-    darkness_overlay_scale_used_   = 1.0f;
-    darkness_overlay_allocation_failed_ = false;
 }
 
 bool SceneRenderer::ensure_sky_texture() {
@@ -825,64 +764,4 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
     SDL_SetTextureColorMod(sky_texture_, 255, 255, 255);
     SDL_SetTextureAlphaMod(sky_texture_, 255);
     SDL_RenderCopyF(renderer_, sky_texture_, nullptr, &dst);
-}
-
-
-
-
-
-
-
-void SceneRenderer::render_dynamic_darkness_overlay(float map_light_opacity,
-                                                    const std::vector<DarkMaskSprite>& sprites) {
-    if (!renderer_) {
-        return;
-    }
-
-    const float overlay_alpha = std::clamp(map_light_opacity, 0.0f, 1.0f);
-    if (overlay_alpha <= 0.0f) {
-        ++darkness_overlay_skipped_frames_;
-        darkness_overlay_skip_logged_ = true;
-        return;
-    }
-
-    if (!ensure_darkness_overlay()) {
-        ++darkness_overlay_skipped_frames_;
-        darkness_overlay_skip_logged_ = true;
-        return;
-    }
-
-    ++darkness_overlay_rendered_frames_;
-    darkness_overlay_skip_logged_ = false;
-
-    SDL_Texture* previous_target = SDL_GetRenderTarget(renderer_);
-    SDL_SetRenderTarget(renderer_, darkness_overlay_texture_);
-    SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_NONE);
-    const Uint8 overlay_alpha_byte = static_cast<Uint8>(std::clamp(std::lround(overlay_alpha * 255.0f), 0L, 255L));
-    SDL_SetRenderDrawColor(renderer_, 0, 0, 0, overlay_alpha_byte);
-    SDL_RenderClear(renderer_);
-
-    if (!sprites.empty()) {
-        SDL_BlendMode carve_mode = SDL_ComposeCustomBlendMode( SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD, SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
-
-        static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
-        for (const DarkMaskSprite& sprite : sprites) {
-            if (!sprite.texture) {
-                continue;
-            }
-            SDL_SetTextureBlendMode(sprite.texture, carve_mode);
-            SDL_SetTextureColorMod(sprite.texture, sprite.color_mod.r, sprite.color_mod.g, sprite.color_mod.b);
-            SDL_SetTextureAlphaMod(sprite.texture, sprite.color_mod.a);
-            SDL_RenderGeometry(renderer_, sprite.texture, sprite.vertices.data(), 4, kQuadIndices, 6);
-        }
-    }
-
-    SDL_SetRenderTarget(renderer_, previous_target);
-
-    SDL_SetTextureBlendMode(darkness_overlay_texture_, SDL_BLENDMODE_BLEND);
-    SDL_SetTextureAlphaMod(darkness_overlay_texture_, overlay_alpha_byte);
-    SDL_SetTextureColorMod(darkness_overlay_texture_, 0, 0, 0);
-
-    SDL_Rect screen_dst{0, 0, screen_width_, screen_height_};
-    SDL_RenderCopy(renderer_, darkness_overlay_texture_, nullptr, &screen_dst);
 }

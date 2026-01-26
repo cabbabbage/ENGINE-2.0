@@ -1,0 +1,190 @@
+#include "render/dynamic_fog_system.hpp"
+#include "asset/Asset.hpp"
+#include "render/warped_screen_grid.hpp"
+#include "world/world_grid.hpp"
+#include "world/grid_point.hpp"
+#include "utils/log.hpp"
+
+#include <SDL_image.h>
+#include <random>
+#include <cmath>
+#include <algorithm>
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
+DynamicFogSystem::DynamicFogSystem() = default;
+
+DynamicFogSystem::~DynamicFogSystem() {
+    // Textures are owned by SDL/renderer and will be cleaned up separately
+    fog_textures_.clear();
+    fog_assignments_.clear();
+    active_fog_sprites_.clear();
+}
+
+bool DynamicFogSystem::initialize(SDL_Renderer* renderer) {
+    if (!renderer) {
+        vibble::log::warn("[DynamicFogSystem] Renderer is null; cannot initialize");
+        return false;
+    }
+
+    renderer_ = renderer;
+
+    // Load fog textures from fog/ directory
+    std::string fog_dir = "fog";
+    if (!fs::exists(fog_dir)) {
+        vibble::log::warn("[DynamicFogSystem] Fog directory not found: " + fog_dir);
+        return false;
+    }
+
+    int loaded_count = 0;
+    for (int i = 1; i <= kNumFogTextures; ++i) {
+        std::string filename = fog_dir + "/" + "fog_" + std::to_string(i) + ".png";
+
+        if (!fs::exists(filename)) {
+            vibble::log::warn("[DynamicFogSystem] Fog texture not found: " + filename);
+            continue;
+        }
+
+        SDL_Surface* surface = IMG_Load(filename.c_str());
+        if (!surface) {
+            vibble::log::warn("[DynamicFogSystem] Failed to load fog texture: " + filename);
+            continue;
+        }
+
+        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
+        SDL_FreeSurface(surface);
+
+        if (!texture) {
+            vibble::log::warn("[DynamicFogSystem] Failed to create SDL_Texture for: " + filename);
+            continue;
+        }
+
+        fog_textures_.push_back(texture);
+        ++loaded_count;
+    }
+
+    if (loaded_count == 0) {
+        vibble::log::error("[DynamicFogSystem] No fog textures loaded");
+        return false;
+    }
+
+    vibble::log::info("[DynamicFogSystem] Loaded " + std::to_string(loaded_count) + " fog textures");
+    return true;
+}
+
+void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGrid& grid) {
+    active_fog_sprites_.clear();
+
+    if (fog_textures_.empty()) {
+        return;
+    }
+
+    // Get visible world bounds from camera
+    SDL_FPoint view_center = cam.get_view_center_f();
+    double view_height = cam.view_height_world();
+    const auto& settings = cam.realism_settings();
+
+    // Use configured grid spacing (set in header file)
+    const int grid_spacing = kFogGridSpacing;
+
+    // Expand visible bounds to ensure coverage
+    const float margin = view_height * 0.5f;
+    SDL_FRect visible_bounds{
+        static_cast<float>(view_center.x - view_height - margin),
+        static_cast<float>(view_center.y - view_height - margin),
+        static_cast<float>(view_height * 2.0 + margin * 2.0),
+        static_cast<float>(view_height * 2.0 + margin * 2.0)
+    };
+
+    int min_world_z = static_cast<int>(settings.depth_near_world);
+    int max_world_z = static_cast<int>(settings.depth_far_world);
+
+    // Snap to grid alignment
+    int start_x = static_cast<int>(std::floor(visible_bounds.x / grid_spacing)) * grid_spacing;
+    int start_y = static_cast<int>(std::floor(visible_bounds.y / grid_spacing)) * grid_spacing;
+    int end_x = static_cast<int>(std::ceil((visible_bounds.x + visible_bounds.w) / grid_spacing)) * grid_spacing;
+    int end_y = static_cast<int>(std::ceil((visible_bounds.y + visible_bounds.h) / grid_spacing)) * grid_spacing;
+
+    // Iterate over z layers (sample only 2 layers for sparse fog)
+    const int z_step = std::max(1, (max_world_z - min_world_z) / 2);
+    for (int world_z = min_world_z; world_z <= max_world_z; world_z += z_step) {
+        // Iterate over grid positions at layer 4 spacing (729 pixels)
+        for (int world_x = start_x; world_x <= end_x; world_x += grid_spacing) {
+            for (int world_y = start_y; world_y <= end_y; world_y += grid_spacing) {
+                // Assign fog texture for this grid point (memoized random assignment)
+                int fog_index = assign_fog_texture_for_point(world_x, world_y, world_z, kFogResolutionLayer);
+                if (fog_index < 0 || fog_index >= static_cast<int>(fog_textures_.size())) {
+                    continue;
+                }
+
+                SDL_Texture* fog_tex = fog_textures_[fog_index];
+                if (!fog_tex) {
+                    continue;
+                }
+
+                // Get texture dimensions
+                int tex_w = 0, tex_h = 0;
+                if (SDL_QueryTexture(fog_tex, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+                    continue;
+                }
+
+                // Project world position to screen with proper Z-depth
+                SDL_FPoint world_pos{static_cast<float>(world_x), static_cast<float>(world_y)};
+                SDL_FPoint screen_pos{};
+                if (!cam.project_world_point(world_pos, static_cast<float>(world_z), screen_pos)) {
+                    continue;
+                }
+                if (!std::isfinite(screen_pos.x) || !std::isfinite(screen_pos.y)) {
+                    continue;
+                }
+
+                // Create fog sprite (scale will be calculated during rendering based on projection)
+                FogSprite sprite;
+                sprite.texture = fog_tex;
+                sprite.world_pos = world_pos;
+                sprite.screen_pos = screen_pos;
+                sprite.scale = 1.0f;  // Base scale, warping will handle perspective
+                sprite.world_z = world_z;
+                sprite.texture_w = tex_w;
+                sprite.texture_h = tex_h;
+
+                active_fog_sprites_.push_back(sprite);
+            }
+        }
+    }
+}
+
+void DynamicFogSystem::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam) {
+    // Note: Fog rendering is now handled in SceneRenderer::render() with depth-sorted warped quads.
+    // This method is kept for API compatibility but is no longer used.
+}
+
+std::uint64_t DynamicFogSystem::make_grid_point_hash(int world_x, int world_y, int world_z, int layer) const {
+    // Create a simple hash from grid coordinates
+    // Combine x, y, z, layer into a single 64-bit hash
+    std::uint64_t h = 0;
+    h ^= std::hash<int>{}(world_x) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<int>{}(world_y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<int>{}(world_z) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<int>{}(layer) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    return h;
+}
+
+int DynamicFogSystem::assign_fog_texture_for_point(int world_x, int world_y, int world_z, int layer) {
+    std::uint64_t hash = make_grid_point_hash(world_x, world_y, world_z, layer);
+
+    auto it = fog_assignments_.find(hash);
+    if (it != fog_assignments_.end()) {
+        return it->second;  // Already assigned
+    }
+
+    // Randomly assign a fog texture
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<int> dist(0, static_cast<int>(fog_textures_.size()) - 1);
+    int fog_index = dist(gen);
+
+    fog_assignments_[hash] = fog_index;
+    return fog_index;
+}

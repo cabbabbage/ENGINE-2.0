@@ -9,6 +9,7 @@ namespace animation_update {
 
 struct FrameHitGeometry {
     struct HitBox {
+        std::string type;
         float center_x   = 0.0f;
         float center_y   = 0.0f;
         float center_z   = 0.0f;

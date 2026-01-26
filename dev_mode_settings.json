@@ -8,7 +8,7 @@
             "methods": {
                 "center": true,
                 "childrandom": false,
-                "edge": true,
+                "edge": false,
                 "exact": true,
                 "exact_position": false,
                 "percent": false,

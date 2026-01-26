@@ -623,3 +623,69 @@ private:
     DMDropdown* d_ = nullptr;
     SDL_Rect rect_cache_{0, 0, 0, 0};
 };
+
+class CallbackCheckboxWidget : public Widget {
+public:
+    CallbackCheckboxWidget(std::unique_ptr<DMCheckbox> checkbox,
+                          std::function<void(bool)> on_change,
+                          bool editable = true)
+        : checkbox_(std::move(checkbox)), on_change_(std::move(on_change)), editable_(editable) {
+        if (checkbox_) checkbox_->set_tooltip_state(this->tooltip_state());
+    }
+    ~CallbackCheckboxWidget() override {
+        if (checkbox_) checkbox_->set_tooltip_state(nullptr);
+    }
+    void set_rect(const SDL_Rect& r) override {
+        rect_cache_ = r;
+        if (!checkbox_) return;
+        SDL_Rect applied = r;
+        const int checkbox_height = DMCheckbox::height();
+        if (applied.h > checkbox_height) {
+            applied.y += (applied.h - checkbox_height) / 2;
+            applied.h = checkbox_height;
+        } else {
+            applied.h = std::max(applied.h, checkbox_height);
+        }
+        checkbox_->set_rect(applied);
+        SDL_Rect final_rect = checkbox_->rect();
+        int preferred = checkbox_->preferred_width();
+        int minimum = final_rect.h > 0 ? final_rect.h : checkbox_height;
+        int desired = std::max(minimum, preferred);
+        final_rect.w = std::min(desired, r.w);
+        checkbox_->set_rect(final_rect);
+        rect_cache_ = final_rect;
+    }
+    const SDL_Rect& rect() const override {
+        if (checkbox_) return checkbox_->rect();
+        return rect_cache_;
+    }
+    int height_for_width(int) const override { return DMCheckbox::height(); }
+    bool handle_event(const SDL_Event& e) override {
+        if (!checkbox_ || !editable_) return false;
+        bool before = checkbox_->value();
+        bool used = checkbox_->handle_event(e);
+        if (used) {
+            bool after = checkbox_->value();
+            if (after != before && on_change_) on_change_(after);
+        }
+        return used;
+    }
+    void render(SDL_Renderer* r) const override {
+        if (checkbox_) checkbox_->render(r);
+        if (!editable_) {
+            SDL_Rect overlay_rect = rect();
+            SDL_Color overlay{40, 40, 40, 140};
+            SDL_SetRenderDrawColor(r, overlay.r, overlay.g, overlay.b, overlay.a);
+            SDL_RenderFillRect(r, &overlay_rect);
+        }
+    }
+    void set_value(bool value) {
+        if (checkbox_) checkbox_->set_value(value);
+    }
+    void set_editable(bool editable) { editable_ = editable; }
+private:
+    std::unique_ptr<DMCheckbox> checkbox_;
+    std::function<void(bool)> on_change_;
+    bool editable_ = true;
+    SDL_Rect rect_cache_{0, 0, 0, 0};
+};

@@ -494,8 +494,13 @@ void ForegroundBackgroundEffectPanel::save_current_mode_settings() {
 }
 
 void ForegroundBackgroundEffectPanel::save_depth_cue_settings_to_manifest() {
-
-    nlohmann::json manifest = manifest::load_manifest().raw;
+    nlohmann::json manifest;
+    try {
+        manifest = manifest::load_manifest().raw;
+    } catch (const std::exception& e) {
+        std::cerr << "[DepthCuePanel] Failed to load manifest for saving: " << e.what() << ", skipping save\n";
+        return;
+    }
 
     nlohmann::json image_effects = nlohmann::json::object();
 
@@ -589,8 +594,18 @@ void ForegroundBackgroundEffectPanel::update_preview_and_manifest() {
 }
 
 bool ForegroundBackgroundEffectPanel::load_depth_cue_settings_from_manifest() {
-
-    nlohmann::json manifest = manifest::load_manifest().raw;
+    nlohmann::json manifest;
+    try {
+        manifest = manifest::load_manifest().raw;
+    } catch (const std::exception& e) {
+        std::cerr << "[DepthCuePanel] Failed to load manifest: " << e.what() << ", using defaults\n";
+        fg_settings_ = camera_effects::ImageEffectSettings{};
+        bg_settings_ = camera_effects::ImageEffectSettings{};
+        saved_fg_ = fg_settings_;
+        saved_bg_ = bg_settings_;
+        load_current_mode_settings();
+        return false;
+    }
 
     if (!manifest.contains("image_effects") || !manifest["image_effects"].is_object()) {
         std::cout << "[DepthCuePanel] No image_effects section found in manifest.json, using defaults\n";

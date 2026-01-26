@@ -97,6 +97,7 @@ public:
     }
 
     void refresh_camera_panel_widgets();
+    void reload_camera_state_from_room();
     void request_camera_live_update();
     void set_on_camera_changed(std::function<void(Room*)> cb) { on_camera_changed_ = std::move(cb); }
     bool camera_controls_enabled() const;

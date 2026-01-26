@@ -1,6 +1,5 @@
 #include "map_mode_ui.hpp"
 
-#include "MapLightPanel.hpp"
 #include "map_layers_preview_panel.hpp"
 #include "DockableCollapsible.hpp"
 #include "FloatingPanelLayoutManager.hpp"
@@ -35,7 +34,6 @@
 namespace {
 constexpr int kDefaultPanelX = 48;
 constexpr int kDefaultPanelY = 48;
-constexpr const char* kButtonIdLights = "lights";
 
 std::string trim_copy(const std::string& input) {
     auto is_space = [](unsigned char ch) { return std::isspace(ch) != 0; };
@@ -118,12 +116,10 @@ void MapModeUI::set_map_context(nlohmann::json* map_info, const std::string& map
 void MapModeUI::set_screen_dimensions(int w, int h) {
     screen_w_ = w;
     screen_h_ = h;
-    light_panel_centered_ = false;
     ensure_panels();
     sliding_area_bounds_ = sanitize_sliding_area(sliding_area_bounds_);
     apply_sliding_area_bounds();
     update_footer_visibility();
-    ensure_light_and_shading_positions();
 }
 
 void MapModeUI::set_sliding_area_bounds(const SDL_Rect& bounds) {
@@ -219,7 +215,6 @@ void MapModeUI::apply_sliding_area_bounds() {
     SDL_Rect work_area = effective_work_area();
     SDL_Rect right_bounds = room_config_bounds();
 
-    if (light_panel_) light_panel_->set_work_area(work_area);
     if (layers_preview_panel_) layers_preview_panel_->set_work_area(work_area);
 
     if (layers_panel_) {
@@ -398,12 +393,6 @@ bool MapModeUI::pointer_inside_floating_panel(int x, int y) const {
     SDL_Point p{x, y};
     for (DockableCollapsible* panel : floating_panels_) {
         if (!panel) continue;
-        if (auto* lights = dynamic_cast<MapLightPanel*>(panel)) {
-            if (lights->is_visible() && lights->is_point_inside(p.x, p.y)) {
-                return true;
-            }
-            continue;
-        }
         if (auto* layers_preview = dynamic_cast<MapLayersPreviewPanel*>(panel)) {
             if (layers_preview->is_visible() && layers_preview->is_point_inside(p.x, p.y)) {
                 return true;
@@ -437,7 +426,6 @@ bool MapModeUI::handle_floating_panel_event(const SDL_Event& e, bool& used) {
         DockableCollapsible* panel = *it;
         if (!panel) continue;
 
-        MapLightPanel* lights = dynamic_cast<MapLightPanel*>(panel);
         MapLayersPreviewPanel* layers_preview = dynamic_cast<MapLayersPreviewPanel*>(panel);
 
         auto handle_and_check = [&](auto* concrete) -> bool {
@@ -453,9 +441,7 @@ bool MapModeUI::handle_floating_panel_event(const SDL_Event& e, bool& used) {
 };
 
         bool handled_special = false;
-        if (lights) {
-            handled_special = handle_and_check(lights);
-        } else if (layers_preview) {
+        if (layers_preview) {
             handled_special = handle_and_check(layers_preview);
         } else {
             if (!panel->is_visible()) continue;
@@ -474,7 +460,9 @@ bool MapModeUI::handle_floating_panel_event(const SDL_Event& e, bool& used) {
             break;
         }
 
-        const bool inside = (lights && lights->is_visible() && lights->is_point_inside(p.x, p.y)) || (layers_preview && layers_preview->is_visible() && layers_preview->is_point_inside(p.x, p.y)) || (!lights && !layers_preview && panel->is_visible() && panel->is_point_inside(p.x, p.y));
+        const bool inside_preview = layers_preview && layers_preview->is_visible() && layers_preview->is_point_inside(p.x, p.y);
+        const bool inside_panel = panel->is_visible() && panel->is_point_inside(p.x, p.y);
+        const bool inside = inside_preview || inside_panel;
 
         if ((pointer_event || wheel_event) && inside) {
             if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
@@ -503,25 +491,6 @@ bool MapModeUI::handle_floating_panel_event(const SDL_Event& e, bool& used) {
 }
 
 void MapModeUI::ensure_panels() {
-    if (!light_panel_) {
-        light_panel_ = std::make_unique<MapLightPanel>(kDefaultPanelX, kDefaultPanelY);
-        light_panel_->close();
-        track_floating_panel(light_panel_.get());
-    }
-    if (light_panel_) {
-        light_panel_->set_assets(assets_);
-        light_panel_->set_map_color_sample_callback(
-            [this](const utils::color::RangedColor& current,
-                   std::function<void(SDL_Color)> on_sample,
-                   std::function<void()> on_cancel) {
-                this->begin_map_color_sampling(current, std::move(on_sample), std::move(on_cancel));
-            });
-        light_panel_->set_update_map_light_callback([this](bool enabled) {
-            if (assets_) {
-                assets_->set_update_map_light_enabled(enabled);
-            }
-        });
-    }
     if (!layers_controller_) {
         layers_controller_ = std::make_shared<MapLayersController>();
     }
@@ -756,26 +725,6 @@ void MapModeUI::configure_footer_buttons() {
 
         append_custom(map_mode_buttons_, HeaderMode::Map);
 
-        const bool has_lights_button = std::any_of(map_mode_buttons_.begin(), map_mode_buttons_.end(),
-                                                   [](const HeaderButtonConfig& cfg) {
-                                                       return cfg.id == kButtonIdLights;
-                                                   });
-
-        if (!has_lights_button) {
-            DevFooterBar::Button lights_btn;
-            lights_btn.id = kButtonIdLights;
-            lights_btn.label = "Lighting";
-            lights_btn.style_override = &DMStyles::WarnButton();
-            lights_btn.active_style_override = &DMStyles::AccentButton();
-            lights_btn.on_toggle = [this](bool active) {
-                if (active) {
-                    this->open_light_panel();
-                } else {
-                    this->close_light_panel();
-                }
-};
-            buttons.push_back(std::move(lights_btn));
-        }
     } else if (header_mode_ == HeaderMode::Room) {
         append_custom(room_mode_buttons_, HeaderMode::Room);
     }
@@ -788,10 +737,7 @@ void MapModeUI::configure_footer_buttons() {
 void MapModeUI::sync_footer_button_states() {
     if (!footer_bar_) return;
     if (header_mode_ == HeaderMode::Map) {
-        const bool lights_visible = light_panel_ && light_panel_->is_visible();
-        const bool lighting_controls_visible = lights_visible;
         const bool layers_visible = layers_panel_ && layers_panel_->is_visible();
-        footer_bar_->set_button_active_state(kButtonIdLights, lighting_controls_visible);
         footer_bar_->set_button_active_state("layers", layers_visible);
         for (const auto& config : map_mode_buttons_) {
             footer_bar_->set_button_active_state(config.id, config.active);
@@ -845,13 +791,6 @@ void MapModeUI::set_active_panel(PanelType panel) {
 void MapModeUI::sync_panel_map_info() {
     if (!map_info_) return;
     ensure_panels();
-    if (light_panel_) {
-        LightSaveCallback callback = light_save_callback_;
-        if (!callback) {
-            callback = [this]() { return save_map_info_to_disk(); };
-        }
-        light_panel_->set_map_info(map_info_, callback);
-    }
     if (layers_panel_) {
         if (layers_controller_) {
             layers_controller_->set_manifest_store(manifest_store_, map_id_);
@@ -884,12 +823,6 @@ void MapModeUI::update(const Input& input) {
     }
     for (DockableCollapsible* panel : floating_panels_) {
         if (!panel) continue;
-        if (auto* lights = dynamic_cast<MapLightPanel*>(panel)) {
-            if (lights->is_visible()) {
-                lights->update(input, screen_w_, screen_h_);
-            }
-            continue;
-        }
         if (auto* layers_preview = dynamic_cast<MapLayersPreviewPanel*>(panel)) {
             if (layers_preview->is_visible()) {
                 layers_preview->update(input, screen_w_, screen_h_);
@@ -907,12 +840,6 @@ void MapModeUI::update(const Input& input) {
     }
     if (visible != active_panel_) {
         active_panel_ = visible;
-        sync_footer_button_states();
-    }
-
-    const bool lights_visible = light_panel_ && light_panel_->is_visible();
-    if (lights_visible != last_lights_visible_) {
-        last_lights_visible_ = lights_visible;
         sync_footer_button_states();
     }
 
@@ -995,12 +922,6 @@ void MapModeUI::render(SDL_Renderer* renderer) const {
     }
     for (DockableCollapsible* panel : floating_panels_) {
         if (!panel) continue;
-        if (auto* lights = dynamic_cast<MapLightPanel*>(panel)) {
-            if (lights->is_visible()) {
-                lights->render(renderer);
-            }
-            continue;
-        }
         if (auto* layers_preview = dynamic_cast<MapLayersPreviewPanel*>(panel)) {
             if (layers_preview->is_visible()) {
                 layers_preview->render(renderer);
@@ -1072,46 +993,6 @@ void MapModeUI::open_layers_panel() {
     set_active_panel(PanelType::Layers);
 }
 
-void MapModeUI::open_light_panel() {
-    ensure_panels();
-    const bool light_unlocked = ensure_panel_unlocked(light_panel_.get(), "Light");
-    if (!light_unlocked) {
-        sync_footer_button_states();
-        return;
-    }
-    if (!light_panel_centered_) {
-        ensure_light_and_shading_positions();
-    }
-    if (light_panel_) {
-        light_panel_->open();
-        bring_panel_to_front(light_panel_.get());
-    }
-    sync_footer_button_states();
-}
-
-void MapModeUI::close_light_panel() {
-    ensure_panels();
-    if (light_panel_) {
-        light_panel_->close();
-    }
-    sync_footer_button_states();
-}
-
-void MapModeUI::toggle_light_panel() {
-    ensure_panels();
-    const bool light_unlocked = ensure_panel_unlocked(light_panel_.get(), "Light");
-    if (!light_unlocked) {
-        sync_footer_button_states();
-        return;
-    }
-    const bool lights_visible = light_panel_ && light_panel_->is_visible();
-    if (lights_visible) {
-        close_light_panel();
-        return;
-    }
-    open_light_panel();
-}
-
 void MapModeUI::toggle_layers_panel() {
     ensure_panels();
     if (!ensure_panel_unlocked(layers_panel_.get(), "Layers")) {
@@ -1126,62 +1007,11 @@ void MapModeUI::toggle_layers_panel() {
 }
 
 void MapModeUI::close_all_panels() {
-    if (light_panel_) {
-        light_panel_->close();
-    }
     if (layers_preview_panel_) {
         layers_preview_panel_->close();
     }
     set_active_panel(PanelType::None);
     close_room_configuration(false);
-}
-
-bool MapModeUI::is_light_panel_visible() const {
-    return light_panel_ && light_panel_->is_visible();
-}
-
-void MapModeUI::ensure_light_and_shading_positions() {
-    ensure_panels();
-
-    const int fallback_w = DockableCollapsible::kDefaultFloatingContentWidth;
-    const int fallback_h = 400;
-
-    std::vector<FloatingPanelLayoutManager::PanelInfo> panels;
-    panels.reserve(2);
-    std::vector<bool*> updated_flags;
-    updated_flags.reserve(2);
-
-    auto add_panel = [&](DockableCollapsible* panel, bool& centered_flag) {
-        if (!panel || centered_flag) {
-            return;
-        }
-        FloatingPanelLayoutManager::PanelInfo info;
-        info.panel = panel;
-        info.force_layout = true;
-        SDL_Rect rect = panel->rect();
-        info.preferred_width = rect.w > 0 ? rect.w : fallback_w;
-        int height = rect.h > 0 ? rect.h : panel->height();
-        if (height <= 0) {
-            height = fallback_h;
-        }
-        info.preferred_height = height;
-        panels.push_back(info);
-        updated_flags.push_back(&centered_flag);
-};
-
-    add_panel(light_panel_.get(), light_panel_centered_);
-
-    if (panels.empty()) {
-        return;
-    }
-
-    FloatingPanelLayoutManager::instance().layoutAll(panels);
-
-    for (bool* flag : updated_flags) {
-        if (flag) {
-            *flag = true;
-        }
-    }
 }
 
 SDL_Rect MapModeUI::room_config_bounds() const {
@@ -1368,25 +1198,6 @@ void MapModeUI::close_room_configuration(bool show_rooms_list) {
     update_room_config_header_controls();
 }
 
-void MapModeUI::set_light_save_callback(LightSaveCallback cb) {
-    light_save_callback_ = std::move(cb);
-    ensure_panels();
-    if (light_panel_) {
-        LightSaveCallback callback = light_save_callback_;
-        if (!callback) {
-            callback = [this]() { return save_map_info_to_disk(); };
-        }
-        light_panel_->set_map_info(map_info_, callback);
-    }
-    if (layers_preview_panel_) {
-        LightSaveCallback callback = light_save_callback_;
-        if (!callback) {
-            callback = [this]() { return auto_save_layers_data(); };
-        }
-        layers_preview_panel_->set_map_info(map_info_, callback);
-    }
-}
-
 bool MapModeUI::is_point_inside(int x, int y) const {
     if (pointer_inside_floating_panel(x, y)) {
         return true;
@@ -1415,10 +1226,6 @@ bool MapModeUI::is_point_inside(int x, int y) const {
 bool MapModeUI::is_any_panel_visible() const {
     for (DockableCollapsible* panel : floating_panels_) {
         if (!panel) continue;
-        if (auto* lights = dynamic_cast<MapLightPanel*>(panel)) {
-            if (lights->is_visible()) return true;
-            continue;
-        }
         if (auto* layers_preview = dynamic_cast<MapLayersPreviewPanel*>(panel)) {
             if (layers_preview->is_visible()) return true;
             continue;

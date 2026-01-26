@@ -135,7 +135,8 @@ manifest_store_(manifest_store)
                 vibble::log::warn("[AssetLoader] Renderer unavailable; skipping asset library cache warmup.");
         }
     }
-        loading_status::notify("Loading assets");
+
+    loading_status::notify("Loading assets");
         vibble::log::info("[AssetLoader] Finalizing assets across rooms...");
         try {
                 finalizeAssets();
@@ -155,7 +156,7 @@ manifest_store_(manifest_store)
         vibble::log::info(std::string("[AssetLoader] Asset library ready in ") + std::to_string(library_ms) + "ms");
         vibble::log::info(std::string("[AssetLoader] Rooms built in ") + std::to_string(rooms_ms) + "ms");
         vibble::log::info(std::string("[AssetLoader] Initialization completed in ") + std::to_string(total_ms) + "ms");
-        auto distant_boundary = collectDistantAssets(150, 800);
+        auto distant_boundary = collectDistantAssets(150, 3000);
         for (auto* asset : distant_boundary) {
                 asset->set_hidden(true);
         }

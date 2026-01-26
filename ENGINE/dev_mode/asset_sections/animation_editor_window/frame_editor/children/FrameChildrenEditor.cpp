@@ -11,8 +11,12 @@
 #include <nlohmann/json.hpp>
 
 #include "../../AnimationDocument.hpp"
+#if defined(FRAME_EDITOR_TEST_PUBLIC_ACCESS)
+#include "FrameChildrenEditorTestStubs.hpp"
+#else
 #include "../FrameToolsPanel.hpp"
 #include "../movement/MovementCanvas.hpp"
+#endif
 #include "../../../../dm_styles.hpp"
 #include "../../../../draw_utils.hpp"
 #include "../../../../../render/scaling_logic.hpp"
@@ -534,9 +538,11 @@ void FrameChildrenEditor::ensure_child_vectors() {
         }
         selected_child_index_ = 0;
         child_modes_.clear();
+        async_child_frames_.clear();
         return;
     }
     ensure_child_mode_size();
+    ensure_async_timeline_size();
     for (auto& frame : frames_) {
         std::vector<ChildFrame> normalized(child_ids_.size());
         for (std::size_t i = 0; i < normalized.size(); ++i) {
@@ -569,6 +575,26 @@ void FrameChildrenEditor::ensure_child_mode_size() {
         next[i] = child_modes_[i];
     }
     child_modes_ = std::move(next);
+}
+
+void FrameChildrenEditor::ensure_async_timeline_size() {
+    const std::size_t desired = child_ids_.size();
+    if (async_child_frames_.size() != desired) {
+        async_child_frames_.resize(desired);
+    }
+    for (std::size_t i = 0; i < async_child_frames_.size(); ++i) {
+        auto& timeline = async_child_frames_[i];
+        if (timeline.empty()) {
+            ChildFrame sample{};
+            sample.child_index = static_cast<int>(i);
+            sample.visible = false;
+            timeline.push_back(sample);
+        } else {
+            for (auto& sample : timeline) {
+                sample.child_index = static_cast<int>(i);
+            }
+        }
+    }
 }
 
 AnimationChildMode FrameChildrenEditor::child_mode(int child_index) const {
@@ -626,6 +652,30 @@ void FrameChildrenEditor::remap_child_indices(const std::vector<int>& remap) {
         }
         frame.children = std::move(next);
     }
+}
+
+void FrameChildrenEditor::remap_async_timelines(const std::vector<int>& remap) {
+    if (remap.empty()) {
+        async_child_frames_.clear();
+        ensure_async_timeline_size();
+        return;
+    }
+    std::vector<std::vector<ChildFrame>> next(child_ids_.size());
+    for (std::size_t i = 0; i < remap.size(); ++i) {
+        const int to = remap[i];
+        if (to < 0 || static_cast<std::size_t>(to) >= next.size()) {
+            continue;
+        }
+        if (i >= async_child_frames_.size()) {
+            continue;
+        }
+        next[static_cast<std::size_t>(to)] = async_child_frames_[i];
+        for (auto& sample : next[static_cast<std::size_t>(to)]) {
+            sample.child_index = to;
+        }
+    }
+    async_child_frames_ = std::move(next);
+    ensure_async_timeline_size();
 }
 
 bool FrameChildrenEditor::timeline_entry_is_static(const nlohmann::json& entry) const {
@@ -756,6 +806,7 @@ void FrameChildrenEditor::apply_child_timelines_from_payload(const nlohmann::jso
         return;
     }
     ensure_child_mode_size();
+    ensure_async_timeline_size();
     std::unordered_map<std::string, int> index_by_name;
     index_by_name.reserve(child_ids_.size());
     for (std::size_t i = 0; i < child_ids_.size(); ++i) {
@@ -782,20 +833,31 @@ void FrameChildrenEditor::apply_child_timelines_from_payload(const nlohmann::jso
         }
         const bool is_static = timeline_entry_is_static(entry);
         child_modes_[static_cast<std::size_t>(child_index)] = is_static ? AnimationChildMode::Static : AnimationChildMode::Async;
-        if (!is_static) {
-            continue;
-        }
         auto frames_it = entry.find("frames");
         if (frames_it == entry.end() || !frames_it->is_array()) {
             continue;
         }
         const auto& samples = *frames_it;
-        for (std::size_t frame_idx = 0; frame_idx < frames_.size(); ++frame_idx) {
-            if (child_index >= static_cast<int>(frames_[frame_idx].children.size())) {
-                continue;
+        if (is_static) {
+            for (std::size_t frame_idx = 0; frame_idx < frames_.size(); ++frame_idx) {
+                if (child_index >= static_cast<int>(frames_[frame_idx].children.size())) {
+                    continue;
+                }
+                ChildFrame sample = (frame_idx < samples.size()) ? child_frame_from_sample(samples[frame_idx], child_index) : child_frame_from_sample(nlohmann::json::object(), child_index);
+                frames_[frame_idx].children[child_index] = sample;
             }
-            ChildFrame sample = (frame_idx < samples.size()) ? child_frame_from_sample(samples[frame_idx], child_index) : child_frame_from_sample(nlohmann::json::object(), child_index);
-            frames_[frame_idx].children[child_index] = sample;
+        } else {
+            auto& timeline = async_child_frames_[static_cast<std::size_t>(child_index)];
+            timeline.clear();
+            for (const auto& sample_json : samples) {
+                timeline.push_back(child_frame_from_sample(sample_json, child_index));
+            }
+            if (timeline.empty()) {
+                ChildFrame sample{};
+                sample.child_index = child_index;
+                sample.visible = false;
+                timeline.push_back(sample);
+            }
         }
     }
 }
@@ -863,8 +925,20 @@ nlohmann::json FrameChildrenEditor::build_child_timelines_payload(const nlohmann
     frames.push_back(child_frame_to_json(sample));
             }
             entry["frames"] = std::move(frames);
-        } else if (!entry.contains("frames") || !entry["frames"].is_array()) {
-            entry["frames"] = nlohmann::json::array();
+        } else {
+            nlohmann::json frames = nlohmann::json::array();
+            ensure_async_timeline_size();
+            const auto& timeline = (child_idx < async_child_frames_.size()) ? async_child_frames_[child_idx] : std::vector<ChildFrame>{};
+            for (const auto& sample : timeline) {
+                frames.push_back(child_frame_to_json(sample));
+            }
+            if (frames.empty()) {
+                ChildFrame sample{};
+                sample.child_index = static_cast<int>(child_idx);
+                sample.visible = false;
+                frames.push_back(child_frame_to_json(sample));
+            }
+            entry["frames"] = std::move(frames);
         }
         normalized.push_back(std::move(entry));
     }
@@ -941,10 +1015,31 @@ void FrameChildrenEditor::set_child_mode(AnimationChildMode mode) {
     if (selected_child_index_ < 0 || static_cast<std::size_t>(selected_child_index_) >= child_modes_.size()) {
         return;
     }
-    if (child_modes_[static_cast<std::size_t>(selected_child_index_)] == mode) {
+    AnimationChildMode previous = child_modes_[static_cast<std::size_t>(selected_child_index_)];
+    if (previous == mode) {
         return;
     }
     child_modes_[static_cast<std::size_t>(selected_child_index_)] = mode;
+    if (mode == AnimationChildMode::Async) {
+        for (auto& frame : frames_) {
+            if (selected_child_index_ >= 0 && selected_child_index_ < static_cast<int>(frame.children.size())) {
+                auto& child = frame.children[static_cast<std::size_t>(selected_child_index_)];
+                child.dx = 0.0f;
+                child.dy = 0.0f;
+                child.dz = 0.0f;
+                child.rotation = 0.0f;
+                child.visible = false;
+            }
+        }
+        ensure_async_timeline_size();
+        auto& timeline = async_child_frames_[static_cast<std::size_t>(selected_child_index_)];
+        if (timeline.empty()) {
+            ChildFrame sample{};
+            sample.child_index = selected_child_index_;
+            sample.visible = false;
+            timeline.push_back(sample);
+        }
+    }
     persist_changes();
 }
 
@@ -1014,6 +1109,7 @@ void FrameChildrenEditor::apply_child_list_change(const std::vector<std::string>
     }
     child_modes_ = std::move(next_modes);
     remap_child_indices(remap);
+    remap_async_timelines(remap);
     ensure_child_vectors();
     if (child_ids_.empty()) {
         selected_child_index_ = 0;
@@ -1076,6 +1172,9 @@ void FrameChildrenEditor::persist_changes() {
                         child.child_index >= static_cast<int>(child_ids_.size())) {
                         continue;
                     }
+                    if (child_mode(child.child_index) == AnimationChildMode::Async) {
+                        continue;
+                    }
                     nlohmann::json child_json = nlohmann::json::array();
                     child_json.push_back(child.child_index);
                     child_json.push_back(static_cast<int>(std::lround(child.dx)));
@@ -1109,6 +1208,7 @@ void FrameChildrenEditor::persist_changes() {
     payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}};
 
     ensure_child_mode_size();
+    ensure_async_timeline_size();
     if (child_ids_.empty()) {
         payload.erase("child_timelines");
     } else {

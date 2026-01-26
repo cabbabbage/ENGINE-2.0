@@ -60,34 +60,6 @@ class Asset {
 
         public:
     RenderCompositePackage render_package;
-    RenderCompositePackage scene_mask_lights;
-    struct RenderTextureCache {
-        SDL_Texture* texture = nullptr;
-        int          width   = 0;
-        int          height  = 0;
-};
-
-    struct MaskRenderMetadata {
-        struct TextureDefaults {
-            SDL_Texture* texture = nullptr;
-            Uint8        r = 255;
-            Uint8        g = 255;
-            Uint8        b = 255;
-            Uint8        a = 255;
-            SDL_BlendMode blend = SDL_BLENDMODE_BLEND;
-            bool         initialized = false;
-            void reset();
-};
-
-        SDL_Texture* last_mask_texture = nullptr;
-        int          mask_w            = 0;
-        int          mask_h            = 0;
-        bool         has_dimensions    = false;
-        TextureDefaults mask_defaults;
-        TextureDefaults base_defaults;
-
-        void reset();
-};
 
     struct TilingInfo {
         bool      enabled      = false;
@@ -159,6 +131,9 @@ class Asset {
     bool is_current_animation_locked_in_progress() const;
     bool is_current_animation_last_frame() const;
     bool is_current_animation_looping() const;
+    bool start_child_async(const std::string& name);
+    bool stop_child_async(const std::string& name);
+    void stop_all_child_async();
     const AnimationFrame* current_animation_frame() const { return current_frame; }
     void add_child(Asset* asset_child);
 
@@ -182,9 +157,6 @@ class Asset {
 
     const ScaleVariantState& scale_variant_state() const { return scale_variant_state_; }
 
-    void set_shading_group(int x);
-    bool is_shading_group_set() const;
-    int  get_shading_group() const;
     void set_frame_progress(float p) { frame_progress = p; }
     class AnimationFrame* current_frame = nullptr;
     const AnimationFrame* last_rendered_frame() const { return last_rendered_frame_; }
@@ -221,6 +193,8 @@ class Asset {
     void set_grid_id(std::uint64_t id);
     std::uint64_t grid_id() const { return grid_id_; }
     void clear_grid_id();
+    void set_world_z_offset(float z) { world_z_offset_ = z; }
+    float world_z_offset() const { return world_z_offset_; }
 
     SDL_Texture* composite_texture() const { return composite_texture_; }
     void set_composite_texture(SDL_Texture* tex);
@@ -231,12 +205,6 @@ class Asset {
     void set_composite_rect(const SDL_Rect& r) { composite_rect_ = r; }
     float        composite_scale() const { return composite_scale_; }
 
-    RenderTextureCache& shadow_mask_cache();
-    RenderTextureCache& shadow_mask_cache() const;
-    RenderTextureCache& cast_shadow_cache();
-    RenderTextureCache& cast_shadow_cache() const;
-    MaskRenderMetadata& mask_render_metadata();
-    MaskRenderMetadata& mask_render_metadata() const;
 
     float smoothed_translation_x() const;
     float smoothed_translation_y() const;
@@ -256,7 +224,6 @@ class Asset {
     std::vector<Asset*> asset_children;
     const std::vector<AnimationChildAttachment>& animation_children() const { return animation_children_; }
     int depth = 0;
-    bool has_shading = false;
     bool dead = false;
     bool static_frame = true;
     bool needs_target = false;
@@ -307,8 +274,6 @@ private:
     void set_flip();
 
     float frame_progress = 0.0f;
-    int  shading_group = 0;
-    bool shading_group_set = false;
     Assets* assets_ = nullptr;
     std::unique_ptr<AssetController>   controller_;
     std::unique_ptr<AssetList> neighbors;
@@ -342,12 +307,6 @@ private:
     ScaleVariantState scale_variant_state_{};
 
     void clear_render_caches();
-    void reset_mask_render_metadata();
-    static void destroy_render_cache(RenderTextureCache& cache);
-
-    mutable RenderTextureCache shadow_mask_cache_{};
-    mutable RenderTextureCache cast_shadow_cache_{};
-    mutable MaskRenderMetadata mask_render_metadata_{};
 
     TransformSmoothingState alpha_smoothing_{};
     // Protect the pending attack queue for thread-safe enqueue/dequeue.
@@ -365,6 +324,11 @@ private:
     bool         composite_dirty_   = true;
     SDL_Rect     composite_rect_    = {0, 0, 0, 0};
     float        composite_scale_   = 1.0f;
+    float        world_z_offset_    = 0.0f;
+
+    void update_animation_children_state();
+    void sync_child_from_slot(AnimationChildAttachment& slot);
+    void deactivate_children();
 };
 
 #endif

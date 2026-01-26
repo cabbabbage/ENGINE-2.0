@@ -2,6 +2,7 @@
 
 #include "render/warped_screen_grid.hpp"
 #include "asset/asset_library.hpp"
+#include "core/popup_manager.hpp"
 #include <SDL.h>
 #include <atomic>
 #include <functional>
@@ -21,7 +22,6 @@
 
 class Asset;
 class SceneRenderer;
-class LightMap;
 struct SDL_Renderer;
 class CurrentRoomFinder;
 class Room;
@@ -37,6 +37,15 @@ class PreviewProvider;
 namespace devmode::core {
 class ManifestStore;
 }
+
+enum class FrameEditorLaunchMode {
+    Movement,
+    SyncChildren,
+    AsyncChildren,
+    AttackGeometry,
+    HitGeometry
+};
+
 class Assets {
 public:
     Assets(AssetLibrary& library,
@@ -59,8 +68,6 @@ public:
     void set_dev_mode(bool mode);
     void set_force_high_quality_rendering(bool enable);
     bool force_high_quality_rendering() const { return force_high_quality_rendering_; }
-    void set_render_dark_mask_enabled(bool enabled);
-    bool render_dark_mask_enabled() const { return render_dark_mask_enabled_; }
     void set_render_suppressed(bool suppressed);
     void set_input(Input* m);
     Input* get_input() const { return input; }
@@ -75,10 +82,6 @@ public:
     const std::vector<Asset*>& getFilteredActiveAssets() const;
     const std::vector<world::GridPoint*>& active_points() const { return active_points_; }
     const std::vector<Asset*>& getActiveRaw() const { return active_assets; }
-    const std::vector<Asset*>& getActiveLightAssets() const { return active_light_assets_; }
-    const std::vector<Asset*>& getActiveLitAssets() const { return active_light_assets_; }
-    const std::vector<Asset*>& getActiveStaticLightAssets() const { return active_static_light_assets_; }
-    const std::vector<Asset*>& getActiveMovingLightAssets() const { return active_moving_light_assets_; }
     std::vector<Asset*>& mutable_filtered_active_assets() { return filtered_active_assets; }
     WarpedScreenGrid& getView() { return camera_; }
     const WarpedScreenGrid& getView() const { return camera_; }
@@ -102,7 +105,6 @@ public:
     void close_asset_info_editor();
     bool is_asset_info_editor_open() const;
 
-    bool is_asset_info_lighting_section_expanded() const;
     void clear_editor_selection();
     void handle_sdl_event(const SDL_Event& e);
     void finalize_asset_drag(Asset* a, const std::shared_ptr<AssetInfo>& info);
@@ -120,7 +122,15 @@ public:
 
     void focus_camera_on_asset(Asset* a, double height_factor = 0.8, int duration_steps = 25);
 
-    void begin_frame_editor_session(Asset* asset, std::shared_ptr<animation_editor::AnimationDocument> document, std::shared_ptr<animation_editor::PreviewProvider> preview, const std::string& animation_id, std::function<void(const std::string&)> on_host_closed);
+    void begin_frame_editor_session(Asset* asset,
+                                    std::shared_ptr<animation_editor::AnimationDocument> document,
+                                    std::shared_ptr<animation_editor::PreviewProvider> preview,
+                                    const std::string& animation_id,
+                                    FrameEditorLaunchMode launch_mode,
+                                    std::function<void(const std::string&)> on_host_closed);
+
+    void log_asset_movement(Asset* asset, SDL_Point previous, SDL_Point current);
+    std::uint32_t current_frame_id() const { return frame_id_; }
 
     devmode::core::ManifestStore* manifest_store();
     const devmode::core::ManifestStore* manifest_store() const;
@@ -128,6 +138,7 @@ public:
     void notify_spawn_group_removed(const std::string& spawn_id);
 
     void show_dev_notice(const std::string& message, Uint32 duration_ms = 2000);
+    void notify_camera_activity(bool active);
 
     void set_dev_grid_overlay_callback(std::function<void()> cb) { dev_grid_overlay_callback_ = cb; }
 
@@ -150,6 +161,7 @@ public:
     const AssetLibrary& library() const;
 
     void set_rooms(std::vector<Room*> rooms);
+    void ensure_light_textures_loaded(Asset* asset);
     std::vector<Room*>& rooms();
     const std::vector<Room*>& rooms() const;
     void notify_rooms_changed();
@@ -162,14 +174,6 @@ public:
     void initialize_active_assets(SDL_Point center);
     std::uint64_t dev_active_state_version() const { return dev_active_state_version_; }
 
-    const LightMap* light_map() const;
-    LightMap*       light_map();
-    void force_shaded_assets_rerender();
-    bool apply_lighting_grid_subdivide(int subdivisions);
-    void set_map_light_panel_visible(bool visible);
-    bool is_map_light_panel_visible() const;
-    void set_update_map_light_enabled(bool enabled);
-    bool update_map_light_enabled() const;
 
     void apply_map_grid_settings(const MapGridSettings& settings, bool persist_json = true);
     int  map_grid_chunk_resolution() const;
@@ -179,12 +183,6 @@ public:
 
     bool is_dev_mode() const { return dev_mode; }
 
-    bool scene_light_map_only_mode() const;
-
-    int shading_group_count() const { return num_groups_; }
-
-    void notify_light_map_asset_moved(const Asset* asset);
-    void notify_light_map_static_assets_changed();
 
     std::vector<Asset*> all;
     Asset* player = nullptr;
@@ -193,14 +191,10 @@ public:
 
     void rebuild_from_grid_state();
 
-    void ensure_light_textures_loaded(Asset* asset);
-
     const std::vector<world::Chunk*>& active_chunks() const { return world_grid_.active_chunks(); }
 
 private:
     void save_map_info_json();
-    void apply_map_light_config();
-    bool on_map_light_changed();
     void hydrate_map_info_sections();
     void load_camera_settings_from_json();
     void write_camera_settings_to_json();
@@ -224,6 +218,7 @@ private:
     DevControls* dev_controls_ = nullptr;
     Room* dev_controls_last_room_ = nullptr;
     std::unique_ptr<QuickTaskPopup> quick_task_popup_;
+    PopupManager popup_manager_;
     WarpedScreenGrid camera_;
     SceneRenderer* scene = nullptr;
     int screen_width;
@@ -232,26 +227,15 @@ private:
     int dy = 0;
     std::vector<Asset*> active_assets;
     std::vector<Asset*> filtered_active_assets;
-    std::vector<Asset*> active_light_assets_;
-    std::vector<Asset*> active_static_light_assets_;
-    std::vector<Asset*> active_moving_light_assets_;
-    std::unordered_set<Asset*> active_moving_light_lookup_;
-    std::unordered_set<Asset*> scratch_moving_light_lookup_;
-    std::vector<Asset*> last_static_light_assets_;
-    std::vector<Asset*> last_moving_light_assets_;
-    std::uint64_t light_assets_version_ = 0;
-    std::uint64_t last_seen_light_assets_version_ = 0;
     std::vector<Room*> rooms_;
     std::size_t rooms_generation_ = 0;
     Room* current_room_ = nullptr;
-    int num_groups_ = 40;
     bool dev_mode = false;
     bool camera_settings_dirty_ = false;
     bool suppress_render_ = false;
 
     bool suppress_dev_renderer_ = false;
     bool force_high_quality_rendering_ = false;
-    bool render_dark_mask_enabled_ = true;
     bool depth_effects_enabled_ = false;
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
@@ -325,21 +309,6 @@ private:
     std::uint64_t dev_active_state_version_ = 1;
     std::uint64_t filtered_active_assets_hash_ = 0;
 
-    struct DevNotice {
-        using TexturePtr = std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)>;
-
-        DevNotice()
-            : texture(nullptr, SDL_DestroyTexture) {}
-
-        std::string message;
-        Uint32 expiry_ms = 0;
-        TexturePtr texture;
-        int texture_width = 0;
-        int texture_height = 0;
-        bool dirty = true;
-};
-
-    std::optional<DevNotice> dev_notice_;
     std::function<void()> dev_grid_overlay_callback_;
 
     void rebuild_non_player_update_buffer_if_needed();

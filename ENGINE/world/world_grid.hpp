@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include <vector>
 
-#include "utils/light_source.hpp"
 #include "utils/grid.hpp"
 #include "world/chunk_manager.hpp"
 #include "world/grid_point.hpp"
@@ -45,12 +44,6 @@ struct GridKeyHash {
 
 class WorldGrid {
 public:
-    struct LightInstance {
-        const GridPoint* point = nullptr;
-        Asset* asset = nullptr;
-        const LightSource* source = nullptr;
-    };
-
     struct RegionMetrics {
         std::uint32_t nodes_visited = 0;
         std::uint32_t branches_skipped = 0;
@@ -141,14 +134,6 @@ public:
                                                bool skip_inactive_branches,
                                                bool include_empty_nodes,
                                                RegionMetrics* metrics = nullptr) const;
-    std::vector<LightInstance> query_lights(const SDL_FRect& world_bounds,
-                                            int min_world_z,
-                                            int max_world_z,
-                                            bool skip_inactive_branches);
-    std::vector<LightInstance> query_lights(const SDL_FRect& world_bounds,
-                                            int min_world_z,
-                                            int max_world_z,
-                                            bool skip_inactive_branches) const;
     int max_resolution_layers() const;
 
 private:

@@ -1,5 +1,5 @@
-# VIBBLE 2D GAME ENGINE
- 
+﻿#VIBBLE 2D GAME ENGINE
+
 cmake_minimum_required(VERSION 3.20)
 project(VIBBLEEngine)
 
@@ -52,12 +52,9 @@ file(GLOB_RECURSE ENGINE_SRC CONFIGURE_DEPENDS
 )
 
 list(REMOVE_DUPLICATES ENGINE_SRC)
+list(REMOVE_ITEM ENGINE_SRC "${CMAKE_SOURCE_DIR}/ENGINE/dev_mode/frame_editor_session_child_timelines.cpp")
 
 add_executable(engine ${ENGINE_SRC})
-
-# Exclude old shim files from the build
-set(SHIM_FILES stride_player.hpp stride_player.cpp)
-list(REMOVE_ITEM ENGINE_SRC ${SHIM_FILES})
 
 # Unity build (jumbo) for faster compiles
 option(ENABLE_UNITY_BUILD "Enable unity builds for faster compilation" OFF)
@@ -195,6 +192,7 @@ add_executable(engine_tests
     TESTS/test_animation_child_visibility.cpp
     TESTS/test_animation_child_runtime.cpp
     TESTS/test_animation_child_clone.cpp
+    TESTS/test_frame_editor_async_payload.cpp
     TESTS/test_attack_validation.cpp
     TESTS/frame_editor_session_test_helpers.cpp
     ENGINE/asset/animation.cpp
@@ -202,15 +200,20 @@ add_executable(engine_tests
     ENGINE/asset/animation_cloner.cpp
     ENGINE/animation_update/child_attachment_controller.cpp
     ENGINE/animation_update/attack_validation.cpp
-    ENGINE/dev_mode/frame_editor_session_child_timelines.cpp
+    ENGINE/dev_mode/asset_sections/animation_editor_window/frame_editor/children/FrameChildrenEditor.cpp
+    ENGINE/dev_mode/asset_sections/animation_editor_window/AnimationDocument.cpp
+    ENGINE/dev_mode/dm_styles.cpp
     ENGINE/dev_mode/core/dev_json_store.cpp
     ENGINE/dev_mode/core/manifest_store.cpp
     ENGINE/dev_mode/manifest_asset_utils.cpp
     ENGINE/dev_mode/tag_utils.cpp
+    ENGINE/dev_mode/draw_utils.cpp
+    ENGINE/dev_mode/font_cache.cpp
+    ENGINE/dev_mode/widgets.cpp
+    ENGINE/dev_mode/frame_editors/shared/Point3DEditor.cpp
     ENGINE/core/manifest/manifest_loader.cpp
     ENGINE/utils/log.cpp
     ENGINE/utils/cache_manager.cpp
-    ENGINE/utils/generate_faded_mask.cpp
     ENGINE/utils/loading_status_notifier.cpp
   )
 

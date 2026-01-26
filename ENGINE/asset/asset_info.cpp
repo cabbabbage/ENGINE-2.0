@@ -3,7 +3,6 @@
 #include "asset/asset_types.hpp"
 #include "asset/animation_loader.hpp"
 #include "asset_info_methods/asset_child_loader.hpp"
-#include "asset_info_methods/lighting_loader.hpp"
 #include "utils/cache_manager.hpp"
 #include "utils/rebuild_queue.hpp"
 #include "core/manifest/manifest_loader.hpp"
@@ -138,197 +137,6 @@ std::vector<AsyncChildDefinition> parse_async_children(const nlohmann::json& dat
         }
     }
     return result;
-}
-
-constexpr int kLightTextureCacheVersion = 3;
-
-std::string light_signature(const LightSource& light) {
-    std::ostringstream oss;
-    oss << light.radius << '|'
-        << light.fall_off << '|'
-        << light.flare << '|'
-        << light.intensity << '|'
-        << light.flicker_speed << '|'
-        << light.flicker_smoothness;
-    return oss.str();
-}
-
-void destroy_light_textures(std::vector<LightSource>& lights) {
-    for (auto& light : lights) {
-        if (light.texture) {
-            SDL_DestroyTexture(light.texture);
-            light.texture = nullptr;
-        }
-        light.cached_w = 0;
-        light.cached_h = 0;
-    }
-}
-
-bool load_light_cache_metadata(const fs::path& meta_path,
-                               std::vector<std::string>& out_signatures) {
-    out_signatures.clear();
-    nlohmann::json meta;
-    if (!CacheManager::load_metadata(meta_path.generic_string(), meta)) {
-        return false;
-    }
-    if (!meta.is_object()) {
-        return false;
-    }
-    if (meta.value("version", -1) != kLightTextureCacheVersion) {
-        return false;
-    }
-    auto it = meta.find("signatures");
-    if (it == meta.end() || !it->is_array()) {
-        return false;
-    }
-    for (const auto& entry : *it) {
-        if (!entry.is_string()) {
-            return false;
-        }
-        out_signatures.push_back(entry.get<std::string>());
-    }
-    return true;
-}
-
-bool save_light_cache_metadata(const fs::path& meta_path,
-                               const std::vector<std::string>& signatures) {
-    nlohmann::json meta;
-    meta["version"]    = kLightTextureCacheVersion;
-    meta["signatures"] = signatures;
-    return CacheManager::save_metadata(meta_path.generic_string(), meta);
-}
-
-bool load_cached_light_textures(const fs::path& cache_dir,
-                                SDL_Renderer* renderer,
-                                std::vector<LightSource>& lights) {
-    if (!renderer) {
-        return false;
-    }
-    for (std::size_t i = 0; i < lights.size(); ++i) {
-        const fs::path png_path = cache_dir / ("light_" + std::to_string(i) + ".png");
-        if (!fs::exists(png_path)) {
-            destroy_light_textures(lights);
-            return false;
-        }
-        SDL_Surface* surface = CacheManager::load_surface(png_path.generic_string());
-        if (!surface) {
-            destroy_light_textures(lights);
-            return false;
-        }
-        SDL_Texture* tex = CacheManager::surface_to_texture(renderer, surface);
-        const int w = surface->w;
-        const int h = surface->h;
-        SDL_FreeSurface(surface);
-        if (!tex) {
-            destroy_light_textures(lights);
-            return false;
-        }
-        SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
-        lights[i].texture = tex;
-        lights[i].cached_w = w;
-        lights[i].cached_h = h;
-    }
-    return true;
-}
-
-bool try_load_cached_lights(const fs::path& cache_dir,
-                            SDL_Renderer* renderer,
-                            std::vector<LightSource>& lights,
-                            const std::vector<std::string>& signatures) {
-    const fs::path meta_path = cache_dir / "metadata.json";
-    std::vector<std::string> cached_signatures;
-    if (!load_light_cache_metadata(meta_path, cached_signatures)) {
-        return false;
-    }
-    if (cached_signatures != signatures) {
-        return false;
-    }
-    return load_cached_light_textures(cache_dir, renderer, lights);
-}
-
-bool regenerate_lights_via_python(const std::string& asset_name) {
-    if (asset_name.empty()) {
-        return false;
-    }
-
-    vibble::RebuildQueueCoordinator coordinator;
-    coordinator.request_light(asset_name);
-
-#if defined(_WIN32)
-    const std::string prefix =
-        "set \"PATH=%PATH%;C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v12.0\\bin\" && ";
-#else
-    const std::string prefix;
-#endif
-
-    std::cout << "[AssetInfo] Regenerating lights via light_tool.py for '"
-              << asset_name << "'\n";
-    if (!coordinator.run_light_tool(prefix)) {
-        std::cerr << "[AssetInfo] light_tool.py failed for '" << asset_name << "'\n";
-        return false;
-    }
-
-    return true;
-}
-
-float compute_light_fade_exponent(int fall_off) {
-    const float falloff_norm = std::clamp(static_cast<float>(fall_off) / 100.0f, 0.0f, 1.0f);
-    return 0.6f + 3.4f * falloff_norm;
-}
-
-bool build_fallback_light_texture(SDL_Renderer* renderer, LightSource& light) {
-    if (!renderer) {
-        return false;
-    }
-    const int radius = std::max(1, light.radius);
-    const int diameter = std::max(1, radius * 2);
-    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, diameter, diameter, 32, SDL_PIXELFORMAT_RGBA32);
-    if (!surface) {
-        return false;
-    }
-
-    if (SDL_LockSurface(surface) != 0) {
-        SDL_FreeSurface(surface);
-        return false;
-    }
-
-    const float center = static_cast<float>(diameter) * 0.5f;
-    const float radius_f = static_cast<float>(radius);
-    const float exponent = compute_light_fade_exponent(light.fall_off);
-    Uint32* pixels = static_cast<Uint32*>(surface->pixels);
-    const int pitch = surface->pitch / static_cast<int>(sizeof(Uint32));
-
-    for (int y = 0; y < diameter; ++y) {
-        for (int x = 0; x < diameter; ++x) {
-            const float dx = (static_cast<float>(x) + 0.5f) - center;
-            const float dy = (static_cast<float>(y) + 0.5f) - center;
-            const float dist = std::sqrt(dx * dx + dy * dy);
-            const float ratio = radius_f > 0.0f ? std::clamp(dist / radius_f, 0.0f, 1.0f) : 1.0f;
-            const float base = std::max(0.0f, 1.0f - ratio);
-            const float alpha_ratio = std::pow(base, exponent);
-            const Uint8 alpha = static_cast<Uint8>(std::clamp(static_cast<int>(std::lround(alpha_ratio * 255.0f)), 0, 255));
-            pixels[y * pitch + x] = SDL_MapRGBA(surface->format, 255, 255, 255, alpha);
-        }
-    }
-
-    SDL_UnlockSurface(surface);
-
-    SDL_Texture* texture = CacheManager::surface_to_texture(renderer, surface);
-    const int w = surface->w;
-    const int h = surface->h;
-    SDL_FreeSurface(surface);
-    if (!texture) {
-        return false;
-    }
-
-    SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-    if (light.texture) {
-        SDL_DestroyTexture(light.texture);
-    }
-    light.texture = texture;
-    light.cached_w = w;
-    light.cached_h = h;
-    return true;
 }
 
 float read_float_field(const nlohmann::json& data, const char* key, float fallback) {
@@ -839,8 +647,7 @@ AssetInfo::AssetInfo(const std::string &asset_folder_name)
     : AssetInfo(asset_folder_name, nlohmann::json::object()) {}
 
 AssetInfo::AssetInfo(const std::string& asset_folder_name, const nlohmann::json& metadata)
-: has_shading(false)
-, is_light_source(false) {
+{
         nlohmann::json data = metadata.is_object() ? metadata : nlohmann::json::object();
 
         std::string resolved_name = data.value("asset_name", asset_folder_name);
@@ -874,15 +681,10 @@ void AssetInfo::set_manifest_store_provider(ManifestStoreProvider provider) {
 }
 
 AssetInfo::~AssetInfo() {
-	clear_light_textures();
 	for (auto &[key, anim] : animations) {
                 anim.clear_texture_cache();
 	}
 	animations.clear();
-}
-
-void AssetInfo::clear_light_textures() {
-	destroy_light_textures(light_sources);
 }
 
 void AssetInfo::load_base_properties(const nlohmann::json &data) {
@@ -912,7 +714,6 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
                         tillable = info_json_.value("tileable", false);
                 }
         }
-        has_shading = data.value("has_shading", false);
         min_same_type_distance = data.value("min_same_type_distance", 0);
         min_distance_all = data.value("min_distance_all", 0);
         flipable = data.value("can_invert", false);
@@ -927,114 +728,6 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
 
 bool AssetInfo::has_tag(const std::string &tag) const {
     return tag_lookup_.find(tag) != tag_lookup_.end();
-}
-
-void AssetInfo::generate_lights(SDL_Renderer* renderer) {
-	clear_light_textures();
-	try {
-		LightingLoader::load(*this, info_json_);
-	} catch (...) {
-		std::cerr << "[AssetInfo] Failed to regenerate lighting info for '" << name << "'\n";
-		return;
-	}
-
-	if (!renderer || light_sources.empty()) {
-		return;
-	}
-
-	std::vector<std::string> signatures;
-	signatures.reserve(light_sources.size());
-	for (const auto& light : light_sources) {
-		signatures.push_back(light_signature(light));
-	}
-
-	const fs::path cache_dir = fs::path("cache") / name / "lights";
-
-	auto load_from_cache = [&]() -> bool {
-		return try_load_cached_lights(cache_dir, renderer, light_sources, signatures);
-};
-
-    bool loaded = load_from_cache();
-    if (!loaded && regenerate_lights_via_python(name)) {
-        loaded = load_from_cache();
-    }
-
-    if (loaded) {
-        return;
-    }
-
-    clear_light_textures();
-    std::cerr << "[AssetInfo] Missing light cache for '" << name
-              << "' after python regeneration; run engine/tools/light_tool.py manually.\n";
-}
-
-bool AssetInfo::rebuild_light_texture(SDL_Renderer* renderer, std::size_t light_index) {
-    if (!renderer) {
-        return false;
-    }
-    if (light_index >= light_sources.size()) {
-        return false;
-    }
-
-    LightSource& light = light_sources[light_index];
-
-    if (light.texture) {
-        SDL_DestroyTexture(light.texture);
-        light.texture = nullptr;
-        light.cached_w = 0;
-        light.cached_h = 0;
-    }
-
-    const std::filesystem::path png_path = std::filesystem::path("cache") / name / "lights" / ("light_" + std::to_string(light_index) + ".png");
-    SDL_Surface* surf = CacheManager::load_surface(png_path.generic_string());
-    if (!surf) {
-        return false;
-    }
-
-    SDL_Texture* tex = CacheManager::surface_to_texture(renderer, surf);
-    const int w = surf->w;
-    const int h = surf->h;
-    SDL_FreeSurface(surf);
-
-    if (!tex) {
-        return false;
-    }
-
-    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
-    light.texture = tex;
-    light.cached_w = w;
-    light.cached_h = h;
-    return true;
-}
-
-bool AssetInfo::ensure_light_textures(SDL_Renderer* renderer) {
-    if (!renderer) {
-        return false;
-    }
-
-    bool missing = false;
-    for (const auto& light : light_sources) {
-        if (!light.texture || light.cached_w <= 0 || light.cached_h <= 0) {
-            missing = true;
-            break;
-        }
-    }
-
-    if (!missing) {
-        return true;
-    }
-
-    generate_lights(renderer);
-
-    bool all_loaded = true;
-    for (std::size_t i = 0; i < light_sources.size(); ++i) {
-        if (!rebuild_light_texture(renderer, i)) {
-            if (!build_fallback_light_texture(renderer, light_sources[i])) {
-                all_loaded = false;
-            }
-        }
-    }
-    return all_loaded;
 }
 
 bool AssetInfo::commit_manifest() {
@@ -1321,72 +1014,6 @@ void AssetInfo::set_tillable(bool v) {
         info_json_["tileable"] = v;
 }
 
-void AssetInfo::set_shadow_mask_settings(const ShadowMaskSettings& settings) {
-        shadow_mask_settings = SanitizeShadowMaskSettings(settings);
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        nlohmann::json serialized = nlohmann::json::object();
-        serialized["expansion_ratio"]  = shadow_mask_settings.expansion_ratio;
-        serialized["blur_scale"]       = shadow_mask_settings.blur_scale;
-        serialized["falloff_start"]    = shadow_mask_settings.falloff_start;
-        serialized["falloff_exponent"] = shadow_mask_settings.falloff_exponent;
-        serialized["alpha_multiplier"] = shadow_mask_settings.alpha_multiplier;
-        info_json_["shadow_mask_settings"] = std::move(serialized);
-}
-
-void AssetInfo::set_shading_enabled(bool enabled) {
-        has_shading = enabled;
-        is_light_source = enabled || !light_sources.empty();
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        info_json_["has_shading"] = enabled;
-}
-
-namespace {
-constexpr float kShadingParallaxMin = 0.0f;
-constexpr float kShadingParallaxMax = 4.0f;
-constexpr float kShadingBrightnessMin = 0.0f;
-constexpr float kShadingBrightnessMax = 4.0f;
-constexpr float kShadingOpacityMin = 0.0f;
-constexpr float kShadingOpacityMax = 4.0f;
-
-float sanitize_shading_ratio(float value, float lo, float hi, float fallback) {
-    if (!std::isfinite(value)) {
-        return fallback;
-    }
-    return std::clamp(value, lo, hi);
-}
-}
-
-void AssetInfo::set_shading_parallax_amount(float amount) {
-        float sanitized = sanitize_shading_ratio(amount, kShadingParallaxMin, kShadingParallaxMax, shading_parallax_amount);
-        shading_parallax_amount = sanitized;
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        info_json_["shading_parallax_amount"] = sanitized;
-}
-
-void AssetInfo::set_shading_screen_brightness_multiplier(float multiplier) {
-        float sanitized = sanitize_shading_ratio( multiplier, kShadingBrightnessMin, kShadingBrightnessMax, shading_screen_brightness_multiplier);
-        shading_screen_brightness_multiplier = sanitized;
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        info_json_["shading_screen_brightness_multiplier"] = sanitized;
-}
-
-void AssetInfo::set_shading_opacity_multiplier(float multiplier) {
-        float sanitized = sanitize_shading_ratio( multiplier, kShadingOpacityMin, kShadingOpacityMax, shading_opacity_multiplier);
-        shading_opacity_multiplier = sanitized;
-        if (!info_json_.is_object()) {
-                info_json_ = nlohmann::json::object();
-        }
-        info_json_["shading_opacity_multiplier"] = sanitized;
-}
-
 Area* AssetInfo::find_area(const std::string& name) {
 	for (auto& na : areas) {
 		if (na.name == name) return na.area.get();
@@ -1644,22 +1271,6 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         }
 
         load_base_properties(data);
-        LightingLoader::load(*this, data);
-
-        ShadowMaskSettings parsed_settings{};
-        if (data.contains("shadow_mask_settings") && data["shadow_mask_settings"].is_object()) {
-                const auto& json_settings = data["shadow_mask_settings"];
-                parsed_settings.expansion_ratio  = json_settings.value("expansion_ratio", parsed_settings.expansion_ratio);
-                parsed_settings.blur_scale       = json_settings.value("blur_scale", parsed_settings.blur_scale);
-                parsed_settings.falloff_start    = json_settings.value("falloff_start", parsed_settings.falloff_start);
-                parsed_settings.falloff_exponent = json_settings.value("falloff_exponent", parsed_settings.falloff_exponent);
-                parsed_settings.alpha_multiplier = json_settings.value("alpha_multiplier", parsed_settings.alpha_multiplier);
-        }
-        set_shadow_mask_settings(parsed_settings);
-
-        set_shading_parallax_amount(read_float_field(data, "shading_parallax_amount", shading_parallax_amount));
-        set_shading_screen_brightness_multiplier( read_float_field(data, "shading_screen_brightness_multiplier", shading_screen_brightness_multiplier));
-        set_shading_opacity_multiplier( read_float_field(data, "shading_opacity_multiplier", shading_opacity_multiplier));
 
         const auto &ss = data.value("size_settings", nlohmann::json::object());
         scale_factor = ss.value("scale_percentage", 100.0f) / 100.0f;
@@ -1754,37 +1365,6 @@ void AssetInfo::set_spawn_groups(const nlohmann::json& groups) {
     }
 
     info_json_["spawn_groups"] = std::move(sanitized);
-}
-
-void AssetInfo::set_lighting(const std::vector<LightSource>& lights) {
-    light_sources = lights;
-    is_light_source = !lights.empty();
-
-    nlohmann::json arr = nlohmann::json::array();
-
-    for (const auto& l : lights) {
-        nlohmann::json j;
-        j["has_light_source"] = true;
-        j["light_intensity"] = l.intensity;
-        j["radius"] = l.radius;
-        j["falloff"] = l.fall_off;
-        j["flicker_speed"] = l.flicker_speed;
-        j["flicker_smoothness"] = l.flicker_smoothness;
-
-        j["flicker"] = l.flicker_speed;
-        j["flare"] = l.flare;
-        j["offset_x"] = l.offset_x;
-        j["offset_z"] = l.offset_z;
-        j["offset_y"] = 0;
-        j["light_color"] = { l.color.r, l.color.g, l.color.b };
-        j["in_front"] = l.in_front;
-        j["behind"] = l.behind;
-        j["render_to_dark_mask"] = l.render_to_dark_mask;
-        j["render_front_and_back_to_asset_alpha_mask"] =
-            l.render_front_and_back_to_asset_alpha_mask;
-        arr.push_back(std::move(j));
-    }
-    info_json_["lighting_info"] = std::move(arr);
 }
 
 bool AssetInfo::remove_area(const std::string& name) {

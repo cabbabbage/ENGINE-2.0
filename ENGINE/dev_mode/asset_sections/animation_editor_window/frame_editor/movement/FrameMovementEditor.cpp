@@ -17,6 +17,7 @@
 #include "FramePropertiesPanel.hpp"
 #include "MovementCanvas.hpp"
 #include "TotalsPanel.hpp"
+#include "dev_mode/core/dev_json_store.hpp"
 
 namespace animation_editor {
 
@@ -95,24 +96,18 @@ nlohmann::json serialize_frames_to_json(const std::vector<MovementFrame>& frames
         const MovementFrame& frame = frames[i];
         int dx = static_cast<int>(std::lround(frame.dx));
         int dy = static_cast<int>(std::lround(frame.dy));
-        nlohmann::json entry;
-        if (std::fabs(frame.dz) > 0.0001f) {
-            entry = nlohmann::json::object({
-                {"dx", dx},
-                {"dy", dy},
-                {"dz", static_cast<int>(std::lround(frame.dz))},
-                {"resort_z", frame.resort_z}
-            });
-        } else {
-            entry = nlohmann::json::array({dx, dy});
-            if (frame.resort_z) {
-                entry.push_back(frame.resort_z);
-            }
+        nlohmann::json entry = nlohmann::json::object({
+            {"dx", dx},
+            {"dy", dy},
+            {"dz", static_cast<int>(std::lround(frame.dz))}
+        });
+        if (frame.resort_z) {
+            entry["resort_z"] = frame.resort_z;
         }
         movement.push_back(entry);
     }
     if (movement.empty()) {
-        movement.push_back(nlohmann::json::array({0, 0}));
+        movement.push_back(nlohmann::json::object({{"dx", 0}, {"dy", 0}, {"dz", 0}}));
     }
     return movement;
 }
@@ -675,9 +670,17 @@ void FrameMovementEditor::apply_changes() {
         payload.erase("movement_variants");
     }
 
-    document_->replace_animation_payload(animation_id_, payload.dump());
+    payload["number_of_frames"] = variants_.front().frames.size();
 
-    document_->save_to_file();
+    if (document_->update_animation_payload(animation_id_, payload)) {
+        if (!document_->save_to_file_checked()) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "[FrameMovementEditor] Failed to persist movement edits for '%s'",
+                         animation_id_.c_str());
+        } else {
+            devmode::core::DevJsonStore::instance().flush_all();
+        }
+    }
     if (totals_panel_) totals_panel_->set_frames(frames_);
 }
 

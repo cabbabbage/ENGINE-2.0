@@ -1,11 +1,14 @@
 #pragma once
 
+#include <array>
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include <SDL.h>
+
+#include "core/AssetsManager.hpp"
 
 namespace animation_editor {
 
@@ -15,6 +18,7 @@ struct ResolvedMovement;
 class MovementSummaryWidget {
   public:
     using EditCallback = std::function<void(const std::string&)>;
+    using ModeLaunchCallback = std::function<void(const std::string&, FrameEditorLaunchMode)>;
     using GoToSourceCallback = std::function<void(const std::string&)>;
 
     MovementSummaryWidget();
@@ -23,6 +27,7 @@ class MovementSummaryWidget {
     void set_animation_id(const std::string& animation_id);
     void set_bounds(const SDL_Rect& bounds);
     void set_edit_callback(EditCallback callback);
+    void set_mode_launch_callback(ModeLaunchCallback callback);
     void set_go_to_source_callback(GoToSourceCallback callback);
 
     void update();
@@ -39,11 +44,15 @@ class MovementSummaryWidget {
     std::shared_ptr<AnimationDocument> document_;
     std::string animation_id_;
     EditCallback edit_callback_;
+    ModeLaunchCallback mode_launch_callback_;
     GoToSourceCallback go_to_source_callback_;
     SDL_Rect bounds_{0, 0, 0, 0};
     SDL_Rect button_rect_{0, 0, 0, 0};
+    std::array<SDL_Rect, 5> mode_button_rects_{};
     bool button_hovered_ = false;
     bool button_pressed_ = false;
+    std::array<bool, 5> mode_button_hovered_{{false, false, false, false, false}};
+    std::array<bool, 5> mode_button_pressed_{{false, false, false, false, false}};
     float total_dx_ = 0.0f;
     float total_dy_ = 0.0f;
     std::string totals_signature_;
@@ -55,4 +64,3 @@ class MovementSummaryWidget {
 };
 
 }
-

@@ -5,7 +5,6 @@
 #include "core/AssetsManager.hpp"
 #include "world/world_grid.hpp"
 #include "world/grid_point.hpp"
-#include "render/light_flicker.hpp"
 #include "render/render.hpp"
 #include "render/warped_screen_grid.hpp"
 
@@ -44,7 +43,6 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
     if (!renderer_ || !asset) return;
 
     asset->render_package.clear();
-    asset->scene_mask_lights.clear();
 
     asset->composite_scale_ = package_scale;
 
@@ -94,210 +92,9 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         asset->render_package.push_back(obj);
     };
 
-    auto add_scene_mask_light = [&](SDL_Texture* tex,
-                                    SDL_Rect rect,
-                                    SDL_Color color = {255, 255, 255, 255},
-                                    SDL_BlendMode blend = SDL_BLENDMODE_BLEND,
-                                    bool apply_scale = true,
-                                    SDL_RendererFlip flip = SDL_FLIP_NONE,
-                                    std::optional<SDL_Point> texture_size = std::nullopt,
-                                    float world_z_offset = 0.0f) {
-        if (!tex) return;
-        if (apply_scale) {
-            rect.w = static_cast<int>(std::lround(static_cast<float>(rect.w) * package_scale));
-            rect.h = static_cast<int>(std::lround(static_cast<float>(rect.h) * package_scale));
-            rect.w = std::max(1, rect.w);
-            rect.h = std::max(1, rect.h);
-        }
-        RenderObject obj{};
-        obj.texture   = tex;
-        obj.screen_rect = rect;
-        obj.color_mod = color;
-        obj.blend_mode = blend;
-        obj.flip       = flip;
-        if (texture_size.has_value()) {
-            obj.texture_w = texture_size->x;
-            obj.texture_h = texture_size->y;
-            obj.has_texture_size = (obj.texture_w > 0 && obj.texture_h > 0);
-        }
-        obj.world_z_offset = world_z_offset;
-        asset->scene_mask_lights.push_back(obj);
-    };
-
-    auto compute_light_color = [&](const LightSource& light) -> std::optional<SDL_Color> {
-        const int raw_intensity = std::clamp(light.intensity, 0, 255);
-        if (raw_intensity <= 0) {
-            return std::nullopt;
-        }
-
-        const float flicker_multiplier =
-            LightFlickerCalculator::compute_multiplier(light, flicker_time_seconds);
-
-        int scaled_intensity = static_cast<int>( std::lround(static_cast<float>(raw_intensity) * flicker_multiplier));
-        scaled_intensity = std::clamp(scaled_intensity, 0, 255);
-        if (scaled_intensity <= 0) {
-            return std::nullopt;
-        }
-
-        const float scale = static_cast<float>(scaled_intensity) / 255.0f;
-        SDL_Color color = light.color;
-
-        auto scale_channel = [&](Uint8 channel) -> Uint8 {
-            const int scaled = static_cast<int>(std::lround(static_cast<float>(channel) * scale));
-            return static_cast<Uint8>(std::clamp(scaled, 0, 255));
-};
-
-        color.r = scale_channel(color.r);
-        color.g = scale_channel(color.g);
-        color.b = scale_channel(color.b);
-        color.a = scale_channel(color.a);
-        if (color.a == 0) {
-            color.a = static_cast<Uint8>(scaled_intensity);
-        }
-
-        return color;
-};
-
-    if (asset->info) {
-        for (const auto& light_source : asset->info->light_sources) {
-            if (light_source.behind && light_source.texture) {
-                const auto light_color = compute_light_color(light_source);
-                if (!light_color) {
-                    continue;
-                }
-
-                int offset_x = light_source.offset_x;
-                if (asset->flipped) {
-                    offset_x = -offset_x;
-                }
-
-                int w, h;
-                SDL_QueryTexture(light_source.texture, nullptr, nullptr, &w, &h);
-                const float light_z = static_cast<float>(light_source.offset_z) * package_scale;
-                SDL_Rect dest_rect = {
-                    static_cast<int>(std::lround(asset->smoothed_translation_x() + offset_x * package_scale)), static_cast<int>(std::lround(asset->smoothed_translation_y())), w, h };
-                SDL_RendererFlip light_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
-
-                add_render_object(light_source.texture,
-                                  dest_rect,
-                                  *light_color,
-                                  SDL_BLENDMODE_ADD,
-                                  true,
-                                  0.0,
-                                  std::nullopt,
-                                  light_flip,
-                                  SDL_Point{w, h},
-                                  light_z);
-
-                if (light_source.render_to_dark_mask) {
-                    add_scene_mask_light(light_source.texture,
-                                         dest_rect,
-                                         *light_color,
-                                         SDL_BLENDMODE_ADD,
-                                         true,
-                                         light_flip,
-                                         SDL_Point{w, h},
-                                         light_z);
-                }
-            }
-        }
-    }
-
-    auto emit_child = [&](const Asset::AnimationChildAttachment& slot) {
-        if (slot.child_index < 0 || !slot.visible || !slot.animation || !slot.current_frame) {
-            return;
-        }
-
-        float child_base_scale = (slot.info && std::isfinite(slot.info->scale_factor) && slot.info->scale_factor > 0.0f) ? slot.info->scale_factor : 1.0f;
-
-        float child_current_scale = child_base_scale;
-
-        float camera_scale = 1.0f;
-        if (assets_) {
-            camera_scale = std::max(0.0001f, static_cast<float>(assets_->getView().get_scale()));
-        }
-
-        float child_desired_variant_scale = child_current_scale / camera_scale;
-        if (!std::isfinite(child_desired_variant_scale) || child_desired_variant_scale <= 0.0f) {
-            child_desired_variant_scale = child_current_scale;
-        }
-
-        const auto& child_steps = (slot.info && !slot.info->scale_variants.empty()) ? static_cast<const std::vector<float>&>(slot.info->scale_variants) : render_pipeline::ScalingLogic::DefaultScaleSteps();
-
-        auto child_selection = render_pipeline::ScalingLogic::Choose(child_desired_variant_scale, child_steps);
-        float child_nearest_variant_scale = child_selection.stored_scale;
-
-        float child_remaining_adjustment = 1.0f;
-        if (child_nearest_variant_scale > 0.0f) {
-            child_remaining_adjustment = child_current_scale / child_nearest_variant_scale;
-        }
-
-        const FrameVariant* variant =
-            slot.animation->get_frame(slot.current_frame, child_nearest_variant_scale);
-        SDL_Texture* tex = variant ? variant->get_base_texture() : nullptr;
-        if (!tex && slot.current_frame && !slot.current_frame->variants.empty()) {
-            tex = slot.current_frame->variants[0].base_texture;
-        }
-        if (!tex) {
-            return;
-        }
-
-        int tex_w = 0;
-        int tex_h = 0;
-        SDL_QueryTexture(tex, nullptr, nullptr, &tex_w, &tex_h);
-
-        const float base_adjustment = child_remaining_adjustment;
-        float perspective_multiplier = 1.0f;
-        float vertical_multiplier = 1.0f;
-        if (assets_) {
-            const bool apply_distance_scaling = !(slot.info);
-            if (apply_distance_scaling) {
-                SDL_Point world_point{ slot.world_pos.x, slot.world_pos.y };
-                float world_z_value = std::isfinite(slot.world_z) ? slot.world_z : 0.0f;
-                int world_z_int = static_cast<int>(std::lround(world_z_value));
-                const Asset* smoothing_asset = slot.spawned_asset ? slot.spawned_asset : asset;
-                const int smoothing_frame = slot.current_frame ? slot.current_frame->frame_index : 0;
-                const WarpedScreenGrid::RenderSmoothingKey smoothing_key(smoothing_asset, smoothing_frame);
-                const WarpedScreenGrid::RenderEffects effects =
-                    assets_->getView().compute_render_effects(world_point, 0.0f, 0.0f, smoothing_key, world_z_int);
-                if (std::isfinite(effects.distance_scale) && effects.distance_scale > 0.0f) {
-                    perspective_multiplier = effects.distance_scale;
-                }
-                if (std::isfinite(effects.vertical_scale) && effects.vertical_scale > 0.0f) {
-                    vertical_multiplier = effects.vertical_scale;
-                }
-            }
-        }
-
-        float width_px = static_cast<float>(tex_w) * base_adjustment * perspective_multiplier;
-        float height_px = static_cast<float>(tex_h) * base_adjustment * perspective_multiplier * vertical_multiplier;
-        int final_w = static_cast<int>(std::lround(width_px));
-        int final_h = static_cast<int>(std::lround(height_px));
-        final_w = std::max(1, final_w);
-        final_h = std::max(1, final_h);
-
-        SDL_Rect dest_rect{
-            slot.world_pos.x,
-            slot.world_pos.y,
-            final_w,
-            final_h
-};
-        SDL_Point pivot{ final_w / 2, final_h };
-        SDL_RendererFlip flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
-        float world_z_offset = std::isfinite(slot.world_z) ? slot.world_z : 0.0f;
-        add_render_object(tex,
-                          dest_rect,
-                          SDL_Color{255, 255, 255, 255},
-                          SDL_BLENDMODE_BLEND,
-                          false,
-                          static_cast<double>(slot.rotation_degrees),
-                          pivot,
-                          flip,
-                          SDL_Point{tex_w, tex_h},
-                          world_z_offset);
-};
-
     SDL_Texture* base_tex = nullptr;
+    SDL_Texture* depth_cue_foreground = nullptr;
+    SDL_Texture* depth_cue_background = nullptr;
 
     if (asset->info) {
         auto anim_it = asset->info->animations.find(asset->current_animation);
@@ -309,6 +106,8 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                     variant_idx = std::clamp(variant_idx, 0, static_cast<int>(variants.size()) - 1);
                     const FrameVariant& variant = variants[static_cast<std::size_t>(variant_idx)];
                     base_tex = variant.get_base_texture();
+                    depth_cue_foreground = variant.get_foreground_texture();
+                    depth_cue_background = variant.get_background_texture();
                 }
             }
         }
@@ -337,55 +136,69 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             static_cast<int>(std::lround(asset->smoothed_translation_y())),
             final_w,
             final_h
-};
-        add_render_object(base_tex, dest_rect, SDL_Color{255, 255, 255, 255}, SDL_BLENDMODE_BLEND, false, 0.0, std::nullopt, SDL_FLIP_NONE, SDL_Point{w, h});
-    }
+        };
+        SDL_RendererFlip base_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+        const Uint8 asset_alpha = static_cast<Uint8>(std::lround(std::clamp(asset->smoothed_alpha(), 0.0f, 1.0f) * 255.0f));
+        add_render_object(base_tex,
+                          dest_rect,
+                          SDL_Color{255, 255, 255, asset_alpha},
+                          SDL_BLENDMODE_BLEND,
+                          false,
+                          0.0,
+                          std::nullopt,
+                          base_flip,
+                          SDL_Point{w, h},
+                          asset->world_z_offset());
 
-    for (const auto& child_attachment : asset->animation_children()) {
-        emit_child(child_attachment);
-    }
+        bool have_vertical_distance = false;
+        float vertical_distance_from_center = 0.0f;
+        bool is_above_center = false;
+        if (assets_ && renderer_) {
+            const WarpedScreenGrid& cam = assets_->getView();
+            if (const auto* gp = cam.grid_point_for_asset(asset)) {
+                int screen_width = 0, screen_height = 0;
+                SDL_GetRendererOutputSize(renderer_, &screen_width, &screen_height);
+                const float center_y = static_cast<float>(screen_height) * 0.5f;
+                vertical_distance_from_center = std::abs(gp->screen.y - center_y);
+                is_above_center = gp->screen.y < center_y;
+                have_vertical_distance = std::isfinite(vertical_distance_from_center);
+            }
+        }
 
-    if (asset->info) {
-        for (const auto& light_source : asset->info->light_sources) {
-            if (light_source.in_front && light_source.texture) {
-                const auto light_color = compute_light_color(light_source);
-                if (!light_color) {
-                    continue;
-                }
+        SDL_Texture* overlay_texture = nullptr;
+        float overlay_opacity = 0.0f;
+        const float fg_distance = kDepthCueForegroundFullOpacityDistance;
+        const float bg_distance = kDepthCueBackgroundFullOpacityDistance;
+        if (have_vertical_distance && vertical_distance_from_center > 0.0f) {
+            if (is_above_center) {
+                // Above center: use background texture, interpolate from center to bg_distance
+                overlay_texture = depth_cue_background;
+                overlay_opacity = std::clamp(vertical_distance_from_center / bg_distance, 0.0f, 1.0f);
+            } else {
+                // Below center: use foreground texture, interpolate from center to fg_distance
+                overlay_texture = depth_cue_foreground;
+                overlay_opacity = std::clamp(vertical_distance_from_center / fg_distance, 0.0f, 1.0f);
+            }
+        }
 
-                int offset_x = light_source.offset_x;
-                if (asset->flipped) {
-                    offset_x = -offset_x;
-                }
-
-                int w, h;
-                SDL_QueryTexture(light_source.texture, nullptr, nullptr, &w, &h);
-                const float light_z = static_cast<float>(light_source.offset_z) * package_scale;
-                SDL_Rect dest_rect = {
-                    static_cast<int>(std::lround(asset->smoothed_translation_x() + offset_x * package_scale)), static_cast<int>(std::lround(asset->smoothed_translation_y())), w, h };
-                SDL_RendererFlip light_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
-
-                add_render_object(light_source.texture,
+        if (overlay_texture != nullptr && overlay_opacity > 0.0f) {
+            const Uint8 overlay_alpha = static_cast<Uint8>(std::lround(overlay_opacity * 255.0f));
+            if (overlay_alpha > 0) {
+                int overlay_tex_w = 0;
+                int overlay_tex_h = 0;
+                SDL_QueryTexture(overlay_texture, nullptr, nullptr, &overlay_tex_w, &overlay_tex_h);
+                overlay_tex_w = std::max(1, overlay_tex_w);
+                overlay_tex_h = std::max(1, overlay_tex_h);
+                add_render_object(overlay_texture,
                                   dest_rect,
-                                  *light_color,
-                                  SDL_BLENDMODE_ADD,
-                                  true,
+                                  SDL_Color{255, 255, 255, overlay_alpha},
+                                  SDL_BLENDMODE_BLEND,
+                                  false,
                                   0.0,
                                   std::nullopt,
-                                  light_flip,
-                                  SDL_Point{w, h},
-                                  light_z);
-
-                if (light_source.render_to_dark_mask) {
-                    add_scene_mask_light(light_source.texture,
-                                         dest_rect,
-                                         *light_color,
-                                         SDL_BLENDMODE_ADD,
-                                         true,
-                                         light_flip,
-                                         SDL_Point{w, h},
-                                         light_z);
-                }
+                                  base_flip,
+                                  SDL_Point{overlay_tex_w, overlay_tex_h},
+                                  asset->world_z_offset());
             }
         }
     }

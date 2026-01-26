@@ -151,8 +151,12 @@
       "start": "default"
     },
     "Bush_1": {
+      "animation_children": [],
       "animations": {
         "default": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
@@ -191,16 +195,34 @@
               "needs_rebuild": false
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "asset_directory": "SRC/assets/Bush_1",
       "asset_name": "Bush_1",
+      "asset_type": "object",
       "lighting_info": [],
       "start": "default"
     },
@@ -947,6 +969,7 @@
       "start": "default"
     },
     "Grass_1": {
+      "animation_children": [],
       "animations": {
         "default": {
           "frames": [
@@ -995,12 +1018,24 @@
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "SRC/assets/Grass_1",
       "asset_name": "Grass_1",
+      "async_children": [],
       "lighting_info": [],
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "size_settings": {
+        "scale_percentage": 2.0
+      },
+      "start": "default",
+      "tags": [
+        "#grass",
+        "#green"
+      ],
+      "tillable": false
     },
     "Grass_2": {
+      "animation_children": [],
       "animations": {
         "default": {
           "frames": [
@@ -1049,10 +1084,21 @@
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "SRC/assets/Grass_2",
       "asset_name": "Grass_2",
+      "async_children": [],
       "lighting_info": [],
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "size_settings": {
+        "scale_percentage": 2.0
+      },
+      "start": "default",
+      "tags": [
+        "#grass",
+        "#green"
+      ],
+      "tillable": false
     },
     "Pub": {
       "animations": {
@@ -1225,13 +1271,13 @@
       },
       "asset_directory": "SRC/assets/Tree_3",
       "asset_name": "Tree_3",
+      "asset_type": "object",
       "lighting_info": [],
       "start": "default"
     },
     "Vibble": {
       "animation_children": [
-        "Vibble_eyes",
-        "Vibble_attack_1"
+        "Vibble_eyes"
       ],
       "animations": {
         "attack": {
@@ -1239,6 +1285,8 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [
@@ -1251,31 +1299,29 @@
                 }
               ],
               "mode": "static"
-            },
-            {
-              "animation": "",
-              "asset": "Vibble_attack_1",
-              "child": 1,
-              "child_index": 1,
-              "frames": [
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 0,
-                  "visible": false
-                }
-              ],
-              "mode": "async"
             }
           ],
           "children": [
-            "Vibble_eyes",
-            "Vibble_attack_1"
+            "Vibble_eyes"
           ],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
             {
               "needs_rebuild": false
             }
@@ -1287,17 +1333,10 @@
             [
               0,
               0,
+              [],
               [
                 [
                   0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ],
-                [
-                  1,
                   0,
                   0,
                   0.0,
@@ -1369,6 +1408,8 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [
@@ -1381,27 +1422,10 @@
                 }
               ],
               "mode": "static"
-            },
-            {
-              "animation": "",
-              "asset": "Vibble_attack_1",
-              "child": 1,
-              "child_index": 1,
-              "frames": [
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 0,
-                  "visible": false
-                }
-              ],
-              "mode": "async"
             }
           ],
           "children": [
-            "Vibble_eyes",
-            "Vibble_attack_1"
+            "Vibble_eyes"
           ],
           "crop_frames": false,
           "derived_modifiers": {
@@ -1465,17 +1489,10 @@
             [
               0,
               0,
+              [],
               [
                 [
                   0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ],
-                [
-                  1,
                   0,
                   0,
                   0.0,
@@ -1510,39 +1527,24 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": -8,
-                  "dy": -144,
-                  "dz": -72,
+                  "dx": 98,
+                  "dy": -3,
+                  "dz": 0,
                   "visible": true
                 }
               ],
               "mode": "static"
-            },
-            {
-              "animation": "",
-              "asset": "Vibble_attack_1",
-              "child": 1,
-              "child_index": 1,
-              "frames": [
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 0,
-                  "visible": false
-                }
-              ],
-              "mode": "async"
             }
           ],
           "children": [
-            "Vibble_eyes",
-            "Vibble_attack_1"
+            "Vibble_eyes"
           ],
           "crop_frames": false,
           "flipped_source": false,
@@ -1560,29 +1562,21 @@
           "locked": false,
           "loop": true,
           "movement": [
-            [
-              0,
-              0,
-              false,
-              [
+            {
+              "children": [
                 [
                   0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ],
-                [
-                  1,
                   0,
                   0,
                   0.0,
                   true,
                   true
                 ]
-              ]
-            ]
+              ],
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
           ],
           "movement_total": {
             "dx": 0,
@@ -1646,24 +1640,10 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
-              "frames": [
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": -88,
-                  "visible": true
-                }
-              ],
-              "mode": "static"
-            },
-            {
-              "animation": "",
-              "asset": "Vibble_attack_1",
-              "child": 1,
-              "child_index": 1,
               "frames": [
                 {
                   "degree": 0.0,
@@ -1673,16 +1653,36 @@
                   "visible": false
                 }
               ],
-              "mode": "async"
+              "mode": "static"
             }
           ],
           "children": [
-            "Vibble_eyes",
-            "Vibble_attack_1"
+            "Vibble_eyes"
           ],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
             {
               "needs_rebuild": false
             }
@@ -1737,17 +1737,10 @@
               0,
               0,
               false,
+              [],
               [
                 [
                   0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ],
-                [
-                  1,
                   0,
                   0,
                   0.0,
@@ -1816,25 +1809,60 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [
                 {
                   "degree": 0.0,
                   "dx": 0,
-                  "dy": 144,
-                  "dz": -96,
-                  "visible": true
-                }
-              ],
-              "mode": "static"
-            },
-            {
-              "animation": "",
-              "asset": "Vibble_attack_1",
-              "child": 1,
-              "child_index": 1,
-              "frames": [
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
+                {
+                  "degree": 0.0,
+                  "dx": 0,
+                  "dy": 0,
+                  "dz": 0,
+                  "visible": false
+                },
                 {
                   "degree": 0.0,
                   "dx": 0,
@@ -1843,16 +1871,36 @@
                   "visible": false
                 }
               ],
-              "mode": "async"
+              "mode": "static"
             }
           ],
           "children": [
-            "Vibble_eyes",
-            "Vibble_attack_1"
+            "Vibble_eyes"
           ],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
             {
               "needs_rebuild": false
             }
@@ -1866,7 +1914,7 @@
                   "center_z": 1230.8443603515625,
                   "half_height": 702.7274780273438,
                   "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
+                  "rotation": -178.48147583007812
                 }
               ]
             },
@@ -1896,35 +1944,132 @@
           "locked": false,
           "loop": true,
           "movement": [
-            [
-              0,
-              0,
-              false,
-              [
+            {
+              "children": [
                 [
                   0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ],
-                [
-                  1,
                   0,
                   0,
                   0.0,
                   true,
                   true
                 ]
-              ]
-            ]
+              ],
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "children": [
+                [
+                  0,
+                  0,
+                  0,
+                  0.0,
+                  true,
+                  true
+                ]
+              ],
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            }
           ],
           "movement_total": {
             "dx": 0,
             "dy": 0
           },
-          "number_of_frames": 1,
+          "number_of_frames": 8,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
@@ -1940,6 +2085,8 @@
             {
               "animation": "",
               "asset": "Vibble_eyes",
+              "auto_start": true,
+              "autostart": true,
               "child": 0,
               "child_index": 0,
               "frames": [
@@ -1947,32 +2094,15 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
-                  "visible": false
+                  "dz": 100,
+                  "visible": true
                 }
               ],
               "mode": "static"
-            },
-            {
-              "animation": "",
-              "asset": "Vibble_attack_1",
-              "child": 1,
-              "child_index": 1,
-              "frames": [
-                {
-                  "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
-                  "dz": 0,
-                  "visible": false
-                }
-              ],
-              "mode": "async"
             }
           ],
           "children": [
-            "Vibble_eyes",
-            "Vibble_attack_1"
+            "Vibble_eyes"
           ],
           "crop_frames": false,
           "derived_modifiers": {
@@ -2083,6 +2213,21 @@
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
             {
               "needs_rebuild": false
             }
@@ -2418,7 +2563,7 @@
                   "center_z": 5163.4951171875,
                   "half_height": 1570.3231201171875,
                   "half_width": 5179.4228515625,
-                  "rotation": -93.25064086914063
+                  "rotation": -93.25064086914062
                 }
               ]
             }
@@ -2940,6 +3085,9 @@
       "animation_children": [],
       "animations": {
         "default": {
+          "attack_geometry": [
+            []
+          ],
           "child_timelines": [],
           "crop_frames": false,
           "flipped_source": false,
@@ -2948,11 +3096,19 @@
               "needs_rebuild": false
             }
           ],
+          "hit_geometry": [
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            }
+          ],
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
             [
+              0,
               0,
               0
             ]
@@ -2973,24 +3129,79 @@
           "speed_multiplier": 1.0
         },
         "down": {
+          "attack_geometry": [
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            }
+          ],
           "child_timelines": [],
           "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": false,
             "flipMovementY": true,
-            "flipX": false,
+            "flipX": true,
             "flipY": false,
             "reverse": false
           },
-          "flipped_source": false,
+          "flipped_source": true,
           "frames": [
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
             {
               "needs_rebuild": true
             }
           ],
+          "hit_geometry": [
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            }
+          ],
           "inherit_source_movement": true,
           "loop": true,
-          "number_of_frames": 1,
+          "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
@@ -3002,12 +3213,73 @@
           "speed_multiplier": 1.0
         },
         "left": {
+          "attack_geometry": [
+            [],
+            [],
+            [],
+            [],
+            [],
+            []
+          ],
           "child_timelines": [],
           "crop_frames": false,
           "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            },
+            {
+              "needs_rebuild": false
+            }
+          ],
+          "hit_geometry": [
+            {
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             }
           ],
           "inherit_source_movement": false,
@@ -3016,14 +3288,40 @@
           "movement": [
             [
               0,
+              0,
+              0
+            ],
+            [
+              -90,
+              0,
+              0
+            ],
+            [
+              66,
+              -121,
+              0
+            ],
+            [
+              -90,
+              0,
+              0
+            ],
+            [
+              -553,
+              6,
+              0
+            ],
+            [
+              -90,
+              0,
               0
             ]
           ],
           "movement_total": {
-            "dx": 0,
-            "dy": 0
+            "dx": -757,
+            "dy": -115
           },
-          "number_of_frames": 1,
+          "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
@@ -3064,34 +3362,115 @@
           "speed_multiplier": 1.0
         },
         "up": {
+          "attack_geometry": [
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            }
+          ],
           "child_timelines": [],
           "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": false,
             "flipMovementY": false,
-            "flipX": true,
+            "flipX": false,
             "flipY": false,
             "reverse": false
           },
-          "flipped_source": true,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
+          ],
+          "hit_geometry": [
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
             }
           ],
           "inherit_source_movement": false,
           "loop": true,
           "movement": [
-            [
-              0,
-              0
-            ]
+            {
+              "dx": 0,
+              "dy": 0,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": -46,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": -46,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": -46,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": -46,
+              "dz": 0
+            },
+            {
+              "dx": 0,
+              "dy": -46,
+              "dz": 0
+            }
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0
+            "dy": -230
           },
-          "number_of_frames": 1,
+          "number_of_frames": 6,
           "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
@@ -3171,17 +3550,37 @@
       "animation_children": [],
       "animations": {
         "default": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "anti_tags": [],
@@ -3227,6 +3626,26 @@
       "asset_name": "yellow_flower",
       "lighting_info": [],
       "start": "default"
+    }
+  },
+  "image_effects": {
+    "background": {
+      "blur": 1.950000004768376,
+      "brightness": -0.05999999046325684,
+      "contrast": 0.0,
+      "hue": 0.0,
+      "saturation_blue": 0.0,
+      "saturation_green": 0.0,
+      "saturation_red": -0.3
+    },
+    "foreground": {
+      "blur": 0.999999284744262,
+      "brightness": 0.04000004291534424,
+      "contrast": 0.23999998569488526,
+      "hue": 0.0,
+      "saturation_blue": 0.0,
+      "saturation_green": 0.0,
+      "saturation_red": 0.4200000286102295
     }
   },
   "maps": {
@@ -3279,8 +3698,20 @@
           {
             "candidates": [
               {
-                "chance": 100,
+                "chance": 189,
                 "name": "null"
+              },
+              {
+                "chance": 71,
+                "name": "##grass"
+              },
+              {
+                "chance": 99,
+                "name": "Grass_1"
+              },
+              {
+                "chance": 53,
+                "name": "Grass_2"
               }
             ],
             "display_name": "batch_map_assets",
@@ -3358,6 +3789,22 @@
               "required_children": []
             }
           ]
+        },
+        {
+          "bounding_extent": 7071.067811865475,
+          "level": 1,
+          "max_rooms": 1,
+          "min_rooms": 0,
+          "name": "layer_1",
+          "ring_radius": 10461.0,
+          "rooms": [
+            {
+              "max_instances": 1,
+              "min_instances": 0,
+              "name": "yassss",
+              "required_children": []
+            }
+          ]
         }
       ],
       "map_layers_settings": {
@@ -3424,16 +3871,16 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 1000,
+          "camera_height_px": 607,
           "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 60.0,
+          "camera_tilt_deg": 45.0,
           "camera_y_distance_px": 0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            139,
+            36,
             242,
-            36,
-            36,
             255
           ],
           "edge_smoothness": 101,
@@ -3462,8 +3909,8 @@
                 }
               ],
               "display_name": "Vibble",
-              "dx": -84,
-              "dy": 1100,
+              "dx": -508,
+              "dy": 2140,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -3516,41 +3963,12 @@
                 },
                 {
                   "chance": 100,
-                  "name": "trail"
-                }
-              ],
-              "display_name": "trail",
-              "dx": 176,
-              "dy": 2696,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 6496,
-              "origional_width": 7040,
-              "position": "Exact",
-              "priority": 2,
-              "resolution": 3,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-28b3021146bc"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
                   "name": "Casino"
                 }
               ],
               "display_name": "Casino",
-              "dx": -908,
-              "dy": 388,
+              "dx": -836,
+              "dy": -508,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -3560,7 +3978,7 @@
               "origional_height": 6376,
               "origional_width": 6376,
               "position": "Exact",
-              "priority": 3,
+              "priority": 2,
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
@@ -3589,7 +4007,7 @@
               "origional_height": 6376,
               "origional_width": 6376,
               "position": "Exact",
-              "priority": 4,
+              "priority": 3,
               "resolution": 5,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
@@ -3618,7 +4036,7 @@
               "origional_height": 6376,
               "origional_width": 6376,
               "position": "Exact",
-              "priority": 5,
+              "priority": 4,
               "resolution": 5,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
@@ -3636,8 +4054,8 @@
                 }
               ],
               "display_name": "spider",
-              "dx": -2292,
-              "dy": 140,
+              "dx": -1028,
+              "dy": 1404,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -3647,13 +4065,38 @@
               "origional_height": 6376,
               "origional_width": 6376,
               "position": "Exact",
-              "priority": 6,
+              "priority": 5,
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-c6162102e00c"
             }
           ]
+        },
+        "yassss": {
+          "camera_height_px": 20725,
+          "camera_pan_y_percent": 0,
+          "camera_tilt_deg": 60.0,
+          "camera_y_distance_px": 0,
+          "camera_zoom_percent": 0,
+          "curvyness": 2,
+          "display_color": [
+            138,
+            242,
+            36,
+            255
+          ],
+          "edge_smoothness": 2,
+          "geometry": "Square",
+          "inherits_map_assets": false,
+          "is_boss": false,
+          "is_spawn": false,
+          "max_height": 10000,
+          "max_width": 10000,
+          "min_height": 1500,
+          "min_width": 1500,
+          "name": "yassss",
+          "spawn_groups": []
         }
       },
       "trails_data": {

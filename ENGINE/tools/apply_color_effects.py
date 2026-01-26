@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 VIBBLE 2D Game Engine
-Apply color and lighting effects to a single image.
+Apply color effects to a single image.
 
 Usage:
   python apply_color_effects.py <img_path> <output_path> <layer_type>
@@ -279,6 +279,12 @@ class ApplyEffects:
 
         is_foreground = bool(getattr(img, "foreground", False))
 
+        # Preserve original alpha channel for blur operations
+        if img.mode != "RGBA":
+            img = img.convert("RGBA")
+
+        original_alpha = img.getchannel("A")
+
         if v > 0.0:
             max_radius = 20.0
             base_radius = v * max_radius
@@ -287,21 +293,27 @@ class ApplyEffects:
 
             if is_foreground:
                 radius = base_radius * 2.0
-                blurred = img.filter(ImageFilter.GaussianBlur(radius=radius))
+                # Apply blur only to RGB channels, preserve alpha
+                rgb_img = img.convert("RGB")
+                blurred_rgb = rgb_img.filter(ImageFilter.GaussianBlur(radius=radius))
 
                 ring_radius = max(1.0, radius * 0.5)
                 ring_percent = 80
-                ring = blurred.filter(
+                ring_rgb = blurred_rgb.filter(
                     ImageFilter.UnsharpMask(
                         radius=ring_radius,
                         percent=ring_percent,
                         threshold=3,
                     )
                 )
-                return ring
+                # Recombine with original alpha
+                result = Image.merge("RGBA", (ring_rgb.split()[0], ring_rgb.split()[1], ring_rgb.split()[2], original_alpha))
+                return result
             else:
                 radius = base_radius * 1.3
-                blurred = img.filter(ImageFilter.GaussianBlur(radius=radius))
+                # Apply blur only to RGB channels, preserve alpha
+                rgb_img = img.convert("RGB")
+                blurred_rgb = rgb_img.filter(ImageFilter.GaussianBlur(radius=radius))
 
                 lum = img.convert("L")
 
@@ -315,17 +327,26 @@ class ApplyEffects:
                     ImageFilter.GaussianBlur(radius=max(1.0, radius * 0.8))
                 )
 
-                bright_blurred = ImageEnhance.Brightness(blurred).enhance(1.4)
-                result = Image.composite(bright_blurred, blurred, mask)
+                bright_blurred_rgb = ImageEnhance.Brightness(blurred_rgb).enhance(1.4)
+                # Recombine with original alpha
+                result_rgb = Image.composite(bright_blurred_rgb, blurred_rgb, mask)
+                result = Image.merge("RGBA", (result_rgb.split()[0], result_rgb.split()[1], result_rgb.split()[2], original_alpha))
                 return result
 
+        # For sharpening, apply to RGB only and preserve alpha
         strength = -v
         radius = 0.7 + strength * 3.3
         percent = 80 + strength * 220
         threshold = 0
-        return img.filter(
+
+        # Apply sharpening only to RGB channels
+        rgb_img = img.convert("RGB")
+        sharpened_rgb = rgb_img.filter(
             ImageFilter.UnsharpMask(radius=radius, percent=int(percent), threshold=threshold)
         )
+        # Recombine with original alpha
+        result = Image.merge("RGBA", (sharpened_rgb.split()[0], sharpened_rgb.split()[1], sharpened_rgb.split()[2], original_alpha))
+        return result
 
     # ---------- CPU implementation ----------
 
@@ -355,6 +376,9 @@ class ApplyEffects:
         b = img_float[:, :, 2]
         a = img_float[:, :, 3]
 
+        # Preserve original alpha channel for final output
+        original_alpha = a.copy()
+
         alpha_mask = a > 0
 
         if (
@@ -368,7 +392,9 @@ class ApplyEffects:
                 and abs(hue_deg) < 1e-6
             )
         ):
-            img_uint8 = (img_float * 255.0).astype(np.uint8)
+            # No visible pixels or no color changes needed, but still preserve original alpha
+            img_float = np.stack([r, g, b, original_alpha], axis=2)
+            img_uint8 = np.clip(img_float * 255.0, 0, 255).astype(np.uint8)
             result = Image.fromarray(img_uint8, mode="RGBA")
             result = self._apply_blur_or_sharpen(result, blur)
             return result
@@ -415,7 +441,8 @@ class ApplyEffects:
         g[alpha_mask] = g_vis
         b[alpha_mask] = b_vis
 
-        img_float = np.stack([r, g, b, a], axis=2)
+        # Use original alpha channel instead of potentially modified one
+        img_float = np.stack([r, g, b, original_alpha], axis=2)
         img_uint8 = np.clip(img_float * 255.0, 0, 255).astype(np.uint8)
         result = Image.fromarray(img_uint8, mode="RGBA")
         result = self._apply_blur_or_sharpen(result, blur)
@@ -456,6 +483,9 @@ class ApplyEffects:
         b = img_t[:, :, 2]
         a = img_t[:, :, 3]
 
+        # Preserve original alpha channel for final output
+        original_alpha = a.clone()
+
         alpha_mask = a > 0
 
         if (
@@ -469,6 +499,8 @@ class ApplyEffects:
                 and abs(hue_deg) < 1e-6
             )
         ):
+            # No visible pixels or no color changes needed, but still preserve original alpha
+            img_t = torch.stack([r, g, b, original_alpha], dim=2)
             img_uint8 = (img_t.clamp(0.0, 1.0) * 255.0).byte().cpu().numpy()
             result = Image.fromarray(img_uint8, mode="RGBA")
             result = self._apply_blur_or_sharpen(result, blur)
@@ -516,7 +548,8 @@ class ApplyEffects:
         g[alpha_mask] = g_vis
         b[alpha_mask] = b_vis
 
-        img_t = torch.stack([r, g, b, a], dim=2)
+        # Use original alpha channel instead of potentially modified one
+        img_t = torch.stack([r, g, b, original_alpha], dim=2)
         img_uint8 = (img_t.clamp(0.0, 1.0) * 255.0).byte().cpu().numpy()
         result = Image.fromarray(img_uint8, mode="RGBA")
         result = self._apply_blur_or_sharpen(result, blur)

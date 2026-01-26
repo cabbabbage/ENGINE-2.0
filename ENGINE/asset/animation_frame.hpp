@@ -33,9 +33,6 @@ public:
         return variants[index].get_background_texture();
     }
 
-    SDL_Texture* get_shadow_mask_texture(int index) const {
-        return variants[index].get_shadow_mask_texture();
-    }
 
     std::vector<AnimationChildFrameData> children;
     std::vector<int> child_start_events;

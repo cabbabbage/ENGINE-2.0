@@ -2,7 +2,6 @@
 setlocal enabledelayedexpansion
 
 set "LOG_FILE=%~dp0log.txt"
-type nul > "%LOG_FILE%"
 set "SCRIPT_PATH=%~f0"
 
 if not defined VIBBLE_SUPPRESS_PAUSE set "VIBBLE_SUPPRESS_PAUSE=1"

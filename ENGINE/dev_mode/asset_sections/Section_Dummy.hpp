@@ -135,22 +135,6 @@ struct Section_Tags        : public DummySection { Section_Tags()        : Dummy
 struct Section_Tags        : public DummySection { Section_Tags()        : DummySection("Tags") {} };
 struct Section_Tags        : public DummySection { Section_Tags()        : DummySection("Tags") {} };
 struct Section_Tags        : public DummySection { Section_Tags()        : DummySection("Tags") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
-struct Section_Lighting    : public DummySection { Section_Lighting()    : DummySection("Lighting") {} };
 struct Section_Json        : public DummySection { Section_Json()        : DummySection("JSON") {} };
 struct Section_Json        : public DummySection { Section_Json()        : DummySection("JSON") {} };
 struct Section_Json        : public DummySection { Section_Json()        : DummySection("JSON") {} };
@@ -167,4 +151,3 @@ struct Section_Json        : public DummySection { Section_Json()        : Dummy
 struct Section_Json        : public DummySection { Section_Json()        : DummySection("JSON") {} };
 struct Section_Json        : public DummySection { Section_Json()        : DummySection("JSON") {} };
 struct Section_Json        : public DummySection { Section_Json()        : DummySection("JSON") {} };
-

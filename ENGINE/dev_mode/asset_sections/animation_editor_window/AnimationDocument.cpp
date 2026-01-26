@@ -11,6 +11,9 @@
 #include <unordered_set>
 #include <unordered_map>
 
+#include "dev_mode/core/dev_json_store.hpp"
+#include "asset/animation.hpp"
+
 namespace {
 
 using animation_editor::AnimationDocument;
@@ -177,6 +180,38 @@ nlohmann::json build_child_timeline_entry(int child_index,
     entry["animation"] = source.value("animation", std::string{});
     std::string mode = sanitize_child_mode_string(source);
     entry["mode"] = mode;
+    const bool has_start_frame_field = source.contains("start_frame") || source.contains("start");
+    const bool has_start_time_field = source.contains("start_time");
+    int start_frame = 0;
+    float start_time = 0.0f;
+    if (has_start_frame_field) {
+        if (source.contains("start_frame")) {
+            start_frame = parse_int(source["start_frame"], 0);
+        } else if (source.contains("start")) {
+            start_frame = parse_int(source["start"], 0);
+        }
+    }
+    if (has_start_time_field) {
+        start_time = parse_float(source["start_time"],
+                                 static_cast<float>(start_frame) / static_cast<float>(kBaseAnimationFps));
+    } else if (has_start_frame_field) {
+        start_time = static_cast<float>(start_frame) / static_cast<float>(kBaseAnimationFps);
+    }
+    if (has_start_frame_field) {
+        entry["start_frame"] = start_frame;
+    }
+    if (has_start_time_field || has_start_frame_field) {
+        entry["start_time"] = start_time;
+    }
+    const bool has_auto_start = source.contains("auto_start") || source.contains("autostart");
+    if (has_auto_start || mode == "static") {
+        const bool auto_start = parse_bool_field(
+            source,
+            "auto_start",
+            parse_bool_field(source, "autostart", mode == "static"));
+        entry["auto_start"] = auto_start;
+        entry["autostart"] = auto_start;
+    }
     const auto frames_it = source.find("frames");
     if (frames_it != source.end()) {
         entry["frames"] = sanitize_child_frames(*frames_it, mode, static_frame_count);
@@ -226,102 +261,6 @@ nlohmann::json normalize_child_timelines(const nlohmann::json& raw,
     return normalized;
 }
 
-const nlohmann::json* find_child_array_const(const nlohmann::json& entry) {
-    auto nested = [](const nlohmann::json& value) -> const nlohmann::json* {
-        if (value.is_array() && !value.empty() && value[0].is_array()) {
-            return &value;
-        }
-        return nullptr;
-};
-    if (entry.is_array()) {
-        if (entry.size() > 4 && entry[4].is_array()) {
-            return &entry[4];
-        }
-        if (entry.size() > 3) {
-            if (const auto* ptr = nested(entry[3])) {
-                return ptr;
-            }
-        }
-        if (entry.size() > 2) {
-            if (const auto* ptr = nested(entry[2])) {
-                return ptr;
-            }
-        }
-    } else if (entry.is_object()) {
-        auto it = entry.find("children");
-        if (it != entry.end() && it->is_array()) {
-            return &(*it);
-        }
-    }
-    return nullptr;
-}
-
-int read_child_index_from_entry(const nlohmann::json& entry) {
-    if (entry.is_object()) {
-        auto it = entry.find("child_index");
-        if (it != entry.end() && it->is_number_integer()) {
-            return it->get<int>();
-        }
-    }
-    if (entry.is_array() && !entry.empty()) {
-        const auto& idx = entry[0];
-        if (idx.is_number_integer()) {
-            return idx.get<int>();
-        }
-        if (idx.is_number()) {
-            return static_cast<int>(idx.get<double>());
-        }
-    }
-    return -1;
-}
-
-nlohmann::json convert_legacy_children_to_timelines(const nlohmann::json& movement,
-                                                    const std::vector<std::string>& child_names,
-                                                    std::size_t static_frame_count) {
-    if (!movement.is_array() || movement.empty() || child_names.empty()) {
-        return nlohmann::json::array();
-    }
-    const std::size_t resolved_static_frames = std::max<std::size_t>(1, static_frame_count);
-    const std::size_t frame_count = std::min(static_cast<std::size_t>(movement.size()), resolved_static_frames);
-    std::vector<std::unordered_map<int, nlohmann::json>> per_frame(frame_count == 0 ? 1 : frame_count);
-    for (std::size_t frame_idx = 0; frame_idx < frame_count; ++frame_idx) {
-        const auto* child_array = find_child_array_const(movement[frame_idx]);
-        if (!child_array) {
-            continue;
-        }
-        for (const auto& entry : *child_array) {
-            int child_index = read_child_index_from_entry(entry);
-            if (child_index < 0 || static_cast<std::size_t>(child_index) >= child_names.size()) {
-                continue;
-            }
-            per_frame[frame_idx][child_index] = normalize_child_frame_json(entry);
-        }
-    }
-
-    nlohmann::json legacy = nlohmann::json::array();
-    legacy.get_ref<nlohmann::json::array_t&>().reserve(child_names.size());
-    for (std::size_t child_idx = 0; child_idx < child_names.size(); ++child_idx) {
-        nlohmann::json frames = nlohmann::json::array();
-        frames.get_ref<nlohmann::json::array_t&>().reserve(resolved_static_frames);
-        for (std::size_t frame_idx = 0; frame_idx < resolved_static_frames; ++frame_idx) {
-            std::size_t actual_frame = 0;
-            if (!per_frame.empty()) {
-                actual_frame = std::min(frame_idx, per_frame.size() - 1);
-            }
-            auto it = per_frame[actual_frame].find(static_cast<int>(child_idx));
-            if (it != per_frame[actual_frame].end()) {
-                frames.push_back(it->second);
-            } else {
-                frames.push_back(default_child_frame_json());
-            }
-        }
-        legacy.push_back(nlohmann::json{{"child", static_cast<int>(child_idx)},
-                                         {"asset", child_names[child_idx]},
-                                         {"mode", "static"},
-                                         {"frames", frames}});
-    }
-    return legacy;
-}
 
 nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::json& source_payload) {
     nlohmann::json payload = source_payload.is_object() ? source_payload : nlohmann::json::object();
@@ -551,10 +490,6 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         static_frame_count = std::max<int>(1, payload.value("number_of_frames", 1));
     }
     nlohmann::json timelines = payload.contains("child_timelines") ? payload["child_timelines"] : nlohmann::json::array();
-    if ((!payload.contains("child_timelines") || !payload["child_timelines"].is_array()) && !child_names.empty()) {
-        const nlohmann::json movement = payload.contains("movement") ? payload["movement"] : nlohmann::json::array();
-        timelines = convert_legacy_children_to_timelines(movement, child_names, static_frame_count);
-    }
     if (child_names.empty()) {
         payload["child_timelines"] = nlohmann::json::array();
     } else {
@@ -631,7 +566,7 @@ void AnimationDocument::load_from_file(const std::filesystem::path& info_path) {
 
 void AnimationDocument::load_from_manifest(const nlohmann::json& asset_json,
                                            const std::filesystem::path& asset_root,
-                                           std::function<void(const nlohmann::json&)> persist_callback) {
+                                           std::function<bool(const nlohmann::json&)> persist_callback) {
     info_path_.clear();
     asset_root_ = asset_root;
     persist_callback_ = std::move(persist_callback);
@@ -697,6 +632,10 @@ void AnimationDocument::load_from_json_object(const nlohmann::json& root) {
 }
 
 void AnimationDocument::save_to_file(bool fire_callback) const {
+    (void)save_to_file_checked(fire_callback);
+}
+
+bool AnimationDocument::save_to_file_checked(bool fire_callback) const {
     nlohmann::json root;
     if (persist_callback_) {
         root = base_data_.is_object() ? base_data_ : nlohmann::json::object();
@@ -750,38 +689,41 @@ void AnimationDocument::save_to_file(bool fire_callback) const {
         root["start"] = start_animation_.has_value() ? *start_animation_ : std::string{};
     }
 
-    auto write_root_to_disk = [&](const std::filesystem::path& path) {
-        if (path.empty()) return;
-        std::ofstream out(path);
-        if (!out.good()) {
-            SDL_Log("AnimationDocument: failed to open %s for writing", path.string().c_str());
-            return;
+    auto write_root_to_disk = [&](const std::filesystem::path& path) -> bool {
+        if (path.empty()) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "AnimationDocument: no output path available for saving.");
+            return false;
         }
-        out << root.dump(4);
+        devmode::core::DevJsonStore::instance().submit(path, root, 4);
+        return true;
     };
 
+    bool saved = true;
     if (persist_callback_) {
-        persist_callback_(root);
-        base_data_ = root;
-
-        // Persist to a concrete file as well so external consumers (e.g., game reload) see changes.
-        if (!info_path_.empty()) {
-            write_root_to_disk(info_path_);
-        } else if (!asset_root_.empty()) {
-            write_root_to_disk(asset_root_ / "manifest.json");
+        saved = persist_callback_(root);
+        if (!saved) {
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "AnimationDocument: failed to persist manifest update.");
+        } else {
+            base_data_ = root;
         }
     } else {
         if (info_path_.empty()) {
-            SDL_Log("AnimationDocument: no info path available for saving.");
-            return;
+            SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                         "AnimationDocument: no info path available for saving.");
+            return false;
         }
-        write_root_to_disk(info_path_);
+        saved = write_root_to_disk(info_path_);
         base_data_ = root;
     }
-    dirty_ = false;
-    if (fire_callback && on_saved_callback_) {
+    if (saved) {
+        dirty_ = false;
+    }
+    if (saved && fire_callback && on_saved_callback_) {
         on_saved_callback_();
     }
+    return saved;
 }
 
 bool AnimationDocument::consume_dirty_flag() const {
@@ -989,18 +931,53 @@ void AnimationDocument::replace_animation_payload(const std::string& animation_i
         SDL_Log("AnimationDocument: ignoring invalid payload for '%s'", animation_id.c_str());
         return;
     }
-    std::string normalized = serialize_payload(coerce_payload(animation_id, parsed));
+    (void)update_animation_payload(animation_id, parsed);
+}
+
+bool AnimationDocument::update_animation_payload(const std::string& animation_id, const nlohmann::json& payload) {
+    auto it = animations_.find(animation_id);
+    if (it == animations_.end()) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "AnimationDocument: missing animation '%s' for update.", animation_id.c_str());
+        return false;
+    }
+    if (!payload.is_object()) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION,
+                     "AnimationDocument: payload update for '%s' is not an object.", animation_id.c_str());
+        return false;
+    }
+    std::string normalized = serialize_payload(coerce_payload(animation_id, payload));
     if (it->second == normalized) {
-        return;
+        return false;
     }
     it->second = std::move(normalized);
     mark_dirty();
+    return true;
+}
+
+bool AnimationDocument::save_animation_payload_immediately(const std::string& animation_id, const nlohmann::json& payload) {
+    // First update the payload using the regular update method
+    bool update_success = update_animation_payload(animation_id, payload);
+    if (!update_success) {
+        return false;
+    }
+
+    // Immediately persist the changes to disk
+    return save_to_file_checked(true);
 }
 
 std::optional<std::string> AnimationDocument::animation_payload(const std::string& animation_id) const {
     auto it = animations_.find(animation_id);
     if (it == animations_.end()) return std::nullopt;
     return it->second;
+}
+
+std::optional<nlohmann::json> AnimationDocument::animation_payload_json(const std::string& animation_id) const {
+    auto it = animations_.find(animation_id);
+    if (it == animations_.end()) {
+        return std::nullopt;
+    }
+    return parse_payload(it->second, animation_id);
 }
 
 namespace {

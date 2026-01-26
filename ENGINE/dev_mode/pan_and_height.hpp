@@ -1,6 +1,7 @@
 #pragma once
 
 #include <SDL.h>
+#include <optional>
 
 class WarpedScreenGrid;
 class Input;
@@ -9,7 +10,10 @@ class PanAndHeight {
 public:
     void set_height_scale_factor(double factor);
 
-    void handle_input(WarpedScreenGrid& cam, const Input& input, bool pan_blocked);
+    void handle_input(WarpedScreenGrid& cam,
+                      const Input& input,
+                      bool pan_blocked,
+                      std::optional<int> scroll_override = std::nullopt);
 
     void cancel(WarpedScreenGrid& cam);
 

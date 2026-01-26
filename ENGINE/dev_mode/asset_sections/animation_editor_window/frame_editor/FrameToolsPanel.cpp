@@ -10,7 +10,7 @@ namespace animation_editor {
 namespace {
 
 bool is_children_mode(FrameToolsPanel::Mode mode) {
-    return mode == FrameToolsPanel::Mode::StaticChildren ||
+    return mode == FrameToolsPanel::Mode::SyncChildren ||
            mode == FrameToolsPanel::Mode::AsyncChildren;
 }
 }
@@ -303,7 +303,7 @@ void FrameToolsPanel::rebuild_rows() {
             rows.push_back({ dx_w_.get(), dy_w_.get() });
             break;
         }
-        case Mode::StaticChildren:
+        case Mode::SyncChildren:
         case Mode::AsyncChildren: {
             rows.push_back({ child_dropdown_widget_.get() });
             rows.push_back({ child_mode_widget_.get(), child_visible_widget_.get() });

@@ -69,7 +69,6 @@ public:
     void reset();
 
     bool passes(const Asset& asset) const;
-    bool render_dark_mask_enabled() const;
 
     void set_grid_resolution_range(int min_resolution, int max_resolution);
     void set_grid_resolution_value(int resolution);
@@ -77,7 +76,7 @@ public:
     void set_grid_resolution_change_callback(std::function<void(int)> cb);
 
 private:
-    enum class FilterKind { MapAssets, CurrentRoom, RenderDarkMask, Type, SpawnMethod };
+    enum class FilterKind { MapAssets, CurrentRoom, Type, SpawnMethod };
 
     struct FilterEntry {
         std::string id;
@@ -88,7 +87,6 @@ private:
     struct FilterState {
         bool map_assets = false;
         bool current_room = true;
-        bool render_dark_mask = true;
         std::unordered_map<std::string, bool> type_filters;
         std::unordered_map<std::string, bool> method_filters;
 };

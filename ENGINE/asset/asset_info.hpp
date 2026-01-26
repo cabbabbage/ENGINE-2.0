@@ -2,8 +2,6 @@
 
 #include "animation.hpp"
 #include "utils/area.hpp"
-#include "utils/shadow_mask_settings.hpp"
-#include "utils/light_source.hpp"
 #include <map>
 #include <nlohmann/json.hpp>
 #include <cmath>
@@ -60,16 +58,10 @@ class AssetInfo {
     ~AssetInfo();
 
     bool has_tag(const std::string &tag) const;
-    std::vector<LightSource> light_sources;
     std::string name;
     std::string type;
     std::string start_animation;
     bool passable;
-    bool has_shading = false;
-    ShadowMaskSettings shadow_mask_settings{};
-    float shading_parallax_amount = 0.0f;
-    float shading_screen_brightness_multiplier = 1.0f;
-    float shading_opacity_multiplier = 1.0f;
     int min_same_type_distance;
     int min_distance_all;
     int starting_health = 100;
@@ -85,7 +77,6 @@ class AssetInfo {
     std::vector<std::string> animation_children;
 
     std::vector<AsyncChildDefinition> async_children;
-    bool is_light_source = false;
     bool moving_asset = false;
     std::vector<float>  scale_variants;
     struct NamedArea {
@@ -147,13 +138,6 @@ class AssetInfo {
 
     void set_children(const std::vector<ChildInfo>& asset_children);
 
-    void set_lighting(const std::vector<LightSource>& lights);
-    void set_shadow_mask_settings(const ShadowMaskSettings& settings);
-    void set_shading_enabled(bool enabled);
-    void set_shading_parallax_amount(float amount);
-    void set_shading_screen_brightness_multiplier(float multiplier);
-    void set_shading_opacity_multiplier(float multiplier);
-
     void set_spawn_groups_payload(const nlohmann::json& groups);
     nlohmann::json spawn_groups_payload() const;
 
@@ -192,13 +176,8 @@ class AssetInfo {
 
     void set_spawn_groups(const nlohmann::json& groups);
 
-    bool rebuild_light_texture(SDL_Renderer* renderer, std::size_t light_index);
-    bool ensure_light_textures(SDL_Renderer* renderer);
-
         private:
     void load_base_properties(const nlohmann::json &data);
-    void generate_lights(SDL_Renderer* renderer);
-    void clear_light_textures();
     void load_animations(const nlohmann::json& data);
     void load_areas(const nlohmann::json &data);
     void load_children(const nlohmann::json &data);
@@ -212,7 +191,6 @@ class AssetInfo {
     std::unordered_set<std::string> tag_lookup_;
     std::unordered_set<std::string> anti_tag_lookup_;
     friend class AnimationLoader;
-    friend class LightingLoader;
     friend class ChildLoader;
 #if defined(ASSET_INFO_ENABLE_TEST_ACCESS)
     friend struct AssetInfoTestAccess;

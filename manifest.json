@@ -951,8 +951,8 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
+                  "dx": -146,
+                  "dy": -1,
                   "dz": 0,
                   "visible": false
                 }
@@ -1682,11 +1682,16 @@
       "tillable": false
     },
     "Vibble_eyes": {
+      "animation_children": [],
       "animations": {
         "default": {
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {}
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
@@ -1700,11 +1705,15 @@
             "dy": 0
           },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "anti_tags": [],

@@ -55,7 +55,7 @@ public:
                     committing_ = false;
                     return false;
                 }
-                if (!validate_()) {
+                if (validate_ && !validate_()) {
                     committing_ = false;
                     return false;
                 }

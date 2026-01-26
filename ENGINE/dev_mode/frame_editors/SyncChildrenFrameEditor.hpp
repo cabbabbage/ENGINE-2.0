@@ -51,6 +51,9 @@ private:
         float z = 0.0f;
     };
     ChildWorldPose child_world_pose(int child_index) const;
+    std::vector<int> static_child_point_indices() const;
+    int child_index_from_point_index(int point_index) const;
+    int point_index_for_child(int child_index) const;
     void ensure_manifest_transaction();
     void refresh_selection_state();
 

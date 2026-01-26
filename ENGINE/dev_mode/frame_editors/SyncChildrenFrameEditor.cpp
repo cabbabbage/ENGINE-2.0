@@ -52,7 +52,14 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
                 if (static_frames_by_child_.empty() || child_assets_.empty()) {
                     return;  // Data not ready
                 }
-                selected_child_index_ = std::clamp(index, 0, static_cast<int>(child_assets_.size()) - 1);
+                const int child_index = child_index_from_point_index(index);
+                if (child_index < 0) {
+                    return;
+                }
+                selected_child_index_ = std::clamp(child_index, 0, static_cast<int>(child_assets_.size()) - 1);
+                if (dd_child_selector_) {
+                    dd_child_selector_->set_selected(selected_child_index_);
+                }
                 if (selection_state_) {
                     selection_state_->target = SelectionTarget::ChildPoint;
                     selection_state_->child_index = selected_child_index_;
@@ -81,7 +88,7 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 
             float dx_world = (new_world_pos.x - static_cast<float>(anchor.x)) / scale;
             float dy_world = (new_world_pos.y - static_cast<float>(anchor.y)) / scale;
-            float dz_world = new_world_z / scale; // Sync children use Z relative to 0
+            float dz_world = (new_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
             auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
             sample.dx = flipped ? -dx_world : dx_world;
@@ -114,7 +121,7 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 
             float dx_world = (selection_state_->world_pos.x - static_cast<float>(anchor.x)) / scale;
             float dy_world = (selection_state_->world_pos.y - static_cast<float>(anchor.y)) / scale;
-            float dz_world = selection_state_->world_z / scale;
+            float dz_world = (selection_state_->world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
             auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
             sample.dx = flipped ? -dx_world : dx_world;
@@ -163,7 +170,14 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
     dd_child_selector_->set_on_selection_changed([this](int index) {
         selected_child_index_ = index;
         if (selection_state_) {
+            selection_state_->target = SelectionTarget::ChildPoint;
             selection_state_->child_index = selected_child_index_;
+        }
+        if (point_3d_editor_) {
+            const int point_index = point_index_for_child(selected_child_index_);
+            if (point_index >= 0) {
+                point_3d_editor_->set_selected_point_index(point_index);
+            }
         }
         data_dirty_ = true;
     });
@@ -252,17 +266,19 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         SDL_Point anchor = asset_anchor_world();
         std::vector<SDL_FPoint> point_screens;
         std::vector<bool> point_selectable;
+        const std::vector<int> point_indices = static_child_point_indices();
+        point_screens.reserve(point_indices.size());
+        point_selectable.reserve(point_indices.size());
 
-        for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
-            if (idx >= child_modes_.size() || child_modes_[idx] == AnimationChildMode::Async) {
-                continue;
-            }
-            const ChildWorldPose pose = child_world_pose(static_cast<int>(idx));
+        for (int child_index : point_indices) {
+            const ChildWorldPose pose = child_world_pose(child_index);
             SDL_FPoint world_pos{anchor.x + pose.pos.x, anchor.y + pose.pos.y};
-            SDL_FPoint screen = cam.map_to_screen_f(world_pos);
+            SDL_FPoint screen{};
+            if (!cam.project_world_point(world_pos, pose.z, screen)) {
+                screen = cam.map_to_screen_f(world_pos);
+            }
             point_screens.push_back(screen);
-            // Only the currently selected child is selectable
-            point_selectable.push_back(static_cast<int>(idx) == selected_child_index_);
+            point_selectable.push_back(true);
         }
 
         // Only consume event if point editor actually handled it
@@ -299,7 +315,7 @@ void SyncChildrenFrameEditor::update(const Input& /*input*/, float /*dt*/) {
 }
 
 void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
-    if (!renderer || !context_.target || !context_.assets) return;
+    if (!renderer || !context_.target || !context_.assets || !point_3d_editor_) return;
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
 
     // Render child assets
@@ -324,13 +340,17 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
         const ChildWorldPose pose = child_world_pose(static_cast<int>(idx));
         SDL_FPoint child_pos = pose.pos;
         SDL_FPoint world{anchor.x + child_pos.x, anchor.y + child_pos.y};
-        SDL_FPoint screen = cam.map_to_screen_f(world);
+        SDL_FPoint screen{};
+        if (!cam.project_world_point(world, pose.z, screen)) {
+            screen = cam.map_to_screen_f(world);
+        }
 
         const bool is_current_child = (static_cast<int>(idx) == selected_child_index_);
         const bool is_selected = (is_current_child &&
                                  selection_state_ &&
                                  selection_state_->target == SelectionTarget::ChildPoint);
-        const bool is_hovered = (static_cast<int>(idx) == point_3d_editor_->get_hovered_point_index());
+        const int hovered_child = child_index_from_point_index(point_3d_editor_->get_hovered_point_index());
+        const bool is_hovered = (static_cast<int>(idx) == hovered_child);
 
         if (is_current_child) {
             point_3d_editor_->render_selectable_point(renderer, screen, is_selected, is_hovered);
@@ -573,10 +593,43 @@ SyncChildrenFrameEditor::ChildWorldPose SyncChildrenFrameEditor::child_world_pos
     const float scale = attachment_scale();
     const float dx = sample.dx * scale;
     const float dy = sample.dy * scale;
+    const float dz = sample.dz * scale;
     const float world_dx = context_.target && context_.target->flipped ? -dx : dx;
     pose.pos = SDL_FPoint{world_dx, dy};
-    pose.z = 0.0f;
+    pose.z = (context_.target ? context_.target->world_z_offset() : 0.0f) + dz;
     return pose;
+}
+
+std::vector<int> SyncChildrenFrameEditor::static_child_point_indices() const {
+    std::vector<int> indices;
+    indices.reserve(child_assets_.size());
+    for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
+        if (idx < child_modes_.size() && child_modes_[idx] == AnimationChildMode::Async) {
+            continue;
+        }
+        indices.push_back(static_cast<int>(idx));
+    }
+    return indices;
+}
+
+int SyncChildrenFrameEditor::child_index_from_point_index(int point_index) const {
+    if (point_index < 0) {
+        return -1;
+    }
+    const std::vector<int> indices = static_child_point_indices();
+    if (point_index >= static_cast<int>(indices.size())) {
+        return -1;
+    }
+    return indices[static_cast<std::size_t>(point_index)];
+}
+
+int SyncChildrenFrameEditor::point_index_for_child(int child_index) const {
+    const std::vector<int> indices = static_child_point_indices();
+    auto it = std::find(indices.begin(), indices.end(), child_index);
+    if (it == indices.end()) {
+        return -1;
+    }
+    return static_cast<int>(std::distance(indices.begin(), it));
 }
 
 

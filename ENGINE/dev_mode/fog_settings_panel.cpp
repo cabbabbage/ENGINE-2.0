@@ -1,6 +1,9 @@
 #include "fog_settings_panel.hpp"
+#include "dev_mode/dev_ui_settings.hpp"
 
 #include <algorithm>
+#include <cmath>
+#include <string_view>
 
 namespace {
 constexpr float kMinGridMultiplier = 0.25f;
@@ -14,6 +17,22 @@ constexpr float kBaseScaleStep = 0.25f;
 constexpr float kMinVerticalOffset = -300.0f;
 constexpr float kMaxVerticalOffset = 300.0f;
 constexpr float kVerticalOffsetStep = 1.0f;
+
+constexpr std::string_view kGridSpacingSettingKey = "dev_ui.fog.grid_spacing_multiplier";
+constexpr std::string_view kBaseSizeScaleSettingKey = "dev_ui.fog.base_size_scale";
+constexpr std::string_view kVerticalOffsetSettingKey = "dev_ui.fog.vertical_offset";
+
+float load_saved_setting(std::string_view key, float default_value, float min_value, float max_value) {
+    const double stored = devmode::ui_settings::load_number(key, default_value);
+    const float as_float = std::isfinite(stored) ? static_cast<float>(stored) : default_value;
+    return std::clamp(as_float, min_value, max_value);
+}
+
+float clamp_and_save(std::string_view key, float value, float min_value, float max_value) {
+    const float clamped = std::clamp(value, min_value, max_value);
+    devmode::ui_settings::save_number(key, clamped);
+    return clamped;
+}
 }
 
 FogSettingsPanel::FogSettingsPanel()
@@ -24,12 +43,32 @@ FogSettingsPanel::FogSettingsPanel()
 }
 
 void FogSettingsPanel::build() {
+    const float saved_grid_multiplier = load_saved_setting(
+        kGridSpacingSettingKey,
+        DynamicFogSystem::kDefaultGridSpacingMultiplier,
+        kMinGridMultiplier,
+        kMaxGridMultiplier);
+    const float saved_base_scale = load_saved_setting(
+        kBaseSizeScaleSettingKey,
+        DynamicFogSystem::kDefaultBaseSizeScale,
+        kMinBaseScale,
+        kMaxBaseScale);
+    const float saved_vertical_offset = load_saved_setting(
+        kVerticalOffsetSettingKey,
+        DynamicFogSystem::kDefaultVerticalOffset,
+        kMinVerticalOffset,
+        kMaxVerticalOffset);
+
+    DynamicFogSystem::set_grid_spacing_multiplier(saved_grid_multiplier);
+    DynamicFogSystem::set_base_size_scale(saved_base_scale);
+    DynamicFogSystem::set_vertical_offset(saved_vertical_offset);
+
     grid_spacing_slider_ = std::make_unique<FloatSliderWidget>(
         "Grid Spacing Multiplier",
         kMinGridMultiplier,
         kMaxGridMultiplier,
         kGridStep,
-        DynamicFogSystem::grid_spacing_multiplier(),
+        saved_grid_multiplier,
         2);
 
     base_scale_slider_ = std::make_unique<FloatSliderWidget>(
@@ -37,7 +76,7 @@ void FogSettingsPanel::build() {
         kMinBaseScale,
         kMaxBaseScale,
         kBaseScaleStep,
-        DynamicFogSystem::base_size_scale(),
+        saved_base_scale,
         2);
 
     vertical_offset_slider_ = std::make_unique<FloatSliderWidget>(
@@ -45,17 +84,20 @@ void FogSettingsPanel::build() {
         kMinVerticalOffset,
         kMaxVerticalOffset,
         kVerticalOffsetStep,
-        DynamicFogSystem::vertical_offset(),
+        saved_vertical_offset,
         0);
 
     grid_spacing_slider_->set_on_value_changed([](float v) {
-        DynamicFogSystem::set_grid_spacing_multiplier(v);
+        const float clamped = clamp_and_save(kGridSpacingSettingKey, v, kMinGridMultiplier, kMaxGridMultiplier);
+        DynamicFogSystem::set_grid_spacing_multiplier(clamped);
     });
     base_scale_slider_->set_on_value_changed([](float v) {
-        DynamicFogSystem::set_base_size_scale(v);
+        const float clamped = clamp_and_save(kBaseSizeScaleSettingKey, v, kMinBaseScale, kMaxBaseScale);
+        DynamicFogSystem::set_base_size_scale(clamped);
     });
     vertical_offset_slider_->set_on_value_changed([](float v) {
-        DynamicFogSystem::set_vertical_offset(v);
+        const float clamped = clamp_and_save(kVerticalOffsetSettingKey, v, kMinVerticalOffset, kMaxVerticalOffset);
+        DynamicFogSystem::set_vertical_offset(clamped);
     });
 
     Rows rows;
@@ -66,7 +108,7 @@ void FogSettingsPanel::build() {
 }
 
 void FogSettingsPanel::set_grid_spacing_multiplier(float multiplier) {
-    const float clamped = std::clamp(multiplier, kMinGridMultiplier, kMaxGridMultiplier);
+    const float clamped = clamp_and_save(kGridSpacingSettingKey, multiplier, kMinGridMultiplier, kMaxGridMultiplier);
     if (grid_spacing_slider_) {
         grid_spacing_slider_->set_value(clamped);
     }
@@ -74,7 +116,7 @@ void FogSettingsPanel::set_grid_spacing_multiplier(float multiplier) {
 }
 
 void FogSettingsPanel::set_base_size_scale(float scale) {
-    const float clamped = std::clamp(scale, kMinBaseScale, kMaxBaseScale);
+    const float clamped = clamp_and_save(kBaseSizeScaleSettingKey, scale, kMinBaseScale, kMaxBaseScale);
     if (base_scale_slider_) {
         base_scale_slider_->set_value(clamped);
     }
@@ -82,7 +124,7 @@ void FogSettingsPanel::set_base_size_scale(float scale) {
 }
 
 void FogSettingsPanel::set_vertical_offset(float offset) {
-    const float clamped = std::clamp(offset, kMinVerticalOffset, kMaxVerticalOffset);
+    const float clamped = clamp_and_save(kVerticalOffsetSettingKey, offset, kMinVerticalOffset, kMaxVerticalOffset);
     if (vertical_offset_slider_) {
         vertical_offset_slider_->set_value(clamped);
     }

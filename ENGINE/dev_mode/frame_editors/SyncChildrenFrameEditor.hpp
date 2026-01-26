@@ -56,6 +56,7 @@ private:
     int point_index_for_child(int child_index) const;
     void ensure_manifest_transaction();
     void refresh_selection_state();
+    void sync_visibility_checkbox();
 
     FrameEditorContext context_{};
     SelectionState* selection_state_ = nullptr;

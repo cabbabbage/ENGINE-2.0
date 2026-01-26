@@ -65,6 +65,7 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
                     selection_state_->child_index = selected_child_index_;
                 }
                 refresh_selection_state();
+                sync_visibility_checkbox();
             }
         });
 
@@ -156,6 +157,8 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         }
         selected_frame_index_ = frame;
         data_dirty_ = true;
+        sync_visibility_checkbox();
+        refresh_selection_state();
     });
 
     // Initialize child selector dropdown
@@ -180,6 +183,8 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             }
         }
         data_dirty_ = true;
+        sync_visibility_checkbox();
+        refresh_selection_state();
     });
 
     // Initialize visibility checkbox
@@ -201,6 +206,8 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         });
 
     ensure_manifest_transaction();
+    // Initial sync of visibility checkbox with current frame/child state
+    sync_visibility_checkbox();
 }
 
 void SyncChildrenFrameEditor::end() {
@@ -318,13 +325,18 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
     if (!renderer || !context_.target || !context_.assets || !point_3d_editor_) return;
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
 
-    // Render child assets
+    // Render child assets - sync their positions from slot data first
     const auto& slots = context_.target->animation_children();
     for (std::size_t i = 0; i < slots.size(); ++i) {
         const auto& slot = slots[i];
         if (!slot.visible) continue;
         Asset* child = context_.assets->find_child_timeline_asset(context_.target, static_cast<int>(i));
         if (!child) continue;
+        // Explicitly sync child asset position from slot data during frame editing
+        // This ensures the child renders at the correct position even without calling Asset::update()
+        child->pos = slot.world_pos;
+        child->set_world_z_offset(slot.world_z);
+        child->mark_composite_dirty();
         CompositeAssetRenderer composite_renderer(renderer, context_.assets);
         composite_renderer.update(child, 0.0f);
     }
@@ -529,9 +541,10 @@ void SyncChildrenFrameEditor::apply_current_frame_to_children() {
         const auto& timeline = static_frames_by_child_[idx];
         if (selected_frame_index_ >= static_cast<int>(timeline.size())) continue;
         const auto& sample = timeline[selected_frame_index_];
-        if (!sample.has_data && !sample.visible) {
-            continue;
-        }
+        // Always include all children in overrides - do not skip any.
+        // apply_frame_data() sets all slots to visible=false first, and only
+        // slots in the override list get updated. Skipping children here would
+        // leave them invisible even if they should be visible.
         AnimationChildFrameData entry{};
         entry.child_index = static_cast<int>(idx);
         entry.dx = static_cast<int>(std::lround(sample.dx));
@@ -662,13 +675,36 @@ void SyncChildrenFrameEditor::refresh_selection_state() {
     }
     selection_state_->child_index = selected_child_index_;
     const ChildWorldPose pose = child_world_pose(selected_child_index_);
-    selection_state_->world_pos = pose.pos;
-    selection_state_->world_z = pose.z;
     SDL_Point anchor = asset_anchor_world();
+    // Store ABSOLUTE world position (anchor + offset) so callbacks can correctly convert back to offsets
+    selection_state_->world_pos = SDL_FPoint{
+        static_cast<float>(anchor.x) + pose.pos.x,
+        static_cast<float>(anchor.y) + pose.pos.y
+    };
+    selection_state_->world_z = pose.z;
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-    SDL_FPoint world{anchor.x + pose.pos.x, anchor.y + pose.pos.y};
-    SDL_FPoint screen = cam.map_to_screen_f(world);
+    SDL_FPoint screen{};
+    if (!cam.project_world_point(selection_state_->world_pos, selection_state_->world_z, screen)) {
+        screen = cam.map_to_screen_f(selection_state_->world_pos);
+    }
     selection_state_->screen_pos = round_point(screen);
+}
+
+void SyncChildrenFrameEditor::sync_visibility_checkbox() {
+    if (!cb_child_visible_) {
+        return;
+    }
+    // Get the visibility state for the currently selected child and frame
+    bool visible = false;
+    if (selected_child_index_ >= 0 &&
+        selected_child_index_ < static_cast<int>(static_frames_by_child_.size()) &&
+        selected_frame_index_ >= 0 && selected_frame_index_ < frame_count_) {
+        const auto& timeline = static_frames_by_child_[static_cast<std::size_t>(selected_child_index_)];
+        if (selected_frame_index_ < static_cast<int>(timeline.size())) {
+            visible = timeline[static_cast<std::size_t>(selected_frame_index_)].visible;
+        }
+    }
+    cb_child_visible_->set_value(visible);
 }
 
 }  // namespace devmode::frame_editors

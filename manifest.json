@@ -951,10 +951,10 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": -146,
-                  "dy": -1,
-                  "dz": 0,
-                  "visible": false
+                  "dx": -33,
+                  "dy": -40,
+                  "dz": 67,
+                  "visible": true
                 }
               ],
               "mode": "static"
@@ -1208,10 +1208,10 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": 0,
-                  "dy": 0,
+                  "dx": -68,
+                  "dy": -161,
                   "dz": 0,
-                  "visible": false
+                  "visible": true
                 },
                 {
                   "degree": 0.0,

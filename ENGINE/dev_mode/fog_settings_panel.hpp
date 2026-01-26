@@ -15,8 +15,10 @@ public:
 
     void set_grid_spacing_multiplier(float multiplier);
     void set_base_size_scale(float scale);
+    void set_vertical_offset(float offset);
 
 private:
     std::unique_ptr<FloatSliderWidget> grid_spacing_slider_;
     std::unique_ptr<FloatSliderWidget> base_scale_slider_;
+    std::unique_ptr<FloatSliderWidget> vertical_offset_slider_;
 };

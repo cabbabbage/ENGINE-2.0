@@ -905,7 +905,8 @@ void AssetInfo::set_animation_children(const std::vector<std::string>& children)
             }
         }
         anim.child_assets() = std::move(merged);
-        anim.rebuild_child_timelines_from_frames();
+        anim.rebuild_frames_from_child_timelines();
+        anim.refresh_child_start_events();
     }
 }
 

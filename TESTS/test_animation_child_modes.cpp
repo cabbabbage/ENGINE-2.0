@@ -36,44 +36,46 @@ void seed_parent_frames(Animation& animation, std::size_t count) {
 
 } // namespace
 
-TEST_CASE("rebuild preserves async child timelines") {
+TEST_CASE("loader rejects legacy array child frames") {
     Animation animation;
     animation.child_assets() = {"childA"};
-    seed_parent_frames(animation, 3);
+    seed_parent_frames(animation, 2);
 
-    AnimationChildData async_descriptor;
-    async_descriptor.asset_name = "childA";
-    async_descriptor.mode = AnimationChildMode::Async;
-    async_descriptor.frames = {make_sample(0), make_sample(0), make_sample(0)};
-    animation.child_timelines().push_back(async_descriptor);
+    nlohmann::json payload = nlohmann::json::object({
+        {"child_timelines", nlohmann::json::array({
+             nlohmann::json::object({
+                 {"child", 0},
+                 {"mode", "static"},
+                 {"frames", nlohmann::json::array({
+                     nlohmann::json::array({0, 1, 2, 3})
+                 })}
+             })
+        })}
+    });
 
-    animation.rebuild_child_timelines_from_frames();
-
-    REQUIRE(animation.child_timelines().size() == 1);
-    const auto& descriptor = animation.child_timelines().front();
-    CHECK(descriptor.mode == AnimationChildMode::Async);
-    CHECK(descriptor.frames.size() == 3);
+    CHECK_FALSE(AnimationLoader::load_child_timelines_from_json(payload, animation));
+    CHECK(animation.child_timelines().empty());
 }
 
-TEST_CASE("rebuild sizes static timelines to match parent frames") {
+TEST_CASE("loader rejects render_in_front child frames") {
     Animation animation;
     animation.child_assets() = {"childA"};
-    seed_parent_frames(animation, 4);
-    animation.frames[1]->children.push_back(make_sample(0, true));
+    seed_parent_frames(animation, 2);
 
-    AnimationChildData static_descriptor;
-    static_descriptor.asset_name = "childA";
-    static_descriptor.mode = AnimationChildMode::Static;
-    static_descriptor.frames = {make_sample(0)};
-    animation.child_timelines().push_back(static_descriptor);
+    nlohmann::json payload = nlohmann::json::object({
+        {"child_timelines", nlohmann::json::array({
+             nlohmann::json::object({
+                 {"child", 0},
+                 {"mode", "static"},
+                 {"frames", nlohmann::json::array({
+                     nlohmann::json::object({{"dx", 0}, {"visible", true}, {"render_in_front", true}})
+                 })}
+             })
+        })}
+    });
 
-    animation.rebuild_child_timelines_from_frames();
-
-    REQUIRE(animation.child_timelines().size() == 1);
-    const auto& descriptor = animation.child_timelines().front();
-    CHECK(descriptor.mode == AnimationChildMode::Static);
-    CHECK(descriptor.frames.size() == 4);
-    CHECK(descriptor.frames[1].visible);
+    CHECK_FALSE(AnimationLoader::load_child_timelines_from_json(payload, animation));
+    CHECK(animation.child_timelines().empty());
 }
 
 TEST_CASE("loader rejects child timelines without explicit mode") {

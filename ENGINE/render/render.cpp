@@ -492,10 +492,15 @@ void SceneRenderer::render() {
                     ++fog_index;
                     continue;
                 }
+
+                // Apply vertical offset (positive moves down)
+                const float fog_vertical_offset = DynamicFogSystem::vertical_offset();
+                const float adjusted_y = base_screen.y + fog_vertical_offset;
+
                 const float left = base_screen.x - half_width;
                 const float right = base_screen.x + half_width;
-                const float top = base_screen.y - height;
-                const float bottom = base_screen.y;
+                const float top = adjusted_y - height;
+                const float bottom = adjusted_y;
                 if (right < -fog_cull_margin || left > static_cast<float>(screen_width_) + fog_cull_margin ||
                     bottom < -fog_cull_margin || top > static_cast<float>(screen_height_) + fog_cull_margin) {
                     ++fog_index;
@@ -511,10 +516,10 @@ void SceneRenderer::render() {
                 const float v1 = 1.0f - padding_y;
 
                 SDL_Vertex vertices[4]{};
-                vertices[0].position = SDL_FPoint{base_screen.x - half_width, base_screen.y - height};
-                vertices[1].position = SDL_FPoint{base_screen.x + half_width, base_screen.y - height};
-                vertices[2].position = SDL_FPoint{base_screen.x + half_width, base_screen.y};
-                vertices[3].position = SDL_FPoint{base_screen.x - half_width, base_screen.y};
+                vertices[0].position = SDL_FPoint{base_screen.x - half_width, adjusted_y - height};
+                vertices[1].position = SDL_FPoint{base_screen.x + half_width, adjusted_y - height};
+                vertices[2].position = SDL_FPoint{base_screen.x + half_width, adjusted_y};
+                vertices[3].position = SDL_FPoint{base_screen.x - half_width, adjusted_y};
 
                 const SDL_Color white{255, 255, 255, 255};
                 vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;

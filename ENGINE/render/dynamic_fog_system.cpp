@@ -18,6 +18,8 @@ constexpr float kMinGridMultiplier = 0.25f;
 constexpr float kMaxGridMultiplier = 8.0f;
 constexpr float kMinBaseScale = 0.25f;
 constexpr float kMaxBaseScale = 12.0f;
+constexpr float kMinVerticalOffset = -300.0f;
+constexpr float kMaxVerticalOffset = 300.0f;
 }
 
 DynamicFogSystem::DynamicFogSystem() = default;
@@ -223,6 +225,17 @@ void DynamicFogSystem::set_base_size_scale(float scale) {
 
 float DynamicFogSystem::base_size_scale() {
     return config().base_size_scale;
+}
+
+void DynamicFogSystem::set_vertical_offset(float offset) {
+    if (!std::isfinite(offset)) {
+        return;
+    }
+    config().vertical_offset = std::clamp(offset, kMinVerticalOffset, kMaxVerticalOffset);
+}
+
+float DynamicFogSystem::vertical_offset() {
+    return config().vertical_offset;
 }
 
 DynamicFogSystem::FogConfig& DynamicFogSystem::config() {

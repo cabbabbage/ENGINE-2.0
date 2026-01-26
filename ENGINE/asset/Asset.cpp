@@ -133,15 +133,6 @@ void Asset::clear_downscale_cache() {
 }
 
 Asset::~Asset() {
-        if (parent) {
-                auto& vec = parent->asset_children;
-                vec.erase(std::remove(vec.begin(), vec.end(), this), vec.end());
-                parent = nullptr;
-        }
-        for (Asset* asset_child : asset_children) {
-                if (asset_child && asset_child->parent == this) asset_child->parent = nullptr;
-        }
-
         clear_render_caches();
         if (composite_texture_) {
                 SDL_DestroyTexture(composite_texture_);
@@ -160,7 +151,6 @@ Asset::Asset(const Asset& o)
     , flipped(o.flipped)
     , distance_from_camera(o.distance_from_camera)
     , angle_from_camera(o.angle_from_camera)
-    , asset_children(o.asset_children)
     , depth(o.depth)
     , dead(o.dead)
     , static_frame(o.static_frame)
@@ -228,7 +218,6 @@ Asset& Asset::operator=(const Asset& o) {
         flipped              = o.flipped;
         distance_from_camera = o.distance_from_camera;
         angle_from_camera = o.angle_from_camera;
-        asset_children       = o.asset_children;
 	depth                = o.depth;
 	dead                 = o.dead;
 	static_frame         = o.static_frame;
@@ -310,19 +299,6 @@ void Asset::finalize_setup() {
                         }
                 }
 	}
-        for (Asset* asset_child : asset_children)
-        if (asset_child) asset_child->finalize_setup();
-#ifdef VIBBLE_DEBUG_ASSET_LOGS
-        if (!asset_children.empty()) {
-                std::cout << "[Asset] \"" << (info ? info->name : std::string{"<null>"})
-                << "\" at (" << pos.x << ", " << pos.y
-                << ") has " << asset_children.size() << " child(ren):\n";
-                for (Asset* asset_child : asset_children)
-                if (asset_child && asset_child->info)
-                std::cout << "    - \"" << asset_child->info->name
-                << "\" at (" << asset_child->pos.x << ", " << asset_child->pos.y << ")\n";
-        }
-#endif
         ensure_animation_runtime(false);
         if (!animation_children_initialized_) {
                 initialize_animation_children_recursive();
@@ -336,6 +312,8 @@ void Asset::finalize_setup() {
 
         finalized_ = true;
 }
+
+
 
 void Asset::update_scale_values() {
     const float base_scale =
@@ -436,6 +414,58 @@ void Asset::set_current_animation(const std::string& name)
 void Asset::update() {
     if (!info) return;
 
+
+    // Early step: if this asset has a parent, sample the parent's child_timeline slot
+    if (parent && !parent->dead) {
+        // Check if parent is inactive - if so, self-deactivate
+        if (!parent->active) {
+            this->active = false;
+            this->deactivate();
+            return;
+        }
+
+        // Find our slot in the parent's animation_children_
+        AnimationChildAttachment* our_slot = nullptr;
+        for (auto& slot : parent->animation_children_) {
+            if (slot.spawned_asset == this) {
+                our_slot = &slot;
+                break;
+            }
+        }
+
+        if (our_slot && our_slot->child_index >= 0) {
+            // Compute visibility: respect parent hidden/inactive state
+            const bool parent_visible = !parent->hidden && parent->active;
+            const bool should_be_visible = parent_visible && our_slot->visible;
+            hidden = !should_be_visible;
+
+            // Set world position from parent's child timeline data
+            if (our_slot->cached_w == 0 || our_slot->cached_h == 0) {
+                animation_update::child_attachments::update_dimensions(*our_slot);
+            }
+            int child_w = our_slot->cached_w > 0 ? our_slot->cached_w : cached_w;
+            int child_h = our_slot->cached_h > 0 ? our_slot->cached_h : cached_h;
+            child_w = std::max(1, child_w);
+            child_h = std::max(1, child_h);
+
+            SDL_Point anchor{ our_slot->world_pos.x, our_slot->world_pos.y };
+            pos.x = anchor.x - child_w / 2;
+            pos.y = anchor.y - child_h;
+
+            // Apply world_z from parent's slot data
+            float resolved_world_z = std::isfinite(our_slot->world_z) ? our_slot->world_z : parent->world_z_offset_;
+            set_world_z_offset(resolved_world_z);
+
+            // Inherit parent's flip state
+            flipped = parent->flipped;
+            depth = parent->depth;
+            grid_resolution = parent->grid_resolution;
+        } else if (!our_slot) {
+            // If we can't find our slot, respect parent's active/hidden state
+            hidden = parent->hidden || !parent->active;
+        }
+    }
+
     SDL_Point previous_pos = pos;
 
     if (controller_) {
@@ -500,7 +530,7 @@ void Asset::update() {
     }
     set_world_z_offset(resolved_world_z);
 
-    update_animation_children_state();
+
 
     if (info->moving_asset) {
         const bool moved = (pos.x != previous_pos.x || pos.y != previous_pos.y);
@@ -515,34 +545,7 @@ void Asset::update() {
 
 std::string Asset::get_current_animation() const { return current_animation; }
 
-bool Asset::start_child_async(const std::string& name) {
-        if (name.empty() || !anim_runtime_) {
-                return false;
-        }
-        return anim_runtime_->run_child_animation(name);
-}
 
-bool Asset::stop_child_async(const std::string& name) {
-        if (name.empty()) {
-                return false;
-        }
-        bool stopped = false;
-        for (auto& slot : animation_children_) {
-                if (slot.asset_name != name) {
-                        continue;
-                }
-                if (slot.timeline_mode == AnimationChildMode::Async && slot.timeline_active) {
-                        slot.timeline_active = false;
-                        stopped = true;
-                }
-                slot.visible = false;
-                slot.was_visible = false;
-        }
-        if (stopped) {
-                mark_composite_dirty();
-        }
-        return stopped;
-}
 
 void Asset::stop_all_child_async() {
         bool any = false;
@@ -582,16 +585,6 @@ bool Asset::is_current_animation_looping() const {
 	return anim.loop;
 }
 
-void Asset::add_child(Asset* asset_child) {
-        if (!asset_child || !asset_child->info) return;
-        if (info) {
-
-        }
-        asset_child->parent = this;
-        if (!asset_child->get_assets()) asset_child->set_assets(this->assets_);
-        asset_children.push_back(asset_child);
-}
-
 void Asset::set_assets(Assets* a) {
     assets_ = a;
     if (assets_) {
@@ -621,172 +614,7 @@ void Asset::rebuild_animation_runtime() {
     ensure_animation_runtime(true);
 }
 
-void Asset::initialize_animation_children_recursive() {
-        if (initializing_animation_children_) {
-                return;
-        }
 
-        if (!info || !assets_) {
-                initializing_animation_children_ = false;
-                animation_children_initialized_ = false;
-                return;
-        }
-
-        const auto child_names = collect_animation_child_names(*info);
-
-        bool needs_refresh = !animation_children_initialized_;
-        if (!needs_refresh) {
-                std::vector<std::string> current_names;
-                current_names.reserve(animation_children_.size());
-                for (const auto& slot : animation_children_) {
-                        if (slot.child_index >= 0 && !slot.asset_name.empty()) {
-                                current_names.push_back(slot.asset_name);
-                        }
-                }
-                if (current_names.size() != child_names.size()) {
-                        needs_refresh = true;
-                } else {
-                        for (std::size_t i = 0; i < child_names.size(); ++i) {
-                                if (child_names[i] != current_names[i]) {
-                                        needs_refresh = true;
-                                        break;
-                                }
-                        }
-                }
-        }
-
-        if (!needs_refresh) {
-                return;
-        }
-
-        initializing_animation_children_ = true;
-
-        try {
-                animation_children_initialized_ = false;
-
-        if (child_names.empty()) {
-                animation_children_initialized_ = true;
-                initializing_animation_children_ = false;
-                return;
-        }
-
-        std::unordered_map<std::string, std::size_t> existing;
-        existing.reserve(animation_children_.size());
-        for (std::size_t i = 0; i < animation_children_.size(); ++i) {
-                const auto& name = animation_children_[i].asset_name;
-                if (!name.empty() && existing.find(name) == existing.end()) {
-                        existing[name] = i;
-                }
-        }
-
-        for (const auto& name : child_names) {
-                if (existing.find(name) != existing.end()) {
-                        continue;
-                }
-                animation_children_.emplace_back();
-                auto& slot = animation_children_.back();
-                slot.child_index = -1;
-                slot.asset_name = name;
-                slot.visible = false;
-                slot.was_visible = false;
-                slot.last_parent_frame_index = -1;
-                existing[name] = animation_children_.size() - 1;
-        }
-
-        for (std::size_t i = 0; i < child_names.size(); ++i) {
-                const std::string& desired = child_names[i];
-                auto it = existing.find(desired);
-                if (it == existing.end()) {
-                        continue;
-                }
-                std::size_t current = it->second;
-                if (current != i) {
-                        std::swap(animation_children_[i], animation_children_[current]);
-                        existing[animation_children_[current].asset_name] = current;
-                        existing[desired] = i;
-                }
-        }
-
-        AssetLibrary* library = assets_ ? &assets_->library() : nullptr;
-        auto bind_child_animation = [&](Asset::AnimationChildAttachment& slot) {
-                if (slot.animation || !slot.info) return;
-                auto child_anim_it =
-                        slot.info->animations.find(animation_update::detail::kDefaultAnimation);
-                if (child_anim_it == slot.info->animations.end() && !slot.info->animations.empty()) {
-                        child_anim_it = slot.info->animations.begin();
-                }
-                if (child_anim_it != slot.info->animations.end()) {
-                        slot.animation = &child_anim_it->second;
-                        slot.current_frame = nullptr;
-                        slot.frame_progress = 0.0f;
-                        slot.last_parent_frame_index = -1;
-                }
-};
-
-        for (std::size_t i = 0; i < child_names.size(); ++i) {
-                auto& slot = animation_children_[i];
-                slot.child_index = static_cast<int>(i);
-                slot.visible = false;
-                slot.was_visible = false;
-                slot.last_parent_frame_index = -1;
-                if (!slot.info && library && !slot.asset_name.empty()) {
-                        slot.info = library->get(slot.asset_name);
-                }
-                bind_child_animation(slot);
-                if (slot.animation && !slot.current_frame) {
-                        animation_update::child_attachments::restart(slot);
-                }
-                if (!slot.spawned_asset && slot.info) {
-                        SDL_Point spawn_pos{
-                                static_cast<int>(std::lround(smoothed_translation_x())), static_cast<int>(std::lround(smoothed_translation_y())) };
-                        Asset* child = nullptr;
-                        try {
-                                child = assets_->spawn_asset(slot.asset_name, spawn_pos);
-                        } catch (...) {
-                                child = nullptr;
-                        }
-                        if (child) {
-                                child->parent = this;
-                                child->depth = depth;
-                                child->grid_resolution = grid_resolution;
-                                child->set_hidden(true);
-                                if (std::find(asset_children.begin(), asset_children.end(), child) ==
-                                    asset_children.end()) {
-                                        add_child(child);
-                                }
-                                slot.spawned_asset = child;
-                                try { child->initialize_animation_children_recursive(); } catch (...) {}
-                        }
-                }
-        }
-
-        for (std::size_t i = child_names.size(); i < animation_children_.size(); ++i) {
-                auto& slot = animation_children_[i];
-                slot.child_index = -1;
-                slot.visible = false;
-                slot.was_visible = false;
-                slot.last_parent_frame_index = -1;
-                slot.timeline = nullptr;
-                slot.timeline_active = false;
-                slot.timeline_frame_cursor = 0;
-                slot.timeline_frame_progress = 0.0f;
-                if (slot.spawned_asset) {
-                        slot.spawned_asset->set_hidden(true);
-                }
-        }
-
-        if (animation_children_.size() > child_names.size()) {
-                animation_children_.resize(child_names.size());
-        }
-
-        animation_children_initialized_ = true;
-        initializing_animation_children_ = false;
-        } catch (...) {
-
-                animation_children_initialized_ = false;
-                initializing_animation_children_ = false;
-        }
-}
 
 void Asset::ensure_animation_runtime(bool force_recreate) {
     if (!assets_) {
@@ -950,11 +778,15 @@ Area Asset::get_area(const std::string& name) const {
 void Asset::deactivate() {
         active = false;
         hidden = true;
-        deactivate_children();
         clear_render_caches();
         visibility_stamp = 0;
         if (assets_) {
                 assets_->mark_active_assets_dirty();
+        }
+
+        // If this is a transient child, self-delete after being removed from active list
+        if (is_transient_child_) {
+                Delete();
         }
 }
 
@@ -1003,16 +835,6 @@ void Asset::on_scale_factor_changed() {
 
         mark_composite_dirty();
 
-        if (!asset_children.empty() && info) {
-                for (Asset* asset_child : asset_children) {
-                        if (!asset_child || !asset_child->info) {
-                                continue;
-                        }
-                        if (asset_child->info.get() == info.get()) {
-                                asset_child->on_scale_factor_changed();
-                        }
-                }
-        }
         if (assets_) {
                 assets_->queue_asset_dimension_update(this);
         }
@@ -1054,120 +876,7 @@ std::vector<animation_update::Attack> Asset::process_pending_attacks() {
         return attacks;
 }
 
-void Asset::update_animation_children_state() {
-        if (animation_children_.empty()) {
-                return;
-        }
-        if (!animation_children_initialized_ && !initializing_animation_children_) {
-                initialize_animation_children_recursive();
-        }
-        if (!assets_) {
-                return;
-        }
 
-        if (!active) {
-                deactivate_children();
-                return;
-        }
-
-        for (auto& slot : animation_children_) {
-                sync_child_from_slot(slot);
-        }
-}
-
-void Asset::sync_child_from_slot(AnimationChildAttachment& slot) {
-        Asset* child = slot.spawned_asset;
-        if (!slot.info || slot.child_index < 0) {
-                if (child) {
-                        child->active = false;
-                        child->set_hidden(true);
-                }
-                return;
-        }
-
-        if (!child && assets_) {
-                SDL_Point spawn_pos{
-                        static_cast<int>(std::lround(smoothed_translation_x())),
-                        static_cast<int>(std::lround(smoothed_translation_y())) };
-                try {
-                        child = assets_->spawn_asset(slot.asset_name, spawn_pos);
-                } catch (...) {
-                        child = nullptr;
-                }
-                if (child) {
-                        child->parent = this;
-                        child->depth = depth;
-                        child->grid_resolution = grid_resolution;
-                        if (std::find(asset_children.begin(), asset_children.end(), child) == asset_children.end()) {
-                                add_child(child);
-                        }
-                        slot.spawned_asset = child;
-                }
-        }
-
-        if (!child || child->dead) {
-                slot.spawned_asset = nullptr;
-                return;
-        }
-
-        child->parent = this;
-        child->depth = depth;
-        child->grid_resolution = grid_resolution;
-        child->flipped = flipped;
-        child->active = active;
-
-        if (slot.current_frame && (slot.cached_w == 0 || slot.cached_h == 0)) {
-                animation_update::child_attachments::update_dimensions(slot);
-        }
-        if (child->cached_w <= 0 || child->cached_h <= 0) {
-                child->refresh_cached_dimensions();
-        }
-
-        int child_w = slot.cached_w > 0 ? slot.cached_w : child->cached_w;
-        int child_h = slot.cached_h > 0 ? slot.cached_h : child->cached_h;
-        child_w = std::max(1, child_w);
-        child_h = std::max(1, child_h);
-
-        SDL_Point prev_pos{ child->pos.x, child->pos.y };
-        SDL_Point anchor{ slot.world_pos.x, slot.world_pos.y };
-        SDL_Point new_pos{
-                anchor.x - child_w / 2,
-                anchor.y - child_h
-        };
-        child->pos = new_pos;
-        float resolved_child_world_z = std::isfinite(slot.world_z) ? slot.world_z : world_z_offset_;
-        child->set_world_z_offset(resolved_child_world_z);
-
-        child->set_hidden(!slot.visible);
-
-        child->mark_composite_dirty();
-
-        if (assets_ && (prev_pos.x != child->pos.x || prev_pos.y != child->pos.y)) {
-                assets_->log_asset_movement(child, prev_pos, child->pos);
-        }
-
-        child->update();
-}
-
-void Asset::deactivate_children() {
-        for (auto& slot : animation_children_) {
-                slot.visible = false;
-                slot.was_visible = false;
-                slot.timeline_active = false;
-                slot.timeline_frame_cursor = 0;
-                slot.timeline_frame_progress = 0.0f;
-                if (slot.spawned_asset) {
-                        slot.spawned_asset->active = false;
-                        slot.spawned_asset->set_hidden(true);
-                }
-        }
-        for (Asset* child : asset_children) {
-                if (!child) continue;
-                child->active = false;
-                child->set_hidden(true);
-                child->deactivate();
-        }
-}
 
 bool Asset::has_grid_residency_cache() const {
         return has_cached_grid_residency_;
@@ -1211,17 +920,26 @@ float Asset::smoothed_alpha() const {
 void Asset::Delete() {
         dead = true;
         hidden = true;
-        if (!animation_children_.empty()) {
-                for (auto& slot : animation_children_) {
-                        if (slot.spawned_asset) {
-                                slot.spawned_asset->Delete();
+
+        // If I'm a transient child, clear parent's slot reference
+        if (parent && is_transient_child_) {
+                for (auto& slot : parent->animation_children_) {
+                        if (slot.spawned_asset == this) {
                                 slot.spawned_asset = nullptr;
+                                break;
                         }
                 }
-                animation_children_.clear();
         }
+
         if (assets_) {
                 assets_->mark_active_assets_dirty();
-                assets_->schedule_removal(this);
+                // Transient children are not in world grid or 'all' list,
+                // so they use a separate deletion queue
+                if (is_transient_child_) {
+                        assets_->schedule_transient_child_deletion(this);
+                } else {
+                        // Normal assets go through the removal queue
+                        assets_->schedule_removal(this);
+                }
         }
 }

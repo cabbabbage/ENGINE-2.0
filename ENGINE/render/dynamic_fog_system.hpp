@@ -54,6 +54,12 @@ public:
     // Examples: 2.0f (200% = 2x texture size), 4.0f (400% = 4x texture size)
     static constexpr float kDefaultBaseSizeScale = 3.0f;
 
+    // ========================================================================
+    // FOG VERTICAL OFFSET SETTINGS - Adjust fog vertical position here
+    // ========================================================================
+    // Vertical offset in pixels to shift fog rendering up (-) or down (+)
+    static constexpr float kDefaultVerticalOffset = 0.0f;
+
     // Resolution layer for fog texture assignment (affects hashing for random but consistent placement)
     static constexpr int kFogResolutionLayer = 4;
 
@@ -62,6 +68,8 @@ public:
     static float grid_spacing_multiplier();
     static void set_base_size_scale(float scale);
     static float base_size_scale();
+    static void set_vertical_offset(float offset);
+    static float vertical_offset();
 
 private:
     static constexpr int kNumFogTextures = 10;
@@ -85,6 +93,7 @@ private:
     struct FogConfig {
         float grid_spacing_multiplier = kDefaultGridSpacingMultiplier;
         float base_size_scale = kDefaultBaseSizeScale;
+        float vertical_offset = kDefaultVerticalOffset;
     };
     static FogConfig& config();
 };

@@ -5388,20 +5388,14 @@ Asset* RoomEditor::find_asset_spawn_owner(const std::string& spawn_id) const {
         return nullptr;
     }
 
-    for (Asset* asset : assets_->all) {
+    // In the new model, children are independent assets with a parent pointer
+    // Search through active assets to find the one with this spawn_id and return its parent
+    for (Asset* asset : assets_->active_assets) {
         if (!asset || asset->dead) {
             continue;
         }
-        if (!asset_belongs_to_room(asset)) {
-            continue;
-        }
-        for (Asset* child : asset->asset_children) {
-            if (!child || child->dead) {
-                continue;
-            }
-            if (child->spawn_id == spawn_id) {
-                return asset;
-            }
+        if (asset->spawn_id == spawn_id && asset->parent) {
+            return asset->parent;
         }
     }
     return nullptr;

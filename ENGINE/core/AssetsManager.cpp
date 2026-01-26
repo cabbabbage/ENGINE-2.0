@@ -828,6 +828,34 @@ void Assets::update(const Input& input)
         }
     }
 
+    // Process transient child deletions
+    {
+        std::vector<Asset*> pending_deletions;
+        {
+            std::lock_guard<std::mutex> lock(transient_child_deletion_mutex_);
+            if (!transient_child_deletion_queue_.empty()) {
+                pending_deletions.swap(transient_child_deletion_queue_);
+            }
+        }
+
+        for (Asset* child : pending_deletions) {
+            if (!child) continue;
+
+            // Remove from active_assets lists
+            active_assets.erase(std::remove(active_assets.begin(), active_assets.end(), child), active_assets.end());
+            filtered_active_assets.erase(std::remove(filtered_active_assets.begin(), filtered_active_assets.end(), child), filtered_active_assets.end());
+
+            // Actually delete the transient child
+            delete child;
+        }
+
+        if (!pending_deletions.empty()) {
+            mark_non_player_update_buffer_dirty();
+            needs_filtered_active_refresh_ = true;
+            touch_dev_active_state_version();
+        }
+    }
+
     if (!suppress_render_ && scene) {
         scene->render();
     }
@@ -840,36 +868,40 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         return;
     }
 
-#if defined(__cpp_lib_execution)
-    const unsigned hardware_threads = std::max(1u, std::thread::hardware_concurrency());
-    const bool can_parallelize = hardware_threads > 1 && active_assets.size() >= kNonPlayerParallelThreshold;
-    if (can_parallelize) {
-        std::vector<Asset*> rebuilt(active_assets.size());
-        std::atomic_size_t next_index{0};
-        std::for_each(std::execution::par_unseq,
-                      active_assets.begin(),
-                      active_assets.end(),
-                      [&](Asset* asset) {
-                          if (asset && asset != player && (!asset->parent || asset->parent->dead)) {
-                              const std::size_t index = next_index.fetch_add(1, std::memory_order_relaxed);
-                              rebuilt[index] = asset;
-                          }
-                      });
-        const std::size_t final_count = next_index.load(std::memory_order_relaxed);
-        rebuilt.resize(final_count);
-        non_player_update_buffer_ = std::move(rebuilt);
-        non_player_update_buffer_dirty_.store(false, std::memory_order_release);
-        return;
-    }
-#endif
+    // Helper to compute parent depth for topological ordering
+    auto compute_parent_depth = [](const Asset* asset) -> int {
+        int depth = 0;
+        const Asset* current = asset;
+        while (current && current->parent) {
+            ++depth;
+            current = current->parent;
+            if (depth > 1000) break; // Prevent infinite loops from circular references
+        }
+        return depth;
+    };
 
+    // Collect all non-player assets (including children)
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(active_assets.size());
     for (Asset* asset : active_assets) {
-        if (asset && asset != player && (!asset->parent || asset->parent->dead)) {
+        if (asset && asset != player) {
             non_player_update_buffer_.push_back(asset);
         }
     }
+
+    // Sort in parent-first order (lower depth = higher in hierarchy = updated first)
+    std::stable_sort(non_player_update_buffer_.begin(),
+                     non_player_update_buffer_.end(),
+                     [&compute_parent_depth](const Asset* a, const Asset* b) {
+                         if (!a || !b) return b != nullptr;
+                         const int depth_a = compute_parent_depth(a);
+                         const int depth_b = compute_parent_depth(b);
+                         if (depth_a != depth_b) {
+                             return depth_a < depth_b; // Parents (lower depth) before children
+                         }
+                         return a < b; // Stable ordering for same depth
+                     });
+
     non_player_update_buffer_dirty_.store(false, std::memory_order_release);
 }
 
@@ -1221,6 +1253,43 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     return raw;
 }
 
+Asset* Assets::spawn_transient_child_asset(const std::string& name, SDL_Point world_pos, Asset* parent) {
+    std::shared_ptr<AssetInfo> info = library_.get(name);
+    if (!info) {
+        return nullptr;
+    }
+
+    std::string owning_room = map_id_;
+    if (current_room_) {
+        owning_room = current_room_->room_name;
+    }
+
+    Area spawn_area(owning_room, 0);
+    int depth = parent ? parent->depth : 0;
+    int grid_res = parent ? parent->grid_resolution : map_grid_settings_.spacing();
+
+    auto uptr = std::make_unique<Asset>(info, spawn_area, world_pos, depth, parent, std::string{}, std::string{}, grid_res);
+    Asset* raw = uptr.release();
+    if (!raw) {
+        return nullptr;
+    }
+
+    raw->set_assets(this);
+    raw->set_camera(&camera_);
+    raw->finalize_setup();
+
+    // Mark this as a transient child (not in 'all' or world grid)
+    raw->is_transient_child_ = true;
+
+    // Add directly to active_assets
+    active_assets.push_back(raw);
+    mark_non_player_update_buffer_dirty();
+    needs_filtered_active_refresh_ = true;
+    touch_dev_active_state_version();
+
+    return raw;
+}
+
 void Assets::rebuild_from_grid_state() {
     ++frame_id_;
     rebuild_all_assets_from_grid();
@@ -1415,6 +1484,14 @@ void Assets::schedule_removal(Asset* a) {
     }
     std::lock_guard<std::mutex> lock(removal_queue_mutex_);
     removal_queue.push_back(a);
+}
+
+void Assets::schedule_transient_child_deletion(Asset* a) {
+    if (!a) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(transient_child_deletion_mutex_);
+    transient_child_deletion_queue_.push_back(a);
 }
 
 bool Assets::process_removals() {
@@ -1953,44 +2030,6 @@ void Assets::rebuild_active_from_screen_grid() {
     }
 
     visible_candidate_buffer_.clear();
-
-    // Ensure children of active assets become active alongside their parents.
-    {
-        std::vector<Asset*> active_snapshot = active_assets;
-        std::unordered_set<Asset*> visited;
-        visited.reserve(active_assets.size() * 2 + 1);
-        std::function<void(Asset*)> activate_children = [&](Asset* parent) {
-            if (!parent) {
-                return;
-            }
-            for (Asset* child : parent->asset_children) {
-                if (!child || child->dead) {
-                    continue;
-                }
-                if (!visited.insert(child).second) {
-                    continue;
-                }
-                if (child->last_active_frame_id == current_frame_id) {
-                    child->active = true;
-                    activate_children(child);
-                    continue;
-                }
-                child->last_active_frame_id = current_frame_id;
-                child->last_visible_frame_id = current_frame_id;
-                child->active = true;
-                auto insert_pos = std::lower_bound(active_assets.begin(), active_assets.end(), child, depth_order);
-                active_assets.insert(insert_pos, child);
-                newly_active_assets.push_back(child);
-                active_changed = true;
-                activate_children(child);
-            }
-        };
-        for (Asset* asset : active_snapshot) {
-            if (asset && asset->last_active_frame_id == current_frame_id) {
-                activate_children(asset);
-            }
-        }
-    }
 
     active_assets_dirty_.store(false, std::memory_order_release);
     if (active_changed) {

@@ -16,7 +16,6 @@ struct ChildFrame {
     float dz = 0.0f;
     float degree = 0.0f;
     bool visible = true;
-    bool render_in_front = true;
     bool has_data = false;
 };
 

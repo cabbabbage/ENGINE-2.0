@@ -73,6 +73,7 @@ class Asset {
         }
 };
 
+
     struct AnimationChildAttachment {
         int child_index = -1;
         std::string asset_name;
@@ -121,7 +122,7 @@ class Asset {
     void finalize_setup();
     void rebuild_animation_runtime();
 
-    void initialize_animation_children_recursive();
+
     bool is_finalized() const { return finalized_; }
     void on_scale_factor_changed();
 
@@ -135,7 +136,6 @@ class Asset {
     bool stop_child_async(const std::string& name);
     void stop_all_child_async();
     const AnimationFrame* current_animation_frame() const { return current_frame; }
-    void add_child(Asset* asset_child);
 
     struct ScaleUsageStats {
         float requested_scale = 1.0f;
@@ -221,8 +221,7 @@ class Asset {
     float distance_from_camera = 0.0f;
     float angle_from_camera = 0.0f;
 
-    std::vector<Asset*> asset_children;
-    const std::vector<AnimationChildAttachment>& animation_children() const { return animation_children_; }
+
     int depth = 0;
     bool dead = false;
     bool static_frame = true;
@@ -278,9 +277,9 @@ private:
     std::unique_ptr<AssetController>   controller_;
     std::unique_ptr<AssetList> neighbors;
     AssetList* impassable_naighbors = nullptr;
-    std::vector<AnimationChildAttachment> animation_children_;
-    bool animation_children_initialized_ = false;
-    bool initializing_animation_children_ = false;
+
+
+
     std::optional<TilingInfo> tiling_info_{};
     SDL_Point last_neighbor_origin_{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min() };
     bool neighbor_lists_initialized_ = false;
@@ -319,6 +318,7 @@ private:
     std::uint64_t grid_id_ = 0;
     bool has_cached_grid_residency_ = false;
     SDL_Point cached_grid_residency_{0, 0};
+    bool is_transient_child_ = false;
 
     SDL_Texture* composite_texture_ = nullptr;
     bool         composite_dirty_   = true;
@@ -326,9 +326,7 @@ private:
     float        composite_scale_   = 1.0f;
     float        world_z_offset_    = 0.0f;
 
-    void update_animation_children_state();
-    void sync_child_from_slot(AnimationChildAttachment& slot);
-    void deactivate_children();
+
 };
 
 #endif

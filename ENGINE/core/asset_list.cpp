@@ -506,27 +506,24 @@ void AssetList::get_delta_area_assets(SDL_Point prev_center,
 
 void AssetList::for_each_candidate(const std::function<void(Asset*)>& f) const {
     if (!f) return;
-    auto process_asset = [&](auto&& self, Asset* asset) -> void {
+    auto process_asset = [&](Asset* asset) -> void {
         if (asset == nullptr) return;
         f(asset);
-        for (Asset* asset_child : asset->asset_children) {
-            self(self, asset_child);
-        }
-};
+    };
 
     if (inherit_parent_view_ && parent_provider_) {
         for (Asset* a : parent_provider_->top_unsorted()) {
-            process_asset(process_asset, a);
+            process_asset(a);
         }
         for (Asset* a : parent_provider_->middle_sorted()) {
-            process_asset(process_asset, a);
+            process_asset(a);
         }
         for (Asset* a : parent_provider_->bottom_unsorted()) {
-            process_asset(process_asset, a);
+            process_asset(a);
         }
     } else {
         for (Asset* a : source_candidates_) {
-            process_asset(process_asset, a);
+            process_asset(a);
         }
     }
 }

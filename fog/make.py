@@ -190,6 +190,13 @@ def main():
         else:
             img = make_fog_image(w, HEIGHT, seed=seed)
 
+        # Darken the image by 25% BEFORE applying final opacity
+        img = img.convert("RGBA")
+        arr = np.array(img, dtype=np.float32)
+        arr[..., :3] *= 0.65  # darken RGB by 25%
+        arr[..., :3] = np.clip(arr[..., :3], 0, 255)
+        img = Image.fromarray(arr.astype(np.uint8), mode="RGBA")
+
         # LAST STEP: reduce opacity for the final image (applies to both test + fog)
         img = apply_final_opacity(img, FINAL_OPACITY_MULT)
 

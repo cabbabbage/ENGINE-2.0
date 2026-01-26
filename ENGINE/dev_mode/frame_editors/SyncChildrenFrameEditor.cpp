@@ -200,6 +200,26 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
     dd_child_selector_ = std::make_unique<DMDropdown>("Child", child_labels, std::min(selected_child_index_, static_cast<int>(child_labels.size()) - 1));
     dd_child_selector_->set_on_selection_changed([this](int index) {
         selected_child_index_ = index;
+
+        // Auto-initialize child data if not set yet (make it visible at 0,0,0)
+        if (selected_child_index_ >= 0 && selected_child_index_ < static_cast<int>(static_frames_by_child_.size()) &&
+            selected_frame_index_ >= 0 && selected_frame_index_ < frame_count_) {
+            auto& timeline = static_frames_by_child_[selected_child_index_];
+            if (selected_frame_index_ < static_cast<int>(timeline.size())) {
+                auto& sample = timeline[selected_frame_index_];
+                if (!sample.has_data) {
+                    // Initialize to visible at parent anchor (0,0,0 displacement)
+                    sample.child_index = selected_child_index_;
+                    sample.dx = 0.0f;
+                    sample.dy = 0.0f;
+                    sample.dz = 0.0f;
+                    sample.degree = 0.0f;
+                    sample.visible = true;
+                    sample.has_data = true;
+                }
+            }
+        }
+
         if (selection_state_) {
             selection_state_->target = SelectionTarget::ChildPoint;
             selection_state_->child_index = selected_child_index_;
@@ -233,11 +253,34 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             }
         });
 
+    // Initialize reset frame button
+    btn_reset_frame_ = std::make_unique<DMButton>("Reset Frame", &DMStyles::PrimaryButton(), 120, DMButton::height());
+
     // Initial sync of visibility checkbox with current frame/child state
     sync_visibility_checkbox();
 
-    // Mark data as not dirty after initial setup is complete
-    data_dirty_ = false;
+    // Auto-initialize the first child if it has no data yet (make it visible at 0,0,0)
+    if (selected_child_index_ >= 0 && selected_child_index_ < static_cast<int>(static_frames_by_child_.size()) &&
+        selected_frame_index_ >= 0 && selected_frame_index_ < frame_count_) {
+        auto& timeline = static_frames_by_child_[selected_child_index_];
+        if (selected_frame_index_ < static_cast<int>(timeline.size())) {
+            auto& sample = timeline[selected_frame_index_];
+            if (!sample.has_data) {
+                // Initialize to visible at parent anchor (0,0,0 displacement)
+                sample.child_index = selected_child_index_;
+                sample.dx = 0.0f;
+                sample.dy = 0.0f;
+                sample.dz = 0.0f;
+                sample.degree = 0.0f;
+                sample.visible = true;
+                sample.has_data = true;
+                data_dirty_ = true;
+            }
+        }
+    }
+
+    // If we didn't initialize anything, mark as clean
+    // If we did initialize, data_dirty_ is already true
 }
 
 void SyncChildrenFrameEditor::end() {
@@ -250,6 +293,7 @@ void SyncChildrenFrameEditor::end() {
     }
     point_3d_editor_ = nullptr;
     btn_back_.reset();
+    btn_reset_frame_.reset();
     frame_navigator_.reset();
     dd_child_selector_.reset();
     cb_child_visible_.reset();
@@ -286,6 +330,10 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         return true;
     }
     if (cb_child_visible_ && cb_child_visible_->handle_event(e)) {
+        return true;
+    }
+    if (btn_reset_frame_ && btn_reset_frame_->handle_event(e)) {
+        reset_current_frame();
         return true;
     }
 
@@ -369,7 +417,7 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
         composite_renderer.update(child, 0.0f);
     }
 
-    // Render axis points
+    // Render axis points - always render them so user can see and edit them
     SDL_Point anchor = asset_anchor_world();
     for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
         if (idx >= static_frames_by_child_.size()) continue;
@@ -392,10 +440,39 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
         const int hovered_child = child_index_from_point_index(point_3d_editor_->get_hovered_point_index());
         const bool is_hovered = (static_cast<int>(idx) == hovered_child);
 
+        // Check if this child is marked as invisible in the frame data
+        bool is_visible_in_frame = false;
+        if (selected_frame_index_ >= 0 && selected_frame_index_ < static_cast<int>(static_frames_by_child_[idx].size())) {
+            is_visible_in_frame = static_frames_by_child_[idx][selected_frame_index_].visible;
+        }
+
+        // Always render the edit point, but use different appearance for invisible children
         if (is_current_child) {
             point_3d_editor_->render_selectable_point(renderer, screen, is_selected, is_hovered);
+            // If invisible, draw an X through the point to indicate it won't render
+            if (!is_visible_in_frame) {
+                SDL_SetRenderDrawColor(renderer, 255, 0, 0, 180);
+                constexpr int x_size = 12;
+                SDL_RenderDrawLine(renderer,
+                                 static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) - x_size,
+                                 static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) + x_size);
+                SDL_RenderDrawLine(renderer,
+                                 static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) - x_size,
+                                 static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) + x_size);
+            }
         } else {
             point_3d_editor_->render_non_selectable_point(renderer, screen);
+            // If invisible, draw a smaller X to indicate it won't render
+            if (!is_visible_in_frame) {
+                SDL_SetRenderDrawColor(renderer, 255, 0, 0, 120);
+                constexpr int x_size = 8;
+                SDL_RenderDrawLine(renderer,
+                                 static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) - x_size,
+                                 static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) + x_size);
+                SDL_RenderDrawLine(renderer,
+                                 static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) - x_size,
+                                 static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) + x_size);
+            }
         }
     }
 }
@@ -441,6 +518,13 @@ void SyncChildrenFrameEditor::render_overlays(SDL_Renderer* renderer) const {
         cursor_y += DMCheckbox::height() + DMSpacing::small_gap();
     }
 
+    // Reset frame button
+    if (btn_reset_frame_) {
+        SDL_Rect reset_rect{x + padding, cursor_y, 120, DMButton::height()};
+        btn_reset_frame_->set_rect(reset_rect);
+        cursor_y += DMButton::height() + DMSpacing::small_gap();
+    }
+
     ui_rect_.h = cursor_y - y;
 
     // Render elements
@@ -448,6 +532,7 @@ void SyncChildrenFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (frame_navigator_) frame_navigator_->render(renderer);
     if (dd_child_selector_) dd_child_selector_->render(renderer);
     if (cb_child_visible_) cb_child_visible_->render(renderer);
+    if (btn_reset_frame_) btn_reset_frame_->render(renderer);
 
     // Render Point3DEditor overlays at the bottom
     if (point_3d_editor_) {
@@ -634,17 +719,14 @@ SyncChildrenFrameEditor::ChildWorldPose SyncChildrenFrameEditor::child_world_pos
     }
     const auto& sample = timeline[static_cast<std::size_t>(frame_idx)];
 
-    // Build 3D world position using the unified calculation system
+    // Calculate 3D world position using the unified calculation system
     // This ensures consistency with runtime child attachment calculations
     const float scale = attachment_scale();
-    const SDL_Point anchor = asset_anchor_world();
-    const SDL_FPoint anchor_float{
-        static_cast<float>(anchor.x),
-        static_cast<float>(anchor.y)
-    };
 
+    // Use zero anchor for the parent state - we'll return relative position
+    // The rendering code adds the anchor, so we need relative displacement
     const child_3d::Parent3DState parent_3d_state{
-        anchor_float,
+        SDL_FPoint{0.0f, 0.0f},  // Zero anchor - return relative position
         context_.target->world_z_offset(),
         scale,
         context_.target->flipped
@@ -659,6 +741,7 @@ SyncChildrenFrameEditor::ChildWorldPose SyncChildrenFrameEditor::child_world_pos
     const auto world_pos_3d = child_3d::calculate_child_world_position(
         parent_3d_state, displacement);
 
+    // Return relative position (anchor will be added by caller in render_world)
     pose.pos = world_pos_3d.to_2d();
     pose.z = world_pos_3d.z;
     return pose;
@@ -784,6 +867,40 @@ void SyncChildrenFrameEditor::sync_visibility_checkbox() {
         }
     }
     cb_child_visible_->set_value(visible);
+}
+
+void SyncChildrenFrameEditor::reset_current_frame() {
+    if (selected_frame_index_ < 0 || selected_frame_index_ >= frame_count_) {
+        return;
+    }
+
+    // Reset all child data for the current frame to defaults (0, 0, 0, visible=true)
+    for (std::size_t child_idx = 0; child_idx < static_frames_by_child_.size(); ++child_idx) {
+        auto& timeline = static_frames_by_child_[child_idx];
+        if (selected_frame_index_ >= static_cast<int>(timeline.size())) {
+            continue;
+        }
+        auto& sample = timeline[static_cast<std::size_t>(selected_frame_index_)];
+        sample.child_index = static_cast<int>(child_idx);
+        sample.dx = 0.0f;
+        sample.dy = 0.0f;
+        sample.dz = 0.0f;
+        sample.degree = 0.0f;
+        sample.visible = true;
+        sample.has_data = true;
+    }
+
+    // Mark as dirty to trigger update and apply changes
+    data_dirty_ = true;
+    apply_live_changes();
+
+    // Sync the visibility checkbox to reflect the new state
+    sync_visibility_checkbox();
+
+    // Refresh selection state if a child is selected
+    if (selected_child_index_ >= 0 && selection_state_) {
+        refresh_selection_state();
+    }
 }
 
 }  // namespace devmode::frame_editors

@@ -1032,6 +1032,7 @@ void DevControls::set_enabled(bool enabled) {
     } else {
         const char* msg_disable = "[DevControls] preparing disable flow";
         std::cout << msg_disable << "\n";
+        grid_overlay_enabled_ = false;
         close_all_floating_panels();
         if (map_editor_ && map_editor_->is_enabled()) {
             map_editor_->exit(true, false);

@@ -67,6 +67,7 @@ class DMStyles {
 public:
   static const DMLabelStyle &Label();
   static const DMButtonStyle &HeaderButton();
+  static const DMButtonStyle &PrimaryButton();
   static const DMButtonStyle &AccentButton();
   static const DMButtonStyle &FooterToggleButton();
   static const DMButtonStyle &WarnButton();

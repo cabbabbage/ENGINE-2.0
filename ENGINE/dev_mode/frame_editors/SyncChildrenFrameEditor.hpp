@@ -60,6 +60,7 @@ private:
     void invalidate_preview() const;
     void refresh_selection_state();
     void sync_visibility_checkbox();
+    void reset_current_frame();
 
     FrameEditorContext context_{};
     SelectionState* selection_state_ = nullptr;
@@ -76,6 +77,7 @@ private:
     bool data_dirty_ = false;
     bool wants_close_ = false;
     std::unique_ptr<DMButton> btn_back_;
+    std::unique_ptr<DMButton> btn_reset_frame_;
     std::unique_ptr<FrameNavigator> frame_navigator_;
     std::unique_ptr<DMDropdown> dd_child_selector_;
     std::unique_ptr<CallbackCheckboxWidget> cb_child_visible_;

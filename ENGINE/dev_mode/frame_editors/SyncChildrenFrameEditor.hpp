@@ -81,6 +81,10 @@ private:
     std::unique_ptr<CallbackCheckboxWidget> cb_child_visible_;
     mutable SDL_Rect back_rect_{0, 0, 0, 0};
     mutable SDL_Rect ui_rect_{0, 0, 0, 0};
+
+    // Cache the camera perspective scale from session start to prevent camera movement
+    // from affecting child position calculations
+    float cached_perspective_scale_ = 1.0f;
 };
 
 }  // namespace devmode::frame_editors

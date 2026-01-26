@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "animation_update/child_attachment_math.hpp"
+#include "animation_update/child_3d_world_position.hpp"
 
 namespace {
 constexpr bool kChildAttachmentDebug = false;
@@ -143,6 +144,19 @@ void apply_frame_data(std::vector<Asset::AnimationChildAttachment>& slots,
         }
     }
 
+    // Build parent 3D state for consistent world position calculations
+    // Use floating-point anchor for maximum precision in 3D calculations
+    const SDL_FPoint parent_anchor_float{
+        static_cast<float>(parent_state.base_position.x),
+        static_cast<float>(parent_state.base_position.y)
+    };
+    const child_3d::Parent3DState parent_3d_state{
+        parent_anchor_float,
+        parent_state.world_z,
+        parent_scale,
+        parent_state.flipped
+    };
+
     // If override_children provided, use that; otherwise read from each slot's timeline
     if (override_children) {
         for (const auto& child_data : *override_children) {
@@ -163,15 +177,20 @@ void apply_frame_data(std::vector<Asset::AnimationChildAttachment>& slots,
                 restart(slot);
             }
             slot.visible = true;
-            const float scaled_dx = static_cast<float>(child_data.dx) * parent_scale;
-            const float scaled_dy = static_cast<float>(child_data.dy) * parent_scale;
-            const float scaled_dz = static_cast<float>(child_data.dz) * parent_scale;
-            const int dx = parent_state.flipped
-                               ? -static_cast<int>(std::lround(scaled_dx)) : static_cast<int>(std::lround(scaled_dx));
-            const int vertical_offset = static_cast<int>(std::lround(scaled_dy));
-            slot.world_pos.x = parent_state.base_position.x + dx;
-            slot.world_pos.y = parent_state.base_position.y + vertical_offset;
-            slot.world_z = parent_state.world_z + scaled_dz;
+
+            // Calculate 3D world position using clean, unified approach
+            const child_3d::Child3DDisplacement displacement{
+                static_cast<float>(child_data.dx),
+                static_cast<float>(child_data.dy),
+                static_cast<float>(child_data.dz)
+            };
+            const auto world_pos_3d = child_3d::calculate_child_world_position(
+                parent_3d_state, displacement);
+
+            // Store as integer screen coordinates for rendering
+            slot.world_pos.x = static_cast<int>(std::lround(world_pos_3d.x));
+            slot.world_pos.y = static_cast<int>(std::lround(world_pos_3d.y));
+            slot.world_z = world_pos_3d.z;
             slot.rotation_degrees = mirrored_child_rotation(parent_state.flipped, child_data.degree);
         }
     } else {
@@ -207,15 +226,20 @@ void apply_frame_data(std::vector<Asset::AnimationChildAttachment>& slots,
                           << "') visible=true dx=" << child_data.dx << " dy=" << child_data.dy
                           << " dz=" << child_data.dz << " deg=" << child_data.degree << " (from timeline)\n";
             }
-            const float scaled_dx = static_cast<float>(child_data.dx) * parent_scale;
-            const float scaled_dy = static_cast<float>(child_data.dy) * parent_scale;
-            const float scaled_dz = static_cast<float>(child_data.dz) * parent_scale;
-            const int dx = parent_state.flipped
-                               ? -static_cast<int>(std::lround(scaled_dx)) : static_cast<int>(std::lround(scaled_dx));
-            const int vertical_offset = static_cast<int>(std::lround(scaled_dy));
-            slot.world_pos.x = parent_state.base_position.x + dx;
-            slot.world_pos.y = parent_state.base_position.y + vertical_offset;
-            slot.world_z = parent_state.world_z + scaled_dz;
+
+            // Calculate 3D world position using clean, unified approach
+            const child_3d::Child3DDisplacement displacement{
+                static_cast<float>(child_data.dx),
+                static_cast<float>(child_data.dy),
+                static_cast<float>(child_data.dz)
+            };
+            const auto world_pos_3d = child_3d::calculate_child_world_position(
+                parent_3d_state, displacement);
+
+            // Store as integer screen coordinates for rendering, with precise Z
+            slot.world_pos.x = static_cast<int>(std::lround(world_pos_3d.x));
+            slot.world_pos.y = static_cast<int>(std::lround(world_pos_3d.y));
+            slot.world_z = world_pos_3d.z;
             slot.rotation_degrees = mirrored_child_rotation(parent_state.flipped, child_data.degree);
         }
     }

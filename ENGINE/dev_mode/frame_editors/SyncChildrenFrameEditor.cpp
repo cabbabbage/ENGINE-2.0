@@ -10,6 +10,7 @@
 #include "asset/Asset.hpp"
 #include "asset/animation.hpp"
 #include "asset/animation_frame.hpp"
+#include "animation_update/child_3d_world_position.hpp"
 #include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/widgets.hpp"
@@ -20,7 +21,7 @@
 
 namespace devmode::frame_editors {
 
-
+namespace child_3d = animation_update::child_3d;
 
 namespace {
 SDL_Point round_point(const SDL_FPoint& pt) {
@@ -35,6 +36,17 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
     if (selection_state_) {
         selection_state_->reset();
     }
+
+    // Cache the perspective scale from the camera at session start
+    // This prevents camera movement from affecting child position calculations
+    cached_perspective_scale_ = 1.0f;
+    if (context_.assets && context_.target) {
+        const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+        if (const auto* gp = cam.grid_point_for_asset(context_.target)) {
+            cached_perspective_scale_ = std::max(0.0001f, gp->perspective_scale);
+        }
+    }
+
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
@@ -143,7 +155,6 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         });
     }
     wants_close_ = false;
-    data_dirty_ = true;
     selected_frame_index_ = 0;
     selected_child_index_ = 0;
     btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
@@ -155,6 +166,10 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         return;
     }
     populate_child_data();
+
+    // Initialize manifest transaction AFTER loading data
+    ensure_manifest_transaction();
+
     frame_navigator_ = std::make_unique<FrameNavigator>();
     frame_navigator_->set_frame_count(frame_count_);
     frame_navigator_->set_current_frame(selected_frame_index_);
@@ -162,7 +177,14 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         // Save changes before changing frames
         persist_pending_changes();
         selected_frame_index_ = frame;
-        data_dirty_ = true;
+        data_dirty_ = false;  // Don't re-apply just from frame change
+        // Deselect current point when changing frames
+        if (selection_state_) {
+            selection_state_->reset();
+        }
+        if (point_3d_editor_) {
+            point_3d_editor_->set_selected_point_index(-1);
+        }
         sync_visibility_checkbox();
         refresh_selection_state();
     });
@@ -211,12 +233,17 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             }
         });
 
-    ensure_manifest_transaction();
     // Initial sync of visibility checkbox with current frame/child state
     sync_visibility_checkbox();
+
+    // Mark data as not dirty after initial setup is complete
+    data_dirty_ = false;
 }
 
 void SyncChildrenFrameEditor::end() {
+    // Persist any pending changes before exiting
+    persist_pending_changes();
+
     if (selection_state_) {
         selection_state_->reset();
         selection_state_ = nullptr;
@@ -564,14 +591,12 @@ void SyncChildrenFrameEditor::apply_current_frame_to_children() {
 }
 
 float SyncChildrenFrameEditor::attachment_scale() const {
-    if (!context_.assets || !context_.target) {
+    if (!context_.target) {
         return 1.0f;
     }
-    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-    float perspective_scale = 1.0f;
-    if (const auto* gp = cam.grid_point_for_asset(context_.target)) {
-        perspective_scale = std::max(0.0001f, gp->perspective_scale);
-    }
+    // Use cached perspective scale from session start to prevent camera movement
+    // from affecting child position calculations
+    float perspective_scale = cached_perspective_scale_;
     float remainder = context_.target->current_remaining_scale_adjustment;
     if (!std::isfinite(remainder) || remainder <= 0.0f) {
         remainder = 1.0f;
@@ -598,19 +623,44 @@ SyncChildrenFrameEditor::ChildWorldPose SyncChildrenFrameEditor::child_world_pos
     if (frame_count_ <= 0) {
         return pose;
     }
+    if (!context_.target) {
+        return pose;
+    }
+
     int frame_idx = std::clamp(selected_frame_index_, 0, frame_count_ - 1);
     const auto& timeline = static_frames_by_child_[static_cast<std::size_t>(child_index)];
     if (frame_idx >= static_cast<int>(timeline.size())) {
         return pose;
     }
     const auto& sample = timeline[static_cast<std::size_t>(frame_idx)];
+
+    // Build 3D world position using the unified calculation system
+    // This ensures consistency with runtime child attachment calculations
     const float scale = attachment_scale();
-    const float dx = sample.dx * scale;
-    const float dy = sample.dy * scale;
-    const float dz = sample.dz * scale;
-    const float world_dx = context_.target && context_.target->flipped ? -dx : dx;
-    pose.pos = SDL_FPoint{world_dx, dy};
-    pose.z = (context_.target ? context_.target->world_z_offset() : 0.0f) + dz;
+    const SDL_Point anchor = asset_anchor_world();
+    const SDL_FPoint anchor_float{
+        static_cast<float>(anchor.x),
+        static_cast<float>(anchor.y)
+    };
+
+    const child_3d::Parent3DState parent_3d_state{
+        anchor_float,
+        context_.target->world_z_offset(),
+        scale,
+        context_.target->flipped
+    };
+
+    const child_3d::Child3DDisplacement displacement{
+        sample.dx,
+        sample.dy,
+        sample.dz
+    };
+
+    const auto world_pos_3d = child_3d::calculate_child_world_position(
+        parent_3d_state, displacement);
+
+    pose.pos = world_pos_3d.to_2d();
+    pose.z = world_pos_3d.z;
     return pose;
 }
 
@@ -651,8 +701,12 @@ void SyncChildrenFrameEditor::ensure_manifest_transaction() {
     if (!context_.document) {
         return;
     }
-    manifest_txn_.begin(context_);
-    manifest_txn_.set_deferred_persist(true);
+    // Only begin if not already active to avoid re-entrant calls
+    if (!manifest_txn_.active()) {
+        manifest_txn_.begin(context_);
+        manifest_txn_.set_deferred_persist(true);
+    }
+    // Always update the callback to use current data
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -670,6 +724,7 @@ void SyncChildrenFrameEditor::ensure_manifest_transaction() {
 }
 
 void SyncChildrenFrameEditor::apply_live_changes() {
+    ensure_manifest_transaction();
     if (manifest_txn_.active()) {
         manifest_txn_.commit(false);
     }
@@ -677,10 +732,10 @@ void SyncChildrenFrameEditor::apply_live_changes() {
 }
 
 void SyncChildrenFrameEditor::persist_pending_changes() {
-    if (!manifest_txn_.active()) {
-        return;
+    ensure_manifest_transaction();
+    if (manifest_txn_.active()) {
+        manifest_txn_.commit(true);
     }
-    manifest_txn_.commit(true);
     invalidate_preview();
 }
 

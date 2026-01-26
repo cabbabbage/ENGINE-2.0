@@ -1499,9 +1499,9 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": -11,
-                  "dy": 11,
-                  "dz": 211,
+                  "dx": -1,
+                  "dy": 2,
+                  "dz": 82,
                   "visible": true
                 }
               ],
@@ -3055,11 +3055,15 @@
       "start": "default"
     },
     "spider": {
+      "animation_children": [],
       "animations": {
         "default": {
           "attack_geometry": [
             []
           ],
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
@@ -3072,6 +3076,7 @@
               "projectile": null
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
@@ -3086,11 +3091,15 @@
             "dy": 0
           },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "down": {
           "attack_geometry": [
@@ -3113,6 +3122,8 @@
               "vectors": []
             }
           ],
+          "child_timelines": [],
+          "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": false,
             "flipMovementY": true,
@@ -3120,6 +3131,7 @@
             "flipY": false,
             "reverse": false
           },
+          "flipped_source": true,
           "frames": [
             {
               "needs_rebuild": true
@@ -3160,13 +3172,18 @@
               "boxes": []
             }
           ],
+          "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "animation",
             "name": "up",
             "path": ""
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "left": {
           "attack_geometry": [
@@ -3177,6 +3194,9 @@
             [],
             []
           ],
+          "child_timelines": [],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": false
@@ -3235,6 +3255,7 @@
               "projectile": null
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
@@ -3274,13 +3295,19 @@
             "dy": -115
           },
           "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "left"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "right": {
+          "child_timelines": [],
+          "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": true,
             "flipMovementY": false,
@@ -3288,18 +3315,24 @@
             "flipY": false,
             "reverse": false
           },
+          "flipped_source": true,
           "frames": [
             {
               "needs_rebuild": true
             }
           ],
+          "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "animation",
             "name": "left",
             "path": ""
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "up": {
           "attack_geometry": [
@@ -3322,6 +3355,8 @@
               "vectors": []
             }
           ],
+          "child_timelines": [],
+          "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": false,
             "flipMovementY": false,
@@ -3329,6 +3364,7 @@
             "flipY": false,
             "reverse": false
           },
+          "flipped_source": false,
           "frames": [
             {
               "needs_rebuild": true
@@ -3369,49 +3405,18 @@
               "boxes": []
             }
           ],
+          "inherit_source_movement": true,
           "loop": true,
-          "movement": [
-            {
-              "dx": 0,
-              "dy": 0,
-              "dz": 0
-            },
-            {
-              "dx": 0,
-              "dy": -46,
-              "dz": 0
-            },
-            {
-              "dx": 0,
-              "dy": -46,
-              "dz": 0
-            },
-            {
-              "dx": 0,
-              "dy": -46,
-              "dz": 0
-            },
-            {
-              "dx": 0,
-              "dy": -46,
-              "dz": 0
-            },
-            {
-              "dx": 0,
-              "dy": -46,
-              "dz": 0
-            }
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": -230
-          },
           "number_of_frames": 6,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "animation",
             "name": "left",
             "path": ""
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "anti_tags": [],
@@ -3552,11 +3557,11 @@
   "image_effects": {
     "background": {
       "blur": 1.950000004768376,
-      "brightness": -0.05999999046325684,
-      "contrast": 0.0,
+      "brightness": -0.599999904632568,
+      "contrast": -0.5,
       "hue": 0.0,
-      "saturation_blue": 1.0,
-      "saturation_green": 0.0,
+      "saturation_blue": 0.3,
+      "saturation_green": 0.3,
       "saturation_red": -0.3
     },
     "foreground": {

@@ -8,7 +8,7 @@ from PIL import Image, ImageFilter
 # Config
 # -----------------------------
 NUM_IMAGES = 10
-HEIGHT = 720
+HEIGHT = 720 * 3
 WIDTH_MIN_MULT = 1.0
 WIDTH_MAX_MULT = 2.0
 

@@ -148,8 +148,9 @@ inline float smoothstep(float edge0, float edge1, float x) {
     return t * t * (3.0f - 2.0f * t);
 }
 
-struct WarpedQuad {
-    std::array<SDL_Vertex, 4> vertices{};
+struct WarpedMesh {
+    std::vector<SDL_Vertex> vertices;
+    std::vector<int> indices;
 };
 
 constexpr float kQuadEpsilon = 1e-5f;
@@ -255,9 +256,21 @@ bool project_world_point(const WarpedScreenGrid& cam,
     return std::isfinite(out.x) && std::isfinite(out.y);
 }
 
-bool build_warped_quad(const RenderObject& obj,
-                       const WarpedScreenGrid& cam,
-                       WarpedQuad& quad) {
+int compute_mesh_segments(float screen_size, int quality_percent) {
+    if (!std::isfinite(screen_size) || screen_size <= 0.0f) {
+        return 1;
+    }
+    const float clamped_quality = static_cast<float>(std::clamp(quality_percent, 10, 100));
+    const float quality_scale = clamped_quality / 100.0f;
+    const float base_segment_px = 200.0f;
+    const float target_px = base_segment_px / quality_scale;
+    const int segments = static_cast<int>(std::ceil(screen_size / target_px));
+    return std::clamp(segments, 1, 8);
+}
+
+bool build_perspective_mesh(const RenderObject& obj,
+                            const WarpedScreenGrid& cam,
+                            WarpedMesh& mesh) {
     if (!obj.texture) {
         return false;
     }
@@ -300,35 +313,75 @@ bool build_warped_quad(const RenderObject& obj,
         std::swap(v0, v1);
     }
 
-    const SDL_Color white{255, 255, 255, 255};
+    const SDL_FPoint world_tl{world_x - half_width, world_y};
+    const SDL_FPoint world_tr{world_x + half_width, world_y};
+    const SDL_FPoint world_bl{world_x - half_width, world_y};
+    const SDL_FPoint world_br{world_x + half_width, world_y};
 
-    // Treat world_z_offset as vertical height (not forward depth).
-    // Project the ground point for depth/parallax, then apply only the vertical lift
-    // from the height projection so height doesn't move the sprite “forward”.
-    SDL_FPoint ground_screen{};
-    if (!project_world_point(cam, world_x, world_y, 0.0f, ground_screen)) {
+    SDL_FPoint screen_tl{};
+    SDL_FPoint screen_tr{};
+    SDL_FPoint screen_bl{};
+    SDL_FPoint screen_br{};
+    if (!project_world_point(cam, world_tl.x, world_tl.y, base_z + height, screen_tl) ||
+        !project_world_point(cam, world_tr.x, world_tr.y, base_z + height, screen_tr) ||
+        !project_world_point(cam, world_br.x, world_br.y, base_z, screen_br) ||
+        !project_world_point(cam, world_bl.x, world_bl.y, base_z, screen_bl)) {
         return false;
     }
-    SDL_FPoint height_screen = ground_screen;
-    if (std::fabs(base_z) > 0.0001f) {
-        // If the height projection fails, fall back to ground so we still render.
-        project_world_point(cam, world_x, world_y, base_z, height_screen);
-    }
-    SDL_FPoint base_screen = ground_screen;
-    base_screen.y = height_screen.y;  // apply vertical lift only
 
-    quad.vertices[0].position = SDL_FPoint{base_screen.x - half_width, base_screen.y - height};
-    quad.vertices[1].position = SDL_FPoint{base_screen.x + half_width, base_screen.y - height};
-    quad.vertices[2].position = SDL_FPoint{base_screen.x + half_width, base_screen.y};
-    quad.vertices[3].position = SDL_FPoint{base_screen.x - half_width, base_screen.y};
+    const float min_x = std::min({screen_tl.x, screen_tr.x, screen_br.x, screen_bl.x});
+    const float max_x = std::max({screen_tl.x, screen_tr.x, screen_br.x, screen_bl.x});
+    const float min_y = std::min({screen_tl.y, screen_tr.y, screen_br.y, screen_bl.y});
+    const float max_y = std::max({screen_tl.y, screen_tr.y, screen_br.y, screen_bl.y});
+    const float screen_w = max_x - min_x;
+    const float screen_h = max_y - min_y;
+
+    const int quality_percent = cam.realism_settings().render_quality_percent;
+    const int cols = compute_mesh_segments(screen_w, quality_percent);
+    const int rows = compute_mesh_segments(screen_h, quality_percent);
+
+    const int vert_cols = cols + 1;
+    const int vert_rows = rows + 1;
+    mesh.vertices.clear();
+    mesh.indices.clear();
+    mesh.vertices.reserve(static_cast<std::size_t>(vert_cols * vert_rows));
+    mesh.indices.reserve(static_cast<std::size_t>(cols * rows * 6));
+
     const SDL_Color vertex_color{255, 255, 255, obj.color_mod.a};
-    for (auto& vertex : quad.vertices) {
-        vertex.color = vertex_color;
+
+    for (int row = 0; row < vert_rows; ++row) {
+        const float v = static_cast<float>(row) / static_cast<float>(rows);
+        const float world_z = base_z + (1.0f - v) * height;
+        const float tex_v = v0 + (v1 - v0) * v;
+        for (int col = 0; col < vert_cols; ++col) {
+            const float u = static_cast<float>(col) / static_cast<float>(cols);
+            const float world_x_local = world_x + (u - 0.5f) * (half_width * 2.0f);
+            SDL_FPoint projected{};
+            if (!project_world_point(cam, world_x_local, world_y, world_z, projected)) {
+                return false;
+            }
+            SDL_Vertex vertex{};
+            vertex.position = projected;
+            vertex.color = vertex_color;
+            vertex.tex_coord = SDL_FPoint{u0 + (u1 - u0) * u, tex_v};
+            mesh.vertices.push_back(vertex);
+        }
     }
-    quad.vertices[0].tex_coord = SDL_FPoint{u0, v0};
-    quad.vertices[1].tex_coord = SDL_FPoint{u1, v0};
-    quad.vertices[2].tex_coord = SDL_FPoint{u1, v1};
-    quad.vertices[3].tex_coord = SDL_FPoint{u0, v1};
+
+    for (int row = 0; row < rows; ++row) {
+        for (int col = 0; col < cols; ++col) {
+            const int i0 = row * vert_cols + col;
+            const int i1 = i0 + 1;
+            const int i2 = i0 + vert_cols;
+            const int i3 = i2 + 1;
+            mesh.indices.push_back(i0);
+            mesh.indices.push_back(i1);
+            mesh.indices.push_back(i3);
+            mesh.indices.push_back(i0);
+            mesh.indices.push_back(i3);
+            mesh.indices.push_back(i2);
+        }
+    }
 
     return true;
 }
@@ -461,7 +514,8 @@ void SceneRenderer::render() {
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
     // Update fog system before rendering
-    if (dynamic_fog_system_) {
+    const bool should_render_fog = assets_->fog_visible();
+    if (dynamic_fog_system_ && should_render_fog) {
         dynamic_fog_system_->update(cam, grid);
     }
 
@@ -471,7 +525,7 @@ void SceneRenderer::render() {
     };
 
     std::vector<DynamicFogSystem::FogSprite> fog_sprites;
-    if (dynamic_fog_system_) {
+    if (dynamic_fog_system_ && should_render_fog) {
         fog_sprites = dynamic_fog_system_->get_fog_sprites();
         std::sort(fog_sprites.begin(), fog_sprites.end(),
             [&](const auto& a, const auto& b) {
@@ -595,8 +649,8 @@ void SceneRenderer::render() {
             };
 
             for (const RenderObject& obj : candidate.asset->render_package) {
-                WarpedQuad quad{};
-                if (!build_warped_quad(obj, cam, quad)) {
+                WarpedMesh mesh{};
+                if (!build_perspective_mesh(obj, cam, mesh)) {
                     continue;
                 }
 
@@ -605,7 +659,12 @@ void SceneRenderer::render() {
                 SDL_SetTextureColorMod(obj.texture, color_mod.r, color_mod.g, color_mod.b);
                 SDL_SetTextureAlphaMod(obj.texture, color_mod.a);
 
-                SDL_RenderGeometry(renderer_, obj.texture, quad.vertices.data(), 4, kQuadIndices, 6);
+                SDL_RenderGeometry(renderer_,
+                                   obj.texture,
+                                   mesh.vertices.data(),
+                                   static_cast<int>(mesh.vertices.size()),
+                                   mesh.indices.data(),
+                                   static_cast<int>(mesh.indices.size()));
             }
 
             next_asset = advance_asset_candidate();

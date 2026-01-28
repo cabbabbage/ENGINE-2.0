@@ -3300,6 +3300,10 @@ bool DevControls::passes_asset_filters(Asset* asset) const {
     return other_settings_.passes(*asset);
 }
 
+bool DevControls::fog_visible() const {
+    return other_settings_.fog_visible();
+}
+
 bool DevControls::persist_map_info_to_disk() {
     if (!assets_) {
         std::cerr << "[DevControls] Cannot persist map info: assets manager not set\n";

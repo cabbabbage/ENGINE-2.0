@@ -417,6 +417,13 @@ void Assets::set_movement_debug_visible(bool visible) {
     }
 }
 
+bool Assets::fog_visible() const {
+    if (!dev_controls_ || !dev_controls_->is_enabled()) {
+        return true;
+    }
+    return dev_controls_->fog_visible();
+}
+
 Assets::~Assets() {
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
@@ -2072,7 +2079,9 @@ void Assets::rebuild_active_from_screen_grid() {
         needs_filtered_active_refresh_ = true;
     }
 
-    for (Asset* asset : newly_active_assets) {
+    // Update scale values for ALL active assets after grid rebuild
+    // to ensure scales reflect current perspective (fixes single-frame asset scaling)
+    for (Asset* asset : active_assets) {
         if (!asset) {
             continue;
         }

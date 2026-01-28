@@ -1501,9 +1501,9 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": 0,
+                  "dx": -3,
                   "dy": 1,
-                  "dz": 143,
+                  "dz": 61,
                   "visible": true
                 }
               ],
@@ -3841,16 +3841,16 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 1216,
+          "camera_height_px": 909,
           "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 71.4000015258789,
+          "camera_tilt_deg": 3.6000022888183594,
           "camera_y_distance_px": 0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            139,
+            36,
             242,
-            36,
-            36,
             255
           ],
           "edge_smoothness": 101,
@@ -4051,9 +4051,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            138,
+            242,
             36,
-            242,
-            242,
             255
           ],
           "edge_smoothness": 2,

@@ -23,6 +23,7 @@ constexpr int kPanelOutlineThickness = 1;
 constexpr const char* kSettingsInitializedKey = "dev.asset_filter.initialized";
 constexpr const char* kSettingsMapAssetsKey = "dev.asset_filter.map_assets";
 constexpr const char* kSettingsCurrentRoomKey = "dev.asset_filter.current_room";
+constexpr const char* kSettingsFogKey = "dev.asset_filter.fog";
 constexpr const char* kSettingsFiltersExpandedKey = "dev.asset_filter.filters_expanded";
 constexpr const char* kSettingsMethodPrefix = "dev.asset_filter.methods.";
 
@@ -85,12 +86,14 @@ void OtherSettingsAndControls::ensure_persistent_state_loaded() {
         FilterState& state = persistent_state();
         state.map_assets = true;
         state.current_room = true;
+        state.fog = true;
         persistent_filters_expanded_flag() = false;
         return;
     }
     FilterState& state = persistent_state();
     state.map_assets = devmode::ui_settings::load_bool(kSettingsMapAssetsKey, true);
     state.current_room = devmode::ui_settings::load_bool(kSettingsCurrentRoomKey, true);
+    state.fog = devmode::ui_settings::load_bool(kSettingsFogKey, true);
     persistent_filters_expanded_flag() = devmode::ui_settings::load_bool(kSettingsFiltersExpandedKey, false);
 }
 
@@ -150,6 +153,7 @@ OtherSettingsAndControls::FilterState& OtherSettingsAndControls::mutable_state()
         if (!has_saved_state_) {
             state_->map_assets = true;
             state_->current_room = true;
+            state_->fog = true;
         }
     }
     return *state_;
@@ -185,6 +189,16 @@ void OtherSettingsAndControls::initialize() {
         state_ref.current_room = current_room_value;
     }
     entries_.push_back(std::move(room_entry));
+
+    FilterEntry fog_entry;
+    fog_entry.id = "fog";
+    fog_entry.kind = FilterKind::Fog;
+    const bool fog_value = use_saved_state ? state_ref.fog : true;
+    fog_entry.checkbox = std::make_unique<DMCheckbox>("Fog", fog_value);
+    if (!use_saved_state) {
+        state_ref.fog = fog_value;
+    }
+    entries_.push_back(std::move(fog_entry));
 
     static const std::vector<std::string> kSpawnMethods = {
         "Random",
@@ -586,6 +600,9 @@ void OtherSettingsAndControls::reset() {
             case FilterKind::CurrentRoom:
                 entry.checkbox->set_value(true);
                 break;
+            case FilterKind::Fog:
+                entry.checkbox->set_value(true);
+                break;
             case FilterKind::Type:
                 entry.checkbox->set_value(default_type_enabled(entry.id));
                 break;
@@ -597,6 +614,7 @@ void OtherSettingsAndControls::reset() {
     FilterState& state_ref = mutable_state();
     state_ref.map_assets = true;
     state_ref.current_room = true;
+    state_ref.fog = true;
     for (auto& kv : state_ref.type_filters) {
         kv.second = default_type_enabled(kv.first);
     }
@@ -614,6 +632,13 @@ bool OtherSettingsAndControls::default_type_enabled(const std::string& type) con
 bool OtherSettingsAndControls::default_method_enabled(const std::string& method) const {
     (void)method;
     return true;
+}
+
+bool OtherSettingsAndControls::fog_visible() const {
+    if (!enabled_) {
+        return true;
+    }
+    return state().fog;
 }
 
 bool OtherSettingsAndControls::passes(const Asset& asset) const {
@@ -682,6 +707,9 @@ void OtherSettingsAndControls::sync_state_from_ui() {
             break;
         case FilterKind::CurrentRoom:
             state_ref.current_room = value;
+            break;
+        case FilterKind::Fog:
+            state_ref.fog = value;
             break;
         case FilterKind::Type:
             state_ref.type_filters[entry.id] = value;
@@ -833,6 +861,7 @@ void OtherSettingsAndControls::layout_filter_checkboxes() {
         switch (entry.kind) {
         case FilterKind::MapAssets:
         case FilterKind::CurrentRoom:
+        case FilterKind::Fog:
             primary_entries.push_back(&entry);
             break;
         default:
@@ -1085,11 +1114,13 @@ void OtherSettingsAndControls::load_persisted_state() {
     if (!has_saved_state_) {
         state_ref.map_assets = true;
         state_ref.current_room = true;
+        state_ref.fog = true;
         filters_expanded_ = false;
         return;
     }
     state_ref.map_assets = devmode::ui_settings::load_bool(kSettingsMapAssetsKey, true);
     state_ref.current_room = devmode::ui_settings::load_bool(kSettingsCurrentRoomKey, true);
+    state_ref.fog = devmode::ui_settings::load_bool(kSettingsFogKey, true);
     filters_expanded_ = persistent_filters_expanded_flag();
 }
 
@@ -1098,6 +1129,7 @@ void OtherSettingsAndControls::persist_state() {
     devmode::ui_settings::save_bool(kSettingsInitializedKey, true);
     devmode::ui_settings::save_bool(kSettingsMapAssetsKey, state_ref.map_assets);
     devmode::ui_settings::save_bool(kSettingsCurrentRoomKey, state_ref.current_room);
+    devmode::ui_settings::save_bool(kSettingsFogKey, state_ref.fog);
     for (const auto& kv : state_ref.type_filters) {
         devmode::ui_settings::save_bool(make_type_setting_key(kv.first), kv.second);
     }

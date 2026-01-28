@@ -117,6 +117,7 @@ public:
     bool movement_debug_enabled() const { return movement_debug_enabled_; }
     void set_movement_debug_visible(bool visible);
     bool movement_debug_visible() const { return movement_debug_visible_; }
+    bool fog_visible() const;
     // Force the camera to refresh from current room settings on next update.
     void mark_camera_dirty();
 

@@ -241,5 +241,6 @@ private:
     float frustum_padding_world_ = 0.0f;
     bool depth_enabled_ = true;
     bool depth_debug_logging_ = false;
+    bool lock_anchor_to_screen_center_ = false;
     std::optional<float> tilt_override_deg_{};
 };

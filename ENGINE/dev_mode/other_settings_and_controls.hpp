@@ -75,8 +75,10 @@ public:
     int grid_resolution_value() const;
     void set_grid_resolution_change_callback(std::function<void(int)> cb);
 
+    bool fog_visible() const;
+
 private:
-    enum class FilterKind { MapAssets, CurrentRoom, Type, SpawnMethod };
+    enum class FilterKind { MapAssets, CurrentRoom, Fog, Type, SpawnMethod };
 
     struct FilterEntry {
         std::string id;
@@ -87,6 +89,7 @@ private:
     struct FilterState {
         bool map_assets = false;
         bool current_room = true;
+        bool fog = true;
         std::unordered_map<std::string, bool> type_filters;
         std::unordered_map<std::string, bool> method_filters;
 };

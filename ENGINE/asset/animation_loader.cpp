@@ -180,9 +180,11 @@ std::optional<AnimationChildFrameData> parse_child_frame_sample(const nlohmann::
         AnimationChildFrameData sample = make_default_child_frame(child_index);
         sample.dx = json_int(node.value("dx", 0), 0);
         sample.dy = json_int(node.value("dy", 0), 0);
-        sample.dz = json_int(node.value("dz", node.value("dy", 0)), 0);
+        // dz is stored as float percentage (0.0-1.0) of parent height
+        sample.dz = json_float(node.value("dz", 0.0f), 0.0f);
         if (!node.contains("dz")) {
-                sample.dz = sample.dy;
+                // Legacy fallback: if dz not present, use dy as dz
+                sample.dz = static_cast<float>(sample.dy);
                 sample.dy = 0;
         }
         if (node.contains("degree")) {

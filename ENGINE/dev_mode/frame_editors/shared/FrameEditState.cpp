@@ -282,7 +282,8 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
         entry = nlohmann::json::array();
         entry.push_back(static_cast<int>(std::lround(f.dx)));
         entry.push_back(static_cast<int>(std::lround(f.dy)));
-        entry.push_back(static_cast<double>(f.dz));
+        // dz is a raw delta value (like dx/dy), save as integer
+        entry.push_back(static_cast<int>(std::lround(f.dz)));
         if (f.resort_z || had_resort) {
             entry.push_back(f.resort_z);
         }

@@ -72,7 +72,8 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
-        // Set parent height for Z percent display
+        // Attack geometry uses Z as percentage of parent height
+        point_3d_editor_->set_z_display_mode(ZDisplayMode::Percentage);
         FramePointResolver resolver(context_.target);
         point_3d_editor_->set_parent_height(resolver.parent_height_px());
         point_3d_editor_->set_on_coordinates_changed([this]() {

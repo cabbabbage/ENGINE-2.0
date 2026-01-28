@@ -58,9 +58,8 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
-        // Set parent height for Z percent display
-        FramePointResolver resolver(context_.target);
-        point_3d_editor_->set_parent_height(resolver.parent_height_px());
+        // Movement mode uses raw delta Z values (like dx/dy), not percentages
+        point_3d_editor_->set_z_display_mode(ZDisplayMode::RawDelta);
     }
     wants_close_ = false;
     selected_index_ = 0;
@@ -125,8 +124,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
             selection_state_->world_z = snapped_world_z;
 
             SDL_Point anchor = asset_anchor_world();
-            FramePointResolver resolver(context_.target);
-            float base_z = resolver.base_world_z();
+            float base_z = base_world_z();
 
             float rel_x = snapped_world.x - static_cast<float>(anchor.x);
             float rel_y = snapped_world.y - static_cast<float>(anchor.y);
@@ -135,7 +133,8 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
 
             frames_[selected_index_].dx = std::round(rel_x - prev_rel_abs.x);
             frames_[selected_index_].dy = std::round(rel_y - prev_rel_abs.y);
-            frames_[selected_index_].dz = resolver.to_percent(snapped_world_z);
+            // dz is a raw delta value (like dx/dy), not a percentage
+            frames_[selected_index_].dz = std::round(snapped_world_z - base_z);
 
             rebuild_rel_positions();
             apply_live_changes();
@@ -180,8 +179,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
             SDL_FPoint snapped_world = snap_world_point_to_grid(new_world_pos, context_.snap_resolution);
             float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
             SDL_Point anchor = asset_anchor_world();
-            FramePointResolver resolver(context_.target);
-            float base_z = resolver.base_world_z();
+            float base_z = base_world_z();
 
             // Convert world to relative to anchor
             float rel_x = snapped_world.x - static_cast<float>(anchor.x);
@@ -190,10 +188,10 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
             // Previous frame absolute relative position
             SDL_FPoint prev_rel_abs = rel_positions_[selected_index_ - 1];
 
-            // New local delta
+            // New local delta - dz is a raw delta value (like dx/dy), not a percentage
             frames_[selected_index_].dx = std::round(rel_x - prev_rel_abs.x);
             frames_[selected_index_].dy = std::round(rel_y - prev_rel_abs.y);
-            frames_[selected_index_].dz = resolver.to_percent(snapped_world_z);
+            frames_[selected_index_].dz = std::round(snapped_world_z - base_z);
 
             rebuild_rel_positions();
             apply_live_changes();
@@ -437,13 +435,13 @@ void MovementFrameEditor::rebuild_rel_positions() {
     rel_positions_.resize(count, SDL_FPoint{0.0f, 0.0f});
     rel_positions_z_.resize(count, 0.0f);
     if (count == 0) return;
-    FramePointResolver resolver(context_.target);
+    // dz is a raw delta value (like dx/dy), not a percentage
     rel_positions_[0] = SDL_FPoint{0.0f, 0.0f};
-    rel_positions_z_[0] = resolver.parent_height_px() * frames_[0].dz;
+    rel_positions_z_[0] = frames_[0].dz;
     for (std::size_t i = 1; i < count; ++i) {
         rel_positions_[i].x = rel_positions_[i - 1].x + frames_[i].dx;
         rel_positions_[i].y = rel_positions_[i - 1].y + frames_[i].dy;
-        rel_positions_z_[i] = resolver.parent_height_px() * frames_[i].dz;
+        rel_positions_z_[i] = frames_[i].dz;
     }
 }
 
@@ -632,11 +630,7 @@ void MovementFrameEditor::refresh_selection_state() {
     if (selection_state_->target != SelectionTarget::MovementPoint) {
         return;
     }
-    // Update parent height for Z percent display (in case scale changed)
-    if (point_3d_editor_) {
-        FramePointResolver resolver(context_.target);
-        point_3d_editor_->set_parent_height(resolver.parent_height_px());
-    }
+    // Movement mode uses raw delta Z, no parent height needed
     const int idx = clamp_index(selected_index_, static_cast<int>(rel_positions_.size()));
     selection_state_->child_index = -1;
     SDL_Point anchor = asset_anchor_world();

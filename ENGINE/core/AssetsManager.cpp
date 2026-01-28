@@ -2056,6 +2056,11 @@ void Assets::rebuild_active_from_screen_grid() {
                                        }),
                         active_assets.end());
 
+    // Batch collect assets to add, then bulk insert + single sort
+    // (replaces O(k*n) individual lower_bound+insert with O(n log n) single sort)
+    std::vector<Asset*> assets_to_add;
+    assets_to_add.reserve(visible_candidate_buffer_.size());
+
     for (Asset* asset : visible_candidate_buffer_) {
         if (!asset) {
             continue;
@@ -2064,18 +2069,23 @@ void Assets::rebuild_active_from_screen_grid() {
             continue;
         }
         const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
-        auto insert_pos = std::lower_bound(active_assets.begin(), active_assets.end(), asset, depth_order);
-        active_assets.insert(insert_pos, asset);
         asset->last_active_frame_id = current_frame_id;
         asset->last_visible_frame_id = current_frame_id;
         asset->active = true;
         if (!was_active) {
             newly_active_assets.push_back(asset);
         }
+        assets_to_add.push_back(asset);
         active_changed = true;
     }
 
-    if (!std::is_sorted(active_assets.begin(), active_assets.end(), depth_order)) {
+    // Bulk append all new assets (O(k) amortized)
+    if (!assets_to_add.empty()) {
+        active_assets.insert(active_assets.end(), assets_to_add.begin(), assets_to_add.end());
+    }
+
+    // Single sort of entire list (O(n log n) once, not O(k*n))
+    if (active_changed || !std::is_sorted(active_assets.begin(), active_assets.end(), depth_order)) {
         std::sort(active_assets.begin(), active_assets.end(), depth_order);
     }
 

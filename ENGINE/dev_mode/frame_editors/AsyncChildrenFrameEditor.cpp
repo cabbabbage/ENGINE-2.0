@@ -12,6 +12,7 @@
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/frame_editors/shared/SnapUtils.hpp"
+#include "dev_mode/frame_editors/shared/FramePointResolver.hpp"
 
 #include "render/warped_screen_grid.hpp"
 
@@ -93,10 +94,11 @@ void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
             SDL_Point anchor = asset_anchor_world();
             const bool flipped = context_.target && context_.target->flipped;
+            FramePointResolver resolver(context_.target);
 
             float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
             float dy_world = (snapped_world.y - static_cast<float>(anchor.y)) / scale;
-            float dz_world = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+            float dz_percent = resolver.to_percent(snapped_world_z);
 
             ensure_async_frame_capacity(selected_child_index_, selected_child_frame_index_);
 
@@ -111,7 +113,7 @@ void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 
             sample.dx = flipped ? -dx_world : dx_world;
             sample.dy = dy_world;
-            sample.dz = dz_world;
+            sample.dz = dz_percent;
 
             data_dirty_ = true;
             refresh_selection_state();
@@ -540,13 +542,13 @@ AsyncChildrenFrameEditor::ChildWorldPose AsyncChildrenFrameEditor::child_world_p
     if (!context_.target) {
         return pose;
     }
+    FramePointResolver resolver(context_.target);
     const float scale = attachment_scale();
     const float dx = sample.dx * scale;
     const float dy = sample.dy * scale;
-    const float dz = sample.dz * scale;
     const float world_dx = context_.target->flipped ? -dx : dx;
     pose.pos = SDL_FPoint{world_dx, dy};
-    pose.z = (context_.target ? context_.target->world_z_offset() : 0.0f) + dz;
+    pose.z = resolver.to_world_z(sample.dz);
     return pose;
 }
 
@@ -705,7 +707,8 @@ void AsyncChildrenFrameEditor::refresh_selection_state() {
     SDL_Point anchor = asset_anchor_world();
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint world{anchor.x + pose.pos.x, anchor.y + pose.pos.y};
-    const float base_z = context_.target ? context_.target->world_z_offset() : 0.0f;
+    FramePointResolver resolver(context_.target);
+    const float base_z = resolver.base_world_z();
     selection_state_->world_pos = world;
     selection_state_->world_z = pose.z;
     SDL_FPoint screen{};
@@ -724,14 +727,14 @@ void AsyncChildrenFrameEditor::apply_preview() {
         static_cast<int>(std::lround(context_.target->smoothed_translation_x())),
         static_cast<int>(std::lround(context_.target->smoothed_translation_y()))
     };
+    FramePointResolver resolver(context_.target);
     animation_update::child_attachments::ParentState parent_state{};
     parent_state.position = render_pos;
     parent_state.base_position = animation_update::detail::bottom_middle_for(*context_.target, render_pos);
     parent_state.scale = context_.target->smoothed_scale();
     parent_state.flipped = context_.target->flipped;
-    parent_state.world_z = context_.target->world_z_offset();
+    parent_state.world_z = resolver.base_world_z();
     parent_state.animation_id = context_.animation_id;
-
     std::vector<AnimationChildFrameData> overrides;
     for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
         if (idx >= child_modes_.size()) continue;
@@ -743,7 +746,7 @@ void AsyncChildrenFrameEditor::apply_preview() {
         entry.child_index = static_cast<int>(idx);
         entry.dx = static_cast<int>(std::lround(sample.dx));
         entry.dy = static_cast<int>(std::lround(sample.dy));
-        entry.dz = static_cast<int>(std::lround(sample.dz));
+        entry.dz = static_cast<int>(std::lround(resolver.parent_height_px() * sample.dz));
         entry.degree = sample.degree;
         entry.visible = sample.visible;
         overrides.push_back(entry);

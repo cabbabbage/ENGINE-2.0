@@ -107,12 +107,7 @@ ChildFrameSample child_frame_from_json(const nlohmann::json& sample, int child_i
     if (sample.is_object()) {
         if (sample.contains("dx")) child.dx = static_cast<float>(read_int(sample["dx"], 0));
         if (sample.contains("dy")) child.dy = static_cast<float>(read_int(sample["dy"], 0));
-        if (sample.contains("dz")) {
-            child.dz = static_cast<float>(read_int(sample["dz"], 0));
-        } else {
-            child.dz = child.dy;
-            child.dy = 0.0f;
-        }
+        if (sample.contains("dz")) child.dz = read_float(sample["dz"], 0.0f);
         if (sample.contains("degree")) {
             child.degree = read_float(sample["degree"], 0.0f);
         } else if (sample.contains("rotation")) {
@@ -124,14 +119,9 @@ ChildFrameSample child_frame_from_json(const nlohmann::json& sample, int child_i
         if (!sample.empty()) child.dx = static_cast<float>(read_int(sample[0], 0));
         if (sample.size() > 1) child.dy = static_cast<float>(read_int(sample[1], 0));
         if (sample.size() > 2 && sample[2].is_number()) {
-            child.dz = static_cast<float>(read_int(sample[2], 0));
+            child.dz = read_float(sample[2], 0.0f);
             if (sample.size() > 3) child.degree = read_float(sample[3], 0.0f);
             if (sample.size() > 4) child.visible = read_bool(sample[4], child.visible);
-        } else {
-            if (sample.size() > 2) child.degree = read_float(sample[2], 0.0f);
-            if (sample.size() > 3) child.visible = read_bool(sample[3], child.visible);
-            child.dz = child.dy;
-            child.dy = 0.0f;
         }
         child.has_data = true;
     }
@@ -143,7 +133,7 @@ nlohmann::json child_frame_to_json(const ChildFrameSample& frame) {
     nlohmann::json sample = nlohmann::json::object();
     sample["dx"] = has_sample ? static_cast<int>(std::lround(frame.dx)) : 0;
     sample["dy"] = has_sample ? static_cast<int>(std::lround(frame.dy)) : 0;
-    sample["dz"] = has_sample ? static_cast<int>(std::lround(frame.dz)) : 0;
+    sample["dz"] = has_sample ? static_cast<double>(frame.dz) : 0.0;
     sample["degree"] = has_sample ? static_cast<double>(frame.degree) : 0.0;
     sample["visible"] = has_sample ? frame.visible : false;
     return sample;

@@ -13,6 +13,7 @@
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/frame_editors/shared/SnapUtils.hpp"
+#include "dev_mode/frame_editors/shared/FramePointResolver.hpp"
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
 
@@ -92,10 +93,10 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
             SDL_Point anchor = asset_anchor_world();
             float scale = asset_local_scale();
-
+            FramePointResolver resolver(context_.target);
             box->center_x = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
             box->center_y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
-            box->center_z = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+            box->center_z = resolver.to_percent(snapped_world_z);
 
             persist_changes();
             refresh_selection_state();
@@ -117,9 +118,10 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             SDL_Point anchor = asset_anchor_world();
             float scale = asset_local_scale();
 
+            FramePointResolver resolver(context_.target);
             box->center_x = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
             box->center_y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
-            box->center_z = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+            box->center_z = resolver.to_percent(snapped_world_z);
 
             persist_changes();
         });
@@ -701,9 +703,10 @@ void HitGeoFrameEditor::refresh_selection_state() {
         static_cast<float>(anchor.y) - box->center_y * scale};
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint screen = cam.map_to_screen_f(world);
+    FramePointResolver resolver(context_.target);
     selection_state_->world_pos = world;
-    const float base_z = base_world_z();
-    const float world_z = base_z + box->center_z * scale;
+    const float base_z = resolver.base_world_z();
+    const float world_z = resolver.to_world_z(box->center_z);
     selection_state_->world_z = world_z;
     selection_state_->screen_pos = round_point(screen);
     selection_state_->set_anchor_world(anchor, base_z);

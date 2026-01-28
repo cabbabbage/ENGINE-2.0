@@ -256,18 +256,6 @@ bool project_world_point(const WarpedScreenGrid& cam,
     return std::isfinite(out.x) && std::isfinite(out.y);
 }
 
-int compute_mesh_segments(float screen_size, int quality_percent) {
-    if (!std::isfinite(screen_size) || screen_size <= 0.0f) {
-        return 1;
-    }
-    const float clamped_quality = static_cast<float>(std::clamp(quality_percent, 10, 100));
-    const float quality_scale = clamped_quality / 100.0f;
-    const float base_segment_px = 200.0f;
-    const float target_px = base_segment_px / quality_scale;
-    const int segments = static_cast<int>(std::ceil(screen_size / target_px));
-    return std::clamp(segments, 1, 8);
-}
-
 bool build_perspective_mesh(const RenderObject& obj,
                             const WarpedScreenGrid& cam,
                             float perspective_scale,
@@ -323,75 +311,102 @@ bool build_perspective_mesh(const RenderObject& obj,
         std::swap(v0, v1);
     }
 
-    const SDL_FPoint world_tl{world_x - half_width, world_y};
-    const SDL_FPoint world_tr{world_x + half_width, world_y};
-    const SDL_FPoint world_bl{world_x - half_width, world_y};
-    const SDL_FPoint world_br{world_x + half_width, world_y};
-
-    SDL_FPoint screen_tl{};
-    SDL_FPoint screen_tr{};
+    // Anchor the quad to the real-world bottom corners. Build a perfect rectangle whose
+    // width is the bottom edge and whose height preserves the source aspect ratio.
     SDL_FPoint screen_bl{};
     SDL_FPoint screen_br{};
-    if (!project_world_point(cam, world_tl.x, world_tl.y, base_z + height, screen_tl) ||
-        !project_world_point(cam, world_tr.x, world_tr.y, base_z + height, screen_tr) ||
-        !project_world_point(cam, world_br.x, world_br.y, base_z, screen_br) ||
-        !project_world_point(cam, world_bl.x, world_bl.y, base_z, screen_bl)) {
+    if (!project_world_point(cam, world_x - half_width, world_y, base_z, screen_bl) ||
+        !project_world_point(cam, world_x + half_width, world_y, base_z, screen_br)) {
         return false;
     }
 
-    const float min_x = std::min({screen_tl.x, screen_tr.x, screen_br.x, screen_bl.x});
-    const float max_x = std::max({screen_tl.x, screen_tr.x, screen_br.x, screen_bl.x});
-    const float min_y = std::min({screen_tl.y, screen_tr.y, screen_br.y, screen_bl.y});
-    const float max_y = std::max({screen_tl.y, screen_tr.y, screen_br.y, screen_bl.y});
-    const float screen_w = max_x - min_x;
-    const float screen_h = max_y - min_y;
+    const float bottom_dx = screen_br.x - screen_bl.x;
+    const float bottom_dy = screen_br.y - screen_bl.y;
+    const float bottom_len = std::hypot(bottom_dx, bottom_dy);
+    if (bottom_len < 1e-5f) {
+        return false; // degenerate projection
+    }
 
-    const int quality_percent = cam.realism_settings().render_quality_percent;
-    const int cols = compute_mesh_segments(screen_w, quality_percent);
-    const int rows = compute_mesh_segments(screen_h, quality_percent);
+    const float aspect = (tex_w > 0 && tex_h > 0)
+        ? static_cast<float>(tex_h) / static_cast<float>(tex_w)
+        : (rect.w != 0 ? static_cast<float>(rect.h) / static_cast<float>(rect.w) : 1.0f);
+    float screen_height = bottom_len * aspect;
+    if (!std::isfinite(screen_height) || screen_height <= 0.0f) {
+        screen_height = std::abs(screen_height);
+        if (screen_height <= 0.0f) {
+            screen_height = world_height; // fallback to unwarped height if projection misbehaves
+        }
+    }
 
-    const int vert_cols = cols + 1;
-    const int vert_rows = rows + 1;
+    // Perpendicular unit vector to the bottom edge
+    const float nx = -bottom_dy / bottom_len;
+    const float ny =  bottom_dx / bottom_len;
+
+    // Two candidate orientations; pick the one that places the top above the bottom in screen space.
+    const SDL_FPoint cand_tl_a{screen_bl.x + nx * screen_height, screen_bl.y + ny * screen_height};
+    const SDL_FPoint cand_tr_a{screen_br.x + nx * screen_height, screen_br.y + ny * screen_height};
+    const SDL_FPoint cand_tl_b{screen_bl.x - nx * screen_height, screen_bl.y - ny * screen_height};
+    const SDL_FPoint cand_tr_b{screen_br.x - nx * screen_height, screen_br.y - ny * screen_height};
+
+    const float avg_bottom_y = 0.5f * (screen_bl.y + screen_br.y);
+    const float avg_top_a = 0.5f * (cand_tl_a.y + cand_tr_a.y);
+    const float avg_top_b = 0.5f * (cand_tl_b.y + cand_tr_b.y);
+
+    bool a_is_above = avg_top_a < avg_bottom_y;
+    bool b_is_above = avg_top_b < avg_bottom_y;
+
+    SDL_FPoint screen_tl{};
+    SDL_FPoint screen_tr{};
+    if (a_is_above && (!b_is_above || avg_top_a <= avg_top_b)) {
+        screen_tl = cand_tl_a;
+        screen_tr = cand_tr_a;
+    } else if (b_is_above && (!a_is_above || avg_top_b <= avg_top_a)) {
+        screen_tl = cand_tl_b;
+        screen_tr = cand_tr_b;
+    } else {
+        // Neither is above; choose the one closer to being above (smaller avg y).
+        if (avg_top_a <= avg_top_b) {
+            screen_tl = cand_tl_a;
+            screen_tr = cand_tr_a;
+        } else {
+            screen_tl = cand_tl_b;
+            screen_tr = cand_tr_b;
+        }
+    }
+
     mesh.vertices.clear();
     mesh.indices.clear();
-    mesh.vertices.reserve(static_cast<std::size_t>(vert_cols * vert_rows));
-    mesh.indices.reserve(static_cast<std::size_t>(cols * rows * 6));
+    mesh.vertices.reserve(4);
+    mesh.indices.reserve(6);
 
     const SDL_Color vertex_color{255, 255, 255, obj.color_mod.a};
 
-    for (int row = 0; row < vert_rows; ++row) {
-        const float v = static_cast<float>(row) / static_cast<float>(rows);
-        const float world_z = base_z + (1.0f - v) * height;
-        const float tex_v = v0 + (v1 - v0) * v;
-        for (int col = 0; col < vert_cols; ++col) {
-            const float u = static_cast<float>(col) / static_cast<float>(cols);
-            const float world_x_local = world_x + (u - 0.5f) * (half_width * 2.0f);
-            SDL_FPoint projected{};
-            if (!project_world_point(cam, world_x_local, world_y, world_z, projected)) {
-                return false;
-            }
-            SDL_Vertex vertex{};
-            vertex.position = projected;
-            vertex.color = vertex_color;
-            vertex.tex_coord = SDL_FPoint{u0 + (u1 - u0) * u, tex_v};
-            mesh.vertices.push_back(vertex);
-        }
-    }
+    SDL_Vertex vtx_tl{};
+    vtx_tl.position = screen_tl;
+    vtx_tl.color = vertex_color;
+    vtx_tl.tex_coord = SDL_FPoint{u0, v0};
 
-    for (int row = 0; row < rows; ++row) {
-        for (int col = 0; col < cols; ++col) {
-            const int i0 = row * vert_cols + col;
-            const int i1 = i0 + 1;
-            const int i2 = i0 + vert_cols;
-            const int i3 = i2 + 1;
-            mesh.indices.push_back(i0);
-            mesh.indices.push_back(i1);
-            mesh.indices.push_back(i3);
-            mesh.indices.push_back(i0);
-            mesh.indices.push_back(i3);
-            mesh.indices.push_back(i2);
-        }
-    }
+    SDL_Vertex vtx_tr{};
+    vtx_tr.position = screen_tr;
+    vtx_tr.color = vertex_color;
+    vtx_tr.tex_coord = SDL_FPoint{u1, v0};
+
+    SDL_Vertex vtx_br{};
+    vtx_br.position = screen_br;
+    vtx_br.color = vertex_color;
+    vtx_br.tex_coord = SDL_FPoint{u1, v1};
+
+    SDL_Vertex vtx_bl{};
+    vtx_bl.position = screen_bl;
+    vtx_bl.color = vertex_color;
+    vtx_bl.tex_coord = SDL_FPoint{u0, v1};
+
+    mesh.vertices.push_back(vtx_tl);
+    mesh.vertices.push_back(vtx_tr);
+    mesh.vertices.push_back(vtx_br);
+    mesh.vertices.push_back(vtx_bl);
+
+    mesh.indices = {0, 1, 2, 0, 2, 3};
 
     return true;
 }

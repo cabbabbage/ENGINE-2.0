@@ -125,6 +125,41 @@ endif()
 
 # OpenGL (needed by glad-backed GL apps)
 find_package(OpenGL REQUIRED)
+if (WIN32)
+    # Ensure opengl32.lib is found even when Windows SDK lib paths are not on the default LIB search list.
+    set(_WINSDK_KITS_ROOT "C:/Program Files (x86)/Windows Kits/10/Lib")
+    if (EXISTS "${_WINSDK_KITS_ROOT}")
+        file(GLOB _winsdk_versions LIST_DIRECTORIES true "${_WINSDK_KITS_ROOT}/*")
+        list(SORT _winsdk_versions COMPARE NATURAL ORDER DESCENDING)
+        list(GET _winsdk_versions 0 _winsdk_latest)
+        set(_winsdk_um_x64 "${_winsdk_latest}/um/x64")
+        set(_winsdk_ucrt_x64 "${_winsdk_latest}/ucrt/x64")
+    endif()
+    find_library(OPENGL32_ABSOLUTE
+        NAMES opengl32 OpenGL32
+        PATHS "${_winsdk_um_x64}" "${_WINSDK_KITS_ROOT}"
+        PATH_SUFFIXES "um/x64" "x64"
+    )
+    if (OPENGL32_ABSOLUTE AND TARGET OpenGL::GL)
+        set_property(TARGET OpenGL::GL PROPERTY IMPORTED_IMPLIB "${OPENGL32_ABSOLUTE}")
+        set_property(TARGET OpenGL::GL PROPERTY IMPORTED_LOCATION "${OPENGL32_ABSOLUTE}")
+    endif()
+    if (EXISTS "${_winsdk_um_x64}")
+        set(WINSDK_UM_X64_LIBDIR "${_winsdk_um_x64}")
+    endif()
+    if (EXISTS "${_winsdk_ucrt_x64}")
+        set(WINSDK_UCRT_X64_LIBDIR "${_winsdk_ucrt_x64}")
+    endif()
+endif()
+if (MSVC)
+    set(_VCTOOLS_ROOT "C:/VS2022/BuildTools/VC/Tools/MSVC")
+    if (EXISTS "${_VCTOOLS_ROOT}")
+        file(GLOB _vctools_versions LIST_DIRECTORIES true "${_VCTOOLS_ROOT}/*")
+        list(SORT _vctools_versions COMPARE NATURAL ORDER DESCENDING)
+        list(GET _vctools_versions 0 _vctools_latest)
+        set(MSVC_LIB_DIR "${_vctools_latest}/lib/x64")
+    endif()
+endif()
 
 # ------------------------------------------
 # Include dirs
@@ -164,6 +199,18 @@ target_link_libraries(engine
         ${GLAD_TARGET}
         OpenGL::GL
 )
+if (WINSDK_UM_X64_LIBDIR)
+    target_link_directories(engine PRIVATE "${WINSDK_UM_X64_LIBDIR}")
+endif()
+if (WINSDK_UCRT_X64_LIBDIR)
+    target_link_directories(engine PRIVATE "${WINSDK_UCRT_X64_LIBDIR}")
+endif()
+if (MSVC_LIB_DIR)
+    target_link_directories(engine PRIVATE "${MSVC_LIB_DIR}")
+endif()
+if (OPENGL32_ABSOLUTE)
+    target_link_libraries(engine PRIVATE ${OPENGL32_ABSOLUTE})
+endif()
 
 # Link Windows COM/Shell libs for modern file dialogs
 if (WIN32)
@@ -249,6 +296,18 @@ target_link_libraries(engine_tests
         ${GLAD_TARGET}
         OpenGL::GL
 )
+if (WINSDK_UM_X64_LIBDIR)
+    target_link_directories(engine_tests PRIVATE "${WINSDK_UM_X64_LIBDIR}")
+endif()
+if (WINSDK_UCRT_X64_LIBDIR)
+    target_link_directories(engine_tests PRIVATE "${WINSDK_UCRT_X64_LIBDIR}")
+endif()
+if (MSVC_LIB_DIR)
+    target_link_directories(engine_tests PRIVATE "${MSVC_LIB_DIR}")
+endif()
+if (OPENGL32_ABSOLUTE)
+    target_link_libraries(engine_tests PRIVATE ${OPENGL32_ABSOLUTE})
+endif()
 
 if (WIN32)
     target_link_libraries(engine_tests PRIVATE Ole32 Shell32)
@@ -284,3 +343,12 @@ target_link_libraries(engine_world_tests
     PRIVATE
         SDL2::SDL2 ${_SDL2MAIN_TARGET}
 )
+if (WINSDK_UM_X64_LIBDIR)
+    target_link_directories(engine_world_tests PRIVATE "${WINSDK_UM_X64_LIBDIR}")
+endif()
+if (WINSDK_UCRT_X64_LIBDIR)
+    target_link_directories(engine_world_tests PRIVATE "${WINSDK_UCRT_X64_LIBDIR}")
+endif()
+if (MSVC_LIB_DIR)
+    target_link_directories(engine_world_tests PRIVATE "${MSVC_LIB_DIR}")
+endif()

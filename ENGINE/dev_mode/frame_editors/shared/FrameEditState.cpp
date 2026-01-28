@@ -179,10 +179,10 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
             if (entry.size() > 1 && entry[1].is_number()) f.dy = static_cast<float>(entry[1].get<double>());
             if (entry.size() > 2 && entry[2].is_number()) {
                 f.dz = static_cast<float>(entry[2].get<double>());
-            } else if (entry.size() > 2 && entry[2].is_boolean()) {
-                f.resort_z = entry[2].get<bool>();
             }
-            if (entry.size() > 3 && entry[3].is_boolean()) {
+            if (entry.size() > 2 && entry[2].is_boolean()) {
+                f.resort_z = entry[2].get<bool>();
+            } else if (entry.size() > 3 && entry[3].is_boolean()) {
                 f.resort_z = entry[3].get<bool>();
             }
 
@@ -282,7 +282,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
         entry = nlohmann::json::array();
         entry.push_back(static_cast<int>(std::lround(f.dx)));
         entry.push_back(static_cast<int>(std::lround(f.dy)));
-        entry.push_back(static_cast<int>(std::lround(f.dz)));
+        entry.push_back(static_cast<double>(f.dz));
         if (f.resort_z || had_resort) {
             entry.push_back(f.resort_z);
         }
@@ -367,7 +367,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
 
     int total_dx = 0;
     int total_dy = 0;
-    int total_dz = 0;
+    double total_dz = 0.0;
     for (std::size_t i = 1; i < movement.size(); ++i) {
         const auto& entry = movement[i];
         if (entry.is_array()) {
@@ -375,8 +375,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
             else if (entry.size() > 0 && entry[0].is_number()) total_dx += static_cast<int>(std::lround(entry[0].get<double>()));
             if (entry.size() > 1 && entry[1].is_number_integer()) total_dy += entry[1].get<int>();
             else if (entry.size() > 1 && entry[1].is_number()) total_dy += static_cast<int>(std::lround(entry[1].get<double>()));
-            if (entry.size() > 2 && entry[2].is_number_integer()) total_dz += entry[2].get<int>();
-            else if (entry.size() > 2 && entry[2].is_number()) total_dz += static_cast<int>(std::lround(entry[2].get<double>()));
+            if (entry.size() > 2 && entry[2].is_number()) total_dz += entry[2].get<double>();
         }
     }
 

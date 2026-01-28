@@ -1264,7 +1264,7 @@
       "lighting_info": [],
       "neighbor_search_distance": 500,
       "size_settings": {
-        "scale_percentage": 192.0
+        "scale_percentage": 100.0
       },
       "start": "default",
       "tags": [],
@@ -3603,6 +3603,9 @@
         "falloff_exponent": 1.0499999523162842,
         "falloff_start": 0.0
       },
+      "size_settings": {
+        "scale_percentage": 210.0
+      },
       "spawn_groups": [],
       "start": "default",
       "tags": [],
@@ -3874,16 +3877,16 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 473,
+          "camera_height_px": 3500,
           "camera_pan_y_percent": 0,
           "camera_tilt_deg": 45.0,
           "camera_y_distance_px": 891,
           "camera_zoom_percent": 93,
           "curvyness": 2,
           "display_color": [
+            139,
+            36,
             242,
-            36,
-            36,
             255
           ],
           "edge_smoothness": 101,
@@ -4113,9 +4116,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            138,
+            242,
             36,
-            242,
-            242,
             255
           ],
           "edge_smoothness": 2,

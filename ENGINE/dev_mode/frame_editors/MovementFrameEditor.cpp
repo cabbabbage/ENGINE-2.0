@@ -14,6 +14,7 @@
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/frame_editors/shared/SnapUtils.hpp"
+#include "dev_mode/frame_editors/shared/FramePointResolver.hpp"
 
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
@@ -121,18 +122,17 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
             selection_state_->world_z = snapped_world_z;
 
             SDL_Point anchor = asset_anchor_world();
-            float base_z = base_world_z();
+            FramePointResolver resolver(context_.target);
+            float base_z = resolver.base_world_z();
 
             float rel_x = snapped_world.x - static_cast<float>(anchor.x);
             float rel_y = snapped_world.y - static_cast<float>(anchor.y);
-            float rel_z = snapped_world_z - base_z;
 
             SDL_FPoint prev_rel_abs = rel_positions_[selected_index_ - 1];
-            float prev_rel_z_abs = rel_positions_z_[selected_index_ - 1];
 
             frames_[selected_index_].dx = std::round(rel_x - prev_rel_abs.x);
             frames_[selected_index_].dy = std::round(rel_y - prev_rel_abs.y);
-            frames_[selected_index_].dz = std::round(rel_z - prev_rel_z_abs);
+            frames_[selected_index_].dz = resolver.to_percent(snapped_world_z);
 
             rebuild_rel_positions();
             apply_live_changes();
@@ -177,21 +177,20 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
             SDL_FPoint snapped_world = snap_world_point_to_grid(new_world_pos, context_.snap_resolution);
             float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
             SDL_Point anchor = asset_anchor_world();
-            float base_z = base_world_z();
+            FramePointResolver resolver(context_.target);
+            float base_z = resolver.base_world_z();
 
             // Convert world to relative to anchor
             float rel_x = snapped_world.x - static_cast<float>(anchor.x);
             float rel_y = snapped_world.y - static_cast<float>(anchor.y);
-            float rel_z = snapped_world_z - base_z;
 
             // Previous frame absolute relative position
             SDL_FPoint prev_rel_abs = rel_positions_[selected_index_ - 1];
-            float prev_rel_z_abs = rel_positions_z_[selected_index_ - 1];
 
             // New local delta
             frames_[selected_index_].dx = std::round(rel_x - prev_rel_abs.x);
             frames_[selected_index_].dy = std::round(rel_y - prev_rel_abs.y);
-            frames_[selected_index_].dz = std::round(rel_z - prev_rel_z_abs);
+            frames_[selected_index_].dz = resolver.to_percent(snapped_world_z);
 
             rebuild_rel_positions();
             apply_live_changes();
@@ -435,12 +434,13 @@ void MovementFrameEditor::rebuild_rel_positions() {
     rel_positions_.resize(count, SDL_FPoint{0.0f, 0.0f});
     rel_positions_z_.resize(count, 0.0f);
     if (count == 0) return;
+    FramePointResolver resolver(context_.target);
     rel_positions_[0] = SDL_FPoint{0.0f, 0.0f};
-    rel_positions_z_[0] = 0.0f;
+    rel_positions_z_[0] = resolver.parent_height_px() * frames_[0].dz;
     for (std::size_t i = 1; i < count; ++i) {
         rel_positions_[i].x = rel_positions_[i - 1].x + frames_[i].dx;
         rel_positions_[i].y = rel_positions_[i - 1].y + frames_[i].dy;
-        rel_positions_z_[i] = rel_positions_z_[i - 1] + frames_[i].dz;
+        rel_positions_z_[i] = resolver.parent_height_px() * frames_[i].dz;
     }
 }
 

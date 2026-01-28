@@ -15,6 +15,7 @@
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/frame_editors/shared/SnapUtils.hpp"
+#include "dev_mode/frame_editors/shared/FramePointResolver.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "render/composite_asset_renderer.hpp"
 #include <SDL_image.h>
@@ -118,15 +119,16 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
             SDL_Point anchor = asset_anchor_world();
             const bool flipped = context_.target && context_.target->flipped;
+            FramePointResolver resolver(context_.target);
 
             float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
             float dy_world = kLockedDepthValue;
-            float dz_world = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+            float dz_percent = resolver.to_percent(snapped_world_z);
 
             auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
             sample.dx = flipped ? -dx_world : dx_world;
             sample.dy = dy_world;
-            sample.dz = dz_world;
+            sample.dz = dz_percent;
             sample.has_data = true;
             sample.visible = true;
 
@@ -155,15 +157,16 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             selection_state_->world_z = snapped_world_z;
             SDL_Point anchor = asset_anchor_world();
             const bool flipped = context_.target && context_.target->flipped;
+            FramePointResolver resolver(context_.target);
 
             float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
             float dy_world = kLockedDepthValue;
-            float dz_world = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+            float dz_percent = resolver.to_percent(snapped_world_z);
 
             auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
             sample.dx = flipped ? -dx_world : dx_world;
             sample.dy = dy_world;
-            sample.dz = dz_world;
+            sample.dz = dz_percent;
             sample.has_data = true;
             sample.visible = true;
 
@@ -638,6 +641,7 @@ void SyncChildrenFrameEditor::apply_current_frame_to_children() {
     parent_state.world_z = context_.target->world_z_offset();
     parent_state.animation_id = context_.animation_id;
 
+    FramePointResolver resolver(context_.target);
     std::vector<AnimationChildFrameData> overrides;
     for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
         if (idx >= static_frames_by_child_.size()) continue;
@@ -655,7 +659,7 @@ void SyncChildrenFrameEditor::apply_current_frame_to_children() {
         entry.child_index = static_cast<int>(idx);
         entry.dx = static_cast<int>(std::lround(sample.dx));
         entry.dy = static_cast<int>(std::lround(sample.dy));
-        entry.dz = static_cast<int>(std::lround(sample.dz));
+        entry.dz = static_cast<int>(std::lround(resolver.parent_height_px() * sample.dz));
         entry.degree = sample.degree;
         entry.visible = sample.visible;
         overrides.push_back(entry);
@@ -706,31 +710,15 @@ SyncChildrenFrameEditor::ChildWorldPose SyncChildrenFrameEditor::child_world_pos
     }
     const auto& sample = timeline[static_cast<std::size_t>(frame_idx)];
 
-    // Calculate 3D world position using the unified calculation system
-    // This ensures consistency with runtime child attachment calculations
+    FramePointResolver resolver(context_.target);
     const float scale = attachment_scale();
-
-    // Use zero anchor for the parent state - we'll return relative position
-    // The rendering code adds the anchor, so we need relative displacement
-    const child_3d::Parent3DState parent_3d_state{
-        SDL_FPoint{0.0f, 0.0f},  // Zero anchor - return relative position
-        context_.target->world_z_offset(),
-        scale,
-        context_.target->flipped
-    };
-
-    const child_3d::Child3DDisplacement displacement{
-        sample.dx,
-        sample.dy,
-        sample.dz
-    };
-
-    const auto world_pos_3d = child_3d::calculate_child_world_position(
-        parent_3d_state, displacement);
-
-    // Return relative position (anchor will be added by caller in render_world)
-    pose.pos = world_pos_3d.to_2d();
-    pose.z = world_pos_3d.z;
+    float dx = sample.dx * scale;
+    if (context_.target && context_.target->flipped) {
+        dx = -dx;
+    }
+    float dy = sample.dy * scale;
+    pose.pos = SDL_FPoint{dx, dy};
+    pose.z = resolver.to_world_z(sample.dz);
     return pose;
 }
 
@@ -820,10 +808,11 @@ void SyncChildrenFrameEditor::refresh_selection_state() {
         selection_state_->target != SelectionTarget::ChildPoint) {
         return;
     }
+    FramePointResolver resolver(context_.target);
     selection_state_->child_index = selected_child_index_;
     const ChildWorldPose pose = child_world_pose(selected_child_index_);
     SDL_Point anchor = asset_anchor_world();
-    const float base_z = context_.target ? context_.target->world_z_offset() : 0.0f;
+    const float base_z = resolver.base_world_z();
     // Store ABSOLUTE world position (anchor + offset) so callbacks can correctly convert back to offsets
     selection_state_->world_pos = SDL_FPoint{
         static_cast<float>(anchor.x) + pose.pos.x,

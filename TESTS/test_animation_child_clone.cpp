@@ -2,69 +2,65 @@
 
 #include <vector>
 
-#include "asset/animation_cloner.hpp"
+#include "asset/animation.hpp"
 
 namespace {
-AnimationChildFrameData make_child(int idx, int dx, int dy) {
+AnimationChildFrameData make_child(int idx, bool visible = false) {
     AnimationChildFrameData child;
     child.child_index = idx;
-    child.dx = dx;
-    child.dy = dy;
+    child.visible = visible;
     return child;
 }
+
+void seed_frames(Animation& animation, std::size_t count) {
+    auto& path = animation.movement_path(0);
+    path.clear();
+    path.resize(count);
+    animation.frames.clear();
+    for (std::size_t i = 0; i < count; ++i) {
+        animation.frames.push_back(&path[i]);
+    }
+}
 }
 
-TEST_CASE("ApplyChildFrameFlip leaves offsets untouched when no flips requested") {
-    std::vector<AnimationChildFrameData> children = {
-        make_child(0, 12, -6),
-        make_child(1, -4, 8)
-    };
-    AnimationCloner::Options opts;
+TEST_CASE("rebuild_frames_from_child_timelines populates derived children") {
+    Animation animation;
+    animation.child_assets() = {"childA"};
+    seed_frames(animation, 2);
 
-    AnimationCloner::ApplyChildFrameFlip(children, opts);
+    AnimationChildData descriptor;
+    descriptor.asset_name = "childA";
+    descriptor.mode = AnimationChildMode::Static;
+    descriptor.frames = {make_child(0, true), make_child(0, false)};
+    animation.child_timelines().push_back(descriptor);
 
-    REQUIRE(children.size() == 2);
-    CHECK(children[0].dx == 12);
-    CHECK(children[0].dy == -6);
-    CHECK(children[1].dx == -4);
-    CHECK(children[1].dy == 8);
+    animation.rebuild_frames_from_child_timelines();
+    animation.refresh_child_start_events();
+
+    REQUIRE(animation.frames.size() == 2);
+    REQUIRE(animation.frames[0]->children.size() == 1);
+    CHECK(animation.frames[0]->children[0].visible);
+    REQUIRE(animation.frames[1]->children.size() == 1);
+    CHECK_FALSE(animation.frames[1]->children[0].visible);
+    REQUIRE(animation.frames[0]->child_start_events.size() == 1);
+    CHECK(animation.frames[0]->child_start_events[0] == 0);
 }
 
-TEST_CASE("ApplyChildFrameFlip mirrors texture flips around bottom-center") {
-    std::vector<AnimationChildFrameData> children = { make_child(0, 14, -10) };
-    AnimationCloner::Options opts;
-    opts.flip_horizontal = true;
+TEST_CASE("rebuild_frames_from_child_timelines overwrites stale frame caches") {
+    Animation animation;
+    animation.child_assets() = {"childA"};
+    seed_frames(animation, 1);
 
-    AnimationCloner::ApplyChildFrameFlip(children, opts);
+    animation.frames[0]->children.push_back(make_child(0, false));
 
-    REQUIRE(children.size() == 1);
-    CHECK(children[0].dx == -14);
-    CHECK(children[0].dy == -10);
-}
+    AnimationChildData descriptor;
+    descriptor.asset_name = "childA";
+    descriptor.mode = AnimationChildMode::Static;
+    descriptor.frames = {make_child(0, true)};
+    animation.child_timelines().push_back(descriptor);
 
-TEST_CASE("ApplyChildFrameFlip mirrors movement flips using the same pivot") {
-    std::vector<AnimationChildFrameData> children = { make_child(0, -9, 7) };
-    AnimationCloner::Options opts;
-    opts.flip_movement_horizontal = true;
-    opts.flip_movement_vertical = true;
+    animation.rebuild_frames_from_child_timelines();
 
-    AnimationCloner::ApplyChildFrameFlip(children, opts);
-
-    REQUIRE(children.size() == 1);
-    CHECK(children[0].dx == 9);
-    CHECK(children[0].dy == -7);
-}
-
-TEST_CASE("ApplyChildFrameFlip combines texture and movement flip requests once per axis") {
-    std::vector<AnimationChildFrameData> children = { make_child(0, 5, -3) };
-    AnimationCloner::Options opts;
-    opts.flip_horizontal = true;
-    opts.flip_movement_horizontal = true;
-    opts.flip_vertical = true;
-
-    AnimationCloner::ApplyChildFrameFlip(children, opts);
-
-    REQUIRE(children.size() == 1);
-    CHECK(children[0].dx == -5);
-    CHECK(children[0].dy == 3);
+    REQUIRE(animation.frames[0]->children.size() == 1);
+    CHECK(animation.frames[0]->children[0].visible);
 }

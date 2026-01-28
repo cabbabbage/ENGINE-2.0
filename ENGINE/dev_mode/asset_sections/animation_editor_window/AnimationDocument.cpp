@@ -7,6 +7,7 @@
 #include <cmath>
 #include <limits>
 #include <fstream>
+#include <optional>
 #include <nlohmann/json.hpp>
 #include <unordered_set>
 #include <unordered_map>
@@ -139,9 +140,13 @@ nlohmann::json normalize_child_frame_json(const nlohmann::json& sample) {
     return normalized;
 }
 
-nlohmann::json sanitize_child_frames(const nlohmann::json& frames,
-                                     const std::string& mode,
-                                     std::size_t static_frame_count) {
+std::optional<nlohmann::json> sanitize_child_frames(const nlohmann::json& frames,
+                                                    const std::string& mode,
+                                                    std::size_t static_frame_count) {
+    auto is_legacy_frame = [](const nlohmann::json& entry) {
+        return !entry.is_object() || entry.contains("render_in_front");
+    };
+
     nlohmann::json sanitized = nlohmann::json::array();
     if (mode == "static") {
         if (static_frame_count == 0) {
@@ -150,6 +155,9 @@ nlohmann::json sanitize_child_frames(const nlohmann::json& frames,
         sanitized.get_ref<nlohmann::json::array_t&>().reserve(static_frame_count);
         for (std::size_t i = 0; i < static_frame_count; ++i) {
             if (frames.is_array() && i < frames.size()) {
+                if (is_legacy_frame(frames[i])) {
+                    return std::nullopt;
+                }
                 sanitized.push_back(normalize_child_frame_json(frames[i]));
             } else {
                 sanitized.push_back(default_child_frame_json());
@@ -160,6 +168,9 @@ nlohmann::json sanitize_child_frames(const nlohmann::json& frames,
 
     if (frames.is_array() && !frames.empty()) {
         for (const auto& entry : frames) {
+            if (is_legacy_frame(entry)) {
+                return std::nullopt;
+            }
             sanitized.push_back(normalize_child_frame_json(entry));
         }
     }
@@ -169,10 +180,10 @@ nlohmann::json sanitize_child_frames(const nlohmann::json& frames,
     return sanitized;
 }
 
-nlohmann::json build_child_timeline_entry(int child_index,
-                                          const std::string& asset_name,
-                                          const nlohmann::json& source,
-                                          std::size_t static_frame_count) {
+std::optional<nlohmann::json> build_child_timeline_entry(int child_index,
+                                                         const std::string& asset_name,
+                                                         const nlohmann::json& source,
+                                                         std::size_t static_frame_count) {
     nlohmann::json entry = nlohmann::json::object();
     entry["child"] = child_index;
     entry["child_index"] = child_index;
@@ -214,9 +225,17 @@ nlohmann::json build_child_timeline_entry(int child_index,
     }
     const auto frames_it = source.find("frames");
     if (frames_it != source.end()) {
-        entry["frames"] = sanitize_child_frames(*frames_it, mode, static_frame_count);
+        const auto sanitized = sanitize_child_frames(*frames_it, mode, static_frame_count);
+        if (!sanitized) {
+            return std::nullopt;
+        }
+        entry["frames"] = *sanitized;
     } else {
-        entry["frames"] = sanitize_child_frames(nlohmann::json::array(), mode, static_frame_count);
+        const auto sanitized = sanitize_child_frames(nlohmann::json::array(), mode, static_frame_count);
+        if (!sanitized) {
+            return std::nullopt;
+        }
+        entry["frames"] = *sanitized;
     }
     return entry;
 }
@@ -253,9 +272,20 @@ nlohmann::json normalize_child_timelines(const nlohmann::json& raw,
         const std::string& asset = child_names[i];
         auto it = by_asset.find(asset);
         if (it != by_asset.end()) {
-            normalized.push_back(build_child_timeline_entry(static_cast<int>(i), asset, it->second, static_frame_count));
+            const std::string mode = sanitize_child_mode_string(it->second);
+            auto built = build_child_timeline_entry(static_cast<int>(i), asset, it->second, static_frame_count);
+            if (!built) {
+                SDL_Log("AnimationDocument: rejecting legacy child timeline data for asset '%s' (mode '%s'); child_timelines are the only supported format.", asset.c_str(), mode.c_str());
+                continue;
+            }
+            normalized.push_back(std::move(*built));
         } else {
-            normalized.push_back(build_child_timeline_entry(static_cast<int>(i), asset, nlohmann::json::object(), static_frame_count));
+            auto built = build_child_timeline_entry(static_cast<int>(i), asset, nlohmann::json::object(), static_frame_count);
+            if (!built) {
+                SDL_Log("AnimationDocument: failed to build child timeline for asset '%s' (mode 'static'); child_timelines are the only supported format.", asset.c_str());
+                continue;
+            }
+            normalized.push_back(std::move(*built));
         }
     }
     return normalized;
@@ -1434,9 +1464,13 @@ bool AnimationDocument::set_child_timeline_settings(const std::string& animation
             entry["animation"] = animation_override;
             changed = true;
         }
-        const nlohmann::json frames = sanitize_child_frames(entry.value("frames", nlohmann::json::array()), entry.value("mode", desired_mode), static_cast<std::size_t>(frame_count));
-        if (!entry.contains("frames") || entry["frames"] != frames) {
-            entry["frames"] = frames;
+        const auto frames = sanitize_child_frames(entry.value("frames", nlohmann::json::array()), entry.value("mode", desired_mode), static_cast<std::size_t>(frame_count));
+        if (!frames) {
+            SDL_Log("AnimationDocument: rejecting legacy child frames for asset '%s' (mode '%s') while updating settings.", child_name.c_str(), desired_mode.c_str());
+            return false;
+        }
+        if (!entry.contains("frames") || entry["frames"] != *frames) {
+            entry["frames"] = *frames;
             changed = true;
         }
         break;
@@ -1481,12 +1515,17 @@ bool AnimationDocument::set_child_mode_for_all_animations(const std::string& chi
         seed["autostart"] = auto_start;
         seed["frames"] = nlohmann::json::array();
 
-        nlohmann::json rebuilt = build_child_timeline_entry(child_index, child_name, seed, static_cast<std::size_t>(frame_count));
-        rebuilt["auto_start"] = auto_start;
-        rebuilt["autostart"] = auto_start;
+        const std::string mode_label = seed.value("mode", mode_to_string(mode));
+        auto rebuilt = build_child_timeline_entry(child_index, child_name, seed, static_cast<std::size_t>(frame_count));
+        if (!rebuilt) {
+            SDL_Log("AnimationDocument: rejecting legacy child frames for asset '%s' (mode '%s') while propagating mode update.", child_name.c_str(), mode_label.c_str());
+            continue;
+        }
+        (*rebuilt)["auto_start"] = auto_start;
+        (*rebuilt)["autostart"] = auto_start;
 
-        if (timelines[static_cast<std::size_t>(child_index)] != rebuilt) {
-            timelines[static_cast<std::size_t>(child_index)] = rebuilt;
+        if (timelines[static_cast<std::size_t>(child_index)] != *rebuilt) {
+            timelines[static_cast<std::size_t>(child_index)] = *rebuilt;
             payload["child_timelines"] = normalize_child_timelines(timelines, children, static_cast<std::size_t>(frame_count));
             anim_entry.second = serialize_payload(coerce_payload(animation_id, payload));
             mutated = true;
@@ -1520,7 +1559,13 @@ bool AnimationDocument::reset_child_timeline(const std::string& animation_id, co
         return false;
     }
 
-    timelines[static_cast<std::size_t>(child_index)] = build_child_timeline_entry(child_index, child_name, nlohmann::json::object(), static_cast<std::size_t>(frame_count));
+    auto rebuilt = build_child_timeline_entry(child_index, child_name, nlohmann::json::object(), static_cast<std::size_t>(frame_count));
+    if (!rebuilt) {
+        SDL_Log("AnimationDocument: rejecting legacy child frames for asset '%s' (mode 'static') while resetting timeline.", child_name.c_str());
+        return false;
+    }
+
+    timelines[static_cast<std::size_t>(child_index)] = *rebuilt;
 
     payload["child_timelines"] = timelines;
     anim_it->second = serialize_payload(coerce_payload(animation_id, payload));

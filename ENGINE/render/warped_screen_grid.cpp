@@ -1442,16 +1442,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             ++last_depth_culled_;
         }
 
-        frustum_hits.clear();
-        for (const auto& owned : gp->occupants) {
-            if (owned) {
-                asset_to_point_[owned.get()] = gp;
-                if (asset_in_frustum(owned.get(), gp)) {
-                    frustum_hits.push_back(owned.get());
-                }
-            }
-        }
-
         gp->screen             = screen_for_bounds;
         gp->parallax_dx        = 0.0f;
         gp->vertical_scale     = proj.vertical_scale;
@@ -1461,7 +1451,21 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         gp->perspective_scale  = proj.perspective_scale;
         gp->distance_to_camera = distance_to_cam;
         gp->tilt_radians       = static_cast<float>(runtime_pitch_rad_);
-        gp->on_screen          = !frustum_hits.empty();
+
+        frustum_hits.clear();
+        for (const auto& owned : gp->occupants) {
+            if (!owned) {
+                continue;
+            }
+
+            asset_to_point_[owned.get()] = gp;
+            owned->update_scale_values();
+            if (asset_in_frustum(owned.get(), gp)) {
+                frustum_hits.push_back(owned.get());
+            }
+        }
+
+        gp->on_screen = !frustum_hits.empty();
         gp->mark_screen_data_updated(frame_stamp);
 
         warped_points_.push_back(gp);
@@ -1593,6 +1597,14 @@ void WarpedScreenGrid::set_manual_height_override(bool v) {
     camera_.set_manual_height_override(v);
 }
 
+bool WarpedScreenGrid::is_manual_zoom_override() const {
+    return camera_.manual_zoom_override();
+}
+
+void WarpedScreenGrid::set_manual_zoom_override(bool v) {
+    camera_.set_manual_zoom_override(v);
+}
+
 double WarpedScreenGrid::get_scale() const {
     return std::max(1.0, camera_.current_height());
 }
@@ -1603,6 +1615,20 @@ void WarpedScreenGrid::set_scale(double s) {
     params.height_px = clamped;
     camera_.set_params(params);
     runtime_camera_height_ = camera_.current_height();
+}
+
+double WarpedScreenGrid::get_zoom_percent() const {
+    return camera_.state().params.zoom_percent;
+}
+
+void WarpedScreenGrid::set_zoom_percent(double percent) {
+    camera_.set_zoom_percent(percent);
+}
+
+void WarpedScreenGrid::adjust_zoom_percent(double delta_percent) {
+    const double current = std::clamp(camera_.state().params.zoom_percent, 0.0, 100.0);
+    const double target = std::clamp(current + delta_percent, 0.0, 100.0);
+    camera_.set_zoom_percent(target);
 }
 
 double WarpedScreenGrid::camera_y_distance() const {

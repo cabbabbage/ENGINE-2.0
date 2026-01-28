@@ -66,6 +66,8 @@ constexpr float kSavedCameraTiltMinDeg = 0.0f;
 constexpr float kSavedCameraTiltMaxDeg = 150.0f;
 constexpr int kSavedCameraYDistanceMinPx = 0;
 constexpr int kSavedCameraYDistanceMaxPx = 2000;
+constexpr int kSavedCameraZoomMinPercent = 0;
+constexpr int kSavedCameraZoomMaxPercent = 100;
 
 SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
     MapGridSettings settings;
@@ -842,6 +844,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
     if (enabled_) {
         if (cam && !preserve_camera_state) {
             cam->set_manual_height_override(false);
+            cam->set_manual_zoom_override(false);
         }
         close_asset_info_editor();
         ensure_room_configurator();
@@ -853,6 +856,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
     } else {
         if (cam && !preserve_camera_state) {
             cam->set_manual_height_override(false);
+            cam->set_manual_zoom_override(false);
             cam->clear_focus_override();
         }
         if (library_ui_) library_ui_->close();
@@ -910,7 +914,7 @@ void RoomEditor::update(const Input& input) {
     if (!should_enable_mouse_controls()) {
         enforce_mouse_controls_disabled();
         if (cam && !camera_settings_lock_active_) {
-            pan_height_.cancel(*cam);
+            camera_controls_.cancel(*cam);
         }
         mouse_controls_enabled_last_frame_ = false;
         return;
@@ -921,7 +925,7 @@ void RoomEditor::update(const Input& input) {
     if (!ui_blocked || dragging_) {
         handle_mouse_input(input);
     } else if (cam && !camera_settings_lock_active_) {
-        pan_height_.cancel(*cam);
+        camera_controls_.cancel(*cam);
     }
 
     if (camera_settings_lock_active_ && cam) {
@@ -1097,15 +1101,6 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
         my = event.button.y;
     } else if (event.type == SDL_MOUSEWHEEL) {
         SDL_GetMouseState(&mx, &my);
-    }
-
-    // Track right-click hold for tilt adjustment
-    if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_RIGHT) {
-        right_click_held_for_tilt_ = true;
-        tilt_adjusted_during_right_click_ = false;
-    }
-    if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_RIGHT) {
-        right_click_held_for_tilt_ = false;
     }
 
     const bool pointer_event =
@@ -1289,19 +1284,24 @@ void RoomEditor::set_camera_settings_lock(bool active) {
         camera_settings_drag_ = CameraSettingsDragState{};
         camera_lock_restore_.valid = true;
         camera_lock_restore_.manual_height_override = cam->is_manual_height_override();
+        camera_lock_restore_.manual_zoom_override = cam->is_manual_zoom_override();
         camera_lock_restore_.had_focus_override = cam->has_focus_override();
         if (camera_lock_restore_.had_focus_override) {
             camera_lock_restore_.focus_point = cam->get_focus_override_point();
         }
         camera_lock_restore_.screen_center = cam->get_screen_center();
-        // Keep live camera updates while locked by clearing manual zoom overrides.
+        camera_lock_restore_.camera_zoom_percent = cam->get_zoom_percent();
+        // Keep live camera updates while locked by clearing manual overrides.
         cam->set_manual_height_override(false);
+        cam->set_manual_zoom_override(false);
         apply_camera_settings_lock(*cam);
     } else {
         camera_settings_drag_ = CameraSettingsDragState{};
         const SDL_Point previous_center = cam->get_screen_center();
         if (camera_lock_restore_.valid) {
             cam->set_manual_height_override(camera_lock_restore_.manual_height_override);
+            cam->set_zoom_percent(camera_lock_restore_.camera_zoom_percent);
+            cam->set_manual_zoom_override(camera_lock_restore_.manual_zoom_override);
             if (camera_lock_restore_.had_focus_override) {
                 cam->set_focus_override(camera_lock_restore_.focus_point);
             } else {
@@ -2349,7 +2349,7 @@ void RoomEditor::purge_asset(Asset* asset) {
 
 void RoomEditor::set_height_scale_factor(double factor) {
     height_scale_factor_ = (factor > 0.0) ? factor : 1.0;
-    pan_height_.set_height_scale_factor(height_scale_factor_);
+    camera_controls_.set_height_scale_factor(height_scale_factor_);
 }
 
 bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
@@ -2470,12 +2470,6 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         assets_->notify_camera_activity(false);
     }
 
-    // Track tilt adjustment during right-click
-    right_click_held_for_tilt_ = input.isDown(Input::RIGHT);
-    if (right_click_held_for_tilt_ && input.getScrollY() != 0) {
-        tilt_adjusted_during_right_click_ = true;
-    }
-
     WarpedScreenGrid& cam = assets_->getView();
     const float prev_scale = cam.get_scale();
     const SDL_Point prev_center = cam.get_screen_center();
@@ -2492,7 +2486,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
                                     (shift_down && hit_before_pan && !hit_before_pan->spawn_id.empty() && (left_down || left_pressed_this_frame));
 
     if (!camera_settings_lock_active_) {
-        pan_height_.handle_input(cam, input, pointer_blocks_pan);
+        camera_controls_.handle_input(cam, input, pointer_blocks_pan);
     }
     if (std::fabs(cam.get_scale() - prev_scale) > 1e-6 ||
         cam.get_screen_center().x != prev_center.x ||
@@ -2501,7 +2495,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     }
 
     if (assets_) {
-        const bool now_panning = pan_height_.is_panning();
+        const bool now_panning = camera_controls_.is_panning();
         if (now_panning && !camera_pan_active_notified_) {
             camera_pan_active_notified_ = true;
             assets_->notify_camera_activity(true);
@@ -3250,20 +3244,16 @@ void RoomEditor::handle_click(const Input& input) {
         const bool shift_modifier =
             input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
         auto open_library_at = [&](const SDL_Point& point) {
-            if (!tilt_adjusted_during_right_click_) {
-                pending_spawn_world_pos_ = point;
-                open_asset_library();
-                if (!is_asset_library_open()) {
-                    pending_spawn_world_pos_.reset();
-                }
+            pending_spawn_world_pos_ = point;
+            open_asset_library();
+            if (!is_asset_library_open()) {
+                pending_spawn_world_pos_.reset();
             }
 };
 
         if (hovered_asset_) {
             if (shift_modifier) {
-                if (!tilt_adjusted_during_right_click_) {
-                    open_asset_info_editor_for_asset(hovered_asset_);
-                }
+                open_asset_info_editor_for_asset(hovered_asset_);
             } else {
                 open_library_at(world_mouse);
             }
@@ -3275,13 +3265,10 @@ void RoomEditor::handle_click(const Input& input) {
             if (inside_room) {
                 open_library_at(world_mouse);
             } else {
-                if (!tilt_adjusted_during_right_click_) {
-                    pending_spawn_world_pos_.reset();
-                    open_asset_library();
-                }
+                pending_spawn_world_pos_.reset();
+                open_asset_library();
             }
         }
-        tilt_adjusted_during_right_click_ = false;
         return;
     } else {
         rclick_buffer_frames_ = 0;
@@ -3640,7 +3627,8 @@ void RoomEditor::handle_shortcuts(const Input& input) {
             return;
         }
         const auto& params = assets_->getView().camera_state().params;
-        if (!std::isfinite(params.height_px) || !std::isfinite(params.tilt_deg) || !std::isfinite(params.y_distance_px)) {
+        if (!std::isfinite(params.height_px) || !std::isfinite(params.tilt_deg) ||
+            !std::isfinite(params.y_distance_px) || !std::isfinite(params.zoom_percent)) {
             return;
         }
 
@@ -3649,15 +3637,20 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         const int y_distance_px = std::clamp(static_cast<int>(std::lround(params.y_distance_px)),
                                              kSavedCameraYDistanceMinPx,
                                              kSavedCameraYDistanceMaxPx);
+        const int zoom_percent = std::clamp(static_cast<int>(std::lround(params.zoom_percent)),
+                                            kSavedCameraZoomMinPercent,
+                                            kSavedCameraZoomMaxPercent);
 
         current_room_->camera_height_px = height_px;
         current_room_->camera_tilt_deg = tilt_deg;
         current_room_->camera_y_distance_px = y_distance_px;
+        current_room_->camera_zoom_percent = zoom_percent;
 
         auto& room_data = current_room_->assets_data();
         room_data["camera_height_px"] = height_px;
         room_data["camera_tilt_deg"] = tilt_deg;
         room_data["camera_y_distance_px"] = y_distance_px;
+        room_data["camera_zoom_percent"] = zoom_percent;
 
         current_room_->save_assets_json();
         notify_room_assets_saved();
@@ -3687,6 +3680,7 @@ void RoomEditor::ensure_room_configurator() {
         room_cfg_ui_->set_on_camera_changed([this](Room* changed_room) {
             if (assets_ && (!changed_room || changed_room == current_room_)) {
                 assets_->getView().set_manual_height_override(false);
+                assets_->getView().set_manual_zoom_override(false);
                 assets_->mark_camera_dirty();
                 mark_spatial_index_dirty();
             }
@@ -5388,20 +5382,15 @@ Asset* RoomEditor::find_asset_spawn_owner(const std::string& spawn_id) const {
         return nullptr;
     }
 
-    for (Asset* asset : assets_->all) {
+    // In the new model, children are independent assets with a parent pointer
+    // Search through active assets to find the one with this spawn_id and return its parent
+    const auto& active_assets_view = assets_->getActive();
+    for (Asset* asset : active_assets_view) {
         if (!asset || asset->dead) {
             continue;
         }
-        if (!asset_belongs_to_room(asset)) {
-            continue;
-        }
-        for (Asset* child : asset->asset_children) {
-            if (!child || child->dead) {
-                continue;
-            }
-            if (child->spawn_id == spawn_id) {
-                return asset;
-            }
+        if (asset->spawn_id == spawn_id && asset->parent) {
+            return asset->parent;
         }
     }
     return nullptr;

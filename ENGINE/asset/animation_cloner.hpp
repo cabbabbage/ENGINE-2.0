@@ -17,6 +17,4 @@ public:
 };
 
     static bool Clone(const Animation& source, Animation&       dest, const Options&   opts, SDL_Renderer*    renderer, AssetInfo&       info);
-
-    static void ApplyChildFrameFlip(std::vector<AnimationChildFrameData>& children, const Options& opts);
 };

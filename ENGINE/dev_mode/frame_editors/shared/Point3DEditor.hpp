@@ -1,8 +1,10 @@
 #pragma once
 
 #include <SDL.h>
+#include <array>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "SelectionState.hpp"
@@ -29,10 +31,17 @@ public:
 
     void set_axis_from_textbox_click(int textbox_index);
 
+    void set_grid_resolution(int resolution);
+
+    // Axis enable/lock controls (e.g., to freeze depth in sync-child mode)
+    void set_axis_enabled(AdjustmentAxis axis, bool enabled);
+    void set_axis_locked_value(AdjustmentAxis axis, std::optional<float> locked_value);
+    bool is_axis_enabled(AdjustmentAxis axis) const;
+
     // UI rendering and event handling
     bool handle_event(const SDL_Event& e, const SDL_Rect& container);
     void render_overlays(SDL_Renderer* renderer, const SDL_Rect& container);
-    int get_overlay_height() const;
+    int get_overlay_height(int container_width) const;
 
     // Coordinate synchronization
     void sync_textboxes_from_selection();
@@ -56,8 +65,7 @@ public:
     // Mouse event handling for 3D point manipulation
     bool handle_mouse_event(const SDL_Event& e,
                            const std::vector<SDL_FPoint>& point_screens,
-                           const std::vector<bool>& point_selectable,
-                           std::function<SDL_FPoint(const SDL_Point&)> screen_to_world);
+                           const std::vector<bool>& point_selectable);
 
     // Point rendering methods
     void render_axis_point(SDL_Renderer* renderer,
@@ -116,6 +124,9 @@ public:
 
     int get_hovered_point_index() const { return hovered_point_index_; }
 
+    // Get the cached container rect from last render (for overlay hit testing)
+    const SDL_Rect& get_cached_container() const { return cached_container_; }
+
 private:
     SelectionState* selection_ = nullptr;
 
@@ -139,18 +150,24 @@ private:
     std::function<void(int index)> on_point_selected_;
 
     // Mouse handling state
-    bool is_dragging_ = false;
     int selected_point_index_ = -1;
     int hovered_point_index_ = -1;
-    bool point_already_selected_ = false;  // Track if clicking already-selected point
-    SDL_Point drag_start_mouse_pos_;
-    SDL_FPoint drag_start_world_pos_;
-    float drag_start_world_z_ = 0.0f;
+    bool is_dragging_ = false;  // Mouse drag state for potential dragging interactions.
+
+    int grid_resolution_ = 0;
+    float grid_step_world_ = 1.0f;
+
+    // Axis configuration (enabled/locked values)
+    std::array<bool, 3> axis_enabled_{{true, true, true}};
+    std::array<std::optional<float>, 3> axis_locked_values_{};
 
     // Double-click detection for axis cycling
     Uint32 last_click_time_ = 0;
     int last_clicked_point_ = -1;
     static constexpr Uint32 DOUBLE_CLICK_THRESHOLD_MS = 300;
+
+    // Cached container rect from last render for event handling
+    SDL_Rect cached_container_{0, 0, 0, 0};
 
     // Rendering helper methods
     SDL_Color get_axis_color(AdjustmentAxis axis);
@@ -158,6 +175,10 @@ private:
                                SDL_FPoint center,
                                AdjustmentAxis axis,
                                float length = 32.0f);
+
+    AdjustmentAxis first_enabled_axis() const;
+    AdjustmentAxis next_enabled_axis(AdjustmentAxis current) const;
+    int axis_to_index(AdjustmentAxis axis) const;
 };
 
 }

@@ -383,6 +383,8 @@ void FrameChildrenEditor::reload_from_document() {
         refresh_tools_panel();
         return;
     }
+    child_modes_.assign(child_ids_.size(), AnimationChildMode::Static);
+    async_child_frames_.clear();
 
     nlohmann::json payload = nlohmann::json::object();
     {
@@ -392,133 +394,52 @@ void FrameChildrenEditor::reload_from_document() {
         }
     }
 
-    nlohmann::json movement = nlohmann::json::array();
-    if (payload.contains("movement")) {
-        movement = payload["movement"];
+    // child_timelines is the sole source of child placement; movement frame children are intentionally ignored.
+    const nlohmann::json movement = (payload.contains("movement") && payload["movement"].is_array())
+                                        ? payload["movement"]
+                                        : nlohmann::json::array();
+    int frame_count = payload.value("number_of_frames", static_cast<int>(movement.size()));
+    if (frame_count <= 0) {
+        frame_count = static_cast<int>(movement.size());
     }
-
-    if (!movement.is_array() || movement.empty()) {
-        frames_.push_back(MovementFrame{});
-    } else {
-        for (const auto& entry : movement) {
-            MovementFrame frame;
-            if (entry.is_array()) {
-                if (!entry.empty() && entry[0].is_number()) frame.dx = static_cast<float>(entry[0].get<double>());
-                if (entry.size() > 1 && entry[1].is_number()) frame.dy = static_cast<float>(entry[1].get<double>());
-                frame.dz = 0.0f;
-                if (entry.size() > 2 && entry[2].is_boolean()) frame.resort_z = entry[2].get<bool>();
-                auto find_children_array = [](const nlohmann::json& arr) -> const nlohmann::json* {
-                    if (!arr.is_array()) {
-                        return nullptr;
-                    }
-                    for (std::size_t idx = 2; idx < arr.size(); ++idx) {
-                        const auto& candidate = arr[idx];
-                        if (!candidate.is_array()) {
-                            continue;
-                        }
-                        if (candidate.empty()) {
-                            return &candidate;
-                        }
-                        const auto& first = candidate.front();
-                        if (first.is_array() || first.is_object()) {
-                            return &candidate;
-                        }
-                    }
-                    return nullptr;
-};
-                if (const nlohmann::json* children = find_children_array(entry)) {
-                    for (const auto& child_entry : *children) {
-                        if (!child_entry.is_array() || child_entry.empty()) continue;
-                        ChildFrame child;
-                        try { child.child_index = child_entry[0].get<int>(); } catch (...) { child.child_index = -1; }
-                        if (child_entry.size() > 1 && child_entry[1].is_number()) {
-                            child.dx = static_cast<float>(child_entry[1].get<double>());
-                        }
-                        if (child_entry.size() > 2 && child_entry[2].is_number()) {
-                            child.dy = static_cast<float>(child_entry[2].get<double>());
-                        }
-                        if (child_entry.size() > 3 && child_entry[3].is_number()) {
-                            child.dz = static_cast<float>(child_entry[3].get<double>());
-                            if (child_entry.size() > 4 && child_entry[4].is_number()) {
-                                child.rotation = static_cast<float>(child_entry[4].get<double>());
-                            }
-                            if (child_entry.size() > 5) {
-                                child.visible = is_true(child_entry[5], true);
-                            }
-                        } else {
-                            if (child_entry.size() > 3 && child_entry[3].is_number()) {
-                                child.rotation = static_cast<float>(child_entry[3].get<double>());
-                            }
-                            if (child_entry.size() > 4) {
-                                child.visible = is_true(child_entry[4], true);
-                            }
-                            child.dz = child.dy;
-                            child.dy = 0.0f;
-                        }
-                        frame.children.push_back(child);
-                    }
-                }
-            } else if (entry.is_object()) {
-                frame.dx = static_cast<float>(entry.value("dx", 0.0));
-                frame.dy = static_cast<float>(entry.value("dy", 0.0));
-                frame.dz = static_cast<float>(entry.value("dz", 0.0));
-                frame.resort_z = entry.value("resort_z", false);
-                if (entry.contains("children") && entry["children"].is_array()) {
-                    for (const auto& child_entry : entry["children"]) {
-                        if (!child_entry.is_object() && !child_entry.is_array()) continue;
-                        ChildFrame child;
-                        if (child_entry.is_object()) {
-                            child.child_index = child_entry.value("child_index", -1);
-                            child.dx = static_cast<float>(child_entry.value("dx", 0.0));
-                            child.dy = static_cast<float>(child_entry.value("dy", 0.0));
-                            child.dz = static_cast<float>(child_entry.value("dz", child_entry.value("dy", 0.0)));
-                            if (!child_entry.contains("dz")) {
-                                child.dy = 0.0f;
-                            }
-                            double deg = child_entry.value("degree", child_entry.value("rotation", 0.0));
-                            child.rotation = static_cast<float>(deg);
-                            child.visible = child_entry.value("visible", true);
-                        } else if (child_entry.is_array()) {
-                            try { child.child_index = child_entry[0].get<int>(); } catch (...) { child.child_index = -1; }
-                            if (child_entry.size() > 1 && child_entry[1].is_number()) {
-                                child.dx = static_cast<float>(child_entry[1].get<double>());
-                            }
-                            if (child_entry.size() > 2 && child_entry[2].is_number()) {
-                                child.dy = static_cast<float>(child_entry[2].get<double>());
-                            }
-                            if (child_entry.size() > 3 && child_entry[3].is_number()) {
-                                child.dz = static_cast<float>(child_entry[3].get<double>());
-                                if (child_entry.size() > 4 && child_entry[4].is_number()) {
-                                    child.rotation = static_cast<float>(child_entry[4].get<double>());
-                                }
-                                if (child_entry.size() > 5) {
-                                    child.visible = is_true(child_entry[5], true);
-                                }
-                            } else {
-                                if (child_entry.size() > 3 && child_entry[3].is_number()) {
-                                    child.rotation = static_cast<float>(child_entry[3].get<double>());
-                                }
-                                if (child_entry.size() > 4) {
-                                    child.visible = is_true(child_entry[4], true);
-                                }
-                                child.dz = child.dy;
-                                child.dy = 0.0f;
-                            }
-                        }
-                        frame.children.push_back(child);
-                    }
-                }
+    if (frame_count <= 0) {
+        frame_count = 1;
+    }
+    auto timelines_it = payload.find("child_timelines");
+    if (timelines_it != payload.end() && timelines_it->is_array()) {
+        for (const auto& entry : *timelines_it) {
+            if (!entry.is_object()) continue;
+            const bool is_static = timeline_entry_is_static(entry);
+            if (!is_static) continue;
+            const auto frames_it = entry.find("frames");
+            if (frames_it != entry.end() && frames_it->is_array()) {
+                frame_count = std::max<int>(frame_count, static_cast<int>(frames_it->size()));
             }
-            frames_.push_back(frame);
         }
     }
 
-    if (frames_.empty()) {
-        frames_.push_back(MovementFrame{});
+    frames_.assign(static_cast<std::size_t>(frame_count), MovementFrame{});
+    for (int idx = 0; idx < frame_count && idx < static_cast<int>(movement.size()); ++idx) {
+        const auto& entry = movement[static_cast<std::size_t>(idx)];
+        MovementFrame frame;
+        if (entry.is_array()) {
+            if (!entry.empty() && entry[0].is_number()) frame.dx = static_cast<float>(entry[0].get<double>());
+            if (entry.size() > 1 && entry[1].is_number()) frame.dy = static_cast<float>(entry[1].get<double>());
+            frame.dz = 0.0f;
+            if (entry.size() > 2 && entry[2].is_boolean()) frame.resort_z = entry[2].get<bool>();
+        } else if (entry.is_object()) {
+            frame.dx = static_cast<float>(entry.value("dx", 0.0));
+            frame.dy = static_cast<float>(entry.value("dy", 0.0));
+            frame.dz = static_cast<float>(entry.value("dz", 0.0));
+            frame.resort_z = entry.value("resort_z", false);
+        }
+        frames_[static_cast<std::size_t>(idx)] = frame;
     }
-    frames_.front().dx = 0.0f;
-    frames_.front().dy = 0.0f;
-    frames_.front().dz = 0.0f;
+    if (!frames_.empty()) {
+        frames_.front().dx = 0.0f;
+        frames_.front().dy = 0.0f;
+        frames_.front().dz = 0.0f;
+    }
 
     ensure_child_vectors();
     apply_child_timelines_from_payload(payload);
@@ -896,12 +817,19 @@ nlohmann::json FrameChildrenEditor::build_child_timelines_payload(const nlohmann
         const std::string& asset_name = child_ids_[child_idx];
         nlohmann::json entry = nlohmann::json::object();
         auto existing = by_asset.find(asset_name);
-        if (existing != by_asset.end()) {
-            entry = existing->second;
+        if (existing != by_asset.end() && existing->second.is_object()) {
+            const nlohmann::json& prev = existing->second;
+            if (prev.contains("animation")) entry["animation"] = prev["animation"];
+            if (prev.contains("auto_start")) entry["auto_start"] = prev["auto_start"];
+            if (prev.contains("autostart")) entry["autostart"] = prev["autostart"];
+            if (prev.contains("start_time")) entry["start_time"] = prev["start_time"];
+            if (prev.contains("start_frame")) entry["start_frame"] = prev["start_frame"];
         }
         entry["child"] = static_cast<int>(child_idx);
         entry["child_index"] = static_cast<int>(child_idx);
         entry["asset"] = asset_name;
+        entry.erase("children");
+        entry.erase("render_in_front");
         if (!entry.contains("animation") || !entry["animation"].is_string()) {
             entry["animation"] = std::string{};
         }
@@ -1157,38 +1085,6 @@ void FrameChildrenEditor::persist_changes() {
             entry = nlohmann::json::array({dx, dy});
             if (frame.resort_z) {
                 entry.push_back(frame.resort_z);
-            }
-        }
-        if (!child_ids_.empty()) {
-            if (entry.is_array()) {
-                while (entry.size() < 4) {
-                    entry.push_back(nlohmann::json());
-                }
-            }
-            nlohmann::json child_entries = nlohmann::json::array();
-            if (!frame.children.empty()) {
-                for (const auto& child : frame.children) {
-                    if (child.child_index < 0 ||
-                        child.child_index >= static_cast<int>(child_ids_.size())) {
-                        continue;
-                    }
-                    if (child_mode(child.child_index) == AnimationChildMode::Async) {
-                        continue;
-                    }
-                    nlohmann::json child_json = nlohmann::json::array();
-                    child_json.push_back(child.child_index);
-                    child_json.push_back(static_cast<int>(std::lround(child.dx)));
-                    child_json.push_back(static_cast<int>(std::lround(child.dy)));
-                    child_json.push_back(static_cast<int>(std::lround(child.dz)));
-                    child_json.push_back(static_cast<double>(child.rotation));
-                    child_json.push_back(child.visible);
-                    child_entries.push_back(std::move(child_json));
-                }
-            }
-            if (entry.is_array()) {
-                entry.push_back(std::move(child_entries));
-            } else {
-                entry["children"] = std::move(child_entries);
             }
         }
         movement_json.push_back(std::move(entry));

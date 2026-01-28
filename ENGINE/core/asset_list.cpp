@@ -140,16 +140,6 @@ AssetList::AssetList(const AssetList& parent_list,
     rebuild_from_scratch();
 }
 
-void AssetList::add_child(std::unique_ptr<AssetList> child) {
-    if (child) {
-        children_.push_back(std::move(child));
-    }
-}
-
-const std::vector<std::unique_ptr<AssetList>>& AssetList::children() const {
-    return children_;
-}
-
 const std::vector<Asset*>& AssetList::top_unsorted() const {
     return list_top_unsorted_;
 }
@@ -238,12 +228,6 @@ void AssetList::update() {
 
     previous_center_point_ = current_center;
     previous_search_radius_ = search_radius_;
-
-    for (const auto& child : children_) {
-        if (child) {
-            child->update();
-        }
-    }
 }
 
 void AssetList::update(SDL_Point new_center) {
@@ -506,27 +490,24 @@ void AssetList::get_delta_area_assets(SDL_Point prev_center,
 
 void AssetList::for_each_candidate(const std::function<void(Asset*)>& f) const {
     if (!f) return;
-    auto process_asset = [&](auto&& self, Asset* asset) -> void {
+    auto process_asset = [&](Asset* asset) -> void {
         if (asset == nullptr) return;
         f(asset);
-        for (Asset* asset_child : asset->asset_children) {
-            self(self, asset_child);
-        }
-};
+    };
 
     if (inherit_parent_view_ && parent_provider_) {
         for (Asset* a : parent_provider_->top_unsorted()) {
-            process_asset(process_asset, a);
+            process_asset(a);
         }
         for (Asset* a : parent_provider_->middle_sorted()) {
-            process_asset(process_asset, a);
+            process_asset(a);
         }
         for (Asset* a : parent_provider_->bottom_unsorted()) {
-            process_asset(process_asset, a);
+            process_asset(a);
         }
     } else {
         for (Asset* a : source_candidates_) {
-            process_asset(process_asset, a);
+            process_asset(a);
         }
     }
 }

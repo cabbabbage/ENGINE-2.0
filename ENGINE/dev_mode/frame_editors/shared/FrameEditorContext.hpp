@@ -6,6 +6,7 @@
 
 #include "SelectionState.hpp"
 #include "core/AssetsManager.hpp"
+#include "dev_mode/asset_sections/animation_editor_window/PreviewProvider.hpp"
 
 class Assets;
 class Asset;

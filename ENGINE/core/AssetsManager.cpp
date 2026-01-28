@@ -34,6 +34,7 @@
 #include <memory>
 #include <mutex>
 #include <execution>
+#include <unordered_set>
 #include <nlohmann/json.hpp>
 #include <functional>
 #include <thread>
@@ -169,7 +170,9 @@ Assets::Assets(AssetLibrary& library,
     hydrate_map_info_sections();
     depth_effects_enabled_ = false;
 
+    vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
     InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_y, map_radius);
+    vibble::log::info("[Assets] Constructor: InitializeAssets complete");
 
     finder_ = new CurrentRoomFinder(rooms_, player);
     if (finder_) {
@@ -208,10 +211,15 @@ Assets::Assets(AssetLibrary& library,
     if (!renderer) {
         vibble::log::error("[Assets] SceneRenderer not created: SDL_Renderer pointer is null.");
     } else {
+        vibble::log::info("[Assets] Constructor: Creating SceneRenderer");
         try {
             scene = new SceneRenderer(renderer, this, screen_width_, screen_height_, map_info_json_, map_id_);
+            vibble::log::info("[Assets] Constructor: SceneRenderer created successfully");
         } catch (const std::exception& ex) {
             vibble::log::error(std::string{"[Assets] SceneRenderer initialization failed: "} + ex.what());
+            scene = nullptr;
+        } catch (...) {
+            vibble::log::error("[Assets] SceneRenderer initialization failed with unknown exception");
             scene = nullptr;
         }
     }
@@ -229,10 +237,12 @@ Assets::Assets(AssetLibrary& library,
     movement_commands_buffer_.reserve(all.size());
     grid_registration_buffer_.clear();
     grid_registration_buffer_.reserve(4);
+    vibble::log::info("[Assets] Constructor: Setting up assets (" + std::to_string(all.size()) + " total)");
     for (Asset* a : all) {
         if (!a) continue;
         a->set_assets(this);
     }
+    vibble::log::info("[Assets] Constructor: Asset finalization complete");
     register_pending_static_assets();
 
     update_filtered_active_assets();
@@ -242,6 +252,7 @@ Assets::Assets(AssetLibrary& library,
         quick_task_popup_->set_manifest_store(manifest_store_fallback_.get());
     }
 
+    vibble::log::info("[Assets] Constructor: Initialization complete");
 }
 
 std::vector<const Room::NamedArea*> Assets::current_room_trigger_areas() const {
@@ -703,6 +714,7 @@ void Assets::update(const Input& input)
             if (!player->dead && player->anim_runtime_) {
                 player->anim_runtime_->update();
             }
+            player->request_child_timeline_creation_if_needed();
         } else {
 
             player->update();
@@ -749,6 +761,7 @@ void Assets::update(const Input& input)
             if (!asset->dead && asset->anim_runtime_) {
                 asset->anim_runtime_->update();
             }
+            asset->request_child_timeline_creation_if_needed();
         } else {
 
             asset->update();
@@ -840,36 +853,40 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         return;
     }
 
-#if defined(__cpp_lib_execution)
-    const unsigned hardware_threads = std::max(1u, std::thread::hardware_concurrency());
-    const bool can_parallelize = hardware_threads > 1 && active_assets.size() >= kNonPlayerParallelThreshold;
-    if (can_parallelize) {
-        std::vector<Asset*> rebuilt(active_assets.size());
-        std::atomic_size_t next_index{0};
-        std::for_each(std::execution::par_unseq,
-                      active_assets.begin(),
-                      active_assets.end(),
-                      [&](Asset* asset) {
-                          if (asset && asset != player && (!asset->parent || asset->parent->dead)) {
-                              const std::size_t index = next_index.fetch_add(1, std::memory_order_relaxed);
-                              rebuilt[index] = asset;
-                          }
-                      });
-        const std::size_t final_count = next_index.load(std::memory_order_relaxed);
-        rebuilt.resize(final_count);
-        non_player_update_buffer_ = std::move(rebuilt);
-        non_player_update_buffer_dirty_.store(false, std::memory_order_release);
-        return;
-    }
-#endif
+    // Helper to compute parent depth for topological ordering
+    auto compute_parent_depth = [](const Asset* asset) -> int {
+        int depth = 0;
+        const Asset* current = asset;
+        while (current && current->parent) {
+            ++depth;
+            current = current->parent;
+            if (depth > 1000) break; // Prevent infinite loops from circular references
+        }
+        return depth;
+    };
 
+    // Collect all non-player assets (including children)
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(active_assets.size());
     for (Asset* asset : active_assets) {
-        if (asset && asset != player && (!asset->parent || asset->parent->dead)) {
+        if (asset && asset != player) {
             non_player_update_buffer_.push_back(asset);
         }
     }
+
+    // Sort in parent-first order (lower depth = higher in hierarchy = updated first)
+    std::stable_sort(non_player_update_buffer_.begin(),
+                     non_player_update_buffer_.end(),
+                     [&compute_parent_depth](const Asset* a, const Asset* b) {
+                         if (!a || !b) return b != nullptr;
+                         const int depth_a = compute_parent_depth(a);
+                         const int depth_b = compute_parent_depth(b);
+                         if (depth_a != depth_b) {
+                             return depth_a < depth_b; // Parents (lower depth) before children
+                         }
+                         return a < b; // Stable ordering for same depth
+                     });
+
     non_player_update_buffer_dirty_.store(false, std::memory_order_release);
 }
 
@@ -1221,6 +1238,79 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     return raw;
 }
 
+void Assets::request_child_timeline_creation(Asset* parent) {
+    if (!parent || parent->dead || !parent->active) {
+        return;
+    }
+    if (parent->animation_children_.empty()) {
+        return;
+    }
+
+    std::string owning_room = map_id_;
+    if (current_room_) {
+        owning_room = current_room_->room_name;
+    }
+    Area spawn_area(owning_room, 0);
+    bool created_any = false;
+
+    for (std::size_t i = 0; i < parent->animation_children_.size(); ++i) {
+        const auto& slot = parent->animation_children_[i];
+        if (slot.child_index < 0 || slot.asset_name.empty() || !slot.timeline) {
+            continue;
+        }
+        if (find_child_timeline_asset(parent, static_cast<int>(i))) {
+            continue;
+        }
+        std::shared_ptr<AssetInfo> info = slot.info ? slot.info : library_.get(slot.asset_name);
+        if (!info) {
+            continue;
+        }
+
+        int depth = parent->depth;
+        int grid_res = parent->grid_resolution;
+        auto uptr = std::make_unique<Asset>(info, spawn_area, parent->pos, depth, parent, std::string{}, std::string{"ChildTimeline"}, grid_res);
+        Asset* raw = uptr.get();
+        if (!raw) {
+            continue;
+        }
+        raw->set_assets(this);
+        raw->set_camera(&camera_);
+        raw->finalize_setup();
+        raw->child_timeline_index_ = static_cast<int>(i);
+
+        raw = world_grid_.create_asset_at_point(std::move(uptr));
+        if (!raw) {
+            continue;
+        }
+        all.push_back(raw);
+        queue_asset_dimension_update(raw);
+        created_any = true;
+    }
+
+    if (created_any) {
+        mark_grid_dirty();
+        mark_active_assets_dirty();
+        mark_non_player_update_buffer_dirty();
+        needs_filtered_active_refresh_ = true;
+        touch_dev_active_state_version();
+    }
+}
+
+Asset* Assets::find_child_timeline_asset(const Asset* parent, int slot_index) const {
+    if (!parent || slot_index < 0) {
+        return nullptr;
+    }
+    for (Asset* asset : all) {
+        if (!asset || asset->dead) {
+            continue;
+        }
+        if (asset->parent == parent && asset->child_timeline_index() == slot_index) {
+            return asset;
+        }
+    }
+    return nullptr;
+}
+
 void Assets::rebuild_from_grid_state() {
     ++frame_id_;
     rebuild_all_assets_from_grid();
@@ -1431,15 +1521,47 @@ bool Assets::process_removals() {
         return false;
     }
 
+    std::unordered_set<Asset*> removal_set;
+    removal_set.reserve(pending_removals.size());
     for (Asset* asset : pending_removals) {
+        if (asset) {
+            removal_set.insert(asset);
+        }
+    }
+
+    if (!removal_set.empty()) {
+        bool added = true;
+        while (added) {
+            added = false;
+            const std::vector<Asset*> all_assets = world_grid_.all_assets();
+            for (Asset* asset : all_assets) {
+                if (!asset || !asset->parent) {
+                    continue;
+                }
+                if (removal_set.find(asset->parent) != removal_set.end()) {
+                    if (removal_set.insert(asset).second) {
+                        added = true;
+                    }
+                }
+            }
+        }
+    }
+
+    std::vector<Asset*> grid_removals;
+    grid_removals.reserve(removal_set.size());
+    for (Asset* asset : removal_set) {
         if (!asset) {
             continue;
         }
+        grid_removals.push_back(asset);
+    }
 
+    for (Asset* asset : grid_removals) {
+        if (!asset) {
+            continue;
+        }
         remove_asset_dimension_cache(asset);
-
         asset->clear_grid_residency_cache();
-
         (void)world_grid_.remove_asset(asset);
     }
 
@@ -1890,29 +2012,22 @@ void Assets::rebuild_active_from_screen_grid() {
         return lhs < rhs;
     };
 
-    auto parent_is_active = [&](Asset* asset) -> bool {
-        if (!asset) {
-            return false;
-        }
-        if (!asset->parent) {
-            return true;
-        }
-        return asset->parent->last_active_frame_id == current_frame_id;
-    };
-
     active_assets.erase(std::remove_if(active_assets.begin(),
                                        active_assets.end(),
                                        [&](Asset* asset) {
                                            if (!asset) {
                                                return true;
                                            }
+                                           if (asset->dead) {
+                                               return true;
+                                           }
                                            const bool is_visible = asset->last_visible_frame_id == current_frame_id;
-                                           const bool parent_active = parent_is_active(asset);
-                                           if (!is_visible || !parent_active) {
+                                           if (!is_visible) {
                                                if (asset->last_active_frame_id == previous_active_frame_id) {
                                                    active_changed = true;
                                                }
                                                asset->active = false;
+                                               asset->child_creation_requested_ = false;
                                                return true;
                                            }
                                            const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
@@ -1928,9 +2043,6 @@ void Assets::rebuild_active_from_screen_grid() {
 
     for (Asset* asset : visible_candidate_buffer_) {
         if (!asset) {
-            continue;
-        }
-        if (!parent_is_active(asset)) {
             continue;
         }
         if (asset->last_active_frame_id == current_frame_id) {
@@ -1953,44 +2065,6 @@ void Assets::rebuild_active_from_screen_grid() {
     }
 
     visible_candidate_buffer_.clear();
-
-    // Ensure children of active assets become active alongside their parents.
-    {
-        std::vector<Asset*> active_snapshot = active_assets;
-        std::unordered_set<Asset*> visited;
-        visited.reserve(active_assets.size() * 2 + 1);
-        std::function<void(Asset*)> activate_children = [&](Asset* parent) {
-            if (!parent) {
-                return;
-            }
-            for (Asset* child : parent->asset_children) {
-                if (!child || child->dead) {
-                    continue;
-                }
-                if (!visited.insert(child).second) {
-                    continue;
-                }
-                if (child->last_active_frame_id == current_frame_id) {
-                    child->active = true;
-                    activate_children(child);
-                    continue;
-                }
-                child->last_active_frame_id = current_frame_id;
-                child->last_visible_frame_id = current_frame_id;
-                child->active = true;
-                auto insert_pos = std::lower_bound(active_assets.begin(), active_assets.end(), child, depth_order);
-                active_assets.insert(insert_pos, child);
-                newly_active_assets.push_back(child);
-                active_changed = true;
-                activate_children(child);
-            }
-        };
-        for (Asset* asset : active_snapshot) {
-            if (asset && asset->last_active_frame_id == current_frame_id) {
-                activate_children(asset);
-            }
-        }
-    }
 
     active_assets_dirty_.store(false, std::memory_order_release);
     if (active_changed) {

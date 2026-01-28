@@ -9,6 +9,7 @@ Makefile
 vcpkg
 vcpkg_installed/
 key.txt
+SRC/
 release/
 Tasks/
 .claude

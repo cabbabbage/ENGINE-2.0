@@ -1032,6 +1032,7 @@ void DevControls::set_enabled(bool enabled) {
     } else {
         const char* msg_disable = "[DevControls] preparing disable flow";
         std::cout << msg_disable << "\n";
+        grid_overlay_enabled_ = false;
         close_all_floating_panels();
         if (map_editor_ && map_editor_->is_enabled()) {
             map_editor_->exit(true, false);
@@ -3199,54 +3200,6 @@ Room* DevControls::choose_room(Room* preferred) const {
 void DevControls::filter_active_assets(std::vector<Asset*>& assets) const {
     if (!enabled_) {
         restore_filter_hidden_assets();
-        return;
-    }
-
-    const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
-    if (frame_editor_active && frame_editor_session_) {
-        std::vector<Asset*> filtered_out;
-        filtered_out.reserve(assets.size());
-        assets.erase(std::remove_if(assets.begin(), assets.end(),
-                                    [this, &filtered_out](Asset* asset) {
-                                        if (!asset) {
-                                            return true;
-                                        }
-                                        if (!frame_editor_session_->should_render_asset(asset)) {
-                                            filtered_out.push_back(asset);
-                                            return true;
-                                        }
-                                        return false;
-                                    }),
-                     assets.end());
-
-        std::unordered_map<Asset*, bool> next_hidden;
-        next_hidden.reserve(filtered_out.size());
-        for (Asset* asset : filtered_out) {
-            if (!asset) {
-                continue;
-            }
-            bool original_hidden = asset->is_hidden();
-            auto it = filter_hidden_assets_.find(asset);
-            if (it != filter_hidden_assets_.end()) {
-                original_hidden = it->second;
-            }
-            asset->set_hidden(true);
-            asset->set_highlighted(false);
-            asset->set_selected(false);
-            next_hidden.emplace(asset, original_hidden);
-        }
-
-        for (auto& kv : filter_hidden_assets_) {
-            Asset* asset = kv.first;
-            if (!asset || !assets_ || !assets_->contains_asset(asset)) {
-                continue;
-            }
-            if (next_hidden.find(asset) != next_hidden.end()) {
-                continue;
-            }
-            asset->set_hidden(kv.second);
-        }
-        filter_hidden_assets_ = std::move(next_hidden);
         return;
     }
 

@@ -70,83 +70,8 @@ Asset* SpawnContext::spawnAssetInternal(const std::string& name,
         } else if (raw) {
                 raw->set_tiling_info(std::nullopt);
         }
-        if (raw->info && !raw->info->asset_children.empty()) {
-                const std::string parent_name = raw->info ? raw->info->name : std::string{"<null>"};
-                vibble::log::debug(std::string{"[Spawn] Parent asset '"} + parent_name +
-                                   "' has " + std::to_string(raw->info->asset_children.size()) +
-                                   " child spawn group(s)");
-                std::unordered_map<std::string, Area> resolved_child_areas;
-                for (const auto& named : raw->info->areas) {
-                        if (!named.area) {
-                                continue;
-                        }
-                        try {
-                                Area world_area = raw->get_area(named.name);
-                                if (world_area.get_points().empty()) {
-                                        continue;
-                                }
-                                resolved_child_areas.insert_or_assign(named.name, std::move(world_area));
-                        } catch (...) {
-                                continue;
-                        }
-                }
-                std::vector<ChildInfo*> shuffled_asset_children;
-                for (auto& asset_child_info : raw->info->asset_children) {
-                        shuffled_asset_children.push_back(&asset_child_info);
-                }
-                std::random_device rd;
-                std::mt19937 g(rd());
-                std::shuffle(shuffled_asset_children.begin(), shuffled_asset_children.end(), g);
-                for (auto* asset_child_info : shuffled_asset_children) {
-
-                        bool skip_for_impassable = false;
-                        if (raw->info) {
-                                for (const auto& na : raw->info->areas) {
-                                        if (!na.area) continue;
-                                        if (na.name == asset_child_info->area_name) {
-                                                if (na.attachment_subtype == "impassable_attachment") {
-                                                        skip_for_impassable = true;
-                                                }
-                                                break;
-                                        }
-                                }
-                        }
-                        if (skip_for_impassable) {
-                                continue;
-                        }
-                        Area childArea = raw->get_area(asset_child_info->area_name);
-                        if (childArea.get_points().empty()) {
-                                vibble::log::debug(std::string{"[Spawn] Skipping child area '"} +
-                                                   asset_child_info->area_name + "' for parent '" + parent_name +
-                                                   "': resolved area has no points");
-                                continue;
-                        }
-
-                        resolved_child_areas.insert_or_assign(asset_child_info->area_name, childArea);
-                        std::vector<Asset*> kids;
-                        vibble::log::debug(std::string{"[Spawn] Parent '"} + parent_name +
-                                           "' child area '" + asset_child_info->area_name + "' produced " +
-                                           std::to_string(kids.size()) + " asset(s)");
-                        for (auto* child : kids) {
-                                if (!child || !child->info) continue;
-                                child->parent = raw;
-                                child->set_hidden(false);
-                                child->set_owning_room_name(raw->owning_room_name());
-
-                                raw->asset_children.push_back(child);
-                                if (!raw->asset_children.empty()) {
-                                        Asset* asset_child_ptr = raw->asset_children.back();
-                                        if (asset_child_ptr && asset_child_ptr->info) {
-                                                std::ostringstream oss;
-                                                oss << "[Spawn] -> Child '" << asset_child_ptr->info->name
-                                                  << "' placed at (" << asset_child_ptr->pos.x << ", "
-                                                     << asset_child_ptr->pos.y << ")";
-                                                vibble::log::debug(oss.str());
-                                        }
-                                }
-                        }
-                }
-        }
+        // NOTE: Child assets are now spawned transiently when parent activates,
+        // not during initial spawn. See Asset::spawn_children_if_needed()
         return raw;
 }
 

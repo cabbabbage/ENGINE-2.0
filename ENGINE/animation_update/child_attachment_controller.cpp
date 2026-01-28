@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "animation_update/child_attachment_math.hpp"
+#include "animation_update/child_3d_world_position.hpp"
 
 namespace {
 constexpr bool kChildAttachmentDebug = false;
@@ -142,63 +143,107 @@ void apply_frame_data(std::vector<Asset::AnimationChildAttachment>& slots,
             continue;
         }
     }
-    const std::vector<AnimationChildFrameData>* child_entries = override_children;
-    if (!child_entries && frame) {
-        child_entries = &frame->children;
-    }
-    if (!child_entries) {
+
+    // Build parent 3D state for consistent world position calculations
+    // Use floating-point anchor for maximum precision in 3D calculations
+    const SDL_FPoint parent_anchor_float{
+        static_cast<float>(parent_state.base_position.x),
+        static_cast<float>(parent_state.base_position.y)
+    };
+    const child_3d::Parent3DState parent_3d_state{
+        parent_anchor_float,
+        parent_state.world_z,
+        parent_scale,
+        parent_state.flipped
+    };
+
+    // If override_children provided, use that; otherwise read from each slot's timeline
+    if (override_children) {
+        for (const auto& child_data : *override_children) {
+            if (child_data.child_index < 0 ||
+                child_data.child_index >= static_cast<int>(slots.size())) {
+                continue;
+            }
+            auto& slot = slots[child_data.child_index];
+            if (!slot.animation) {
+                continue;
+            }
+            if (!child_data.visible) {
+                slot.visible = false;
+                continue;
+            }
+            const bool became_visible = !slot.was_visible;
+            if (became_visible) {
+                restart(slot);
+            }
+            slot.visible = true;
+
+            // Calculate 3D world position using clean, unified approach
+            const child_3d::Child3DDisplacement displacement{
+                static_cast<float>(child_data.dx),
+                static_cast<float>(child_data.dy),
+                static_cast<float>(child_data.dz)
+            };
+            const auto world_pos_3d = child_3d::calculate_child_world_position(
+                parent_3d_state, displacement);
+
+            // Store as integer screen coordinates for rendering
+            slot.world_pos.x = static_cast<int>(std::lround(world_pos_3d.x));
+            slot.world_pos.y = static_cast<int>(std::lround(world_pos_3d.y));
+            slot.world_z = world_pos_3d.z;
+            slot.rotation_degrees = mirrored_child_rotation(parent_state.flipped, child_data.degree);
+        }
+    } else {
+        // Read directly from each slot's child_timelines entry
         for (auto& slot : slots) {
-            slot.was_visible = slot.visible;
-        }
-        return;
-    }
-    for (const auto& child_data : *child_entries) {
-        if (child_data.child_index < 0 ||
-            child_data.child_index >= static_cast<int>(slots.size())) {
-            if constexpr (kChildAttachmentDebug) {
-                std::cout << "[ChildAttachments] Skipping child_data with out-of-range index "
-                          << child_data.child_index << "\n";
+            if (slot.child_index < 0 || !slot.animation) {
+                continue;
             }
-            continue;
-        }
-        auto& slot = slots[child_data.child_index];
-        if (!slot.animation) {
-            if constexpr (kChildAttachmentDebug) {
-                std::cout << "[ChildAttachments] Slot " << child_data.child_index
-                          << " has no bound animation (asset='" << slot.asset_name << "')\n";
+            // Only static timelines have per-frame data
+            if (!slot.timeline || !slot.timeline->is_static()) {
+                continue;
             }
-            continue;
-        }
-        if (!child_data.visible) {
-            slot.visible = false;
+            const std::size_t frame_idx = (parent_frame_index >= 0) ? static_cast<std::size_t>(parent_frame_index) : 0;
+            if (frame_idx >= slot.timeline->frames.size()) {
+                continue;
+            }
+            const AnimationChildFrameData& child_data = slot.timeline->frames[frame_idx];
+            if (!child_data.visible) {
+                slot.visible = false;
+                if constexpr (kChildAttachmentDebug) {
+                    std::cout << "[ChildAttachments] Setting slot " << slot.child_index << " ('" << slot.asset_name
+                              << "') visible=false (from timeline)\n";
+                }
+                continue;
+            }
+            const bool became_visible = !slot.was_visible;
+            if (became_visible) {
+                restart(slot);
+            }
+            slot.visible = true;
             if constexpr (kChildAttachmentDebug) {
                 std::cout << "[ChildAttachments] Setting slot " << slot.child_index << " ('" << slot.asset_name
-                          << "') visible=false\n";
+                          << "') visible=true dx=" << child_data.dx << " dy=" << child_data.dy
+                          << " dz=" << child_data.dz << " deg=" << child_data.degree << " (from timeline)\n";
             }
-            continue;
-        }
-        const bool became_visible = !slot.was_visible;
-        if (became_visible) {
-            restart(slot);
-        }
-        slot.visible = true;
-        if constexpr (kChildAttachmentDebug) {
-            std::cout << "[ChildAttachments] Setting slot " << slot.child_index << " ('" << slot.asset_name
-                      << "') visible=true dx=" << child_data.dx << " dy=" << child_data.dy
-                      << " dz=" << child_data.dz << " deg=" << child_data.degree << "\n";
-        }
-        const float scaled_dx = static_cast<float>(child_data.dx) * parent_scale;
-        const float scaled_dy = static_cast<float>(child_data.dy) * parent_scale;
-        const float scaled_dz = static_cast<float>(child_data.dz) * parent_scale;
 
-        const int dx = parent_state.flipped
-                           ? -static_cast<int>(std::lround(scaled_dx)) : static_cast<int>(std::lround(scaled_dx));
-        const int vertical_offset = static_cast<int>(std::lround(scaled_dy));
-        slot.world_pos.x = parent_state.base_position.x + dx;
-        slot.world_pos.y = parent_state.base_position.y + vertical_offset;
-        slot.world_z = parent_state.world_z + scaled_dz;
-        slot.rotation_degrees = mirrored_child_rotation(parent_state.flipped, child_data.degree);
+            // Calculate 3D world position using clean, unified approach
+            const child_3d::Child3DDisplacement displacement{
+                static_cast<float>(child_data.dx),
+                static_cast<float>(child_data.dy),
+                static_cast<float>(child_data.dz)
+            };
+            const auto world_pos_3d = child_3d::calculate_child_world_position(
+                parent_3d_state, displacement);
+
+            // Store as integer screen coordinates for rendering, with precise Z
+            slot.world_pos.x = static_cast<int>(std::lround(world_pos_3d.x));
+            slot.world_pos.y = static_cast<int>(std::lround(world_pos_3d.y));
+            slot.world_z = world_pos_3d.z;
+            slot.rotation_degrees = mirrored_child_rotation(parent_state.flipped, child_data.degree);
+        }
     }
+
     for (auto& slot : slots) {
         slot.was_visible = slot.visible;
     }

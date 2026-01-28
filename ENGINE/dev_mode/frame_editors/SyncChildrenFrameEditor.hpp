@@ -38,6 +38,7 @@ public:
     void update(const Input& input, float dt) override;
     void render_world(SDL_Renderer* renderer) const override;
     void render_overlays(SDL_Renderer* renderer) const override;
+    void persist_pending_changes() override;
     bool wants_close() const override { return wants_close_; }
 
 private:
@@ -51,8 +52,15 @@ private:
         float z = 0.0f;
     };
     ChildWorldPose child_world_pose(int child_index) const;
+    std::vector<int> static_child_point_indices() const;
+    int child_index_from_point_index(int point_index) const;
+    int point_index_for_child(int child_index) const;
     void ensure_manifest_transaction();
+    void apply_live_changes();
+    void invalidate_preview() const;
     void refresh_selection_state();
+    void sync_visibility_checkbox();
+    void reset_current_frame();
 
     FrameEditorContext context_{};
     SelectionState* selection_state_ = nullptr;
@@ -69,11 +77,18 @@ private:
     bool data_dirty_ = false;
     bool wants_close_ = false;
     std::unique_ptr<DMButton> btn_back_;
+    std::unique_ptr<DMButton> btn_reset_frame_;
     std::unique_ptr<FrameNavigator> frame_navigator_;
     std::unique_ptr<DMDropdown> dd_child_selector_;
     std::unique_ptr<CallbackCheckboxWidget> cb_child_visible_;
     mutable SDL_Rect back_rect_{0, 0, 0, 0};
     mutable SDL_Rect ui_rect_{0, 0, 0, 0};
+
+    // Cache the camera perspective scale from session start to prevent camera movement
+    // from affecting child position calculations
+    float cached_perspective_scale_ = 1.0f;
+    // Cache the full attachment scale at session start so edits stay stable if the camera moves
+    float cached_attachment_scale_ = 1.0f;
 };
 
 }  // namespace devmode::frame_editors

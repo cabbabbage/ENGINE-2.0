@@ -10,7 +10,7 @@
 #include "dev_mode/frame_editors/shared/FrameEditorContext.hpp"
 
 #include "dev_mode/frame_editors/FrameEditorBase.hpp"
-#include "dev_mode/pan_and_height.hpp"
+#include "dev_mode/dev_camera_controls.hpp"
 
 class Assets;
 class Asset;
@@ -57,11 +57,10 @@ public:
     void render(SDL_Renderer* renderer) const;
 
     void set_snap_resolution(int r);
-    bool should_render_asset(const Asset* asset) const;
 
 private:
     void create_and_begin_editor();
-    void destroy_editor();
+    void destroy_editor(bool persist_changes);
     std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(Mode mode);
 
     void capture_camera_state();
@@ -70,6 +69,7 @@ private:
     void capture_edit_camera_state();
     void restore_edit_camera_state();
     void enforce_camera_locks(WarpedScreenGrid& cam);
+    bool should_render_asset(const Asset* asset) const;
 
     Assets* assets_ = nullptr;
     Asset* target_ = nullptr;
@@ -98,6 +98,8 @@ private:
         SDL_Point screen_center_before{0, 0};
         std::optional<float> tilt_override_before;
         double camera_y_distance_before = 0.0;
+        bool manual_zoom_override_before = false;
+        double camera_zoom_percent_before = 0.0;
     };
     CameraLockState camera_lock_state_{};
     CameraLockState edit_camera_state_{};
@@ -107,5 +109,5 @@ private:
     float locked_tilt_deg_ = 0.0f;
     bool edit_camera_locked_ = false;
 
-    PanAndHeight pan_height_;
+    DevCameraControls camera_controls_;
 };

@@ -1,11 +1,13 @@
 #include "Point3DEditor.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <string>
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/dm_styles.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "world/grid_point.hpp"
+#include "utils/grid.hpp"
 #include "asset/Asset.hpp"
 
 namespace devmode::frame_editors {
@@ -38,16 +40,13 @@ void Point3DEditor::set_selection(SelectionState* selection) {
 
 void Point3DEditor::cycle_axis() {
     if (!selection_) return;
-    switch (selection_->axis) {
-        case AdjustmentAxis::X: selection_->axis = AdjustmentAxis::Y; break;
-        case AdjustmentAxis::Y: selection_->axis = AdjustmentAxis::Z; break;
-        case AdjustmentAxis::Z: selection_->axis = AdjustmentAxis::X; break;
-    }
+    selection_->axis = next_enabled_axis(selection_->axis);
 }
 
 void Point3DEditor::reset_axis(AdjustmentAxis axis) {
     if (selection_) {
-        selection_->axis = axis;
+        // If requested axis is disabled, fall back to first enabled axis
+        selection_->axis = is_axis_enabled(axis) ? axis : first_enabled_axis();
     }
 }
 
@@ -58,7 +57,61 @@ void Point3DEditor::set_axis_from_textbox_click(int textbox_index) {
         case 1: new_axis = AdjustmentAxis::Y; break; // dy
         case 2: new_axis = AdjustmentAxis::Z; break; // dz
     }
-    reset_axis(new_axis);
+    if (is_axis_enabled(new_axis)) {
+        reset_axis(new_axis);
+    }
+}
+
+void Point3DEditor::set_grid_resolution(int resolution) {
+    const int clamped = vibble::grid::clamp_resolution(std::max(0, resolution));
+    grid_resolution_ = clamped;
+    const int step = vibble::grid::delta(clamped);
+    grid_step_world_ = static_cast<float>(step > 0 ? step : 1);
+}
+
+void Point3DEditor::set_axis_enabled(AdjustmentAxis axis, bool enabled) {
+    axis_enabled_[axis_to_index(axis)] = enabled;
+    // If the current axis becomes disabled, move to the first enabled axis
+    if (selection_ && !is_axis_enabled(selection_->axis)) {
+        selection_->axis = first_enabled_axis();
+    }
+}
+
+void Point3DEditor::set_axis_locked_value(AdjustmentAxis axis, std::optional<float> locked_value) {
+    axis_locked_values_[axis_to_index(axis)] = locked_value;
+}
+
+bool Point3DEditor::is_axis_enabled(AdjustmentAxis axis) const {
+    return axis_enabled_[axis_to_index(axis)];
+}
+
+int Point3DEditor::axis_to_index(AdjustmentAxis axis) const {
+    switch (axis) {
+        case AdjustmentAxis::X: return 0;
+        case AdjustmentAxis::Y: return 1;
+        case AdjustmentAxis::Z: return 2;
+    }
+    return 0;
+}
+
+AdjustmentAxis Point3DEditor::first_enabled_axis() const {
+    for (int i = 0; i < 3; ++i) {
+        if (axis_enabled_[i]) {
+            return static_cast<AdjustmentAxis>(i);
+        }
+    }
+    return AdjustmentAxis::X;
+}
+
+AdjustmentAxis Point3DEditor::next_enabled_axis(AdjustmentAxis current) const {
+    int idx = axis_to_index(current);
+    for (int step = 1; step <= 3; ++step) {
+        const int next_idx = (idx + step) % 3;
+        if (axis_enabled_[next_idx]) {
+            return static_cast<AdjustmentAxis>(next_idx);
+        }
+    }
+    return current;
 }
 
 bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) {
@@ -66,64 +119,109 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
         return false;
     }
 
+    // Use cached container if passed container is invalid (zero dimensions)
+    // This happens when handle_event is called without renderer access
+    const SDL_Rect& effective_container = (container.w > 0 && container.h > 0)
+        ? container
+        : cached_container_;
+
     // Check for textbox clicks to set axis
+    bool pointer_clicked_textbox = false;
     if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mouse_pos = {e.button.x, e.button.y};
         const int padding = DMSpacing::small_gap();
-        const int inner_w = container.w - padding * 2;
+        const int inner_w = effective_container.w - padding * 2;
         const int third_w = (inner_w - DMSpacing::small_gap() * 2) / 3;
-        int y = container.y + padding;
+        int y = effective_container.y + padding;
 
         if (tb_dx_) {
             SDL_Rect dx_rect{
-                container.x + padding,
+                effective_container.x + padding,
                 y,
                 third_w,
                 tb_dx_->height_for_width(third_w)
             };
-            if (SDL_PointInRect(&mouse_pos, &dx_rect)) {
+            if (SDL_PointInRect(&mouse_pos, &dx_rect) && is_axis_enabled(AdjustmentAxis::X)) {
                 set_axis_from_textbox_click(0);
+                pointer_clicked_textbox = true;
             }
         }
 
         if (tb_dy_) {
             SDL_Rect dy_rect{
-                container.x + padding + third_w + DMSpacing::small_gap(),
+                effective_container.x + padding + third_w + DMSpacing::small_gap(),
                 y,
                 third_w,
                 tb_dy_->height_for_width(third_w)
             };
-            if (SDL_PointInRect(&mouse_pos, &dy_rect)) {
+            if (SDL_PointInRect(&mouse_pos, &dy_rect) && is_axis_enabled(AdjustmentAxis::Y)) {
                 set_axis_from_textbox_click(1);
+                pointer_clicked_textbox = true;
             }
         }
 
         if (tb_dz_) {
             SDL_Rect dz_rect{
-                container.x + padding + (third_w + DMSpacing::small_gap()) * 2,
+                effective_container.x + padding + (third_w + DMSpacing::small_gap()) * 2,
                 y,
                 third_w,
                 tb_dz_->height_for_width(third_w)
             };
-            if (SDL_PointInRect(&mouse_pos, &dz_rect)) {
+            if (SDL_PointInRect(&mouse_pos, &dz_rect) && is_axis_enabled(AdjustmentAxis::Z)) {
                 set_axis_from_textbox_click(2);
+                pointer_clicked_textbox = true;
             }
         }
     }
 
     bool consumed = false;
 
-    if (tb_dx_ && tb_dx_->handle_event(e)) {
+    const bool dx_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::X)].has_value();
+    const bool dy_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::Y)].has_value();
+    const bool dz_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::Z)].has_value();
+
+    if (tb_dx_ && is_axis_enabled(AdjustmentAxis::X) && !dx_locked && tb_dx_->handle_event(e)) {
         apply_textbox_changes();
         consumed = true;
     }
-    if (tb_dy_ && tb_dy_->handle_event(e)) {
+    if (tb_dy_ && is_axis_enabled(AdjustmentAxis::Y) && !dy_locked && tb_dy_->handle_event(e)) {
         apply_textbox_changes();
         consumed = true;
     }
-    if (tb_dz_ && tb_dz_->handle_event(e)) {
+    if (tb_dz_ && is_axis_enabled(AdjustmentAxis::Z) && !dz_locked && tb_dz_->handle_event(e)) {
         apply_textbox_changes();
         consumed = true;
+    }
+
+    if (pointer_clicked_textbox) {
+        consumed = true;
+    }
+
+    if (!consumed && e.type == SDL_KEYDOWN &&
+        (e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) {
+        if (selection_ && selection_->has_target() && selected_point_index_ >= 0 && on_position_changed_) {
+            if (!is_axis_enabled(selection_->axis) ||
+                axis_locked_values_[axis_to_index(selection_->axis)].has_value()) {
+                return consumed;
+            }
+            const float step = (grid_step_world_ > 0.0f) ? grid_step_world_ : 1.0f;
+            const float direction = (e.key.keysym.sym == SDLK_UP) ? 1.0f : -1.0f;
+            SDL_FPoint new_world = selection_->world_pos;
+            float new_world_z = selection_->world_z;
+            switch (selection_->axis) {
+                case AdjustmentAxis::X:
+                    new_world.x += direction * step;
+                    break;
+                case AdjustmentAxis::Y:
+                    new_world.y += direction * step;
+                    break;
+                case AdjustmentAxis::Z:
+                    new_world_z += direction * step;
+                    break;
+            }
+            on_position_changed_(new_world, new_world_z);
+            consumed = true;
+        }
     }
 
     return consumed;
@@ -133,6 +231,9 @@ void Point3DEditor::render_overlays(SDL_Renderer* renderer, const SDL_Rect& cont
     if (!renderer || !selection_ || !selection_->has_target()) {
         return;
     }
+
+    // Cache the container rect for use in handle_event
+    cached_container_ = container;
 
     sync_textboxes_from_selection();
 
@@ -180,27 +281,52 @@ void Point3DEditor::sync_textboxes_from_selection() {
     }
 
     // Only update if not currently editing
-    if (tb_dx_ && !tb_dx_->is_editing()) {
-        const std::string dx_str = std::to_string(static_cast<int>(std::lround(selection_->world_pos.x)));
-        if (dx_str != last_dx_text_) {
+    const SDL_FPoint rel_pos = selection_->relative_world_pos();
+    const float rel_z = selection_->relative_world_z();
+
+    const auto locked_x = axis_locked_values_[axis_to_index(AdjustmentAxis::X)];
+    const auto locked_y = axis_locked_values_[axis_to_index(AdjustmentAxis::Y)];
+    const auto locked_z = axis_locked_values_[axis_to_index(AdjustmentAxis::Z)];
+
+    if (tb_dx_) {
+        const float display_x = locked_x.value_or(rel_pos.x);
+        const std::string dx_str = std::to_string(static_cast<int>(std::lround(display_x)));
+        if (!tb_dx_->is_editing() && dx_str != last_dx_text_) {
             tb_dx_->set_value(dx_str);
             last_dx_text_ = dx_str;
         }
-    }
-
-    if (tb_dy_ && !tb_dy_->is_editing()) {
-        const std::string dy_str = std::to_string(static_cast<int>(std::lround(selection_->world_pos.y)));
-        if (dy_str != last_dy_text_) {
-            tb_dy_->set_value(dy_str);
-            last_dy_text_ = dy_str;
+        if (!is_axis_enabled(AdjustmentAxis::X)) {
+            tb_dx_->set_label_color_override(SDL_Color{160, 160, 160, 255});
+        } else {
+            tb_dx_->clear_label_color_override();
         }
     }
 
-    if (tb_dz_ && !tb_dz_->is_editing()) {
-        const std::string dz_str = std::to_string(static_cast<int>(std::lround(selection_->world_z)));
-        if (dz_str != last_dz_text_) {
+    if (tb_dy_) {
+        const float display_y = locked_y.value_or(rel_pos.y);
+        const std::string dy_str = std::to_string(static_cast<int>(std::lround(display_y)));
+        if (!tb_dy_->is_editing() && dy_str != last_dy_text_) {
+            tb_dy_->set_value(dy_str);
+            last_dy_text_ = dy_str;
+        }
+        if (!is_axis_enabled(AdjustmentAxis::Y)) {
+            tb_dy_->set_label_color_override(SDL_Color{160, 160, 160, 255});
+        } else {
+            tb_dy_->clear_label_color_override();
+        }
+    }
+
+    if (tb_dz_) {
+        const float display_z = locked_z.value_or(rel_z);
+        const std::string dz_str = std::to_string(static_cast<int>(std::lround(display_z)));
+        if (!tb_dz_->is_editing() && dz_str != last_dz_text_) {
             tb_dz_->set_value(dz_str);
             last_dz_text_ = dz_str;
+        }
+        if (!is_axis_enabled(AdjustmentAxis::Z)) {
+            tb_dz_->set_label_color_override(SDL_Color{160, 160, 160, 255});
+        } else {
+            tb_dz_->clear_label_color_override();
         }
     }
 }
@@ -211,29 +337,40 @@ void Point3DEditor::apply_textbox_changes() {
     }
 
     bool changed = false;
+    const SDL_FPoint anchor = selection_->anchor_point();
+    const SDL_FPoint rel_pos = selection_->relative_world_pos();
+    const float rel_z = selection_->relative_world_z();
+    const float anchor_z = selection_->anchor_z_point();
 
-    if (tb_dx_) {
-        const float value = parse_float(tb_dx_->value(), selection_->world_pos.x);
-        if (std::fabs(value - selection_->world_pos.x) > 0.001f) {
-            selection_->world_pos.x = value;
+    const auto locked_x = axis_locked_values_[axis_to_index(AdjustmentAxis::X)];
+    const auto locked_y = axis_locked_values_[axis_to_index(AdjustmentAxis::Y)];
+    const auto locked_z = axis_locked_values_[axis_to_index(AdjustmentAxis::Z)];
+
+    if (tb_dx_ && is_axis_enabled(AdjustmentAxis::X)) {
+        const float value = locked_x.value_or(parse_float(tb_dx_->value(), rel_pos.x));
+        const float new_world_x = anchor.x + value;
+        if (std::fabs(new_world_x - selection_->world_pos.x) > 0.001f) {
+            selection_->world_pos.x = new_world_x;
             changed = true;
             last_dx_text_ = tb_dx_->value();
         }
     }
 
-    if (tb_dy_) {
-        const float value = parse_float(tb_dy_->value(), selection_->world_pos.y);
-        if (std::fabs(value - selection_->world_pos.y) > 0.001f) {
-            selection_->world_pos.y = value;
+    if (tb_dy_ && is_axis_enabled(AdjustmentAxis::Y)) {
+        const float value = locked_y.value_or(parse_float(tb_dy_->value(), rel_pos.y));
+        const float new_world_y = anchor.y + value;
+        if (std::fabs(new_world_y - selection_->world_pos.y) > 0.001f) {
+            selection_->world_pos.y = new_world_y;
             changed = true;
             last_dy_text_ = tb_dy_->value();
         }
     }
 
-    if (tb_dz_) {
-        const float value = parse_float(tb_dz_->value(), selection_->world_z);
-        if (std::fabs(value - selection_->world_z) > 0.001f) {
-            selection_->world_z = value;
+    if (tb_dz_ && is_axis_enabled(AdjustmentAxis::Z)) {
+        const float value = locked_z.value_or(parse_float(tb_dz_->value(), rel_z));
+        const float new_world_z = anchor_z + value;
+        if (std::fabs(new_world_z - selection_->world_z) > 0.001f) {
+            selection_->world_z = new_world_z;
             changed = true;
             last_dz_text_ = tb_dz_->value();
         }
@@ -244,13 +381,24 @@ void Point3DEditor::apply_textbox_changes() {
     }
 }
 
-int Point3DEditor::get_overlay_height() const {
-    if (!selection_ || !selection_->has_target()) {
-        return 0;
+int Point3DEditor::get_overlay_height(int container_width) const {
+    const int padding = DMSpacing::small_gap();
+    const int inner_w = std::max(0, container_width - padding * 2);
+    const int third_w = std::max(0, (inner_w - DMSpacing::small_gap() * 2) / 3);
+
+    int textbox_height = DMTextBox::height();
+    if (tb_dx_) {
+        textbox_height = std::max(textbox_height, tb_dx_->height_for_width(third_w));
+    }
+    if (tb_dy_) {
+        textbox_height = std::max(textbox_height, tb_dy_->height_for_width(third_w));
+    }
+    if (tb_dz_) {
+        textbox_height = std::max(textbox_height, tb_dz_->height_for_width(third_w));
     }
 
-    // Return height needed for the three textboxes with extra padding
-    return DMTextBox::height() + DMSpacing::small_gap() * 4;
+    // Keep the previous extra padding below the textboxes for consistency
+    return textbox_height + DMSpacing::small_gap() * 4;
 }
 
 void Point3DEditor::render_axis_point(SDL_Renderer* renderer,
@@ -591,10 +739,8 @@ void Point3DEditor::render_movement_arrows(SDL_Renderer* renderer,
 
 bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                                       const std::vector<SDL_FPoint>& point_screens,
-                                      const std::vector<bool>& point_selectable,
-                                      std::function<SDL_FPoint(const SDL_Point&)> screen_to_world) {
-    // Handle hover detection on mouse motion
-    if (e.type == SDL_MOUSEMOTION && !is_dragging_) {
+                                      const std::vector<bool>& point_selectable) {
+    if (e.type == SDL_MOUSEMOTION) {
         SDL_Point mouse_pos = {e.motion.x, e.motion.y};
         int new_hover = -1;
 
@@ -615,35 +761,24 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
         SDL_Point mouse_pos = {e.button.x, e.button.y};
         Uint32 current_time = SDL_GetTicks();
 
-        // Check if clicking on any point
-        bool clicked_on_point = false;
         for (std::size_t i = 0; i < point_screens.size(); ++i) {
             if (handle_point_click(mouse_pos, point_screens[i])) {
-                // Check if point is selectable
                 const bool is_selectable = (i < point_selectable.size() && point_selectable[i]);
-
                 if (!is_selectable) {
-                    // Don't select non-selectable points, but stop propagation
                     return false;
                 }
-
-                clicked_on_point = true;
                 const int clicked_index = static_cast<int>(i);
 
-                // Check for double-click on the same point for axis cycling
                 if (clicked_index == last_clicked_point_ &&
                     clicked_index == selected_point_index_ &&
                     (current_time - last_click_time_) < DOUBLE_CLICK_THRESHOLD_MS) {
-                    // Double-click on same selected point - cycle axis
                     cycle_axis();
-                    last_click_time_ = 0;  // Reset to prevent triple-click from cycling again
+                    last_click_time_ = 0;
                     last_clicked_point_ = -1;
                 } else {
-                    // Single click - select this point and notify callback
                     last_click_time_ = current_time;
                     last_clicked_point_ = clicked_index;
 
-                    // If clicking a different point, select it
                     if (clicked_index != selected_point_index_) {
                         selected_point_index_ = clicked_index;
                         if (on_point_selected_) {
@@ -651,69 +786,21 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                         }
                     }
                 }
-
-                // Start dragging only if this is the selected point
-                if (clicked_index == selected_point_index_) {
-                    drag_start_mouse_pos_ = mouse_pos;
-                    drag_start_world_pos_ = screen_to_world(drag_start_mouse_pos_);
-                    if (selection_) {
-                        drag_start_world_z_ = selection_->world_z;
-                    }
-                    is_dragging_ = true;
-                }
                 return true;
             }
         }
 
-        // Clicked somewhere else (not on any point) - deselect
-        if (!clicked_on_point) {
-            selected_point_index_ = -1;
-            hovered_point_index_ = -1;
-            is_dragging_ = false;
-            last_click_time_ = 0;
-            last_clicked_point_ = -1;
-            if (on_point_selected_) {
-                on_point_selected_(-1);  // Notify deselection
-            }
-            // Return false to allow frame editors to handle camera panning
-            return false;
+        selected_point_index_ = -1;
+        hovered_point_index_ = -1;
+        last_click_time_ = 0;
+        last_clicked_point_ = -1;
+        if (on_point_selected_) {
+            on_point_selected_(-1);
         }
-    } else if (e.type == SDL_MOUSEMOTION && is_dragging_) {
-        SDL_Point current_mouse = {e.motion.x, e.motion.y};
-        SDL_FPoint screen_delta = {static_cast<float>(current_mouse.x - drag_start_mouse_pos_.x),
-                                  static_cast<float>(current_mouse.y - drag_start_mouse_pos_.y)};
-
-        SDL_FPoint delta;
-        if (selection_ && selection_->axis == AdjustmentAxis::Z) {
-            delta = {0.0f, screen_delta.y};
-        } else {
-            SDL_FPoint current_world = screen_to_world(current_mouse);
-            delta = {current_world.x - drag_start_world_pos_.x, current_world.y - drag_start_world_pos_.y};
-        }
-
-        SDL_FPoint constrained_delta = constrain_drag_delta(delta, axis());
-
-        if (selection_ && selection_->axis == AdjustmentAxis::Z) {
-            float new_world_z = drag_start_world_z_ - constrained_delta.y; // Invert screen Y for world Z
-            if (on_position_changed_) {
-                on_position_changed_(drag_start_world_pos_, new_world_z);
-            }
-        } else {
-            SDL_FPoint new_world_pos = {drag_start_world_pos_.x + constrained_delta.x,
-                                       drag_start_world_pos_.y + constrained_delta.y};
-            if (on_position_changed_) {
-                on_position_changed_(new_world_pos, drag_start_world_z_);
-            }
-        }
-        return true;
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT && is_dragging_) {
-        is_dragging_ = false;
-        return true;
+        return false;
     }
 
-    // Scroll is NOT handled here anymore - reserved for camera height/tilt
-
-    return is_dragging_;
+    return false;
 }
 
 void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,

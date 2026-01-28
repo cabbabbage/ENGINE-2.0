@@ -24,6 +24,7 @@ public:
     void update(const Input& input, float dt) override;
     void render_world(SDL_Renderer* renderer) const override;
     void render_overlays(SDL_Renderer* renderer) const override;
+    void persist_pending_changes() override;
     bool wants_close() const override { return wants_close_; }
 
 private:
@@ -35,6 +36,8 @@ private:
     void refresh_attack_form() const;
     void apply_text_fields();
     void persist_changes();
+    void apply_live_changes();
+    void invalidate_preview() const;
     void apply_attack_to_all_frames();
     void copy_attack_vector_to_next_frame();
     std::string current_attack_type() const;

@@ -67,6 +67,10 @@ private:
     void destroy_sky_texture();
     void render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled);
 
+    bool ensure_floor_gradient_texture();
+    void destroy_floor_gradient_texture();
+    void render_floor_gradient();
+
     SDL_Renderer*  renderer_;
     Assets*        assets_;
     int            screen_width_;
@@ -97,4 +101,10 @@ private:
     int                   sky_texture_width_ = 0;
     int                   sky_texture_height_ = 0;
     bool                  sky_texture_failed_ = false;
+
+    std::filesystem::path floor_gradient_path_;
+    SDL_Texture*          floor_gradient_texture_       = nullptr;
+    int                   floor_gradient_width_ = 0;
+    int                   floor_gradient_height_ = 0;
+    bool                  floor_gradient_failed_ = false;
 };

@@ -119,48 +119,34 @@ AnimationChildFrameData make_default_child_frame(int child_index) {
         return sample;
 }
 
-AnimationChildFrameData parse_child_frame_sample(const nlohmann::json& node, int child_index) {
-        AnimationChildFrameData sample = make_default_child_frame(child_index);
-        if (node.is_object()) {
-                sample.dx = json_int(node.value("dx", 0), 0);
-                sample.dy = json_int(node.value("dy", 0), 0);
-                sample.dz = json_int(node.value("dz", node.value("dy", 0)), 0);
-                if (!node.contains("dz")) {
-                        sample.dz = sample.dy;
-                        sample.dy = 0;
-                }
-                if (node.contains("degree")) {
-                        sample.degree = json_float(node["degree"], 0.0f);
-                } else if (node.contains("rotation")) {
-                        sample.degree = json_float(node["rotation"], 0.0f);
-                }
-                sample.visible = json_bool(node.value("visible", sample.visible), sample.visible);
-        } else if (node.is_array()) {
-                if (!node.empty() && node[0].is_number()) {
-                        sample.dx = json_int(node[0], 0);
-                }
-                if (node.size() > 1 && node[1].is_number()) {
-                        sample.dy = json_int(node[1], 0);
-                }
-                if (node.size() > 3 && node[3].is_number()) {
-                        sample.dz = json_int(node[3], 0);
-                        if (node.size() > 4 && node[4].is_number()) {
-                                sample.degree = json_float(node[4], 0.0f);
-                        }
-                        if (node.size() > 5) {
-                                sample.visible = json_bool(node[5], sample.visible);
-                        }
-                } else {
-                        if (node.size() > 2 && node[2].is_number()) {
-                                sample.degree = json_float(node[2], 0.0f);
-                        }
-                        if (node.size() > 3) {
-                                sample.visible = json_bool(node[3], sample.visible);
-                        }
-                        sample.dz = sample.dy;
-                        sample.dy = 0;
-                }
+std::optional<AnimationChildFrameData> parse_child_frame_sample(const nlohmann::json& node,
+                                                                int child_index,
+                                                                const std::string& asset_name) {
+        if (!node.is_object()) {
+                std::cout << "[AnimationLoader] child timeline frame for asset '" << asset_name
+                          << "' is not an object; legacy child formats are unsupported.\n";
+                return std::nullopt;
         }
+        if (node.contains("render_in_front")) {
+                std::cout << "[AnimationLoader] child timeline frame for asset '" << asset_name
+                          << "' includes legacy field 'render_in_front' and cannot be loaded. "
+                          << "child_timelines are the only supported child source.\n";
+                return std::nullopt;
+        }
+        AnimationChildFrameData sample = make_default_child_frame(child_index);
+        sample.dx = json_int(node.value("dx", 0), 0);
+        sample.dy = json_int(node.value("dy", 0), 0);
+        sample.dz = json_int(node.value("dz", node.value("dy", 0)), 0);
+        if (!node.contains("dz")) {
+                sample.dz = sample.dy;
+                sample.dy = 0;
+        }
+        if (node.contains("degree")) {
+                sample.degree = json_float(node["degree"], 0.0f);
+        } else if (node.contains("rotation")) {
+                sample.degree = json_float(node["rotation"], 0.0f);
+        }
+        sample.visible = json_bool(node.value("visible", sample.visible), sample.visible);
         return sample;
 }
 
@@ -583,6 +569,7 @@ void AnimationLoader::load(Animation& animation,
         animation.movement_paths_.clear();
         animation.audio_clip = Animation::AudioClip{};
         bool movement_specified = false;
+        bool legacy_movement_children_found = false;
         nlohmann::json hit_geometry_json = nlohmann::json::array();
         if (anim_json.contains("hit_geometry") && anim_json["hit_geometry"].is_array()) {
                 hit_geometry_json = anim_json["hit_geometry"];
@@ -604,55 +591,8 @@ void AnimationLoader::load(Animation& animation,
                                 try { fm.dy = static_cast<int>(mv.value("dy", 0)); } catch (...) { fm.dy = 0; }
                                 try { fm.dz = static_cast<int>(mv.value("dz", 0)); } catch (...) { fm.dz = 0; }
                                 fm.z_resort = mv.value("resort_z", false);
-
-                                fm.children.clear();
-                                if (mv.contains("children") && mv["children"].is_array()) {
-                                        for (const auto& child_entry : mv["children"]) {
-                                                AnimationChildFrameData child_data;
-                                                if (child_entry.is_object()) {
-                                                        child_data.child_index = child_entry.value("child_index", -1);
-                                                        try { child_data.dx = static_cast<int>(child_entry.value("dx", 0)); } catch (...) { child_data.dx = 0; }
-                                                        try { child_data.dy = static_cast<int>(child_entry.value("dy", 0)); } catch (...) { child_data.dy = 0; }
-                                                        try { child_data.dz = static_cast<int>(child_entry.value("dz", 0)); } catch (...) { child_data.dz = 0; }
-                                                        if (!child_entry.contains("dz")) {
-                                                                child_data.dz = child_data.dy;
-                                                                child_data.dy = 0;
-                                                        }
-                                                        if (child_entry.contains("degree") && child_entry["degree"].is_number()) {
-                                                                try { child_data.degree = static_cast<float>(child_entry["degree"].get<double>()); } catch (...) { child_data.degree = 0.0f; }
-                                                        } else if (child_entry.contains("rotation") && child_entry["rotation"].is_number()) {
-                                                                try { child_data.degree = static_cast<float>(child_entry["rotation"].get<double>()); } catch (...) { child_data.degree = 0.0f; }
-                                                        }
-                                                        child_data.visible = child_entry.value("visible", true);
-                                                } else if (child_entry.is_array() && !child_entry.empty()) {
-                                                        try { child_data.child_index = child_entry[0].get<int>(); } catch (...) { child_data.child_index = -1; }
-                                                        if (child_entry.size() >= 2 && child_entry[1].is_number()) { try { child_data.dx = child_entry[1].get<int>(); } catch (...) { child_data.dx = 0; } }
-                                                        if (child_entry.size() >= 3 && child_entry[2].is_number()) { try { child_data.dy = child_entry[2].get<int>(); } catch (...) { child_data.dy = 0; } }
-                                                        if (child_entry.size() >= 4 && child_entry[3].is_number()) {
-                                                                try { child_data.dz = child_entry[3].get<int>(); } catch (...) { child_data.dz = 0; }
-                                                                if (child_entry.size() >= 5 && child_entry[4].is_number()) { try { child_data.degree = static_cast<float>(child_entry[4].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
-                                                                if (child_entry.size() >= 6) {
-                                                                        if (child_entry[5].is_boolean()) child_data.visible = child_entry[5].get<bool>();
-                                                                        else if (child_entry[5].is_number_integer()) child_data.visible = child_entry[5].get<int>() != 0;
-                                                                }
-                                                        } else {
-                                                                if (child_entry.size() >= 4 && child_entry[3].is_number()) { try { child_data.degree = static_cast<float>(child_entry[3].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
-                                                                if (child_entry.size() >= 5) {
-                                                                        if (child_entry[4].is_boolean()) child_data.visible = child_entry[4].get<bool>();
-                                                                        else if (child_entry[4].is_number_integer()) child_data.visible = child_entry[4].get<int>() != 0;
-                                                                }
-                                                                child_data.dz = child_data.dy;
-                                                                child_data.dy = 0;
-                                                        }
-                                                } else {
-                                                        continue;
-                                                }
-                                                if (child_data.child_index < 0 || child_data.child_index >= static_cast<int>(animation.child_asset_names_.size())) {
-                                                        std::cout << "[AnimationLoader] Ignoring child entry with invalid index " << child_data.child_index << " for asset list size " << animation.child_asset_names_.size() << "\n";
-                                                        continue;
-                                                }
-                                                fm.children.push_back(child_data);
-                                        }
+                                if (mv.contains("children")) {
+                                        legacy_movement_children_found = true;
                                 }
                                 if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.contains("resort_z")) specified = true;
                                 dest.push_back(std::move(fm));
@@ -672,7 +612,6 @@ void AnimationLoader::load(Animation& animation,
                                 fm.z_resort = mv[3].get<bool>();
                         }
 
-                        bool color_consumed = false;
                         for (const auto& node : mv) {
                                 if (!node.is_array()) continue;
                                 const bool looks_color = (node.size() == 3) && node[0].is_number() && node[1].is_number() && node[2].is_number();
@@ -682,60 +621,15 @@ void AnimationLoader::load(Animation& animation,
                                         try { g = clamp(node[1].get<int>()); } catch (...) { g = 255; }
                                         try { b = clamp(node[2].get<int>()); } catch (...) { b = 255; }
                                         fm.rgb = SDL_Color{ static_cast<Uint8>(r), static_cast<Uint8>(g), static_cast<Uint8>(b), 255 };
-                                        color_consumed = true;
                                         break;
                                 }
                         }
-                        fm.children.clear();
-                        const nlohmann::json* children_json = nullptr;
+
                         for (const auto& node : mv) {
-                                if (!node.is_array()) continue;
-                                if (!node.empty() && node[0].is_array()) {
-                                        children_json = &node;
+                                if (node.is_array() && !node.empty() && node[0].is_array()) {
+                                        legacy_movement_children_found = true;
                                         break;
                                 }
-                        }
-                        if (children_json) {
-                                for (const auto& child_entry : *children_json) {
-                                        if (!child_entry.is_array() || child_entry.empty()) continue;
-                                        AnimationChildFrameData child_data;
-                                        try { child_data.child_index = child_entry[0].get<int>(); } catch (...) { child_data.child_index = -1; }
-                                        if (child_entry.size() >= 2 && child_entry[1].is_number()) { try { child_data.dx = child_entry[1].get<int>(); } catch (...) { child_data.dx = 0; } }
-                                        if (child_entry.size() >= 3 && child_entry[2].is_number()) { try { child_data.dy = child_entry[2].get<int>(); } catch (...) { child_data.dy = 0; } }
-                                        if (child_entry.size() >= 4 && child_entry[3].is_number()) {
-                                                try { child_data.dz = child_entry[3].get<int>(); } catch (...) { child_data.dz = 0; }
-                                                if (child_entry.size() >= 5 && child_entry[4].is_number()) { try { child_data.degree = static_cast<float>(child_entry[4].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
-                                                if (child_entry.size() >= 6) {
-                                                        if (child_entry[5].is_boolean()) child_data.visible = child_entry[5].get<bool>();
-                                                        else if (child_entry[5].is_number_integer()) child_data.visible = child_entry[5].get<int>() != 0;
-                                                }
-                                        } else {
-                                                if (child_entry.size() >= 4 && child_entry[3].is_number()) { try { child_data.degree = static_cast<float>(child_entry[3].get<double>()); } catch (...) { child_data.degree = 0.0f; } }
-                                                if (child_entry.size() >= 5) {
-                                                        if (child_entry[4].is_boolean()) child_data.visible = child_entry[4].get<bool>();
-                                                        else if (child_entry[4].is_number_integer()) child_data.visible = child_entry[4].get<int>() != 0;
-                                                }
-                                                child_data.dz = child_data.dy;
-                                                child_data.dy = 0;
-                                        }
-                                        if (child_data.child_index < 0 || child_data.child_index >= static_cast<int>(animation.child_asset_names_.size())) {
-                                                std::cout << "[AnimationLoader] Ignoring child entry with invalid index " << child_data.child_index << " for asset list size " << animation.child_asset_names_.size() << "\n";
-                                                continue;
-                                        }
-                                        fm.children.push_back(child_data);
-                                }
-                        }
-                        if (!fm.children.empty()) {
-                                std::cout << "[AnimationLoader] Parsed frame children: ";
-                                for (const auto& cd : fm.children) {
-                                        std::cout << "(idx=" << cd.child_index << ", dx=" << cd.dx << ", dy=" << cd.dy << ", dz=" << cd.dz << ")";
-                                        if (cd.child_index >= 0 && cd.child_index < static_cast<int>(animation.child_asset_names_.size())) {
-                                                std::cout << "->'" << animation.child_asset_names_[cd.child_index] << "' ";
-                                        } else {
-                                                std::cout << "->'<invalid>' ";
-                                        }
-                                }
-                                std::cout << "\n";
                         }
                         if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.size() >= 3) {
                                 specified = true;
@@ -771,6 +665,13 @@ void AnimationLoader::load(Animation& animation,
 
         if (parsed_paths.empty()) {
                 parsed_paths.emplace_back();
+        }
+
+        if (legacy_movement_children_found) {
+                cache_invalid_detected = true;
+                vibble::log::warn("[AnimationLoader] " + info.name + "::" + trigger
+                          + " contains legacy child data in movement frames; child_timelines is the only supported child format. Continuing with animation load while ignoring child data.");
+                // Don't return - continue loading the animation without the child data
         }
 
         std::vector<std::vector<AnimationFrame>> authored_movement_paths = parsed_paths;
@@ -999,9 +900,6 @@ void AnimationLoader::load(Animation& animation,
                         for (auto& path : paths) {
                                 for (auto& frame : path) {
                                         frame.dx = -frame.dx;
-                                        for (auto& child : frame.children) {
-                                                child.dx = -child.dx;
-                                        }
                                 }
                         }
                 }
@@ -1009,9 +907,6 @@ void AnimationLoader::load(Animation& animation,
                         for (auto& path : paths) {
                                 for (auto& frame : path) {
                                         frame.dy = -frame.dy;
-                                        for (auto& child : frame.children) {
-                                                child.dy = -child.dy;
-                                        }
                                 }
                         }
                 }
@@ -1040,6 +935,20 @@ void AnimationLoader::load(Animation& animation,
         if (derive_from_animation) {
                 apply_movement_transforms(animation.movement_paths_);
         }
+        auto warn_on_legacy_frame_children = [&](const std::vector<std::vector<AnimationFrame>>& paths) {
+                for (const auto& path : paths) {
+                        for (const auto& frame : path) {
+                                if (!frame.children.empty()) {
+                                        cache_invalid_detected = true;
+                                        vibble::log::warn("[AnimationLoader] " + info.name + "::" + trigger
+                                                  + " contains legacy frame child data; child_timelines is the only supported child format. Continuing with animation load while ignoring child data.");
+                                        // Clear legacy child data but continue loading
+                                        const_cast<AnimationFrame&>(frame).children.clear();
+                                }
+                        }
+                }
+        };
+        warn_on_legacy_frame_children(animation.movement_paths_);
         const bool has_audio_json = anim_json.contains("audio") && anim_json["audio"].is_object();
         const nlohmann::json* audio_json = has_audio_json ? &anim_json["audio"] : nullptr;
         auto clamp_volume = [](int value) {
@@ -1139,19 +1048,19 @@ void AnimationLoader::load(Animation& animation,
 
         animation.movment = any_motion;
         animation.number_of_frames = static_cast<int>(frame_count);
-        const bool had_existing_timelines = !animation.child_timelines().empty();
-        if (!AnimationLoader::load_child_timelines_from_json(anim_json, animation)) {
-                if (had_existing_timelines) {
-                        animation.refresh_child_start_events();
-                } else {
-                animation.rebuild_child_timelines_from_frames();
+        const bool requested_child_timelines = anim_json.contains("child_timelines");
+        // child_timelines are the sole source of truth for child data; legacy paths are rejected.
+        const bool loaded_child_timelines = AnimationLoader::load_child_timelines_from_json(anim_json, animation);
+        if (!loaded_child_timelines) {
+                if (requested_child_timelines) {
+                        cache_invalid_detected = true;
+                        std::cerr << "[AnimationLoader] " << info.name << "::" << trigger
+                                  << " failed to load child_timelines; legacy child formats are not supported.\n";
                 }
-        } else {
-                // Successfully loaded child_timelines from JSON
-                // CRITICAL: Populate AnimationFrame::children from the loaded timelines
-                animation.rebuild_frames_from_child_timelines();
-                animation.refresh_child_start_events();
+                animation.child_timelines().clear();
         }
+        animation.rebuild_frames_from_child_timelines();
+        animation.refresh_child_start_events();
         if (trigger == "default" && !animation.frames.empty() && !animation.frames[0]->variants.empty()) {
                 base_sprite = animation.frames[0]->variants[0].base_texture;
                 info.preview_texture = animation.frames[0]->variants[0].base_texture;
@@ -1208,6 +1117,15 @@ bool AnimationLoader::load_child_timelines_from_json(const nlohmann::json& anim_
                                 previous_by_asset.emplace(descriptor.asset_name, &descriptor);
                         }
                 }
+
+                auto note_legacy_child_payload = [&](const std::string& asset_name, const std::string& detail) {
+                        std::cout << "[AnimationLoader] child timeline for asset '" << asset_name
+                                  << "' contains unsupported legacy child data (" << detail
+                                  << "). child_timelines is the only source of truth.\n";
+                };
+                auto is_legacy_child_frame = [](const nlohmann::json& node) {
+                        return !node.is_object() || node.contains("render_in_front");
+                };
 
                 auto resolve_child_index = [&](const nlohmann::json& node) -> int {
                         int idx = -1;
@@ -1314,10 +1232,17 @@ bool AnimationLoader::load_child_timelines_from_json(const nlohmann::json& anim_
                                 continue;
                         }
 
+                        std::string asset_name = (static_cast<std::size_t>(child_idx) < child_assets.size())
+                                                        ? child_assets[static_cast<std::size_t>(child_idx)]
+                                                        : std::string{};
+                        if (entry.contains("render_in_front") || entry.contains("children")) {
+                                note_legacy_child_payload(asset_name, "legacy child fields in child_timeline entry");
+                                fatal_error = true;
+                                continue;
+                        }
+
                         AnimationChildData timeline;
-                        timeline.asset_name = (static_cast<std::size_t>(child_idx) < child_assets.size())
-                                                   ? child_assets[static_cast<std::size_t>(child_idx)]
-                                                   : std::string{};
+                        timeline.asset_name = asset_name;
                         timeline.animation_override = entry.value("animation", std::string{});
                         const auto mode = parse_child_mode(entry);
                         if (!mode) {
@@ -1338,9 +1263,27 @@ bool AnimationLoader::load_child_timelines_from_json(const nlohmann::json& anim_
                                 timeline.auto_start = true;
                         }
                         const auto frames_it = entry.find("frames");
-                        if (frames_it != entry.end() && frames_it->is_array()) {
+                        if (frames_it != entry.end()) {
+                                if (!frames_it->is_array()) {
+                                        note_legacy_child_payload(timeline.asset_name, "frames must be an array of objects");
+                                        fatal_error = true;
+                                        continue;
+                                }
                                 for (const auto& sample : *frames_it) {
-                                        timeline.frames.push_back(parse_child_frame_sample(sample, child_idx));
+                                        if (is_legacy_child_frame(sample)) {
+                                                note_legacy_child_payload(timeline.asset_name, "legacy child frame payload");
+                                                fatal_error = true;
+                                                break;
+                                        }
+                                        const auto parsed_frame = parse_child_frame_sample(sample, child_idx, timeline.asset_name);
+                                        if (!parsed_frame) {
+                                                fatal_error = true;
+                                                break;
+                                        }
+                                        timeline.frames.push_back(*parsed_frame);
+                                }
+                                if (fatal_error) {
+                                        continue;
                                 }
                         }
                         parsed[child_idx] = std::move(timeline);

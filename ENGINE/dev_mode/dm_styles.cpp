@@ -113,6 +113,10 @@ const DMButtonStyle &DMStyles::HeaderButton() {
   return s;
 }
 
+const DMButtonStyle &DMStyles::PrimaryButton() {
+  return DMStyles::AccentButton();
+}
+
 const DMButtonStyle &DMStyles::AccentButton() {
   static const DMButtonStyle s{
       {dm::FONT_PATH, 18, kAccentText},

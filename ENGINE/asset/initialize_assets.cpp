@@ -24,6 +24,8 @@ void InitializeAssets::initialize(Assets& assets,
         assets.all.clear();
         auto grid_assets = assets.world_grid().all_assets();
         assets.all.reserve(grid_assets.size());
+        vibble::log::info("[InitializeAssets] Processing " + std::to_string(grid_assets.size()) + " assets from world grid");
+        int processed_count = 0;
         for (Asset* raw : grid_assets) {
                 if (!raw) {
                         continue;
@@ -42,17 +44,21 @@ void InitializeAssets::initialize(Assets& assets,
                 set_camera_recursive(raw, &assets.getView());
                 set_assets_owner_recursive(raw, &assets);
                 assets.all.push_back(raw);
+                processed_count++;
+                if (processed_count % 1000 == 0) {
+                    vibble::log::info("[InitializeAssets] Processed " + std::to_string(processed_count) + " assets...");
+                }
 
                 if (!raw->is_finalized()) {
                     vibble::log::debug("[InitializeAssets] Asset '" + (raw->info ? raw->info->name : std::string{"<null>"}) + "' not finalized by loader; finalizing now.");
-                    raw->finalize_setup();
-                }
-
-                if (raw->info && !raw->info->animation_children.empty()) {
                     try {
-                        raw->initialize_animation_children_recursive();
+                        raw->finalize_setup();
+                    } catch (const std::exception& e) {
+                        vibble::log::error("[InitializeAssets] Exception finalizing asset '" + (raw->info ? raw->info->name : std::string{"<null>"}) + "': " + e.what());
+                        throw;
                     } catch (...) {
-
+                        vibble::log::error("[InitializeAssets] Unknown exception finalizing asset '" + (raw->info ? raw->info->name : std::string{"<null>"}) + "'");
+                        throw;
                     }
                 }
 

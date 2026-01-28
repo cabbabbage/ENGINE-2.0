@@ -73,6 +73,7 @@ class Asset {
         }
 };
 
+
     struct AnimationChildAttachment {
         int child_index = -1;
         std::string asset_name;
@@ -88,7 +89,6 @@ class Asset {
         int cached_h = 0;
         bool was_visible = false;
         int last_parent_frame_index = -1;
-        Asset* spawned_asset = nullptr;
         const AnimationChildData* timeline = nullptr;
         AnimationChildMode timeline_mode = AnimationChildMode::Static;
         bool timeline_active = false;
@@ -121,7 +121,7 @@ class Asset {
     void finalize_setup();
     void rebuild_animation_runtime();
 
-    void initialize_animation_children_recursive();
+
     bool is_finalized() const { return finalized_; }
     void on_scale_factor_changed();
 
@@ -131,11 +131,15 @@ class Asset {
     bool is_current_animation_locked_in_progress() const;
     bool is_current_animation_last_frame() const;
     bool is_current_animation_looping() const;
+    const std::vector<AnimationChildAttachment>& animation_children() const;
+    std::vector<AnimationChildAttachment>& animation_children();
     bool start_child_async(const std::string& name);
     bool stop_child_async(const std::string& name);
     void stop_all_child_async();
     const AnimationFrame* current_animation_frame() const { return current_frame; }
-    void add_child(Asset* asset_child);
+    void request_child_timeline_creation_if_needed();
+    bool is_child_timeline_asset() const { return is_child_timeline_asset_; }
+    int child_timeline_index() const { return child_timeline_index_; }
 
     struct ScaleUsageStats {
         float requested_scale = 1.0f;
@@ -221,8 +225,7 @@ class Asset {
     float distance_from_camera = 0.0f;
     float angle_from_camera = 0.0f;
 
-    std::vector<Asset*> asset_children;
-    const std::vector<AnimationChildAttachment>& animation_children() const { return animation_children_; }
+
     int depth = 0;
     bool dead = false;
     bool static_frame = true;
@@ -277,10 +280,10 @@ private:
     Assets* assets_ = nullptr;
     std::unique_ptr<AssetController>   controller_;
     std::unique_ptr<AssetList> neighbors;
-    AssetList* impassable_naighbors = nullptr;
-    std::vector<AnimationChildAttachment> animation_children_;
-    bool animation_children_initialized_ = false;
-    bool initializing_animation_children_ = false;
+    std::unique_ptr<AssetList> impassable_naighbors;
+
+
+
     std::optional<TilingInfo> tiling_info_{};
     SDL_Point last_neighbor_origin_{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min() };
     bool neighbor_lists_initialized_ = false;
@@ -319,6 +322,10 @@ private:
     std::uint64_t grid_id_ = 0;
     bool has_cached_grid_residency_ = false;
     SDL_Point cached_grid_residency_{0, 0};
+    std::vector<AnimationChildAttachment> animation_children_;
+    bool child_creation_requested_ = false;
+    bool is_child_timeline_asset_ = false;
+    int child_timeline_index_ = -1;
 
     SDL_Texture* composite_texture_ = nullptr;
     bool         composite_dirty_   = true;
@@ -326,9 +333,7 @@ private:
     float        composite_scale_   = 1.0f;
     float        world_z_offset_    = 0.0f;
 
-    void update_animation_children_state();
-    void sync_child_from_slot(AnimationChildAttachment& slot);
-    void deactivate_children();
+
 };
 
 #endif

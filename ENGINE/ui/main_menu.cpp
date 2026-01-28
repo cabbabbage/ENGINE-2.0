@@ -93,7 +93,7 @@ void MainMenu::buildButtons() {
         int y = (screen_h_ / 2) - 140;
         const int x = (screen_w_ - btn_w) / 2;
         auto configure_button = [](Button& button) {
-                button.set_glass_style(Button::default_glass_style());
+                button.reset_glass_style_override();
                 button.enable_glass_style(true);
 };
         if (maps_json_ && maps_json_->is_object()) {
@@ -126,6 +126,14 @@ void MainMenu::buildButtons() {
 }
 
 std::optional<MainMenu::Selection> MainMenu::handle_event(const SDL_Event& e) {
+        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_e &&
+            (e.key.keysym.mod & KMOD_CTRL)) {
+                button_tweaker_.toggle();
+                return std::nullopt;
+        }
+        if (button_tweaker_.is_active() && button_tweaker_.handle_event(e, screen_w_, screen_h_)) {
+                return std::nullopt;
+        }
         for (auto& entry : buttons_) {
                 if (entry.button.handle_event(e)) {
                         Selection selection;
@@ -157,6 +165,7 @@ void MainMenu::render() {
 	for (auto& entry : buttons_) {
 		entry.button.render(renderer_);
 	}
+	button_tweaker_.render(renderer_, screen_w_, screen_h_);
 }
 
 void MainMenu::showLoadingScreen() {

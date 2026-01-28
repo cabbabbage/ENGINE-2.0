@@ -66,31 +66,6 @@ SDL_Texture* clone_texture(SDL_Texture* src,
 
 }
 
-void AnimationCloner::ApplyChildFrameFlip(std::vector<AnimationChildFrameData>& children,
-                                          const Options& opts) {
-    const bool flip_children_h = opts.flip_horizontal || opts.flip_movement_horizontal;
-    const bool flip_children_v = opts.flip_vertical   || opts.flip_movement_vertical;
-    if (!flip_children_h && !flip_children_v) {
-        return;
-    }
-
-    for (auto& child : children) {
-        if (flip_children_h) child.dx = -child.dx;
-        if (flip_children_v) child.dy = -child.dy;
-    }
-}
-
-namespace {
-
-void copy_children(const std::vector<AnimationChildFrameData>& src_children,
-                   std::vector<AnimationChildFrameData>& dst_children,
-                   const AnimationCloner::Options& opts) {
-    dst_children = src_children;
-    AnimationCloner::ApplyChildFrameFlip(dst_children, opts);
-}
-
-}
-
 bool AnimationCloner::Clone(const Animation& source,
                             Animation&       dest,
                             const Options&   opts,
@@ -114,6 +89,7 @@ bool AnimationCloner::Clone(const Animation& source,
     dest.total_dy         = source.total_dy;
     dest.total_dz         = source.total_dz;
     dest.child_asset_names_ = source.child_asset_names_;
+    dest.child_data_      = source.child_data_;
     dest.audio_clip       = source.audio_clip;
 
     const std::size_t frame_count   = source.frame_cache_.size();
@@ -206,9 +182,7 @@ bool AnimationCloner::Clone(const Animation& source,
                 dst_frame.variants.push_back(var);
             }
 
-            dst_frame.children.clear();
             if (src_frame) {
-                copy_children(src_frame->children, dst_frame.children, opts);
                 dst_frame.hit_geometry = src_frame->hit_geometry;
                 dst_frame.attack_geometry = src_frame->attack_geometry;
             }
@@ -218,6 +192,9 @@ bool AnimationCloner::Clone(const Animation& source,
             }
         }
     }
+
+    dest.rebuild_frames_from_child_timelines();
+    dest.refresh_child_start_events();
 
     dest.total_dx = 0;
     dest.total_dy = 0;

@@ -60,6 +60,12 @@
             "texture_warp_percent": 100.0,
             "texture_warp_y_offset_px": 0.0
         },
+        "fog": {
+            "base_size_scale": 0.5,
+            "grid_spacing_multiplier": 1.5,
+            "max_random_jitter": 298.0,
+            "vertical_offset": 293.0
+        },
         "lighting": {
             "map_panel": {
                 "reactive": {

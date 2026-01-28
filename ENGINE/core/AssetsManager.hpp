@@ -188,6 +188,8 @@ public:
     Asset* player = nullptr;
 
     Asset* spawn_asset(const std::string& name, SDL_Point world_pos);
+    void request_child_timeline_creation(Asset* parent);
+    Asset* find_child_timeline_asset(const Asset* parent, int slot_index) const;
 
     void rebuild_from_grid_state();
 

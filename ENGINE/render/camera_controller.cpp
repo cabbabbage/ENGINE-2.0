@@ -73,6 +73,8 @@ void CameraController::reset(const CameraParams& params, SDL_Point center, doubl
     smoothed_ = camera_math::sanitize_camera_params(params, fallback_height_px_);
     manual_scale_ = smoothed_.height_px;
     manual_height_override_ = false;
+    manual_zoom_override_ = false;
+    manual_zoom_percent_ = smoothed_.zoom_percent;
     focus_override_ = false;
     sync_state();
 }
@@ -132,10 +134,31 @@ bool CameraController::manual_height_override() const {
     return manual_height_override_;
 }
 
+void CameraController::set_manual_zoom_override(bool enabled) {
+    manual_zoom_override_ = enabled;
+    sync_state();
+}
+
+bool CameraController::manual_zoom_override() const {
+    return manual_zoom_override_;
+}
+
 void CameraController::set_params(const CameraParams& params) {
     smoothed_ = camera_math::sanitize_camera_params(params, fallback_height_px_);
     manual_scale_ = smoothed_.height_px;
+    manual_zoom_percent_ = smoothed_.zoom_percent;
     sync_state();
+}
+
+void CameraController::set_zoom_percent(double percent) {
+    CameraParams params = smoothed_;
+    params.zoom_percent = percent;
+    manual_zoom_override_ = true;
+    set_params(params);
+}
+
+double CameraController::zoom_percent() const {
+    return smoothed_.zoom_percent;
 }
 
 void CameraController::animate_height_to(double target_height_px, int steps) {
@@ -180,8 +203,12 @@ void CameraController::apply_room_targets(const CameraParams& cur,
     blended = camera_math::sanitize_camera_params(blended, fallback_height_px_);
 
     if (manual_height_override_) {
-        // Preserve manual zoom adjustments (e.g., scroll wheel) instead of snapping back to the last applied height.
+        // Preserve manual height adjustments instead of snapping back to the last applied height.
         blended.height_px = smoothed_.height_px;
+    }
+    if (manual_zoom_override_) {
+        // Keep developer-driven zoom overrides until explicitly cleared.
+        blended.zoom_percent = smoothed_.zoom_percent;
     }
     (void)dev_mode;
     (void)refresh_requested;
@@ -192,6 +219,7 @@ void CameraController::apply_room_targets(const CameraParams& cur,
 void CameraController::tick(float /*dt_seconds*/) {
     smoothed_ = camera_math::sanitize_camera_params(smoothed_, fallback_height_px_);
     manual_scale_ = smoothed_.height_px;
+    manual_zoom_percent_ = smoothed_.zoom_percent;
     sync_state();
 }
 
@@ -225,7 +253,9 @@ void CameraController::sync_state() {
     state_.focus_override = focus_point_;
     state_.has_focus_override = focus_override_;
     state_.manual_height_override = manual_height_override_;
+    state_.manual_zoom_override = manual_zoom_override_;
     state_.manual_scale = manual_scale_;
+    state_.manual_zoom_percent = manual_zoom_percent_;
     state_.pitch_deg = camera_math::sanitize_pitch_degrees(static_cast<float>(smoothed_.tilt_deg));
     state_.pitch_rad = static_cast<double>(state_.pitch_deg) * (PI_D / 180.0);
 }

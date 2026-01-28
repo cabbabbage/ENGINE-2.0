@@ -186,128 +186,11 @@ std::vector<MovementFrame> parse_frames_from_payload(const nlohmann::json& paylo
                 f.resort_z = entry[3].get<bool>();
             }
 
-            const nlohmann::json* children_json = nullptr;
-            for (const auto& node : entry) {
-                if (!node.is_array()) continue;
-                if (!node.empty() && node[0].is_array()) {
-                    children_json = &node;
-                    break;
-                }
-            }
-            if (children_json) {
-                for (const auto& child_entry : *children_json) {
-                    if (!child_entry.is_array() || child_entry.empty()) continue;
-                    ChildFrame child;
-                    bool has_explicit_dz = false;
-                    try { child.child_index = child_entry[0].get<int>(); } catch (...) { child.child_index = -1; }
-                    if (child_entry.size() > 1 && child_entry[1].is_number()) {
-                        child.dx = static_cast<float>(child_entry[1].get<double>());
-                    }
-                    if (child_entry.size() > 2 && child_entry[2].is_number()) {
-                        child.dy = static_cast<float>(child_entry[2].get<double>());
-                    }
-                    if (child_entry.size() > 3 && child_entry[3].is_number()) {
-                        if (child_entry.size() > 4 && child_entry[4].is_number()) {
-                            child.dz = static_cast<float>(child_entry[3].get<double>());
-                            has_explicit_dz = true;
-                        } else {
-                            child.degree = static_cast<float>(child_entry[3].get<double>());
-                        }
-                    }
-                    if (child_entry.size() > 4) {
-                        if (child_entry[4].is_number() && child_entry.size() > 4) {
-                            child.degree = static_cast<float>(child_entry[4].get<double>());
-                        } else if (child_entry[4].is_boolean()) {
-                            child.visible = child_entry[4].get<bool>();
-                        } else if (child_entry[4].is_number_integer()) {
-                            child.visible = child_entry[4].get<int>() != 0;
-                        }
-                    }
-                    if (child_entry.size() > 5) {
-                        if (child_entry[5].is_boolean()) {
-                            child.render_in_front = child_entry[5].get<bool>();
-                        } else if (child_entry[5].is_number_integer()) {
-                            child.render_in_front = child_entry[5].get<int>() != 0;
-                        }
-                    }
-                    if (!has_explicit_dz) {
-                        child.dz = child.dy;
-                        child.dy = 0.0f;
-                    }
-                    child.has_data = true;
-                    f.children.push_back(child);
-                }
-            }
         } else if (entry.is_object()) {
             f.dx = static_cast<float>(entry.value("dx", 0.0));
             f.dy = static_cast<float>(entry.value("dy", 0.0));
             f.dz = static_cast<float>(entry.value("dz", 0.0));
             f.resort_z = entry.value("resort_z", false);
-            if (entry.contains("children") && entry["children"].is_array()) {
-                for (const auto& child_entry : entry["children"]) {
-                    if (!child_entry.is_object() && !child_entry.is_array()) continue;
-                    ChildFrame child;
-                    if (child_entry.is_object()) {
-                        child.child_index = child_entry.value("child_index", -1);
-                        child.dx = static_cast<float>(child_entry.value("dx", 0.0));
-                        child.dy = static_cast<float>(child_entry.value("dy", 0.0));
-                        child.dz = static_cast<float>(child_entry.value("dz", 0.0));
-                        if (!child_entry.contains("dz")) {
-                            child.dz = child.dy;
-                            child.dy = 0.0f;
-                        }
-                        if (child_entry.contains("degree") && child_entry["degree"].is_number()) {
-                            child.degree = static_cast<float>(child_entry["degree"].get<double>());
-                        } else if (child_entry.contains("rotation") && child_entry["rotation"].is_number()) {
-                            child.degree = static_cast<float>(child_entry["rotation"].get<double>());
-                        } else {
-                            child.degree = 0.0f;
-                        }
-                        child.visible = child_entry.value("visible", true);
-                        child.render_in_front = child_entry.value("render_in_front", true);
-                        child.has_data = true;
-                    } else if (child_entry.is_array()) {
-                        try { child.child_index = child_entry[0].get<int>(); } catch (...) { child.child_index = -1; }
-                        bool has_explicit_dz = false;
-                        if (child_entry.size() > 1 && child_entry[1].is_number()) {
-                            child.dx = static_cast<float>(child_entry[1].get<double>());
-                        }
-                        if (child_entry.size() > 2 && child_entry[2].is_number()) {
-                            child.dy = static_cast<float>(child_entry[2].get<double>());
-                        }
-                        if (child_entry.size() > 3 && child_entry[3].is_number()) {
-                            if (child_entry.size() > 4 && child_entry[4].is_number()) {
-                                child.dz = static_cast<float>(child_entry[3].get<double>());
-                                has_explicit_dz = true;
-                            } else {
-                                child.degree = static_cast<float>(child_entry[3].get<double>());
-                            }
-                        }
-                        if (child_entry.size() > 4) {
-                            if (child_entry[4].is_number() && child_entry.size() > 4) {
-                                child.degree = static_cast<float>(child_entry[4].get<double>());
-                            } else if (child_entry[4].is_boolean()) {
-                                child.visible = child_entry[4].get<bool>();
-                            } else if (child_entry[4].is_number_integer()) {
-                                child.visible = child_entry[4].get<int>() != 0;
-                            }
-                        }
-                        if (child_entry.size() > 5) {
-                            if (child_entry[5].is_boolean()) {
-                                child.render_in_front = child_entry[5].get<bool>();
-                            } else if (child_entry[5].is_number_integer()) {
-                                child.render_in_front = child_entry[5].get<int>() != 0;
-                            }
-                        }
-                        if (!has_explicit_dz) {
-                            child.dz = child.dy;
-                            child.dy = 0.0f;
-                        }
-                        child.has_data = true;
-                    }
-                    f.children.push_back(child);
-                }
-            }
         }
 
         f.hit.boxes.clear();
@@ -379,9 +262,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
             entry = nlohmann::json::array({0, 0});
         }
         nlohmann::json preserved_color;
-        nlohmann::json preserved_children;
         bool has_color = false;
-        bool has_children = false;
         bool had_resort = false;
         if (entry.is_array()) {
             for (const auto& node : entry) {
@@ -395,11 +276,6 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
                 if (looks_color && !has_color) {
                     preserved_color = node;
                     has_color = true;
-                    continue;
-                }
-                if (!node.empty() && node[0].is_array() && !has_children) {
-                    preserved_children = node;
-                    has_children = true;
                 }
             }
         }
@@ -412,9 +288,6 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
         }
         if (has_color) {
             entry.push_back(std::move(preserved_color));
-        }
-        if (has_children) {
-            entry.push_back(std::move(preserved_children));
         }
         movement[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(entry);
     }

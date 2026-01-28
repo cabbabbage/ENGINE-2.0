@@ -12,6 +12,7 @@
 #include "dev_mode/draw_utils.hpp"
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
+#include "dev_mode/frame_editors/shared/SnapUtils.hpp"
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
 
@@ -53,6 +54,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     }
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
+        point_3d_editor_->set_grid_resolution(context_.snap_resolution);
 
         point_3d_editor_->set_on_point_selected([this](int index) {
             if (index < 0) {
@@ -86,12 +88,14 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             auto* box = current_hit_box();
             if (!box) return;
 
+            SDL_FPoint snapped_world = snap_world_point_to_grid(new_world_pos, context_.snap_resolution);
+            float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
             SDL_Point anchor = asset_anchor_world();
             float scale = asset_local_scale();
 
-            box->center_x = (new_world_pos.x - static_cast<float>(anchor.x)) / scale;
-            box->center_y = (static_cast<float>(anchor.y) - new_world_pos.y) / scale;
-            box->center_z = (new_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+            box->center_x = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            box->center_y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
+            box->center_z = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
             persist_changes();
             refresh_selection_state();
@@ -106,12 +110,16 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             auto* box = current_hit_box();
             if (!box || !selection_state_) return;
 
+            SDL_FPoint snapped_world = snap_world_point_to_grid(selection_state_->world_pos, context_.snap_resolution);
+            float snapped_world_z = snap_world_z_to_grid(selection_state_->world_z, context_.snap_resolution);
+            selection_state_->world_pos = snapped_world;
+            selection_state_->world_z = snapped_world_z;
             SDL_Point anchor = asset_anchor_world();
             float scale = asset_local_scale();
 
-            box->center_x = (selection_state_->world_pos.x - static_cast<float>(anchor.x)) / scale;
-            box->center_y = (static_cast<float>(anchor.y) - selection_state_->world_pos.y) / scale;
-            box->center_z = (selection_state_->world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
+            box->center_x = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            box->center_y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
+            box->center_z = (snapped_world_z - (context_.target ? context_.target->world_z_offset() : 0.0f)) / scale;
 
             persist_changes();
         });
@@ -162,9 +170,6 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
 }
 
 void HitGeoFrameEditor::end() {
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit();
-    }
     frames_.clear();
     if (selection_state_) {
         selection_state_->reset();
@@ -183,12 +188,14 @@ void HitGeoFrameEditor::end() {
 
 bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
     // Handle Point3DEditor events first
+    SDL_Rect overlay_rect{0, 0, 0, 0};
+    bool overlay_valid = false;
     if (point_3d_editor_) {
-        int sw = 0, sh = 0;
-        SDL_GetRendererOutputSize(nullptr, &sw, &sh);
-        int height = point_3d_editor_->get_overlay_height();
-        SDL_Rect bottom_container{0, sh - height, sw, height};
-        if (point_3d_editor_->handle_event(e, bottom_container)) {
+        // Use the cached container from Point3DEditor (set during render_overlays)
+        // This avoids issues with SDL_GetRendererOutputSize(nullptr, ...) failing
+        overlay_rect = point_3d_editor_->get_cached_container();
+        overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
+        if (point_3d_editor_->handle_event(e, overlay_rect)) {
             return true;
         }
     }
@@ -204,10 +211,6 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
-        // Save changes before exiting - always commit pending changes
-        if (manifest_txn_.active()) {
-            manifest_txn_.commit();
-        }
         wants_close_ = true;
         consumed = true;
     }
@@ -251,7 +254,8 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
         SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
-    if (!ui_contains_point(mouse_pos)) {
+    const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
+    if (!ui_contains_point(mouse_pos) && !pointer_in_overlay) {
         std::vector<SDL_FPoint> point_screens;
         std::vector<bool> point_selectable;
         const std::string type = current_hitbox_type();
@@ -283,9 +287,7 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
         }
 
         // Only consume event if point editor actually handled it
-        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable, [this](const SDL_Point& p) {
-                return screen_to_world_point(p);
-            });
+        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable);
     }
 
     return consumed;
@@ -316,7 +318,7 @@ void HitGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
         SDL_GetRendererOutputSize(renderer, &sw, &sh);
-        int height = point_3d_editor_->get_overlay_height();
+        int height = point_3d_editor_->get_overlay_height(sw);
         SDL_Rect bottom_container{0, sh - height, sw, height};
         point_3d_editor_->render_overlays(renderer, bottom_container);
     }
@@ -382,9 +384,7 @@ void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 
 void HitGeoFrameEditor::select_frame(int index) {
     // Save changes before changing frames
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit();
-    }
+    persist_pending_changes();
 
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
 
@@ -413,11 +413,17 @@ void HitGeoFrameEditor::persist_changes() {
     if (frames_.empty()) {
         return;
     }
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit();
-    }
+    apply_live_changes();
     refresh_hitbox_form();
     refresh_selection_state();
+}
+
+void HitGeoFrameEditor::persist_pending_changes() {
+    if (!manifest_txn_.active()) {
+        return;
+    }
+    manifest_txn_.commit(true);
+    invalidate_preview();
 }
 
 float HitGeoFrameEditor::base_world_z() const {
@@ -438,6 +444,19 @@ void HitGeoFrameEditor::apply_hit_to_all_frames() {
     }
     refresh_hitbox_form();
     persist_changes();
+}
+
+void HitGeoFrameEditor::apply_live_changes() {
+    if (manifest_txn_.active()) {
+        manifest_txn_.commit(false);
+    }
+    invalidate_preview();
+}
+
+void HitGeoFrameEditor::invalidate_preview() const {
+    if (context_.preview && !context_.animation_id.empty()) {
+        context_.preview->invalidate(context_.animation_id);
+    }
 }
 
 void HitGeoFrameEditor::copy_hit_box_to_next_frame() {
@@ -683,8 +702,11 @@ void HitGeoFrameEditor::refresh_selection_state() {
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint screen = cam.map_to_screen_f(world);
     selection_state_->world_pos = world;
-    selection_state_->world_z = base_world_z() + box->center_z * scale;
+    const float base_z = base_world_z();
+    const float world_z = base_z + box->center_z * scale;
+    selection_state_->world_z = world_z;
     selection_state_->screen_pos = round_point(screen);
+    selection_state_->set_anchor_world(anchor, base_z);
 }
 
 bool HitGeoFrameEditor::ui_contains_point(const SDL_Point& pt) const {

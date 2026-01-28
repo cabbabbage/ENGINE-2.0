@@ -33,7 +33,9 @@ public:
         SDL_Point focus_override{0, 0};
         bool has_focus_override = false;
         bool manual_height_override = false;
+        bool manual_zoom_override = false;
         double manual_scale = 1.0;
+        double manual_zoom_percent = 0.0;
         float pitch_deg = 0.0f;
         double pitch_rad = 0.0;
     };
@@ -53,8 +55,12 @@ public:
 
     void set_manual_height_override(bool enabled);
     bool manual_height_override() const;
+    void set_manual_zoom_override(bool enabled);
+    bool manual_zoom_override() const;
 
     void set_params(const CameraParams& params);
+    void set_zoom_percent(double percent);
+    double zoom_percent() const;
 
     void animate_height_to(double target_height_px, int steps = 10);
     void animate_height_multiply(double factor);
@@ -87,7 +93,9 @@ private:
     bool focus_override_ = false;
     SDL_Point focus_point_{0, 0};
     bool manual_height_override_ = false;
+    bool manual_zoom_override_ = false;
     double manual_scale_ = 1.0;
+    double manual_zoom_percent_ = 0.0;
     double fallback_height_px_ = 1000.0;
 
     State state_{};

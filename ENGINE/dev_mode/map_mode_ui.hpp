@@ -11,6 +11,7 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include "utils/ranged_color.hpp"
+#include "fog_settings_panel.hpp"
 
 class Assets;
 namespace devmode::core {
@@ -82,6 +83,8 @@ public:
     bool is_point_inside(int x, int y) const;
     bool is_any_panel_visible() const;
     bool is_layers_panel_visible() const;
+    bool is_fog_panel_visible() const;
+    void toggle_fog_panel();
 
 private:
     void ensure_panels();
@@ -110,6 +113,8 @@ private:
     void close_room_configuration(bool show_rooms_list = false);
     void create_room_from_panel(SlidingPanel return_panel);
     SDL_Rect room_config_bounds() const;
+    void open_fog_panel();
+    void close_fog_panel();
     void show_sliding_panel(SlidingPanel panel, bool preserve_layers_panel = false);
     SDL_Rect sanitize_sliding_area(const SDL_Rect& bounds) const;
     SDL_Rect effective_work_area() const;
@@ -142,6 +147,7 @@ private:
     std::unique_ptr<MapLayerControlsDisplay> layer_controls_display_;
     std::unique_ptr<MapRoomsDisplay> rooms_display_;
     std::unique_ptr<MapLayersPanel> layers_panel_;
+    std::unique_ptr<FogSettingsPanel> fog_settings_panel_;
     std::unique_ptr<DevFooterBar> footer_bar_;
     bool footer_buttons_configured_ = false;
     bool map_mode_active_ = false;

@@ -12,7 +12,7 @@ public:
     // Assets at screen center render the foreground overlay at full opacity.
     // Assets at screen edges render the background overlay at full opacity.
     static constexpr float kDepthCueForegroundFullOpacityDistance = 1800.0f;
-    static constexpr float kDepthCueBackgroundFullOpacityDistance = 1200.0f;
+    static constexpr float kDepthCueBackgroundFullOpacityDistance = 400.0f;
 
     CompositeAssetRenderer(SDL_Renderer* renderer, Assets* assets);
     ~CompositeAssetRenderer();

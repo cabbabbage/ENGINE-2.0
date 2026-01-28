@@ -12,6 +12,7 @@
 #include "dev_mode/draw_utils.hpp"
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
+#include "dev_mode/frame_editors/shared/SnapUtils.hpp"
 
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
@@ -69,7 +70,42 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     }
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
+        point_3d_editor_->set_grid_resolution(context_.snap_resolution);
         point_3d_editor_->set_on_coordinates_changed([this]() {
+            auto* vec = current_attack_vector();
+            if (!vec || !selection_state_) {
+                return;
+            }
+            SDL_FPoint snapped_world = snap_world_point_to_grid(selection_state_->world_pos, context_.snap_resolution);
+            float snapped_world_z = snap_world_z_to_grid(selection_state_->world_z, context_.snap_resolution);
+            selection_state_->world_pos = snapped_world;
+            selection_state_->world_z = snapped_world_z;
+            SDL_Point anchor = asset_anchor_world();
+            float scale = asset_local_scale();
+            SDL_FPoint local;
+            local.x = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            local.y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
+            float local_z = (snapped_world_z - base_world_z()) / scale;
+            switch (selected_handle_) {
+                case AttackHandle::Start:
+                    vec->start_x = local.x;
+                    vec->start_y = local.y;
+                    vec->start_z = local_z;
+                    break;
+                case AttackHandle::Control:
+                    vec->control_x = local.x;
+                    vec->control_y = local.y;
+                    vec->control_z = local_z;
+                    break;
+                case AttackHandle::End:
+                    vec->end_x = local.x;
+                    vec->end_y = local.y;
+                    vec->end_z = local_z;
+                    break;
+                default:
+                    break;
+            }
+            refresh_attack_form();
             persist_changes();
         });
 
@@ -116,12 +152,14 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
         point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
             auto* vec = current_attack_vector();
             if (!vec) return;
+            SDL_FPoint snapped_world = snap_world_point_to_grid(new_world_pos, context_.snap_resolution);
+            float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
             SDL_Point anchor = asset_anchor_world();
             float scale = asset_local_scale();
             SDL_FPoint local;
-            local.x = (new_world_pos.x - static_cast<float>(anchor.x)) / scale;
-            local.y = (static_cast<float>(anchor.y) - new_world_pos.y) / scale;
-            float local_z = (new_world_z - base_world_z()) / scale;
+            local.x = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            local.y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
+            float local_z = (snapped_world_z - base_world_z()) / scale;
             switch (selected_handle_) {
                 case AttackHandle::Start:
                     vec->start_x = local.x;
@@ -161,7 +199,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     }
 
     manifest_txn_.begin(context_);
-    manifest_txn_.set_immediate_persist(true);
+    manifest_txn_.set_deferred_persist(true);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -169,7 +207,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
         auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
         nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
         nlohmann::json updated = build_payload_from_frames(frames_, payload);
-        return context_.document->save_animation_payload_immediately(context_.animation_id, updated);
+        return context_.document->update_animation_payload(context_.animation_id, updated);
     });
 
     btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
@@ -190,9 +228,6 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
 }
 
 void AttackGeoFrameEditor::end() {
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit();
-    }
     frames_.clear();
     if (selection_state_) {
         selection_state_->reset();
@@ -209,12 +244,14 @@ void AttackGeoFrameEditor::end() {
 
 bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
     // Handle Point3DEditor events first
+    SDL_Rect overlay_rect{0, 0, 0, 0};
+    bool overlay_valid = false;
     if (point_3d_editor_) {
-        int sw = 0, sh = 0;
-        SDL_GetRendererOutputSize(nullptr, &sw, &sh);
-        int height = point_3d_editor_->get_overlay_height();
-        SDL_Rect bottom_container{0, sh - height, sw, height};
-        if (point_3d_editor_->handle_event(e, bottom_container)) {
+        // Use the cached container from Point3DEditor (set during render_overlays)
+        // This avoids issues with SDL_GetRendererOutputSize(nullptr, ...) failing
+        overlay_rect = point_3d_editor_->get_cached_container();
+        overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
+        if (point_3d_editor_->handle_event(e, overlay_rect)) {
             return true;
         }
     }
@@ -223,12 +260,10 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
 
     if (frame_navigator_ && frame_navigator_->handle_event(e)) {
         consumed = true;
+        if (selection_state_) selection_state_->reset();
+        if (point_3d_editor_) point_3d_editor_->set_selected_point_index(-1);
     }
     if (btn_back_ && btn_back_->handle_event(e)) {
-        // Save changes before exiting - always commit pending changes
-        if (manifest_txn_.active()) {
-            manifest_txn_.commit();
-        }
         wants_close_ = true;
         consumed = true;
     }
@@ -363,10 +398,11 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
             point_selectable.push_back(true);
         }
 
-        // Only consume event if point editor actually handled it
-        consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable, [this](const SDL_Point& p) {
-                return screen_to_world_point(p);
-            });
+        const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
+        // Only consume event if point editor actually handled it and pointer not over overlay UI
+        if (!pointer_in_overlay) {
+            consumed = point_3d_editor_->handle_mouse_event(e, point_screens, point_selectable);
+        }
     }
 
     return consumed;
@@ -397,7 +433,7 @@ void AttackGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
         SDL_GetRendererOutputSize(renderer, &sw, &sh);
-        int height = point_3d_editor_->get_overlay_height();
+        int height = point_3d_editor_->get_overlay_height(sw);
         SDL_Rect bottom_container{0, sh - height, sw, height};
         point_3d_editor_->render_overlays(renderer, bottom_container);
     }
@@ -524,8 +560,8 @@ void AttackGeoFrameEditor::render_attack_geometry(SDL_Renderer* renderer) const 
 
 void AttackGeoFrameEditor::select_frame(int index) {
     // Save changes before changing frames - always commit (works for both immediate and deferred)
-    if (manifest_txn_.active() && !frames_.empty()) {
-        manifest_txn_.commit();
+    if (!frames_.empty()) {
+        persist_pending_changes();
     }
 
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
@@ -583,12 +619,18 @@ void AttackGeoFrameEditor::persist_changes() {
     if (frames_.empty()) {
         return;
     }
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit();
-    }
+    apply_live_changes();
     clamp_attack_selection();
     refresh_attack_form();
     refresh_selection_state();
+}
+
+void AttackGeoFrameEditor::persist_pending_changes() {
+    if (!manifest_txn_.active()) {
+        return;
+    }
+    manifest_txn_.commit(true);
+    invalidate_preview();
 }
 
 float AttackGeoFrameEditor::base_world_z() const {
@@ -670,6 +712,19 @@ void AttackGeoFrameEditor::delete_current_attack_vector() {
     persist_changes();
 }
 
+void AttackGeoFrameEditor::apply_live_changes() {
+    if (manifest_txn_.active()) {
+        manifest_txn_.commit(false);
+    }
+    invalidate_preview();
+}
+
+void AttackGeoFrameEditor::invalidate_preview() const {
+    if (context_.preview && !context_.animation_id.empty()) {
+        context_.preview->invalidate(context_.animation_id);
+    }
+}
+
 
 SDL_Point AttackGeoFrameEditor::asset_anchor_world() const {
     if (!context_.target) {
@@ -748,6 +803,7 @@ void AttackGeoFrameEditor::refresh_selection_state() {
             break;
     }
     SDL_Point anchor = asset_anchor_world();
+    const float base_z = base_world_z();
     SDL_FPoint world{
         static_cast<float>(anchor.x) + local_x * asset_local_scale(),
         static_cast<float>(anchor.y) - local_y * asset_local_scale()
@@ -755,7 +811,9 @@ void AttackGeoFrameEditor::refresh_selection_state() {
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint screen = cam.map_to_screen_f(world);
     selection_state_->world_pos = world;
+    selection_state_->world_z = base_z;
     selection_state_->screen_pos = round_point(screen);
+    selection_state_->set_anchor_world(anchor, base_z);
 }
 
 bool AttackGeoFrameEditor::ui_contains_point(const SDL_Point& p) const {

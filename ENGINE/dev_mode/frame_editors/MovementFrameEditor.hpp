@@ -27,6 +27,7 @@ public:
     void update(const Input& input, float dt) override;
     void render_world(SDL_Renderer* renderer) const override;
     void render_overlays(SDL_Renderer* renderer) const override;
+    void persist_pending_changes() override;
     bool wants_close() const override { return wants_close_; }
 
 private:
@@ -40,6 +41,8 @@ private:
                                 std::vector<SDL_FPoint>& redistributed,
                                 int last_index) const;
     void persist_changes();
+    void apply_live_changes();
+    void invalidate_preview() const;
     void apply_to_all_frames();
     void refresh_selection_state();
     SDL_Point asset_anchor_world() const;

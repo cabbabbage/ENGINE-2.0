@@ -270,6 +270,7 @@ int compute_mesh_segments(float screen_size, int quality_percent) {
 
 bool build_perspective_mesh(const RenderObject& obj,
                             const WarpedScreenGrid& cam,
+                            float perspective_scale,
                             WarpedMesh& mesh) {
     if (!obj.texture) {
         return false;
@@ -281,8 +282,17 @@ bool build_perspective_mesh(const RenderObject& obj,
     }
     const float world_x = static_cast<float>(rect.x);
     const float world_y = static_cast<float>(rect.y);
-    const float half_width = static_cast<float>(rect.w) * 0.5f;
-    const float height = static_cast<float>(rect.h);
+
+    // Render package dimensions already include the per-grid-point perspective scale;
+    // strip it off so the projection step is the sole place that applies perspective.
+    const float safe_perspective =
+        (std::isfinite(perspective_scale) && perspective_scale > 0.0f)
+            ? perspective_scale
+            : 1.0f;
+    const float world_width = static_cast<float>(rect.w) / safe_perspective;
+    const float world_height = static_cast<float>(rect.h) / safe_perspective;
+    const float half_width = world_width * 0.5f;
+    const float height = world_height;
     const float base_z = obj.world_z_offset;
     if (!(std::isfinite(world_x) && std::isfinite(world_y) && std::isfinite(half_width) && std::isfinite(height))) {
         return false;
@@ -650,7 +660,10 @@ void SceneRenderer::render() {
 
             for (const RenderObject& obj : candidate.asset->render_package) {
                 WarpedMesh mesh{};
-                if (!build_perspective_mesh(obj, cam, mesh)) {
+                const float perspective_scale = candidate.grid_point
+                    ? std::max(0.0001f, candidate.grid_point->perspective_scale)
+                    : 1.0f;
+                if (!build_perspective_mesh(obj, cam, perspective_scale, mesh)) {
                     continue;
                 }
 

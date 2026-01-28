@@ -33,8 +33,6 @@ constexpr int kRadiusSliderExpansionFactor = 2;
 constexpr int kRadiusSliderHardCap = 20000;
 constexpr float kCameraTiltMinDeg = 0.0f;
 constexpr float kCameraTiltMaxDeg = 150.0f;
-constexpr int kCameraYDistanceMinPx = 0;
-constexpr int kCameraYDistanceMaxPx = 2000;
 constexpr int kCameraZoomMinPercent = 0;
 constexpr int kCameraZoomMaxPercent = 100;
 constexpr int kCameraPanMinPercent = -100;
@@ -196,7 +194,6 @@ struct RoomConfigurator::State {
     // Camera settings
     int camera_height_px = 1000;
     float camera_tilt_deg = 60.0f;
-    int camera_y_distance_px = 0;
     int camera_zoom_percent = 0;
 
 
@@ -307,11 +304,6 @@ struct RoomConfigurator::State {
             camera_tilt_deg = clamped_tilt;
             mutated = true;
         }
-        int clamped_y_distance = std::clamp(camera_y_distance_px, kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
-        if (clamped_y_distance != camera_y_distance_px) {
-            camera_y_distance_px = clamped_y_distance;
-            mutated = true;
-        }
         int clamped_zoom = std::clamp(camera_zoom_percent, kCameraZoomMinPercent, kCameraZoomMaxPercent);
         if (clamped_zoom != camera_zoom_percent) {
             camera_zoom_percent = clamped_zoom;
@@ -331,7 +323,6 @@ struct RoomConfigurator::State {
         // Camera settings
         camera_height_px = src.value("camera_height_px", 1000);
         camera_tilt_deg = std::clamp(src.value("camera_tilt_deg", 60.0f), kCameraTiltMinDeg, kCameraTiltMaxDeg);
-        camera_y_distance_px = std::clamp(src.value("camera_y_distance_px", 0), kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
         camera_zoom_percent = std::clamp(src.value("camera_zoom_percent", 0), kCameraZoomMinPercent, kCameraZoomMaxPercent);
 
 
@@ -423,7 +414,6 @@ struct RoomConfigurator::State {
         // Camera settings
         dest["camera_height_px"] = camera_height_px;
         dest["camera_tilt_deg"] = camera_tilt_deg;
-        dest["camera_y_distance_px"] = camera_y_distance_px;
         dest["camera_zoom_percent"] = camera_zoom_percent;
  
 
@@ -783,7 +773,6 @@ void RoomConfigurator::refresh_base_panel_rows() {
         DockableCollapsible::Rows cam_rows;
         cam_rows.push_back({camera_height_widget_.get()});
         cam_rows.push_back({camera_tilt_widget_.get()});
-        cam_rows.push_back({camera_y_distance_widget_.get()});
         cam_rows.push_back({camera_zoom_widget_.get()});
         cam_rows.push_back({camera_pan_widget_.get()});
         camera_panel_->set_rows(cam_rows);
@@ -2061,15 +2050,6 @@ bool RoomConfigurator::sync_state_from_widgets() {
         }
     }
 
-    if (camera_y_distance_slider_) {
-        int sanitized = std::clamp(camera_y_distance_slider_->value(), kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
-        if (sanitized != state_->camera_y_distance_px) {
-            state_->camera_y_distance_px = sanitized;
-            changed = true;
-            camera_changed = true;
-        }
-    }
-
     if (camera_zoom_slider_) {
         int sanitized = std::clamp(camera_zoom_slider_->value(), kCameraZoomMinPercent, kCameraZoomMaxPercent);
         if (sanitized != state_->camera_zoom_percent) {
@@ -2167,9 +2147,6 @@ bool RoomConfigurator::sync_state_from_widgets() {
                                                   static_cast<int>(kCameraTiltMinDeg),
                                                   static_cast<int>(kCameraTiltMaxDeg)));
     }
-    if (camera_y_distance_slider_) {
-        camera_y_distance_slider_->set_value(std::clamp(state_->camera_y_distance_px, kCameraYDistanceMinPx, kCameraYDistanceMaxPx));
-    }
     if (camera_zoom_slider_) {
         camera_zoom_slider_->set_value(std::clamp(state_->camera_zoom_percent, kCameraZoomMinPercent, kCameraZoomMaxPercent));
     }
@@ -2192,7 +2169,6 @@ bool RoomConfigurator::sync_state_from_widgets() {
             write_tags_to_json(root);
             room_->camera_height_px = state_->camera_height_px;
             room_->camera_tilt_deg = state_->camera_tilt_deg;
-            room_->camera_y_distance_px = state_->camera_y_distance_px;
             room_->camera_zoom_percent = state_->camera_zoom_percent;
             room_->save_assets_json();
             if (tags_changed) {
@@ -2431,13 +2407,10 @@ void RoomConfigurator::refresh_camera_panel_widgets() {
     const int tilt_value = std::clamp(static_cast<int>(std::lround(state_->camera_tilt_deg)),
                                       static_cast<int>(kCameraTiltMinDeg),
                                       static_cast<int>(kCameraTiltMaxDeg));
-    const int y_distance_value = std::clamp(state_->camera_y_distance_px, kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
     const int zoom_value = std::clamp(state_->camera_zoom_percent, kCameraZoomMinPercent, kCameraZoomMaxPercent);
-
 
     const std::string height_label = is_trail_context_ ? "Trail Height (px)" : "Height (px)";
     const std::string tilt_label   = is_trail_context_ ? "Trail Tilt (deg)" : "Tilt (deg)";
-    const std::string y_offset_label = is_trail_context_ ? "Trail Y Distance (px)" : "Y Distance (px)";
     const std::string zoom_label = is_trail_context_ ? "Trail Zoom (%)" : "Zoom (%)";
     const std::string pan_label = is_trail_context_ ? "Trail Pan Y (%)" : "Pan Up/Down (%)";
 
@@ -2446,13 +2419,10 @@ void RoomConfigurator::refresh_camera_panel_widgets() {
                                                      static_cast<int>(kCameraTiltMinDeg),
                                                      static_cast<int>(kCameraTiltMaxDeg),
                                                      tilt_value);
-    camera_y_distance_slider_ = std::make_unique<DMSlider>(y_offset_label, kCameraYDistanceMinPx, kCameraYDistanceMaxPx, y_distance_value);
     camera_zoom_slider_ = std::make_unique<DMSlider>(zoom_label, kCameraZoomMinPercent, kCameraZoomMaxPercent, zoom_value);
-
 
     camera_height_widget_ = std::make_unique<SliderWidget>(camera_height_slider_.get());
     camera_tilt_widget_ = std::make_unique<SliderWidget>(camera_tilt_slider_.get());
-    camera_y_distance_widget_ = std::make_unique<SliderWidget>(camera_y_distance_slider_.get());
     camera_zoom_widget_ = std::make_unique<SliderWidget>(camera_zoom_slider_.get());
     camera_pan_widget_ = std::make_unique<SliderWidget>(camera_pan_slider_.get());
 }
@@ -2479,11 +2449,6 @@ bool RoomConfigurator::apply_camera_adjustment(const CameraAdjustment& adjustmen
         state_->camera_tilt_deg = std::clamp(state_->camera_tilt_deg, kCameraTiltMinDeg, kCameraTiltMaxDeg);
         changed = true;
     }
-    if (adjustment.y_distance_delta_px != 0) {
-        state_->camera_y_distance_px += adjustment.y_distance_delta_px;
-        clamp_int(state_->camera_y_distance_px, kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
-        changed = true;
-    }
     if (adjustment.zoom_delta_percent != 0) {
         state_->camera_zoom_percent += adjustment.zoom_delta_percent;
         clamp_int(state_->camera_zoom_percent, kCameraZoomMinPercent, kCameraZoomMaxPercent);
@@ -2500,9 +2465,6 @@ bool RoomConfigurator::apply_camera_adjustment(const CameraAdjustment& adjustmen
     }
     if (camera_tilt_slider_) {
         camera_tilt_slider_->set_value(static_cast<int>(std::lround(state_->camera_tilt_deg)));
-    }
-    if (camera_y_distance_slider_) {
-        camera_y_distance_slider_->set_value(state_->camera_y_distance_px);
     }
     if (camera_zoom_slider_) {
         camera_zoom_slider_->set_value(state_->camera_zoom_percent);
@@ -2524,9 +2486,6 @@ void RoomConfigurator::reload_camera_state_from_room() {
                                            static_cast<double>(kCameraTiltMinDeg),
                                            static_cast<double>(kCameraTiltMaxDeg));
     state_->camera_tilt_deg = static_cast<float>(clamped_tilt);
-    state_->camera_y_distance_px = std::clamp(source.value("camera_y_distance_px", state_->camera_y_distance_px),
-                                              kCameraYDistanceMinPx,
-                                              kCameraYDistanceMaxPx);
     state_->camera_zoom_percent = std::clamp(source.value("camera_zoom_percent", state_->camera_zoom_percent),
                                               kCameraZoomMinPercent,
                                               kCameraZoomMaxPercent);
@@ -2541,7 +2500,6 @@ void RoomConfigurator::request_camera_live_update() {
     if (room_) {
         room_->camera_height_px = state_->camera_height_px;
         room_->camera_tilt_deg = state_->camera_tilt_deg;
-        room_->camera_y_distance_px = state_->camera_y_distance_px;
         room_->camera_zoom_percent = state_->camera_zoom_percent;
 
         state_->apply_to_json(room_->assets_data(), true);

@@ -9,7 +9,42 @@
 #include <optional>
 #include <vector>
 #include <unordered_map>
+#include <memory>
 #include <nlohmann/json.hpp>
+
+struct Vec3 {
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+};
+
+struct CameraState {
+    bool   valid = false;
+    Vec3   position{};
+    Vec3   forward{};
+    Vec3   right{};
+    Vec3   up{};
+    SDL_FPoint anchor_world_px{0.0f, 0.0f};
+    double camera_height = 0.0;
+    double focus_depth   = 0.0;
+    double reference_depth = 1.0;
+    double tan_half_fov_y = 0.0;
+    double tan_half_fov_x = 0.0;
+    double near_plane = 0.0;
+    double far_plane  = 0.0;
+    double horizon_screen_y = 0.0;
+    double meters_scale = 1.0;
+    double pitch_radians = 0.0;
+    float  pitch_degrees = 0.0f;
+    double camera_world_y = 0.0;
+    double anchor_world_y = 0.0;
+    double focus_ndc_offset = 0.0;
+    double screen_zoom = 1.0;
+    double inv_screen_zoom = 1.0;
+    double screen_pan_y_px = 0.0;
+    float  near_camera_max_perspective_scale = 0.0f;
+    float  offscreen_fade_amount_px = 0.0f;
+};
 
 class Asset;
 class Room;
@@ -155,10 +190,13 @@ public:
 
     bool is_manual_height_override() const;
     void set_manual_height_override(bool);
+    bool is_manual_zoom_override() const;
+    void set_manual_zoom_override(bool);
+    double get_zoom_percent() const;
+    void set_zoom_percent(double percent);
+    void adjust_zoom_percent(double delta_percent);
     double get_scale() const;
     void set_scale(double);
-    double camera_y_distance() const;
-    void set_camera_y_distance(double distance);
     void update();
     void set_tilt_override(std::optional<float> tilt_deg);
     void clear_tilt_override();
@@ -192,6 +230,9 @@ public:
     const CameraController::State& camera_state() const { return camera_.state(); }
 
 private:
+    const CameraState& camera_state_cached() const;
+    void invalidate_camera_cache();
+
     // --- Camera parameter state for explicit per-room camera ---
 
 
@@ -202,6 +243,7 @@ private:
     double aspect_ = 1.0;
 
     bool render_areas_enabled_ = false;
+    bool lock_anchor_to_screen_center_ = false; // dev-mode option to pin anchor to screen center
     RealismSettings settings_{};
 
     CameraController camera_;
@@ -219,6 +261,9 @@ private:
     double runtime_pitch_rad_ = 0.0;
     float runtime_pitch_deg_ = 0.0f;
     float runtime_depth_offset_px_ = 0.0f;
+
+    mutable std::unique_ptr<CameraState> cached_camera_state_;
+    mutable bool cached_camera_state_dirty_ = true;
 
     std::vector<world::GridPoint*> warped_points_;
     std::vector<Asset*> visible_assets_;

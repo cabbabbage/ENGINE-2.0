@@ -17,7 +17,6 @@ public:
         SDL_Point focus_point_before{0, 0};
         SDL_Point screen_center_before{0, 0};
         std::optional<float> tilt_override_before{};
-        double camera_y_distance_before = 0.0;
     };
 
     void capture(WarpedScreenGrid&) { state_.valid = true; }

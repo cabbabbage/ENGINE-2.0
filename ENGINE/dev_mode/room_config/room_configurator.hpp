@@ -104,7 +104,6 @@ public:
     struct CameraAdjustment {
         int height_delta_px = 0;
         float tilt_delta_deg = 0.0f;
-        int y_distance_delta_px = 0;
         int zoom_delta_percent = 0;
         float pan_delta_percent = 0.0f;
     };
@@ -213,8 +212,6 @@ private:
     std::unique_ptr<SliderWidget> camera_height_widget_;
     std::unique_ptr<DMSlider> camera_tilt_slider_;
     std::unique_ptr<SliderWidget> camera_tilt_widget_;
-    std::unique_ptr<DMSlider> camera_y_distance_slider_;
-    std::unique_ptr<SliderWidget> camera_y_distance_widget_;
     std::unique_ptr<DMSlider> camera_zoom_slider_;
     std::unique_ptr<SliderWidget> camera_zoom_widget_;
     std::unique_ptr<DMSlider> camera_pan_slider_;

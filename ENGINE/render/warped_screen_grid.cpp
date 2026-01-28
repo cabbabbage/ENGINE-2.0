@@ -29,7 +29,6 @@ namespace {
     constexpr double PI_D       = 3.14159265358979323846;
     constexpr double kHalfFovY  = PI_D / 4.0;
     constexpr float  kVirtualScreenScale = 1.5f;
-    struct CameraState;
 
     static inline Area make_rect_area(const std::string& name, SDL_Point center, int w, int h, int resolution) {
         const int left   = center.x - (w / 2);
@@ -46,12 +45,6 @@ namespace {
     }
 
     // clamp_height_scale and all scale-based logic removed; camera is now fully explicit per-room.
-
-    struct Vec3 {
-        double x = 0.0;
-        double y = 0.0;
-        double z = 0.0;
-    };
 
     Vec3 operator+(const Vec3& a, const Vec3& b) {
         return Vec3{ a.x + b.x, a.y + b.y, a.z + b.z };
@@ -90,34 +83,8 @@ namespace {
         return Vec3{ v.x * inv, v.y * inv, v.z * inv };
     }
 
-    struct CameraState {
-        bool   valid = false;
-        Vec3   position{};
-        Vec3   forward{};
-        Vec3   right{};
-        Vec3   up{};
-        SDL_FPoint anchor_world_px{0.0f, 0.0f};
-        double camera_height = 0.0;
-        double focus_depth   = 0.0;
-        double reference_depth = 1.0;
-        double tan_half_fov_y = std::tan(kHalfFovY);
-        double tan_half_fov_x = std::tan(kHalfFovY);
-        double near_plane = 0.0;
-        double far_plane  = 0.0;
-        double horizon_screen_y = 0.0;
-        double meters_scale = 1.0;
-        double pitch_radians = 0.0;
-        float  pitch_degrees = 0.0f;
-        double camera_world_y = 0.0;
-        double anchor_world_y = 0.0;
-        double focus_ndc_offset = 0.0;
-        double screen_zoom = 1.0;
-        double inv_screen_zoom = 1.0;
-        double screen_pan_y_px = 0.0;
-        float  near_camera_max_perspective_scale = 0.0f;
-        float  offscreen_fade_amount_px = 0.0f;
-    };
-
+}
+namespace {
     SDL_FPoint ndc_to_screen_point(const CameraState& cam,
                                    double ndc_x,
                                    double ndc_y,
@@ -199,15 +166,14 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
 
         const double camera_height_pixels = safe_params.height_px;
         const float  tilt_deg             = camera_math::sanitize_pitch_degrees(static_cast<float>(safe_params.tilt_deg));
-        const double y_distance_pixels    = safe_params.y_distance_px;
 
         const double pitch_rad = static_cast<double>(tilt_deg) * PI_D / 180.0;
         const double meters_scale_raw = std::max(1e-6, static_cast<double>(settings.meters_per_100_world_px));
         const double meters_scale = meters_scale_raw / 100.0;
         const Vec3 anchor{ 0.0, 0.0, 0.0 };
-        const Vec3 camera_pos{
+        Vec3 camera_pos{
             0.0,
-            y_distance_pixels * meters_scale,
+            0.0,
             camera_height_pixels * meters_scale
         };
         state.screen_zoom = 1.0 + std::clamp(safe_params.zoom_percent, 0.0, 100.0) * 0.01;
@@ -218,6 +184,15 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
 
         state.near_camera_max_perspective_scale = settings.near_camera_max_perspective_scale;
         state.offscreen_fade_amount_px = settings.offscreen_fade_amount_px;
+
+        if (lock_anchor_to_screen_center) {
+            const double tan_pitch = std::tan(pitch_rad);
+            if (std::isfinite(tan_pitch) && std::fabs(tan_pitch) > 1e-6) {
+                const double horizontal_offset = camera_pos.z / tan_pitch;
+                // Move the camera horizontally so the anchor projects to the exact screen center.
+                camera_pos.y = horizontal_offset;
+            }
+        }
 
         Vec3 to_anchor = anchor - camera_pos;
         Vec3 horiz_dir{ to_anchor.x, to_anchor.y, 0.0 };
@@ -268,23 +243,6 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         state.tan_half_fov_y = std::tan(kHalfFovY);
         state.tan_half_fov_x = aspect * state.tan_half_fov_y;
 
-        // Pan the camera so the anchor/focus point (usually the player) projects to the screen center
-        // Only apply this when explicit centering is enabled; otherwise respect the room's tilt/height/zoom framing.
-        if (lock_anchor_to_screen_center) {
-            const Vec3 to_anchor = anchor - camera_pos; // anchor is origin in local space
-            const double depth_forward = dot(to_anchor, state.forward);
-            if (std::isfinite(depth_forward) && depth_forward > state.near_plane) {
-                const double cam_x = dot(to_anchor, state.right);
-                const double cam_y = dot(to_anchor, state.up);
-                const auto screen_opt = project_camera_space_point(
-                    state, cam_x, cam_y, depth_forward, screen_width, screen_height);
-                if (screen_opt.has_value()) {
-                    const double desired_y = static_cast<double>(screen_height) * 0.5;
-                    state.screen_pan_y_px = desired_y - static_cast<double>(screen_opt->y);
-                }
-            }
-        }
-
         const double tan_pitch = std::tan(pitch_rad);
         const double horizon_ndc = (std::isfinite(tan_pitch) && std::isfinite(state.tan_half_fov_y))
             ? (tan_pitch / state.tan_half_fov_y)
@@ -295,7 +253,7 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         state.meters_scale = meters_scale;
         state.pitch_radians = pitch_rad;
         state.pitch_degrees = tilt_deg;
-        state.camera_world_y = anchor_world.y + y_distance_pixels;
+        state.camera_world_y = anchor_world.y;
         state.anchor_world_y = anchor_world.y;
 
         return state;
@@ -639,7 +597,6 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
     CameraParams initial_params;
     initial_params.height_px = settings_.base_height_px;
     initial_params.tilt_deg = camera_math::kDefaultCameraTiltDeg;
-    initial_params.y_distance_px = 0.0;
     camera_.reset(initial_params, start_center, settings_.base_height_px);
     runtime_camera_height_ = camera_.current_height();
     runtime_pitch_deg_ = camera_.current_pitch_deg();
@@ -664,12 +621,27 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
         std::clamp(settings_.near_camera_max_perspective_scale, 0.0f, 100.0f);
     settings_.offscreen_fade_amount_px =
         std::clamp(settings_.offscreen_fade_amount_px, 0.0f, 1000.0f);
+    invalidate_camera_cache();
 
     // No-op: geometry cache is obsolete.
 }
 
 void WarpedScreenGrid::set_screen_center(SDL_Point p, bool snap_immediately) {
     camera_.set_screen_center(p, snap_immediately);
+    invalidate_camera_cache();
+}
+
+const CameraState& WarpedScreenGrid::camera_state_cached() const {
+    if (cached_camera_state_dirty_ || !cached_camera_state_) {
+        cached_camera_state_ = std::make_unique<CameraState>(build_camera_state(
+            settings_, aspect_, screen_width_, screen_height_, camera_.state().center, camera_.state().params, lock_anchor_to_screen_center_));
+        cached_camera_state_dirty_ = false;
+    }
+    return *cached_camera_state_;
+}
+
+void WarpedScreenGrid::invalidate_camera_cache() {
+    cached_camera_state_dirty_ = true;
 }
 
 
@@ -699,6 +671,7 @@ void WarpedScreenGrid::set_up_rooms(CurrentRoomFinder* finder) {
 
 void WarpedScreenGrid::animate_height_to_scale(double target_height_px, int steps) {
     camera_.animate_height_to(target_height_px, steps);
+    invalidate_camera_cache();
 }
 
 void WarpedScreenGrid::update_camera_height(Room* cur,
@@ -708,21 +681,29 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
                          float dt,
                          bool dev_mode)
 {
-    // In normal mode, keep the room's camera framing (height/tilt/zoom) intact.
-    // Only allow screen-centering pan in dev mode where explicit overrides are expected.
-    lock_anchor_to_screen_center_ = dev_mode;
+    invalidate_camera_cache();
+    // In normal mode (non-dev), center the player on the warped screen grid.
+    // In dev mode, don't center automatically - allow manual camera control.
+    lock_anchor_to_screen_center_ = !dev_mode;
 
     CameraParams cur_params;
     CameraParams neigh_params;
     double t = 0.0;
     const double fallback_height = std::max(1.0, static_cast<double>(settings_.base_height_px));
 
+    if (!dev_mode) {
+        if (camera_.manual_height_override()) {
+            camera_.set_manual_height_override(false);
+        }
+        if (camera_.manual_zoom_override()) {
+            camera_.set_manual_zoom_override(false);
+        }
+    }
+
     if (cur) {
         cur_params.height_px = cur->camera_height_px;
         cur_params.tilt_deg = cur->camera_tilt_deg;
-        cur_params.y_distance_px = cur->camera_y_distance_px;
         cur_params.zoom_percent = cur->camera_zoom_percent;
-  
     }
     Room* neigh = nullptr;
     if (finder) {
@@ -732,11 +713,9 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     if (neigh) {
         neigh_params.height_px = neigh->camera_height_px;
         neigh_params.tilt_deg = neigh->camera_tilt_deg;
-        neigh_params.y_distance_px = neigh->camera_y_distance_px;
         neigh_params.zoom_percent = neigh->camera_zoom_percent;
-
     }
-    if (tilt_override_deg_) {
+    if (tilt_override_deg_ && dev_mode) {
         cur_params.tilt_deg = *tilt_override_deg_;
         neigh_params.tilt_deg = *tilt_override_deg_;
     }
@@ -762,12 +741,6 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
 
     const bool focus_override_active = camera_.has_focus_override();
     if (!dev_mode) {
-        if (camera_.manual_height_override()) {
-            camera_.set_manual_height_override(false);
-        }
-        if (camera_.manual_zoom_override()) {
-            camera_.set_manual_zoom_override(false);
-        }
         if (focus_override_active) {
             camera_.clear_focus_override();
         }
@@ -806,12 +779,10 @@ Area WarpedScreenGrid::convert_area_to_aspect(const Area& in) const {
 }
 
 void WarpedScreenGrid::recompute_current_view() {
-    const CameraController::State& cam_settings = camera_.state();
-    const CameraState cam = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params, lock_anchor_to_screen_center_);
+    const CameraState& cam = camera_state_cached();
     runtime_camera_height_ = cam.camera_height;
     runtime_focus_depth_ = cam.focus_depth;
-    runtime_anchor_world_y_ = cam_settings.center.y;
+    runtime_anchor_world_y_ = cam.anchor_world_y;
     runtime_focus_ndc_offset_ = cam.focus_ndc_offset;
     runtime_pitch_rad_ = cam.pitch_radians;
     runtime_pitch_deg_ = cam.pitch_degrees;
@@ -841,7 +812,7 @@ void WarpedScreenGrid::recompute_current_view() {
 
     if (ground_points.empty()) {
         SDL_Point center{
-            static_cast<int>(std::lround(cam_settings.center.x)), static_cast<int>(std::lround(cam_settings.center.y)) };
+            static_cast<int>(std::lround(cam.anchor_world_px.x)), static_cast<int>(std::lround(cam.anchor_world_px.y)) };
         const int virtual_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_width_) * kVirtualScreenScale)));
         const int virtual_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(screen_height_) * kVirtualScreenScale)));
         current_view_ = make_rect_area("current_view", center, virtual_w, virtual_h, 0);
@@ -882,9 +853,7 @@ SDL_FPoint WarpedScreenGrid::map_to_screen(SDL_Point world) const {
 }
 
 SDL_FPoint WarpedScreenGrid::map_to_screen_f(SDL_FPoint world) const {
-    const CameraController::State& cam_settings = camera_.state();
-    const CameraState cam = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params, lock_anchor_to_screen_center_);
+    const CameraState& cam = camera_state_cached();
     ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
                                                 static_cast<double>(world.y),
@@ -899,9 +868,7 @@ SDL_FPoint WarpedScreenGrid::map_to_screen_f(SDL_FPoint world) const {
 }
 
 bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const {
-    const CameraController::State& cam_settings = camera_.state();
-    const CameraState cam = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params, lock_anchor_to_screen_center_);
+    const CameraState& cam = camera_state_cached();
     ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
                                                 static_cast<double>(world.y),
@@ -917,9 +884,7 @@ bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_
 }
 
 SDL_FPoint WarpedScreenGrid::screen_to_map(SDL_Point screen) const {
-    const CameraController::State& cam_settings = camera_.state();
-    const CameraState cam = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params, lock_anchor_to_screen_center_);
+    const CameraState& cam = camera_state_cached();
     if (!cam.valid) {
         return SDL_FPoint{0.0f, 0.0f};
     }
@@ -946,9 +911,7 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
 {
     RenderEffects result;
 
-    const CameraController::State& cam_settings = camera_.state();
-    const CameraState cam = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params, lock_anchor_to_screen_center_);
+    const CameraState& cam = camera_state_cached();
     ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
                                                 static_cast<double>(world.y),
@@ -1064,8 +1027,7 @@ SDL_FPoint WarpedScreenGrid::get_view_center_f() const {
 }
 
 WarpedScreenGrid::FloorDepthParams WarpedScreenGrid::compute_floor_depth_params() const {
-    const CameraState cam = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, camera_.state().center, camera_.state().params, lock_anchor_to_screen_center_);
+    const CameraState& cam = camera_state_cached();
     return build_floor_params_from_camera_state(screen_width_, screen_height_, cam);
 }
 
@@ -1167,12 +1129,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
     const float virtual_w = virtual_bounds.right - virtual_bounds.left;
     const float virtual_h = virtual_bounds.bottom - virtual_bounds.top;
 
-    const CameraController::State& cam_settings = camera_.state();
-    const CameraState cam_state = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params, lock_anchor_to_screen_center_);
+    const CameraState& cam_state = camera_state_cached();
     runtime_camera_height_ = cam_state.camera_height;
     runtime_focus_depth_ = cam_state.focus_depth;
-    runtime_anchor_world_y_ = cam_settings.center.y;
+    runtime_anchor_world_y_ = cam_state.anchor_world_y;
     runtime_focus_ndc_offset_ = cam_state.focus_ndc_offset;
     runtime_pitch_rad_ = cam_state.pitch_radians;
     runtime_pitch_deg_ = cam_state.pitch_degrees;
@@ -1272,7 +1232,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         double bottom = 0.0;
     };
 
-    auto compute_bounds = [&](Asset* asset) -> std::optional<Bounds2D> {
+    auto compute_bounds = [&](Asset* asset, const world::GridPoint* gp) -> std::optional<Bounds2D> {
         if (!asset || !asset->info) {
             return std::nullopt;
         }
@@ -1294,10 +1254,18 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             }
         }
 
+        float perspective_scale = 1.0f;
+        if (gp) {
+            perspective_scale = std::max(0.0001f, gp->perspective_scale);
+        }
+        // Bounds should be expressed in world units; remove per-point perspective scaling
+        // that will be reapplied later by the projection step.
+        const float world_scale = scale / perspective_scale;
+
         const float fw = static_cast<float>(std::max(1, asset->info->original_canvas_width));
         const float fh = static_cast<float>(std::max(1, asset->info->original_canvas_height));
-        const float width = fw * scale;
-        const float height = fh * scale;
+        const float width = fw * world_scale;
+        const float height = fh * world_scale;
         const float half_w = width * 0.5f;
 
         float center_x = asset->smoothed_translation_x();
@@ -1322,7 +1290,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             return false;
         }
         const double asset_z = gp ? static_cast<double>(gp->world_z()) : 0.0;
-        if (auto bounds = compute_bounds(asset)) {
+        if (auto bounds = compute_bounds(asset, gp)) {
             const Bounds2D& b = *bounds;
             const std::array<std::pair<double, double>, 4> corners{
                 std::pair<double, double>{b.left, b.bottom},
@@ -1589,10 +1557,12 @@ WarpedScreenGrid::RenderSmoothingKey::RenderSmoothingKey(const Asset* asset, int
 
 void WarpedScreenGrid::set_focus_override(SDL_Point focus) {
     camera_.set_focus_override(focus);
+    invalidate_camera_cache();
 }
 
 void WarpedScreenGrid::clear_focus_override() {
     camera_.clear_focus_override();
+    invalidate_camera_cache();
 }
 
 
@@ -1605,9 +1575,7 @@ double WarpedScreenGrid::default_camera_height_for_room(const Room* room) const 
 
 void WarpedScreenGrid::project_to_screen(world::GridPoint& point) const {
 
-    const CameraController::State& cam_settings = camera_.state();
-    const CameraState cam_state = build_camera_state(
-        settings_, aspect_, screen_width_, screen_height_, cam_settings.center, cam_settings.params, lock_anchor_to_screen_center_);
+    const CameraState& cam_state = camera_state_cached();
     const ProjectionResult proj = project_world_point_internal(
         cam_state,
         static_cast<double>(point.world_x()),
@@ -1642,6 +1610,7 @@ bool WarpedScreenGrid::is_manual_height_override() const {
 
 void WarpedScreenGrid::set_manual_height_override(bool v) {
     camera_.set_manual_height_override(v);
+    invalidate_camera_cache();
 }
 
 bool WarpedScreenGrid::is_manual_zoom_override() const {
@@ -1650,6 +1619,7 @@ bool WarpedScreenGrid::is_manual_zoom_override() const {
 
 void WarpedScreenGrid::set_manual_zoom_override(bool v) {
     camera_.set_manual_zoom_override(v);
+    invalidate_camera_cache();
 }
 
 double WarpedScreenGrid::get_scale() const {
@@ -1662,6 +1632,7 @@ void WarpedScreenGrid::set_scale(double s) {
     params.height_px = clamped;
     camera_.set_params(params);
     runtime_camera_height_ = camera_.current_height();
+    invalidate_camera_cache();
 }
 
 double WarpedScreenGrid::get_zoom_percent() const {
@@ -1670,34 +1641,29 @@ double WarpedScreenGrid::get_zoom_percent() const {
 
 void WarpedScreenGrid::set_zoom_percent(double percent) {
     camera_.set_zoom_percent(percent);
+    invalidate_camera_cache();
 }
 
 void WarpedScreenGrid::adjust_zoom_percent(double delta_percent) {
     const double current = std::clamp(camera_.state().params.zoom_percent, 0.0, 100.0);
     const double target = std::clamp(current + delta_percent, 0.0, 100.0);
     camera_.set_zoom_percent(target);
-}
-
-double WarpedScreenGrid::camera_y_distance() const {
-    return camera_.state().params.y_distance_px;
-}
-
-void WarpedScreenGrid::set_camera_y_distance(double distance) {
-    CameraParams params = camera_.state().params;
-    params.y_distance_px = distance;
-    camera_.set_params(params);
+    invalidate_camera_cache();
 }
 
 void WarpedScreenGrid::set_tilt_override(std::optional<float> tilt_deg) {
     if (!tilt_deg.has_value() || !std::isfinite(*tilt_deg)) {
         tilt_override_deg_.reset();
+        invalidate_camera_cache();
         return;
     }
     tilt_override_deg_ = camera_math::sanitize_pitch_degrees(*tilt_deg);
+    invalidate_camera_cache();
 }
 
 void WarpedScreenGrid::clear_tilt_override() {
     tilt_override_deg_.reset();
+    invalidate_camera_cache();
 }
 
 std::optional<float> WarpedScreenGrid::tilt_override() const {
@@ -1705,11 +1671,13 @@ std::optional<float> WarpedScreenGrid::tilt_override() const {
 }
 
 void WarpedScreenGrid::update() {
+    invalidate_camera_cache();
     camera_.tick(0.0f);
-    runtime_camera_height_ = camera_.current_height();
-    runtime_pitch_deg_ = camera_.current_pitch_deg();
-    runtime_pitch_rad_ = camera_.current_pitch_rad();
-    runtime_anchor_world_y_ = camera_.state().center.y;
+    const CameraState& cam = camera_state_cached();
+    runtime_camera_height_ = cam.camera_height;
+    runtime_pitch_deg_ = cam.pitch_degrees;
+    runtime_pitch_rad_ = cam.pitch_radians;
+    runtime_anchor_world_y_ = cam.anchor_world_y;
 }
 
 Area WarpedScreenGrid::frame_to_area(const SDL_Rect& frame) const {
@@ -1734,10 +1702,12 @@ SDL_Point WarpedScreenGrid::pan_and_height_to_point(double pan, double height) c
 
 void WarpedScreenGrid::animate_height_multiply(double factor) {
     camera_.animate_height_multiply(factor);
+    invalidate_camera_cache();
 }
 
 void WarpedScreenGrid::animate_height_towards_point(double target_height, SDL_Point target_point) {
     camera_.animate_height_towards_point(target_height, target_point);
+    invalidate_camera_cache();
 }
 
 bool WarpedScreenGrid::is_height_animating() const {

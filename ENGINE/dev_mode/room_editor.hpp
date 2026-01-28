@@ -172,7 +172,6 @@ private:
         enum class Mode {
             None,
             Tilt,
-            YOffset,
             Pan,
         };
         Mode mode = Mode::None;

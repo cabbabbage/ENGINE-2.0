@@ -77,7 +77,6 @@ class Room {
     std::string room_name;
     int camera_height_px = 1000;
     float camera_tilt_deg = 60.0f;
-    int camera_y_distance_px = 0;
     int camera_zoom_percent = 0;
     std::string room_directory;
     std::string json_path;

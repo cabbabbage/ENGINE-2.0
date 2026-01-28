@@ -64,8 +64,6 @@ namespace {
 constexpr int kSavedCameraHeightMinPx = 1;
 constexpr float kSavedCameraTiltMinDeg = 0.0f;
 constexpr float kSavedCameraTiltMaxDeg = 150.0f;
-constexpr int kSavedCameraYDistanceMinPx = 0;
-constexpr int kSavedCameraYDistanceMaxPx = 2000;
 constexpr int kSavedCameraZoomMinPercent = 0;
 constexpr int kSavedCameraZoomMaxPercent = 100;
 
@@ -106,7 +104,6 @@ constexpr float kCameraScaleEpsilon = 1e-4f;
 constexpr int kCameraHeightScrollStep = 25;
 constexpr int kCameraZoomScrollStep = 5;
 constexpr float kCameraTiltDegreesPerPixel = 0.2f;
-constexpr int kCameraYOffsetPerPixel = 2;
 constexpr float kCameraPanPercentPerPixel = 0.2f;
 
 int floor_div(int value, int divisor) {
@@ -2384,7 +2381,7 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
         } else if (input.wasPressed(Input::RIGHT)) {
             camera_settings_drag_.active = true;
             camera_settings_drag_.button = Input::RIGHT;
-            camera_settings_drag_.mode = CameraSettingsDragState::Mode::YOffset;
+            camera_settings_drag_.mode = CameraSettingsDragState::Mode::Pan;
             consumed = true;
         }
     }
@@ -2405,10 +2402,6 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
             switch (camera_settings_drag_.mode) {
                 case CameraSettingsDragState::Mode::Tilt:
                     adjustment.tilt_delta_deg = delta * kCameraTiltDegreesPerPixel;
-                    consumed = true;
-                    break;
-                case CameraSettingsDragState::Mode::YOffset:
-                    adjustment.y_distance_delta_px = static_cast<int>(std::lround(delta * kCameraYOffsetPerPixel));
                     consumed = true;
                     break;
                 case CameraSettingsDragState::Mode::Pan:
@@ -3628,28 +3621,23 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         }
         const auto& params = assets_->getView().camera_state().params;
         if (!std::isfinite(params.height_px) || !std::isfinite(params.tilt_deg) ||
-            !std::isfinite(params.y_distance_px) || !std::isfinite(params.zoom_percent)) {
+            !std::isfinite(params.zoom_percent)) {
             return;
         }
 
         const int height_px = std::max(kSavedCameraHeightMinPx, static_cast<int>(std::lround(params.height_px)));
         const float tilt_deg = std::clamp(static_cast<float>(params.tilt_deg), kSavedCameraTiltMinDeg, kSavedCameraTiltMaxDeg);
-        const int y_distance_px = std::clamp(static_cast<int>(std::lround(params.y_distance_px)),
-                                             kSavedCameraYDistanceMinPx,
-                                             kSavedCameraYDistanceMaxPx);
         const int zoom_percent = std::clamp(static_cast<int>(std::lround(params.zoom_percent)),
                                             kSavedCameraZoomMinPercent,
                                             kSavedCameraZoomMaxPercent);
 
         current_room_->camera_height_px = height_px;
         current_room_->camera_tilt_deg = tilt_deg;
-        current_room_->camera_y_distance_px = y_distance_px;
         current_room_->camera_zoom_percent = zoom_percent;
 
         auto& room_data = current_room_->assets_data();
         room_data["camera_height_px"] = height_px;
         room_data["camera_tilt_deg"] = tilt_deg;
-        room_data["camera_y_distance_px"] = y_distance_px;
         room_data["camera_zoom_percent"] = zoom_percent;
 
         current_room_->save_assets_json();

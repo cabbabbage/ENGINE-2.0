@@ -150,7 +150,6 @@ void FrameEditorSession::end() {
     editor_context_ = {};
     camera_lock_state_.valid = false;
     edit_camera_state_.valid = false;
-    camera_y_distance_locked_ = false;
     tilt_locked_ = false;
     edit_camera_locked_ = false;
 
@@ -273,7 +272,6 @@ void FrameEditorSession::capture_camera_state() {
     camera_lock_state_.focus_point_before = cam.get_focus_override_point();
     camera_lock_state_.screen_center_before = cam.get_screen_center();
     camera_lock_state_.tilt_override_before = cam.tilt_override();
-    camera_lock_state_.camera_y_distance_before = cam.camera_y_distance();
     camera_lock_state_.manual_zoom_override_before = cam.is_manual_zoom_override();
     camera_lock_state_.camera_zoom_percent_before = cam.get_zoom_percent();
     camera_lock_state_.valid = true;
@@ -296,11 +294,9 @@ void FrameEditorSession::restore_camera_state() {
     } else {
         cam.clear_tilt_override();
     }
-    cam.set_camera_y_distance(camera_lock_state_.camera_y_distance_before);
     cam.set_zoom_percent(camera_lock_state_.camera_zoom_percent_before);
     cam.set_manual_zoom_override(camera_lock_state_.manual_zoom_override_before);
     camera_lock_state_.valid = false;
-    camera_y_distance_locked_ = false;
     tilt_locked_ = false;
 }
 
@@ -314,7 +310,6 @@ void FrameEditorSession::capture_edit_camera_state() {
     edit_camera_state_.focus_point_before = cam.get_focus_override_point();
     edit_camera_state_.screen_center_before = cam.get_screen_center();
     edit_camera_state_.tilt_override_before = cam.tilt_override();
-    edit_camera_state_.camera_y_distance_before = cam.camera_y_distance();
     edit_camera_state_.manual_zoom_override_before = cam.is_manual_zoom_override();
     edit_camera_state_.camera_zoom_percent_before = cam.get_zoom_percent();
     edit_camera_state_.valid = true;
@@ -338,11 +333,9 @@ void FrameEditorSession::restore_edit_camera_state() {
     } else {
         cam.clear_tilt_override();
     }
-    cam.set_camera_y_distance(edit_camera_state_.camera_y_distance_before);
     cam.set_zoom_percent(edit_camera_state_.camera_zoom_percent_before);
     cam.set_manual_zoom_override(edit_camera_state_.manual_zoom_override_before);
     edit_camera_state_.valid = false;
-    camera_y_distance_locked_ = false;
     tilt_locked_ = false;
     edit_camera_locked_ = false;
 }

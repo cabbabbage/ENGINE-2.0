@@ -10,8 +10,6 @@ namespace {
     }
 
     constexpr double PI_D = 3.14159265358979323846;
-    constexpr double kCameraYDistanceMinPx = 0.0;
-    constexpr double kCameraYDistanceMaxPx = 2000.0;
 
     double wrap_degrees_0_360(double raw_value) {
         if (!std::isfinite(raw_value)) {
@@ -44,10 +42,6 @@ CameraParams camera_math::sanitize_camera_params(const CameraParams& raw, double
         params.height_px = safe_height;
     }
     params.tilt_deg = sanitize_pitch_degrees(static_cast<float>(params.tilt_deg));
-    if (!std::isfinite(params.y_distance_px)) {
-        params.y_distance_px = 0.0;
-    }
-    params.y_distance_px = std::clamp(params.y_distance_px, kCameraYDistanceMinPx, kCameraYDistanceMaxPx);
     if (!std::isfinite(params.zoom_percent)) {
         params.zoom_percent = 0.0;
     }
@@ -198,7 +192,6 @@ void CameraController::apply_room_targets(const CameraParams& cur,
     CameraParams blended{};
     blended.height_px = lerp(cur_params.height_px, neigh_params.height_px, t);
     blended.tilt_deg = lerp(cur_params.tilt_deg, neigh_params.tilt_deg, t);
-    blended.y_distance_px = lerp(cur_params.y_distance_px, neigh_params.y_distance_px, t);
     blended.zoom_percent = lerp(cur_params.zoom_percent, neigh_params.zoom_percent, t);
     blended = camera_math::sanitize_camera_params(blended, fallback_height_px_);
 

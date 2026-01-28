@@ -269,8 +269,6 @@ manifest_writer_(std::move(manifest_writer))
                 std::clamp(static_cast<int>(std::lround(read_number(map_camera_settings, "camera_height_px", 1000.0))), 1, 2000);
         const float default_camera_tilt = std::clamp(
                 static_cast<float>(read_number(map_camera_settings, "camera_tilt_deg", 60.0)), 0.0f, 150.0f);
-        const int default_camera_y_distance =
-                std::clamp(static_cast<int>(std::lround(read_number(map_camera_settings, "camera_y_distance_px", 0.0))), 0, 2000);
 
         auto read_room_int = [&](const char* key, int fallback) {
                 return static_cast<int>(std::lround(read_number(&assets_json, key, static_cast<double>(fallback))));
@@ -281,7 +279,6 @@ manifest_writer_(std::move(manifest_writer))
 
         camera_height_px = std::clamp(read_room_int("camera_height_px", default_camera_height), 1, 2000);
         camera_tilt_deg = std::clamp(read_room_float("camera_tilt_deg", default_camera_tilt), 0.0f, 150.0f);
-        camera_y_distance_px = std::clamp(read_room_int("camera_y_distance_px", default_camera_y_distance), 0, 2000);
         camera_zoom_percent = std::clamp(read_room_int("camera_zoom_percent", 0), 0, 100);
 
         load_named_areas_from_json();
@@ -979,7 +976,6 @@ void Room::save_assets_json() const {
 
         const_cast<Room*>(this)->assets_json["camera_height_px"] = camera_height_px;
         const_cast<Room*>(this)->assets_json["camera_tilt_deg"] = camera_tilt_deg;
-        const_cast<Room*>(this)->assets_json["camera_y_distance_px"] = camera_y_distance_px;
         const_cast<Room*>(this)->assets_json["camera_zoom_percent"] = camera_zoom_percent;
 
         if (room_data_ptr_) {

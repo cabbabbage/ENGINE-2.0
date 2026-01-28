@@ -97,14 +97,11 @@ private:
         SDL_Point focus_point_before{0, 0};
         SDL_Point screen_center_before{0, 0};
         std::optional<float> tilt_override_before;
-        double camera_y_distance_before = 0.0;
         bool manual_zoom_override_before = false;
         double camera_zoom_percent_before = 0.0;
     };
     CameraLockState camera_lock_state_{};
     CameraLockState edit_camera_state_{};
-    bool camera_y_distance_locked_ = false;
-    double locked_camera_y_distance_ = 0.0;
     bool tilt_locked_ = false;
     float locked_tilt_deg_ = 0.0f;
     bool edit_camera_locked_ = false;

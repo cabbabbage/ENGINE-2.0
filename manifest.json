@@ -3,38 +3,7 @@
     "Bartender": {
       "animations": {
         "back": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -43,26 +12,7 @@
           }
         },
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -71,26 +21,7 @@
           }
         },
         "forward": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -99,44 +30,7 @@
           }
         },
         "right": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -155,40 +49,7 @@
         "default": {
           "frames": [
             {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "locked": false,
@@ -220,44 +81,7 @@
     "Candle": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -274,38 +98,7 @@
     "Carrie": {
       "animations": {
         "back": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -314,11 +107,7 @@
           }
         },
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -327,26 +116,7 @@
           }
         },
         "forward": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -355,44 +125,7 @@
           }
         },
         "right": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -410,22 +143,43 @@
       "animation_children": [],
       "animations": {
         "default": {
+          "child_timelines": [],
+          "crop_frames": true,
+          "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
+            "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "anti_tags": [],
       "asset_directory": "SRC/assets/Casino",
       "asset_name": "Casino",
+      "asset_type": "object",
       "async_children": [],
       "lighting_info": [],
       "neighbor_search_distance": 500,
@@ -450,44 +204,7 @@
     "Davey": {
       "animations": {
         "back": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -496,80 +213,7 @@
           }
         },
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -578,44 +222,7 @@
           }
         },
         "forward": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -624,44 +231,7 @@
           }
         },
         "right": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -678,44 +248,7 @@
     "Fountain": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -732,11 +265,7 @@
     "Frog": {
       "animations": {
         "Default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -745,26 +274,7 @@
           }
         },
         "Move Forward": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -773,44 +283,7 @@
           }
         },
         "Move Left": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -827,38 +300,7 @@
     "Gary": {
       "animations": {
         "back": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -867,11 +309,7 @@
           }
         },
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -880,26 +318,7 @@
           }
         },
         "forward": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -908,44 +327,7 @@
           }
         },
         "right": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -962,44 +344,7 @@
     "Grass_1": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -1026,44 +371,7 @@
     "Grass_2": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -1090,11 +398,7 @@
     "Pub": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -1111,11 +415,7 @@
     "Town_Hall": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -1132,80 +432,7 @@
     "Tree_1": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -1220,13 +447,10 @@
       "start": "default"
     },
     "Tree_2": {
+      "animation_children": [],
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -1235,19 +459,23 @@
           }
         }
       },
+      "anti_tags": [],
       "asset_directory": "SRC/assets/Tree_2",
       "asset_name": "Tree_2",
+      "async_children": [],
       "lighting_info": [],
-      "start": "default"
+      "neighbor_search_distance": 500,
+      "size_settings": {
+        "scale_percentage": 192.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false
     },
     "Tree_3": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -1295,22 +523,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "inherit_source_movement": false,
@@ -1517,7 +730,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "hit_geometry": [
@@ -1630,28 +843,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "hit_geometry": [
@@ -1848,28 +1040,28 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "hit_geometry": [
@@ -1881,7 +1073,7 @@
                   "center_z": 1230.8443603515625,
                   "half_height": 702.7274780273438,
                   "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
+                  "rotation": -178.48147583007812
                 }
               ]
             },
@@ -2178,22 +1370,7 @@
           ],
           "frames": [
             {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "hit_geometry": [
@@ -2322,7 +1499,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "inherit_source_movement": false,
@@ -2390,55 +1567,55 @@
         "damaged": {
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "locked": false,
@@ -2532,7 +1709,7 @@
           ],
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "hit_geometry": [
@@ -2544,7 +1721,7 @@
                   "center_z": 5163.4951171875,
                   "half_height": 1570.3231201171875,
                   "half_width": 5179.4228515625,
-                  "rotation": -93.25064086914063
+                  "rotation": -93.25064086914062
                 }
               ]
             }
@@ -2597,11 +1774,7 @@
     "bone": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2618,11 +1791,7 @@
     "bone_2": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2639,11 +1808,7 @@
     "book_1": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2660,11 +1825,7 @@
     "book_2": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2681,11 +1842,7 @@
     "book_pile": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2702,11 +1859,7 @@
     "book_pile_2": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2723,11 +1876,7 @@
     "bottle": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2744,11 +1893,7 @@
     "box": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2765,11 +1910,7 @@
     "car": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2786,11 +1927,7 @@
     "church": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2807,11 +1944,7 @@
     "flower_red": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2828,11 +1961,7 @@
     "grass_3": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2849,11 +1978,7 @@
     "grass_4": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2870,11 +1995,7 @@
     "grave_1": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2891,11 +2012,7 @@
     "grave_2": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2912,11 +2029,7 @@
     "lantern": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2933,11 +2046,7 @@
     "latern_left": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2954,11 +2063,7 @@
     "shop_1": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2975,11 +2080,7 @@
     "shop_2": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -2996,11 +2097,7 @@
     "skull_1": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -3017,11 +2114,7 @@
     "skull_pile": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -3038,11 +2131,7 @@
     "smith": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -3068,7 +2157,7 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "hit_geometry": [
@@ -3201,22 +2290,22 @@
           "flipped_source": false,
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             },
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "hit_geometry": [
@@ -3487,11 +2576,7 @@
     "tex": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -3508,11 +2593,7 @@
     "top_hat": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -3531,7 +2612,7 @@
         "default": {
           "frames": [
             {
-              "needs_rebuild": false
+              "needs_rebuild": true
             }
           ],
           "locked": false,
@@ -3579,11 +2660,7 @@
     "yellow_flower": {
       "animations": {
         "default": {
-          "frames": [
-            {
-              "needs_rebuild": false
-            }
-          ],
+          "frames": [],
           "locked": false,
           "loop": true,
           "source": {
@@ -3841,16 +2918,16 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 909,
+          "camera_height_px": 1393,
           "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 3.6000022888183594,
-          "camera_y_distance_px": 0,
-          "camera_zoom_percent": 0,
+          "camera_tilt_deg": 41.79999923706055,
+          "camera_y_distance_px": 1161,
+          "camera_zoom_percent": 99,
           "curvyness": 2,
           "display_color": [
-            139,
-            36,
             242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -4051,9 +3128,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            138,
-            242,
             36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 2,

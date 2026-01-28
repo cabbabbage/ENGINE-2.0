@@ -61,10 +61,10 @@
             "texture_warp_y_offset_px": 0.0
         },
         "fog": {
-            "base_size_scale": 1.25,
-            "grid_spacing_multiplier": 4.0,
-            "max_random_jitter": 27.0,
-            "vertical_offset": 806.0
+            "base_size_scale": 0.5,
+            "grid_spacing_multiplier": 1.5,
+            "max_random_jitter": 298.0,
+            "vertical_offset": 293.0
         },
         "lighting": {
             "map_panel": {

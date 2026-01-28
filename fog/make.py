@@ -17,7 +17,7 @@ CREATE_TEST_IMAGES = False
 
 # Final opacity multiplier applied as the LAST step (0.0 to 1.0)
 # Example: 0.75 = reduce final opacity to 75%
-FINAL_OPACITY_MULT = 0.2
+FINAL_OPACITY_MULT = 0.3
 
 
 def smoothstep(edge0, edge1, x):
@@ -193,7 +193,7 @@ def main():
         # Darken the image by 25% BEFORE applying final opacity
         img = img.convert("RGBA")
         arr = np.array(img, dtype=np.float32)
-        arr[..., :3] *= 0.25  # darken RGB by 25%
+        arr[..., :3] *= 0.05  # darken RGB by 25%
         arr[..., :3] = np.clip(arr[..., :3], 0, 255)
         img = Image.fromarray(arr.astype(np.uint8), mode="RGBA")
 

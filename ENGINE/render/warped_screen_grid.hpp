@@ -155,13 +155,8 @@ public:
 
     bool is_manual_height_override() const;
     void set_manual_height_override(bool);
-    bool is_manual_zoom_override() const;
-    void set_manual_zoom_override(bool);
     double get_scale() const;
     void set_scale(double);
-    double get_zoom_percent() const;
-    void set_zoom_percent(double percent);
-    void adjust_zoom_percent(double delta_percent);
     double camera_y_distance() const;
     void set_camera_y_distance(double distance);
     void update();
@@ -241,6 +236,5 @@ private:
     float frustum_padding_world_ = 0.0f;
     bool depth_enabled_ = true;
     bool depth_debug_logging_ = false;
-    bool lock_anchor_to_screen_center_ = false;
     std::optional<float> tilt_override_deg_{};
 };

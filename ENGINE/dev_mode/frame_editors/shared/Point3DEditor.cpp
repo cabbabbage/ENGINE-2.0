@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
+#include <sstream>
 #include <string>
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/dm_styles.hpp"
@@ -67,6 +69,10 @@ void Point3DEditor::set_grid_resolution(int resolution) {
     grid_resolution_ = clamped;
     const int step = vibble::grid::delta(clamped);
     grid_step_world_ = static_cast<float>(step > 0 ? step : 1);
+}
+
+void Point3DEditor::set_parent_height(float height_px) {
+    parent_height_px_ = (height_px > 0.0f && std::isfinite(height_px)) ? height_px : 0.0f;
 }
 
 void Point3DEditor::set_axis_enabled(AdjustmentAxis axis, bool enabled) {
@@ -317,8 +323,18 @@ void Point3DEditor::sync_textboxes_from_selection() {
     }
 
     if (tb_dz_) {
-        const float display_z = locked_z.value_or(rel_z);
-        const std::string dz_str = std::to_string(static_cast<int>(std::lround(display_z)));
+        // Z is displayed as a percentage (0.0-1.0) of parent height
+        // rel_z is the world Z offset, convert to percent: rel_z / parent_height_px_
+        float display_z_percent = 0.0f;
+        if (parent_height_px_ > 0.0f) {
+            const float world_z_offset = locked_z.value_or(rel_z);
+            display_z_percent = world_z_offset / parent_height_px_;
+            display_z_percent = std::clamp(display_z_percent, 0.0f, 1.0f);
+        }
+        // Format as float with 2 decimal places
+        std::ostringstream oss;
+        oss << std::fixed << std::setprecision(2) << display_z_percent;
+        const std::string dz_str = oss.str();
         if (!tb_dz_->is_editing() && dz_str != last_dz_text_) {
             tb_dz_->set_value(dz_str);
             last_dz_text_ = dz_str;
@@ -367,8 +383,17 @@ void Point3DEditor::apply_textbox_changes() {
     }
 
     if (tb_dz_ && is_axis_enabled(AdjustmentAxis::Z)) {
-        const float value = locked_z.value_or(parse_float(tb_dz_->value(), rel_z));
-        const float new_world_z = anchor_z + value;
+        // The textbox contains a percent value (0.0-1.0)
+        // Convert to world Z: anchor_z + (percent * parent_height_px_)
+        float current_percent = 0.0f;
+        if (parent_height_px_ > 0.0f) {
+            current_percent = rel_z / parent_height_px_;
+        }
+        const float input_percent = locked_z.has_value()
+            ? (parent_height_px_ > 0.0f ? locked_z.value() / parent_height_px_ : 0.0f)
+            : parse_float(tb_dz_->value(), current_percent);
+        const float clamped_percent = std::clamp(input_percent, 0.0f, 1.0f);
+        const float new_world_z = anchor_z + (clamped_percent * parent_height_px_);
         if (std::fabs(new_world_z - selection_->world_z) > 0.001f) {
             selection_->world_z = new_world_z;
             changed = true;

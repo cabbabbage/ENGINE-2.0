@@ -1531,9 +1531,9 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": -3,
+                  "dx": 18,
                   "dy": 1,
-                  "dz": 61,
+                  "dz": 0,
                   "visible": true
                 }
               ],
@@ -1813,10 +1813,10 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": -68,
-                  "dy": -161,
+                  "dx": 0,
+                  "dy": 0,
                   "dz": 0,
-                  "visible": true
+                  "visible": false
                 },
                 {
                   "degree": 0.0,
@@ -3877,16 +3877,16 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 3500,
+          "camera_height_px": 2000,
           "camera_pan_y_percent": 0,
           "camera_tilt_deg": 45.0,
           "camera_y_distance_px": 891,
           "camera_zoom_percent": 93,
           "curvyness": 2,
           "display_color": [
-            139,
-            36,
             242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -4076,35 +4076,6 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-c6162102e00c"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "trail"
-                }
-              ],
-              "display_name": "trail",
-              "dx": -593,
-              "dy": 379,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 6376,
-              "origional_width": 6376,
-              "position": "Exact",
-              "priority": 6,
-              "resolution": 5,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-c0c1c16e75da"
             }
           ]
         },
@@ -4116,9 +4087,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            138,
-            242,
             36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 2,

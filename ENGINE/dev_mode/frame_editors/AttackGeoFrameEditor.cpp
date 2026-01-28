@@ -72,6 +72,9 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
+        // Set parent height for Z percent display
+        FramePointResolver resolver(context_.target);
+        point_3d_editor_->set_parent_height(resolver.parent_height_px());
         point_3d_editor_->set_on_coordinates_changed([this]() {
             auto* vec = current_attack_vector();
             if (!vec || !selection_state_) {
@@ -783,6 +786,11 @@ void AttackGeoFrameEditor::refresh_selection_state() {
     if (!selection_state_->has_target()) {
         return;
     }
+    FramePointResolver resolver(context_.target);
+    // Update parent height for Z percent display (in case scale changed)
+    if (point_3d_editor_) {
+        point_3d_editor_->set_parent_height(resolver.parent_height_px());
+    }
     const auto* vec = current_attack_vector();
     if (!vec) {
         selection_state_->target = SelectionTarget::None;
@@ -805,7 +813,6 @@ void AttackGeoFrameEditor::refresh_selection_state() {
         default:
             break;
     }
-    FramePointResolver resolver(context_.target);
     float z_percent = vec ? vec->start_z : 0.0f;
     if (vec) {
         switch (selection_state_->target) {

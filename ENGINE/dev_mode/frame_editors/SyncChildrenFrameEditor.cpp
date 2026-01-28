@@ -67,6 +67,9 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
         point_3d_editor_->set_axis_enabled(AdjustmentAxis::Y, false);
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
+        // Set parent height for Z percent display
+        FramePointResolver resolver(context_.target);
+        point_3d_editor_->set_parent_height(resolver.parent_height_px());
 
         point_3d_editor_->set_on_point_selected([this](int index) {
             if (index < 0) {
@@ -809,6 +812,10 @@ void SyncChildrenFrameEditor::refresh_selection_state() {
         return;
     }
     FramePointResolver resolver(context_.target);
+    // Update parent height for Z percent display (in case scale changed)
+    if (point_3d_editor_) {
+        point_3d_editor_->set_parent_height(resolver.parent_height_px());
+    }
     selection_state_->child_index = selected_child_index_;
     const ChildWorldPose pose = child_world_pose(selected_child_index_);
     SDL_Point anchor = asset_anchor_world();

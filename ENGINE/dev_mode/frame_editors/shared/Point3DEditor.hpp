@@ -33,6 +33,11 @@ public:
 
     void set_grid_resolution(int resolution);
 
+    // Set the parent asset's height in pixels for Z percent display/input
+    // Z is stored as a percentage (0.0-1.0) of this height
+    void set_parent_height(float height_px);
+    float get_parent_height() const { return parent_height_px_; }
+
     // Axis enable/lock controls (e.g., to freeze depth in sync-child mode)
     void set_axis_enabled(AdjustmentAxis axis, bool enabled);
     void set_axis_locked_value(AdjustmentAxis axis, std::optional<float> locked_value);
@@ -156,6 +161,7 @@ private:
 
     int grid_resolution_ = 0;
     float grid_step_world_ = 1.0f;
+    float parent_height_px_ = 0.0f;  // Parent asset height for Z percent calculations
 
     // Axis configuration (enabled/locked values)
     std::array<bool, 3> axis_enabled_{{true, true, true}};

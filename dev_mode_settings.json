@@ -1,7 +1,7 @@
 {
     "dev": {
         "asset_filter": {
-            "current_room": false,
+            "current_room": true,
             "filters_expanded": false,
             "fog": true,
             "initialized": true,
@@ -19,7 +19,7 @@
             "render_dark_mask": false,
             "types": {
                 "area": false,
-                "boundary": false,
+                "boundary": true,
                 "enemy": false,
                 "npc": false,
                 "object": true,
@@ -62,8 +62,8 @@
             "texture_warp_y_offset_px": 0.0
         },
         "fog": {
-            "base_size_scale": 0.75,
-            "grid_spacing_multiplier": 3.25,
+            "base_size_scale": 0.25,
+            "grid_spacing_multiplier": 3.0,
             "max_random_jitter": 298.0,
             "vertical_offset": 293.0
         },

@@ -58,6 +58,9 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
+        // Set parent height for Z percent display
+        FramePointResolver resolver(context_.target);
+        point_3d_editor_->set_parent_height(resolver.parent_height_px());
     }
     wants_close_ = false;
     selected_index_ = 0;
@@ -628,6 +631,11 @@ void MovementFrameEditor::refresh_selection_state() {
     }
     if (selection_state_->target != SelectionTarget::MovementPoint) {
         return;
+    }
+    // Update parent height for Z percent display (in case scale changed)
+    if (point_3d_editor_) {
+        FramePointResolver resolver(context_.target);
+        point_3d_editor_->set_parent_height(resolver.parent_height_px());
     }
     const int idx = clamp_index(selected_index_, static_cast<int>(rel_positions_.size()));
     selection_state_->child_index = -1;

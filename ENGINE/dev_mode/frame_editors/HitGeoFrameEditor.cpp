@@ -56,6 +56,9 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     if (point_3d_editor_) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
+        // Set parent height for Z percent display
+        FramePointResolver resolver(context_.target);
+        point_3d_editor_->set_parent_height(resolver.parent_height_px());
 
         point_3d_editor_->set_on_point_selected([this](int index) {
             if (index < 0) {
@@ -691,6 +694,11 @@ void HitGeoFrameEditor::refresh_selection_state() {
     if (selection_state_->target != SelectionTarget::HitboxCenter) {
         return;
     }
+    FramePointResolver resolver(context_.target);
+    // Update parent height for Z percent display (in case scale changed)
+    if (point_3d_editor_) {
+        point_3d_editor_->set_parent_height(resolver.parent_height_px());
+    }
     const auto* box = current_hit_box();
     if (!box) {
         selection_state_->target = SelectionTarget::None;
@@ -703,7 +711,6 @@ void HitGeoFrameEditor::refresh_selection_state() {
         static_cast<float>(anchor.y) - box->center_y * scale};
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint screen = cam.map_to_screen_f(world);
-    FramePointResolver resolver(context_.target);
     selection_state_->world_pos = world;
     const float base_z = resolver.base_world_z();
     const float world_z = resolver.to_world_z(box->center_z);

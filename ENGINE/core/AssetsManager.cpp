@@ -1195,13 +1195,11 @@ void Assets::initialize_active_assets(SDL_Point ) {
 
     active_assets.clear();
     active_assets.reserve(all.size());
-    for (Asset* a : all) {
-        if (a) {
-            active_assets.push_back(a);
-        }
-    }
+    filtered_active_assets.clear();
+    filtered_active_assets_hash_ = 0;
+    filtered_active_assets_source_hash_ = 0;
+    filtered_active_assets_filter_version_ = 0;
 
-    active_assets_dirty_.store(false, std::memory_order_release);
     mark_non_player_update_buffer_dirty();
     needs_filtered_active_refresh_ = true;
 }
@@ -1378,6 +1376,13 @@ bool Assets::maybe_rebuild_world_grid() {
         return false;
     }
 
+    rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
+    return true;
+}
+
+void Assets::rebuild_world_grid_and_active_assets(const SDL_Point& current_center,
+                                                  double current_scale,
+                                                  double current_pitch) {
     camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_);
     world_grid_.update_active_chunks(screen_world_rect(), 0);
     rebuild_active_from_screen_grid();
@@ -1387,7 +1392,6 @@ bool Assets::maybe_rebuild_world_grid() {
     last_camera_center_for_grid_ = current_center;
     last_camera_scale_for_grid_ = current_scale;
     last_camera_pitch_for_grid_ = current_pitch;
-    return true;
 }
 
 void Assets::untrack_asset_for_grid(Asset* asset) {
@@ -1446,9 +1450,15 @@ bool Assets::rebuild_active_assets_if_needed() {
     if (!dirty) {
         return false;
     }
+
+    const SDL_Point current_center = camera_.get_screen_center();
+    const double current_scale = camera_.get_scale();
+    const double current_pitch = camera_.current_pitch_radians();
+
     pending_initial_rebuild_ = false;
     active_assets_dirty_.store(false, std::memory_order_release);
-    initialize_active_assets(camera_.get_screen_center());
+    initialize_active_assets(current_center);
+    rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
     return true;
 }
 

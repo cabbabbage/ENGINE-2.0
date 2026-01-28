@@ -296,6 +296,9 @@ private:
 
     void track_asset_for_grid(Asset* asset);
     bool maybe_rebuild_world_grid();
+    void rebuild_world_grid_and_active_assets(const SDL_Point& current_center,
+                                              double current_scale,
+                                              double current_pitch);
     void mark_grid_dirty();
     void untrack_asset_for_grid(Asset* asset);
     void register_pending_static_assets();

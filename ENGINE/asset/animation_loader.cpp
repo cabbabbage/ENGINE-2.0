@@ -108,6 +108,50 @@ float json_float(const nlohmann::json& value, float fallback) {
         return fallback;
 }
 
+std::vector<float> discover_cached_scale_steps(const fs::path& cache_folder) {
+        std::vector<float> steps;
+        std::error_code ec;
+        if (!fs::exists(cache_folder, ec) || !fs::is_directory(cache_folder, ec)) {
+                return steps;
+        }
+
+        for (const auto& entry : fs::directory_iterator(cache_folder, ec)) {
+                if (ec) break;
+                if (!entry.is_directory()) continue;
+                const std::string name = entry.path().filename().string();
+                const std::string prefix = "scale_";
+                if (name.rfind(prefix, 0) != 0 || name.size() <= prefix.size()) {
+                        continue;
+                }
+                try {
+                        const int pct = std::stoi(name.substr(prefix.size()));
+                        if (pct <= 0) continue;
+                        float step = static_cast<float>(pct) * 0.01f;
+                        if (!std::isfinite(step) || step <= 0.0f || step >= 0.999f) {
+                                continue;
+                        }
+                        steps.push_back(std::clamp(step, 0.01f, 0.99f));
+                } catch (...) {
+                        continue;
+                }
+        }
+
+        if (steps.empty()) {
+                return steps;
+        }
+
+        std::sort(steps.begin(), steps.end(), std::greater<float>());
+        steps.erase(std::unique(steps.begin(), steps.end(), [](float a, float b) {
+                return std::fabs(a - b) < 1e-4f;
+        }), steps.end());
+
+        if (steps.size() > render_pipeline::ScalingLogic::kMaxVariantCount) {
+                steps.resize(render_pipeline::ScalingLogic::kMaxVariantCount);
+        }
+
+        return steps;
+}
+
 AnimationChildFrameData make_default_child_frame(int child_index) {
         AnimationChildFrameData sample{};
         sample.child_index = child_index;
@@ -469,7 +513,14 @@ void AnimationLoader::load(Animation& animation,
         const bool supports_depthcue_cache = false;
         bool effect_hash_mismatch = false;
         animation.variant_steps_ = info.scale_variants;
-        render_pipeline::ScalingLogic::NormalizeVariantSteps(animation.variant_steps_);
+
+        const fs::path cache_folder_path = fs::path(root_cache) / trigger;
+        if (animation.variant_steps_.empty()) {
+                animation.variant_steps_ = discover_cached_scale_steps(cache_folder_path);
+        }
+        if (animation.variant_steps_.empty()) {
+                render_pipeline::ScalingLogic::NormalizeVariantSteps(animation.variant_steps_);
+        }
 
         if (anim_json.contains("source")) {
                 const auto& s = anim_json["source"];
@@ -497,13 +548,17 @@ void AnimationLoader::load(Animation& animation,
                 auto it = info.animations.find(animation.source.name);
                 if (it != info.animations.end()) {
                         const Animation& src_anim = it->second;
-                if (!src_anim.variant_steps_.empty()) {
+                        if (!src_anim.variant_steps_.empty()) {
                                 animation.variant_steps_ = src_anim.variant_steps_;
                         }
                 }
         }
 
         const std::size_t initial_variant_count = animation.variant_steps_.size();
+
+        if (info.scale_variants.empty() && !animation.variant_steps_.empty()) {
+                info.scale_variants = animation.variant_steps_;
+        }
 
         animation.flipped_source = anim_json.value("flipped_source", false);
         animation.flip_vertical_source = anim_json.value("flip_vertical_source", false);

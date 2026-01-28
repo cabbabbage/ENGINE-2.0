@@ -3,7 +3,7 @@
         "asset_filter": {
             "current_room": false,
             "filters_expanded": false,
-            "fog": false,
+            "fog": true,
             "initialized": true,
             "map_assets": false,
             "methods": {
@@ -47,10 +47,10 @@
         "camera": {
             "background_texture_max_opacity": 255.0,
             "depthcue_enabled": true,
-            "extra_cull_margin": 5000.0,
+            "extra_cull_margin": 150.0,
             "foreground_texture_max_opacity": 255.0,
-            "meters_per_100_world_px": 0.20000000298023224,
-            "min_visible_screen_ratio": 0.005000000353902578,
+            "meters_per_100_world_px": 0.9999999403953552,
+            "min_visible_screen_ratio": 0.003000000026077032,
             "near_camera_fade_end_ratio": 1.6699999570846558,
             "near_camera_fade_start_ratio": 0.550000011920929,
             "near_camera_max_perspective_scale": 4.0,
@@ -62,8 +62,8 @@
             "texture_warp_y_offset_px": 0.0
         },
         "fog": {
-            "base_size_scale": 2.0,
-            "grid_spacing_multiplier": 4.0,
+            "base_size_scale": 0.75,
+            "grid_spacing_multiplier": 3.25,
             "max_random_jitter": 298.0,
             "vertical_offset": 293.0
         },

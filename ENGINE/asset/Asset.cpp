@@ -179,6 +179,9 @@ Asset::Asset(const Asset& o)
     , last_scale_usage_()
     , last_rendered_frame_(nullptr)
     , scale_variant_state_(o.scale_variant_state_)
+    , last_scale_base_input_(o.last_scale_base_input_)
+    , last_scale_perspective_input_(o.last_scale_perspective_input_)
+    , last_scale_camera_input_(o.last_scale_camera_input_)
     , base_bounds_local_(o.base_bounds_local_)
     , grid_id_(o.grid_id_)
     , composite_texture_(nullptr)
@@ -252,6 +255,9 @@ Asset& Asset::operator=(const Asset& o) {
         last_scaled_camera_scale_ = -1.0f;
         last_scale_usage_         = o.last_scale_usage_;
         scale_variant_state_      = o.scale_variant_state_;
+        last_scale_base_input_    = o.last_scale_base_input_;
+        last_scale_perspective_input_ = o.last_scale_perspective_input_;
+        last_scale_camera_input_  = o.last_scale_camera_input_;
         cached_grid_residency_    = o.cached_grid_residency_;
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
@@ -335,14 +341,26 @@ void Asset::update_scale_values() {
         }
     }
 
-    current_scale = base_scale * perspective_scale;
-
     float camera_scale = 1.0f;
     if (assets_) {
-        camera_scale = 1.0f;
+        camera_scale = static_cast<float>(std::max(0.0001, assets_->getView().get_scale()));
     } else if (window) {
-        camera_scale = 1.0f;
+        camera_scale = static_cast<float>(std::max(0.0001, window->get_scale()));
     }
+
+    const float prospective_scale = base_scale * perspective_scale;
+    constexpr float kScaleEpsilon = 1e-4f;
+    if (std::fabs(prospective_scale - current_scale) < kScaleEpsilon &&
+        std::fabs(base_scale - last_scale_base_input_) < kScaleEpsilon &&
+        std::fabs(perspective_scale - last_scale_perspective_input_) < kScaleEpsilon &&
+        std::fabs(camera_scale - last_scale_camera_input_) < kScaleEpsilon) {
+        return;
+    }
+
+    current_scale = prospective_scale;
+    last_scale_base_input_ = base_scale;
+    last_scale_perspective_input_ = perspective_scale;
+    last_scale_camera_input_ = camera_scale;
 
     float desired_variant_scale = current_scale / camera_scale;
     if (!std::isfinite(desired_variant_scale) || desired_variant_scale <= 0.0f) {

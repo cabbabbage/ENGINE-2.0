@@ -16,6 +16,8 @@
 #include <vector>
 
 #include <SDL.h>
+#include <nlohmann/json.hpp>
+#include "core/manifest/manifest_loader.hpp"
 
 class Asset;
 class AssetLibrary;
@@ -426,12 +428,82 @@ private:
         return state;
     }
 
+    static inline ScaleSteps parse_profile_steps(const nlohmann::json& profile) {
+        ScaleSteps steps;
+        auto ingest = [&](const nlohmann::json& arr, bool is_percentage) {
+            if (!arr.is_array()) return;
+            for (const auto& v : arr) {
+                if (!v.is_number()) continue;
+                float value = static_cast<float>(v.get<double>());
+                if (is_percentage) {
+                    value *= 0.01f;
+                }
+                if (!::std::isfinite(value) || value <= 0.0f) continue;
+                if (value >= 0.999f) continue; // base variant is stored separately
+                steps.push_back(::std::clamp(value, 0.01f, 1.0f));
+            }
+        };
+
+        if (profile.contains("recommended_percentages")) {
+            ingest(profile.at("recommended_percentages"), true);
+        }
+        if (steps.empty() && profile.contains("recommended_steps")) {
+            ingest(profile.at("recommended_steps"), false);
+        }
+
+        if (steps.empty()) {
+            return steps;
+        }
+
+        ::std::sort(steps.begin(), steps.end(), ::std::greater<float>());
+        steps.erase(::std::unique(steps.begin(), steps.end(), [](float a, float b) {
+            return ::std::fabs(a - b) < 1e-4f;
+        }), steps.end());
+
+        if (steps.size() > kMaxVariantCount) {
+            steps.resize(kMaxVariantCount);
+        }
+        return steps;
+    }
+
     static inline void ensure_loaded(ProfilesState& state) {
         if (state.loaded) {
             return;
         }
         state.loaded = true;
         state.entries.clear();
+
+        try {
+            const auto manifest_data = manifest::load_manifest();
+            if (!manifest_data.assets.is_object()) {
+                return;
+            }
+
+            for (auto it = manifest_data.assets.begin(); it != manifest_data.assets.end(); ++it) {
+                if (!it.value().is_object()) {
+                    continue;
+                }
+                auto profile_it = it.value().find("scaling_profile");
+                if (profile_it == it.value().end() || !profile_it->is_object()) {
+                    continue;
+                }
+
+                ScaleSteps steps = parse_profile_steps(*profile_it);
+                if (steps.empty()) {
+                    continue;
+                }
+
+                ProfileEntry entry;
+                entry.steps     = ::std::move(steps);
+                entry.revision  = profile_it->value("revision", static_cast<::std::uint64_t>(0));
+                entry.min_scale = profile_it->value("min_scale", 1.0f);
+                entry.max_scale = profile_it->value("max_scale", 1.0f);
+
+                state.entries.emplace(it.key(), ::std::move(entry));
+            }
+        } catch (...) {
+            // Fallback to defaults; nothing to log here to keep header-only dependency light.
+        }
     }
 
     static inline void record_profile_history(ProfilesState& state,

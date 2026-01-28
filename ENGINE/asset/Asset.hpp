@@ -247,6 +247,11 @@ class Asset {
     float current_remaining_scale_adjustment = 1.00f;
     int   current_variant_index = 0;
 
+    // Cache the last scale inputs so we can skip redundant work when nothing changed.
+    float last_scale_base_input_ = -1.0f;
+    float last_scale_perspective_input_ = -1.0f;
+    float last_scale_camera_input_ = -1.0f;
+
     void update_scale_values();
     SDL_Texture* get_current_variant_texture() const;
     void set_current_animation(const std::string& name);

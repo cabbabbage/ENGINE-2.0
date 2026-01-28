@@ -881,13 +881,21 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         }
     }
 
-    // Sort in parent-first order (lower depth = higher in hierarchy = updated first)
+    // Pre-compute all parent depths once (O(n * avg_depth)) instead of
+    // recomputing during sort comparisons (which would be O(n log n * avg_depth))
+    std::unordered_map<const Asset*, int> depth_cache;
+    depth_cache.reserve(non_player_update_buffer_.size());
+    for (const Asset* asset : non_player_update_buffer_) {
+        depth_cache[asset] = compute_parent_depth(asset);
+    }
+
+    // Sort in parent-first order using cached depths (O(n log n) with O(1) lookups)
     std::stable_sort(non_player_update_buffer_.begin(),
                      non_player_update_buffer_.end(),
-                     [&compute_parent_depth](const Asset* a, const Asset* b) {
+                     [&depth_cache](const Asset* a, const Asset* b) {
                          if (!a || !b) return b != nullptr;
-                         const int depth_a = compute_parent_depth(a);
-                         const int depth_b = compute_parent_depth(b);
+                         const int depth_a = depth_cache[a];
+                         const int depth_b = depth_cache[b];
                          if (depth_a != depth_b) {
                              return depth_a < depth_b; // Parents (lower depth) before children
                          }

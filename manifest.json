@@ -1311,7 +1311,7 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 }
               ],
@@ -1366,7 +1366,8 @@
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0
+            "dy": 0,
+            "dz": 0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -1435,7 +1436,7 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 }
               ],
@@ -1531,9 +1532,9 @@
               "frames": [
                 {
                   "degree": 0.0,
-                  "dx": 33,
+                  "dx": 1,
                   "dy": 1,
-                  "dz": 0,
+                  "dz": 1.0,
                   "visible": true
                 }
               ],
@@ -1577,7 +1578,8 @@
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0
+            "dy": 0,
+            "dz": 0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -1646,7 +1648,7 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 }
               ],
@@ -1749,7 +1751,8 @@
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0
+            "dy": 0,
+            "dz": 0
           },
           "number_of_frames": 1,
           "on_end": "default",
@@ -1815,56 +1818,56 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 },
                 {
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 },
                 {
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 },
                 {
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 },
                 {
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 },
                 {
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 },
                 {
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 },
                 {
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 }
               ],
@@ -2064,7 +2067,8 @@
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0
+            "dy": 0,
+            "dz": 0
           },
           "number_of_frames": 8,
           "on_end": "default",
@@ -2091,7 +2095,7 @@
                   "degree": 0.0,
                   "dx": 0,
                   "dy": 0,
-                  "dz": 0,
+                  "dz": 0.0,
                   "visible": false
                 }
               ],

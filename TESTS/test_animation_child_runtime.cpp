@@ -36,8 +36,8 @@ TEST_CASE("Hidden child attachments restart from frame zero when revealed") {
 
     AnimationChildFrameData visible{};
     visible.child_index = 0;
-    visible.dx = 3;
-    visible.dy = -2;
+    visible.offset.px = 0.03f;  // Percentage of parent height
+    visible.offset.py = -0.02f;
     visible.degree = 15.0f;
     visible.visible = true;
 

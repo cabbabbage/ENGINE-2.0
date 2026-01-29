@@ -295,8 +295,23 @@ void Point3DEditor::sync_textboxes_from_selection() {
     const auto locked_z = axis_locked_values_[axis_to_index(AdjustmentAxis::Z)];
 
     if (tb_dx_) {
-        const float display_x = locked_x.value_or(rel_pos.x);
-        const std::string dx_str = std::to_string(static_cast<int>(std::lround(display_x)));
+        std::string dx_str;
+        if (xy_display_mode_ == CoordinateDisplayMode::RawDelta) {
+            // Display X as raw integer value
+            const float display_x = locked_x.value_or(rel_pos.x);
+            dx_str = std::to_string(static_cast<int>(std::lround(display_x)));
+        } else {
+            // Display X as a percentage (0.0-1.0) of parent height
+            float display_x_percent = 0.0f;
+            if (parent_height_px_ > 0.0f) {
+                const float world_x_offset = locked_x.value_or(rel_pos.x);
+                display_x_percent = world_x_offset / parent_height_px_;
+                display_x_percent = std::clamp(display_x_percent, 0.0f, 1.0f);
+            }
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(2) << display_x_percent;
+            dx_str = oss.str();
+        }
         if (!tb_dx_->is_editing() && dx_str != last_dx_text_) {
             tb_dx_->set_value(dx_str);
             last_dx_text_ = dx_str;
@@ -309,8 +324,23 @@ void Point3DEditor::sync_textboxes_from_selection() {
     }
 
     if (tb_dy_) {
-        const float display_y = locked_y.value_or(rel_pos.y);
-        const std::string dy_str = std::to_string(static_cast<int>(std::lround(display_y)));
+        std::string dy_str;
+        if (xy_display_mode_ == CoordinateDisplayMode::RawDelta) {
+            // Display Y as raw integer value
+            const float display_y = locked_y.value_or(rel_pos.y);
+            dy_str = std::to_string(static_cast<int>(std::lround(display_y)));
+        } else {
+            // Display Y as a percentage (0.0-1.0) of parent height
+            float display_y_percent = 0.0f;
+            if (parent_height_px_ > 0.0f) {
+                const float world_y_offset = locked_y.value_or(rel_pos.y);
+                display_y_percent = world_y_offset / parent_height_px_;
+                display_y_percent = std::clamp(display_y_percent, 0.0f, 1.0f);
+            }
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(2) << display_y_percent;
+            dy_str = oss.str();
+        }
         if (!tb_dy_->is_editing() && dy_str != last_dy_text_) {
             tb_dy_->set_value(dy_str);
             last_dy_text_ = dy_str;

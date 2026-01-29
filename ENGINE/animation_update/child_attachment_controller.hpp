@@ -16,6 +16,7 @@ struct ParentState {
     SDL_Point base_position{0, 0};
     float scale = 1.0f;
     float world_z = 0.0f;
+    float height = 0.0f;  // Parent asset height in world pixels for percentage conversion
     bool flipped = false;
     std::string_view animation_id{};
 };

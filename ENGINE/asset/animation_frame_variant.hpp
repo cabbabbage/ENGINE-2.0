@@ -1,11 +1,11 @@
 #pragma once
 
 #include <SDL.h>
+#include "PointPercentage.hpp"
+
 struct AnimationChildFrameData {
     int   child_index     = -1;
-    int   dx              = 0;
-    int   dy              = 0;
-    float dz              = 0.0f;  // Z as percentage (0.0-1.0) of parent height
+    vibble::PointPercentage offset;
     float degree          = 0.0f;
     bool  visible         = true;
 };

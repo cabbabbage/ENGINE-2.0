@@ -346,9 +346,9 @@ void AsyncChildrenFrameEditor::populate_child_data() {
             }
             auto& sample = static_frames_by_child_[static_cast<std::size_t>(child_src.child_index)][frame_idx];
             sample.child_index = child_src.child_index;
-            sample.dx = static_cast<float>(child_src.dx);
-            sample.dy = static_cast<float>(child_src.dy);
-            sample.dz = static_cast<float>(child_src.dz);
+            sample.dx = child_src.offset.px;
+            sample.dy = child_src.offset.py;
+            sample.dz = child_src.offset.pz;
             sample.degree = child_src.degree;
             sample.visible = child_src.visible;
             sample.has_data = true;
@@ -367,9 +367,9 @@ void AsyncChildrenFrameEditor::populate_child_data() {
                 for (const auto& frame : descriptor.frames) {
                     child_timelines::ChildFrameSample sample{};
                 sample.child_index = frame.child_index;
-                sample.dx = static_cast<float>(frame.dx);
-                sample.dy = static_cast<float>(frame.dy);
-                sample.dz = static_cast<float>(frame.dz);
+                sample.dx = frame.offset.px;
+                sample.dy = frame.offset.py;
+                sample.dz = frame.offset.pz;
                 sample.degree = frame.degree;
                 sample.visible = frame.visible;
                 sample.has_data = true;
@@ -742,6 +742,7 @@ void AsyncChildrenFrameEditor::apply_preview() {
     parent_state.scale = context_.target->smoothed_scale();
     parent_state.flipped = context_.target->flipped;
     parent_state.world_z = resolver.base_world_z();
+    parent_state.height = resolver.parent_height_px();
     parent_state.animation_id = context_.animation_id;
     std::vector<AnimationChildFrameData> overrides;
     for (std::size_t idx = 0; idx < child_assets_.size(); ++idx) {
@@ -752,9 +753,10 @@ void AsyncChildrenFrameEditor::apply_preview() {
         }
         AnimationChildFrameData entry{};
         entry.child_index = static_cast<int>(idx);
-        entry.dx = static_cast<int>(std::lround(sample.dx));
-        entry.dy = static_cast<int>(std::lround(sample.dy));
-        entry.dz = static_cast<int>(std::lround(resolver.parent_height_px() * sample.dz));
+        // Store percentages - runtime conversion happens in apply_frame_data
+        entry.offset.px = sample.dx;
+        entry.offset.py = sample.dy;
+        entry.offset.pz = sample.dz;
         entry.degree = sample.degree;
         entry.visible = sample.visible;
         overrides.push_back(entry);

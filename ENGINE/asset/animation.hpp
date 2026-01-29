@@ -12,6 +12,7 @@
 #include "animation_frame.hpp"
 #include "render/render.hpp"
 #include "animation_frame_variant.hpp"
+#include "PointPercentage.hpp"
 
 inline constexpr int kBaseAnimationFps = 24;
 

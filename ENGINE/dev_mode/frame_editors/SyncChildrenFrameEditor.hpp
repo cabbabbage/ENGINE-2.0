@@ -57,6 +57,7 @@ private:
     int point_index_for_child(int child_index) const;
     void ensure_manifest_transaction();
     void apply_live_changes();
+    void force_save_to_disk();
     void invalidate_preview() const;
     void refresh_selection_state();
     void sync_visibility_checkbox();

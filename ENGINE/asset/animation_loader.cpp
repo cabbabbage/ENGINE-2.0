@@ -155,9 +155,7 @@ std::vector<float> discover_cached_scale_steps(const fs::path& cache_folder) {
 AnimationChildFrameData make_default_child_frame(int child_index) {
         AnimationChildFrameData sample{};
         sample.child_index = child_index;
-        sample.dx = 0;
-        sample.dy = 0;
-        sample.dz = 0;
+        sample.offset = {0.0f, 0.0f, 0.0f};
         sample.degree = 0.0f;
         sample.visible = false;
         return sample;
@@ -171,26 +169,14 @@ std::optional<AnimationChildFrameData> parse_child_frame_sample(const nlohmann::
                           << "' is not an object; legacy child formats are unsupported.\n";
                 return std::nullopt;
         }
-        if (node.contains("render_in_front")) {
-                std::cout << "[AnimationLoader] child timeline frame for asset '" << asset_name
-                          << "' includes legacy field 'render_in_front' and cannot be loaded. "
-                          << "child_timelines are the only supported child source.\n";
-                return std::nullopt;
-        }
+        
         AnimationChildFrameData sample = make_default_child_frame(child_index);
-        sample.dx = json_int(node.value("dx", 0), 0);
-        sample.dy = json_int(node.value("dy", 0), 0);
-        // dz is stored as float percentage (0.0-1.0) of parent height
-        sample.dz = json_float(node.value("dz", 0.0f), 0.0f);
-        if (!node.contains("dz")) {
-                // Legacy fallback: if dz not present, use dy as dz
-                sample.dz = static_cast<float>(sample.dy);
-                sample.dy = 0;
-        }
+        sample.offset.px = json_float(node.value("px", 0.0f), 0.0f);
+        sample.offset.py = json_float(node.value("py", 0.0f), 0.0f);
+        sample.offset.pz = json_float(node.value("pz", 0.0f), 0.0f);
+        
         if (node.contains("degree")) {
                 sample.degree = json_float(node["degree"], 0.0f);
-        } else if (node.contains("rotation")) {
-                sample.degree = json_float(node["rotation"], 0.0f);
         }
         sample.visible = json_bool(node.value("visible", sample.visible), sample.visible);
         return sample;
@@ -643,31 +629,19 @@ void AnimationLoader::load(Animation& animation,
                 for (const auto& mv : seq) {
                         AnimationFrame fm;
 
-                        if (mv.is_object()) {
-                                try { fm.dx = static_cast<int>(mv.value("dx", 0)); } catch (...) { fm.dx = 0; }
-                                try { fm.dy = static_cast<int>(mv.value("dy", 0)); } catch (...) { fm.dy = 0; }
-                                try { fm.dz = static_cast<int>(mv.value("dz", 0)); } catch (...) { fm.dz = 0; }
-                                fm.z_resort = mv.value("resort_z", false);
-                                if (mv.contains("children")) {
-                                        legacy_movement_children_found = true;
+                                if (mv.is_object()) {
+                                        // Movement uses integer world pixels
+                                        fm.dx = json_int(mv.value("x", 0), 0);
+                                        fm.dy = json_int(mv.value("y", 0), 0);
+                                        fm.dz = json_int(mv.value("z", 0), 0);
+                                        fm.z_resort = mv.value("resort_z", false);
+                                        if (mv.contains("children")) {
+                                                legacy_movement_children_found = true;
+                                        }
+                                        if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.contains("resort_z")) specified = true;
+                                        dest.push_back(std::move(fm));
+                                        continue;
                                 }
-                                if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.contains("resort_z")) specified = true;
-                                dest.push_back(std::move(fm));
-                                continue;
-                        }
-
-                        if (!mv.is_array() || mv.size() < 2) continue;
-                        try { fm.dx = mv[0].get<int>(); } catch (...) { fm.dx = 0; }
-                        try { fm.dy = mv[1].get<int>(); } catch (...) { fm.dy = 0; }
-                        fm.dz = 0;
-                        if (mv.size() >= 3 && mv[2].is_number()) {
-                                try { fm.dz = mv[2].get<int>(); } catch (...) { fm.dz = 0; }
-                        } else if (mv.size() >= 3 && mv[2].is_boolean()) {
-                                fm.z_resort = mv[2].get<bool>();
-                        }
-                        if (mv.size() >= 4 && mv[3].is_boolean()) {
-                                fm.z_resort = mv[3].get<bool>();
-                        }
 
                         for (const auto& node : mv) {
                                 if (!node.is_array()) continue;

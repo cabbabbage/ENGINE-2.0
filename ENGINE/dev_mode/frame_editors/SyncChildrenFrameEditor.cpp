@@ -223,6 +223,11 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
     }
     dd_child_selector_ = std::make_unique<DMDropdown>("Child", child_labels, std::min(selected_child_index_, static_cast<int>(child_labels.size()) - 1));
     dd_child_selector_->set_on_selection_changed([this](int index) {
+        // Save changes before switching children
+        if (data_dirty_) {
+            persist_pending_changes();
+        }
+
         selected_child_index_ = index;
 
         if (selection_state_) {
@@ -579,6 +584,7 @@ void SyncChildrenFrameEditor::populate_child_data() {
             sample.child_index = static_cast<int>(child_idx);
             sample.dy = kLockedDepthValue;
             sample.visible = false;
+            sample.has_data = true;  // All samples should be considered to have data
         }
     }
 
@@ -595,9 +601,9 @@ void SyncChildrenFrameEditor::populate_child_data() {
             }
             auto& sample = static_frames_by_child_[static_cast<std::size_t>(child_src.child_index)][frame_idx];
             sample.child_index = child_src.child_index;
-            sample.dx = static_cast<float>(child_src.dx);
+            sample.dx = child_src.offset.px;
             sample.dy = kLockedDepthValue;
-            sample.dz = static_cast<float>(child_src.dz);
+            sample.dz = child_src.offset.pz;
             sample.degree = child_src.degree;
             sample.visible = child_src.visible;
             sample.has_data = true;
@@ -616,13 +622,28 @@ void SyncChildrenFrameEditor::populate_child_data() {
             for (const auto& frame : descriptor.frames) {
                 child_timelines::ChildFrameSample sample{};
                 sample.child_index = frame.child_index;
-                sample.dx = static_cast<float>(frame.dx);
-                sample.dy = static_cast<float>(frame.dy);
-                sample.dz = static_cast<float>(frame.dz);
+                sample.dx = frame.offset.px;
+                sample.dy = frame.offset.py;
+                sample.dz = frame.offset.pz;
                 sample.degree = frame.degree;
                 sample.visible = frame.visible;
                 sample.has_data = true;
                 timeline.push_back(sample);
+            }
+        } else {
+            // For static mode, update the static_frames_by_child_ with loaded data
+            auto& timeline = static_frames_by_child_[idx];
+            const std::size_t frame_count = std::min(timeline.size(), descriptor.frames.size());
+            for (std::size_t frame_idx = 0; frame_idx < frame_count; ++frame_idx) {
+                const auto& frame = descriptor.frames[frame_idx];
+                auto& sample = timeline[frame_idx];
+                sample.child_index = frame.child_index;
+                sample.dx = frame.offset.px;
+                sample.dy = frame.offset.py;
+                sample.dz = frame.offset.pz;
+                sample.degree = frame.degree;
+                sample.visible = frame.visible;
+                sample.has_data = true;
             }
         }
     }
@@ -643,6 +664,7 @@ void SyncChildrenFrameEditor::apply_current_frame_to_children() {
     parent_state.scale = attachment_scale();
     parent_state.flipped = context_.target->flipped;
     parent_state.world_z = context_.target->world_z_offset();
+    parent_state.height = static_cast<float>(context_.target->cached_h);
     parent_state.animation_id = context_.animation_id;
 
     FramePointResolver resolver(context_.target);
@@ -661,9 +683,10 @@ void SyncChildrenFrameEditor::apply_current_frame_to_children() {
         // leave them invisible even if they should be visible.
         AnimationChildFrameData entry{};
         entry.child_index = static_cast<int>(idx);
-        entry.dx = static_cast<int>(std::lround(sample.dx));
-        entry.dy = static_cast<int>(std::lround(sample.dy));
-        entry.dz = static_cast<int>(std::lround(resolver.parent_height_px() * sample.dz));
+        // Store percentages - runtime conversion happens in apply_frame_data
+        entry.offset.px = sample.dx;
+        entry.offset.py = sample.dy;
+        entry.offset.pz = sample.dz;
         entry.degree = sample.degree;
         entry.visible = sample.visible;
         overrides.push_back(entry);
@@ -766,37 +789,87 @@ void SyncChildrenFrameEditor::ensure_manifest_transaction() {
     // Only begin if not already active to avoid re-entrant calls
     if (!manifest_txn_.active()) {
         manifest_txn_.begin(context_);
-        manifest_txn_.set_deferred_persist(true);
+        manifest_txn_.set_immediate_persist(true);
     }
     // Always update the callback to use current data
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
         }
-        const auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
+
+        auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
         nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
-        payload["child_timelines"] = child_timelines::build_child_timelines_payload(
-            payload,
-            static_frames_by_child_,
-            child_assets_,
-            child_modes_,
-            async_timelines_by_child_);
+
+        nlohmann::json child_timelines = nlohmann::json::array();
+        for (std::size_t child_idx = 0; child_idx < child_assets_.size(); ++child_idx) {
+            nlohmann::json child_entry = {{"child", static_cast<int>(child_idx)},
+                                         {"asset", child_assets_[child_idx]},
+                                         {"mode", "static"}};
+
+            nlohmann::json frames = nlohmann::json::array();
+            if (child_idx < static_frames_by_child_.size()) {
+                for (const auto& sample : static_frames_by_child_[child_idx]) {
+                    frames.push_back({
+                        {"dx", static_cast<int>(std::lround(sample.dx))},
+                        {"dy", static_cast<int>(std::lround(sample.dy))},
+                        {"dz", static_cast<double>(sample.dz)},
+                        {"degree", static_cast<double>(sample.degree)},
+                        {"visible", sample.visible}
+                    });
+                }
+            }
+            child_entry["frames"] = frames;
+            child_timelines.push_back(child_entry);
+        }
+
+        payload["child_timelines"] = child_timelines;
         return context_.document->update_animation_payload(context_.animation_id, payload);
     });
 }
 
 void SyncChildrenFrameEditor::apply_live_changes() {
-    ensure_manifest_transaction();
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit(false);
-    }
-    invalidate_preview();
+    force_save_to_disk();
 }
 
 void SyncChildrenFrameEditor::persist_pending_changes() {
-    ensure_manifest_transaction();
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit(true);
+    force_save_to_disk();
+}
+
+void SyncChildrenFrameEditor::force_save_to_disk() {
+    if (!context_.document) return;
+
+    auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
+    nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
+
+    nlohmann::json child_timelines = nlohmann::json::array();
+    for (std::size_t child_idx = 0; child_idx < child_assets_.size(); ++child_idx) {
+        nlohmann::json child_entry = {
+            {"child", static_cast<int>(child_idx)},
+            {"asset", child_assets_[child_idx]},
+            {"mode", "static"}
+        };
+
+        nlohmann::json frames = nlohmann::json::array();
+        if (child_idx < static_frames_by_child_.size()) {
+            for (size_t frame_idx = 0; frame_idx < static_frames_by_child_[child_idx].size(); ++frame_idx) {
+                const auto& sample = static_frames_by_child_[child_idx][frame_idx];
+                frames.push_back({
+                    {"dx", static_cast<int>(std::lround(sample.dx))},
+                    {"dy", static_cast<int>(std::lround(sample.dy))},
+                    {"dz", static_cast<double>(sample.dz)},
+                    {"degree", static_cast<double>(sample.degree)},
+                    {"visible", sample.visible}
+                });
+            }
+        }
+        child_entry["frames"] = frames;
+        child_timelines.push_back(child_entry);
+    }
+
+    payload["child_timelines"] = child_timelines;
+
+    if (context_.document->update_animation_payload(context_.animation_id, payload)) {
+        context_.document->save_to_file_checked(true);
     }
     invalidate_preview();
 }

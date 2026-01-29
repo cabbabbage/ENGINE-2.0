@@ -178,11 +178,13 @@ void apply_frame_data(std::vector<Asset::AnimationChildAttachment>& slots,
             }
             slot.visible = true;
 
-            // Calculate 3D world position using clean, unified approach
+            // Calculate 3D world position from percentage offsets
+            // Convert percentage to world displacement: world = height * percent
+            const float parent_height = parent_state.height > 0.0f ? parent_state.height : 1.0f;
             const child_3d::Child3DDisplacement displacement{
-                static_cast<float>(child_data.dx),
-                static_cast<float>(child_data.dy),
-                static_cast<float>(child_data.dz)
+                child_data.offset.px * parent_height,
+                child_data.offset.py * parent_height,
+                child_data.offset.pz * parent_height
             };
             const auto world_pos_3d = child_3d::calculate_child_world_position(
                 parent_3d_state, displacement);
@@ -223,15 +225,17 @@ void apply_frame_data(std::vector<Asset::AnimationChildAttachment>& slots,
             slot.visible = true;
             if constexpr (kChildAttachmentDebug) {
                 std::cout << "[ChildAttachments] Setting slot " << slot.child_index << " ('" << slot.asset_name
-                          << "') visible=true dx=" << child_data.dx << " dy=" << child_data.dy
-                          << " dz=" << child_data.dz << " deg=" << child_data.degree << " (from timeline)\n";
+                          << "') visible=true px=" << child_data.offset.px << " py=" << child_data.offset.py
+                          << " pz=" << child_data.offset.pz << " deg=" << child_data.degree << " (from timeline)\n";
             }
 
-            // Calculate 3D world position using clean, unified approach
+            // Calculate 3D world position from percentage offsets
+            // Convert percentage to world displacement: world = height * percent
+            const float parent_height = parent_state.height > 0.0f ? parent_state.height : 1.0f;
             const child_3d::Child3DDisplacement displacement{
-                static_cast<float>(child_data.dx),
-                static_cast<float>(child_data.dy),
-                static_cast<float>(child_data.dz)
+                child_data.offset.px * parent_height,
+                child_data.offset.py * parent_height,
+                child_data.offset.pz * parent_height
             };
             const auto world_pos_3d = child_3d::calculate_child_world_position(
                 parent_3d_state, displacement);

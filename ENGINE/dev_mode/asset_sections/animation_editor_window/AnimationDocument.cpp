@@ -104,7 +104,7 @@ std::string sanitize_child_mode_string(const nlohmann::json& entry) {
 }
 
 nlohmann::json default_child_frame_json() {
-    return nlohmann::json{{"dx", 0}, {"dy", 0}, {"dz", 0}, {"degree", 0.0}, {"visible", false}};
+    return nlohmann::json{{"dx", 0}, {"dy", 0}, {"dz", 0.0}, {"degree", 0.0}, {"visible", false}};
 }
 
 nlohmann::json normalize_child_frame_json(const nlohmann::json& sample) {
@@ -112,9 +112,10 @@ nlohmann::json normalize_child_frame_json(const nlohmann::json& sample) {
     if (sample.is_object()) {
         normalized["dx"] = parse_int(sample.value("dx", normalized["dx"].get<int>()), normalized["dx"].get<int>());
         normalized["dy"] = parse_int(sample.value("dy", normalized["dy"].get<int>()), normalized["dy"].get<int>());
-        normalized["dz"] = parse_int(sample.value("dz", normalized["dz"].get<int>()), normalized["dz"].get<int>());
-        if (!sample.contains("dz")) {
-            normalized["dz"] = normalized["dy"];
+        if (sample.contains("dz")) {
+            normalized["dz"] = parse_float(sample["dz"], 0.0f);
+        } else {
+            normalized["dz"] = static_cast<double>(normalized["dy"].get<int>());
             normalized["dy"] = 0;
         }
         if (sample.contains("degree")) {
@@ -127,13 +128,13 @@ nlohmann::json normalize_child_frame_json(const nlohmann::json& sample) {
         if (!sample.empty()) normalized["dx"] = parse_int(sample[0], normalized["dx"].get<int>());
         if (sample.size() > 1) normalized["dy"] = parse_int(sample[1], normalized["dy"].get<int>());
         if (sample.size() > 2 && sample[2].is_number()) {
-            normalized["dz"] = parse_int(sample[2], normalized["dz"].get<int>());
+            normalized["dz"] = parse_float(sample[2], 0.0f);
             if (sample.size() > 3) normalized["degree"] = parse_float(sample[3], static_cast<float>(normalized["degree"].get<double>()));
             if (sample.size() > 4) normalized["visible"] = parse_bool(sample[4], normalized["visible"].get<bool>());
         } else {
             if (sample.size() > 2) normalized["degree"] = parse_float(sample[2], static_cast<float>(normalized["degree"].get<double>()));
             if (sample.size() > 3) normalized["visible"] = parse_bool(sample[3], normalized["visible"].get<bool>());
-            normalized["dz"] = normalized["dy"];
+            normalized["dz"] = static_cast<double>(normalized["dy"].get<int>());
             normalized["dy"] = 0;
         }
     }
@@ -465,9 +466,9 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
                 return 0;
             }
             if (entry.is_object()) {
-                const char* keys[] = {"dx", "dy"};
-                const char* key = (index == 0) ? keys[0] : keys[1];
-                if (entry.contains(key)) {
+                const char* keys[] = {"dx", "dy", "dz"};
+                const char* key = (index >= 0 && index < 3) ? keys[index] : nullptr;
+                if (key && entry.contains(key)) {
                     return parse_int(entry[key], 0);
                 }
             }
@@ -476,12 +477,14 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
 
         int total_dx = 0;
         int total_dy = 0;
+        int total_dz = 0;
         for (std::size_t i = 1; i < movement.size(); ++i) {
             const nlohmann::json& entry = movement[i];
             total_dx += read_component(entry, 0);
             total_dy += read_component(entry, 1);
+            total_dz += read_component(entry, 2);
         }
-        payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}};
+        payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}};
     } else {
         payload.erase("movement");
         payload.erase("movement_total");

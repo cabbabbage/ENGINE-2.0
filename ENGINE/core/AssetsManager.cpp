@@ -875,9 +875,39 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
     // Collect all non-player assets (including children)
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(active_assets.size());
+    std::unordered_set<const Asset*> buffer_set;
     for (Asset* asset : active_assets) {
         if (asset && asset != player) {
             non_player_update_buffer_.push_back(asset);
+            buffer_set.insert(asset);
+        }
+    }
+
+    // Also include child timeline assets when their parent is active.
+    // Child timeline assets may not be on a visible grid point but should
+    // still be updated when their parent is active (for both sync and async modes).
+    for (Asset* asset : all) {
+        if (!asset || asset->dead || asset == player) {
+            continue;
+        }
+        // Check if this is a child timeline asset
+        if (asset->child_timeline_index() < 0) {
+            continue;
+        }
+        // Skip if already in the buffer
+        if (buffer_set.count(asset)) {
+            continue;
+        }
+        // Check if parent is active (in buffer or is player)
+        const Asset* parent_asset = asset->parent;
+        if (!parent_asset || parent_asset->dead) {
+            continue;
+        }
+        const bool parent_in_buffer = buffer_set.count(parent_asset) > 0;
+        const bool parent_is_player = (parent_asset == player && player && player->active);
+        if (parent_in_buffer || parent_is_player) {
+            non_player_update_buffer_.push_back(asset);
+            buffer_set.insert(asset);
         }
     }
 

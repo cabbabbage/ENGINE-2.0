@@ -8,6 +8,7 @@
 
 class AnimationFrame {
 public:
+    // Movement in world pixels (for movement frames)
     int dx = 0;
     int dy = 0;
     int dz = 0;

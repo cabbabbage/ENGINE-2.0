@@ -76,7 +76,7 @@ std::string to_lower(const std::string& value) {
 }
 
 nlohmann::json default_child_frame_json() {
-    return nlohmann::json{{"dx", 0}, {"dy", 0}, {"dz", 0}, {"degree", 0.0}, {"visible", false}};
+    return nlohmann::json{{"dx", 0}, {"dy", 0}, {"dz", 0.0}, {"degree", 0.0}, {"visible", false}};
 }
 
 }  // namespace
@@ -105,24 +105,13 @@ ChildFrameSample child_frame_from_json(const nlohmann::json& sample, int child_i
     child.has_data = false;
 
     if (sample.is_object()) {
-        if (sample.contains("dx")) child.dx = static_cast<float>(read_int(sample["dx"], 0));
-        if (sample.contains("dy")) child.dy = static_cast<float>(read_int(sample["dy"], 0));
-        if (sample.contains("dz")) child.dz = read_float(sample["dz"], 0.0f);
+        if (sample.contains("px")) child.dx = read_float(sample["px"], 0.0f);
+        if (sample.contains("py")) child.dy = read_float(sample["py"], 0.0f);
+        if (sample.contains("pz")) child.dz = read_float(sample["pz"], 0.0f);
         if (sample.contains("degree")) {
             child.degree = read_float(sample["degree"], 0.0f);
-        } else if (sample.contains("rotation")) {
-            child.degree = read_float(sample["rotation"], 0.0f);
         }
         if (sample.contains("visible")) child.visible = read_bool(sample["visible"], child.visible);
-        child.has_data = true;
-    } else if (sample.is_array()) {
-        if (!sample.empty()) child.dx = static_cast<float>(read_int(sample[0], 0));
-        if (sample.size() > 1) child.dy = static_cast<float>(read_int(sample[1], 0));
-        if (sample.size() > 2 && sample[2].is_number()) {
-            child.dz = read_float(sample[2], 0.0f);
-            if (sample.size() > 3) child.degree = read_float(sample[3], 0.0f);
-            if (sample.size() > 4) child.visible = read_bool(sample[4], child.visible);
-        }
         child.has_data = true;
     }
     return child;
@@ -131,9 +120,9 @@ ChildFrameSample child_frame_from_json(const nlohmann::json& sample, int child_i
 nlohmann::json child_frame_to_json(const ChildFrameSample& frame) {
     const bool has_sample = frame.has_data;
     nlohmann::json sample = nlohmann::json::object();
-    sample["dx"] = has_sample ? static_cast<int>(std::lround(frame.dx)) : 0;
-    sample["dy"] = has_sample ? static_cast<int>(std::lround(frame.dy)) : 0;
-    sample["dz"] = has_sample ? static_cast<double>(frame.dz) : 0.0;
+    sample["px"] = has_sample ? static_cast<double>(frame.dx) : 0.0;
+    sample["py"] = has_sample ? static_cast<double>(frame.dy) : 0.0;
+    sample["pz"] = has_sample ? static_cast<double>(frame.dz) : 0.0;
     sample["degree"] = has_sample ? static_cast<double>(frame.degree) : 0.0;
     sample["visible"] = has_sample ? frame.visible : false;
     return sample;

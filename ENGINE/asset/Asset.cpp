@@ -515,10 +515,18 @@ void Asset::update() {
                             compute_parent_attachment_scale(),
                             parent->flipped
                         };
+                        // Get parent height for percentage conversion
+                        float parent_height = static_cast<float>(parent->cached_h);
+                        if (parent_height <= 0.0f && parent->info) {
+                            parent_height = static_cast<float>(parent->info->original_canvas_height);
+                        }
+                        if (parent_height <= 0.0f) parent_height = 1.0f;
+
+                        // Convert percentage offsets to world displacement
                         const animation_update::child_3d::Child3DDisplacement displacement{
-                            static_cast<float>(child_frame->dx),
-                            static_cast<float>(child_frame->dy),
-                            static_cast<float>(child_frame->dz)
+                            child_frame->offset.px * parent_height,
+                            child_frame->offset.py * parent_height,
+                            child_frame->offset.pz * parent_height
                         };
                         const auto world_pos_3d = animation_update::child_3d::calculate_child_world_position(
                             parent_state, displacement);

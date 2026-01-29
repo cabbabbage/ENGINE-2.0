@@ -13,11 +13,14 @@ class DMTextBox;
 
 namespace devmode::frame_editors {
 
-// How the Z value is displayed and interpreted in the textbox
-enum class ZDisplayMode {
-    RawDelta,    // Display raw Z value as integer (for movement mode)
+// How coordinate values are displayed and interpreted in textboxes
+enum class CoordinateDisplayMode {
+    RawDelta,    // Display raw value as integer (for movement mode)
     Percentage   // Display as percentage 0.0-1.0 of parent height (for children, hit/attack geo)
 };
+
+// Backwards compatibility alias
+using ZDisplayMode = CoordinateDisplayMode;
 
 class Point3DEditor {
 public:
@@ -43,11 +46,17 @@ public:
     void set_parent_height(float height_px);
     float get_parent_height() const { return parent_height_px_; }
 
+    // Set how X/Y values are displayed and interpreted
+    // RawDelta: X/Y are raw delta values (integers) - for movement mode (default)
+    // Percentage: X/Y are percentages (floats 0.0-1.0) of parent height - for children, hit/attack geo
+    void set_xy_display_mode(CoordinateDisplayMode mode) { xy_display_mode_ = mode; }
+    CoordinateDisplayMode get_xy_display_mode() const { return xy_display_mode_; }
+
     // Set how Z values are displayed and interpreted
     // RawDelta: Z is a raw delta value (like dx/dy) - for movement mode
     // Percentage: Z is a percentage (0.0-1.0) of parent height - for children, hit/attack geo
-    void set_z_display_mode(ZDisplayMode mode) { z_display_mode_ = mode; }
-    ZDisplayMode get_z_display_mode() const { return z_display_mode_; }
+    void set_z_display_mode(CoordinateDisplayMode mode) { z_display_mode_ = mode; }
+    CoordinateDisplayMode get_z_display_mode() const { return z_display_mode_; }
 
     // Axis enable/lock controls (e.g., to freeze depth in sync-child mode)
     void set_axis_enabled(AdjustmentAxis axis, bool enabled);
@@ -172,8 +181,9 @@ private:
 
     int grid_resolution_ = 0;
     float grid_step_world_ = 1.0f;
-    float parent_height_px_ = 0.0f;  // Parent asset height for Z percent calculations
-    ZDisplayMode z_display_mode_ = ZDisplayMode::RawDelta;  // How Z is displayed/interpreted
+    float parent_height_px_ = 0.0f;  // Parent asset height for percent calculations
+    CoordinateDisplayMode xy_display_mode_ = CoordinateDisplayMode::RawDelta;  // How X/Y are displayed/interpreted
+    CoordinateDisplayMode z_display_mode_ = CoordinateDisplayMode::RawDelta;  // How Z is displayed/interpreted
 
     // Axis configuration (enabled/locked values)
     std::array<bool, 3> axis_enabled_{{true, true, true}};

@@ -545,6 +545,7 @@ void AnimationRuntime::advance_child_frames(float dt) {
     parent_state.scale = compute_attachment_scale();
     parent_state.flipped = self_->flipped;
     parent_state.world_z = parent_world_z();
+    parent_state.height = static_cast<float>(self_->cached_h);
     parent_state.animation_id = self_->current_animation;
     animation_update::child_attachments::advance_frames(self_->animation_children_, parent_state, dt);
 
@@ -641,6 +642,7 @@ void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFr
     parent_state.scale = compute_attachment_scale();
     parent_state.flipped = self_->flipped;
     parent_state.world_z = parent_world_z();
+    parent_state.height = static_cast<float>(self_->cached_h);
     parent_state.animation_id = self_->current_animation;
     const int parent_frame_index = frame ? frame->frame_index : -1;
     const float parent_frame_interval = 1.0f / static_cast<float>(kBaseAnimationFps);

@@ -26,7 +26,7 @@ bool resolve_asset_pos(const Asset* asset, long long& x, long long& y) {
     }
     vibble::grid::Grid& grid = vibble::grid::global_grid();
     const int          resolution = vibble::grid::clamp_resolution(asset->grid_resolution);
-    SDL_Point          snapped    = grid.snap_to_vertex(asset->pos, resolution);
+    SDL_Point          snapped    = grid.snap_to_vertex(asset->world_point(), resolution);
     x = static_cast<long long>(snapped.x);
     y = static_cast<long long>(snapped.y);
     return true;
@@ -39,7 +39,7 @@ bool Range::xy(const Asset* a, double& x, double& y) {
     if (!a) return false;
     vibble::grid::Grid& grid = vibble::grid::global_grid();
     const int          resolution = vibble::grid::clamp_resolution(a->grid_resolution);
-    SDL_Point          snapped    = grid.snap_to_vertex(a->pos, resolution);
+    SDL_Point          snapped    = grid.snap_to_vertex(a->world_point(), resolution);
     x = static_cast<double>(snapped.x);
     y = static_cast<double>(snapped.y);
     return true;
@@ -176,7 +176,7 @@ void Range::get_in_range(const SDL_Point& center,
     for (Asset* a : candidates) {
         if (!a) continue;
         const int       resolution = vibble::grid::clamp_resolution(a->grid_resolution);
-        SDL_Point       snapped    = grid.snap_to_vertex(a->pos, resolution);
+        SDL_Point       snapped    = grid.snap_to_vertex(a->world_point(), resolution);
         const long long ax         = static_cast<long long>(snapped.x);
         const long long ay         = static_cast<long long>(snapped.y);
         const long long dx = ax - cx;

@@ -33,7 +33,7 @@ SDL_Point world_point_for_asset(const Asset* asset) {
     if (!asset) {
         return SDL_Point{0, 0};
     }
-    return SDL_Point{asset->pos.x, asset->pos.y};
+    return SDL_Point{asset->world_x(), asset->world_y()};
 }
 
 template <typename PointPtr>
@@ -278,6 +278,7 @@ std::unique_ptr<Asset> WorldGrid::detach_asset_from_grid_point(Asset* a, GridPoi
     if (clear_mapping) {
         asset_to_key_.erase(a);
     }
+    a->pos_ = nullptr;
     a->clear_grid_id();
     SDL_assert(point.occupants.empty() || point.has_assets_or_active_children());
     const bool has_after = point.has_assets_or_active_children();
@@ -606,6 +607,7 @@ void WorldGrid::bind_asset_to_point(Asset* a, GridPoint& point) {
     if (!a) {
         return;
     }
+    a->pos_ = &point;
     GridKey key{point.world_x(), point.world_y(), point.world_z(), point.resolution_layer()};
     asset_to_key_[a] = key;
     a->clear_grid_id();

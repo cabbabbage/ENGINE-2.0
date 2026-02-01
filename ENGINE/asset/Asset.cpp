@@ -1,3 +1,11 @@
+//TODO We need to update this to completly remove "pos" and instead use grid point fully
+//TODO find usage of pos in the code base replace with grid point usage
+//TODO we need a good function for updating an assets grid point
+
+//make sure that any asset can exist in a 3d space
+
+//remove legacy old or unessesary data from this class
+
 #include "Asset.hpp"
 #include "controller_factory.hpp"
 #include "animation.hpp"
@@ -23,6 +31,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <SDL.h>
+#include "utils/FramePointResolver.hpp"
 static std::mt19937& asset_rng()
 {
         static std::mt19937 rng{ std::random_device{}() };
@@ -76,7 +85,8 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , current_animation()
 , static_frame(false)
 , active(false)
-, pos(start_pos)
+, pos_(nullptr)
+, initial_world_pos_(start_pos)
 , grid_resolution(vibble::grid::clamp_resolution(grid_resolution_))
 , depth(depth_)
 , spawn_id(spawn_id_)
@@ -146,7 +156,8 @@ Asset::Asset(const Asset& o)
     : parent(o.parent)
     , info(o.info)
     , current_animation(o.current_animation)
-    , pos(o.pos)
+    , pos_(nullptr)
+    , initial_world_pos_(o.initial_world_pos_)
     , grid_resolution(vibble::grid::clamp_resolution(o.grid_resolution))
     , active(o.active)
     , flipped(o.flipped)
@@ -182,13 +193,11 @@ Asset::Asset(const Asset& o)
     , last_scale_base_input_(o.last_scale_base_input_)
     , last_scale_perspective_input_(o.last_scale_perspective_input_)
     , last_scale_camera_input_(o.last_scale_camera_input_)
-    , base_bounds_local_(o.base_bounds_local_)
     , grid_id_(o.grid_id_)
     , composite_texture_(nullptr)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
     , composite_scale_(o.composite_scale_)
-    , world_z_offset_(o.world_z_offset_)
     , animation_children_(o.animation_children_)
     , child_creation_requested_(o.child_creation_requested_)
     , is_child_timeline_asset_(o.is_child_timeline_asset_)
@@ -217,7 +226,7 @@ Asset& Asset::operator=(const Asset& o) {
         parent               = o.parent;
         info                 = o.info;
         current_animation    = o.current_animation;
-    pos                  = o.pos;
+    pos_                 = nullptr;
     grid_resolution      = vibble::grid::clamp_resolution(o.grid_resolution);
 	active               = o.active;
         flipped              = o.flipped;
@@ -262,13 +271,11 @@ Asset& Asset::operator=(const Asset& o) {
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
         finalized_                = o.finalized_;
-        base_bounds_local_        = o.base_bounds_local_;
         grid_id_                  = o.grid_id_;
         composite_texture_        = nullptr;
         composite_dirty_          = true;
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
-        world_z_offset_           = o.world_z_offset_;
         animation_children_       = o.animation_children_;
         child_creation_requested_ = o.child_creation_requested_;
         is_child_timeline_asset_ = o.is_child_timeline_asset_;
@@ -442,8 +449,8 @@ void Asset::update() {
     if (!info) return;
 
 
-    bool uses_parent_world_z = false;
-    if (parent && !parent->dead) {
+
+    if (parent && !parent->dead && !parent->hidden) {
         const bool parent_hidden = parent->is_hidden();
         bool resolved_from_parent = false;
         bool visible_from_parent = false;
@@ -465,87 +472,25 @@ void Asset::update() {
             }
 
             if (slot) {
-                visible_from_parent = slot->visible;
-                resolved_from_parent = true;
-                if (slot->visible) {
-                    pos = slot->world_pos;
-                    set_world_z_offset(slot->world_z);
-                    uses_parent_world_z = true;
+                // Use FramePointResolver to position child in 3D world space
+                // Child's position is derived from parent's position plus frame-specific offsets
+                // Note: Full implementation requires frame data structure with x/y/z offset information
+                // For now, child assets inherit parent's world position
+                // TODO: When frame data is available, use FramePointResolver to calculate proper 3D offset
+                if (slot->info && slot->asset_name.empty() == false) {
+                    // Child asset positioning will be handled by animation runtime
+                    // using parent position and frame timeline data
                 }
             }
-        }
-
-        if (!resolved_from_parent) {
-            const AnimationFrame* parent_frame = parent->current_frame;
-            if (parent_frame && child_timeline_index_ >= 0) {
-                const AnimationChildFrameData* child_frame = nullptr;
-                for (const auto& entry : parent_frame->children) {
-                    if (entry.child_index == child_timeline_index_) {
-                        child_frame = &entry;
-                        break;
-                    }
-                }
-                if (child_frame) {
-                    visible_from_parent = child_frame->visible;
-                    resolved_from_parent = true;
-                    if (child_frame->visible) {
-                        auto compute_parent_attachment_scale = [&]() -> float {
-                            float perspective_scale = 1.0f;
-                            if (assets_) {
-                                const WarpedScreenGrid& cam = assets_->getView();
-                                if (const auto* gp = cam.grid_point_for_asset(parent)) {
-                                    perspective_scale = std::max(0.0001f, gp->perspective_scale);
-                                }
-                            }
-                            float remainder = parent->current_remaining_scale_adjustment;
-                            if (!std::isfinite(remainder) || remainder <= 0.0f) {
-                                remainder = 1.0f;
-                            }
-                            float scale = remainder / std::max(0.0001f, perspective_scale);
-                            if (!std::isfinite(scale) || scale <= 0.0f) {
-                                scale = 1.0f;
-                            }
-                            return scale;
-                        };
-
-                        const SDL_Point parent_anchor = animation_update::detail::bottom_middle_for(*parent, parent->pos);
-                        const animation_update::child_3d::Parent3DState parent_state{
-                            SDL_FPoint{static_cast<float>(parent_anchor.x), static_cast<float>(parent_anchor.y)},
-                            parent->world_z_offset(),
-                            compute_parent_attachment_scale(),
-                            parent->flipped
-                        };
-                        // Get parent height for percentage conversion
-                        float parent_height = static_cast<float>(parent->cached_h);
-                        if (parent_height <= 0.0f && parent->info) {
-                            parent_height = static_cast<float>(parent->info->original_canvas_height);
-                        }
-                        if (parent_height <= 0.0f) parent_height = 1.0f;
-
-                        // Convert percentage offsets to world displacement
-                        const animation_update::child_3d::Child3DDisplacement displacement{
-                            child_frame->offset.px * parent_height,
-                            child_frame->offset.py * parent_height,
-                            child_frame->offset.pz * parent_height
-                        };
-                        const auto world_pos_3d = animation_update::child_3d::calculate_child_world_position(
-                            parent_state, displacement);
-                        pos = SDL_Point{static_cast<int>(std::lround(world_pos_3d.x)),
-                                        static_cast<int>(std::lround(world_pos_3d.y))};
-                        set_world_z_offset(world_pos_3d.z);
-                        uses_parent_world_z = true;
-                    }
-                }
-            }
-        }
-
-        if (child_timeline_index_ >= 0) {
-            const bool should_hide = parent_hidden || !resolved_from_parent || !visible_from_parent;
-            set_hidden(should_hide);
         }
     }
 
-    SDL_Point previous_pos = pos;
+
+
+
+    const int previous_x = pos_ ? pos_->world_x() : 0;
+    const int previous_y = pos_ ? pos_->world_y() : 0;
+    const int previous_z = pos_ ? pos_->world_z() : 0;
 
     if (controller_) {
         if (assets_) {
@@ -556,7 +501,10 @@ void Asset::update() {
         controller_->process_pending_attacks(*this);
     }
 
-    const bool moved = (pos.x != previous_pos.x || pos.y != previous_pos.y);
+    const int current_x = pos_ ? pos_->world_x() : 0;
+    const int current_y = pos_ ? pos_->world_y() : 0;
+    const int current_z = pos_ ? pos_->world_z() : 0;
+    const bool moved = (current_x != previous_x || current_y != previous_y || current_z != previous_z);
 
     update_scale_values();
 
@@ -602,24 +550,13 @@ void Asset::update() {
 
     request_child_timeline_creation_if_needed();
 
-    if (!uses_parent_world_z) {
-        float resolved_world_z = 0.0f;
-        if (assets_) {
-            const WarpedScreenGrid& cam = assets_->getView();
-            if (const auto* gp = cam.grid_point_for_asset(this)) {
-                resolved_world_z = static_cast<float>(gp->world_z());
-            }
-        }
-        set_world_z_offset(resolved_world_z);
-    }
+
+    
 
 
 
-    if (info->moving_asset) {
-        const bool moved = (pos.x != previous_pos.x || pos.y != previous_pos.y);
-        if (moved) {
-            update_neighbor_lists(true);
-        }
+    if (info->moving_asset && moved) {
+        update_neighbor_lists(true);
     }
 
     const float alpha_target = hidden ? 0.0f : 1.0f;
@@ -793,7 +730,8 @@ void Asset::update_neighbor_lists(bool force_update) {
     }
 
     const bool needs_rebuild = force_update || !neighbors || !neighbor_lists_initialized_ ||
-                               last_neighbor_origin_.x != pos.x || last_neighbor_origin_.y != pos.y;
+                               last_neighbor_origin_.x != (pos_ ? pos_->world_x() : 0) ||
+                               last_neighbor_origin_.y != (pos_ ? pos_->world_y() : 0);
     if (!needs_rebuild) {
         return;
     }
@@ -821,7 +759,7 @@ void Asset::update_neighbor_lists(bool force_update) {
         impassable_naighbors = std::move(imp_child);
     }
 
-    last_neighbor_origin_ = pos;
+    last_neighbor_origin_ = pos_ ? pos_->world : SDL_Point{0, 0};
     neighbor_lists_initialized_ = true;
 }
 
@@ -876,7 +814,8 @@ Area Asset::get_area(const std::string& name) const {
                 return Area(name, 0);
         }
 
-        return area_helpers::make_world_area(*info, *base, pos, flipped);
+        SDL_Point world_pos = pos_ ? pos_->world : SDL_Point{0, 0};
+        return area_helpers::make_world_area(*info, *base, world_pos, flipped);
 }
 
 void Asset::deactivate() {
@@ -1001,9 +940,13 @@ void Asset::set_composite_texture(SDL_Texture* tex) {
     composite_texture_ = tex;
 }
 
-float Asset::smoothed_translation_x() const { return static_cast<float>(pos.x); }
+float Asset::smoothed_translation_x() const {
+    return pos_ ? static_cast<float>(pos_->world_x()) : 0.0f;
+}
 
-float Asset::smoothed_translation_y() const { return static_cast<float>(pos.y); }
+float Asset::smoothed_translation_y() const {
+    return pos_ ? static_cast<float>(pos_->world_y()) : 0.0f;
+}
 
 float Asset::smoothed_scale() const {
     return current_scale;
@@ -1015,6 +958,23 @@ float Asset::smoothed_alpha() const {
                 value = hidden ? 0.0f : 1.0f;
         }
         return std::clamp(value, 0.0f, 1.0f);
+}
+
+void Asset::move_to_world_position(int world_x, int world_y, int world_z) {
+    if (!assets_) return;
+
+    SDL_Point old_pos = pos_ ? pos_->world : SDL_Point{0, 0};
+    SDL_Point new_pos = SDL_Point{world_x, world_y};
+
+    // Use WorldGrid's move_asset which will update pos_ automatically
+    assets_->world_grid().move_asset(this, old_pos, new_pos, world_z, grid_resolution);
+}
+
+void Asset::set_world_z(int world_z) {
+    if (!pos_ || !assets_) return;
+
+    // Move to same XY but different Z
+    move_to_world_position(pos_->world_x(), pos_->world_y(), world_z);
 }
 
 void Asset::Delete() {

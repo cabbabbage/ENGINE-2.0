@@ -259,9 +259,9 @@ void MainApp::setup() {
                         }
                 }
 
-                int start_px = player_ptr ? player_ptr->pos.x
+                int start_px = player_ptr ? player_ptr->world_x()
                                           : static_cast<int>(loader_->getMapRadius());
-                int start_py = player_ptr ? player_ptr->pos.y
+                int start_py = player_ptr ? player_ptr->world_y()
                                           : static_cast<int>(loader_->getMapRadius());
 
                 AssetLibrary* active_library = loader_->getAssetLibrary();

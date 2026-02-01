@@ -188,7 +188,7 @@ std::vector<Asset*> AssetLoader::collectDistantAssets(int lock_threshold, int re
                     continue;
             }
                         ++considered;
-                        SDL_Point asset_point{asset->pos.x, asset->pos.y};
+                        SDL_Point asset_point{asset->world_x(), asset->world_y()};
 
                         Room* owning_room = room;
                         const std::string& owner_name = asset->owning_room_name();

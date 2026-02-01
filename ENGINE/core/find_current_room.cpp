@@ -29,8 +29,8 @@ Room* CurrentRoomFinder::getCurrentRoom() const {
         return nullptr;
     }
 
-    const int px = player->pos.x;
-    const int py = player->pos.y;
+    const int px = player->world_x();
+    const int py = player->world_y();
     auto contains_player = [&](Room* room) -> bool {
         return room &&
                room->room_area &&

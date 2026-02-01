@@ -81,7 +81,7 @@ static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* as
     }
     step = std::max(1, step);
 
-    const SDL_Point world_pos{ asset->pos.x, asset->pos.y };
+    const SDL_Point world_pos{ asset->world_x(), asset->world_y() };
     const int base_w = std::max(1, asset->info->original_canvas_width);
     const int base_h = std::max(1, asset->info->original_canvas_height);
     double scale = 1.0;
@@ -140,8 +140,8 @@ static std::optional<SDL_Rect> compute_sprite_world_rect(const Asset* asset) {
     const int scaled_h = std::max(1, static_cast<int>(std::lround(static_cast<double>(base_h) * scale)));
 
     SDL_Rect rect{};
-    rect.x = asset->pos.x - (scaled_w / 2);
-    rect.y = asset->pos.y - scaled_h;
+    rect.x = asset->world_x() - (scaled_w / 2);
+    rect.y = asset->world_y() - scaled_h;
     rect.w = scaled_w;
     rect.h = scaled_h;
     return rect.w > 0 && rect.h > 0 ? std::optional<SDL_Rect>(rect) : std::nullopt;

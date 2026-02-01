@@ -27,8 +27,8 @@ void FrogController::update(const Input&) {
     }
 
     constexpr int kFleeThresholdPx = 64;
-    const int distance_sq = (self_->pos.x - player->pos.x) * (self_->pos.x - player->pos.x) +
-                            (self_->pos.y - player->pos.y) * (self_->pos.y - player->pos.y);
+    const int distance_sq = (self_->world_x() - player->world_x()) * (self_->world_x() - player->world_x()) +
+                            (self_->world_y() - player->world_y()) * (self_->world_y() - player->world_y());
 
     if (distance_sq <= (kFleeThresholdPx * kFleeThresholdPx)) {
         if (!self_->needs_target) {

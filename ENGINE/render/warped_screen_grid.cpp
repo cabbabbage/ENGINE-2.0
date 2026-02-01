@@ -726,8 +726,8 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     if (player && cur && cur->room_area && neigh && neigh->room_area && cur != neigh) {
         auto [ax, ay] = cur->room_area->get_center();
         auto [bx, by] = neigh->room_area->get_center();
-        const double pax = double(player->pos.x);
-        const double pay = double(player->pos.y);
+        const double pax = double(player->world_x());
+        const double pay = double(player->world_y());
         const double vx = double(bx - ax);
         const double vy = double(by - ay);
         const double wx = double(pax - ax);
@@ -749,7 +749,7 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     if (dev_mode && focus_override_active) {
         set_screen_center(camera_.state().focus_override);
     } else if (player) {
-        set_screen_center(SDL_Point{ player->pos.x, player->pos.y }, false);
+        set_screen_center(SDL_Point{ player->world_x(), player->world_y() }, false);
     } else if (cur && cur->room_area) {
         set_screen_center(cur->room_area->get_center());
     }
@@ -1271,10 +1271,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         float center_x = asset->smoothed_translation_x();
         float bottom = asset->smoothed_translation_y();
         if (!std::isfinite(center_x)) {
-            center_x = static_cast<float>(asset->pos.x);
+            center_x = static_cast<float>(asset->world_x());
         }
         if (!std::isfinite(bottom)) {
-            bottom = static_cast<float>(asset->pos.y);
+            bottom = static_cast<float>(asset->world_y());
         }
 
         return Bounds2D{
@@ -1307,10 +1307,10 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         float center_x = asset->smoothed_translation_x();
         float center_y = asset->smoothed_translation_y();
         if (!std::isfinite(center_x)) {
-            center_x = static_cast<float>(asset->pos.x);
+            center_x = static_cast<float>(asset->world_x());
         }
         if (!std::isfinite(center_y)) {
-            center_y = static_cast<float>(asset->pos.y);
+            center_y = static_cast<float>(asset->world_y());
         }
         return point_inside_frustum(static_cast<double>(center_x), static_cast<double>(center_y), asset_z);
     };
@@ -1717,5 +1717,5 @@ bool WarpedScreenGrid::is_height_animating() const {
 SDL_Point WarpedScreenGrid::pan_and_height_to_asset(double pan, double height, const Asset* asset) const {
     if (!asset) return {0, 0};
     // Adjust asset position by pan and height
-    return {asset->pos.x + static_cast<int>(pan), asset->pos.y + static_cast<int>(height)};
+    return {asset->world_x() + static_cast<int>(pan), asset->world_y() + static_cast<int>(height)};
 }

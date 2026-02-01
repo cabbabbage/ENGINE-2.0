@@ -113,7 +113,7 @@ std::vector<SDL_Point> PathSanitizer::sanitize(const Asset& self,
     }
 
     const auto collision_areas = gather_collision_areas(self);
-    const SDL_Point origin     = self.pos;
+    const SDL_Point origin     = self.world_point();
     const int       thresh_sq  = visited_thresh_px * visited_thresh_px;
     const Assets*   assets     = self.get_assets();
 

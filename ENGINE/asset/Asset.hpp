@@ -1,3 +1,6 @@
+//TODO we need to implement a public height() that should return the current height in screen pixles of our asset
+//we need to add a public method to return the current grid point of the asset
+//TODO remove unessesary data for animation child attachment
 #ifndef ASSET_HPP
 #define ASSET_HPP
 
@@ -15,6 +18,7 @@
 
 #include "utils/area.hpp"
 #include "asset_info.hpp"
+#include "world/grid_point.hpp"
 
 #include "utils/transform_smoothing.hpp"
 
@@ -31,6 +35,10 @@ class Animation;
 class AssetInfoUI;
 class RenderAsset;
 class AssetList;
+
+namespace world { class WorldGrid; }
+
+using world::GridPoint;
 
 struct RenderObject {
     SDL_Texture* texture = nullptr;
@@ -81,8 +89,8 @@ class Asset {
         const Animation* animation = nullptr;
         const AnimationFrame* current_frame = nullptr;
         float frame_progress = 0.0f;
-        SDL_Point world_pos{0, 0};
-        float world_z = 0.0f;
+
+
         float rotation_degrees = 0.0f;
         bool visible = false;
         int cached_w = 0;
@@ -94,14 +102,8 @@ class Asset {
         bool timeline_active = false;
         int timeline_frame_cursor = 0;
         float timeline_frame_progress = 0.0f;
-};
-
-    struct BoundsSquare {
-        float center_x = 0.0f;
-        float center_y = 0.0f;
-        float half_size = 0.0f;
-
-        bool valid() const { return std::isfinite(half_size) && half_size > 0.0f; }
+        SDL_Point world_pos = {0, 0};
+        float world_z = 0.0f;
 };
 
     Area get_area(const std::string& name) const;
@@ -124,6 +126,16 @@ class Asset {
 
     bool is_finalized() const { return finalized_; }
     void on_scale_factor_changed();
+
+    // 3D Grid Position accessors
+    GridPoint* grid_point() const { return pos_; }
+    int world_x() const { return pos_ ? pos_->world_x() : initial_world_pos_.x; }
+    int world_y() const { return pos_ ? pos_->world_y() : initial_world_pos_.y; }
+    int world_z() const { return pos_ ? pos_->world_z() : 0; }
+    SDL_Point world_point() const { return SDL_Point{world_x(), world_y()}; }
+    int height() const { return cached_h; }
+    void move_to_world_position(int world_x, int world_y, int world_z = 0);
+    void set_world_z(int world_z);
 
     void update();
     SDL_Texture* get_current_frame() const;
@@ -214,11 +226,9 @@ class Asset {
     float smoothed_translation_y() const;
     float smoothed_scale() const;
     float smoothed_alpha() const;
-    const BoundsSquare& base_bounds_local() const { return base_bounds_local_; }
     Asset* parent = nullptr;
     std::shared_ptr<AssetInfo> info;
     std::string current_animation;
-    SDL_Point pos{0, 0};
     int grid_resolution = 0;
     bool active = false;
     bool flipped = false;
@@ -274,11 +284,14 @@ private:
     friend class FrameEditorSession;
     friend class Assets;
     friend class CompositeAssetRenderer;
+    friend class world::WorldGrid;
     WarpedScreenGrid* window = nullptr;
     bool highlighted = false;
     bool hidden = false;
     bool selected = false;
     bool merged_from_neighbors_ = false;
+    GridPoint* pos_ = nullptr; // Non-owning pointer to GridPoint in WorldGrid; set by WorldGrid on registration
+    SDL_Point initial_world_pos_{0, 0}; // Spawn position, used before registration with WorldGrid
     void set_flip();
 
     float frame_progress = 0.0f;
@@ -302,7 +315,6 @@ private:
 
     std::uint64_t downscale_cache_ready_revision_ = 0;
 
-    BoundsSquare base_bounds_local_{};
     SDL_Rect     composite_bounds_local_{0, 0, 0, 0};
 
     SDL_Texture* last_scaled_texture_      = nullptr;

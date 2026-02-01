@@ -23,7 +23,7 @@ void spiderController::update(const Input&) {
         return;
     }
 
-    int distance_sq = (self_->pos.x - player->pos.x) * (self_->pos.x - player->pos.x) + (self_->pos.y - player->pos.y) * (self_->pos.y - player->pos.y);
+    int distance_sq = (self_->world_x() - player->world_x()) * (self_->world_x() - player->world_x()) + (self_->world_y() - player->world_y()) * (self_->world_y() - player->world_y());
 
     if (distance_sq <= 700) {
         if (self_->info && self_->info->animations.count("explosion")) {
@@ -31,7 +31,7 @@ void spiderController::update(const Input&) {
         }
     }
     else if (self_->needs_target) {
-        self_->anim_->auto_move(player->pos);
+        self_->anim_->auto_move(player->world_point());
     }
 
     attack_helpers::send_attack_if_hit(self_, player);

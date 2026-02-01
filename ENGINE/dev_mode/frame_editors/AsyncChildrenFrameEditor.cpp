@@ -12,7 +12,7 @@
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/frame_editors/shared/SnapUtils.hpp"
-#include "dev_mode/frame_editors/shared/FramePointResolver.hpp"
+#include "utils/FramePointResolver.hpp"
 
 #include "render/warped_screen_grid.hpp"
 
@@ -102,6 +102,8 @@ void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
 
             float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
             float dy_world = (snapped_world.y - static_cast<float>(anchor.y)) / scale;
+            float dx_percent = resolver.to_percent_xy(dx_world);
+            float dy_percent = resolver.to_percent_xy(dy_world);
             float dz_percent = resolver.to_percent(snapped_world_z);
 
             ensure_async_frame_capacity(selected_child_index_, selected_child_frame_index_);
@@ -115,8 +117,8 @@ void AsyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             sample.has_data = true;
             sample.visible = true;
 
-            sample.dx = flipped ? -dx_world : dx_world;
-            sample.dy = dy_world;
+            sample.dx = flipped ? -dx_percent : dx_percent;
+            sample.dy = dy_percent;
             sample.dz = dz_percent;
 
             data_dirty_ = true;
@@ -537,7 +539,7 @@ SDL_Point AsyncChildrenFrameEditor::asset_anchor_world() const {
     if (!context_.target) {
         return SDL_Point{0, 0};
     }
-    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->pos);
+    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_point());
 }
 
 AsyncChildrenFrameEditor::ChildWorldPose AsyncChildrenFrameEditor::child_world_pose(int child_index) const {
@@ -548,10 +550,11 @@ AsyncChildrenFrameEditor::ChildWorldPose AsyncChildrenFrameEditor::child_world_p
     }
     FramePointResolver resolver(context_.target);
     const float scale = attachment_scale();
-    const float dx = sample.dx * scale;
-    const float dy = sample.dy * scale;
-    const float world_dx = context_.target->flipped ? -dx : dx;
-    pose.pos = SDL_FPoint{world_dx, dy};
+    // Convert percent displacements back to world coordinates
+    const float dx_world = resolver.to_world_xy(sample.dx) * scale;
+    const float dy_world = resolver.to_world_xy(sample.dy) * scale;
+    const float world_dx = context_.target->flipped ? -dx_world : dx_world;
+    pose.pos = SDL_FPoint{world_dx, dy_world};
     pose.z = resolver.to_world_z(sample.dz);
     return pose;
 }
@@ -741,6 +744,8 @@ void AsyncChildrenFrameEditor::apply_preview() {
     parent_state.base_position = animation_update::detail::bottom_middle_for(*context_.target, render_pos);
     parent_state.scale = context_.target->smoothed_scale();
     parent_state.flipped = context_.target->flipped;
+    
+    //TODO we can replace this with 
     parent_state.world_z = resolver.base_world_z();
     parent_state.height = resolver.parent_height_px();
     parent_state.animation_id = context_.animation_id;

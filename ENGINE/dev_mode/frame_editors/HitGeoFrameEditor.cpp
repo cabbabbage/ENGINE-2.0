@@ -13,7 +13,7 @@
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/frame_editors/shared/SnapUtils.hpp"
-#include "dev_mode/frame_editors/shared/FramePointResolver.hpp"
+#include "utils/FramePointResolver.hpp"
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
 
@@ -98,8 +98,10 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             SDL_Point anchor = asset_anchor_world();
             float scale = asset_local_scale();
             FramePointResolver resolver(context_.target);
-            box->center_x = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
-            box->center_y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
+            float center_x_local = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            float center_y_local = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
+            box->center_x = resolver.to_percent_xy(center_x_local);
+            box->center_y = resolver.to_percent_xy(center_y_local);
             box->center_z = resolver.to_percent(snapped_world_z);
 
             persist_changes();
@@ -123,8 +125,10 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             float scale = asset_local_scale();
 
             FramePointResolver resolver(context_.target);
-            box->center_x = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
-            box->center_y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
+            float center_x_local = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            float center_y_local = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
+            box->center_x = resolver.to_percent_xy(center_x_local);
+            box->center_y = resolver.to_percent_xy(center_y_local);
             box->center_z = resolver.to_percent(snapped_world_z);
 
             persist_changes();
@@ -538,6 +542,7 @@ bool HitGeoFrameEditor::build_hitbox_visual(const animation_update::FrameHitGeom
     const float scale = asset_local_scale();
     if (scale <= 0.0001f) return false;
 
+    FramePointResolver resolver(context_.target);
     const float cos_r = std::cos(box.rotation_degrees * static_cast<float>(M_PI) / 180.0f);
     const float sin_r = std::sin(box.rotation_degrees * static_cast<float>(M_PI) / 180.0f);
     auto rotate_vec = [&](SDL_FPoint v) -> SDL_FPoint {
@@ -548,7 +553,8 @@ bool HitGeoFrameEditor::build_hitbox_visual(const animation_update::FrameHitGeom
         return cam.map_to_screen_f(world);
     };
 
-    SDL_FPoint center_local{box.center_x, box.center_y};
+    // Convert percent values back to local coordinates
+    SDL_FPoint center_local{resolver.to_world_xy(box.center_x), resolver.to_world_xy(box.center_y)};
     std::array<SDL_FPoint, 4> local_corners = {
         SDL_FPoint{-box.half_width, box.half_height},
         SDL_FPoint{box.half_width, box.half_height},
@@ -613,6 +619,7 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
     SDL_Point anchor = asset_anchor_world();
     const float scale = asset_local_scale();
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
+    FramePointResolver resolver(context_.target);
 
     for (std::size_t i = 0; i < frames_.size(); ++i) {
         const auto& f = frames_[i];
@@ -624,8 +631,11 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
             }
         }
         if (box) {
-            SDL_FPoint center_world{static_cast<float>(anchor.x) + box->center_x * scale,
-                                   static_cast<float>(anchor.y) - box->center_y * scale};
+            // Convert percent values back to world coordinates
+            const float center_x_local = resolver.to_world_xy(box->center_x);
+            const float center_y_local = resolver.to_world_xy(box->center_y);
+            SDL_FPoint center_world{static_cast<float>(anchor.x) + center_x_local * scale,
+                                   static_cast<float>(anchor.y) - center_y_local * scale};
             SDL_FPoint center_screen = cam.map_to_screen_f(center_world);
 
             const bool is_current_frame = (static_cast<int>(i) == selected_index_);
@@ -647,7 +657,7 @@ SDL_Point HitGeoFrameEditor::asset_anchor_world() const {
     if (!context_.target) {
         return SDL_Point{0, 0};
     }
-    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->pos);
+    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_point());
 }
 
 float HitGeoFrameEditor::asset_local_scale() const {
@@ -707,9 +717,12 @@ void HitGeoFrameEditor::refresh_selection_state() {
     }
     SDL_Point anchor = asset_anchor_world();
     float scale = asset_local_scale();
+    // Convert percent values back to world coordinates
+    const float center_x_local = resolver.to_world_xy(box->center_x);
+    const float center_y_local = resolver.to_world_xy(box->center_y);
     SDL_FPoint world{
-        static_cast<float>(anchor.x) + box->center_x * scale,
-        static_cast<float>(anchor.y) - box->center_y * scale};
+        static_cast<float>(anchor.x) + center_x_local * scale,
+        static_cast<float>(anchor.y) - center_y_local * scale};
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint screen = cam.map_to_screen_f(world);
     selection_state_->world_pos = world;

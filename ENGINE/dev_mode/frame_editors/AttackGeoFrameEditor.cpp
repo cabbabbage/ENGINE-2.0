@@ -13,7 +13,7 @@
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/frame_editors/shared/SnapUtils.hpp"
-#include "dev_mode/frame_editors/shared/FramePointResolver.hpp"
+#include "utils/FramePointResolver.hpp"
 
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
@@ -91,21 +91,23 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
             SDL_FPoint local;
             local.x = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
             local.y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
+            float x_percent = resolver.to_percent_xy(local.x);
+            float y_percent = resolver.to_percent_xy(local.y);
             float z_percent = resolver.to_percent(snapped_world_z);
             switch (selected_handle_) {
                 case AttackHandle::Start:
-                    vec->start_x = local.x;
-                    vec->start_y = local.y;
+                    vec->start_x = x_percent;
+                    vec->start_y = y_percent;
                     vec->start_z = z_percent;
                     break;
                 case AttackHandle::Control:
-                    vec->control_x = local.x;
-                    vec->control_y = local.y;
+                    vec->control_x = x_percent;
+                    vec->control_y = y_percent;
                     vec->control_z = z_percent;
                     break;
                 case AttackHandle::End:
-                    vec->end_x = local.x;
-                    vec->end_y = local.y;
+                    vec->end_x = x_percent;
+                    vec->end_y = y_percent;
                     vec->end_z = z_percent;
                     break;
                 default:
@@ -166,21 +168,23 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
             SDL_FPoint local;
             local.x = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
             local.y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
+            float x_percent = resolver.to_percent_xy(local.x);
+            float y_percent = resolver.to_percent_xy(local.y);
             float z_percent = resolver.to_percent(snapped_world_z);
             switch (selected_handle_) {
                 case AttackHandle::Start:
-                    vec->start_x = local.x;
-                    vec->start_y = local.y;
+                    vec->start_x = x_percent;
+                    vec->start_y = y_percent;
                     vec->start_z = z_percent;
                     break;
                 case AttackHandle::Control:
-                    vec->control_x = local.x;
-                    vec->control_y = local.y;
+                    vec->control_x = x_percent;
+                    vec->control_y = y_percent;
                     vec->control_z = z_percent;
                     break;
                 case AttackHandle::End:
-                    vec->end_x = local.x;
-                    vec->end_y = local.y;
+                    vec->end_x = x_percent;
+                    vec->end_y = y_percent;
                     vec->end_z = z_percent;
                     break;
                 default:
@@ -513,7 +517,11 @@ void AttackGeoFrameEditor::render_attack_geometry(SDL_Renderer* renderer) const 
     const float scale = asset_local_scale();
     if (scale <= 0.0001f) return;
 
-    auto to_screen = [&](float lx, float ly) -> SDL_FPoint {
+    FramePointResolver resolver(context_.target);
+    auto to_screen = [&](float lx_percent, float ly_percent) -> SDL_FPoint {
+        // Convert percent values to local world coordinates
+        const float lx = resolver.to_world_xy(lx_percent);
+        const float ly = resolver.to_world_xy(ly_percent);
         SDL_FPoint world{static_cast<float>(anchor.x) + lx * scale, static_cast<float>(anchor.y) - ly * scale};
         return cam.map_to_screen_f(world);
     };
@@ -737,7 +745,7 @@ SDL_Point AttackGeoFrameEditor::asset_anchor_world() const {
     if (!context_.target) {
         return SDL_Point{0, 0};
     }
-    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->pos);
+    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_point());
 }
 
 float AttackGeoFrameEditor::asset_local_scale() const {
@@ -825,9 +833,12 @@ void AttackGeoFrameEditor::refresh_selection_state() {
     }
     SDL_Point anchor = asset_anchor_world();
     const float base_z = resolver.base_world_z();
+    // Convert percent values back to world coordinates
+    const float local_x_world = resolver.to_world_xy(local_x) * asset_local_scale();
+    const float local_y_world = resolver.to_world_xy(local_y) * asset_local_scale();
     SDL_FPoint world{
-        static_cast<float>(anchor.x) + local_x * asset_local_scale(),
-        static_cast<float>(anchor.y) - local_y * asset_local_scale()
+        static_cast<float>(anchor.x) + local_x_world,
+        static_cast<float>(anchor.y) - local_y_world
     };
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint screen = cam.map_to_screen_f(world);

@@ -531,7 +531,7 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                 for (auto& asset_ptr : boundary_assets) {
                         Asset* asset = asset_ptr.get();
                         if (!asset) continue;
-                        Room* owner = room_index.find_owner(asset->pos);
+                        Room* owner = room_index.find_owner(asset->world_point());
                         if (owner) {
                                 asset->set_owning_room_name(owner->room_name);
                                 std::vector<std::unique_ptr<Asset>> wrapper;

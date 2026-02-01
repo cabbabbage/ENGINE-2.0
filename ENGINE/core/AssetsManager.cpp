@@ -115,10 +115,10 @@ bool compute_asset_world_bounds(const Asset* asset,
     const float width  = static_cast<float>(base_w) * scale_factor * camera_scale;
     const float height = static_cast<float>(base_h) * scale_factor * camera_scale;
     const float half_w = width * 0.5f;
-    const float bottom = static_cast<float>(asset->pos.y);
+    const float bottom = static_cast<float>(asset->world_y());
 
-    bounds.left   = static_cast<float>(asset->pos.x) - half_w;
-    bounds.right  = static_cast<float>(asset->pos.x) + half_w;
+    bounds.left   = static_cast<float>(asset->world_x()) - half_w;
+    bounds.right  = static_cast<float>(asset->world_x()) + half_w;
     bounds.bottom = bottom;
     bounds.top    = bottom - height;
     return true;
@@ -189,7 +189,7 @@ Assets::Assets(AssetLibrary& library,
 
     SDL_Point intro_center{screen_center_x, screen_center_y};
     if (player) {
-        intro_center = SDL_Point{player->pos.x, player->pos.y};
+        intro_center = SDL_Point{player->world_x(), player->world_y()};
     } else if (Room* room = intro_room) {
         if (room->room_area) {
             intro_center = room->room_area->get_center();
@@ -200,7 +200,7 @@ Assets::Assets(AssetLibrary& library,
     last_camera_scale_for_grid_ = camera_.get_scale();
     last_camera_pitch_for_grid_ = camera_.current_pitch_radians();
     if (player) {
-        last_known_player_pos_ = SDL_Point{player->pos.x, player->pos.y};
+        last_known_player_pos_ = SDL_Point{player->world_x(), player->world_y()};
         last_player_pos_valid_ = true;
     } else {
         last_player_pos_valid_ = false;
@@ -485,8 +485,8 @@ void Assets::update_audio_camera_metrics() {
     SDL_Point camera_focus = camera_.get_screen_center();
     auto update_audio_metrics = [&](Asset* asset) {
         if (!asset) return;
-        const float dx = static_cast<float>(asset->pos.x - camera_focus.x);
-        const float dy = static_cast<float>(asset->pos.y - camera_focus.y);
+        const float dx = static_cast<float>(asset->world_x() - camera_focus.x);
+        const float dy = static_cast<float>(asset->world_y() - camera_focus.y);
         asset->distance_from_camera = std::sqrt(dx * dx + dy * dy);
         asset->angle_from_camera = std::atan2(dy, dx);
 };
@@ -708,8 +708,8 @@ void Assets::update(const Input& input)
 
     dx = dy = 0;
 
-    int start_px = player ? player->pos.x : 0;
-    int start_py = player ? player->pos.y : 0;
+    int start_px = player ? player->world_x() : 0;
+    int start_py = player ? player->world_y() : 0;
 
     if (player) {
         player->active = true;
@@ -730,10 +730,10 @@ void Assets::update(const Input& input)
 
     bool player_moved = false;
     if (player) {
-        dx = player->pos.x - start_px;
-        dy = player->pos.y - start_py;
+        dx = player->world_x() - start_px;
+        dy = player->world_y() - start_py;
         const bool moved_during_update = (dx != 0 || dy != 0);
-        SDL_Point current_player_pos{player->pos.x, player->pos.y};
+        SDL_Point current_player_pos{player->world_x(), player->world_y()};
         const bool moved_since_last_frame =
             !last_player_pos_valid_ ||
             current_player_pos.x != last_known_player_pos_.x ||
@@ -747,7 +747,7 @@ void Assets::update(const Input& input)
 
             log_asset_movement(player,
                                SDL_Point{start_px, start_py},
-                               SDL_Point{player->pos.x, player->pos.y});
+                               SDL_Point{player->world_x(), player->world_y()});
         }
     } else {
         last_player_pos_valid_ = false;
@@ -757,7 +757,7 @@ void Assets::update(const Input& input)
 
     for (Asset* asset : non_player_update_buffer_) {
         if (!asset) continue;
-        SDL_Point previous_pos{asset->pos.x, asset->pos.y};
+        SDL_Point previous_pos{asset->world_x(), asset->world_y()};
         asset->active = true;
 
         if (dev_mode) {
@@ -772,10 +772,10 @@ void Assets::update(const Input& input)
         } else {
 
             asset->update();
-            if (previous_pos.x != asset->pos.x || previous_pos.y != asset->pos.y) {
+            if (previous_pos.x != asset->world_x() || previous_pos.y != asset->world_y()) {
                 log_asset_movement(asset,
                                    previous_pos,
-                                   SDL_Point{asset->pos.x, asset->pos.y});
+                                   SDL_Point{asset->world_x(), asset->world_y()});
             }
         }
     }
@@ -784,7 +784,7 @@ void Assets::update(const Input& input)
         for (const GridMovementCommand& cmd : movement_commands_buffer_) {
             if (!cmd.asset) continue;
             world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
-            cmd.asset->cache_grid_residency(SDL_Point{cmd.asset->pos.x, cmd.asset->pos.y});
+            cmd.asset->cache_grid_residency(SDL_Point{cmd.asset->world_x(), cmd.asset->world_y()});
         }
         movement_commands_buffer_.clear();
 
@@ -1311,7 +1311,7 @@ void Assets::request_child_timeline_creation(Asset* parent) {
 
         int depth = parent->depth;
         int grid_res = parent->grid_resolution;
-        auto uptr = std::make_unique<Asset>(info, spawn_area, parent->pos, depth, parent, std::string{}, std::string{"ChildTimeline"}, grid_res);
+        auto uptr = std::make_unique<Asset>(info, spawn_area, parent->world_point(), depth, parent, std::string{}, std::string{"ChildTimeline"}, grid_res);
         Asset* raw = uptr.get();
         if (!raw) {
             continue;
@@ -1499,8 +1499,8 @@ bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rec
     float world_x = asset->smoothed_translation_x();
     float world_y = asset->smoothed_translation_y();
     if (dev_mode) {
-        world_x = static_cast<float>(asset->pos.x);
-        world_y = static_cast<float>(asset->pos.y);
+        world_x = static_cast<float>(asset->world_x());
+        world_y = static_cast<float>(asset->world_y());
     }
 
     float asset_scale = asset->smoothed_scale();
@@ -1726,7 +1726,7 @@ std::optional<Asset::TilingInfo> Assets::compute_tiling_for_asset(const Asset* a
     }
     step = std::max(1, step);
 
-    const SDL_Point world_pos{ asset->pos.x, asset->pos.y };
+    const SDL_Point world_pos{ asset->world_x(), asset->world_y() };
     const int base_w = std::max(1, asset->info->original_canvas_width);
     const int base_h = std::max(1, asset->info->original_canvas_height);
     double scale = 1.0;
@@ -1829,7 +1829,7 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
             continue;
         }
         if (world_grid_.point_for_asset(asset)) {
-            asset->cache_grid_residency(SDL_Point{asset->pos.x, asset->pos.y});
+            asset->cache_grid_residency(SDL_Point{asset->world_x(), asset->world_y()});
         }
     }
 
@@ -2050,7 +2050,7 @@ void Assets::rebuild_active_from_screen_grid() {
         if (!asset) {
             return std::numeric_limits<double>::infinity();
         }
-        return anchor_world_y - static_cast<double>(asset->pos.y);
+        return anchor_world_y - static_cast<double>(asset->world_y());
     };
     auto depth_order = [&distance_from_anchor](Asset* lhs, Asset* rhs) {
         if (lhs == rhs) {

@@ -8,13 +8,13 @@
 #include <utility>
 
 #include "animation_update/animation_update.hpp"
-#include "dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp"
+
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/draw_utils.hpp"
 #include "dev_mode/dev_mode_utils.hpp"
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/frame_editors/shared/SnapUtils.hpp"
-#include "dev_mode/frame_editors/shared/FramePointResolver.hpp"
+#include "utils/FramePointResolver.hpp"
 
 #include "nlohmann/json.hpp"
 #include "render/warped_screen_grid.hpp"
@@ -656,7 +656,7 @@ SDL_Point MovementFrameEditor::asset_anchor_world() const {
     if (!context_.target) {
         return SDL_Point{0, 0};
     }
-    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->pos);
+    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_point());
 }
 
 float MovementFrameEditor::base_world_z() const {

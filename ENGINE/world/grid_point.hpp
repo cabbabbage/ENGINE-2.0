@@ -13,7 +13,7 @@ class Asset;
 
 namespace world {
 
-class Chunk;
+struct Chunk;
 
 using GridId = std::uint64_t;
 

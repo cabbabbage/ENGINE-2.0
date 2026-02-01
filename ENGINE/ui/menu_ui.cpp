@@ -292,8 +292,8 @@ void MenuUI::doRestart() {
                 for (Asset* candidate : all_assets) {
                     if (candidate && candidate->info && candidate->info->type == asset_types::player) { player_ptr = candidate; break; }
                 }
-                int start_px = player_ptr ? player_ptr->pos.x : static_cast<int>(loader_->getMapRadius());
-                int start_py = player_ptr ? player_ptr->pos.y : static_cast<int>(loader_->getMapRadius());
+                int start_px = player_ptr ? player_ptr->world_x() : static_cast<int>(loader_->getMapRadius());
+                int start_py = player_ptr ? player_ptr->world_y() : static_cast<int>(loader_->getMapRadius());
                 AssetLibrary* restart_library = loader_->getAssetLibrary();
                 if (!restart_library) {
                         throw std::runtime_error("Asset library unavailable during restart.");

@@ -241,7 +241,7 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
     float base_sh = static_cast<float>(base_h) * package_scale;
     if (base_sw <= 0.0f || base_sh <= 0.0f) return;
 
-    SDL_FPoint screen_pos = cam.map_to_screen(SDL_Point{target->pos.x, target->pos.y});
+    SDL_FPoint screen_pos = cam.map_to_screen(target->world_point());
     float distance_scale = 1.0f;
     float vertical_scale = 1.0f;
     if (auto* gp = cam.grid_point_for_asset(target)) {
@@ -258,7 +258,7 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
     int sh = std::max(1, static_cast<int>(std::round(final_visible_h)));
     if (sw <= 0 || sh <= 0) return;
 
-        SDL_Point world_point{ target->pos.x, target->pos.y };
+        SDL_Point world_point{ target->world_point().x, target->world_point().y };
         float center_x = screen_pos.x;
         if (assets) {
 

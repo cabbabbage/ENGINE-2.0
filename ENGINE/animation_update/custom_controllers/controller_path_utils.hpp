@@ -73,7 +73,7 @@ inline std::vector<SDL_Point> idle_path(const Asset* asset, int rest_ratio) {
         return relative;
     }
 
-    const SDL_Point origin = asset->pos;
+    const SDL_Point origin = asset->world_point();
     const int       radius = neighbor_radius(asset);
     if (radius <= 0) {
         relative.push_back(SDL_Point{ 0, 0 });
@@ -99,10 +99,10 @@ inline std::vector<SDL_Point> pursue_path(const Asset* asset, const Asset* targe
         return relative;
     }
 
-    const SDL_Point origin = asset->pos;
+    const SDL_Point origin = asset->world_point();
     const int       radius = neighbor_radius(asset);
 
-    SDL_Point desired = clamp_to_radius(origin, target->pos, radius);
+    SDL_Point desired = clamp_to_radius(origin, target->world_point(), radius);
     relative.push_back(SDL_Point{ desired.x - origin.x, desired.y - origin.y });
 
     return relative;
@@ -114,7 +114,7 @@ inline std::vector<SDL_Point> flee_path(const Asset* asset, const Asset* threat)
         return relative;
     }
 
-    const SDL_Point origin = asset->pos;
+    const SDL_Point origin = asset->world_point();
     const int       radius = neighbor_radius(asset);
     if (radius <= 0) {
         relative.push_back(SDL_Point{ 0, 0 });
@@ -123,8 +123,8 @@ inline std::vector<SDL_Point> flee_path(const Asset* asset, const Asset* threat)
 
     SDL_Point direction{ origin.x, origin.y };
     if (threat) {
-        direction.x -= threat->pos.x;
-        direction.y -= threat->pos.y;
+        direction.x -= threat->world_point().x;
+        direction.y -= threat->world_point().y;
     }
     if (direction.x == 0 && direction.y == 0) {
         direction.x = 1;
@@ -151,8 +151,8 @@ inline std::vector<SDL_Point> orbit_path(const Asset* asset, const Asset* center
         return pursue_path(asset, center);
     }
 
-    const SDL_Point origin     = asset->pos;
-    const SDL_Point center_pos = center->pos;
+    const SDL_Point origin     = asset->world_point();
+    const SDL_Point center_pos = center->world_point();
 
     const double base_dx = static_cast<double>(origin.x - center_pos.x);
     const double base_dy = static_cast<double>(origin.y - center_pos.y);

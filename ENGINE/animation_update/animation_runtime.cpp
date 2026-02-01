@@ -173,7 +173,7 @@ void AnimationRuntime::apply_pending_move() {
 
     const auto req = planner_iface_->consume_move_request();
     const int  resolution = effective_grid_resolution(std::nullopt);
-    const SDL_Point from{ self_->pos.x, self_->pos.y };
+    const SDL_Point from{ self_->world_x(), self_->world_y() };
     SDL_Point world_delta = convert_delta_to_world(req.delta, resolution);
     const SDL_Point to{ from.x + world_delta.x, from.y + world_delta.y };
 
@@ -202,15 +202,15 @@ void AnimationRuntime::apply_pending_move() {
         }
     }
 
-    if (final_position.x != self_->pos.x || final_position.y != self_->pos.y) {
-        self_->pos = final_position;
+    if (final_position.x != self_->world_x() || final_position.y != self_->world_y()) {
+        self_->move_to_world_position(final_position.x, final_position.y, self_->world_z());
         suppress_root_motion_frames_ = std::max(2, suppress_root_motion_frames_);
         if (planner_iface_) {
             planner_iface_->clear_movement_plan();
         }
     }
 
-    planner_iface_->final_dest = self_->pos;
+    planner_iface_->final_dest = self_->world_point();
 
     const std::string resolved = resolve_animation(*self_, req.animation_id);
     if (self_->current_animation != resolved) {
@@ -891,7 +891,7 @@ bool AnimationRuntime::path_blocked(SDL_Point from,
         if (!contains_from && !contains_to && !touches_segment) {
             const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
             if (overlap_check) {
-                const SDL_Point neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, neighbor->pos);
+                const SDL_Point neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, neighbor->world_point());
                 overlaps = animation_update::detail::distance_sq(dest_bottom, neighbor_bottom) <
                            animation_update::detail::kOverlapDistanceSq;
             }
@@ -940,7 +940,7 @@ bool AnimationRuntime::attempt_unstick(SDL_Point from,
             if (!contains_from && !contains_to && !touches_segment) {
                 const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
                 if (overlap_check) {
-                    const SDL_Point neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, neighbor->pos);
+                    const SDL_Point neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, neighbor->world_point());
                     overlaps = animation_update::detail::distance_sq(bottom_from, neighbor_bottom) <
                                animation_update::detail::kOverlapDistanceSq;
                 }
@@ -1036,7 +1036,7 @@ bool AnimationRuntime::attempt_unstick(SDL_Point from,
 };
     const int max_steps = 12;
     for (SDL_Point dir : directions) {
-        SDL_Point candidate = self_->pos;
+        SDL_Point candidate = self_->world_point();
         bool      moved     = false;
         for (int step = 0; step < max_steps; ++step) {
             SDL_Point next{ candidate.x + dir.x, candidate.y + dir.y };
@@ -1050,7 +1050,7 @@ bool AnimationRuntime::attempt_unstick(SDL_Point from,
             }
         }
         if (moved) {
-            self_->pos = candidate;
+            self_->move_to_world_position(candidate.x, candidate.y, self_->world_z());
             return true;
         }
     }
@@ -1065,10 +1065,10 @@ void AnimationRuntime::mark_progress_toward_checkpoints() {
     const int visited_sq     = visited_thresh * visited_thresh;
     while (next_checkpoint_index_ < planner_iface_->plan_.sanitized_checkpoints.size()) {
         const SDL_Point target  = planner_iface_->plan_.sanitized_checkpoints[next_checkpoint_index_];
-        const int       dist_sq = animation_update::detail::distance_sq(self_->pos, target);
+        const int       dist_sq = animation_update::detail::distance_sq(SDL_Point{self_->world_x(), self_->world_y()}, target);
         bool reached = false;
         if (visited_thresh == 0) {
-            reached = (self_->pos.x == target.x) && (self_->pos.y == target.y);
+            reached = (self_->world_x() == target.x) && (self_->world_y() == target.y);
         } else {
             reached = dist_sq <= visited_sq;
         }
@@ -1093,11 +1093,11 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         Area area = neighbor->get_area("impassable");
         if (area.get_points().empty()) area = neighbor->get_area("collision_area");
         if (area.get_points().empty()) return;
-        bool relevant = area.contains_point(bottom_target) || animation_update::detail::segment_hits_area(self_->pos, target, area);
+        bool relevant = area.contains_point(bottom_target) || animation_update::detail::segment_hits_area(self_->world_point(), target, area);
         if (!relevant) {
             const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
             if (overlap_check) {
-                const SDL_Point neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, neighbor->pos);
+                const SDL_Point neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, neighbor->world_point());
                 relevant = animation_update::detail::distance_sq(bottom_target, neighbor_bottom) < animation_update::detail::kOverlapDistanceSq;
             }
         }
@@ -1119,8 +1119,8 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         });
     }
     if (push.x == 0 && push.y == 0) {
-        push.x = target.x - self_->pos.x;
-        push.y = target.y - self_->pos.y;
+        push.x = target.x - self_->world_x();
+        push.y = target.y - self_->world_y();
     }
     if (push.x == 0 && push.y == 0) {
         push.y = -1;
@@ -1214,7 +1214,7 @@ bool AnimationRuntime::replan_to_destination() {
         return false;
     }
     const int visited_sq = planner_iface_->visited_thresh_ * planner_iface_->visited_thresh_;
-    if (visited_sq > 0 && animation_update::detail::distance_sq(self_->pos, planner_iface_->final_dest) <= visited_sq) {
+    if (visited_sq > 0 && animation_update::detail::distance_sq(self_->world_point(), planner_iface_->final_dest) <= visited_sq) {
         return false;
     }
     mark_progress_toward_checkpoints();

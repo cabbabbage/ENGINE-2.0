@@ -16,7 +16,7 @@ float sanitize_scale(float value) {
 
 animation_update::GeometryContext geometry_for(const Asset& asset) {
     animation_update::GeometryContext context{};
-    context.anchor = animation_update::detail::bottom_middle_for(asset, asset.pos);
+    context.anchor = animation_update::detail::bottom_middle_for(asset, asset.world_point());
     context.scale = sanitize_scale(asset.smoothed_scale());
     context.flipped = asset.flipped;
     context.plane = animation_update::CombatPlane::XY;

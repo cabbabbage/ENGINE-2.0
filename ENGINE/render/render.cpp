@@ -575,7 +575,7 @@ void SceneRenderer::render() {
     };
 
     const auto depth_from_asset = [&](const Asset* asset) {
-        return depth_from_anchor(static_cast<double>(asset->pos.y));
+        return depth_from_anchor(static_cast<double>(asset->world_y()));
     };
 
     size_t asset_index = 0;
@@ -730,7 +730,7 @@ void SceneRenderer::render() {
                     const std::size_t paths = anim.movement_path_count();
                     for (std::size_t path_idx = 0; path_idx < paths; ++path_idx) {
                         const auto& path_frames = anim.movement_path(path_idx);
-                        SDL_Point cursor = asset->pos;
+                        SDL_Point cursor = {asset->world_x(), asset->world_y()};
                         for (const AnimationFrame& frame : path_frames) {
                             SDL_Point next{ cursor.x + frame.dx, cursor.y + frame.dy };
                             SDL_FPoint screen_cur  = cam.map_to_screen(cursor);

@@ -77,7 +77,7 @@ bool blocked_step(SDL_Point from,
         bool overlap_check = animation_update::detail::should_consider_overlap(self, *other);
 
         if (overlap_check) {
-            const SDL_Point other_bottom = animation_update::detail::bottom_middle_for(*other, other->pos);
+            const SDL_Point other_bottom = animation_update::detail::bottom_middle_for(*other, other->world_point());
             if (animation_update::detail::distance_sq(dest_bottom, other_bottom) <
                 animation_update::detail::kOverlapDistanceSq) {
                 return true;
@@ -155,7 +155,7 @@ Plan GetBestPath::operator()(const Asset& self,
     Plan plan;
     plan.sanitized_checkpoints = sanitized_checkpoints;
 
-    SDL_Point cursor = self.pos;
+    SDL_Point cursor = self.world_point();
     plan.final_dest  = cursor;
 
     if (!self.info) {

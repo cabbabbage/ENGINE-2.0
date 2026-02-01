@@ -385,7 +385,7 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                                 const double sy = static_cast<double>(region_h) / static_cast<double>(origin_h);
                                 std::vector<SDL_Point> adjusted;
                                 adjusted.reserve(zone_world.get_points().size());
-                                const SDL_Point anchor = rec.asset->pos;
+                                const SDL_Point anchor = rec.asset->world_point();
                                 for (const auto& p : zone_world.get_points()) {
                                         const int dx = p.x - anchor.x;
                                         const int dy = p.y - anchor.y;

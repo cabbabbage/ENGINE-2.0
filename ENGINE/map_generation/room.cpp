@@ -821,8 +821,8 @@ nlohmann::json Room::create_static_room_json(std::string name) {
                 const Asset* a = uptr.get();
                 if (!a || !a->info) continue;
 
-                const int ax = a->pos.x;
-                const int ay = a->pos.y;
+                const int ax = a->world_x();
+                const int ay = a->world_y();
                 json entry;
                 entry["min_number"] = 1;
                 entry["max_number"] = 1;

@@ -191,7 +191,7 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
         if (!asset_uptr) {
             continue;
         }
-        occupancy.set_occupied_at(asset_uptr->pos, true);
+        occupancy.set_occupied_at(asset_uptr->world_point(), true);
     }
 
     std::vector<const Area*> trail_areas;
@@ -234,7 +234,7 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
                 owner = it->second;
             }
             if (!owner) {
-                owner = resolve_owner(asset_uptr->pos, rooms);
+                owner = resolve_owner(asset_uptr->world_point(), rooms);
             }
             if (!owner) {
                 continue;
@@ -334,7 +334,7 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
             owner = it->second;
         }
         if (!owner) {
-            owner = resolve_owner(asset_uptr->pos, rooms);
+            owner = resolve_owner(asset_uptr->world_point(), rooms);
         }
         if (!owner) {
             continue;

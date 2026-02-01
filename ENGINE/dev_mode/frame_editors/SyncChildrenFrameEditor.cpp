@@ -15,7 +15,7 @@
 #include "dev_mode/dm_styles.hpp"
 #include "dev_mode/widgets.hpp"
 #include "dev_mode/frame_editors/shared/SnapUtils.hpp"
-#include "dev_mode/frame_editors/shared/FramePointResolver.hpp"
+#include "utils/FramePointResolver.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "render/composite_asset_renderer.hpp"
 #include <SDL_image.h>
@@ -126,12 +126,14 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             FramePointResolver resolver(context_.target);
 
             float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            float dx_percent = resolver.to_percent_xy(dx_world);
             float dy_world = kLockedDepthValue;
+            float dy_percent = resolver.to_percent_xy(dy_world);
             float dz_percent = resolver.to_percent(snapped_world_z);
 
             auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
-            sample.dx = flipped ? -dx_world : dx_world;
-            sample.dy = dy_world;
+            sample.dx = flipped ? -dx_percent : dx_percent;
+            sample.dy = dy_percent;
             sample.dz = dz_percent;
             sample.has_data = true;
             sample.visible = true;
@@ -164,12 +166,14 @@ void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
             FramePointResolver resolver(context_.target);
 
             float dx_world = (snapped_world.x - static_cast<float>(anchor.x)) / scale;
+            float dx_percent = resolver.to_percent_xy(dx_world);
             float dy_world = kLockedDepthValue;
+            float dy_percent = resolver.to_percent_xy(dy_world);
             float dz_percent = resolver.to_percent(snapped_world_z);
 
             auto& sample = const_cast<std::vector<child_timelines::ChildFrameSample>&>(child_frames)[selected_frame_index_];
-            sample.dx = flipped ? -dx_world : dx_world;
-            sample.dy = dy_world;
+            sample.dx = flipped ? -dx_percent : dx_percent;
+            sample.dy = dy_percent;
             sample.dz = dz_percent;
             sample.has_data = true;
             sample.visible = true;
@@ -414,8 +418,8 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
         Asset* child = context_.assets->find_child_timeline_asset(context_.target, static_cast<int>(i));
         if (!child) continue;
         const ChildWorldPose pose = child_world_pose(static_cast<int>(i));
-        child->pos = SDL_Point{static_cast<int>(std::lround(anchor.x + pose.pos.x)),
-                               static_cast<int>(std::lround(anchor.y + pose.pos.y))};
+        child->move_to_world_position(static_cast<int>(std::lround(anchor.x + pose.pos.x)),
+                               static_cast<int>(std::lround(anchor.y + pose.pos.y)));
         child->set_world_z_offset(pose.z);
         child->mark_composite_dirty();
         CompositeAssetRenderer composite_renderer(renderer, context_.assets);
@@ -715,7 +719,7 @@ SDL_Point SyncChildrenFrameEditor::asset_anchor_world() const {
     if (!context_.target) {
         return SDL_Point{0, 0};
     }
-    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->pos);
+    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_point());
 }
 
 SyncChildrenFrameEditor::ChildWorldPose SyncChildrenFrameEditor::child_world_pose(int child_index) const {
@@ -739,11 +743,14 @@ SyncChildrenFrameEditor::ChildWorldPose SyncChildrenFrameEditor::child_world_pos
 
     FramePointResolver resolver(context_.target);
     const float scale = attachment_scale();
-    float dx = sample.dx * scale;
+    // Convert percent displacements back to world coordinates
+    const float dx_world = resolver.to_world_xy(sample.dx) * scale;
+    const float dy_world = resolver.to_world_xy(sample.dy) * scale;
+    float dx = dx_world;
     if (context_.target && context_.target->flipped) {
         dx = -dx;
     }
-    float dy = sample.dy * scale;
+    float dy = dy_world;
     pose.pos = SDL_FPoint{dx, dy};
     pose.z = resolver.to_world_z(sample.dz);
     return pose;

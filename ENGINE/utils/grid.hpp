@@ -5,8 +5,12 @@
 #include <cstdint>
 #include <limits>
 
+
+//TODO do we need this or is it an old duplicate?
 namespace vibble::grid {
 
+
+    //TODO delete or move consolodate logic if any of this is relevant
 // Legacy power-of-two grid helpers (tile-only). Core Map Grid identity uses 3^n
 // spacing; these remain for chunk/tile math and dev tooling.
 constexpr int kMaxResolution = 30;

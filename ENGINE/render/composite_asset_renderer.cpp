@@ -224,8 +224,8 @@ void CompositeAssetRenderer::calculate_local_bounds(Asset* asset) {
         bounds = {new_x, new_y, new_w, new_h};
     }
 
-    bounds.x -= asset->pos.x;
-    bounds.y -= asset->pos.y;
+    bounds.x -= asset->world_x();
+    bounds.y -= asset->world_y();
 
     asset->composite_bounds_local_ = bounds;
 }

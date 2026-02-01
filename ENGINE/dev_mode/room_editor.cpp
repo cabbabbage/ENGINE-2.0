@@ -1318,7 +1318,7 @@ void RoomEditor::set_camera_settings_lock(bool active) {
 
 SDL_Point RoomEditor::camera_lock_target() const {
     if (player_) {
-        return SDL_Point{player_->pos.x, player_->pos.y};
+        return player_->world_point();
     }
     if (current_room_ && current_room_->room_area) {
         auto c = current_room_->room_area->get_center();
@@ -2083,8 +2083,8 @@ void RoomEditor::finalize_asset_drag(Asset* asset, const std::shared_ptr<AssetIn
     nlohmann::json entry;
     entry["spawn_id"]        = spawn_id;
     entry["position"]        = "Exact";
-    entry["dx"]              = asset->pos.x - center.x;
-    entry["dy"]              = asset->pos.y - center.y;
+    entry["dx"]              = asset->world_x() - center.x;
+    entry["dy"]              = asset->world_y() - center.y;
     if (width  > 0) entry["origional_width"]  = width;
     if (height > 0) entry["origional_height"] = height;
     entry["display_name"]    = info->name;
@@ -2216,7 +2216,7 @@ void RoomEditor::focus_camera_on_asset(Asset* asset, double height_factor, int d
 
     WarpedScreenGrid& cam = assets_->getView();
     cam.set_manual_height_override(true);
-    cam.set_focus_override(asset->pos);
+    cam.set_focus_override(asset->world_point());
     cam.animate_height_to_scale(height_factor * 1000.0, duration_steps);
     mark_spatial_index_dirty();
 }
@@ -2997,7 +2997,7 @@ void RoomEditor::sync_dragged_assets_immediately() {
         if (!asset) {
             continue;
         }
-        SDL_Point current{asset->pos.x, asset->pos.y};
+        SDL_Point current{asset->world_x(), asset->world_y()};
         if (current.x == state.last_synced_pos.x && current.y == state.last_synced_pos.y) {
             continue;
         }
@@ -4047,8 +4047,8 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
 
     if (drag_mode_ == DragMode::Perimeter || drag_mode_ == DragMode::PerimeterCenter) {
         if (drag_perimeter_base_radius_ <= 0.0) {
-            double dx = static_cast<double>(primary->pos.x - drag_perimeter_circle_center_.x);
-            double dy = static_cast<double>(primary->pos.y - drag_perimeter_circle_center_.y);
+            double dx = static_cast<double>(primary->world_point().x - drag_perimeter_circle_center_.x);
+            double dy = static_cast<double>(primary->world_point().y - drag_perimeter_circle_center_.y);
             drag_perimeter_base_radius_ = std::hypot(dx, dy);
         }
         if (!std::isfinite(drag_perimeter_base_radius_) || drag_perimeter_base_radius_ <= 0.0) {
@@ -4061,12 +4061,12 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
         if (!asset) continue;
         DraggedAssetState state;
         state.asset = asset;
-        state.start_pos = asset->pos;
-        state.last_synced_pos = asset->pos;
+        state.start_pos = asset->world_point();
+        state.last_synced_pos = SDL_Point{asset->world_x(), asset->world_y()};
         state.active = true;
         if (drag_mode_ == DragMode::Perimeter) {
-            double dx = static_cast<double>(asset->pos.x - drag_perimeter_circle_center_.x);
-            double dy = static_cast<double>(asset->pos.y - drag_perimeter_circle_center_.y);
+            double dx = static_cast<double>(asset->world_x() - drag_perimeter_circle_center_.x);
+            double dy = static_cast<double>(asset->world_y() - drag_perimeter_circle_center_.y);
             double len = std::hypot(dx, dy);
             if (len > 1e-6) {
                 state.direction.x = static_cast<float>(dx / len);
@@ -4076,8 +4076,8 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
                 state.direction.y = -1.0f;
             }
         } else if (drag_mode_ == DragMode::Edge) {
-            double dx = static_cast<double>(asset->pos.x - drag_edge_center_.x);
-            double dy = static_cast<double>(asset->pos.y - drag_edge_center_.y);
+            double dx = static_cast<double>(asset->world_x() - drag_edge_center_.x);
+            double dy = static_cast<double>(asset->world_y() - drag_edge_center_.y);
             double len = std::hypot(dx, dy);
             if (len > 1e-6) {
                 state.direction.x = static_cast<float>(dx / len);
@@ -4151,8 +4151,8 @@ void RoomEditor::update_drag_session(const SDL_Point& world_mouse) {
 
             vibble::grid::Grid& grid_service = vibble::grid::global_grid();
             SDL_Point snapped_pointer = grid_service.snap_to_vertex(world_mouse, drag_resolution_);
-            delta.x = snapped_pointer.x - anchor_asset->pos.x;
-            delta.y = snapped_pointer.y - anchor_asset->pos.y;
+            delta.x = snapped_pointer.x - anchor_asset->world_x();
+            delta.y = snapped_pointer.y - anchor_asset->world_y();
         }
     }
 
@@ -4163,8 +4163,7 @@ void RoomEditor::update_drag_session(const SDL_Point& world_mouse) {
 
     for (auto& state : drag_states_) {
         if (!state.asset) continue;
-        state.asset->pos.x += delta.x;
-        state.asset->pos.y += delta.y;
+        state.asset->move_to_world_position(state.asset->world_x() + delta.x, state.asset->world_y() + delta.y, state.asset->world_z());
     }
 
     if (drag_mode_ == DragMode::PerimeterCenter) {
@@ -4205,8 +4204,8 @@ void RoomEditor::apply_perimeter_drag(const SDL_Point& world_mouse) {
 
     double reference_length = compute_start_distance(*ref);
     if (reference_length <= 1e-6) {
-        double dx = static_cast<double>(ref->asset->pos.x - drag_perimeter_circle_center_.x);
-        double dy = static_cast<double>(ref->asset->pos.y - drag_perimeter_circle_center_.y);
+        double dx = static_cast<double>(ref->asset->world_x() - drag_perimeter_circle_center_.x);
+        double dy = static_cast<double>(ref->asset->world_y() - drag_perimeter_circle_center_.y);
         reference_length = std::hypot(dx, dy);
     }
     if (reference_length <= 1e-6) reference_length = 1.0;
@@ -4229,8 +4228,8 @@ void RoomEditor::apply_perimeter_drag(const SDL_Point& world_mouse) {
         double base = compute_start_distance(state);
         SDL_FPoint state_dir = state.direction;
         if (base <= 0.0 || (state_dir.x == 0.0f && state_dir.y == 0.0f)) {
-            double dx = static_cast<double>(state.asset->pos.x - drag_perimeter_circle_center_.x);
-            double dy = static_cast<double>(state.asset->pos.y - drag_perimeter_circle_center_.y);
+            double dx = static_cast<double>(state.asset->world_x() - drag_perimeter_circle_center_.x);
+            double dy = static_cast<double>(state.asset->world_y() - drag_perimeter_circle_center_.y);
             if (base <= 0.0) base = std::hypot(dx, dy);
             if (dx != 0.0 || dy != 0.0) {
                 state_dir.x = static_cast<float>(dx / std::hypot(dx, dy));
@@ -4243,9 +4242,8 @@ void RoomEditor::apply_perimeter_drag(const SDL_Point& world_mouse) {
         double desired = base * ratio;
         int new_x = drag_perimeter_circle_center_.x + static_cast<int>(std::lround(static_cast<double>(state_dir.x) * desired));
         int new_y = drag_perimeter_circle_center_.y + static_cast<int>(std::lround(static_cast<double>(state_dir.y) * desired));
-        if (state.asset->pos.x != new_x || state.asset->pos.y != new_y) {
-            state.asset->pos.x = new_x;
-            state.asset->pos.y = new_y;
+        if (state.asset->world_x() != new_x || state.asset->world_y() != new_y) {
+            state.asset->move_to_world_position(new_x, new_y, state.asset->world_z());
             changed = true;
         }
     }
@@ -4297,8 +4295,8 @@ void RoomEditor::apply_edge_drag(const SDL_Point& world_mouse) {
 
         reference_length = ref->edge_length;
         if (reference_length <= 1e-6 && ref->asset) {
-            double dx = static_cast<double>(ref->asset->pos.x - center.x);
-            double dy = static_cast<double>(ref->asset->pos.y - center.y);
+            double dx = static_cast<double>(ref->asset->world_x() - center.x);
+            double dy = static_cast<double>(ref->asset->world_y() - center.y);
             reference_length = std::hypot(dx, dy);
         }
     }
@@ -4339,8 +4337,8 @@ void RoomEditor::apply_edge_drag(const SDL_Point& world_mouse) {
         if (!state.asset) continue;
         double base_length = state.edge_length;
         if (base_length <= 1e-6) {
-            double dx = static_cast<double>(state.asset->pos.x - center.x);
-            double dy = static_cast<double>(state.asset->pos.y - center.y);
+            double dx = static_cast<double>(state.asset->world_x() - center.x);
+            double dy = static_cast<double>(state.asset->world_y() - center.y);
             base_length = std::hypot(dx, dy);
         }
         SDL_FPoint dir = state.direction;
@@ -4349,8 +4347,8 @@ void RoomEditor::apply_edge_drag(const SDL_Point& world_mouse) {
             dir.x = static_cast<float>(dir.x / dir_len);
             dir.y = static_cast<float>(dir.y / dir_len);
         } else if (base_length > 1e-6) {
-            double dx = static_cast<double>(state.asset->pos.x - center.x);
-            double dy = static_cast<double>(state.asset->pos.y - center.y);
+            double dx = static_cast<double>(state.asset->world_x() - center.x);
+            double dy = static_cast<double>(state.asset->world_y() - center.y);
             if (dx != 0.0 || dy != 0.0) {
                 dir.x = static_cast<float>(dx / std::hypot(dx, dy));
                 dir.y = static_cast<float>(dy / std::hypot(dx, dy));
@@ -4360,9 +4358,8 @@ void RoomEditor::apply_edge_drag(const SDL_Point& world_mouse) {
         double desired = base_length * snapped_ratio;
         int new_x = center.x + static_cast<int>(std::lround(static_cast<double>(dir.x) * desired));
         int new_y = center.y + static_cast<int>(std::lround(static_cast<double>(dir.y) * desired));
-        if (state.asset->pos.x != new_x || state.asset->pos.y != new_y) {
-            state.asset->pos.x = new_x;
-            state.asset->pos.y = new_y;
+        if (state.asset->world_x() != new_x || state.asset->world_y() != new_y) {
+            state.asset->move_to_world_position(new_x, new_y, state.asset->world_z());
             assets_changed = true;
         }
     }
@@ -4425,7 +4422,7 @@ void RoomEditor::update_spawn_json_during_drag() {
             const int orig_w = std::max(1, drag_perimeter_orig_w_ > 0 ? drag_perimeter_orig_w_ : curr_w);
             const int orig_h = std::max(1, drag_perimeter_orig_h_ > 0 ? drag_perimeter_orig_h_ : curr_h);
             SDL_Point stored = RelativeRoomPosition::ToOriginal(drag_perimeter_center_offset_world_, orig_w, orig_h, curr_w, curr_h);
-            const double dist = std::hypot(static_cast<double>(primary->pos.x - drag_perimeter_circle_center_.x), static_cast<double>(primary->pos.y - drag_perimeter_circle_center_.y));
+            const double dist = std::hypot(static_cast<double>(primary->world_point().x - drag_perimeter_circle_center_.x), static_cast<double>(primary->world_point().y - drag_perimeter_circle_center_.y));
             const int radius = static_cast<int>(std::lround(dist));
             save_perimeter_json(*entry, stored.x, stored.y, orig_w, orig_h, radius);
             break;
@@ -4463,8 +4460,7 @@ bool RoomEditor::snap_dragged_assets_to_grid() {
             drag_perimeter_center_offset_world_.y += dy;
             for (auto& state : drag_states_) {
                 if (!state.asset) continue;
-                state.asset->pos.x += dx;
-                state.asset->pos.y += dy;
+                state.asset->move_to_world_position(state.asset->world_x() + dx, state.asset->world_y() + dy, state.asset->world_z());
             }
             changed = true;
         }
@@ -4472,11 +4468,10 @@ bool RoomEditor::snap_dragged_assets_to_grid() {
 
     for (auto& state : drag_states_) {
         if (!state.asset) continue;
-        SDL_Point current{state.asset->pos.x, state.asset->pos.y};
+        SDL_Point current{state.asset->world_x(), state.asset->world_y()};
         SDL_Point snapped = grid_service.snap_to_vertex(current, resolution);
-        if (snapped.x != state.asset->pos.x || snapped.y != state.asset->pos.y) {
-            state.asset->pos.x = snapped.x;
-            state.asset->pos.y = snapped.y;
+        if (snapped.x != state.asset->world_x() || snapped.y != state.asset->world_y()) {
+            state.asset->move_to_world_position(snapped.x, snapped.y, state.asset->world_z());
             changed = true;
         }
     }
@@ -4536,7 +4531,7 @@ void RoomEditor::finalize_drag_session() {
                         const int orig_w = std::max(1, drag_perimeter_orig_w_ > 0 ? drag_perimeter_orig_w_ : curr_w);
                         const int orig_h = std::max(1, drag_perimeter_orig_h_ > 0 ? drag_perimeter_orig_h_ : curr_h);
                         SDL_Point stored = RelativeRoomPosition::ToOriginal(drag_perimeter_center_offset_world_, orig_w, orig_h, curr_w, curr_h);
-                        const double dist = std::hypot(static_cast<double>(primary->pos.x - drag_perimeter_circle_center_.x), static_cast<double>(primary->pos.y - drag_perimeter_circle_center_.y));
+                        const double dist = std::hypot(static_cast<double>(primary->world_point().x - drag_perimeter_circle_center_.x), static_cast<double>(primary->world_point().y - drag_perimeter_circle_center_.y));
                         const int radius = static_cast<int>(std::lround(dist));
                         save_perimeter_json(*entry, stored.x, stored.y, orig_w, orig_h, radius);
                         json_modified = true;
@@ -4549,7 +4544,7 @@ void RoomEditor::finalize_drag_session() {
                         const int orig_w = std::max(1, drag_perimeter_orig_w_ > 0 ? drag_perimeter_orig_w_ : curr_w);
                         const int orig_h = std::max(1, drag_perimeter_orig_h_ > 0 ? drag_perimeter_orig_h_ : curr_h);
                         SDL_Point stored = RelativeRoomPosition::ToOriginal(drag_perimeter_center_offset_world_, orig_w, orig_h, curr_w, curr_h);
-                        const double dist = std::hypot(static_cast<double>(primary->pos.x - drag_perimeter_circle_center_.x), static_cast<double>(primary->pos.y - drag_perimeter_circle_center_.y));
+                        const double dist = std::hypot(static_cast<double>(primary->world_point().x - drag_perimeter_circle_center_.x), static_cast<double>(primary->world_point().y - drag_perimeter_circle_center_.y));
                         const int radius = static_cast<int>(std::lround(dist));
                         save_perimeter_json(*entry, stored.x, stored.y, orig_w, orig_h, radius);
                         json_modified = true;
@@ -5027,8 +5022,8 @@ std::optional<RoomEditor::PerimeterOverlay> RoomEditor::compute_perimeter_overla
     if (!reference) return std::nullopt;
     PerimeterOverlay overlay;
     overlay.center = drag_perimeter_circle_center_;
-    double dx = static_cast<double>(reference->pos.x - overlay.center.x);
-    double dy = static_cast<double>(reference->pos.y - overlay.center.y);
+    double dx = static_cast<double>(reference->world_point().x - overlay.center.x);
+    double dy = static_cast<double>(reference->world_point().y - overlay.center.y);
     overlay.radius = std::hypot(dx, dy);
     if (!std::isfinite(overlay.radius) || overlay.radius <= 0.0) {
         return std::nullopt;
@@ -5080,8 +5075,8 @@ std::optional<RoomEditor::PerimeterOverlay> RoomEditor::compute_perimeter_overla
     if (overlay.radius <= 0.0 && active_assets_) {
         for (Asset* asset : *active_assets_) {
             if (!asset || asset->spawn_id != spawn_id) continue;
-            double dx = static_cast<double>(asset->pos.x - overlay.center.x);
-            double dy = static_cast<double>(asset->pos.y - overlay.center.y);
+            double dx = static_cast<double>(asset->world_x() - overlay.center.x);
+            double dy = static_cast<double>(asset->world_y() - overlay.center.y);
             overlay.radius = std::hypot(dx, dy);
             if (overlay.radius > 0.0) break;
         }
@@ -5312,7 +5307,7 @@ std::unique_ptr<vibble::grid::Occupancy> RoomEditor::build_room_grid(const std::
         if (!asset || asset->dead) continue;
         if (!asset_belongs_to_room(asset)) continue;
         if (!asset->spawn_id.empty() && asset->spawn_id == ignore_spawn_id) continue;
-        SDL_Point pos{asset->pos.x, asset->pos.y};
+        SDL_Point pos{asset->world_x(), asset->world_y()};
         if (current_room_->room_area && !current_room_->room_area->contains_point(pos)) continue;
         if (auto* vertex = occupancy->vertex_at_world(pos)) {
             occupancy->set_occupied(vertex, true);
@@ -5611,8 +5606,8 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
 }
 
 void RoomEditor::update_exact_json(nlohmann::json& entry, const Asset& asset, SDL_Point center, int width, int height) {
-    const int dx = asset.pos.x - center.x;
-    const int dy = asset.pos.y - center.y;
+    const int dx = asset.world_x() - center.x;
+    const int dy = asset.world_y() - center.y;
     entry["dx"] = dx;
     entry["dy"] = dy;
     if (width > 0) entry["origional_width"] = width;
@@ -5625,8 +5620,8 @@ void RoomEditor::update_percent_json(nlohmann::json& entry, const Asset& asset, 
     double half_w = static_cast<double>(width) / 2.0;
     double half_h = static_cast<double>(height) / 2.0;
     if (half_w <= 0.0 || half_h <= 0.0) return;
-    double dx = static_cast<double>(asset.pos.x - center.x);
-    double dy = static_cast<double>(asset.pos.y - center.y);
+    double dx = static_cast<double>(asset.world_x() - center.x);
+    double dy = static_cast<double>(asset.world_y() - center.y);
     int percent_x = clamp_percent(static_cast<int>(std::lround((dx / half_w) * 100.0)));
     int percent_y = clamp_percent(static_cast<int>(std::lround((dy / half_h) * 100.0)));
     entry["p_x_min"] = percent_x;

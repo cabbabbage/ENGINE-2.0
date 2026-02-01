@@ -53,7 +53,7 @@ void Check::register_asset(Asset* asset, bool enforce_spacing, bool track_for_sp
         return;
     }
 
-    SDL_Point index = grid_->world_to_index(asset->pos, resolution_);
+    SDL_Point index = grid_->world_to_index(asset->world_point(), resolution_);
     const CellKey key = make_key(index);
 
     if (enforce_spacing) {
@@ -212,8 +212,8 @@ bool Check::perform_spacing_checks_grid(const std::shared_ptr<AssetInfo>& info,
             if (Range::is_in_range(asset, test_pos, min_all)) {
                 if (debug_) {
                     std::cout << "[Check] Min distance (all) violated by asset: "
-                              << asset->info->name << " at (" << asset->pos.x << ", "
-                              << asset->pos.y << ")\n";
+                              << asset->info->name << " at (" << asset->world_x() << ", "
+                              << asset->world_y() << ")\n";
                 }
                 return true;
             }
@@ -237,8 +237,8 @@ bool Check::perform_spacing_checks_grid(const std::shared_ptr<AssetInfo>& info,
             if (Range::is_in_range(asset, test_pos, min_same)) {
                 if (debug_) {
                     std::cout << "[Check] Min type distance violated by same-name asset: "
-                              << asset->info->name << " at (" << asset->pos.x << ", "
-                              << asset->pos.y << ")\n";
+                              << asset->info->name << " at (" << asset->world_x() << ", "
+                              << asset->world_y() << ")\n";
                 }
                 return true;
             }
@@ -290,8 +290,8 @@ bool Check::perform_spacing_checks_linear(const std::shared_ptr<AssetInfo>& info
             if (should_check && Range::is_in_range(existing, test_pos, min_all)) {
                 if (debug_) {
                     std::cout << "[Check] Min distance (all) violated by asset: "
-                              << existing->info->name << " at (" << existing->pos.x << ", "
-                              << existing->pos.y << ")\n";
+                              << existing->info->name << " at (" << existing->world_x() << ", "
+                              << existing->world_y() << ")\n";
                 }
                 return true;
             }
@@ -305,8 +305,8 @@ bool Check::perform_spacing_checks_linear(const std::shared_ptr<AssetInfo>& info
             if (should_check && Range::is_in_range(existing, test_pos, min_same)) {
                 if (debug_) {
                     std::cout << "[Check] Min type distance violated by same-name asset: "
-                              << existing->info->name << " at (" << existing->pos.x << ", "
-                              << existing->pos.y << ")\n";
+                              << existing->info->name << " at (" << existing->world_x() << ", "
+                              << existing->world_y() << ")\n";
                 }
                 return true;
             }

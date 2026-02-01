@@ -22,7 +22,7 @@ SDL_Point BartenderController::get_random_point_in_room() {
     std::uniform_int_distribution<int> dist(-500, 500);
     int dx = dist(rng_);
     int dy = dist(rng_);
-    return {self_->pos.x + dx, self_->pos.y + dy};
+    return {self_->world_x() + dx, self_->world_y() + dy};
 }
 
 void BartenderController::update(const Input&) {
@@ -35,7 +35,7 @@ void BartenderController::update(const Input&) {
         return;
     }
 
-    int distance_sq = (self_->pos.x - player->pos.x) * (self_->pos.x - player->pos.x) + (self_->pos.y - player->pos.y) * (self_->pos.y - player->pos.y);
+    int distance_sq = (self_->world_x() - player->world_x()) * (self_->world_x() - player->world_x()) + (self_->world_y() - player->world_y()) * (self_->world_y() - player->world_y());
 
     if (distance_sq <= 500) {
         if (self_->needs_target) {

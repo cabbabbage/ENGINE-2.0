@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -13,9 +14,33 @@
 
 class Asset;
 
+// Forward declarations to keep grid_point lightweight
+namespace world {
+class WorldGrid;
+}
+
 namespace world {
 
 struct Chunk;
+
+struct GridKey {
+    int x = 0;
+    int y = 0;
+    int z = 0;
+    int layer = 0;
+
+    bool operator==(const GridKey& other) const noexcept {
+        return x == other.x && y == other.y && z == other.z && layer == other.layer;
+    }
+
+    bool operator!=(const GridKey& other) const noexcept {
+        return !(*this == other);
+    }
+};
+
+struct GridKeyHash {
+    std::size_t operator()(const GridKey& key) const noexcept;
+};
 
 // Parameters needed for world→screen projection, extracted from CameraState
 struct CameraProjectionParams {
@@ -59,13 +84,15 @@ struct GridPoint {
               SDL_Point chunk_idx,
               GridId legacy_id,
               Chunk* owning_chunk,
-              GridPoint* parent_point = nullptr)
+              GridPoint* parent_point = nullptr,
+              bool is_virtual_point = false)
         : id(legacy_id)
         , world_x_(world_x)
         , world_y_(world_y)
         , world_z_(world_z)
         , resolution_layer_(resolution_layer)
         , parent_(parent_point)
+        , is_virtual_(is_virtual_point)
         , world(SDL_Point{world_x, world_y})
         , grid_index(grid_idx)
         , chunk_index(chunk_idx)
@@ -76,11 +103,32 @@ struct GridPoint {
     GridPoint& operator=(const GridPoint&) = delete;
     GridPoint& operator=(GridPoint&& other) noexcept;
 
+    // Canonical constructors/converters
+    static GridPoint& from_world(int x, int y, int z, int layer, WorldGrid& grid);
+    static GridPoint& from_world(const GridKey& key, WorldGrid& grid);
+    static GridPoint* from_screen(const SDL_FPoint& screen,
+                                  float world_z,
+                                  const CameraProjectionParams& proj,
+                                  WorldGrid& grid);
+    static GridPoint make_virtual(int world_x,
+                                  int world_y,
+                                  int world_z = 0,
+                                  int resolution_layer = 0);
+
+    GridKey key() const;
+    GridId  hash_key() const;
+    static GridId hash_key(const GridKey& key);
+
     int world_x() const { return world_x_; }
     int world_y() const { return world_y_; }
     int world_z() const { return world_z_; }
     int resolution_layer() const { return resolution_layer_; }
     GridPoint* parent() const { return parent_; }
+    bool is_virtual() const { return is_virtual_; }
+
+    // Renderer/UI boundary helpers (explicit conversions)
+    SDL_Point to_sdl_point() const { return SDL_Point{world_x_, world_y_}; }
+    SDL_FPoint to_sdl_fpoint() const { return SDL_FPoint{static_cast<float>(world_x_), static_cast<float>(world_y_)}; }
 
     enum class ChildDirection {
         XNeg = 0,
@@ -285,6 +333,7 @@ struct GridPoint {
                " layer=" + std::to_string(resolution_layer_) +
                " grid_index=(" + std::to_string(grid_index.x) + "," + std::to_string(grid_index.y) + ")" +
                " chunk_index=(" + std::to_string(chunk_index.x) + "," + std::to_string(chunk_index.y) + ")" +
+               (is_virtual_ ? " virtual=1" : " virtual=0") +
                " assets=" + std::to_string(occupants.size()) +
                " children_with_assets=" + std::to_string(children_with_assets) +
                " mask=0x" + to_hex(active_child_mask);
@@ -321,6 +370,7 @@ private:
     int world_z_          = 0;
     int resolution_layer_ = 0;
     GridPoint* parent_    = nullptr;
+    bool is_virtual_      = false;
 
     // Non-owning hierarchy links; Map Grid owns nodes, Screen Grid only references.
     GridPoint* x_child_neg_ = nullptr;
@@ -329,6 +379,25 @@ private:
     GridPoint* y_child_pos_ = nullptr;
     GridPoint* z_child_neg_ = nullptr;
     GridPoint* z_child_pos_ = nullptr;
+};
+
+struct GridBounds {
+    GridPoint min;
+    GridPoint max;
+
+    GridBounds(const GridPoint& min_pt, const GridPoint& max_pt)
+        : min(min_pt)
+        , max(max_pt) {}
+
+    static GridBounds from_xywh(int x, int y, int w, int h, int world_z = 0, int layer = 0);
+    static GridBounds from_min_max(const GridPoint& min_pt, const GridPoint& max_pt);
+
+    bool contains(const GridPoint& pt) const;
+    GridBounds expanded(int margin) const;
+
+    // Renderer-only escape hatches
+    SDL_Rect  to_sdl_rect() const;
+    SDL_FRect to_sdl_frect() const;
 };
 
 }

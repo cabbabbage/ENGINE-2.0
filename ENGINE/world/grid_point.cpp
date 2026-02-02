@@ -1,8 +1,10 @@
 #include "grid_point.hpp"
 #include "asset/Asset.hpp"
+#include "world/world_grid.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace world {
 
@@ -24,6 +26,14 @@ namespace {
         return std::sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
     }
 } // namespace
+
+std::size_t GridKeyHash::operator()(const GridKey& key) const noexcept {
+    std::size_t h1 = std::hash<int>{}(key.x);
+    std::size_t h2 = std::hash<int>{}(key.y);
+    std::size_t h3 = std::hash<int>{}(key.z);
+    std::size_t h4 = std::hash<int>{}(key.layer);
+    return ((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1) ^ (h4 << 3);
+}
 
 void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     // Track which camera state we're using
@@ -230,6 +240,99 @@ GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     return *this;
 }
 
+GridKey GridPoint::key() const {
+    return GridKey{world_x_, world_y_, world_z_, resolution_layer_};
+}
+
+GridId GridPoint::hash_key() const {
+    return hash_key(key());
+}
+
+GridId GridPoint::hash_key(const GridKey& key) {
+    return static_cast<GridId>(GridKeyHash{}(key));
+}
+
+GridPoint& GridPoint::from_world(int x, int y, int z, int layer, WorldGrid& grid) {
+    const SDL_Point world_px{x, y};
+    const GridKey key = grid.grid_key_from_world(world_px, z, layer);
+    Chunk* owning_chunk = grid.ensure_chunk_from_world(world_px);
+    return grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+}
+
+GridPoint& GridPoint::from_world(const GridKey& key, WorldGrid& grid) {
+    const SDL_Point world_px{key.x, key.y};
+    Chunk* owning_chunk = grid.ensure_chunk_from_world(world_px);
+    return grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+}
+
+GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
+                                  float world_z,
+                                  const CameraProjectionParams& params,
+                                  WorldGrid& grid) {
+    if (params.screen_width <= 0 || params.screen_height <= 0) {
+        return nullptr;
+    }
+
+    const double zoom = std::max(1e-6, params.screen_zoom);
+    const double ndc_x = (static_cast<double>(screen.x) / static_cast<double>(params.screen_width) * 2.0 - 1.0) / zoom;
+    const double ndc_y = (1.0 - (static_cast<double>(screen.y) - params.screen_pan_y_px) / static_cast<double>(params.screen_height) * 2.0) / zoom;
+
+    const double tan_fov_x = std::max(1e-6, params.tan_half_fov_x);
+    const double tan_fov_y = std::max(1e-6, params.tan_half_fov_y);
+
+    // Solve for depth so that resulting world_z matches the requested world_z (ground plane assumption).
+    const Vec3 cam_pos{params.position_x, params.position_y, params.position_z};
+    const Vec3 cam_forward{params.forward_x, params.forward_y, params.forward_z};
+    const Vec3 cam_right{params.right_x, params.right_y, params.right_z};
+    const Vec3 cam_up{params.up_x, params.up_y, params.up_z};
+
+    const double denom = cam_forward.z + ndc_x * tan_fov_x * cam_right.z + ndc_y * tan_fov_y * cam_up.z;
+    const double target_z_meters = static_cast<double>(world_z) * std::max(1e-6, params.meters_scale);
+    if (std::abs(denom) <= 1e-9) {
+        return nullptr;
+    }
+    const double depth = (target_z_meters - cam_pos.z) / denom;
+    if (!std::isfinite(depth) || depth <= params.near_plane || depth >= params.far_plane) {
+        return nullptr;
+    }
+
+    const double cam_x = depth * ndc_x * tan_fov_x;
+    const double cam_y = depth * ndc_y * tan_fov_y;
+    const Vec3 world_meters{
+        cam_pos.x + cam_forward.x * depth + cam_right.x * cam_x + cam_up.x * cam_y,
+        cam_pos.y + cam_forward.y * depth + cam_right.y * cam_x + cam_up.y * cam_y,
+        cam_pos.z + cam_forward.z * depth + cam_right.z * cam_x + cam_up.z * cam_y
+    };
+
+    const double safe_scale = std::max(1e-6, params.meters_scale);
+    const int world_x_px = static_cast<int>(std::lround(world_meters.x / safe_scale + params.anchor_world_x));
+    const int world_y_px = static_cast<int>(std::lround(world_meters.y / safe_scale + params.anchor_world_y));
+    const int world_z_px = static_cast<int>(std::lround(world_z));
+
+    const SDL_Point world_px{world_x_px, world_y_px};
+    const GridKey key = grid.grid_key_from_world(world_px, world_z_px, -1);
+    Chunk* owning_chunk = grid.ensure_chunk_from_world(world_px);
+    return &grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+}
+
+GridPoint GridPoint::make_virtual(int world_x,
+                                  int world_y,
+                                  int world_z,
+                                  int resolution_layer) {
+    const GridKey key{world_x, world_y, world_z, resolution_layer};
+    const GridId virtual_id = hash_key(key);
+    return GridPoint(world_x,
+                     world_y,
+                     world_z,
+                     resolution_layer,
+                     SDL_Point{0, 0},
+                     SDL_Point{0, 0},
+                     virtual_id,
+                     nullptr,
+                     nullptr,
+                     true);
+}
+
 void GridPoint::update_world_position(int new_x, int new_y, int new_z) {
     world_x_ = new_x;
     world_y_ = new_y;
@@ -271,6 +374,50 @@ void swap(GridPoint& a, GridPoint& b) noexcept {
     swap(a.y_child_pos_, b.y_child_pos_);
     swap(a.z_child_neg_, b.z_child_neg_);
     swap(a.z_child_pos_, b.z_child_pos_);
+}
+
+GridBounds GridBounds::from_xywh(int x, int y, int w, int h, int world_z, int layer) {
+    const int max_x = x + std::max(0, w - 1);
+    const int max_y = y + std::max(0, h - 1);
+    GridPoint min = GridPoint::make_virtual(x, y, world_z, layer);
+    GridPoint max = GridPoint::make_virtual(max_x, max_y, world_z, layer);
+    return GridBounds(min, max);
+}
+
+GridBounds GridBounds::from_min_max(const GridPoint& min_pt, const GridPoint& max_pt) {
+    return GridBounds(min_pt, max_pt);
+}
+
+bool GridBounds::contains(const GridPoint& pt) const {
+    return pt.world_x() >= min.world_x() && pt.world_x() <= max.world_x() &&
+           pt.world_y() >= min.world_y() && pt.world_y() <= max.world_y() &&
+           pt.world_z() >= std::min(min.world_z(), max.world_z()) &&
+           pt.world_z() <= std::max(min.world_z(), max.world_z());
+}
+
+GridBounds GridBounds::expanded(int margin) const {
+    const int m = std::max(0, margin);
+    GridPoint new_min = GridPoint::make_virtual(min.world_x() - m, min.world_y() - m, min.world_z(), min.resolution_layer());
+    GridPoint new_max = GridPoint::make_virtual(max.world_x() + m, max.world_y() + m, max.world_z(), max.resolution_layer());
+    return GridBounds(new_min, new_max);
+}
+
+SDL_Rect GridBounds::to_sdl_rect() const {
+    return SDL_Rect{
+        min.world_x(),
+        min.world_y(),
+        std::max(0, max.world_x() - min.world_x() + 1),
+        std::max(0, max.world_y() - min.world_y() + 1)
+    };
+}
+
+SDL_FRect GridBounds::to_sdl_frect() const {
+    return SDL_FRect{
+        static_cast<float>(min.world_x()),
+        static_cast<float>(min.world_y()),
+        static_cast<float>(std::max(0, max.world_x() - min.world_x() + 1)),
+        static_cast<float>(std::max(0, max.world_y() - min.world_y() + 1))
+    };
 }
 
 } // namespace world

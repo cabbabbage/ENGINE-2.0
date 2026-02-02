@@ -130,7 +130,7 @@ public:
                                     FrameEditorLaunchMode launch_mode,
                                     std::function<void(const std::string&)> on_host_closed);
 
-    void log_asset_movement(Asset* asset, SDL_Point previous, SDL_Point current);
+    void log_asset_movement(Asset* asset, const world::GridPoint& previous, const world::GridPoint& current);
     std::uint32_t current_frame_id() const { return frame_id_; }
 
     devmode::core::ManifestStore* manifest_store();
@@ -173,7 +173,7 @@ public:
     void refresh_filtered_active_assets();
     void mark_active_assets_dirty();
     bool rebuild_active_assets_if_needed();
-    void initialize_active_assets(SDL_Point center);
+    void initialize_active_assets(const world::GridPoint& center);
     std::uint64_t dev_active_state_version() const { return dev_active_state_version_; }
 
 
@@ -286,19 +286,19 @@ private:
     bool logged_initial_rebuild_warning_ = false;
     bool grid_dirty_ = true;
     bool camera_view_dirty_ = true;
-    SDL_Point last_camera_center_for_grid_{0, 0};
+    world::GridPoint last_camera_center_for_grid_ = world::GridPoint::make_virtual(0, 0, 0, 0);
     double last_camera_scale_for_grid_ = 0.0;
     double last_camera_pitch_for_grid_ = 0.0;
 
     struct GridMovementCommand {
         Asset* asset = nullptr;
-        SDL_Point previous{0, 0};
-        SDL_Point current{0, 0};
-};
+        world::GridPoint previous = world::GridPoint::make_virtual(0, 0, 0, 0);
+        world::GridPoint current   = world::GridPoint::make_virtual(0, 0, 0, 0);
+    };
 
     void track_asset_for_grid(Asset* asset);
     bool maybe_rebuild_world_grid();
-    void rebuild_world_grid_and_active_assets(const SDL_Point& current_center,
+    void rebuild_world_grid_and_active_assets(const world::GridPoint& current_center,
                                               double current_scale,
                                               double current_pitch);
     void mark_grid_dirty();
@@ -320,7 +320,7 @@ private:
     std::function<void()> dev_grid_overlay_callback_;
 
     void rebuild_non_player_update_buffer_if_needed();
-    void update_active_assets(SDL_Point center);
+    void update_active_assets(const world::GridPoint& center);
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();
     void invalidate_max_asset_dimensions();
@@ -338,7 +338,7 @@ private:
     }
 
 private:
-    SDL_Point last_known_player_pos_{0, 0};
+    world::GridPoint last_known_player_pos_ = world::GridPoint::make_virtual(0, 0, 0, 0);
     bool      last_player_pos_valid_ = false;
 
     std::vector<SDL_Rect> culled_debug_rects_;

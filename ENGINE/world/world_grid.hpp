@@ -19,31 +19,6 @@ class WarpedScreenGrid;
 
 namespace world {
 
-struct GridKey {
-    int x = 0;
-    int y = 0;
-    int z = 0;
-    int layer = 0;
-
-    bool operator==(const GridKey& other) const noexcept {
-        return x == other.x && y == other.y && z == other.z && layer == other.layer;
-    }
-
-    bool operator!=(const GridKey& other) const noexcept {
-        return !(*this == other);
-    }
-};
-
-struct GridKeyHash {
-    std::size_t operator()(const GridKey& key) const noexcept {
-        std::size_t h1 = std::hash<int>{}(key.x);
-        std::size_t h2 = std::hash<int>{}(key.y);
-        std::size_t h3 = std::hash<int>{}(key.z);
-        std::size_t h4 = std::hash<int>{}(key.layer);
-        return ((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1) ^ (h4 << 3);
-    }
-};
-
 class WorldGrid {
 public:
     struct RegionMetrics {
@@ -56,22 +31,22 @@ public:
     // grid and are not transferred to Screen Grid; Screen Grid only holds non-owning
     // references during frame rebuilds. Legacy chunked rendering (ChunkManager) and
     // loaders remain intact during migration; avoid adding new permanent 2D-only paths.
-    WorldGrid() : WorldGrid(SDL_Point{0, 0}, 0) {}
-    WorldGrid(SDL_Point origin, int r_chunk);
+    WorldGrid() : WorldGrid(GridPoint::make_virtual(0, 0, 0, 0), 0) {}
+    WorldGrid(const GridPoint& origin, int r_chunk);
 
     void set_chunk_resolution(int r);
     void set_grid_resolution(int r);
     int  grid_resolution() const;
     int  chunk_resolution() const { return r_chunk_; }
-    SDL_Point origin() const { return origin_; }
-    void set_origin(SDL_Point origin);
+    GridPoint origin() const { return origin_; }
+    void set_origin(const GridPoint& origin);
 
     Asset* create_asset_at_point(std::unique_ptr<Asset> a, int world_z = 0, int resolution_layer = -1);
     Asset* create_asset_at_point(Asset* a, int world_z = 0, int resolution_layer = -1);
     Asset* register_asset(std::unique_ptr<Asset> a, int world_z = 0, int resolution_layer = -1);
     Asset* register_asset(Asset* a, int world_z = 0, int resolution_layer = -1);
-    Chunk* ensure_chunk_from_world(SDL_Point world_px);
-    Chunk* chunk_from_world(SDL_Point world_px) const;
+    Chunk* ensure_chunk_from_world(const GridPoint& world_px);
+    Chunk* chunk_from_world(const GridPoint& world_px) const;
     Chunk* get_or_create_chunk_ij(int i, int j);
     std::vector<Chunk*> all_chunks() const {
         const auto& storage = chunks_.storage();
@@ -86,13 +61,15 @@ public:
     }
 
     Asset* move_asset_to_point(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int world_z = 0, int resolution_layer = -1);
+    Asset* move_asset_to_point(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos);
     Asset* move_asset(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int world_z = 0, int resolution_layer = -1);
+    Asset* move_asset(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos);
 
     Asset* remove_asset(Asset* a);
     void unregister_asset(Asset* a);
     void rebuild_chunks();
 
-    void update_active_chunks(const SDL_Rect& camera_world, int margin_px);
+    void update_active_chunks(const GridBounds& camera_world, int margin_px);
 
     const std::vector<Chunk*>& active_chunks() const;
 
@@ -100,8 +77,8 @@ public:
     const ChunkManager& chunks() const;
     std::vector<Asset*> all_assets() const;
 
-    SDL_Point grid_index_from_world(SDL_Point world) const;
-    GridKey grid_key_from_world(SDL_Point world, int world_z = 0, int layer = -1) const;
+    GridKey grid_key_from_world(const GridPoint& world, int world_z = 0, int layer = -1) const;
+    GridKey grid_key_from_world(const GridPoint& world_point) const;
     const std::unordered_map<GridId, GridPoint>& points() const { return points_; }
     std::unordered_map<GridId, GridPoint>& points() { return points_; }
     GridPoint* point_for_id(GridId id);
@@ -114,7 +91,7 @@ public:
     GridPoint* find_grid_point_strict(const GridKey& key);
     const GridPoint* find_grid_point_strict(const GridKey& key) const;
     GridPoint& find_or_create_grid_point(const GridKey& key, Chunk* owning_chunk = nullptr, GridPoint* parent = nullptr);
-    GridKey grid_key_from_legacy(SDL_Point grid_index, int world_z = 0, int layer = -1) const;
+    GridKey grid_key_from_legacy(GridPoint grid_index, int world_z = 0, int layer = -1) const;
     GridPoint& ensure_child(GridPoint& parent, GridPoint::ChildDirection dir, const GridKey& child_key, Chunk* owning_chunk = nullptr);
     void attach_asset_to_hierarchy(GridPoint& point);
     void detach_asset_from_hierarchy(GridPoint& point);
@@ -128,7 +105,23 @@ public:
                                          bool skip_inactive_branches,
                                          bool include_empty_nodes,
                                          RegionMetrics* metrics = nullptr);
+    std::vector<GridPoint*> query_region(const GridBounds& bounds,
+                                         int min_layer,
+                                         int max_layer,
+                                         int min_world_z,
+                                         int max_world_z,
+                                         bool skip_inactive_branches,
+                                         bool include_empty_nodes,
+                                         RegionMetrics* metrics = nullptr);
     std::vector<const GridPoint*> query_region(const SDL_FRect& world_bounds,
+                                               int min_layer,
+                                               int max_layer,
+                                               int min_world_z,
+                                               int max_world_z,
+                                               bool skip_inactive_branches,
+                                               bool include_empty_nodes,
+                                               RegionMetrics* metrics = nullptr) const;
+    std::vector<const GridPoint*> query_region(const GridBounds& bounds,
                                                int min_layer,
                                                int max_layer,
                                                int min_world_z,

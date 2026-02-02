@@ -22,6 +22,7 @@
 #include "utils/grid.hpp"
 #include "utils/transform_smoothing_settings.hpp"
 #include "utils/log.hpp"
+#include "world/grid_point.hpp"
 #include <iostream>
 #include <random>
 #include <mutex>
@@ -911,13 +912,13 @@ bool  Asset::is_highlighted(){ return highlighted; }
 void Asset::set_selected(bool state){ selected = state; }
 bool  Asset::is_selected(){ return selected; }
 
-void Asset::cache_grid_residency(SDL_Point point) {
-        cached_grid_residency_    = point;
+void Asset::cache_grid_residency(const world::GridPoint& point) {
+        cached_grid_residency_    = point.key();
         has_cached_grid_residency_ = true;
 }
 
 void Asset::clear_grid_residency_cache() {
-        cached_grid_residency_    = SDL_Point{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min() };
+        cached_grid_residency_    = world::GridKey{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min(), 0, 0 };
         has_cached_grid_residency_ = false;
 }
 
@@ -942,7 +943,7 @@ bool Asset::has_grid_residency_cache() const {
         return has_cached_grid_residency_;
 }
 
-SDL_Point Asset::grid_residency_cache() const {
+world::GridKey Asset::grid_residency_cache() const {
         return cached_grid_residency_;
 }
 
@@ -984,11 +985,17 @@ float Asset::smoothed_alpha() const {
 void Asset::move_to_world_position(int world_x, int world_y, int world_z) {
     if (!assets_) return;
 
-    SDL_Point old_pos = pos_ ? pos_->world : SDL_Point{0, 0};
-    SDL_Point new_pos = SDL_Point{world_x, world_y};
+    WorldGrid& grid = assets_->world_grid();
+    GridPoint& target = GridPoint::from_world(world_x, world_y, world_z, grid_resolution, grid);
 
-    // Use WorldGrid's move_asset which will update pos_ automatically
-    assets_->world_grid().move_asset(this, old_pos, new_pos, world_z, grid_resolution);
+    if (pos_) {
+        grid.move_asset(this, *pos_, target);
+    } else {
+        const int start_x = world_x + 1; // force placement when no previous grid residency
+        const int start_y = world_y + 1;
+        GridPoint virtual_start = GridPoint::make_virtual(start_x, start_y, world_z, grid_resolution);
+        grid.move_asset(this, virtual_start, target);
+    }
 }
 
 void Asset::set_world_z(int world_z) {

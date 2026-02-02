@@ -1,13 +1,12 @@
 #pragma once
 
-#include <SDL.h>
-
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <vector>
 
 #include "tiling/grid_tile.hpp"
+#include "world/grid_point.hpp"
 
 class Assets;
 class Asset;
@@ -21,7 +20,7 @@ struct Chunk {
     int      i = 0;
     int      j = 0;
     int      r_chunk = 0;
-    SDL_Rect world_bounds{0, 0, 0, 0};
+    GridBounds world_bounds = GridBounds::from_xywh(0, 0, 0, 0);
 
     std::vector<Asset*> assets;
     std::uint64_t       occlusion_revision = 0;

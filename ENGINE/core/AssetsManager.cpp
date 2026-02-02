@@ -540,11 +540,11 @@ void Assets::update_filtered_active_assets() {
     }
 }
 
-void Assets::log_asset_movement(Asset* asset, SDL_Point previous, SDL_Point current) {
+void Assets::log_asset_movement(Asset* asset, const world::GridPoint& previous, const world::GridPoint& current) {
     if (!asset) {
         return;
     }
-    if (previous.x == current.x && previous.y == current.y) {
+    if (previous.world_x() == current.world_x() && previous.world_y() == current.world_y()) {
         return;
     }
     movement_commands_buffer_.push_back(GridMovementCommand{
@@ -733,21 +733,23 @@ void Assets::update(const Input& input)
         dx = player->world_x() - start_px;
         dy = player->world_y() - start_py;
         const bool moved_during_update = (dx != 0 || dy != 0);
-        SDL_Point current_player_pos{player->world_x(), player->world_y()};
+        world::GridPoint current_player_pos = world::GridPoint::make_virtual(player->world_x(),
+                                                                             player->world_y(),
+                                                                             player->world_z(),
+                                                                             player->grid_resolution);
         const bool moved_since_last_frame =
             !last_player_pos_valid_ ||
-            current_player_pos.x != last_known_player_pos_.x ||
-            current_player_pos.y != last_known_player_pos_.y;
+            current_player_pos.world_x() != last_known_player_pos_.world_x() ||
+            current_player_pos.world_y() != last_known_player_pos_.world_y();
 
         last_known_player_pos_ = current_player_pos;
         last_player_pos_valid_ = true;
 
         player_moved = moved_during_update || moved_since_last_frame;
         if (!dev_mode && moved_during_update) {
-
             log_asset_movement(player,
-                               SDL_Point{start_px, start_py},
-                               SDL_Point{player->world_x(), player->world_y()});
+                               world::GridPoint::make_virtual(start_px, start_py, player->world_z(), player->grid_resolution),
+                               current_player_pos);
         }
     } else {
         last_player_pos_valid_ = false;
@@ -757,7 +759,10 @@ void Assets::update(const Input& input)
 
     for (Asset* asset : non_player_update_buffer_) {
         if (!asset) continue;
-        SDL_Point previous_pos{asset->world_x(), asset->world_y()};
+        world::GridPoint previous_pos = world::GridPoint::make_virtual(asset->world_x(),
+                                                                       asset->world_y(),
+                                                                       asset->world_z(),
+                                                                       asset->grid_resolution);
         asset->active = true;
 
         if (dev_mode) {
@@ -772,10 +777,13 @@ void Assets::update(const Input& input)
         } else {
 
             asset->update();
-            if (previous_pos.x != asset->world_x() || previous_pos.y != asset->world_y()) {
+            if (previous_pos.world_x() != asset->world_x() || previous_pos.world_y() != asset->world_y()) {
                 log_asset_movement(asset,
                                    previous_pos,
-                                   SDL_Point{asset->world_x(), asset->world_y()});
+                                   world::GridPoint::make_virtual(asset->world_x(),
+                                                                  asset->world_y(),
+                                                                  asset->world_z(),
+                                                                  asset->grid_resolution));
             }
         }
     }
@@ -784,7 +792,7 @@ void Assets::update(const Input& input)
         for (const GridMovementCommand& cmd : movement_commands_buffer_) {
             if (!cmd.asset) continue;
             world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
-            cmd.asset->cache_grid_residency(SDL_Point{cmd.asset->world_x(), cmd.asset->world_y()});
+            cmd.asset->cache_grid_residency(cmd.current);
         }
         movement_commands_buffer_.clear();
 
@@ -1221,7 +1229,7 @@ const std::vector<Asset*>& Assets::getFilteredActiveAssets() const {
     return filtered_active_assets;
 }
 
-void Assets::initialize_active_assets(SDL_Point ) {
+void Assets::initialize_active_assets(const world::GridPoint& ) {
 
     active_assets.clear();
     active_assets.reserve(all.size());
@@ -1357,7 +1365,8 @@ Asset* Assets::find_child_timeline_asset(const Asset* parent, int slot_index) co
 void Assets::rebuild_from_grid_state() {
     ++frame_id_;
     rebuild_all_assets_from_grid();
-    initialize_active_assets(camera_.get_screen_center());
+    const SDL_Point center_px = camera_.get_screen_center();
+    initialize_active_assets(world::GridPoint::make_virtual(center_px.x, center_px.y, 0, world_grid_.max_resolution_layers()));
     refresh_filtered_active_assets();
     mark_non_player_update_buffer_dirty();
 }
@@ -1396,13 +1405,18 @@ bool Assets::maybe_rebuild_world_grid() {
         return false;
     }
 
-    const SDL_Point current_center = camera_.get_screen_center();
+    const SDL_Point center_px = camera_.get_screen_center();
+    const world::GridPoint current_center = world::GridPoint::make_virtual(
+        center_px.x,
+        center_px.y,
+        0,
+        world_grid_.max_resolution_layers());
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
     constexpr double kCameraGridEpsilon = 1e-4;
     const bool camera_changed =
-        current_center.x != last_camera_center_for_grid_.x ||
-        current_center.y != last_camera_center_for_grid_.y ||
+        current_center.world_x() != last_camera_center_for_grid_.world_x() ||
+        current_center.world_y() != last_camera_center_for_grid_.world_y() ||
         std::fabs(current_scale - last_camera_scale_for_grid_) > kCameraGridEpsilon ||
         std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon;
 
@@ -1416,7 +1430,7 @@ bool Assets::maybe_rebuild_world_grid() {
     return true;
 }
 
-void Assets::rebuild_world_grid_and_active_assets(const SDL_Point& current_center,
+void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& current_center,
                                                   double current_scale,
                                                   double current_pitch) {
     camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_);
@@ -1487,7 +1501,8 @@ bool Assets::rebuild_active_assets_if_needed() {
         return false;
     }
 
-    const SDL_Point current_center = camera_.get_screen_center();
+    const SDL_Point center_px = camera_.get_screen_center();
+    const world::GridPoint current_center = world::GridPoint::make_virtual(center_px.x, center_px.y, 0, world_grid_.max_resolution_layers());
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
 

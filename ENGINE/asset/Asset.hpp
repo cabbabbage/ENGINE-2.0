@@ -200,10 +200,10 @@ class Asset {
     bool is_selected();
     void set_merged_from_neighbors(bool state);
     bool merged_from_neighbors() const;
-    void cache_grid_residency(SDL_Point point);
+    void cache_grid_residency(const world::GridPoint& point);
     void clear_grid_residency_cache();
     bool has_grid_residency_cache() const;
-    SDL_Point grid_residency_cache() const;
+    world::GridKey grid_residency_cache() const;
     void sync_transform_to_position();
     void set_grid_id(std::uint64_t id);
     std::uint64_t grid_id() const { return grid_id_; }
@@ -337,7 +337,7 @@ private:
     bool finalized_ = false;
     std::uint64_t grid_id_ = 0;
     bool has_cached_grid_residency_ = false;
-    SDL_Point cached_grid_residency_{0, 0};
+    world::GridKey cached_grid_residency_{0, 0, 0, 0};
     std::vector<AnimationChildAttachment> animation_children_;
     bool child_creation_requested_ = false;
     bool is_child_timeline_asset_ = false;

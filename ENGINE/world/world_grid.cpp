@@ -29,19 +29,17 @@ constexpr float kParallaxEpsilon = 1e-3f;
 constexpr int   kDefaultWorldZ   = 0;
 constexpr int   kDefaultMaxLayers = 10;
 
-SDL_Point world_point_for_asset(const Asset* asset) {
+GridPoint world_point_for_asset(const Asset* asset) {
     if (!asset) {
-        return SDL_Point{0, 0};
+        return GridPoint::make_virtual(0, 0, 0, 0);
     }
-    return SDL_Point{asset->world_x(), asset->world_y()};
+    return GridPoint::make_virtual(asset->world_x(), asset->world_y(), asset->world_z(), asset->grid_resolution);
 }
 
 template <typename PointPtr>
-inline bool world_point_in_rect(const PointPtr* gp, const SDL_FRect& rect) {
+inline bool world_point_in_rect(const PointPtr* gp, const GridBounds& rect) {
     if (!gp) return false;
-    const float x = static_cast<float>(gp->world_x());
-    const float y = static_cast<float>(gp->world_y());
-    return x >= rect.x && x <= rect.x + rect.w && y >= rect.y && y <= rect.y + rect.h;
+    return rect.contains(*gp);
 }
 
 std::optional<GridPoint::ChildDirection> direction_from_parent(const GridPoint* parent, const GridPoint* child) {
@@ -84,7 +82,7 @@ int WorldGrid::grid_spacing_for_layer(int layer) const {
     return dist;
 }
 
-WorldGrid::WorldGrid(SDL_Point origin, int r_chunk)
+WorldGrid::WorldGrid(const GridPoint& origin, int r_chunk)
     : origin_(origin)
     , r_chunk_(std::clamp(r_chunk, 0, vibble::grid::kMaxResolution))
     , grid_resolution_(r_chunk_)
@@ -111,7 +109,7 @@ void WorldGrid::set_chunk_resolution(int r) {
     invalidate_active_cache();
 }
 
-void WorldGrid::set_origin(SDL_Point origin) {
+void WorldGrid::set_origin(const GridPoint& origin) {
     origin_ = origin;
     invalidate_active_cache();
 }
@@ -134,22 +132,13 @@ GridId WorldGrid::make_point_id(int i, int j) const {
     return (static_cast<GridId>(ux) << 32) | static_cast<GridId>(uy);
 }
 
-SDL_Point WorldGrid::grid_index_from_world(SDL_Point world) const {
-    int spacing = grid_spacing_for_layer(default_resolution_layer());
-    if (spacing <= 0) {
-        spacing = 1;
-    }
-    const double fx = static_cast<double>(world.x - origin_.x) / static_cast<double>(spacing);
-    const double fy = static_cast<double>(world.y - origin_.y) / static_cast<double>(spacing);
-    return SDL_Point{
-        static_cast<int>(std::floor(fx)),
-        static_cast<int>(std::floor(fy))
-    };
+GridKey WorldGrid::grid_key_from_world(const GridPoint& world, int world_z, int layer) const {
+    const int resolution_layer = (layer >= 0) ? layer : world.resolution_layer();
+    return GridKey{world.world_x(), world.world_y(), world_z, resolution_layer};
 }
 
-GridKey WorldGrid::grid_key_from_world(SDL_Point world, int world_z, int layer) const {
-    const int resolution_layer = (layer >= 0) ? layer : default_resolution_layer();
-    return GridKey{world.x, world.y, world_z, resolution_layer};
+GridKey WorldGrid::grid_key_from_world(const GridPoint& world_point) const {
+    return GridKey{world_point.world_x(), world_point.world_y(), world_point.world_z(), world_point.resolution_layer()};
 }
 
 std::size_t WorldGrid::hash_key(const GridKey& key) {
@@ -205,6 +194,10 @@ Asset* WorldGrid::create_asset_at_point(Asset* a, int world_z, int resolution_la
 Asset* WorldGrid::move_asset_to_point(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int world_z, int resolution_layer) {
     move_asset(a, old_pos, new_pos, world_z, resolution_layer);
     return a;
+}
+
+Asset* WorldGrid::move_asset_to_point(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos) {
+    return move_asset(a, old_pos, new_pos);
 }
 
 Asset* WorldGrid::remove_asset(Asset* a) {
@@ -316,16 +309,14 @@ GridPoint& WorldGrid::ensure_point(SDL_Point grid_index, SDL_Point chunk_index, 
     const GridId id = make_point_id(grid_index.x, grid_index.y);
     const int resolution_layer = (resolution_layer_override >= 0) ? resolution_layer_override : default_resolution_layer();
     const int spacing = grid_spacing_for_layer(resolution_layer);
-    SDL_Point canonical_world{
-        origin_.x + grid_index.x * spacing,
-        origin_.y + grid_index.y * spacing
-    };
-    const GridKey canonical_key{canonical_world.x, canonical_world.y, world_z, resolution_layer};
+    const int canonical_world_x = origin_.world_x() + grid_index.x * spacing;
+    const int canonical_world_y = origin_.world_y() + grid_index.y * spacing;
+    const GridKey canonical_key{canonical_world_x, canonical_world_y, world_z, resolution_layer};
 
     auto [it, inserted] = points_.try_emplace(
         id,
-        canonical_world.x,
-        canonical_world.y,
+        canonical_world_x,
+        canonical_world_y,
         world_z,
         resolution_layer,
         grid_index,
@@ -360,14 +351,12 @@ GridPoint& WorldGrid::ensure_child(GridPoint& parent, GridPoint::ChildDirection 
     return child;
 }
 
-GridKey WorldGrid::grid_key_from_legacy(SDL_Point grid_index, int world_z, int layer) const {
+GridKey WorldGrid::grid_key_from_legacy(GridPoint grid_index, int world_z, int layer) const {
     const int resolution_layer = (layer >= 0) ? layer : default_resolution_layer();
     const int spacing = grid_spacing_for_layer(resolution_layer);
-    const SDL_Point world{
-        origin_.x + grid_index.x * spacing,
-        origin_.y + grid_index.y * spacing
-    };
-    return GridKey{world.x, world.y, world_z, resolution_layer};
+    const int wx = origin_.world_x() + grid_index.world_x() * spacing;
+    const int wy = origin_.world_y() + grid_index.world_y() * spacing;
+    return GridKey{wx, wy, world_z, resolution_layer};
 }
 
 GridPoint* WorldGrid::find_grid_point(const GridKey& key) {
@@ -407,8 +396,8 @@ GridPoint& WorldGrid::find_or_create_grid_point(const GridKey& key, Chunk* ownin
         return *existing;
     }
 
-    const SDL_Point world{key.x, key.y};
-    const SDL_Point grid_idx = grid_index_from_world(world);
+    const GridPoint world = GridPoint::make_virtual(key.x, key.y, key.z, key.layer);
+    const SDL_Point grid_idx = grid_index_from_world(world.to_sdl_point());
     const int chunk_step = 1 << r_chunk_;
     SDL_Point chunk_idx{0, 0};
     if (chunk_step > 0) {
@@ -524,6 +513,18 @@ std::vector<GridPoint*> WorldGrid::query_region(const SDL_FRect& world_bounds,
     return result;
 }
 
+std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& bounds,
+                                                int min_layer,
+                                                int max_layer,
+                                                int min_world_z,
+                                                int max_world_z,
+                                                bool skip_inactive_branches,
+                                                bool include_empty_nodes,
+                                                RegionMetrics* metrics) {
+    SDL_FRect rect = bounds.to_sdl_frect();
+    return query_region(rect, min_layer, max_layer, min_world_z, max_world_z, skip_inactive_branches, include_empty_nodes, metrics);
+}
+
 std::vector<const GridPoint*> WorldGrid::query_region(const SDL_FRect& world_bounds,
                                                       int min_layer,
                                                       int max_layer,
@@ -584,6 +585,18 @@ std::vector<const GridPoint*> WorldGrid::query_region(const SDL_FRect& world_bou
     }
 
     return result;
+}
+
+std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& bounds,
+                                                      int min_layer,
+                                                      int max_layer,
+                                                      int min_world_z,
+                                                      int max_world_z,
+                                                      bool skip_inactive_branches,
+                                                      bool include_empty_nodes,
+                                                      RegionMetrics* metrics) const {
+    SDL_FRect rect = bounds.to_sdl_frect();
+    return query_region(rect, min_layer, max_layer, min_world_z, max_world_z, skip_inactive_branches, include_empty_nodes, metrics);
 }
 
 std::unique_ptr<Asset> WorldGrid::extract_from_point(Asset* a, GridPoint& point) {
@@ -698,23 +711,23 @@ Asset* WorldGrid::register_asset(Asset* a, int world_z, int resolution_layer) {
     return register_asset(std::unique_ptr<Asset>(a), world_z, resolution_layer);
 }
 
-Chunk* WorldGrid::ensure_chunk_from_world(SDL_Point world_px) {
+Chunk* WorldGrid::ensure_chunk_from_world(const GridPoint& world_px) {
     const int chunk_step = 1 << r_chunk_;
     if (chunk_step <= 0) {
         return nullptr;
     }
-    const int i = grid_floor_div(world_px.x - origin_.x, chunk_step);
-    const int j = grid_floor_div(world_px.y - origin_.y, chunk_step);
+    const int i = grid_floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
+    const int j = grid_floor_div(world_px.world_y() - origin_.world_y(), chunk_step);
     return get_or_create_chunk_ij(i, j);
 }
 
-Chunk* WorldGrid::chunk_from_world(SDL_Point world_px) const {
+Chunk* WorldGrid::chunk_from_world(const GridPoint& world_px) const {
     const int chunk_step = 1 << r_chunk_;
     if (chunk_step <= 0) {
         return nullptr;
     }
-    const int i = grid_floor_div(world_px.x - origin_.x, chunk_step);
-    const int j = grid_floor_div(world_px.y - origin_.y, chunk_step);
+    const int i = grid_floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
+    const int j = grid_floor_div(world_px.world_y() - origin_.world_y(), chunk_step);
     return chunks_.find(i, j);
 }
 
@@ -803,6 +816,12 @@ Asset* WorldGrid::move_asset(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int
     prune_empty_points();
 
     return a;
+}
+
+Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos) {
+    const SDL_Point old_pt = old_pos.to_sdl_point();
+    const SDL_Point new_pt = new_pos.to_sdl_point();
+    return move_asset(a, old_pt, new_pt, new_pos.world_z(), new_pos.resolution_layer());
 }
 
 void WorldGrid::unregister_asset(Asset* a) {

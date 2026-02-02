@@ -555,22 +555,12 @@ private:
     struct GroupWidgets {
         std::string spawn_id{};
         std::unique_ptr<LabelWidget> header{};
-        std::unique_ptr<CallbackTextBoxWidget> resolution_widget{};
+        std::unique_ptr<DMNumericStepper> resolution_stepper{};
+        std::unique_ptr<StepperWidget> resolution_widget{};
         std::unique_ptr<DMButton> remove_button{};
         std::unique_ptr<ButtonWidget> remove_button_widget{};
         std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
     };
-
-    static int parse_resolution(const std::string& text, int fallback) {
-        if (text.empty()) return fallback;
-        try {
-            size_t idx = 0;
-            int value = std::stoi(text, &idx);
-            if (idx == text.size()) return value;
-        } catch (...) {
-        }
-        return fallback;
-    }
 
     json& ensure_candidate_selectors() {
         if (!section_) {
@@ -705,12 +695,15 @@ private:
             rows.push_back({group.header.get()});
 
             const int grid_resolution = entry.value("grid_resolution", 5);
-            group.resolution_widget = std::make_unique<CallbackTextBoxWidget>(
-                std::make_unique<DMTextBox>("Grid Resolution (2^r px)", std::to_string(grid_resolution)),
-                [this, spawn_id = group.spawn_id](const std::string& value) {
-                    this->update_group_resolution(spawn_id, value);
-                },
-                false);
+            group.resolution_stepper = std::make_unique<DMNumericStepper>("Grid Resolution (3^r spacing)",
+                                                                          0,
+                                                                          vibble::grid::kMaxResolution,
+                                                                          grid_resolution);
+            group.resolution_stepper->set_step(1);
+            group.resolution_stepper->set_on_change([this, spawn_id = group.spawn_id](int value) {
+                this->update_group_resolution(spawn_id, value);
+            });
+            group.resolution_widget = std::make_unique<StepperWidget>(group.resolution_stepper.get());
 
             group.remove_button = std::make_unique<DMButton>("Remove", &DMStyles::WarnButton(), 90, DMButton::height());
             group.remove_button_widget = std::make_unique<ButtonWidget>(
@@ -797,12 +790,11 @@ private:
         }
     }
 
-    void update_group_resolution(const std::string& spawn_id, const std::string& value) {
+    void update_group_resolution(const std::string& spawn_id, int parsed_value) {
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry) return;
         int current = entry->value("grid_resolution", 5);
-        int parsed = parse_resolution(value, current);
-        int desired = vibble::grid::clamp_resolution(parsed);
+        int desired = vibble::grid::clamp_resolution(parsed_value);
 
         std::unordered_set<int> used;
         auto& selectors = ensure_candidate_selectors();
@@ -817,8 +809,8 @@ private:
         notify_save(false);
 
         for (auto& group : group_widgets_) {
-            if (group.spawn_id == spawn_id && group.resolution_widget) {
-                group.resolution_widget->set_value(std::to_string(resolved));
+            if (group.spawn_id == spawn_id && group.resolution_stepper) {
+                group.resolution_stepper->set_value(resolved);
                 break;
             }
         }

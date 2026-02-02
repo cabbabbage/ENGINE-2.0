@@ -6,8 +6,10 @@
 #include "asset/animation.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/log.hpp"
+#include "utils/grid.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
 #include <cstdint>
@@ -33,6 +35,113 @@ inline std::uint64_t xorshift64(std::uint64_t value) {
     value ^= value >> 7;
     value ^= value << 17;
     return value;
+}
+
+inline bool is_trail_string(const std::string& text) {
+    if (text.empty()) {
+        return false;
+    }
+    bool all_space = true;
+    for (unsigned char ch : text) {
+        if (!std::isspace(ch)) {
+            all_space = false;
+            break;
+        }
+    }
+    if (all_space) {
+        return false;
+    }
+    std::string lower;
+    lower.reserve(text.size());
+    for (unsigned char ch : text) {
+        lower.push_back(static_cast<char>(std::tolower(ch)));
+    }
+    return lower == "trail";
+}
+
+struct ExclusionArea {
+    const Area* area = nullptr;
+    int min_x = 0;
+    int max_x = 0;
+    int min_y = 0;
+    int max_y = 0;
+};
+
+inline void try_add_area(const Area* area, std::vector<ExclusionArea>& out) {
+    if (!area) {
+        return;
+    }
+    try {
+        auto [minx, miny, maxx, maxy] = area->get_bounds();
+        out.push_back(ExclusionArea{area, minx, maxx, miny, maxy});
+    } catch (...) {
+        // Ignore malformed areas that cannot produce bounds.
+    }
+}
+
+inline std::vector<ExclusionArea> collect_exclusion_areas(const Assets* assets) {
+    std::vector<ExclusionArea> result;
+    if (!assets) {
+        return result;
+    }
+    const auto& rooms = assets->rooms();
+    result.reserve(rooms.size() * 2);
+    for (const Room* room : rooms) {
+        if (!room) {
+            continue;
+        }
+        try_add_area(room->room_area.get(), result);
+        for (const auto& named : room->areas) {
+            if (!named.area) {
+                continue;
+            }
+            if (is_trail_string(named.type) || is_trail_string(named.kind) || is_trail_string(named.name)) {
+                try_add_area(named.area.get(), result);
+            }
+        }
+    }
+    return result;
+}
+
+inline bool is_blocked(const SDL_FPoint& world_pos, const std::vector<ExclusionArea>& exclusions) {
+    if (exclusions.empty()) {
+        return false;
+    }
+    const SDL_Point pt{
+        static_cast<int>(std::lround(world_pos.x)),
+        static_cast<int>(std::lround(world_pos.y))
+    };
+    for (const auto& ex : exclusions) {
+        if (!ex.area) {
+            continue;
+        }
+        if (pt.x < ex.min_x || pt.x > ex.max_x || pt.y < ex.min_y || pt.y > ex.max_y) {
+            continue;
+        }
+        try {
+            if (ex.area->contains_point(pt)) {
+                return true;
+            }
+        } catch (...) {
+            // Skip problematic areas
+        }
+    }
+    return false;
+}
+
+inline int scaled_spacing(int base_spacing, float multiplier) {
+    const double scaled = static_cast<double>(base_spacing) * static_cast<double>(multiplier);
+    if (!std::isfinite(scaled) || scaled <= 0.0) {
+        return std::max(1, base_spacing);
+    }
+    const long long rounded = static_cast<long long>(std::llround(scaled));
+    if (rounded <= 0) {
+        return 1;
+    }
+    if (rounded > static_cast<long long>(std::numeric_limits<int>::max())) {
+        return std::numeric_limits<int>::max();
+    }
+    return static_cast<int>(rounded);
 }
 }
 
@@ -98,15 +207,16 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     const world::GridPoint grid_origin = grid.origin();
     const float spacing_multiplier = std::clamp(config().grid_spacing_multiplier, kMinGridMultiplier, kMaxGridMultiplier);
     const float max_random_jitter = std::clamp(config().max_random_jitter, kMinRandomJitter, kMaxRandomJitter);
+    const std::vector<ExclusionArea> exclusion_areas = collect_exclusion_areas(assets);
 
     for (size_t type_idx = 0; type_idx < boundary_types_.size(); ++type_idx) {
         const BoundaryType& btype = boundary_types_[type_idx];
-        int resolution_layer = std::clamp(btype.grid_resolution, 0, grid.max_resolution_layers());
-        int base_spacing = grid.grid_spacing_for_layer(resolution_layer);
+        const int resolution_layer = std::clamp(btype.grid_resolution, 0, grid.max_resolution_layers());
+        const int base_spacing = grid.grid_spacing_for_layer(resolution_layer);
         if (base_spacing <= 0) {
             continue;
         }
-        const int grid_spacing = std::max(1, static_cast<int>(std::lround(static_cast<float>(base_spacing) * spacing_multiplier)));
+        const int grid_spacing = scaled_spacing(base_spacing, spacing_multiplier);
 
         const float min_x = visible_bounds.x;
         const float max_x = visible_bounds.x + visible_bounds.w;
@@ -139,6 +249,10 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                     static_cast<float>(world_x) + jitter.x,
                     static_cast<float>(world_y) + jitter.y
                 };
+
+                if (is_blocked(world_pos, exclusion_areas)) {
+                    continue;
+                }
 
                 SDL_FPoint screen_pos{};
                 if (!cam.project_world_point(world_pos, static_cast<float>(world_z), screen_pos)) {
@@ -181,7 +295,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 sprite.texture = texture;
                 sprite.world_pos = world_pos;
                 sprite.screen_pos = screen_pos;
-                sprite.scale = 1.0f;
+                sprite.scale = static_cast<float>(grid_spacing) / static_cast<float>(std::max(1, base_spacing));
                 sprite.world_z = world_z;
                 sprite.texture_w = active_frame.width;
                 sprite.texture_h = active_frame.height;
@@ -363,7 +477,7 @@ void DynamicBoundarySystem::parse_boundary_config(const nlohmann::json& map_info
         type.spawn_id = selector.value("spawn_id", std::string{});
         type.display_name = selector.value("display_name", std::string{});
         type.grid_resolution = selector.value("grid_resolution", 5);
-        type.grid_resolution = std::clamp(type.grid_resolution, 0, 10);
+        type.grid_resolution = std::clamp(type.grid_resolution, 0, vibble::grid::kMaxResolution);
 
         int total_chance = 0;
         const auto candidates_it = selector.find("candidates");

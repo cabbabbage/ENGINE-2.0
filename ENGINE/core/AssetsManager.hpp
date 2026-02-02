@@ -329,7 +329,7 @@ private:
     void rebuild_asset_dimension_cache(float camera_scale);
     bool compute_asset_dimension_cache(const Asset* asset, float camera_scale, AssetDimensionCache& out) const;
     void finalize_max_asset_dimensions(float max_width, float max_height);
-    SDL_Rect screen_world_rect() const;
+    world::GridBounds screen_world_rect() const;
     int audio_effect_max_distance_world() const;
 
     void update_audio_camera_metrics();

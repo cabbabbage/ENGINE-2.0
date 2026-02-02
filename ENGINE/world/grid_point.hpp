@@ -38,6 +38,11 @@ struct GridKey {
     }
 };
 
+struct GridCoord {
+    int x = 0;
+    int y = 0;
+};
+
 struct GridKeyHash {
     std::size_t operator()(const GridKey& key) const noexcept;
 };
@@ -80,8 +85,8 @@ struct GridPoint {
               int world_y,
               int world_z,
               int resolution_layer,
-              SDL_Point grid_idx,
-              SDL_Point chunk_idx,
+              GridCoord grid_idx,
+              GridCoord chunk_idx,
               GridId legacy_id,
               Chunk* owning_chunk,
               GridPoint* parent_point = nullptr,
@@ -93,7 +98,7 @@ struct GridPoint {
         , resolution_layer_(resolution_layer)
         , parent_(parent_point)
         , is_virtual_(is_virtual_point)
-        , world(SDL_Point{world_x, world_y})
+        , world(GridCoord{world_x, world_y})
         , grid_index(grid_idx)
         , chunk_index(chunk_idx)
         , chunk(owning_chunk) {}
@@ -168,9 +173,9 @@ struct GridPoint {
     // match the legacy 2D fields until Cleanup.
     // Legacy fields stay present for migration; avoid mutating them outside WorldGrid wiring.
     const GridId     id           = 0;
-    const SDL_Point  world        = SDL_Point{0, 0};
-    const SDL_Point  grid_index   = SDL_Point{0, 0};
-    SDL_Point        chunk_index  = SDL_Point{0, 0};
+    const GridCoord  world        = GridCoord{0, 0};
+    const GridCoord  grid_index   = GridCoord{0, 0};
+    GridCoord        chunk_index  = GridCoord{0, 0};
     Chunk*           chunk        = nullptr;
 
     // Per-frame camera fields; WarpedScreenGrid must refresh these each rebuild.
@@ -384,6 +389,10 @@ private:
 struct GridBounds {
     GridPoint min;
     GridPoint max;
+
+    GridBounds()
+        : min(GridPoint::make_virtual(0, 0, 0, 0))
+        , max(GridPoint::make_virtual(0, 0, 0, 0)) {}
 
     GridBounds(const GridPoint& min_pt, const GridPoint& max_pt)
         : min(min_pt)

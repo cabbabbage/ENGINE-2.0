@@ -3005,7 +3005,17 @@ void RoomEditor::sync_dragged_assets_immediately() {
         asset->sync_transform_to_position();
         asset->mark_composite_dirty();
         if (assets_) {
-            (void)assets_->world_grid().move_asset(asset, state.last_synced_pos, current);
+            const world::GridPoint old_pos = world::GridPoint::make_virtual(
+                state.last_synced_pos.x,
+                state.last_synced_pos.y,
+                asset->world_z(),
+                asset->grid_resolution);
+            const world::GridPoint new_pos = world::GridPoint::make_virtual(
+                current.x,
+                current.y,
+                asset->world_z(),
+                asset->grid_resolution);
+            (void)assets_->world_grid().move_asset(asset, old_pos, new_pos);
         }
         state.last_synced_pos = current;
         moved_any = true;

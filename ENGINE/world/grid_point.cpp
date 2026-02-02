@@ -253,15 +253,15 @@ GridId GridPoint::hash_key(const GridKey& key) {
 }
 
 GridPoint& GridPoint::from_world(int x, int y, int z, int layer, WorldGrid& grid) {
-    const SDL_Point world_px{x, y};
-    const GridKey key = grid.grid_key_from_world(world_px, z, layer);
-    Chunk* owning_chunk = grid.ensure_chunk_from_world(world_px);
+    const GridPoint world_point = GridPoint::make_virtual(x, y, z, layer);
+    const GridKey key = grid.grid_key_from_world(world_point, z, layer);
+    Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
     return grid.find_or_create_grid_point(key, owning_chunk, nullptr);
 }
 
 GridPoint& GridPoint::from_world(const GridKey& key, WorldGrid& grid) {
-    const SDL_Point world_px{key.x, key.y};
-    Chunk* owning_chunk = grid.ensure_chunk_from_world(world_px);
+    const GridPoint world_point = GridPoint::make_virtual(key.x, key.y, key.z, key.layer);
+    Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
     return grid.find_or_create_grid_point(key, owning_chunk, nullptr);
 }
 
@@ -309,9 +309,9 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     const int world_y_px = static_cast<int>(std::lround(world_meters.y / safe_scale + params.anchor_world_y));
     const int world_z_px = static_cast<int>(std::lround(world_z));
 
-    const SDL_Point world_px{world_x_px, world_y_px};
-    const GridKey key = grid.grid_key_from_world(world_px, world_z_px, -1);
-    Chunk* owning_chunk = grid.ensure_chunk_from_world(world_px);
+    const GridPoint world_point = GridPoint::make_virtual(world_x_px, world_y_px, world_z_px, -1);
+    const GridKey key = grid.grid_key_from_world(world_point, world_z_px, -1);
+    Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
     return &grid.find_or_create_grid_point(key, owning_chunk, nullptr);
 }
 
@@ -325,8 +325,8 @@ GridPoint GridPoint::make_virtual(int world_x,
                      world_y,
                      world_z,
                      resolution_layer,
-                     SDL_Point{0, 0},
-                     SDL_Point{0, 0},
+                     GridCoord{0, 0},
+                     GridCoord{0, 0},
                      virtual_id,
                      nullptr,
                      nullptr,
@@ -338,7 +338,7 @@ void GridPoint::update_world_position(int new_x, int new_y, int new_z) {
     world_y_ = new_y;
     world_z_ = new_z;
     // Keep legacy 'world' field in sync
-    const_cast<SDL_Point&>(world) = SDL_Point{new_x, new_y};
+    const_cast<GridCoord&>(world) = GridCoord{new_x, new_y};
     // Invalidate screen data since position changed
     screen_data_valid = false;
 }
@@ -390,9 +390,7 @@ GridBounds GridBounds::from_min_max(const GridPoint& min_pt, const GridPoint& ma
 
 bool GridBounds::contains(const GridPoint& pt) const {
     return pt.world_x() >= min.world_x() && pt.world_x() <= max.world_x() &&
-           pt.world_y() >= min.world_y() && pt.world_y() <= max.world_y() &&
-           pt.world_z() >= std::min(min.world_z(), max.world_z()) &&
-           pt.world_z() <= std::max(min.world_z(), max.world_z());
+           pt.world_y() >= min.world_y() && pt.world_y() <= max.world_y();
 }
 
 GridBounds GridBounds::expanded(int margin) const {

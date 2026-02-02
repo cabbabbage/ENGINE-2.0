@@ -28,7 +28,7 @@ struct Chunk {
     std::vector<GridTile> tiles;
 
     Chunk() = default;
-    Chunk(int in_i, int in_j, int r, SDL_Rect bounds);
+    Chunk(int in_i, int in_j, int r, GridBounds bounds);
     ~Chunk();
     void releaseTileTextures();
 
@@ -39,4 +39,3 @@ struct Chunk {
 };
 
 }
-

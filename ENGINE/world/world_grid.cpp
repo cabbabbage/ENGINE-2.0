@@ -1,5 +1,7 @@
 #include "world/world_grid.hpp"
 
+#include <SDL.h>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -29,11 +31,12 @@ constexpr float kParallaxEpsilon = 1e-3f;
 constexpr int   kDefaultWorldZ   = 0;
 constexpr int   kDefaultMaxLayers = 10;
 
-GridPoint world_point_for_asset(const Asset* asset) {
+GridPoint world_point_for_asset(const Asset* asset, int resolution_layer = -1) {
     if (!asset) {
         return GridPoint::make_virtual(0, 0, 0, 0);
     }
-    return GridPoint::make_virtual(asset->world_x(), asset->world_y(), asset->world_z(), asset->grid_resolution);
+    const int resolved_layer = (resolution_layer >= 0) ? resolution_layer : asset->grid_resolution;
+    return GridPoint::make_virtual(asset->world_x(), asset->world_y(), asset->world_z(), resolved_layer);
 }
 
 template <typename PointPtr>
@@ -191,11 +194,6 @@ Asset* WorldGrid::create_asset_at_point(Asset* a, int world_z, int resolution_la
     return register_asset(std::unique_ptr<Asset>(a), world_z, resolution_layer);
 }
 
-Asset* WorldGrid::move_asset_to_point(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int world_z, int resolution_layer) {
-    move_asset(a, old_pos, new_pos, world_z, resolution_layer);
-    return a;
-}
-
 Asset* WorldGrid::move_asset_to_point(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos) {
     return move_asset(a, old_pos, new_pos);
 }
@@ -305,7 +303,7 @@ void WorldGrid::attach_asset_to_grid_point(std::unique_ptr<Asset> owned, Asset* 
     }
 }
 
-GridPoint& WorldGrid::ensure_point(SDL_Point grid_index, SDL_Point chunk_index, Chunk* owning_chunk, GridPoint* parent, int world_z, int resolution_layer_override) {
+GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent, int world_z, int resolution_layer_override) {
     const GridId id = make_point_id(grid_index.x, grid_index.y);
     const int resolution_layer = (resolution_layer_override >= 0) ? resolution_layer_override : default_resolution_layer();
     const int spacing = grid_spacing_for_layer(resolution_layer);
@@ -397,12 +395,12 @@ GridPoint& WorldGrid::find_or_create_grid_point(const GridKey& key, Chunk* ownin
     }
 
     const GridPoint world = GridPoint::make_virtual(key.x, key.y, key.z, key.layer);
-    const SDL_Point grid_idx = grid_index_from_world(world.to_sdl_point());
+    const GridCoord grid_idx = grid_index_from_world(world, key.layer);
     const int chunk_step = 1 << r_chunk_;
-    SDL_Point chunk_idx{0, 0};
+    GridCoord chunk_idx{0, 0};
     if (chunk_step > 0) {
-        chunk_idx.x = grid_floor_div(world.x - origin_.x, chunk_step);
-        chunk_idx.y = grid_floor_div(world.y - origin_.y, chunk_step);
+        chunk_idx.x = grid_floor_div(world.world_x() - origin_.world_x(), chunk_step);
+        chunk_idx.y = grid_floor_div(world.world_y() - origin_.world_y(), chunk_step);
     }
     GridPoint& point = ensure_point(grid_idx, chunk_idx, owning_chunk, parent, key.z, key.layer);
 
@@ -451,7 +449,7 @@ std::vector<PointPtr*> gather_roots(const std::unordered_map<GridId, GridPoint>&
 }
 }
 
-std::vector<GridPoint*> WorldGrid::query_region(const SDL_FRect& world_bounds,
+std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
                                                 int min_layer,
                                                 int max_layer,
                                                 int min_world_z,
@@ -513,19 +511,7 @@ std::vector<GridPoint*> WorldGrid::query_region(const SDL_FRect& world_bounds,
     return result;
 }
 
-std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& bounds,
-                                                int min_layer,
-                                                int max_layer,
-                                                int min_world_z,
-                                                int max_world_z,
-                                                bool skip_inactive_branches,
-                                                bool include_empty_nodes,
-                                                RegionMetrics* metrics) {
-    SDL_FRect rect = bounds.to_sdl_frect();
-    return query_region(rect, min_layer, max_layer, min_world_z, max_world_z, skip_inactive_branches, include_empty_nodes, metrics);
-}
-
-std::vector<const GridPoint*> WorldGrid::query_region(const SDL_FRect& world_bounds,
+std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
                                                       int min_layer,
                                                       int max_layer,
                                                       int min_world_z,
@@ -585,18 +571,6 @@ std::vector<const GridPoint*> WorldGrid::query_region(const SDL_FRect& world_bou
     }
 
     return result;
-}
-
-std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& bounds,
-                                                      int min_layer,
-                                                      int max_layer,
-                                                      int min_world_z,
-                                                      int max_world_z,
-                                                      bool skip_inactive_branches,
-                                                      bool include_empty_nodes,
-                                                      RegionMetrics* metrics) const {
-    SDL_FRect rect = bounds.to_sdl_frect();
-    return query_region(rect, min_layer, max_layer, min_world_z, max_world_z, skip_inactive_branches, include_empty_nodes, metrics);
 }
 
 std::unique_ptr<Asset> WorldGrid::extract_from_point(Asset* a, GridPoint& point) {
@@ -663,9 +637,10 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
         return raw;
     }
 
-    const SDL_Point world_pos = world_point_for_asset(raw);
-    const SDL_Point grid_index = grid_index_from_world(world_pos);
-    const GridKey new_key = grid_key_from_world(world_pos, world_z, (resolution_layer >= 0 ? resolution_layer : default_resolution_layer()));
+    const int resolved_layer = (resolution_layer >= 0) ? resolution_layer : default_resolution_layer();
+    const GridPoint world_pos = world_point_for_asset(raw, resolved_layer);
+    const GridCoord grid_index = grid_index_from_world(world_pos, resolved_layer);
+    const GridKey new_key = grid_key_from_world(world_pos, world_z, resolved_layer);
 
     auto existing_key_it = asset_to_key_.find(raw);
     if (existing_key_it != asset_to_key_.end() && existing_key_it->second != new_key) {
@@ -676,9 +651,9 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
         prune_empty_points();
     }
 
-    const int i = grid_floor_div(world_pos.x - origin_.x, chunk_step);
-    const int j = grid_floor_div(world_pos.y - origin_.y, chunk_step);
-    const SDL_Point chunk_index{i, j};
+    const int i = grid_floor_div(world_pos.world_x() - origin_.world_x(), chunk_step);
+    const int j = grid_floor_div(world_pos.world_y() - origin_.world_y(), chunk_step);
+    const GridCoord chunk_index{i, j};
     Chunk& chunk = chunks_.ensure(chunk_index.x, chunk_index.y, r_chunk_, origin_);
 
     auto ensure_asset_in_chunk = [&]() {
@@ -745,19 +720,22 @@ void WorldGrid::remove_from_chunk(Asset* a, Chunk* c) {
     }
 }
 
-Asset* WorldGrid::move_asset(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int world_z, int resolution_layer) {
+Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos) {
     if (!a) {
         return nullptr;
     }
+    const int resolved_layer = new_pos.resolution_layer();
+    const GridCoord old_index = grid_index_from_world(old_pos, old_pos.resolution_layer());
+    const GridCoord new_index = grid_index_from_world(new_pos, resolved_layer);
     const int chunk_step = 1 << r_chunk_;
     if (chunk_step <= 0) {
         return nullptr;
     }
-    const int old_i = grid_floor_div(old_pos.x - origin_.x, chunk_step);
-    const int old_j = grid_floor_div(old_pos.y - origin_.y, chunk_step);
-    const int new_i = grid_floor_div(new_pos.x - origin_.x, chunk_step);
-    const int new_j = grid_floor_div(new_pos.y - origin_.y, chunk_step);
-    const SDL_Point chunk_index{new_i, new_j};
+    const int old_i = grid_floor_div(old_pos.world_x() - origin_.world_x(), chunk_step);
+    const int old_j = grid_floor_div(old_pos.world_y() - origin_.world_y(), chunk_step);
+    const int new_i = grid_floor_div(new_pos.world_x() - origin_.world_x(), chunk_step);
+    const int new_j = grid_floor_div(new_pos.world_y() - origin_.world_y(), chunk_step);
+    const GridCoord chunk_index{new_i, new_j};
 
     Chunk* previous = nullptr;
     auto existing = residency_.find(a);
@@ -778,9 +756,6 @@ Asset* WorldGrid::move_asset(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int
         residency_[a] = &target;
     }
 
-    const SDL_Point old_index = grid_index_from_world(old_pos);
-    const SDL_Point new_index = grid_index_from_world(new_pos);
-
     // PRESERVE perspective scale before detaching from old point
     float preserved_perspective = 1.0f;
     if (a->pos_ && a->pos_->perspective_scale > 0.0001f) {
@@ -788,15 +763,14 @@ Asset* WorldGrid::move_asset(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int
     }
 
     std::unique_ptr<Asset> owned;
-    const bool point_changed = (old_pos.x != new_pos.x) || (old_pos.y != new_pos.y);
+    const bool point_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_y() != new_pos.world_y());
     if (point_changed) {
         if (GridPoint* existing_point = point_for_asset(a)) {
             owned = detach_asset_from_grid_point(a, *existing_point, true);
         }
     }
 
-    const int resolved_layer = (resolution_layer >= 0) ? resolution_layer : default_resolution_layer();
-    const GridKey new_key = grid_key_from_world(new_pos, world_z, resolved_layer);
+    const GridKey new_key = grid_key_from_world(new_pos, new_pos.world_z(), resolved_layer);
     GridPoint& point = ensure_point(new_index, chunk_index, &target, nullptr, new_key.z, new_key.layer);
 
     if (point_changed) {
@@ -816,12 +790,6 @@ Asset* WorldGrid::move_asset(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int
     prune_empty_points();
 
     return a;
-}
-
-Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos) {
-    const SDL_Point old_pt = old_pos.to_sdl_point();
-    const SDL_Point new_pt = new_pos.to_sdl_point();
-    return move_asset(a, old_pt, new_pt, new_pos.world_z(), new_pos.resolution_layer());
 }
 
 void WorldGrid::unregister_asset(Asset* a) {
@@ -854,20 +822,21 @@ const std::vector<Chunk*>& WorldGrid::active_chunks() const {
     return chunks_.active();
 }
 
-void WorldGrid::update_active_chunks(const SDL_Rect& camera_world, int margin_px) {
+void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_px) {
     const int margin = std::max(0, margin_px);
-    SDL_Rect expanded{
-        camera_world.x - margin,
-        camera_world.y - margin,
-        std::max(0, camera_world.w + margin * 2), std::max(0, camera_world.h + margin * 2) };
+    const GridBounds expanded = camera_world.expanded(margin);
+    const int min_x = std::min(expanded.min.world_x(), expanded.max.world_x());
+    const int max_x = std::max(expanded.min.world_x(), expanded.max.world_x());
+    const int min_y = std::min(expanded.min.world_y(), expanded.max.world_y());
+    const int max_y = std::max(expanded.min.world_y(), expanded.max.world_y());
 
     const bool needs_update = !has_cached_camera_rect_ ||
         last_margin_px_ != margin_px ||
         last_chunk_resolution_ != r_chunk_ ||
-        expanded.x != last_expanded_camera_.x ||
-        expanded.y != last_expanded_camera_.y ||
-        expanded.w != last_expanded_camera_.w ||
-        expanded.h != last_expanded_camera_.h;
+        last_expanded_camera_.min.world_x() != min_x ||
+        last_expanded_camera_.min.world_y() != min_y ||
+        last_expanded_camera_.max.world_x() != max_x ||
+        last_expanded_camera_.max.world_y() != max_y;
 
     if (!needs_update) {
         return;
@@ -876,11 +845,11 @@ void WorldGrid::update_active_chunks(const SDL_Rect& camera_world, int margin_px
     chunks_.clear_active();
     auto& active = chunks_.active();
     const int chunk_step = 1 << r_chunk_;
-    if (chunk_step > 0 && expanded.w > 0 && expanded.h > 0) {
-        const int min_i = grid_floor_div(expanded.x - origin_.x, chunk_step);
-        const int min_j = grid_floor_div(expanded.y - origin_.y, chunk_step);
-        const int max_i = grid_floor_div(expanded.x + expanded.w - 1 - origin_.x, chunk_step);
-        const int max_j = grid_floor_div(expanded.y + expanded.h - 1 - origin_.y, chunk_step);
+    if (chunk_step > 0 && max_x >= min_x && max_y >= min_y) {
+        const int min_i = grid_floor_div(min_x - origin_.world_x(), chunk_step);
+        const int min_j = grid_floor_div(min_y - origin_.world_y(), chunk_step);
+        const int max_i = grid_floor_div(max_x - origin_.world_x(), chunk_step);
+        const int max_j = grid_floor_div(max_y - origin_.world_y(), chunk_step);
         if (max_i >= min_i && max_j >= min_j) {
             for (int i = min_i; i <= max_i; ++i) {
                 for (int j = min_j; j <= max_j; ++j) {
@@ -910,6 +879,17 @@ void WorldGrid::set_grid_resolution(int r) {
 
 int WorldGrid::grid_resolution() const {
     return grid_resolution_;
+}
+
+GridCoord WorldGrid::grid_index_from_world(const GridPoint& world_point, int layer_override) const {
+    const int resolution_layer = (layer_override >= 0) ? layer_override : world_point.resolution_layer();
+    const int spacing = grid_spacing_for_layer(resolution_layer);
+    if (spacing <= 0) {
+        return GridCoord{0, 0};
+    }
+    const int i = grid_floor_div(world_point.world_x() - origin_.world_x(), spacing);
+    const int j = grid_floor_div(world_point.world_y() - origin_.world_y(), spacing);
+    return GridCoord{i, j};
 }
 
 void WorldGrid::propagate_branch_active(GridPoint* node) {

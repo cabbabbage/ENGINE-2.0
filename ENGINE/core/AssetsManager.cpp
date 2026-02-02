@@ -1132,14 +1132,12 @@ void Assets::update_max_asset_dimensions() {
     }
 }
 
-SDL_Rect Assets::screen_world_rect() const {
+world::GridBounds Assets::screen_world_rect() const {
     const Area view = camera_.get_camera_area();
     auto [minx, miny, maxx, maxy] = view.get_bounds();
-    SDL_Rect rect{
-        minx,
-        miny,
-        std::max(0, maxx - minx), std::max(0, maxy - miny) };
-    return rect;
+    const int width = std::max(0, maxx - minx);
+    const int height = std::max(0, maxy - miny);
+    return world::GridBounds::from_xywh(minx, miny, width, height, 0, world_grid_.default_resolution_layer());
 }
 
 int Assets::audio_effect_max_distance_world() const {

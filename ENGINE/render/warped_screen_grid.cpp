@@ -1138,12 +1138,15 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
 
     int minx, miny, maxx, maxy;
     std::tie(minx, miny, maxx, maxy) = current_view_.get_bounds();
-    SDL_FRect world_bounds{
-        static_cast<float>(minx),
-        static_cast<float>(miny),
-        static_cast<float>(std::max(0, maxx - minx)),
-        static_cast<float>(std::max(0, maxy - miny))
-};
+    const int width = std::max(0, maxx - minx);
+    const int height = std::max(0, maxy - miny);
+    const world::GridBounds world_bounds = world::GridBounds::from_xywh(
+        minx,
+        miny,
+        width,
+        height,
+        0,
+        world_grid.default_resolution_layer());
     world::WorldGrid::RegionMetrics region_metrics{};
     const int min_world_z = static_cast<int>(std::floor(settings_.depth_near_world));
     const int max_world_z = static_cast<int>(std::ceil(settings_.depth_far_world));

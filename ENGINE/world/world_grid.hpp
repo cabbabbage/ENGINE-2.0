@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include <SDL.h>
-
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -60,9 +58,7 @@ public:
         return result;
     }
 
-    Asset* move_asset_to_point(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int world_z = 0, int resolution_layer = -1);
     Asset* move_asset_to_point(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos);
-    Asset* move_asset(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int world_z = 0, int resolution_layer = -1);
     Asset* move_asset(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos);
 
     Asset* remove_asset(Asset* a);
@@ -85,7 +81,6 @@ public:
     const GridPoint* point_for_id(GridId id) const;
     GridPoint* point_for_asset(const Asset* asset);
     const GridPoint* point_for_asset(const Asset* asset) const;
-    GridPoint& ensure_child(GridPoint& parent, SDL_Point grid_index, SDL_Point chunk_index, Chunk* owning_chunk = nullptr);
     GridPoint* find_grid_point(const GridKey& key);
     const GridPoint* find_grid_point(const GridKey& key) const;
     GridPoint* find_grid_point_strict(const GridKey& key);
@@ -97,14 +92,6 @@ public:
     void detach_asset_from_hierarchy(GridPoint& point);
     static std::size_t hash_key(const GridKey& key);
     void debug_validate_keys_and_masks() const;
-    std::vector<GridPoint*> query_region(const SDL_FRect& world_bounds,
-                                         int min_layer,
-                                         int max_layer,
-                                         int min_world_z,
-                                         int max_world_z,
-                                         bool skip_inactive_branches,
-                                         bool include_empty_nodes,
-                                         RegionMetrics* metrics = nullptr);
     std::vector<GridPoint*> query_region(const GridBounds& bounds,
                                          int min_layer,
                                          int max_layer,
@@ -113,14 +100,6 @@ public:
                                          bool skip_inactive_branches,
                                          bool include_empty_nodes,
                                          RegionMetrics* metrics = nullptr);
-    std::vector<const GridPoint*> query_region(const SDL_FRect& world_bounds,
-                                               int min_layer,
-                                               int max_layer,
-                                               int min_world_z,
-                                               int max_world_z,
-                                               bool skip_inactive_branches,
-                                               bool include_empty_nodes,
-                                               RegionMetrics* metrics = nullptr) const;
     std::vector<const GridPoint*> query_region(const GridBounds& bounds,
                                                int min_layer,
                                                int max_layer,
@@ -130,6 +109,7 @@ public:
                                                bool include_empty_nodes,
                                                RegionMetrics* metrics = nullptr) const;
     int max_resolution_layers() const;
+    int default_resolution_layer() const;
     int grid_spacing_for_layer(int layer) const;
 
 private:
@@ -139,17 +119,17 @@ private:
     void remove_asset_from_point(Asset* a, GridPoint& point);
     std::unique_ptr<Asset> detach_asset_from_grid_point(Asset* a, GridPoint& point, bool clear_mapping);
     void attach_asset_to_grid_point(std::unique_ptr<Asset> owned, Asset* raw, GridPoint& point);
-    GridPoint& ensure_point(SDL_Point grid_index, SDL_Point chunk_index, Chunk* owning_chunk, GridPoint* parent = nullptr, int world_z = 0, int resolution_layer = -1);
+    GridPoint& ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent = nullptr, int world_z = 0, int resolution_layer = -1);
     void bind_asset_to_point(Asset* a, GridPoint& point);
     void propagate_branch_active(GridPoint* node);
     void propagate_branch_inactive(GridPoint* node);
     void prune_empty_points();
     std::unique_ptr<Asset> extract_from_point(Asset* a, GridPoint& point);
-    int default_resolution_layer() const;
     int distance_for_layer(int layer) const;
     static int power_of_three(int exponent);
+    GridCoord grid_index_from_world(const GridPoint& world_point, int layer_override = -1) const;
 
-    SDL_Point origin_{0, 0};
+    GridPoint origin_ = GridPoint::make_virtual(0, 0, 0, 0);
     int       r_chunk_ = 0;
     int       grid_resolution_ = 0;
     int       max_resolution_layers_ = 0;
@@ -158,7 +138,7 @@ private:
     std::unordered_map<Asset*, Chunk*> residency_;
 
     bool     has_cached_camera_rect_ = false;
-    SDL_Rect last_expanded_camera_{0, 0, 0, 0};
+    GridBounds last_expanded_camera_{};
     int      last_margin_px_         = -1;
     int      last_chunk_resolution_  = -1;
 

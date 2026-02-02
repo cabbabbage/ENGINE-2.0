@@ -15,6 +15,7 @@
 #include "core/AssetsManager.hpp"
 #include "core/asset_list.hpp"
 #include "utils/area.hpp"
+#include "world/grid_point.hpp"
 
 namespace {
 struct CollisionEntry {
@@ -52,13 +53,13 @@ std::vector<CollisionEntry> gather_collision_entries(const Asset& self) {
     return entries;
 }
 
-bool blocked_step(SDL_Point from,
-                  SDL_Point to,
+bool blocked_step(const world::GridPoint& from,
+                  const world::GridPoint& to,
                   const std::vector<CollisionEntry>& collisions,
                   const Asset& self,
                   const Assets* assets_owner) {
-    const SDL_Point start_bottom = animation_update::detail::bottom_middle_for(self, from);
-    const SDL_Point dest_bottom  = animation_update::detail::bottom_middle_for(self, to);
+    const world::GridPoint start_bottom = animation_update::detail::bottom_middle_for(self, from);
+    const world::GridPoint dest_bottom  = animation_update::detail::bottom_middle_for(self, to);
 
     if (animation_update::detail::segment_leaves_playable_area(assets_owner, start_bottom, dest_bottom)) {
         return true;
@@ -77,7 +78,7 @@ bool blocked_step(SDL_Point from,
         bool overlap_check = animation_update::detail::should_consider_overlap(self, *other);
 
         if (overlap_check) {
-            const SDL_Point other_bottom = animation_update::detail::bottom_middle_for(*other, other->world_point());
+            const world::GridPoint other_bottom = animation_update::detail::bottom_middle_for(*other, world::grid_math::from_sdl(other->world_point(), other->world_z(), other->grid_resolution));
             if (animation_update::detail::distance_sq(dest_bottom, other_bottom) <
                 animation_update::detail::kOverlapDistanceSq) {
                 return true;
@@ -131,19 +132,19 @@ std::vector<AnimationDescriptor> gather_movement_animations(const Asset& self) {
 }
 
 struct CandidateStride {
-    std::string animation_id;
-    SDL_Point   end_position{ 0, 0 };
-    int         frames   = 0;
-    int         dist_sq  = std::numeric_limits<int>::max();
-    bool        reaches  = false;
-    bool        valid    = false;
-    std::size_t path_index = 0;
+    std::string       animation_id;
+    world::GridPoint  end_position = world::GridPoint::make_virtual(0, 0, 0, 0);
+    int               frames   = 0;
+    int               dist_sq  = std::numeric_limits<int>::max();
+    bool              reaches  = false;
+    bool              valid    = false;
+    std::size_t       path_index = 0;
 };
 
 struct SmallestStride {
-    std::string anim_id;
-    std::size_t path_index = 0;
-    SDL_Point   delta{ 0, 0 };
+    std::string      anim_id;
+    std::size_t      path_index = 0;
+    world::GridPoint delta      = world::GridPoint::make_virtual(0, 0, 0, 0);
 };
 
 }
@@ -155,8 +156,17 @@ Plan GetBestPath::operator()(const Asset& self,
     Plan plan;
     plan.sanitized_checkpoints = sanitized_checkpoints;
 
-    SDL_Point cursor = self.world_point();
-    plan.final_dest  = cursor;
+    const int world_z = self.world_z();
+    const int layer   = self.grid_resolution;
+    std::vector<world::GridPoint> checkpoints;
+    checkpoints.reserve(sanitized_checkpoints.size());
+    for (const auto& cp : sanitized_checkpoints) {
+        checkpoints.emplace_back(world::grid_math::from_sdl(cp, world_z, layer));
+    }
+
+    world::GridPoint cursor = world::grid_math::from_sdl(self.world_point(), world_z, layer);
+    plan.final_dest  = cursor.to_sdl_point();
+    plan.world_start = cursor.to_sdl_point();
 
     if (!self.info) {
         return plan;
@@ -179,13 +189,13 @@ Plan GetBestPath::operator()(const Asset& self,
             int sum = std::abs(delta.x) + std::abs(delta.y);
             if (sum > 0 && sum < min_sum) {
                 min_sum = sum;
-                min_stride = { descriptor.id, descriptor.path_index, delta };
+                min_stride = { descriptor.id, descriptor.path_index, world::GridPoint::make_virtual(delta.x, delta.y, 0, layer) };
             }
         }
     }
 
     bool aborted = false;
-    for (const SDL_Point& checkpoint : sanitized_checkpoints) {
+    for (const world::GridPoint& checkpoint : checkpoints) {
         if (visited_sq > 0 && animation_update::detail::distance_sq(cursor, checkpoint) <= visited_sq) {
             continue;
         }
@@ -212,18 +222,18 @@ Plan GetBestPath::operator()(const Asset& self,
 
                 const int min_frames = descriptor.locked ? max_frames : 1;
                 for (int frames = min_frames; frames <= max_frames; ++frames) {
-                    SDL_Point simulated = cursor;
-                    bool      blocked   = false;
+                    world::GridPoint simulated = cursor;
+                    bool             blocked   = false;
 
                     for (int i = 0; i < frames; ++i) {
                         const AnimationFrame& frame = (*frames_path)[i];
                         SDL_Point delta = animation_update::detail::frame_world_delta(frame, self, grid);
-                        SDL_Point next{ simulated.x + delta.x, simulated.y + delta.y };
+                        world::GridPoint next = world::grid_math::offset(simulated, delta);
                         if (blocked_step(simulated, next, collisions, self, assets)) {
                             blocked = true;
                             break;
                         }
-                        simulated = next;
+                        simulated = std::move(next);
                     }
 
                     if (blocked) {
@@ -256,7 +266,7 @@ Plan GetBestPath::operator()(const Asset& self,
                         best.animation_id = descriptor.id;
                         best.frames       = frames;
                         best.dist_sq      = dist_sq;
-                        best.end_position = simulated;
+                        best.end_position = std::move(simulated);
                         best.path_index   = descriptor.path_index;
                     }
                 }
@@ -264,12 +274,13 @@ Plan GetBestPath::operator()(const Asset& self,
 
             if (!best.valid) {
                 if (min_sum != std::numeric_limits<int>::max()) {
-                    const SDL_Point fallback_next{ cursor.x + min_stride.delta.x, cursor.y + min_stride.delta.y };
+                    const SDL_Point delta_pt{ min_stride.delta.world_x(), min_stride.delta.world_y() };
+                    world::GridPoint fallback_next = world::grid_math::offset(cursor, delta_pt);
                     const int       fallback_dist_sq = animation_update::detail::distance_sq(fallback_next, checkpoint);
                     if (fallback_dist_sq < current_dist_sq) {
                         plan.strides.push_back(Stride{ min_stride.anim_id, 1, min_stride.path_index });
-                        cursor = fallback_next;
-                        plan.final_dest = cursor;
+                        cursor = std::move(fallback_next);
+                        plan.final_dest = cursor.to_sdl_point();
                     } else {
                         aborted = true;
                         break;
@@ -280,8 +291,8 @@ Plan GetBestPath::operator()(const Asset& self,
                 }
             } else {
                 plan.strides.push_back(Stride{ best.animation_id, best.frames, best.path_index });
-                cursor = best.end_position;
-                plan.final_dest = cursor;
+                cursor = std::move(best.end_position);
+                plan.final_dest = cursor.to_sdl_point();
             }
 
             if (++safeguard > 256) {

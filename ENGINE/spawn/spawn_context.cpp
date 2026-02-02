@@ -14,6 +14,7 @@
 #include "utils/area_helpers.hpp"
 #include "utils/log.hpp"
 #include "utils/map_grid_settings.hpp"
+#include "world/grid_point.hpp"
 SpawnContext::SpawnContext(std::mt19937& rng,
                            Check& checker,
                            std::vector<Area>& exclusion_zones,
@@ -184,6 +185,10 @@ void SpawnContext::set_map_grid_settings(const MapGridSettings& settings) {
         map_grid_settings_ = settings;
         map_grid_settings_.clamp();
         spawn_resolution_ = occupancy_ ? occupancy_->resolution() : vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution);
+}
+
+world::GridPoint SpawnContext::to_grid_point(SDL_Point pos) const {
+        return world::GridPoint::make_virtual(pos.x, pos.y, 0, spawn_resolution_);
 }
 
 void SpawnContext::set_spacing_filter(std::unordered_set<std::string> names) {

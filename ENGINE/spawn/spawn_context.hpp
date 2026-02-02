@@ -15,6 +15,7 @@
 #include "utils/grid.hpp"
 #include "utils/grid_occupancy.hpp"
 #include "utils/map_grid_settings.hpp"
+#include "world/grid_point.hpp"
 
 class Asset;
 class Area;
@@ -64,6 +65,7 @@ class SpawnContext {
     void set_allow_partial_clip_overlap(bool allow) { allow_partial_clip_overlap_ = allow; }
 
     bool position_allowed(const Area& area, SDL_Point pos) const;
+    world::GridPoint to_grid_point(SDL_Point pos) const;
 
     void set_map_grid_settings(const MapGridSettings& settings);
     const MapGridSettings& map_grid_settings() const { return map_grid_settings_; }

@@ -19,6 +19,7 @@
 #include "animation_runtime.hpp"
 #include "core/AssetsManager.hpp"
 #include "map_generation/room.hpp"
+#include "world/grid_point.hpp"
 #include "utils/grid.hpp"
 #include "utils/area.hpp"
 #include "utils/log.hpp"
@@ -106,16 +107,22 @@ bool should_consider_overlap(const Asset& self, const Asset& other) {
     return false;
 }
 
-int distance_sq(SDL_Point a, SDL_Point b) {
-    const int dx = a.x - b.x;
-    const int dy = a.y - b.y;
-    return dx * dx + dy * dy;
+int distance_sq(const world::GridPoint& a, const world::GridPoint& b) {
+    return world::grid_math::distance_sq(a, b);
 }
 
-bool segment_hits_area(SDL_Point from, SDL_Point to, const Area& area) {
+int distance_sq(SDL_Point a, SDL_Point b) {
+    return distance_sq(world::grid_math::from_sdl(a), world::grid_math::from_sdl(b));
+}
+
+bool segment_hits_area(const world::GridPoint& from_gp,
+                       const world::GridPoint& to_gp,
+                       const Area& area) {
+    const SDL_Point from = from_gp.to_sdl_point();
+    const SDL_Point to   = to_gp.to_sdl_point();
     const int steps = std::max(std::abs(to.x - from.x), std::abs(to.y - from.y));
     if (steps == 0) {
-        return area.contains_point(from);
+        return area.contains_point(from_gp.to_sdl_point());
     }
 
     const double step_x = (to.x - from.x) / static_cast<double>(steps);
@@ -131,7 +138,13 @@ bool segment_hits_area(SDL_Point from, SDL_Point to, const Area& area) {
     return false;
 }
 
-SDL_Point bottom_middle_for(const Asset& asset, SDL_Point pos) {
+bool segment_hits_area(SDL_Point from, SDL_Point to, const Area& area) {
+    return segment_hits_area(world::grid_math::from_sdl(from),
+                             world::grid_math::from_sdl(to),
+                             area);
+}
+
+world::GridPoint bottom_middle_for(const Asset& asset, const world::GridPoint& pos) {
     Area        area = asset.get_area("collision_area");
     const auto& pts  = area.get_points();
     if (pts.empty()) {
@@ -147,7 +160,11 @@ SDL_Point bottom_middle_for(const Asset& asset, SDL_Point pos) {
 
     const int offset_x = bottom.x - asset.world_x();
     const int offset_y = bottom.y - asset.world_y();
-    return SDL_Point{ pos.x + offset_x, pos.y + offset_y };
+    return world::grid_math::offset(pos, offset_x, offset_y);
+}
+
+SDL_Point bottom_middle_for(const Asset& asset, SDL_Point pos) {
+    return bottom_middle_for(asset, world::grid_math::from_sdl(pos)).to_sdl_point();
 }
 
 SDL_Point frame_world_delta(const AnimationFrame& frame,
@@ -159,7 +176,7 @@ SDL_Point frame_world_delta(const AnimationFrame& frame,
     return SDL_Point{ frame.dx, frame.dy };
 }
 
-bool bottom_point_inside_playable_area(const Assets* assets, SDL_Point bottom_point) {
+bool bottom_point_inside_playable_area(const Assets* assets, const world::GridPoint& bottom_point) {
     if (!assets) {
         return false;
     }
@@ -182,7 +199,7 @@ bool bottom_point_inside_playable_area(const Assets* assets, SDL_Point bottom_po
         if (!is_playable_room_cached(*room, cache_entry)) {
             return false;
         }
-        return room->room_area->contains_point(bottom_point);
+        return room->room_area->contains_point(bottom_point.to_sdl_point());
 };
 
     if (cache_entry.last_containing_room && contains_playable(cache_entry.last_containing_room)) {
@@ -200,18 +217,26 @@ bool bottom_point_inside_playable_area(const Assets* assets, SDL_Point bottom_po
     return false;
 }
 
-bool segment_leaves_playable_area(const Assets* assets, SDL_Point from, SDL_Point to) {
+bool bottom_point_inside_playable_area(const Assets* assets, SDL_Point bottom_point) {
+    return bottom_point_inside_playable_area(assets, world::grid_math::from_sdl(bottom_point));
+}
+
+bool segment_leaves_playable_area(const Assets* assets,
+                                  const world::GridPoint& from_gp,
+                                  const world::GridPoint& to_gp) {
     if (!assets) {
         return false;
     }
 
-    const bool start_inside = bottom_point_inside_playable_area(assets, from);
-    const bool end_inside   = bottom_point_inside_playable_area(assets, to);
+    const bool start_inside = bottom_point_inside_playable_area(assets, from_gp);
+    const bool end_inside   = bottom_point_inside_playable_area(assets, to_gp);
 
     if (!start_inside || !end_inside) {
         return true;
     }
 
+    const SDL_Point from = from_gp.to_sdl_point();
+    const SDL_Point to   = to_gp.to_sdl_point();
     const int steps = std::max(std::abs(to.x - from.x), std::abs(to.y - from.y));
     if (steps <= 1) {
         return false;
@@ -229,6 +254,12 @@ bool segment_leaves_playable_area(const Assets* assets, SDL_Point from, SDL_Poin
     }
 
     return false;
+}
+
+bool segment_leaves_playable_area(const Assets* assets, SDL_Point from, SDL_Point to) {
+    return segment_leaves_playable_area(assets,
+                                        world::grid_math::from_sdl(from),
+                                        world::grid_math::from_sdl(to));
 }
 
 }

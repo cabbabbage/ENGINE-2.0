@@ -28,7 +28,7 @@ void ChildrenSpawner::spawn(const SpawnInfo& item, const Area* area, SpawnContex
         const bool enforce_spacing = item.check_min_spacing;
         if (ctx.checks_enabled() &&
             ctx.checker().check(candidate->info,
-                                 pos,
+                                 ctx.to_grid_point(pos),
                                  std::vector<Area>{},
                                  ctx.all_assets(),
                                  false,

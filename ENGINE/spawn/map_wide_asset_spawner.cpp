@@ -300,8 +300,9 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
         context.set_clip_area(owner->room_area.get());
 
         const bool enforce_spacing = spawn_info->check_min_spacing;
+        const auto spawn_gp = context.to_grid_point(spawn_pos);
         if (context.checker().check(candidate->info,
-                                    spawn_pos,
+                                    spawn_gp,
                                     context.exclusion_zones(),
                                     context.all_assets(),
                                     true,

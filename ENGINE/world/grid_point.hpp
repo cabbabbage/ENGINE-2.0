@@ -409,4 +409,37 @@ struct GridBounds {
     SDL_FRect to_sdl_frect() const;
 };
 
+namespace grid_math {
+// Lightweight helpers to keep spatial math in the GridPoint domain and avoid
+// ad-hoc SDL_Point arithmetic sprinkled across systems that aren't render UI.
+inline GridPoint from_sdl(const SDL_Point& pt,
+                          int world_z = 0,
+                          int resolution_layer = 0) {
+    return GridPoint::make_virtual(pt.x, pt.y, world_z, resolution_layer);
+}
+
+inline SDL_Point to_sdl(const GridPoint& gp) { return gp.to_sdl_point(); }
+
+inline GridPoint offset(const GridPoint& base, int dx, int dy) {
+    return GridPoint::make_virtual(base.world_x() + dx,
+                                   base.world_y() + dy,
+                                   base.world_z(),
+                                   base.resolution_layer());
+}
+
+inline GridPoint offset(const GridPoint& base, const SDL_Point& delta) {
+    return offset(base, delta.x, delta.y);
+}
+
+inline int distance_sq(const GridPoint& a, const GridPoint& b) {
+    const int dx = a.world_x() - b.world_x();
+    const int dy = a.world_y() - b.world_y();
+    return dx * dx + dy * dy;
+}
+
+inline int manhattan(const GridPoint& a, const GridPoint& b) {
+    return std::abs(a.world_x() - b.world_x()) + std::abs(a.world_y() - b.world_y());
+}
+} // namespace grid_math
+
 }

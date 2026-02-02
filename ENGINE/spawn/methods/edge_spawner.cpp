@@ -166,7 +166,7 @@ void EdgeSpawner::spawn(const SpawnInfo& item, const Area* area, SpawnContext& c
         const bool enforce_spacing = item.check_min_spacing;
         if (ctx.checks_enabled() &&
             ctx.checker().check(candidate->info,
-                                spawn_point,
+                                ctx.to_grid_point(spawn_point),
                                 ctx.exclusion_zones(),
                                 ctx.all_assets(),
                                 false,

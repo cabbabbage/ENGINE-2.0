@@ -11,6 +11,7 @@
 #include "get_best_path.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "asset/animation.hpp"
+#include "world/grid_point.hpp"
 
 class Area;
 class Asset;
@@ -53,11 +54,16 @@ inline constexpr const char kDefaultAnimation[] = "default";
 inline constexpr int        kOverlapDistanceSq  = 40 * 40;
 
 bool should_consider_overlap(const Asset& self, const Asset& other);
+int  distance_sq(const world::GridPoint& a, const world::GridPoint& b);
 int  distance_sq(SDL_Point a, SDL_Point b);
+bool segment_hits_area(const world::GridPoint& from, const world::GridPoint& to, const Area& area);
 bool segment_hits_area(SDL_Point from, SDL_Point to, const Area& area);
+world::GridPoint bottom_middle_for(const Asset& asset, const world::GridPoint& pos);
 SDL_Point bottom_middle_for(const Asset& asset, SDL_Point pos);
 SDL_Point frame_world_delta(const AnimationFrame& frame, const Asset&          asset, const vibble::grid::Grid& grid);
+bool bottom_point_inside_playable_area(const Assets* assets, const world::GridPoint& bottom_point);
 bool bottom_point_inside_playable_area(const Assets* assets, SDL_Point bottom_point);
+bool segment_leaves_playable_area(const Assets* assets, const world::GridPoint& from, const world::GridPoint& to);
 bool segment_leaves_playable_area(const Assets* assets, SDL_Point from, SDL_Point to);
 
 }

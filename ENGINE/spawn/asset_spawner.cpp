@@ -305,8 +305,9 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                                                 placed = true;
                                                 break;
                                         }
+                                        const auto spawn_gp = batch_ctx.to_grid_point(spawn_pos);
                                         if (batch_ctx.checker().check(candidate.info,
-                                                                spawn_pos,
+                                                                spawn_gp,
                                                                 batch_ctx.exclusion_zones(),
                                                                 batch_ctx.all_assets(),
                                                                 true,
@@ -492,8 +493,9 @@ void AssetSpawner::run_edge_spawning(const Area& area) {
                                 continue;
                         }
 
+                        const auto spawn_gp = ctx.to_grid_point(spawn_pos);
                         if (ctx.checker().check(candidate->info,
-                                                spawn_pos,
+                                                spawn_gp,
                                                 ctx.exclusion_zones(),
                                                 ctx.all_assets(),
                                                 true,

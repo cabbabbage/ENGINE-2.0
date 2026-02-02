@@ -13,6 +13,7 @@
 #include "path_sanitizer.hpp"
 #include "get_best_path.hpp"
 #include "movement_plan_executor.hpp"
+#include "world/grid_point.hpp"
 
 namespace vibble::grid {
 class Grid;
@@ -39,7 +40,9 @@ public:
     std::size_t path_index_for(const std::string& anim_id) const;
 
     vibble::grid::Grid& grid() const;
+    bool path_blocked(const world::GridPoint& from, const world::GridPoint& to, const Asset* ignored, std::vector<const Asset*>* blockers = nullptr) const;
     bool path_blocked(SDL_Point from, SDL_Point to, const Asset* ignored, std::vector<const Asset*>* blockers = nullptr) const;
+    bool handle_blocked_path(const world::GridPoint& from, const world::GridPoint& to, const std::vector<const Asset*>& blockers);
     bool handle_blocked_path(SDL_Point from, SDL_Point to, const std::vector<const Asset*>& blockers);
     void mark_progress_toward_checkpoints();
     bool advance(AnimationFrame*& frame);
@@ -54,8 +57,11 @@ public:
 private:
     int        effective_grid_resolution(std::optional<int> override_resolution) const;
     SDL_Point  convert_delta_to_world(SDL_Point delta, int resolution) const;
+    world::GridPoint bottom_middle(const world::GridPoint& pos) const;
     SDL_Point  bottom_middle(SDL_Point pos) const;
+    bool       point_in_impassable(const world::GridPoint& pt, const Asset* ignored) const;
     bool       point_in_impassable(SDL_Point pt, const Asset* ignored) const;
+    bool       attempt_unstick(const world::GridPoint& from, const world::GridPoint& to, const std::vector<const Asset*>& blockers);
     bool       attempt_unstick(SDL_Point from, SDL_Point to, const std::vector<const Asset*>& blockers);
     bool       adjust_next_checkpoint(const std::vector<const Asset*>& blockers);
     bool       replan_to_destination();

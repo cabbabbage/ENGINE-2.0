@@ -45,7 +45,7 @@ void ExactSpawner::spawn(const SpawnInfo& item, const Area* area, SpawnContext& 
         const bool enforce_spacing = item.check_min_spacing;
         if (ctx.checks_enabled() &&
             ctx.checker().check(info,
-                                pos,
+                                ctx.to_grid_point(pos),
                                 ctx.exclusion_zones(),
                                 ctx.all_assets(),
                                 false,

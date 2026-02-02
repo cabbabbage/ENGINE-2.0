@@ -12,6 +12,7 @@
 #include "asset/Asset.hpp"
 #include "asset/asset_info.hpp"
 #include "utils/area.hpp"
+#include "world/grid_point.hpp"
 
 namespace vibble::grid {
 class Grid;
@@ -26,8 +27,10 @@ public:
     void reset_session();
 
     void register_asset(Asset* asset, bool enforce_spacing, bool track_for_spacing);
+    void register_asset(const world::GridPoint& world_pos, Asset* asset, bool enforce_spacing, bool track_for_spacing);
 
     bool check(const std::shared_ptr<AssetInfo>& info, const SDL_Point& test_pos, const std::vector<Area>& exclusion_areas, const std::vector<std::unique_ptr<Asset>>& assets, bool respect_exclusion_zones, bool enforce_spacing_for_candidate, bool treat_as_edge_asset, bool treat_as_map_asset, int num_neighbors) const;
+    bool check(const std::shared_ptr<AssetInfo>& info, const world::GridPoint& test_pos, const std::vector<Area>& exclusion_areas, const std::vector<std::unique_ptr<Asset>>& assets, bool respect_exclusion_zones, bool enforce_spacing_for_candidate, bool treat_as_edge_asset, bool treat_as_map_asset, int num_neighbors) const;
 
 private:
     bool debug_;

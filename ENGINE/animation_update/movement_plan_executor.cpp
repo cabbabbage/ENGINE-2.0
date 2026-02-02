@@ -7,6 +7,7 @@
 #include "asset/animation.hpp"
 #include "asset/animation_frame.hpp"
 #include "animation_update.hpp"
+#include "world/grid_point.hpp"
 
 bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
                         std::size_t& stride_index, int& stride_frame_counter) {
@@ -19,7 +20,9 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
         if (self && up.planner_iface_) {
             const int visited_thresh = up.planner_iface_->visit_threshold_px();
             const int visited_thresh_squared = visited_thresh * visited_thresh;
-            const int dist_sq = (self->world_x() - plan.final_dest.x) * (self->world_x() - plan.final_dest.x) + (self->world_y() - plan.final_dest.y) * (self->world_y() - plan.final_dest.y);
+            const world::GridPoint current = world::grid_math::from_sdl(self->world_point(), self->world_z(), self->grid_resolution);
+            const world::GridPoint target  = world::grid_math::from_sdl(plan.final_dest, self->world_z(), self->grid_resolution);
+            const int dist_sq = animation_update::detail::distance_sq(current, target);
             if (dist_sq <= visited_thresh_squared) {
                 self->target_reached = true;
             }

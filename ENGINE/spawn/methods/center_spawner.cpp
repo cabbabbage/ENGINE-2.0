@@ -35,9 +35,10 @@ void CenterSpawner::spawn(const SpawnInfo& item, const Area* area, SpawnContext&
         }
 
         const bool enforce_spacing = item.check_min_spacing;
+        const auto center_gp = ctx.to_grid_point(center);
         if (ctx.checks_enabled() &&
             ctx.checker().check(info,
-                                center,
+                                center_gp,
                                 ctx.exclusion_zones(),
                                 ctx.all_assets(),
                                 false,

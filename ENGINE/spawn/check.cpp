@@ -9,6 +9,7 @@
 #include "asset/asset_types.hpp"
 #include "utils/grid.hpp"
 #include "utils/range_util.hpp"
+#include "world/grid_point.hpp"
 
 namespace {
 
@@ -73,6 +74,43 @@ void Check::register_asset(Asset* asset, bool enforce_spacing, bool track_for_sp
     }
 }
 
+void Check::register_asset(const world::GridPoint& world_pos,
+                           Asset* asset,
+                           bool enforce_spacing,
+                           bool track_for_spacing) {
+    if (!asset || !asset->info) {
+        return;
+    }
+    if (!grid_) {
+        if (enforce_spacing) {
+            enforced_assets_.insert(asset);
+        }
+        if (track_for_spacing) {
+            tracked_assets_.insert(asset);
+        }
+        return;
+    }
+
+    SDL_Point index = grid_->world_to_index(world_pos.to_sdl_point(), resolution_);
+    const CellKey key = make_key(index);
+
+    if (enforce_spacing) {
+        enforced_assets_.insert(asset);
+        enforced_cells_[key].push_back(asset);
+        if (!asset->info->name.empty()) {
+            enforced_name_cells_[asset->info->name][key].push_back(asset);
+        }
+    }
+
+    if (track_for_spacing) {
+        tracked_assets_.insert(asset);
+        all_cells_[key].push_back(asset);
+        if (!asset->info->name.empty()) {
+            name_cells_[asset->info->name][key].push_back(asset);
+        }
+    }
+}
+
 bool Check::check(const std::shared_ptr<AssetInfo>& info,
                   const SDL_Point& test_pos,
                   const std::vector<Area>& exclusion_areas,
@@ -104,6 +142,26 @@ bool Check::check(const std::shared_ptr<AssetInfo>& info,
     }
 
     return perform_spacing_checks_grid(info, test_pos, enforce_spacing_for_candidate, treat_as_edge_asset, treat_as_map_asset);
+}
+
+bool Check::check(const std::shared_ptr<AssetInfo>& info,
+                  const world::GridPoint& test_pos,
+                  const std::vector<Area>& exclusion_areas,
+                  const std::vector<std::unique_ptr<Asset>>& assets,
+                  bool respect_exclusion_zones,
+                  bool enforce_spacing_for_candidate,
+                  bool treat_as_edge_asset,
+                  bool treat_as_map_asset,
+                  int num_neighbors) const {
+    return check(info,
+                 test_pos.to_sdl_point(),
+                 exclusion_areas,
+                 assets,
+                 respect_exclusion_zones,
+                 enforce_spacing_for_candidate,
+                 treat_as_edge_asset,
+                 treat_as_map_asset,
+                 num_neighbors);
 }
 
 Check::CellKey Check::make_key(SDL_Point index) {

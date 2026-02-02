@@ -1994,6 +1994,12 @@ void Assets::notify_spawn_group_removed(const std::string& spawn_id) {
     }
 }
 
+void Assets::invalidate_dynamic_boundary_system() {
+    if (scene) {
+        scene->invalidate_dynamic_boundary_system();
+    }
+}
+
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {
     popup_manager_.show_toast(message, duration_ms);
 }

@@ -2704,12 +2704,9 @@ void DevControls::regenerate_map_grid_assets() {
 }
 
 void DevControls::regenerate_boundary_spawn_group(const nlohmann::json& entry) {
-    // NOTE: Boundary assets are now rendered dynamically via DynamicBoundarySystem.
-    // This function is kept for API compatibility but no longer spawns static assets.
-    // The dynamic boundary system reads directly from map_boundary_data in the manifest.
-    // TODO: If live boundary config editing is needed, add a method to reinitialize
-    // the DynamicBoundarySystem from SceneRenderer.
-    (void)entry;
+    if (assets_) {
+        assets_->invalidate_dynamic_boundary_system();
+    }
 }
 
 void DevControls::ensure_map_assets_modal_open() {

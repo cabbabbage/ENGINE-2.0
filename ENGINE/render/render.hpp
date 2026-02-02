@@ -35,6 +35,8 @@ public:
     SceneRenderer(SDL_Renderer* renderer, Assets* assets, int screen_width, int screen_height, const nlohmann::json& map_manifest, const std::string& map_id);
     ~SceneRenderer();
 
+    void invalidate_dynamic_boundary_system();
+
     static inline bool prerequisites_ready(SDL_Renderer* renderer, Assets* assets, std::string* reason = nullptr) {
         if (!renderer) {
             if (reason) { *reason = "SDL_Renderer pointer is null."; }

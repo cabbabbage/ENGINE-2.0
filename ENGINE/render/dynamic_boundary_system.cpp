@@ -1,15 +1,13 @@
 #include "render/dynamic_boundary_system.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "world/world_grid.hpp"
-#include "world/grid_point.hpp"
-#include "asset/Asset.hpp"
 #include "asset/asset_library.hpp"
 #include "asset/asset_info.hpp"
+#include "animation/animation.hpp"
 #include "utils/log.hpp"
 
-#include <random>
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <cstdint>
 
@@ -22,119 +20,72 @@ constexpr float kMinVerticalOffset = -300.0f;
 constexpr float kMaxVerticalOffset = 300.0f;
 constexpr float kMinRandomJitter = 0.0f;
 constexpr float kMaxRandomJitter = 500.0f;
+constexpr float kDefaultAnimationFrameMs = 1000.0f / 24.0f;
+
+inline std::uint64_t mix_uint64(std::uint64_t seed, std::uint64_t value) {
+    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
+    return seed;
+}
+
+inline std::uint64_t xorshift64(std::uint64_t value) {
+    value ^= value << 13;
+    value ^= value >> 7;
+    value ^= value << 17;
+    return value;
+}
 }
 
 DynamicBoundarySystem::DynamicBoundarySystem() = default;
 
 DynamicBoundarySystem::~DynamicBoundarySystem() {
-    boundary_types_.clear();
-    boundary_assignments_.clear();
-    animation_states_.clear();
-    active_boundary_sprites_.clear();
+    clear_runtime_caches();
 }
 
-bool DynamicBoundarySystem::initialize(SDL_Renderer* renderer, const nlohmann::json& boundary_data, AssetLibrary* asset_library) {
+bool DynamicBoundarySystem::initialize(SDL_Renderer* renderer, AssetLibrary* asset_library) {
     if (!renderer || !asset_library) {
         vibble::log::warn("[DynamicBoundarySystem] Renderer or AssetLibrary is null; cannot initialize");
         return false;
     }
-
     renderer_ = renderer;
-    boundary_types_.clear();
-
-    if (boundary_data.is_null() || !boundary_data.is_object()) {
-        vibble::log::warn("[DynamicBoundarySystem] Boundary data is null or not an object");
-        return false;
-    }
-
-    const auto selectors_it = boundary_data.find("candidate_selectors");
-    if (selectors_it == boundary_data.end() || !selectors_it->is_array() || selectors_it->empty()) {
-        vibble::log::warn("[DynamicBoundarySystem] No candidate_selectors found in boundary data");
-        return false;
-    }
-
-    // Parse each spawn group
-    for (const auto& selector : *selectors_it) {
-        if (!selector.is_object()) continue;
-
-        BoundaryType boundary_type;
-        boundary_type.spawn_id = selector.value("spawn_id", std::string{});
-        boundary_type.display_name = selector.value("display_name", std::string{});
-        boundary_type.grid_resolution = selector.value("grid_resolution", 5);
-
-        // Clamp grid resolution
-        boundary_type.grid_resolution = std::clamp(boundary_type.grid_resolution, 0, 10);
-
-        const auto candidates_it = selector.find("candidates");
-        if (candidates_it == selector.end() || !candidates_it->is_array()) {
-            continue;
-        }
-
-        int total_chance = 0;
-        for (const auto& candidate : *candidates_it) {
-            if (!candidate.is_object()) continue;
-
-            BoundaryCandidate bc;
-            bc.asset_name = candidate.value("name", std::string{});
-            bc.chance = candidate.value("chance", 0);
-
-            if (bc.chance <= 0) continue;
-
-            total_chance += bc.chance;
-            boundary_type.candidates.push_back(bc);
-
-            // Get texture from asset library
-            if (bc.asset_name == "null" || bc.asset_name.empty()) {
-                boundary_type.textures.push_back(nullptr);
-                boundary_type.texture_widths.push_back(0);
-                boundary_type.texture_heights.push_back(0);
-            } else {
-                auto asset_info = asset_library->get(bc.asset_name);
-                if (asset_info && asset_info->preview_texture) {
-                    SDL_Texture* tex = asset_info->preview_texture;
-                    int w = 0, h = 0;
-                    SDL_QueryTexture(tex, nullptr, nullptr, &w, &h);
-                    boundary_type.textures.push_back(tex);
-                    boundary_type.texture_widths.push_back(w);
-                    boundary_type.texture_heights.push_back(h);
-                } else {
-                    vibble::log::warn("[DynamicBoundarySystem] Asset not found or has no texture: " + bc.asset_name);
-                    boundary_type.textures.push_back(nullptr);
-                    boundary_type.texture_widths.push_back(0);
-                    boundary_type.texture_heights.push_back(0);
-                }
-            }
-        }
-
-        boundary_type.total_chance = total_chance;
-
-        if (!boundary_type.candidates.empty() && total_chance > 0) {
-            boundary_types_.push_back(std::move(boundary_type));
-        }
-    }
-
-    if (boundary_types_.empty()) {
-        vibble::log::warn("[DynamicBoundarySystem] No valid boundary types loaded");
-        return false;
-    }
-
+    asset_library_ = asset_library;
     initialized_ = true;
-    vibble::log::info("[DynamicBoundarySystem] Loaded " + std::to_string(boundary_types_.size()) + " boundary types");
+    config_dirty_ = true;
+    last_boundary_json_ = nlohmann::json{};
+    boundary_types_.clear();
+    clear_runtime_caches();
     return true;
 }
 
-void DynamicBoundarySystem::update(const WarpedScreenGrid& cam, const world::WorldGrid& grid, float delta_ms) {
+void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
+                                   const world::WorldGrid& grid,
+                                   Assets* assets,
+                                   float delta_ms) {
     active_boundary_sprites_.clear();
+    if (!initialized_ || !renderer_ || !asset_library_ || !assets) {
+        return;
+    }
+    if (delta_ms < 0.0f) {
+        delta_ms = 0.0f;
+    }
 
-    if (!initialized_ || boundary_types_.empty()) {
+    const nlohmann::json& map_info = assets->map_info_json();
+    auto boundary_it = map_info.find("map_boundary_data");
+    if (boundary_it == map_info.end() || !boundary_it->is_object()) {
+        boundary_types_.clear();
+        last_boundary_json_ = nlohmann::json{};
         return;
     }
 
-    // Get visible world bounds from camera
+    if (config_dirty_ || needs_reparse(map_info)) {
+        parse_boundary_config(map_info);
+    }
+
+    if (boundary_types_.empty()) {
+        return;
+    }
+
     SDL_FPoint view_center = cam.get_view_center_f();
     double view_height = cam.view_height_world();
-
-    // Expand visible bounds for margin
     const float margin = static_cast<float>(view_height) * 0.5f;
     SDL_FRect visible_bounds{
         static_cast<float>(view_center.x - view_height - margin),
@@ -143,60 +94,51 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam, const world::Wor
         static_cast<float>(view_height * 2.0 + margin * 2.0)
     };
 
+    const SDL_Point grid_origin = grid.origin();
     const float spacing_multiplier = std::clamp(config().grid_spacing_multiplier, kMinGridMultiplier, kMaxGridMultiplier);
     const float max_random_jitter = std::clamp(config().max_random_jitter, kMinRandomJitter, kMaxRandomJitter);
 
-    // Iterate over each boundary type (each may have different grid resolution)
     for (size_t type_idx = 0; type_idx < boundary_types_.size(); ++type_idx) {
         const BoundaryType& btype = boundary_types_[type_idx];
-
-        // Use grid resolution from this boundary type
         int resolution_layer = std::clamp(btype.grid_resolution, 0, grid.max_resolution_layers());
         int base_spacing = grid.grid_spacing_for_layer(resolution_layer);
-        if (base_spacing <= 0 || base_spacing > 20000) {
-            base_spacing = grid.grid_spacing_for_layer(kBoundaryResolutionLayer);
+        if (base_spacing <= 0) {
+            continue;
         }
         const int grid_spacing = std::max(1, static_cast<int>(std::lround(static_cast<float>(base_spacing) * spacing_multiplier)));
 
-        // Snap to grid alignment
-        int start_x = static_cast<int>(std::floor(visible_bounds.x / grid_spacing)) * grid_spacing;
-        int start_y = static_cast<int>(std::floor(visible_bounds.y / grid_spacing)) * grid_spacing;
-        int end_x = static_cast<int>(std::ceil((visible_bounds.x + visible_bounds.w) / grid_spacing)) * grid_spacing;
-        int end_y = static_cast<int>(std::ceil((visible_bounds.y + visible_bounds.h) / grid_spacing)) * grid_spacing;
+        const float min_x = visible_bounds.x;
+        const float max_x = visible_bounds.x + visible_bounds.w;
+        const float min_y = visible_bounds.y;
+        const float max_y = visible_bounds.y + visible_bounds.h;
+
+        const int start_idx_x = static_cast<int>(std::floor((min_x - static_cast<float>(grid_origin.x)) / grid_spacing));
+        const int end_idx_x = static_cast<int>(std::ceil((max_x - static_cast<float>(grid_origin.x)) / grid_spacing));
+        const int start_idx_y = static_cast<int>(std::floor((min_y - static_cast<float>(grid_origin.y)) / grid_spacing));
+        const int end_idx_y = static_cast<int>(std::ceil((max_y - static_cast<float>(grid_origin.y)) / grid_spacing));
 
         const int world_z = 0;
 
-        for (int world_x = start_x; world_x <= end_x; world_x += grid_spacing) {
-            for (int world_y = start_y; world_y <= end_y; world_y += grid_spacing) {
-                // Assign boundary candidate for this grid point
-                auto [assigned_type, candidate_idx] = assign_boundary_for_point(world_x, world_y, world_z, resolution_layer);
-
-                // Only process if this grid point belongs to this boundary type
-                if (assigned_type != static_cast<int>(type_idx)) {
+        for (int ix = start_idx_x; ix <= end_idx_x; ++ix) {
+            const int world_x = grid_origin.x + ix * grid_spacing;
+            for (int iy = start_idx_y; iy <= end_idx_y; ++iy) {
+                const int world_y = grid_origin.y + iy * grid_spacing;
+                const BoundaryKey key = make_key(static_cast<int>(type_idx), resolution_layer, ix, iy, world_z);
+                const int candidate_idx = select_candidate_for_key(key, btype);
+                if (candidate_idx < 0 || candidate_idx >= static_cast<int>(btype.candidates.size())) {
+                    continue;
+                }
+                const BoundaryCandidate& candidate = btype.candidates[candidate_idx];
+                if (candidate.is_null || candidate.frames.empty()) {
                     continue;
                 }
 
-                if (candidate_idx < 0 || candidate_idx >= static_cast<int>(btype.textures.size())) {
-                    continue;
-                }
+                const SDL_FPoint jitter = sample_jitter_offset(key, max_random_jitter);
+                SDL_FPoint world_pos{
+                    static_cast<float>(world_x) + jitter.x,
+                    static_cast<float>(world_y) + jitter.y
+                };
 
-                SDL_Texture* tex = btype.textures[candidate_idx];
-                if (!tex) {
-                    continue;  // null candidate (empty space)
-                }
-
-                int tex_w = btype.texture_widths[candidate_idx];
-                int tex_h = btype.texture_heights[candidate_idx];
-                if (tex_w <= 0 || tex_h <= 0) {
-                    continue;
-                }
-
-                // Calculate world position with optional jitter
-                SDL_FPoint base_world_pos{static_cast<float>(world_x), static_cast<float>(world_y)};
-                const SDL_FPoint jitter_offset = sample_jitter_offset(world_x, world_y, world_z, resolution_layer, max_random_jitter);
-                SDL_FPoint world_pos{base_world_pos.x + jitter_offset.x, base_world_pos.y + jitter_offset.y};
-
-                // Project to screen
                 SDL_FPoint screen_pos{};
                 if (!cam.project_world_point(world_pos, static_cast<float>(world_z), screen_pos)) {
                     continue;
@@ -205,27 +147,57 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam, const world::Wor
                     continue;
                 }
 
-                // Create boundary sprite
+                auto& frame_state = animation_states_[key];
+                frame_state.elapsed_ms += delta_ms;
+                const int total_frames = static_cast<int>(candidate.frames.size());
+                if (total_frames <= 0) {
+                    continue;
+                }
+
+                int current_index = frame_state.frame_index % total_frames;
+                float frame_duration = candidate.frames[current_index].duration_ms;
+                if (!(frame_duration > 0.0f)) {
+                    frame_duration = kDefaultAnimationFrameMs;
+                }
+                while (frame_state.elapsed_ms >= frame_duration && total_frames > 0) {
+                    frame_state.elapsed_ms -= frame_duration;
+                    current_index = (current_index + 1) % total_frames;
+                    frame_state.frame_index = current_index;
+                    frame_duration = candidate.frames[current_index].duration_ms;
+                    if (!(frame_duration > 0.0f)) {
+                        frame_duration = kDefaultAnimationFrameMs;
+                    }
+                }
+
+                frame_state.frame_index = current_index;
+                const BoundaryFrame& active_frame = candidate.frames[current_index];
+                SDL_Texture* texture = active_frame.texture;
+                if (!texture) {
+                    continue;
+                }
+
                 BoundarySprite sprite;
-                sprite.texture = tex;
+                sprite.texture = texture;
                 sprite.world_pos = world_pos;
                 sprite.screen_pos = screen_pos;
                 sprite.scale = 1.0f;
                 sprite.world_z = world_z;
-                sprite.texture_w = tex_w;
-                sprite.texture_h = tex_h;
+                sprite.texture_w = active_frame.width;
+                sprite.texture_h = active_frame.height;
+                if (sprite.texture_w <= 0 || sprite.texture_h <= 0) {
+                    int texture_w = 0;
+                    int texture_h = 0;
+                    if (SDL_QueryTexture(texture, nullptr, nullptr, &texture_w, &texture_h) == 0) {
+                        sprite.texture_w = texture_w;
+                        sprite.texture_h = texture_h;
+                    }
+                }
                 sprite.boundary_type_index = static_cast<int>(type_idx);
-
-                // Get/update animation state for this grid point
-                std::uint64_t hash = make_grid_point_hash(world_x, world_y, world_z, resolution_layer);
-                auto& anim_state = animation_states_[hash];
-                anim_state.second += delta_ms;
-
-                // For now, single frame (no animation advancement)
-                // TODO: Add multi-frame animation support when needed
-                sprite.current_frame_index = 0;
-                sprite.frame_elapsed_ms = anim_state.second;
-                sprite.total_frames = 1;
+                sprite.candidate_index = candidate_idx;
+                sprite.current_frame_index = current_index;
+                sprite.total_frames = total_frames;
+                sprite.frame_duration_ms = frame_duration;
+                sprite.frame_elapsed_ms = frame_state.elapsed_ms;
 
                 active_boundary_sprites_.push_back(sprite);
             }
@@ -233,78 +205,230 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam, const world::Wor
     }
 }
 
-std::uint64_t DynamicBoundarySystem::make_grid_point_hash(int world_x, int world_y, int world_z, int layer) const {
-    std::uint64_t h = 0;
-    h ^= std::hash<int>{}(world_x) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<int>{}(world_y) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<int>{}(world_z) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<int>{}(layer) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    return h;
+std::size_t DynamicBoundarySystem::BoundaryKeyHash::operator()(const BoundaryKey& key) const noexcept {
+    std::uint64_t hash = 0;
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.group));
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.resolution_layer));
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.grid_x));
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.grid_y));
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.world_z));
+    return static_cast<std::size_t>(hash);
 }
 
-std::pair<int, int> DynamicBoundarySystem::assign_boundary_for_point(int world_x, int world_y, int world_z, int layer) {
-    std::uint64_t hash = make_grid_point_hash(world_x, world_y, world_z, layer);
+BoundaryKey DynamicBoundarySystem::make_key(int group_idx, int resolution_layer, int grid_x, int grid_y, int world_z) const {
+    return BoundaryKey{
+        group_idx,
+        resolution_layer,
+        grid_x,
+        grid_y,
+        world_z
+    };
+}
 
-    auto it = boundary_assignments_.find(hash);
+std::uint64_t DynamicBoundarySystem::hash_key(const BoundaryKey& key) const {
+    std::uint64_t hash = 0;
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.group));
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.resolution_layer));
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.grid_x));
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.grid_y));
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.world_z));
+    return hash;
+}
+
+int DynamicBoundarySystem::select_candidate_for_key(const BoundaryKey& key, const BoundaryType& btype) {
+    auto it = boundary_assignments_.find(key);
     if (it != boundary_assignments_.end()) {
         return it->second;
     }
-
-    // Randomly select boundary type and candidate
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-
-    // Pick a boundary type (for now just use type 0, could randomize later)
-    int type_idx = 0;
-    if (boundary_types_.empty()) {
-        boundary_assignments_[hash] = {-1, -1};
-        return {-1, -1};
+    if (btype.total_chance <= 0 || btype.candidates.empty()) {
+        boundary_assignments_.emplace(key, -1);
+        return -1;
     }
+    std::uint64_t state = hash_key(key);
+    state ^= 0x9e3779b97f4a7c15ULL;
+    state = xorshift64(state);
+    const int roll = static_cast<int>(state % static_cast<std::uint64_t>(btype.total_chance));
 
-    const BoundaryType& btype = boundary_types_[type_idx];
-    if (btype.candidates.empty() || btype.total_chance <= 0) {
-        boundary_assignments_[hash] = {-1, -1};
-        return {-1, -1};
-    }
-
-    // Weighted random selection of candidate
-    std::uniform_int_distribution<int> dist(1, btype.total_chance);
-    int roll = dist(gen);
-
-    int candidate_idx = 0;
     int cumulative = 0;
-    for (size_t i = 0; i < btype.candidates.size(); ++i) {
-        cumulative += btype.candidates[i].chance;
-        if (roll <= cumulative) {
-            candidate_idx = static_cast<int>(i);
-            break;
+    for (int idx = 0; idx < static_cast<int>(btype.candidates.size()); ++idx) {
+        cumulative += btype.candidates[idx].chance;
+        if (roll < cumulative) {
+            boundary_assignments_.emplace(key, idx);
+            return idx;
         }
     }
 
-    boundary_assignments_[hash] = {type_idx, candidate_idx};
-    return {type_idx, candidate_idx};
+    boundary_assignments_.emplace(key, static_cast<int>(btype.candidates.size()) - 1);
+    return static_cast<int>(btype.candidates.size()) - 1;
 }
 
-SDL_FPoint DynamicBoundarySystem::sample_jitter_offset(int world_x, int world_y, int world_z, int layer, float max_jitter) const {
+SDL_FPoint DynamicBoundarySystem::sample_jitter_offset(const BoundaryKey& key, float max_jitter) const {
     if (max_jitter <= 0.0f) {
         return SDL_FPoint{0.0f, 0.0f};
     }
-    std::uint64_t state = make_grid_point_hash(world_x, world_y, world_z, layer);
+    std::uint64_t state = hash_key(key);
     state ^= 0x9e3779b97f4a7c15ULL;
-    auto uniform01 = [&state]() -> double {
-        state ^= state << 13;
-        state ^= state >> 7;
-        state ^= state << 17;
-        const uint32_t value = static_cast<uint32_t>(state >> 32);
-        return static_cast<double>(value) / static_cast<double>(std::numeric_limits<uint32_t>::max());
-    };
-    const double jitter_x = (uniform01() * 2.0 - 1.0) * static_cast<double>(max_jitter);
-    const double jitter_y = (uniform01() * 2.0 - 1.0) * static_cast<double>(max_jitter);
+    double uniform_x = static_cast<double>(xorshift64(state) & 0xFFFFFFFFULL) / static_cast<double>(std::numeric_limits<uint32_t>::max());
+    state = xorshift64(state);
+    double uniform_y = static_cast<double>(xorshift64(state) & 0xFFFFFFFFULL) / static_cast<double>(std::numeric_limits<uint32_t>::max());
+    const double jitter_x = (uniform_x * 2.0 - 1.0) * static_cast<double>(max_jitter);
+    const double jitter_y = (uniform_y * 2.0 - 1.0) * static_cast<double>(max_jitter);
     return SDL_FPoint{static_cast<float>(jitter_x), static_cast<float>(jitter_y)};
 }
 
+void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate) {
+    candidate.frames.clear();
+    candidate.is_null = false;
+    if (candidate.asset_name.empty() || candidate.asset_name == "null") {
+        candidate.is_null = true;
+        return;
+    }
+    if (!asset_library_) {
+        candidate.is_null = true;
+        return;
+    }
+
+    auto info = asset_library_->get(candidate.asset_name);
+    if (!info) {
+        candidate.is_null = true;
+        return;
+    }
+
+    std::string animation_id = !info->start_animation.empty() ? info->start_animation : "default";
+    auto anim_it = info->animations.find(animation_id);
+    if (anim_it == info->animations.end() && !info->animations.empty()) {
+        anim_it = info->animations.begin();
+    }
+
+    if (anim_it != info->animations.end()) {
+        const Animation& animation = anim_it->second;
+        for (const AnimationFrame* frame : animation.frames) {
+            if (!frame || frame->variants.empty()) {
+                continue;
+            }
+            const FrameVariant& variant = frame->variants.front();
+            if (!variant.base_texture) {
+                continue;
+            }
+            BoundaryFrame boundary_frame;
+            boundary_frame.texture = variant.base_texture;
+            boundary_frame.duration_ms = variant.base_texture ? kDefaultAnimationFrameMs : 0.0f;
+            SDL_QueryTexture(boundary_frame.texture, nullptr, nullptr, &boundary_frame.width, &boundary_frame.height);
+            candidate.frames.push_back(boundary_frame);
+        }
+    }
+
+    if (candidate.frames.empty() && info->preview_texture) {
+        BoundaryFrame boundary_frame;
+        boundary_frame.texture = info->preview_texture;
+        boundary_frame.duration_ms = kDefaultAnimationFrameMs;
+        SDL_QueryTexture(boundary_frame.texture, nullptr, nullptr, &boundary_frame.width, &boundary_frame.height);
+        candidate.frames.push_back(boundary_frame);
+    }
+
+    if (candidate.frames.empty()) {
+        candidate.is_null = true;
+    }
+}
+
+void DynamicBoundarySystem::parse_boundary_config(const nlohmann::json& map_info) {
+    auto boundary_it = map_info.find("map_boundary_data");
+    if (boundary_it == map_info.end() || !boundary_it->is_object()) {
+        boundary_types_.clear();
+        last_boundary_json_ = nlohmann::json{};
+        config_dirty_ = false;
+        clear_runtime_caches();
+        return;
+    }
+
+    const nlohmann::json& boundary_data = *boundary_it;
+    const auto selectors_it = boundary_data.find("candidate_selectors");
+    if (selectors_it == boundary_data.end() || !selectors_it->is_array()) {
+        boundary_types_.clear();
+        last_boundary_json_ = boundary_data;
+        config_dirty_ = false;
+        clear_runtime_caches();
+        return;
+    }
+
+    std::vector<BoundaryType> parsed_types;
+    parsed_types.reserve(selectors_it->size());
+
+    for (const auto& selector : *selectors_it) {
+        if (!selector.is_object()) {
+            continue;
+        }
+        BoundaryType type;
+        type.spawn_id = selector.value("spawn_id", std::string{});
+        type.display_name = selector.value("display_name", std::string{});
+        type.grid_resolution = selector.value("grid_resolution", 5);
+        type.grid_resolution = std::clamp(type.grid_resolution, 0, 10);
+
+        int total_chance = 0;
+        const auto candidates_it = selector.find("candidates");
+        if (candidates_it == selector.end() || !candidates_it->is_array()) {
+            continue;
+        }
+        for (const auto& candidate_json : *candidates_it) {
+            if (!candidate_json.is_object()) {
+                continue;
+            }
+            BoundaryCandidate candidate;
+            candidate.asset_name = candidate_json.value("name",
+                                                       candidate_json.value("asset_name", std::string{}));
+            candidate.chance = candidate_json.value("chance", 0);
+            if (candidate.chance <= 0) {
+                continue;
+            }
+            build_candidate_frames(candidate);
+            if (!candidate.is_null && candidate.frames.empty()) {
+                continue;
+            }
+            total_chance += candidate.chance;
+            type.candidates.push_back(std::move(candidate));
+        }
+        type.total_chance = total_chance;
+        if (!type.candidates.empty() && type.total_chance > 0) {
+            parsed_types.push_back(std::move(type));
+        }
+    }
+
+    boundary_types_ = std::move(parsed_types);
+    last_boundary_json_ = boundary_data;
+    config_revision_++;
+    config_dirty_ = false;
+    clear_runtime_caches();
+}
+
+bool DynamicBoundarySystem::needs_reparse(const nlohmann::json& map_info) const {
+    auto boundary_it = map_info.find("map_boundary_data");
+    if (boundary_it == map_info.end() || !boundary_it->is_object()) {
+        return !last_boundary_json_.is_null();
+    }
+    return (*boundary_it) != last_boundary_json_;
+}
+
+void DynamicBoundarySystem::clear_runtime_caches() {
+    boundary_assignments_.clear();
+    animation_states_.clear();
+    active_boundary_sprites_.clear();
+}
+
+void DynamicBoundarySystem::invalidate_config() {
+    config_dirty_ = true;
+    last_boundary_json_ = nlohmann::json{};
+    clear_runtime_caches();
+}
+
+DynamicBoundarySystem::BoundaryConfig& DynamicBoundarySystem::config() {
+    static BoundaryConfig cfg{};
+    return cfg;
+}
+
 void DynamicBoundarySystem::set_grid_spacing_multiplier(float multiplier) {
-    if (!std::isfinite(multiplier)) return;
+    if (!std::isfinite(multiplier)) {
+        return;
+    }
     config().grid_spacing_multiplier = std::clamp(multiplier, kMinGridMultiplier, kMaxGridMultiplier);
 }
 
@@ -313,7 +437,9 @@ float DynamicBoundarySystem::grid_spacing_multiplier() {
 }
 
 void DynamicBoundarySystem::set_base_size_scale(float scale) {
-    if (!std::isfinite(scale)) return;
+    if (!std::isfinite(scale)) {
+        return;
+    }
     config().base_size_scale = std::clamp(scale, kMinBaseScale, kMaxBaseScale);
 }
 
@@ -322,7 +448,9 @@ float DynamicBoundarySystem::base_size_scale() {
 }
 
 void DynamicBoundarySystem::set_vertical_offset(float offset) {
-    if (!std::isfinite(offset)) return;
+    if (!std::isfinite(offset)) {
+        return;
+    }
     config().vertical_offset = std::clamp(offset, kMinVerticalOffset, kMaxVerticalOffset);
 }
 
@@ -330,7 +458,13 @@ float DynamicBoundarySystem::vertical_offset() {
     return config().vertical_offset;
 }
 
-DynamicBoundarySystem::BoundaryConfig& DynamicBoundarySystem::config() {
-    static BoundaryConfig cfg{};
-    return cfg;
+void DynamicBoundarySystem::set_max_random_jitter(float jitter) {
+    if (!std::isfinite(jitter)) {
+        return;
+    }
+    config().max_random_jitter = std::clamp(jitter, kMinRandomJitter, kMaxRandomJitter);
+}
+
+float DynamicBoundarySystem::max_random_jitter() {
+    return config().max_random_jitter;
 }

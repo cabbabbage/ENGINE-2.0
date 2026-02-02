@@ -470,12 +470,9 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     }
 
     // Initialize dynamic boundary system
-    if (dynamic_boundary_system_ && assets_) {
-        const nlohmann::json& map_info = assets_->map_info_json();
-        if (map_info.contains("map_boundary_data") && map_info["map_boundary_data"].is_object()) {
-            if (!dynamic_boundary_system_->initialize(renderer_, map_info["map_boundary_data"], &assets_->library())) {
-                vibble::log::warn("[SceneRenderer] Failed to initialize dynamic boundary system");
-            }
+    if (dynamic_boundary_system_) {
+        if (!dynamic_boundary_system_->initialize(renderer_, &assets_->library())) {
+            vibble::log::warn("[SceneRenderer] Failed to initialize dynamic boundary system");
         }
     }
 
@@ -514,6 +511,12 @@ void SceneRenderer::set_movement_debug_enabled(bool enabled) {
 
 void SceneRenderer::set_movement_debug_visible(bool visible) {
     movement_debug_visible_ = visible;
+}
+
+void SceneRenderer::invalidate_dynamic_boundary_system() {
+    if (dynamic_boundary_system_) {
+        dynamic_boundary_system_->invalidate_config();
+    }
 }
 
 void SceneRenderer::render() {
@@ -559,8 +562,9 @@ void SceneRenderer::render() {
 
     // Update boundary system before rendering (uses frame delta of 16.67ms as estimate)
     const bool should_render_boundaries = dynamic_boundary_system_ && dynamic_boundary_system_->is_initialized();
+    const float boundary_delta_ms = static_cast<float>(assets_->frame_delta_seconds() * 1000.0);
     if (should_render_boundaries) {
-        dynamic_boundary_system_->update(cam, grid, 16.67f);  // ~60fps delta
+        dynamic_boundary_system_->update(cam, grid, assets_, boundary_delta_ms);
     }
 
     const double anchor_world_y = cam.anchor_world_y();

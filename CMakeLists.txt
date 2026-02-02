@@ -53,6 +53,14 @@ file(GLOB_RECURSE ENGINE_SRC CONFIGURE_DEPENDS
 
 list(REMOVE_DUPLICATES ENGINE_SRC)
 list(REMOVE_ITEM ENGINE_SRC "${CMAKE_SOURCE_DIR}/ENGINE/dev_mode/frame_editor_session_child_timelines.cpp")
+# Exclude standalone tool entry points from the main engine binary
+list(REMOVE_ITEM ENGINE_SRC
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/asset_tool_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/set_rebuild_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cache_validator_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/apply_effects_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/image_cache_generator.cpp"
+)
 
 add_executable(engine ${ENGINE_SRC})
 
@@ -352,3 +360,83 @@ endif()
 if (MSVC_LIB_DIR)
     target_link_directories(engine_world_tests PRIVATE "${MSVC_LIB_DIR}")
 endif()
+
+# ------------------------------------------
+# C++ Cache Tools (ENGINE/tools)
+# ------------------------------------------
+
+# Asset Tool CLI - main cache generator
+add_executable(asset_tool_cli
+    ENGINE/tools/asset_tool_cli.cpp
+    ENGINE/tools/image_cache_generator.cpp
+)
+target_include_directories(asset_tool_cli PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools
+    ${CMAKE_SOURCE_DIR}/external
+)
+target_compile_definitions(asset_tool_cli PRIVATE
+    IMGCACHE_STB_IMAGE_IMPL=1
+    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
+)
+target_link_libraries(asset_tool_cli PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
+# Set Rebuild Values CLI - manifest manipulation
+add_executable(set_rebuild_cli
+    ENGINE/tools/set_rebuild_cli.cpp
+)
+target_include_directories(set_rebuild_cli PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools
+)
+target_link_libraries(set_rebuild_cli PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
+# Cache Validator CLI - cache integrity validation
+add_executable(cache_validator_cli
+    ENGINE/tools/cache_validator_cli.cpp
+    ENGINE/tools/image_cache_generator.cpp
+)
+target_include_directories(cache_validator_cli PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools
+    ${CMAKE_SOURCE_DIR}/external
+)
+target_compile_definitions(cache_validator_cli PRIVATE
+    IMGCACHE_STB_IMAGE_IMPL=1
+    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
+)
+target_link_libraries(cache_validator_cli PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
+# Apply Effects CLI - effect preview generation
+add_executable(apply_effects_cli
+    ENGINE/tools/apply_effects_cli.cpp
+    ENGINE/tools/image_cache_generator.cpp
+)
+target_include_directories(apply_effects_cli PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools
+    ${CMAKE_SOURCE_DIR}/external
+)
+target_compile_definitions(apply_effects_cli PRIVATE
+    IMGCACHE_STB_IMAGE_IMPL=1
+    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
+)
+target_link_libraries(apply_effects_cli PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
+# Output all tools to ENGINE/tools directory
+foreach(tool_target asset_tool_cli set_rebuild_cli cache_validator_cli apply_effects_cli)
+    set_target_properties(${tool_target} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/ENGINE/tools"
+    )
+    # Set output directory for all configurations
+    foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
+        string(TOUPPER "${cfg}" CFG_UP)
+        set_target_properties(${tool_target} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY_${CFG_UP} "${CMAKE_SOURCE_DIR}/ENGINE/tools"
+        )
+    endforeach()
+endforeach()

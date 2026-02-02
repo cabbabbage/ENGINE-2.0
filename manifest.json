@@ -612,6 +612,7 @@
       "anti_tags": [],
       "asset_directory": "SRC/assets/Grass_2",
       "asset_name": "Grass_2",
+      "asset_type": "object",
       "lighting_info": [],
       "neighbor_search_distance": 500,
       "size_settings": {

@@ -63,7 +63,6 @@ public:
 
         if (j.is_array()) {
             nlohmann::json out = nlohmann::json::array();
-            out.reserve(j.size());
             for (const auto& v : j) {
                 out.push_back(Normalize(v));
             }

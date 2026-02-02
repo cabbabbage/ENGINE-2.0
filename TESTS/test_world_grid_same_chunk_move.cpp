@@ -7,7 +7,7 @@ using namespace world;
 
 TEST_CASE("WorldGrid same-chunk move rebinds GridPoint without duplication") {
     // Chunk resolution r=4 -> step=16px; moving <16px stays in same chunk and grid point.
-    WorldGrid grid(SDL_Point{0, 0}, /*r_chunk=*/4);
+    WorldGrid grid(GridPoint::make_virtual(0, 0, 0, 0), /*r_chunk=*/4);
 
     // Minimal asset setup (stubbed Asset)
     SDL_Point start{10, 10};
@@ -27,7 +27,9 @@ TEST_CASE("WorldGrid same-chunk move rebinds GridPoint without duplication") {
     // Move within the same chunk/grid cell
     SDL_Point next{12, 12}; // still within 16px cell at r=4
     asset->pos = next; // keep stub's pos in sync with the new world position
-    grid.move_asset(asset, start, next);
+    GridPoint old_gp = GridPoint::make_virtual(start.x, start.y, 0, grid.default_resolution_layer());
+    GridPoint new_gp = GridPoint::make_virtual(next.x, next.y, 0, grid.default_resolution_layer());
+    grid.move_asset(asset, old_gp, new_gp);
 
     GridPoint* gp1 = grid.point_for_asset(asset);
     REQUIRE(gp1 != nullptr);

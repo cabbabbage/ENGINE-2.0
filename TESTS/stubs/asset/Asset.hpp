@@ -22,10 +22,13 @@ struct AssetInfo {
 class Asset {
 public:
     SDL_Point pos{0, 0};
+    int grid_resolution = 0;
+    int pos_z = 0;
     AssetInfo* info = nullptr;
 
     int world_x() const { return pos_ ? pos_->world_x() : pos.x; }
     int world_y() const { return pos_ ? pos_->world_y() : pos.y; }
+    int world_z() const { return pos_ ? pos_->world_z() : pos_z; }
     SDL_Point world_point() const { return SDL_Point{world_x(), world_y()}; }
 
     void set_grid_id(std::uint64_t id) { grid_id_ = id; }

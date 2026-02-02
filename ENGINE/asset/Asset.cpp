@@ -23,6 +23,7 @@
 #include "utils/transform_smoothing_settings.hpp"
 #include "utils/log.hpp"
 #include "world/grid_point.hpp"
+#include "world/world_grid.hpp"
 #include <iostream>
 #include <random>
 #include <mutex>
@@ -781,7 +782,7 @@ void Asset::update_neighbor_lists(bool force_update) {
         impassable_naighbors = std::move(imp_child);
     }
 
-    last_neighbor_origin_ = pos_ ? pos_->world : SDL_Point{0, 0};
+    last_neighbor_origin_ = pos_ ? SDL_Point{pos_->world.x, pos_->world.y} : SDL_Point{0, 0};
     neighbor_lists_initialized_ = true;
 }
 
@@ -836,7 +837,7 @@ Area Asset::get_area(const std::string& name) const {
                 return Area(name, 0);
         }
 
-        SDL_Point world_pos = pos_ ? pos_->world : SDL_Point{0, 0};
+        SDL_Point world_pos = pos_ ? SDL_Point{pos_->world.x, pos_->world.y} : SDL_Point{0, 0};
         return area_helpers::make_world_area(*info, *base, world_pos, flipped);
 }
 
@@ -985,15 +986,15 @@ float Asset::smoothed_alpha() const {
 void Asset::move_to_world_position(int world_x, int world_y, int world_z) {
     if (!assets_) return;
 
-    WorldGrid& grid = assets_->world_grid();
-    GridPoint& target = GridPoint::from_world(world_x, world_y, world_z, grid_resolution, grid);
+    world::WorldGrid& grid = assets_->world_grid();
+    world::GridPoint& target = world::GridPoint::from_world(world_x, world_y, world_z, grid_resolution, grid);
 
     if (pos_) {
         grid.move_asset(this, *pos_, target);
     } else {
         const int start_x = world_x + 1; // force placement when no previous grid residency
         const int start_y = world_y + 1;
-        GridPoint virtual_start = GridPoint::make_virtual(start_x, start_y, world_z, grid_resolution);
+        world::GridPoint virtual_start = world::GridPoint::make_virtual(start_x, start_y, world_z, grid_resolution);
         grid.move_asset(this, virtual_start, target);
     }
 }

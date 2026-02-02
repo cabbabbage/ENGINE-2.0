@@ -35,6 +35,45 @@ std::size_t GridKeyHash::operator()(const GridKey& key) const noexcept {
     return ((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1) ^ (h4 << 3);
 }
 
+GridPoint::GridPoint(const GridPoint& other)
+    : id(other.id)
+    , world_x_(other.world_x_)
+    , world_y_(other.world_y_)
+    , world_z_(other.world_z_)
+    , resolution_layer_(other.resolution_layer_)
+    , parent_(other.parent_)
+    , is_virtual_(other.is_virtual_)
+    , world(other.world)
+    , grid_index(other.grid_index)
+    , chunk_index(other.chunk_index)
+    , chunk(other.chunk)
+    , screen(other.screen)
+    , parallax_dx(other.parallax_dx)
+    , vertical_scale(other.vertical_scale)
+    , horizon_fade_alpha(other.horizon_fade_alpha)
+    , near_camera_fade_alpha(other.near_camera_fade_alpha)
+    , perspective_scale(other.perspective_scale)
+    , distance_to_camera(other.distance_to_camera)
+    , tilt_radians(other.tilt_radians)
+    , on_screen(other.on_screen)
+    , screen_data_frame_updated(other.screen_data_frame_updated)
+    , screen_data_valid(other.screen_data_valid)
+    , last_camera_state_version_(other.last_camera_state_version_)
+    , occupants()  // Leave empty - unique_ptrs cannot be copied
+    , children_with_assets(0)  // Reset - no assets copied
+    , active_child_mask(0)  // Reset - no child state copied
+    , x_child_neg_(other.x_child_neg_)
+    , x_child_pos_(other.x_child_pos_)
+    , y_child_neg_(other.y_child_neg_)
+    , y_child_pos_(other.y_child_pos_)
+    , z_child_neg_(other.z_child_neg_)
+    , z_child_pos_(other.z_child_pos_)
+{
+    // Note: occupants vector is intentionally left empty
+    // Virtual points (used in GridBounds) don't have assets
+    // Real points with assets should use move semantics, not copy
+}
+
 void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     // Track which camera state we're using
     last_camera_state_version_ = params.state_version;

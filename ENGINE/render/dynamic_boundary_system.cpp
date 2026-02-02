@@ -3,7 +3,8 @@
 #include "world/world_grid.hpp"
 #include "asset/asset_library.hpp"
 #include "asset/asset_info.hpp"
-#include "animation/animation.hpp"
+#include "asset/animation.hpp"
+#include "core/AssetsManager.hpp"
 #include "utils/log.hpp"
 
 #include <algorithm>
@@ -94,7 +95,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         static_cast<float>(view_height * 2.0 + margin * 2.0)
     };
 
-    const SDL_Point grid_origin = grid.origin();
+    const world::GridPoint grid_origin = grid.origin();
     const float spacing_multiplier = std::clamp(config().grid_spacing_multiplier, kMinGridMultiplier, kMaxGridMultiplier);
     const float max_random_jitter = std::clamp(config().max_random_jitter, kMinRandomJitter, kMaxRandomJitter);
 
@@ -112,17 +113,17 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         const float min_y = visible_bounds.y;
         const float max_y = visible_bounds.y + visible_bounds.h;
 
-        const int start_idx_x = static_cast<int>(std::floor((min_x - static_cast<float>(grid_origin.x)) / grid_spacing));
-        const int end_idx_x = static_cast<int>(std::ceil((max_x - static_cast<float>(grid_origin.x)) / grid_spacing));
-        const int start_idx_y = static_cast<int>(std::floor((min_y - static_cast<float>(grid_origin.y)) / grid_spacing));
-        const int end_idx_y = static_cast<int>(std::ceil((max_y - static_cast<float>(grid_origin.y)) / grid_spacing));
+        const int start_idx_x = static_cast<int>(std::floor((min_x - static_cast<float>(grid_origin.world_x())) / grid_spacing));
+        const int end_idx_x = static_cast<int>(std::ceil((max_x - static_cast<float>(grid_origin.world_x())) / grid_spacing));
+        const int start_idx_y = static_cast<int>(std::floor((min_y - static_cast<float>(grid_origin.world_y())) / grid_spacing));
+        const int end_idx_y = static_cast<int>(std::ceil((max_y - static_cast<float>(grid_origin.world_y())) / grid_spacing));
 
         const int world_z = 0;
 
         for (int ix = start_idx_x; ix <= end_idx_x; ++ix) {
-            const int world_x = grid_origin.x + ix * grid_spacing;
+            const int world_x = grid_origin.world_x() + ix * grid_spacing;
             for (int iy = start_idx_y; iy <= end_idx_y; ++iy) {
-                const int world_y = grid_origin.y + iy * grid_spacing;
+                const int world_y = grid_origin.world_y() + iy * grid_spacing;
                 const BoundaryKey key = make_key(static_cast<int>(type_idx), resolution_layer, ix, iy, world_z);
                 const int candidate_idx = select_candidate_for_key(key, btype);
                 if (candidate_idx < 0 || candidate_idx >= static_cast<int>(btype.candidates.size())) {
@@ -205,7 +206,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     }
 }
 
-std::size_t DynamicBoundarySystem::BoundaryKeyHash::operator()(const BoundaryKey& key) const noexcept {
+std::size_t DynamicBoundarySystem::BoundaryKeyHash::operator()(const DynamicBoundarySystem::BoundaryKey& key) const noexcept {
     std::uint64_t hash = 0;
     hash = mix_uint64(hash, static_cast<std::uint64_t>(key.group));
     hash = mix_uint64(hash, static_cast<std::uint64_t>(key.resolution_layer));
@@ -215,8 +216,8 @@ std::size_t DynamicBoundarySystem::BoundaryKeyHash::operator()(const BoundaryKey
     return static_cast<std::size_t>(hash);
 }
 
-BoundaryKey DynamicBoundarySystem::make_key(int group_idx, int resolution_layer, int grid_x, int grid_y, int world_z) const {
-    return BoundaryKey{
+DynamicBoundarySystem::BoundaryKey DynamicBoundarySystem::make_key(int group_idx, int resolution_layer, int grid_x, int grid_y, int world_z) const {
+    return DynamicBoundarySystem::BoundaryKey{
         group_idx,
         resolution_layer,
         grid_x,

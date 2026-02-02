@@ -212,7 +212,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
     if (chunk_step <= 0) {
         return;
     }
-    const SDL_Point grid_origin = grid.origin();
+    const SDL_Point grid_origin = grid.origin().to_sdl_point();
 
     std::vector<ChunkTileAsset>                        asset_contexts;
     asset_contexts.reserve(all_assets.size());
@@ -268,7 +268,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
 
         chunk->releaseTileTextures();
 
-        const SDL_Rect bounds = chunk->world_bounds;
+        const SDL_Rect bounds = chunk->world_bounds.to_sdl_rect();
         if (bounds.w <= 0 || bounds.h <= 0) continue;
 
         const auto tiler_it = chunk_tilers.find(chunk_key(chunk->i, chunk->j));

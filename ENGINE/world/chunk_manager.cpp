@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "asset/Asset.hpp"
+
 namespace world {
 
 int floor_div(int value, int step);

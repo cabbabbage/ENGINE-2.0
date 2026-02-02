@@ -21,12 +21,21 @@ fs::path default_repo_root() {
     return fs::absolute(manifest).parent_path();
 }
 
-fs::path script_path(const fs::path& repo_root, const std::string& script_name) {
-    const fs::path root_script = repo_root / "tools" / script_name;
-    if (fs::exists(root_script)) {
-        return root_script;
+static inline std::string exe_ext() {
+#ifdef _WIN32
+    return ".exe";
+#else
+    return "";
+#endif
+}
+
+fs::path tool_path(const fs::path& repo_root, const std::string& tool_name) {
+    const fs::path tool_exe = tool_name + exe_ext();
+    const fs::path root_tool = repo_root / "tools" / tool_exe;
+    if (fs::exists(root_tool)) {
+        return root_tool;
     }
-    return repo_root / "ENGINE" / "tools" / script_name;
+    return repo_root / "ENGINE" / "tools" / tool_exe;
 }
 
 }
@@ -77,35 +86,35 @@ bool RebuildQueueCoordinator::has_pending_asset_work() const {
 }
 
 bool RebuildQueueCoordinator::run_asset_tool(const std::string& command_prefix) const {
-    const fs::path script = script_path(repo_root_, "asset_tool.py");
-    return run_python_script(script, {}, command_prefix);
+    const fs::path tool = tool_path(repo_root_, "asset_tool_cli");
+    return run_cpp_tool(tool, {}, command_prefix);
 }
 
 void RebuildQueueCoordinator::mark_all_frames_for_rebuild() const {
-    const fs::path script = script_path(repo_root_, "set_rebuild_values.py");
-    run_python_script(script, {"all", "--manifest", manifest_path_.string()}, "");
+    const fs::path tool = tool_path(repo_root_, "set_rebuild_cli");
+    run_cpp_tool(tool, {"all", "--manifest", manifest_path_.string()}, "");
 }
 
 void RebuildQueueCoordinator::mark_asset_for_rebuild(const std::string& asset_name) const {
-    const fs::path script = script_path(repo_root_, "set_rebuild_values.py");
-    run_python_script(script, {"asset", asset_name, "--manifest", manifest_path_.string()}, "");
+    const fs::path tool = tool_path(repo_root_, "set_rebuild_cli");
+    run_cpp_tool(tool, {"asset", asset_name, "--manifest", manifest_path_.string()}, "");
 }
 
 void RebuildQueueCoordinator::mark_animation_for_rebuild(const std::string& asset_name,
                                                          const std::string& animation) const {
-    const fs::path script = script_path(repo_root_, "set_rebuild_values.py");
-    run_python_script(script,
-                      {"animation", asset_name, animation, "--manifest", manifest_path_.string()},
-                      "");
+    const fs::path tool = tool_path(repo_root_, "set_rebuild_cli");
+    run_cpp_tool(tool,
+                 {"animation", asset_name, animation, "--manifest", manifest_path_.string()},
+                 "");
 }
 
 void RebuildQueueCoordinator::mark_frame_for_rebuild(const std::string& asset_name,
                                                      const std::string& animation,
                                                      int frame_index) const {
-    const fs::path script = script_path(repo_root_, "set_rebuild_values.py");
-    run_python_script(script,
-                      {"frame", asset_name, animation, std::to_string(frame_index), "--manifest", manifest_path_.string()},
-                      "");
+    const fs::path tool = tool_path(repo_root_, "set_rebuild_cli");
+    run_cpp_tool(tool,
+                 {"frame", asset_name, animation, std::to_string(frame_index), "--manifest", manifest_path_.string()},
+                 "");
 }
 
 
@@ -159,24 +168,32 @@ bool RebuildQueueCoordinator::manifest_has_needs_rebuild() const {
 }
 
 
-bool RebuildQueueCoordinator::run_python_script(const fs::path& script,
-                                                const std::vector<std::string>& args,
-                                                const std::string& command_prefix) const {
-    if (!fs::exists(script)) {
-        vibble::log::warn(std::string{"Missing script: "} + script.string());
+bool RebuildQueueCoordinator::run_cpp_tool(const fs::path& tool,
+                                           const std::vector<std::string>& args,
+                                           const std::string& command_prefix) const {
+    if (!fs::exists(tool)) {
+        vibble::log::error(std::string{"Missing C++ tool: "} + tool.string());
         return false;
     }
 
-    std::string command = "python \"" + script.string() + "\"";
+    std::string command = "\"" + tool.string() + "\"";
     for (const auto& arg : args) {
-        command += " \"" + arg + "\"";
+        // Escape quotes in arguments
+        std::string escaped = arg;
+        size_t pos = 0;
+        while ((pos = escaped.find('"', pos)) != std::string::npos) {
+            escaped.insert(pos, "\\");
+            pos += 2;
+        }
+        command += " \"" + escaped + "\"";
     }
 
     std::string full_command = command_prefix.empty() ? command : (command_prefix + command);
-    vibble::log::info(std::string{"[RebuildQueue] Running "} + script.filename().string());
+    vibble::log::info(std::string{"[RebuildQueue] Running "} + tool.filename().string());
+
     int ret = std::system(full_command.c_str());
     if (ret != 0) {
-        vibble::log::warn(std::string{"[RebuildQueue] Script exited with code "} + std::to_string(ret));
+        vibble::log::warn(std::string{"[RebuildQueue] Tool exited with code "} + std::to_string(ret));
         return false;
     }
     return true;
@@ -187,8 +204,8 @@ bool RebuildQueueCoordinator::validate_manifest_cache(const std::string& command
         vibble::log::warn("[RebuildQueue] Cache root missing; queueing full asset rebuild.");
         mark_all_frames_for_rebuild();
     }
-    const fs::path script = script_path(repo_root_, "cache_validator.py");
-    return run_python_script(script, {"--manifest", manifest_path_.string()}, command_prefix);
+    const fs::path tool = tool_path(repo_root_, "cache_validator_cli");
+    return run_cpp_tool(tool, {"--manifest", manifest_path_.string()}, command_prefix);
 }
 
 }

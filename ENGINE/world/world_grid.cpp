@@ -113,7 +113,7 @@ void WorldGrid::set_chunk_resolution(int r) {
 }
 
 void WorldGrid::set_origin(const GridPoint& origin) {
-    origin_ = origin;
+    origin_ = GridPoint::make_virtual(origin.world_x(), origin.world_y(), origin.world_z(), origin.resolution_layer());
     invalidate_active_cache();
 }
 
@@ -824,7 +824,7 @@ const std::vector<Chunk*>& WorldGrid::active_chunks() const {
 
 void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_px) {
     const int margin = std::max(0, margin_px);
-    const GridBounds expanded = camera_world.expanded(margin);
+    GridBounds expanded = camera_world.expanded(margin);
     const int min_x = std::min(expanded.min.world_x(), expanded.max.world_x());
     const int max_x = std::max(expanded.min.world_x(), expanded.max.world_x());
     const int min_y = std::min(expanded.min.world_y(), expanded.max.world_y());
@@ -861,7 +861,7 @@ void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_
         }
     }
 
-    last_expanded_camera_ = expanded;
+    last_expanded_camera_ = std::move(expanded);
     last_margin_px_ = margin_px;
     last_chunk_resolution_ = r_chunk_;
     has_cached_camera_rect_ = true;

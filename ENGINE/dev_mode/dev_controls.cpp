@@ -2496,7 +2496,10 @@ void DevControls::integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& 
         }
     }
     spawned.clear();
-    assets_->initialize_active_assets(assets_->getView().get_screen_center());
+    const SDL_Point center_px = assets_->getView().get_screen_center();
+    const world::GridPoint center_point = world::GridPoint::make_virtual(
+        center_px.x, center_px.y, 0, assets_->world_grid().max_resolution_layers());
+    assets_->initialize_active_assets(center_point);
     assets_->refresh_active_asset_lists();
     refresh_active_asset_filters();
 }

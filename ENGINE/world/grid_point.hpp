@@ -103,7 +103,7 @@ struct GridPoint {
         , chunk_index(chunk_idx)
         , chunk(owning_chunk) {}
 
-    GridPoint(const GridPoint&) = default;
+    GridPoint(const GridPoint& other);
     GridPoint(GridPoint&&) = default;
     GridPoint& operator=(const GridPoint&) = delete;
     GridPoint& operator=(GridPoint&& other) noexcept;

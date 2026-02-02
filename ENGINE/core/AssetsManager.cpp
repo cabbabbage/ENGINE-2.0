@@ -196,11 +196,12 @@ Assets::Assets(AssetLibrary& library,
         }
     }
     camera_.set_screen_center(intro_center);
-    last_camera_center_for_grid_ = camera_.get_screen_center();
+    SDL_Point center_px = camera_.get_screen_center();
+    last_camera_center_for_grid_ = world::GridPoint::make_virtual(center_px.x, center_px.y, 0, 0);
     last_camera_scale_for_grid_ = camera_.get_scale();
     last_camera_pitch_for_grid_ = camera_.current_pitch_radians();
     if (player) {
-        last_known_player_pos_ = SDL_Point{player->world_x(), player->world_y()};
+        last_known_player_pos_ = world::GridPoint::make_virtual(player->world_x(), player->world_y(), player->world_z(), player->grid_resolution);
         last_player_pos_valid_ = true;
     } else {
         last_player_pos_valid_ = false;
@@ -742,7 +743,7 @@ void Assets::update(const Input& input)
             current_player_pos.world_x() != last_known_player_pos_.world_x() ||
             current_player_pos.world_y() != last_known_player_pos_.world_y();
 
-        last_known_player_pos_ = current_player_pos;
+        last_known_player_pos_ = std::move(current_player_pos);
         last_player_pos_valid_ = true;
 
         player_moved = moved_during_update || moved_since_last_frame;
@@ -1437,7 +1438,11 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
 
     grid_dirty_ = false;
     camera_view_dirty_ = false;
-    last_camera_center_for_grid_ = current_center;
+    last_camera_center_for_grid_ = world::GridPoint::make_virtual(
+        current_center.world_x(),
+        current_center.world_y(),
+        current_center.world_z(),
+        current_center.resolution_layer());
     last_camera_scale_for_grid_ = current_scale;
     last_camera_pitch_for_grid_ = current_pitch;
 }
@@ -1847,8 +1852,8 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
         if (!asset) {
             continue;
         }
-        if (world_grid_.point_for_asset(asset)) {
-            asset->cache_grid_residency(SDL_Point{asset->world_x(), asset->world_y()});
+        if (world::GridPoint* point = world_grid_.point_for_asset(asset)) {
+            asset->cache_grid_residency(*point);
         }
     }
 

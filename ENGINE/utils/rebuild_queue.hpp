@@ -35,7 +35,7 @@ private:
     void mark_animation_for_rebuild(const std::string& asset_name, const std::string& animation) const;
     void mark_frame_for_rebuild(const std::string& asset_name, const std::string& animation, int frame_index) const;
 
-    bool run_python_script(const std::filesystem::path& script, const std::vector<std::string>& args, const std::string& command_prefix) const;
+    bool run_cpp_tool(const std::filesystem::path& tool, const std::vector<std::string>& args, const std::string& command_prefix) const;
     bool manifest_has_needs_rebuild() const;
 };
 

@@ -42,17 +42,23 @@
 
 // ---- stb ----
 // You can move these defines into a single translation unit in your tools project if you prefer.
+#if defined(IMGCACHE_STB_IMAGE_IMPL) && !defined(STB_IMAGE_IMPLEMENTATION)
+#define STB_IMAGE_IMPLEMENTATION
+#endif
 #ifndef IMGCACHE_STB_IMAGE_IMPL
 #define IMGCACHE_STB_IMAGE_IMPL
 #define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
 #endif
+#include "../utils/stb_image.h"
 
+#if defined(IMGCACHE_STB_IMAGE_WRITE_IMPL) && !defined(STB_IMAGE_WRITE_IMPLEMENTATION)
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#endif
 #ifndef IMGCACHE_STB_IMAGE_WRITE_IMPL
 #define IMGCACHE_STB_IMAGE_WRITE_IMPL
 #define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
 #endif
+#include "../utils/stb_image_write.h"
 
 namespace imgcache {
 
@@ -61,6 +67,7 @@ namespace {
 using ordered_json = nlohmann::ordered_json;
 
 static constexpr float kSpeedMultipliers[] = {0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
+static constexpr float kPi = 3.14159265358979323846f;
 
 static inline float clampf(float v, float lo, float hi) {
     return std::max(lo, std::min(hi, v));
@@ -259,7 +266,7 @@ static inline float u82f(std::uint8_t v) {
 
 static inline float sinc(float x) {
     if (std::fabs(x) < 1e-6f) return 1.0f;
-    const float pix = static_cast<float>(M_PI) * x;
+    const float pix = kPi * x;
     return std::sin(pix) / pix;
 }
 

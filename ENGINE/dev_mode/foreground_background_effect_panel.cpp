@@ -16,10 +16,11 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
-#include <limits>
-#include <nlohmann/json.hpp>
-#include <iostream>
 #include <fstream>
+#include <iostream>
+#include <limits>
+#include <sstream>
+#include <nlohmann/json.hpp>
 
 namespace fs = std::filesystem;
 
@@ -665,7 +666,21 @@ void ForegroundBackgroundEffectPanel::generate_preview_with_python(
         return;
     }
 
-    std::string python_cmd = "python engine/tools/apply_color_effects.py";
+#ifdef _WIN32
+    const std::string exe_ext = ".exe";
+#else
+    const std::string exe_ext = "";
+#endif
+
+    // Build path to C++ tool
+    std::filesystem::path tool_path =
+        std::filesystem::path(PROJECT_ROOT) / "ENGINE" / "tools" / ("apply_effects_cli" + exe_ext);
+
+    if (!std::filesystem::exists(tool_path)) {
+        std::cerr << "[DepthCuePanel] C++ tool not found: " << tool_path << "\n";
+        return;
+    }
+
     std::string output_path = "cache/preview_image.png";
 
     std::error_code ec;
@@ -678,10 +693,21 @@ void ForegroundBackgroundEffectPanel::generate_preview_with_python(
     std::string layer_type =
         (current_mode_ == EffectMode::Foreground) ? "foreground" : "background";
 
-    std::string full_cmd = python_cmd +
-        " \"" + image_path + "\" \"" + output_path + "\" " + layer_type + " " +
-        std::to_string(settings.contrast) + " " + std::to_string(settings.brightness) + " " + std::to_string(settings.blur) + " " + std::to_string(settings.saturation_red) + " " + std::to_string(settings.saturation_green) + " " + std::to_string(settings.saturation_blue) + " " + std::to_string(settings.hue);
+    // Build command with proper quoting
+    std::ostringstream cmd;
+    cmd << "\"" << tool_path.string() << "\" "
+        << "\"" << image_path << "\" "
+        << "\"" << output_path << "\" "
+        << layer_type << " "
+        << settings.contrast << " "
+        << settings.brightness << " "
+        << settings.blur << " "
+        << settings.saturation_red << " "
+        << settings.saturation_green << " "
+        << settings.saturation_blue << " "
+        << settings.hue;
 
+    std::string full_cmd = cmd.str();
     std::cout << "[DepthCuePanel] Executing: " << full_cmd << "\n";
 
     int result = std::system(full_cmd.c_str());

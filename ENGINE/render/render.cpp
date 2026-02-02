@@ -19,9 +19,11 @@
 #include <SDL_image.h>
 
 #include "asset/Asset.hpp"
+#include "asset/asset_library.hpp"
 #include "core/AssetsManager.hpp"
 #include "render/warped_screen_grid.hpp"
 #include "render/dynamic_fog_system.hpp"
+#include "render/dynamic_boundary_system.hpp"
 #include "animation_update/animation_update.hpp"
 #include "tiling/grid_tile.hpp"
 #include "asset/animation.hpp"
@@ -454,7 +456,8 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   sky_texture_path_(std::filesystem::path("SRC") / "misc_content" / "sky.png"),
   floor_gradient_path_(std::filesystem::path("SRC") / "misc_content" / "floor_gradient.png"),
   composite_renderer_(renderer, assets),
-  dynamic_fog_system_(std::make_unique<DynamicFogSystem>())
+  dynamic_fog_system_(std::make_unique<DynamicFogSystem>()),
+  dynamic_boundary_system_(std::make_unique<DynamicBoundarySystem>())
 {
 
     map_clear_color_ = SDL_Color{69, 101, 74, 255};
@@ -463,6 +466,16 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     if (dynamic_fog_system_) {
         if (!dynamic_fog_system_->initialize(renderer_)) {
             vibble::log::warn("[SceneRenderer] Failed to initialize dynamic fog system");
+        }
+    }
+
+    // Initialize dynamic boundary system
+    if (dynamic_boundary_system_ && assets_) {
+        const nlohmann::json& map_info = assets_->map_info_json();
+        if (map_info.contains("map_boundary_data") && map_info["map_boundary_data"].is_object()) {
+            if (!dynamic_boundary_system_->initialize(renderer_, map_info["map_boundary_data"], &assets_->library())) {
+                vibble::log::warn("[SceneRenderer] Failed to initialize dynamic boundary system");
+            }
         }
     }
 
@@ -544,6 +557,12 @@ void SceneRenderer::render() {
         dynamic_fog_system_->update(cam, grid);
     }
 
+    // Update boundary system before rendering (uses frame delta of 16.67ms as estimate)
+    const bool should_render_boundaries = dynamic_boundary_system_ && dynamic_boundary_system_->is_initialized();
+    if (should_render_boundaries) {
+        dynamic_boundary_system_->update(cam, grid, 16.67f);  // ~60fps delta
+    }
+
     const double anchor_world_y = cam.anchor_world_y();
     auto depth_from_anchor = [&](double world_y) {
         return anchor_world_y - world_y;
@@ -567,6 +586,25 @@ void SceneRenderer::render() {
     const float fog_cull_margin = 64.0f;
 
     const float fog_vertical_offset = DynamicFogSystem::vertical_offset();
+
+    // Get and sort boundary sprites
+    std::vector<DynamicBoundarySystem::BoundarySprite> boundary_sprites;
+    if (should_render_boundaries) {
+        boundary_sprites = dynamic_boundary_system_->get_boundary_sprites();
+        std::sort(boundary_sprites.begin(), boundary_sprites.end(),
+            [&](const auto& a, const auto& b) {
+                const double da = depth_from_anchor(static_cast<double>(a.world_pos.y));
+                const double db = depth_from_anchor(static_cast<double>(b.world_pos.y));
+                if (da != db) {
+                    return da > db;
+                }
+                return a.world_pos.x < b.world_pos.x;
+            });
+    }
+    size_t boundary_index = 0;
+    const float boundary_size_scale = DynamicBoundarySystem::base_size_scale();
+    const float boundary_cull_margin = 64.0f;
+    const float boundary_vertical_offset = DynamicBoundarySystem::vertical_offset();
 
     struct AssetRenderCandidate {
         Asset* asset = nullptr;
@@ -652,13 +690,72 @@ void SceneRenderer::render() {
         SDL_RenderGeometry(renderer_, sprite.texture, vertices, 4, kQuadIndices, 6);
     };
 
-    while (next_asset || fog_index < fog_sprites.size()) {
+    auto render_boundary_sprite = [&](const DynamicBoundarySystem::BoundarySprite& sprite) {
+        if (!sprite.texture || sprite.texture_w <= 0 || sprite.texture_h <= 0) {
+            return;
+        }
+
+        const float world_x = sprite.world_pos.x;
+        const float world_y = sprite.world_pos.y;
+        const float world_z = static_cast<float>(sprite.world_z);
+        const float boundary_world_width = static_cast<float>(sprite.texture_w) * boundary_size_scale * sprite.scale;
+        const float boundary_world_height = static_cast<float>(sprite.texture_h) * boundary_size_scale * sprite.scale;
+        const float half_width = boundary_world_width * 0.5f;
+        const float height = boundary_world_height;
+
+        SDL_FPoint base_screen{};
+        if (!project_world_point(cam, world_x, world_y, world_z, base_screen)) {
+            return;
+        }
+
+        const float adjusted_y = base_screen.y + boundary_vertical_offset;
+        const float left = base_screen.x - half_width;
+        const float right = base_screen.x + half_width;
+        const float top = adjusted_y - height;
+        const float bottom = adjusted_y;
+        if (right < -boundary_cull_margin || left > static_cast<float>(screen_width_) + boundary_cull_margin ||
+            bottom < -boundary_cull_margin || top > static_cast<float>(screen_height_) + boundary_cull_margin) {
+            return;
+        }
+
+        const float padding_x = 0.5f / static_cast<float>(sprite.texture_w);
+        const float padding_y = 0.5f / static_cast<float>(sprite.texture_h);
+        const float u0 = padding_x;
+        const float u1 = 1.0f - padding_x;
+        const float v0 = padding_y;
+        const float v1 = 1.0f - padding_y;
+
+        SDL_Vertex vertices[4]{};
+        vertices[0].position = SDL_FPoint{base_screen.x - half_width, adjusted_y - height};
+        vertices[1].position = SDL_FPoint{base_screen.x + half_width, adjusted_y - height};
+        vertices[2].position = SDL_FPoint{base_screen.x + half_width, adjusted_y};
+        vertices[3].position = SDL_FPoint{base_screen.x - half_width, adjusted_y};
+        const SDL_Color white{255, 255, 255, 255};
+        vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
+        vertices[0].tex_coord = SDL_FPoint{u0, v0};
+        vertices[1].tex_coord = SDL_FPoint{u1, v0};
+        vertices[2].tex_coord = SDL_FPoint{u1, v1};
+        vertices[3].tex_coord = SDL_FPoint{u0, v1};
+
+        SDL_SetTextureBlendMode(sprite.texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
+        SDL_SetTextureAlphaMod(sprite.texture, 255);
+        SDL_RenderGeometry(renderer_, sprite.texture, vertices, 4, kQuadIndices, 6);
+    };
+
+    while (next_asset || fog_index < fog_sprites.size() || boundary_index < boundary_sprites.size()) {
         const double asset_depth = next_asset ? next_asset->depth : std::numeric_limits<double>::lowest();
         const double fog_depth = fog_index < fog_sprites.size()
             ? depth_from_anchor(static_cast<double>(fog_sprites[fog_index].world_pos.y))
             : std::numeric_limits<double>::lowest();
+        const double boundary_depth = boundary_index < boundary_sprites.size()
+            ? depth_from_anchor(static_cast<double>(boundary_sprites[boundary_index].world_pos.y))
+            : std::numeric_limits<double>::lowest();
 
-        if (next_asset && (fog_index >= fog_sprites.size() || asset_depth >= fog_depth)) {
+        // Determine which to render next (highest depth = furthest from camera = render first)
+        const double max_depth = std::max({asset_depth, fog_depth, boundary_depth});
+
+        if (next_asset && asset_depth == max_depth) {
             const AssetRenderCandidate candidate = *next_asset;
 
             composite_renderer_.update(candidate.asset, flicker_time_seconds);
@@ -696,6 +793,9 @@ void SceneRenderer::render() {
             }
 
             next_asset = advance_asset_candidate();
+        } else if (boundary_index < boundary_sprites.size() && boundary_depth == max_depth) {
+            render_boundary_sprite(boundary_sprites[boundary_index]);
+            ++boundary_index;
         } else if (fog_index < fog_sprites.size()) {
             render_fog_sprite(fog_sprites[fog_index]);
             ++fog_index;

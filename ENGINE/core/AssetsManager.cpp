@@ -1391,6 +1391,11 @@ void Assets::track_asset_for_grid(Asset* asset) {
 }
 
 bool Assets::maybe_rebuild_world_grid() {
+    // Prevent double rebuild in same frame
+    if (frame_id_ == last_grid_rebuild_frame_) {
+        return false;
+    }
+
     const SDL_Point current_center = camera_.get_screen_center();
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
@@ -1406,6 +1411,7 @@ bool Assets::maybe_rebuild_world_grid() {
         return false;
     }
 
+    last_grid_rebuild_frame_ = frame_id_;
     rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
     return true;
 }

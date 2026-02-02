@@ -342,10 +342,20 @@ void Asset::update_scale_values() {
         (info && std::isfinite(info->scale_factor) && info->scale_factor > 0.0f) ? info->scale_factor : 1.0f;
 
     float perspective_scale = 1.0f;
-    if (window) {
+    // Try multiple sources for perspective scale to handle movement transitions
+    if (pos_ && pos_->perspective_scale > 0.0001f) {
+        // Primary: use current GridPoint directly
+        perspective_scale = pos_->perspective_scale;
+    } else if (window) {
         if (auto* gp = window->grid_point_for_asset(this)) {
             perspective_scale = std::max(0.0001f, gp->perspective_scale);
+        } else if (last_scale_perspective_input_ > 0.0001f) {
+            // Use cached value from last frame during movement transition
+            perspective_scale = last_scale_perspective_input_;
         }
+    } else if (last_scale_perspective_input_ > 0.0001f) {
+        // Absolute fallback: use last known value
+        perspective_scale = last_scale_perspective_input_;
     }
 
     float camera_scale = 1.0f;
@@ -975,16 +985,4 @@ void Asset::set_world_z(int world_z) {
 
     // Move to same XY but different Z
     move_to_world_position(pos_->world_x(), pos_->world_y(), world_z);
-}
-
-void Asset::Delete() {
-        dead = true;
-        hidden = true;
-        child_timeline_index_ = -1;
-        child_creation_requested_ = false;
-
-        if (assets_) {
-                assets_->mark_active_assets_dirty();
-                assets_->schedule_removal(this);
-        }
 }

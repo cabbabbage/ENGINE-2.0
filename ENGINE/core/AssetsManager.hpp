@@ -279,6 +279,7 @@ private:
     std::uint64_t active_candidate_generation_ = 0;
     std::uint32_t frame_id_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
+    std::uint32_t last_grid_rebuild_frame_ = 0;
 
     bool pending_initial_rebuild_ = false;
     bool logged_initial_rebuild_warning_ = false;

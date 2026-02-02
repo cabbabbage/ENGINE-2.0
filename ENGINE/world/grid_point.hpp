@@ -3,10 +3,12 @@
 #include <SDL.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 class Asset;
@@ -14,6 +16,36 @@ class Asset;
 namespace world {
 
 struct Chunk;
+
+// Parameters needed for world→screen projection, extracted from CameraState
+struct CameraProjectionParams {
+    // Camera position in meters
+    double position_x = 0.0, position_y = 0.0, position_z = 0.0;
+    // Camera basis vectors
+    double forward_x = 0.0, forward_y = 1.0, forward_z = 0.0;
+    double right_x = 1.0, right_y = 0.0, right_z = 0.0;
+    double up_x = 0.0, up_y = 0.0, up_z = 1.0;
+    // World anchor point (pixels)
+    double anchor_world_x = 0.0, anchor_world_y = 0.0;
+    // Conversion factor: world pixels to meters
+    double meters_scale = 0.01;
+    // Field of view tangents
+    double tan_half_fov_x = 1.0, tan_half_fov_y = 1.0;
+    // Clipping planes
+    double near_plane = 0.1, far_plane = 10000.0;
+    // Zoom and pan
+    double screen_zoom = 1.0, screen_pan_y_px = 0.0;
+    // Horizon and pitch
+    double horizon_screen_y = 0.0, pitch_radians = 0.0;
+    // Fade parameters
+    float horizon_band_px = 100.0f;
+    float near_camera_max_perspective_scale = 4.0f;
+    float offscreen_fade_amount_px = 200.0f;
+    // Screen dimensions
+    int screen_width = 0, screen_height = 0;
+    // Version for cache invalidation
+    std::uint64_t state_version = 0;
+};
 
 using GridId = std::uint64_t;
 
@@ -42,7 +74,7 @@ struct GridPoint {
     GridPoint(const GridPoint&) = default;
     GridPoint(GridPoint&&) = default;
     GridPoint& operator=(const GridPoint&) = delete;
-    GridPoint& operator=(GridPoint&&) = delete;
+    GridPoint& operator=(GridPoint&& other) noexcept;
 
     int world_x() const { return world_x_; }
     int world_y() const { return world_y_; }
@@ -106,6 +138,23 @@ struct GridPoint {
 
     mutable std::uint64_t screen_data_frame_updated = 0;
     mutable bool          screen_data_valid         = false;
+    mutable std::uint64_t last_camera_state_version_ = 0;
+
+    // Smart caching: returns true if projection calculation is needed
+    bool needs_projection_update(std::uint64_t current_frame, std::uint64_t camera_version) const {
+        return !screen_data_valid ||
+               screen_data_frame_updated != current_frame ||
+               last_camera_state_version_ != camera_version;
+    }
+
+    // Self-contained projection: GridPoint calculates its own screen position
+    void project_to_screen(const CameraProjectionParams& params);
+
+    // Update world position (controlled mutation for movement)
+    void update_world_position(int new_x, int new_y, int new_z = 0);
+
+    // Swap mutable data between points (for efficient grid reorganization)
+    friend void swap(GridPoint& a, GridPoint& b) noexcept;
 
     void reset_frame_state(std::uint64_t frame_stamp = 0) {
         screen             = SDL_FPoint{0.0f, 0.0f};
@@ -267,11 +316,11 @@ private:
         return out;
     }
 
-    const int world_x_          = 0;
-    const int world_y_          = 0;
-    const int world_z_          = 0;
-    const int resolution_layer_ = 0;
-    GridPoint* const parent_    = nullptr;
+    int world_x_          = 0;
+    int world_y_          = 0;
+    int world_z_          = 0;
+    int resolution_layer_ = 0;
+    GridPoint* parent_    = nullptr;
 
     // Non-owning hierarchy links; Map Grid owns nodes, Screen Grid only references.
     GridPoint* x_child_neg_ = nullptr;

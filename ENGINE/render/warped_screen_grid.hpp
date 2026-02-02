@@ -228,6 +228,7 @@ public:
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
     Area convert_area_to_aspect(const Area& in) const;
     const CameraController::State& camera_state() const { return camera_.state(); }
+    std::uint64_t camera_state_version() const { return camera_state_version_; }
 
 private:
     const CameraState& camera_state_cached() const;
@@ -271,6 +272,7 @@ private:
     std::vector<world::Chunk*> active_chunks_;
     std::unordered_map<const Asset*, world::GridPoint*> asset_to_point_;
     std::uint64_t frame_counter_ = 0;
+    std::uint64_t camera_state_version_ = 0;
     std::uint32_t last_nodes_visited_ = 0;
     std::uint32_t last_branches_skipped_ = 0;
     std::uint32_t last_depth_culled_ = 0;

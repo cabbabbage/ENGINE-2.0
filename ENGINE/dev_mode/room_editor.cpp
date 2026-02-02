@@ -5488,27 +5488,11 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
     const double old_area_size = old_area_copy ? old_area_copy->get_size() : 0.0;
     const double new_area_size = old_area_size;
 
-    if (old_area_copy && new_area_size < old_area_size) {
-        nlohmann::json& map_info_json = assets_->map_info_json();
-        if (map_info_json.contains("map_boundary_data") && map_info_json["map_boundary_data"].is_object()) {
-            const auto& boundary_json = map_info_json["map_boundary_data"];
-            if (boundary_json.contains("candidate_selectors") &&
-                boundary_json["candidate_selectors"].is_array() &&
-                !boundary_json["candidate_selectors"].empty()) {
-                std::vector<Area> exclusion;
-                if (current_room_ && current_room_->room_area) {
-                    exclusion.push_back(*current_room_->room_area);
-                }
-                AssetSpawner spawner(&assets_->library(), exclusion);
-                std::string source = assets_ ? assets_->map_id() : std::string{};
-                if (!source.empty()) {
-                    source += "::map_boundary_data";
-                }
-                auto boundary_spawned = spawner.spawn_boundary_from_json(boundary_json, *old_area_copy, source);
-                integrate_spawned_assets(boundary_spawned);
-            }
-        }
-    }
+    // NOTE: Boundary assets are now rendered dynamically via DynamicBoundarySystem.
+    // No need to spawn static boundary assets when room area shrinks.
+    (void)old_area_copy;
+    (void)new_area_size;
+    (void)old_area_size;
 
     std::string player_asset_name;
     if (assets_) {

@@ -514,34 +514,8 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                 map_wide.spawn(all_rooms);
         }
         std::cout << "[GenerateRooms] Map-wide assets spawned\n";
-        if (!boundary_data.is_null() && !boundary_data.empty()) {
-                std::cout << "[GenerateRooms] Processing boundary assets...\n";
-                std::vector<Area> exclusion_zones;
-                for (const auto& r : all_rooms) {
-                        exclusion_zones.push_back(*r->room_area);
-                }
-                const int map_radius_int = map_radius > 0.0 ? static_cast<int>(std::lround(map_radius)) : 0;
-                const int diameter = map_radius_int * 2;
-                SDL_Point center{map_radius_int, map_radius_int};
-                Area area("Map", center, diameter, diameter, "Circle", 1, diameter, diameter, 3);
-                AssetSpawner spawner(asset_lib, exclusion_zones);
-                std::vector<std::unique_ptr<Asset>> boundary_assets = spawner.spawn_boundary_from_json( boundary_data, area, map_id_ + "::map_boundary_data");
-                int assigned_count = 0;
-                RoomSpatialIndex room_index(all_rooms);
-                for (auto& asset_ptr : boundary_assets) {
-                        Asset* asset = asset_ptr.get();
-                        if (!asset) continue;
-                        Room* owner = room_index.find_owner(asset->world_point());
-                        if (owner) {
-                                asset->set_owning_room_name(owner->room_name);
-                                std::vector<std::unique_ptr<Asset>> wrapper;
-                                        wrapper.push_back(std::move(asset_ptr));
-                                        owner->add_room_assets(std::move(wrapper));
-                                        assigned_count++;
-                        }
-                }
-                std::cout << "[GenerateRooms] Boundary assets processed, " << assigned_count << " assigned\n";
-        }
+        // NOTE: Boundary assets are now rendered dynamically via DynamicBoundarySystem
+        // instead of being spawned as static assets during map generation.
 	std::cout << "[GenerateRooms] Build completed successfully\n";
 	return all_rooms;
 }

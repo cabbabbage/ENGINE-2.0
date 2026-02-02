@@ -2704,50 +2704,12 @@ void DevControls::regenerate_map_grid_assets() {
 }
 
 void DevControls::regenerate_boundary_spawn_group(const nlohmann::json& entry) {
-    if (!assets_ || !entry.is_object()) {
-        return;
-    }
-    const std::string spawn_id = entry.value("spawn_id", std::string{});
-    if (spawn_id.empty()) {
-        return;
-    }
-
-    remove_spawn_group_assets(spawn_id);
-
-    const nlohmann::json& map_json = assets_->map_info_json();
-    if (!map_json.is_object()) {
-        return;
-    }
-    const auto boundary_it = map_json.find("map_boundary_data");
-    if (boundary_it == map_json.end() || !boundary_it->is_object()) {
-        return;
-    }
-    const nlohmann::json& boundary_data = *boundary_it;
-    if (boundary_data.is_null()) {
-        return;
-    }
-
-    const int radius = map_radius_or_default();
-    const int diameter = radius * 2;
-    SDL_Point center{radius, radius};
-    Area area("map_boundary_regen", center, diameter, diameter, "Circle", 1, diameter, diameter, 3);
-
-    std::vector<Area> exclusion;
-    const auto& rooms = assets_->rooms();
-    exclusion.reserve(rooms.size());
-    for (Room* room : rooms) {
-        if (room && room->room_area) {
-            exclusion.push_back(*room->room_area);
-        }
-    }
-
-    AssetSpawner spawner(&assets_->library(), exclusion);
-    std::string source = assets_->map_id();
-    if (!source.empty()) {
-        source += "::map_boundary_data";
-    }
-    auto spawned = spawner.spawn_boundary_from_json(boundary_data, area, source);
-    integrate_spawned_assets(spawned);
+    // NOTE: Boundary assets are now rendered dynamically via DynamicBoundarySystem.
+    // This function is kept for API compatibility but no longer spawns static assets.
+    // The dynamic boundary system reads directly from map_boundary_data in the manifest.
+    // TODO: If live boundary config editing is needed, add a method to reinitialize
+    // the DynamicBoundarySystem from SceneRenderer.
+    (void)entry;
 }
 
 void DevControls::ensure_map_assets_modal_open() {

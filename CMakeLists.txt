@@ -319,6 +319,7 @@ add_executable(engine_world_tests
     TESTS/test_main.cpp
     TESTS/test_world_grid_same_chunk_move.cpp
     ENGINE/world/world_grid.cpp
+    ENGINE/world/grid_point.cpp
     ENGINE/world/chunk_manager.cpp
     ENGINE/utils/grid_math.cpp
     ENGINE/utils/log.cpp

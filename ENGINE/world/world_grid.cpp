@@ -768,6 +768,12 @@ Asset* WorldGrid::move_asset(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int
     const SDL_Point old_index = grid_index_from_world(old_pos);
     const SDL_Point new_index = grid_index_from_world(new_pos);
 
+    // PRESERVE perspective scale before detaching from old point
+    float preserved_perspective = 1.0f;
+    if (a->pos_ && a->pos_->perspective_scale > 0.0001f) {
+        preserved_perspective = a->pos_->perspective_scale;
+    }
+
     std::unique_ptr<Asset> owned;
     const bool point_changed = (old_pos.x != new_pos.x) || (old_pos.y != new_pos.y);
     if (point_changed) {
@@ -785,6 +791,11 @@ Asset* WorldGrid::move_asset(Asset* a, SDL_Point old_pos, SDL_Point new_pos, int
             attach_asset_to_grid_point(std::move(owned), nullptr, point);
         } else {
             attach_asset_to_grid_point(nullptr, a, point);
+        }
+        // Initialize new point's perspective_scale if not yet calculated
+        // This prevents a single frame of wrong scaling during movement
+        if (point.perspective_scale <= 0.0001f || !point.screen_data_valid) {
+            point.perspective_scale = preserved_perspective;
         }
     } else {
         point.invalidate_screen_data();

@@ -8,13 +8,14 @@
 #include "render/composite_asset_renderer.hpp"
 #include "render/scaling_logic.hpp"
 #include "render/dynamic_fog_system.hpp"
+#include "render/dynamic_boundary_system.hpp"
 #include <SDL.h>
 
 #include <nlohmann/json.hpp>
 
 class Assets;
 class WarpedScreenGrid;
-namespace world { class WorldGrid; }
+class AssetLibrary;
 namespace world { class WorldGrid; }
 
 class GridTileRenderer {
@@ -89,6 +90,7 @@ private:
 
     CompositeAssetRenderer composite_renderer_;
     std::unique_ptr<DynamicFogSystem> dynamic_fog_system_;
+    std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
 
     std::uint32_t depthcue_warmup_frames_ = 8;
 

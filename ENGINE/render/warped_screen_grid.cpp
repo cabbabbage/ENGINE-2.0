@@ -512,6 +512,44 @@ WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
         return p;
     }
 
+    world::CameraProjectionParams camera_state_to_projection_params(
+        const CameraState& cam,
+        int screen_width,
+        int screen_height,
+        float horizon_band_px) {
+        world::CameraProjectionParams params{};
+        params.position_x = cam.position.x;
+        params.position_y = cam.position.y;
+        params.position_z = cam.position.z;
+        params.forward_x = cam.forward.x;
+        params.forward_y = cam.forward.y;
+        params.forward_z = cam.forward.z;
+        params.right_x = cam.right.x;
+        params.right_y = cam.right.y;
+        params.right_z = cam.right.z;
+        params.up_x = cam.up.x;
+        params.up_y = cam.up.y;
+        params.up_z = cam.up.z;
+        params.anchor_world_x = static_cast<double>(cam.anchor_world_px.x);
+        params.anchor_world_y = static_cast<double>(cam.anchor_world_px.y);
+        params.meters_scale = cam.meters_scale;
+        params.tan_half_fov_x = cam.tan_half_fov_x;
+        params.tan_half_fov_y = cam.tan_half_fov_y;
+        params.near_plane = cam.near_plane;
+        params.far_plane = cam.far_plane;
+        params.screen_zoom = cam.screen_zoom;
+        params.screen_pan_y_px = cam.screen_pan_y_px;
+        params.horizon_screen_y = cam.horizon_screen_y;
+        params.pitch_radians = cam.pitch_radians;
+        params.horizon_band_px = horizon_band_px;
+        params.near_camera_max_perspective_scale = cam.near_camera_max_perspective_scale;
+        params.offscreen_fade_amount_px = cam.offscreen_fade_amount_px;
+        params.screen_width = screen_width;
+        params.screen_height = screen_height;
+        params.state_version = 0; // Will be set by caller
+        return params;
+    }
+
     float warp_floor_screen_y_internal(
         float world_y,
         float linear_screen_y,
@@ -642,6 +680,7 @@ const CameraState& WarpedScreenGrid::camera_state_cached() const {
 
 void WarpedScreenGrid::invalidate_camera_cache() {
     cached_camera_state_dirty_ = true;
+    ++camera_state_version_;
 }
 
 
@@ -1320,11 +1359,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
 
     for (world::GridPoint* gp : grid_points) {
         if (!gp) continue;
-        const SDL_FPoint prev_screen = gp->screen;
-        const bool prev_screen_valid = gp->screen_data_valid &&
-                                       std::isfinite(prev_screen.x) &&
-                                       std::isfinite(prev_screen.y);
-        gp->reset_frame_state(frame_stamp);
 
         if (gp->occupants.empty()) {
             continue;
@@ -1342,34 +1376,33 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
         }
 
         const SDL_Point world_pos{ gp->world_x(), gp->world_y() };
-        const CameraSpaceData space = to_camera_space(
-            static_cast<double>(world_pos.x),
-            static_cast<double>(world_pos.y),
-            static_cast<double>(gp->world_z()));
-        ProjectionResult proj = project_world_point_internal(
-            cam_state,
-            static_cast<double>(world_pos.x),
-            static_cast<double>(world_pos.y),
-            static_cast<double>(gp->world_z()),
-            screen_width_,
-            screen_height_,
-            horizon_band);
-        if (!proj.valid) {
-            proj.screen = prev_screen_valid
-                ? prev_screen
-                : SDL_FPoint{ static_cast<float>(world_pos.x), static_cast<float>(world_pos.y) };
-            proj.perspective_scale = 1.0f;
-            proj.vertical_scale = 1.0f;
-            proj.horizon_fade = 1.0f;
-            proj.distance = std::isfinite(space.distance) ? static_cast<float>(space.distance) : 0.0f;
+
+        // SMART CACHING: Skip expensive projection if data is still valid
+        const bool needs_projection = gp->needs_projection_update(frame_stamp, camera_state_version_);
+
+        CameraSpaceData space{};
+
+        if (needs_projection) {
+            // Use GridPoint's self-contained projection method
+            world::CameraProjectionParams params = camera_state_to_projection_params(
+                cam_state, screen_width_, screen_height_, horizon_band);
+            params.state_version = camera_state_version_;
+
+            gp->project_to_screen(params);
+            gp->mark_screen_data_updated(frame_stamp);
+
+            // Still need camera space data for frustum culling
+            space = to_camera_space(
+                static_cast<double>(world_pos.x),
+                static_cast<double>(world_pos.y),
+                static_cast<double>(gp->world_z()));
+        } else {
+            // GridPoint already has valid cached data
+            space.distance = static_cast<double>(gp->distance_to_camera);
+            space.valid = true;
         }
 
-        SDL_FPoint screen_pos = proj.screen;
-        if (!std::isfinite(screen_pos.x) || !std::isfinite(screen_pos.y)) {
-            screen_pos = prev_screen_valid ? prev_screen : SDL_FPoint{0.0f, 0.0f};
-        }
-
-        const SDL_FPoint screen_for_bounds = screen_pos;
+        const SDL_FPoint screen_for_bounds = gp->screen;
 
         float base_scale = primary_asset->smoothed_scale();
         if (!std::isfinite(base_scale) || base_scale <= 0.0f) {
@@ -1447,26 +1480,15 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             };
         }
 
-        const float distance_to_cam = std::isfinite(proj.distance)
-            ? proj.distance
-            : static_cast<float>(space.distance);
-
+        // Track z-range and depth culling stats
         last_min_world_z_ = std::min(last_min_world_z_, gp->world_z());
         last_max_world_z_ = std::max(last_max_world_z_, gp->world_z());
         if (space.valid && (space.distance < padded_near || space.distance > padded_far)) {
             ++last_depth_culled_;
         }
 
-        gp->screen             = screen_for_bounds;
-        gp->parallax_dx        = 0.0f;
-        gp->vertical_scale     = proj.vertical_scale;
-        gp->horizon_fade_alpha = proj.horizon_fade;
-        gp->near_camera_fade_alpha = proj.near_camera_fade;
-
-        gp->perspective_scale  = proj.perspective_scale;
-        gp->distance_to_camera = distance_to_cam;
-        gp->tilt_radians       = static_cast<float>(runtime_pitch_rad_);
-
+        // GridPoint now has all projection data from project_to_screen()
+        // Check which assets are actually visible in the frustum
         frustum_hits.clear();
         for (const auto& owned : gp->occupants) {
             if (!owned) {
@@ -1480,8 +1502,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid, float dt_secon
             }
         }
 
+        // Update visibility based on frustum check
         gp->on_screen = !frustum_hits.empty();
-        gp->mark_screen_data_updated(frame_stamp);
 
         warped_points_.push_back(gp);
         if (!frustum_hits.empty()) {
@@ -1574,34 +1596,19 @@ double WarpedScreenGrid::default_camera_height_for_room(const Room* room) const 
 }
 
 void WarpedScreenGrid::project_to_screen(world::GridPoint& point) const {
-
     const CameraState& cam_state = camera_state_cached();
-    const ProjectionResult proj = project_world_point_internal(
-        cam_state,
-        static_cast<double>(point.world_x()),
-        static_cast<double>(point.world_y()),
-        static_cast<double>(point.world_z()),
-        screen_width_,
-        screen_height_,
-        horizon_fade_for_height(cam_state.camera_height));
+    const float horizon_band = horizon_fade_for_height(cam_state.camera_height);
 
-    if (!proj.valid) {
-        point.screen = SDL_FPoint{0.0f, 0.0f};
-        point.parallax_dx = 0.0f;
-        point.on_screen = false;
-        return;
-    }
+    // Use GridPoint's self-contained projection method
+    world::CameraProjectionParams params = camera_state_to_projection_params(
+        cam_state, screen_width_, screen_height_, horizon_band);
+    params.state_version = camera_state_version_;
 
-    point.screen          = proj.screen;
-    point.screen.y        = screen_height_ - point.screen.y;
-    point.parallax_dx     = 0.0f;
-    point.vertical_scale  = proj.vertical_scale;
-    point.perspective_scale = proj.perspective_scale;
-    point.horizon_fade_alpha = proj.horizon_fade;
-    point.near_camera_fade_alpha = proj.near_camera_fade;
-    point.distance_to_camera = proj.distance;
-    point.tilt_radians    = static_cast<float>(runtime_pitch_rad_);
-    point.on_screen       = true;
+    point.project_to_screen(params);
+
+    // Note: GridPoint uses screen coordinates with Y increasing downward,
+    // but the internal projection uses Y increasing upward. The GridPoint
+    // method handles this internally, so no Y-flip is needed here.
 }
 
 bool WarpedScreenGrid::is_manual_height_override() const {

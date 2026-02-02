@@ -176,6 +176,9 @@ public:
     void initialize_active_assets(const world::GridPoint& center);
     std::uint64_t dev_active_state_version() const { return dev_active_state_version_; }
 
+    // Region tagging
+    void classify_region(world::GridPoint& point);
+
 
     void apply_map_grid_settings(const MapGridSettings& settings, bool persist_json = true);
     int  map_grid_chunk_resolution() const;

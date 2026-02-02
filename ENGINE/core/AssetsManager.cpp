@@ -2041,6 +2041,50 @@ void Assets::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& i
         dev_controls_->open_animation_editor_for_asset(info);
     }
 }
+
+namespace {
+inline bool is_trail_string(const std::string& text) {
+    if (text.empty()) return false;
+    std::string lower;
+    lower.reserve(text.size());
+    for (unsigned char ch : text) {
+        lower.push_back(static_cast<char>(std::tolower(ch)));
+    }
+    return lower == "trail";
+}
+}
+
+void Assets::classify_region(world::GridPoint& point) {
+    point.region_kind = world::GridPoint::RegionKind::Boundary;
+    point.region_owner = nullptr;
+
+    const SDL_Point pt{point.world_x(), point.world_y()};
+    for (Room* room : rooms_) {
+        if (!room) continue;
+        const bool room_is_trail = is_trail_string(room->type);
+        if (room->room_area && room->room_area->contains_point(pt)) {
+            point.region_kind = room_is_trail ? world::GridPoint::RegionKind::Trail
+                                              : world::GridPoint::RegionKind::Room;
+            point.region_owner = room;
+            return;
+        }
+        // Named areas that are marked as trail
+        for (const auto& named : room->areas) {
+            if (!named.area) continue;
+            if (!(is_trail_string(named.type) || is_trail_string(named.kind) || is_trail_string(named.name))) {
+                continue;
+            }
+            try {
+                if (named.area->contains_point(pt)) {
+                    point.region_kind = world::GridPoint::RegionKind::Trail;
+                    point.region_owner = room;
+                    return;
+                }
+            } catch (...) {
+            }
+        }
+    }
+}
 void Assets::rebuild_active_from_screen_grid() {
     const std::uint32_t current_frame_id = frame_id_;
     const std::uint32_t previous_active_frame_id = last_active_rebuild_frame_id_;
@@ -2065,6 +2109,7 @@ void Assets::rebuild_active_from_screen_grid() {
         if (!point->has_assets_or_active_children()) {
             continue;
         }
+        classify_region(*point);
         active_points_.push_back(point);
         for (const auto& occ : point->occupants) {
             Asset* asset = occ.get();

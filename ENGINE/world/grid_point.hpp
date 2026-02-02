@@ -13,6 +13,7 @@
 #include <vector>
 
 class Asset;
+class Room;
 
 // Forward declarations to keep grid_point lightweight
 namespace world {
@@ -130,6 +131,15 @@ struct GridPoint {
     int resolution_layer() const { return resolution_layer_; }
     GridPoint* parent() const { return parent_; }
     bool is_virtual() const { return is_virtual_; }
+
+    enum class RegionKind {
+        Boundary = 0,
+        Room,
+        Trail
+    };
+
+    RegionKind region_kind = RegionKind::Boundary;
+    const Room* region_owner = nullptr; // Non-owning; points to Room that contains this point, if any.
 
     // Renderer/UI boundary helpers (explicit conversions)
     SDL_Point to_sdl_point() const { return SDL_Point{world_x_, world_y_}; }

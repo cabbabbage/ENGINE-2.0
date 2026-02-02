@@ -5,6 +5,8 @@
 #include "asset/asset_info.hpp"
 #include "asset/animation.hpp"
 #include "core/AssetsManager.hpp"
+#include "map_generation/room.hpp"
+#include "utils/area.hpp"
 #include "utils/log.hpp"
 #include "utils/grid.hpp"
 
@@ -143,6 +145,35 @@ inline int scaled_spacing(int base_spacing, float multiplier) {
     }
     return static_cast<int>(rounded);
 }
+
+inline world::GridPoint::RegionKind classify_region_at(const std::vector<Room*>& rooms,
+                                                       SDL_Point pt,
+                                                       const Room** owner_out) {
+    if (owner_out) *owner_out = nullptr;
+    for (Room* room : rooms) {
+        if (!room) continue;
+        const bool room_is_trail = is_trail_string(room->type);
+        if (room->room_area && room->room_area->contains_point(pt)) {
+            if (owner_out) *owner_out = room;
+            return room_is_trail ? world::GridPoint::RegionKind::Trail
+                                 : world::GridPoint::RegionKind::Room;
+        }
+        for (const auto& named : room->areas) {
+            if (!named.area) continue;
+            if (!(is_trail_string(named.type) || is_trail_string(named.kind) || is_trail_string(named.name))) {
+                continue;
+            }
+            try {
+                if (named.area->contains_point(pt)) {
+                    if (owner_out) *owner_out = room;
+                    return world::GridPoint::RegionKind::Trail;
+                }
+            } catch (...) {
+            }
+        }
+    }
+    return world::GridPoint::RegionKind::Boundary;
+}
 }
 
 DynamicBoundarySystem::DynamicBoundarySystem() = default;
@@ -167,7 +198,7 @@ bool DynamicBoundarySystem::initialize(SDL_Renderer* renderer, AssetLibrary* ass
 }
 
 void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
-                                   const world::WorldGrid& grid,
+                                   world::WorldGrid& grid,
                                    Assets* assets,
                                    float delta_ms) {
     active_boundary_sprites_.clear();
@@ -208,6 +239,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     const float spacing_multiplier = std::clamp(config().grid_spacing_multiplier, kMinGridMultiplier, kMaxGridMultiplier);
     const float max_random_jitter = std::clamp(config().max_random_jitter, kMinRandomJitter, kMaxRandomJitter);
     const std::vector<ExclusionArea> exclusion_areas = collect_exclusion_areas(assets);
+    const std::vector<Room*>& rooms = assets ? assets->rooms() : std::vector<Room*>{};
 
     for (size_t type_idx = 0; type_idx < boundary_types_.size(); ++type_idx) {
         const BoundaryType& btype = boundary_types_[type_idx];
@@ -249,6 +281,20 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                     static_cast<float>(world_x) + jitter.x,
                     static_cast<float>(world_y) + jitter.y
                 };
+                const SDL_Point world_pt{static_cast<int>(std::lround(world_pos.x)), static_cast<int>(std::lround(world_pos.y))};
+                const Room* owning_room = nullptr;
+                const auto region_kind = classify_region_at(rooms, world_pt, &owning_room);
+                if (region_kind != world::GridPoint::RegionKind::Boundary) {
+                    continue;
+                }
+                const world::GridPoint virtual_point =
+                    world::GridPoint::make_virtual(world_x, world_y, world_z, resolution_layer);
+                const world::GridKey virtual_key =
+                    grid.grid_key_from_world(virtual_point, world_z, resolution_layer);
+                if (world::GridPoint* gp = grid.find_grid_point(virtual_key)) {
+                    gp->region_kind = region_kind;
+                    gp->region_owner = owning_room;
+                }
 
                 if (is_blocked(world_pos, exclusion_areas)) {
                     continue;

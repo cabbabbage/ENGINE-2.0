@@ -43,6 +43,8 @@ GridPoint::GridPoint(const GridPoint& other)
     , resolution_layer_(other.resolution_layer_)
     , parent_(other.parent_)
     , is_virtual_(other.is_virtual_)
+    , region_kind(other.region_kind)
+    , region_owner(other.region_owner)
     , world(other.world)
     , grid_index(other.grid_index)
     , chunk_index(other.chunk_index)
@@ -394,6 +396,8 @@ void swap(GridPoint& a, GridPoint& b) noexcept {
     swap(a.perspective_scale, b.perspective_scale);
     swap(a.distance_to_camera, b.distance_to_camera);
     swap(a.tilt_radians, b.tilt_radians);
+    swap(a.region_kind, b.region_kind);
+    swap(a.region_owner, b.region_owner);
     swap(a.on_screen, b.on_screen);
     swap(a.screen_data_frame_updated, b.screen_data_frame_updated);
     swap(a.screen_data_valid, b.screen_data_valid);

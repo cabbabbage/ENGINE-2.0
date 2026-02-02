@@ -87,7 +87,7 @@ public:
     ~DynamicBoundarySystem();
 
     bool initialize(SDL_Renderer* renderer, AssetLibrary* asset_library);
-    void update(const WarpedScreenGrid& cam, const world::WorldGrid& grid, Assets* assets, float delta_ms);
+    void update(const WarpedScreenGrid& cam, world::WorldGrid& grid, Assets* assets, float delta_ms);
 
     const std::vector<BoundarySprite>& get_boundary_sprites() const { return active_boundary_sprites_; }
 

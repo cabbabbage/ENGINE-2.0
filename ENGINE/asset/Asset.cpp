@@ -673,6 +673,17 @@ void Asset::rebuild_animation_runtime() {
 
 
 
+void Asset::Delete() {
+    if (dead) {
+        return;
+    }
+    dead = true;
+    active = false;
+    if (assets_) {
+        assets_->schedule_removal(this);
+    }
+}
+
 void Asset::ensure_animation_runtime(bool force_recreate) {
     if (!assets_) {
         return;

@@ -122,7 +122,7 @@ class Asset {
     ~Asset();
     void finalize_setup();
     void rebuild_animation_runtime();
-
+    void Delete();
 
     bool is_finalized() const { return finalized_; }
     void on_scale_factor_changed();

@@ -9,6 +9,7 @@
 #include "rebuild_queue.hpp"
 
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <filesystem>
 #include <optional>
@@ -39,6 +40,60 @@ static inline fs::file_time_type safe_last_write_time(const fs::path& p) {
     auto t = fs::last_write_time(p, ec);
     if (ec) return fs::file_time_type::min();
     return t;
+}
+
+static inline double parse_float_like(const json& v, double fallback) {
+    if (v.is_number()) return v.get<double>();
+    if (v.is_string()) {
+        try {
+            return std::stod(v.get<std::string>());
+        } catch (...) {
+            return fallback;
+        }
+    }
+    return fallback;
+}
+
+static json build_effects_snippet(const json& manifest) {
+    json snippet = json::object();
+    auto block_to_dict = [&](const char* name) {
+        json out = json::object();
+        if (manifest.is_object() && manifest.contains("image_effects") && manifest["image_effects"].is_object()) {
+            const json& ie = manifest["image_effects"];
+            if (ie.contains(name) && ie[name].is_object()) {
+                out = ie[name];
+            }
+        }
+        const char* keys[] = {
+            "brightness", "contrast", "blur",
+            "saturation_red", "saturation_green", "saturation_blue",
+            "hue"
+        };
+        for (const char* k : keys) {
+            if (!out.contains(k)) {
+                out[k] = 0.0;
+            } else {
+                out[k] = parse_float_like(out[k], 0.0);
+            }
+        }
+        return out;
+    };
+
+    snippet["foreground"] = block_to_dict("foreground");
+    snippet["background"] = block_to_dict("background");
+    return snippet;
+}
+
+static std::optional<json> read_json_file(const fs::path& path) {
+    std::ifstream in(path);
+    if (!in.is_open()) return std::nullopt;
+    json data;
+    try {
+        in >> data;
+    } catch (...) {
+        return std::nullopt;
+    }
+    return data;
 }
 
 static inline bool file_missing_or_older(const fs::path& p,
@@ -166,14 +221,12 @@ int main(int argc, char** argv) {
 
     fs::path repo_root;
     fs::path manifest_dir;
-    fs::file_time_type manifest_mtime = fs::file_time_type::min();
 
     auto resolved = resolve_manifest(manifest_path);
     if (resolved) {
         manifest_path = *resolved;
         manifest_dir = manifest_path.parent_path();
         repo_root = manifest_dir;
-        manifest_mtime = safe_last_write_time(manifest_path);
         std::cout << "Using manifest: " << manifest_path.string() << "\n";
     } else if (cache_root_override.empty()) {
         std::cerr << "Error: could not locate manifest.json (searched upward from CWD). Use --manifest <path> or --cache-root.\n";
@@ -195,6 +248,20 @@ int main(int argc, char** argv) {
                               : cache_root_override;
 
     std::cout << "Cache root: " << cache_root.string() << "\n";
+
+    const fs::path effects_cache_path = cache_root / "effects_cache.json";
+    const fs::file_time_type effects_cache_mtime = safe_last_write_time(effects_cache_path);
+
+    bool effects_mismatch = false;
+    if (!manifest_path.empty()) {
+        const auto manifest_json = read_json_file(manifest_path);
+        const auto effects_cache_json = read_json_file(effects_cache_path);
+        if (!manifest_json || !effects_cache_json) {
+            effects_mismatch = true;
+        } else {
+            effects_mismatch = (build_effects_snippet(*manifest_json) != *effects_cache_json);
+        }
+    }
 
     const fs::path rebuild_queue_path = ResolveRebuildQueuePath(cache_root);
     json rebuild_queue = LoadRebuildQueue(rebuild_queue_path);
@@ -228,7 +295,7 @@ int main(int argc, char** argv) {
             }
 
             fs::path anim_cache_root = cache_root / asset_name / "animations" / anim_name;
-            if (!fs::is_directory(anim_cache_root)) {
+            if (effects_mismatch || !fs::is_directory(anim_cache_root)) {
                 if (mark_all_frames(rebuild_queue, asset_name, anim_name, frame_count)) {
                     changed = true;
                 }
@@ -267,7 +334,7 @@ int main(int argc, char** argv) {
                     continue;
                 }
 
-                fs::file_time_type baseline = manifest_mtime;
+                fs::file_time_type baseline = effects_cache_mtime;
                 if (bundle_mtime > baseline) {
                     baseline = bundle_mtime;
                 }

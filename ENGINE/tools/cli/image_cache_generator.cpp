@@ -868,7 +868,6 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         return result;
     }
 
-    const fs::file_time_type manifest_mtime = safe_last_write_time(manifest_path);
     if (!manifest.is_object()) {
         result.ok = false;
         result.error = "Manifest root is not a JSON object.";
@@ -886,6 +885,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     if (!opt.dry_run) {
         update_effects_cache_like_python(cache_root, manifest, log);
     }
+    const fs::path effects_cache_path = cache_root / "effects_cache.json";
+    const fs::file_time_type effects_cache_mtime = safe_last_write_time(effects_cache_path);
 
     // Scales: python normalize_variant_steps returns [0.75, 0.5, 0.25, 0.1]
     std::vector<int> scale_pcts = opt.scale_percents;
@@ -1016,7 +1017,7 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     if (!opt.filters.matches_source_frame(src_idx)) continue;
 
                     bool needs = opt.force_rebuild || flagged_set.count(src_idx) > 0;
-                    fs::file_time_type baseline = manifest_mtime;
+                    fs::file_time_type baseline = effects_cache_mtime;
                     if (bundle_mtime > baseline) {
                         baseline = bundle_mtime;
                     }

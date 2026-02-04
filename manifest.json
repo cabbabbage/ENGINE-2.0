@@ -138,35 +138,6 @@
             "resolve_geometry_to_room_size": false,
             "resolve_quantity_to_room_size": false,
             "spawn_id": "spn-test-map_boundary"
-          },
-          {
-            "candidates": [
-              {
-                "chance": 0,
-                "name": "null"
-              },
-              {
-                "chance": 5,
-                "name": "Bush_1"
-              },
-              {
-                "chance": 0.25,
-                "name": "Grass_1"
-              }
-            ],
-            "display_name": "batch_map_boundary",
-            "enforce_spacing": false,
-            "explicit_flip": false,
-            "force_flipped": false,
-            "grid_resolution": 5,
-            "locked": false,
-            "max_number": 1,
-            "min_number": 1,
-            "position": "Random",
-            "resolution": 0,
-            "resolve_geometry_to_room_size": false,
-            "resolve_quantity_to_room_size": false,
-            "spawn_id": "spn-f4c3c3e24f0c"
           }
         ],
         "inherits_map_assets": false,
@@ -472,6 +443,34 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-c6162102e00c"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "Vibble"
+                }
+              ],
+              "display_name": "Vibble",
+              "dx": 1918,
+              "dy": 1099,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 6376,
+              "origional_width": 6376,
+              "position": "Exact",
+              "resolution": 5,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-b16000a93281"
             }
           ]
         },

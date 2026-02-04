@@ -438,7 +438,7 @@ Assets::~Assets() {
     grid_registration_buffer_.clear();
 
     // Persist current asset state to bundle caches on teardown (dev mode exit).
-    PrimaryAssetCache cache(renderer_);
+    PrimaryAssetCache cache(renderer());
     for (const auto& entry : library_.all()) {
         if (entry.second) {
             cache.save_current(*entry.second);

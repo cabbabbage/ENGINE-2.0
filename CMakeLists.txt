@@ -238,18 +238,19 @@ endif()
 # ------------------------------------------
 # Unit tests (doctest-based)
 # ------------------------------------------
+set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/TESTS")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
 add_executable(engine_tests
-    TESTS/test_main.cpp
-    TESTS/test_dev_json_store.cpp
-    TESTS/test_manifest_loader.cpp
-    TESTS/test_scene_renderer_prereqs.cpp
-    TESTS/test_animation_child_visibility.cpp
-    TESTS/test_animation_child_runtime.cpp
-    TESTS/test_animation_child_clone.cpp
-    TESTS/test_frame_editor_async_payload.cpp
-    TESTS/test_attack_validation.cpp
-    TESTS/frame_editor_session_test_helpers.cpp
+    ${TESTS_SOURCE_DIR}/test_main.cpp
+    ${TESTS_SOURCE_DIR}/test_dev_json_store.cpp
+    ${TESTS_SOURCE_DIR}/test_manifest_loader.cpp
+    ${TESTS_SOURCE_DIR}/test_scene_renderer_prereqs.cpp
+    ${TESTS_SOURCE_DIR}/test_animation_child_visibility.cpp
+    ${TESTS_SOURCE_DIR}/test_animation_child_runtime.cpp
+    ${TESTS_SOURCE_DIR}/test_animation_child_clone.cpp
+    ${TESTS_SOURCE_DIR}/test_frame_editor_async_payload.cpp
+    ${TESTS_SOURCE_DIR}/test_attack_validation.cpp
+    ${TESTS_SOURCE_DIR}/frame_editor_session_test_helpers.cpp
     ENGINE/runtime/assets/asset/animation.cpp
     ENGINE/runtime/assets/asset/surface_utils.cpp
     ENGINE/runtime/assets/asset/animation_cloner.cpp
@@ -317,19 +318,19 @@ endif()
 # Isolated WorldGrid tests (lightweight target)
 # ------------------------------------------
 add_executable(engine_world_tests
-    TESTS/test_main.cpp
-    TESTS/test_world_grid_same_chunk_move.cpp
+    ${TESTS_SOURCE_DIR}/test_main.cpp
+    ${TESTS_SOURCE_DIR}/test_world_grid_same_chunk_move.cpp
     ENGINE/runtime/gameplay/world/world_grid.cpp
     ENGINE/runtime/gameplay/world/grid_point.cpp
     ENGINE/runtime/gameplay/world/chunk_manager.cpp
     ENGINE/runtime/utils/utils/grid_math.cpp
     ENGINE/runtime/utils/utils/log.cpp
-    TESTS/stubs/chunk_stubs.cpp
+    ${TESTS_SOURCE_DIR}/stubs/chunk_stubs.cpp
 )
 
 target_include_directories(engine_world_tests
     PRIVATE
-        ${CMAKE_SOURCE_DIR}/TESTS/stubs
+        ${TESTS_SOURCE_DIR}/stubs
         ${CMAKE_SOURCE_DIR}/ENGINE/runtime
         ${CMAKE_SOURCE_DIR}/ENGINE/editor
         ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline

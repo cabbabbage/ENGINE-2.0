@@ -710,7 +710,6 @@ void Assets::update(const Input& input)
 
     if (process_removals()) {
         mark_active_assets_dirty();
-        rebuild_active_assets_if_needed();
     }
 
     Room* detected_room = finder_ ? finder_->getCurrentRoom() : nullptr;
@@ -825,24 +824,21 @@ void Assets::update(const Input& input)
 
     culled_debug_rects_.clear();
 
-    maybe_rebuild_world_grid();
-
-    update_audio_camera_metrics();
-
     if (dev_controls_ && dev_controls_->is_enabled()) {
         sync_dev_controls_current_room(current_room_);
         dev_controls_->update(input);
 
         dev_controls_->update_ui(input);
-
-        maybe_rebuild_world_grid();
     }
 
     register_pending_static_assets();
     if (process_removals()) {
         mark_active_assets_dirty();
-        rebuild_active_assets_if_needed();
     }
+
+    maybe_rebuild_world_grid();
+
+    update_audio_camera_metrics();
 
     bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
     const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
@@ -883,7 +879,7 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         return;
     }
 
-    // Helper to compute parent depth for topological ordering
+    // Helper to compute parent depth for ordering within a grid point
     auto compute_parent_depth = [](const Asset* asset) -> int {
         int depth = 0;
         const Asset* current = asset;
@@ -895,65 +891,96 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         return depth;
     };
 
-    // Collect all non-player assets (including children)
-    non_player_update_buffer_.clear();
-    non_player_update_buffer_.reserve(active_assets.size());
-    std::unordered_set<const Asset*> buffer_set;
-    for (Asset* asset : active_assets) {
-        if (asset && asset != player) {
-            non_player_update_buffer_.push_back(asset);
-            buffer_set.insert(asset);
-        }
-    }
-
-    // Also include child timeline assets when their parent is active.
-    // Child timeline assets may not be on a visible grid point but should
-    // still be updated when their parent is active (for both sync and async modes).
+    // Build lookup for child timeline assets keyed by their parent
+    std::unordered_map<Asset*, std::vector<Asset*>> child_lookup;
+    child_lookup.reserve(all.size());
     for (Asset* asset : all) {
-        if (!asset || asset->dead || asset == player) {
+        if (!asset || asset->dead) {
             continue;
         }
-        // Check if this is a child timeline asset
         if (asset->child_timeline_index() < 0) {
             continue;
         }
-        // Skip if already in the buffer
-        if (buffer_set.count(asset)) {
-            continue;
-        }
-        // Check if parent is active (in buffer or is player)
-        const Asset* parent_asset = asset->parent;
+        Asset* parent_asset = asset->parent;
         if (!parent_asset || parent_asset->dead) {
             continue;
         }
-        const bool parent_in_buffer = buffer_set.count(parent_asset) > 0;
-        const bool parent_is_player = (parent_asset == player && player && player->active);
-        if (parent_in_buffer || parent_is_player) {
-            non_player_update_buffer_.push_back(asset);
-            buffer_set.insert(asset);
+        child_lookup[parent_asset].push_back(asset);
+    }
+    for (auto& kv : child_lookup) {
+        auto& children = kv.second;
+        std::stable_sort(children.begin(), children.end(),
+                         [](const Asset* a, const Asset* b) {
+                             if (!a || !b) return b != nullptr;
+                             if (a->child_timeline_index() != b->child_timeline_index()) {
+                                 return a->child_timeline_index() < b->child_timeline_index();
+                             }
+                             return a < b;
+                         });
+    }
+
+    non_player_update_buffer_.clear();
+    non_player_update_buffer_.reserve(active_traversal_.size());
+    std::unordered_set<const Asset*> buffer_set;
+
+    for (world::GridPoint* point : active_points_) {
+        if (!point) {
+            continue;
+        }
+
+        std::vector<Asset*> point_assets;
+        point_assets.reserve(point->occupants.size());
+        for (const auto& occ : point->occupants) {
+            Asset* asset = occ.get();
+            if (!asset || asset->dead) {
+                continue;
+            }
+            point_assets.push_back(asset);
+        }
+
+        if (point_assets.empty()) {
+            continue;
+        }
+
+        std::stable_sort(point_assets.begin(),
+                         point_assets.end(),
+                         [&compute_parent_depth](const Asset* a, const Asset* b) {
+                             if (!a || !b) return b != nullptr;
+                             const int depth_a = compute_parent_depth(a);
+                             const int depth_b = compute_parent_depth(b);
+                             if (depth_a != depth_b) {
+                                 return depth_a < depth_b; // parents before children
+                             }
+                             return a < b;
+                         });
+
+        for (Asset* asset : point_assets) {
+            if (!asset) {
+                continue;
+            }
+
+            // Always respect traversal order; skip adding player itself to the buffer.
+            if (asset != player && buffer_set.insert(asset).second) {
+                non_player_update_buffer_.push_back(asset);
+            }
+
+            // Append child timeline assets immediately after their parent (or player).
+            auto child_it = child_lookup.find(asset);
+            if (child_it == child_lookup.end() && asset == player) {
+                child_it = child_lookup.find(player);
+            }
+            if (child_it != child_lookup.end()) {
+                for (Asset* child : child_it->second) {
+                    if (!child || child->dead) {
+                        continue;
+                    }
+                    if (buffer_set.insert(child).second) {
+                        non_player_update_buffer_.push_back(child);
+                    }
+                }
+            }
         }
     }
-
-    // Pre-compute all parent depths once (O(n * avg_depth)) instead of
-    // recomputing during sort comparisons (which would be O(n log n * avg_depth))
-    std::unordered_map<const Asset*, int> depth_cache;
-    depth_cache.reserve(non_player_update_buffer_.size());
-    for (const Asset* asset : non_player_update_buffer_) {
-        depth_cache[asset] = compute_parent_depth(asset);
-    }
-
-    // Sort in parent-first order using cached depths (O(n log n) with O(1) lookups)
-    std::stable_sort(non_player_update_buffer_.begin(),
-                     non_player_update_buffer_.end(),
-                     [&depth_cache](const Asset* a, const Asset* b) {
-                         if (!a || !b) return b != nullptr;
-                         const int depth_a = depth_cache[a];
-                         const int depth_b = depth_cache[b];
-                         if (depth_a != depth_b) {
-                             return depth_a < depth_b; // Parents (lower depth) before children
-                         }
-                         return a < b; // Stable ordering for same depth
-                     });
 
     non_player_update_buffer_dirty_.store(false, std::memory_order_release);
 }
@@ -1420,7 +1447,7 @@ void Assets::track_asset_for_grid(Asset* asset) {
 
 bool Assets::maybe_rebuild_world_grid() {
     // Prevent double rebuild in same frame
-    if (frame_id_ == last_grid_rebuild_frame_) {
+    if (frame_id_ == last_grid_rebuild_frame_ || frame_id_ == last_active_rebuild_frame_id_) {
         return false;
     }
 
@@ -1433,6 +1460,7 @@ bool Assets::maybe_rebuild_world_grid() {
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
     constexpr double kCameraGridEpsilon = 1e-4;
+    const bool active_dirty = active_assets_dirty_.load(std::memory_order_acquire) || pending_initial_rebuild_;
     const bool camera_changed =
         current_center.world_x() != last_camera_center_for_grid_.world_x() ||
         current_center.world_y() != last_camera_center_for_grid_.world_y() ||
@@ -1440,11 +1468,10 @@ bool Assets::maybe_rebuild_world_grid() {
         std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon;
 
     camera_view_dirty_ = camera_view_dirty_ || camera_changed;
-    if (!grid_dirty_ && !camera_view_dirty_) {
+    if (!grid_dirty_ && !camera_view_dirty_ && !active_dirty) {
         return false;
     }
 
-    last_grid_rebuild_frame_ = frame_id_;
     rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
     return true;
 }
@@ -1452,6 +1479,7 @@ bool Assets::maybe_rebuild_world_grid() {
 void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& current_center,
                                                   double current_scale,
                                                   double current_pitch) {
+    last_grid_rebuild_frame_ = frame_id_;
     camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_);
     world_grid_.update_active_chunks(screen_world_rect(), 0);
     rebuild_active_from_screen_grid();
@@ -1523,6 +1551,9 @@ bool Assets::rebuild_active_assets_if_needed() {
     if (!dirty) {
         return false;
     }
+    if (frame_id_ == last_active_rebuild_frame_id_) {
+        return false;
+    }
 
     const SDL_Point center_px = camera_.get_screen_center();
     const world::GridPoint current_center = world::GridPoint::make_virtual(center_px.x, center_px.y, 0, world_grid_.max_resolution_layers());
@@ -1530,7 +1561,6 @@ bool Assets::rebuild_active_assets_if_needed() {
     const double current_pitch = camera_.current_pitch_radians();
 
     pending_initial_rebuild_ = false;
-    active_assets_dirty_.store(false, std::memory_order_release);
     initialize_active_assets(current_center);
     rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
     return true;
@@ -2107,15 +2137,23 @@ void Assets::classify_region(world::GridPoint& point) {
 }
 void Assets::rebuild_active_from_screen_grid() {
     const std::uint32_t current_frame_id = frame_id_;
+    if (current_frame_id == last_active_rebuild_frame_id_) {
+        return;
+    }
     const std::uint32_t previous_active_frame_id = last_active_rebuild_frame_id_;
     bool active_changed = false;
-    std::vector<Asset*> newly_active_assets;
-    newly_active_assets.reserve(active_assets.size());
+    std::vector<Asset*> previous_active = std::move(active_assets);
 
     active_points_.clear();
-
+    active_traversal_.clear();
+    active_assets.clear();
+    active_assets.reserve(camera_.get_visible_points().size() * 4);
     visible_candidate_buffer_.clear();
     visible_candidate_buffer_.reserve(camera_.get_visible_points().size() * 2);
+    std::unordered_set<Asset*> seen_assets;
+    seen_assets.reserve(camera_.get_visible_points().size() * 2);
+
+    const double anchor_world_y = camera_.anchor_world_y();
 
     // Screen Grid traversal: use per-frame visible nodes (already filtered by region + branch masks).
     for (world::GridPoint* point : camera_.get_visible_points()) {
@@ -2133,98 +2171,42 @@ void Assets::rebuild_active_from_screen_grid() {
         active_points_.push_back(point);
         for (const auto& occ : point->occupants) {
             Asset* asset = occ.get();
-            if (asset && asset->last_visible_frame_id != current_frame_id) {
-                asset->last_visible_frame_id = current_frame_id;
-                visible_candidate_buffer_.push_back(asset);
+            if (!asset || asset->dead) {
+                continue;
             }
+            if (!seen_assets.insert(asset).second) {
+                continue; // already handled this frame
+            }
+
+            const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
+            if (!was_active) {
+                active_changed = true;
+            }
+
+            asset->last_active_frame_id = current_frame_id;
+            asset->last_visible_frame_id = current_frame_id;
+            asset->active = true;
+
+            active_assets.push_back(asset);
+            active_traversal_.push_back(ActiveTraversalEntry{
+                asset,
+                point,
+                anchor_world_y - static_cast<double>(asset->world_y())
+            });
         }
     }
-
-    const double anchor_world_y = camera_.anchor_world_y();
-    const auto distance_from_anchor = [anchor_world_y](const Asset* asset) {
-        if (!asset) {
-            return std::numeric_limits<double>::infinity();
-        }
-        return anchor_world_y - static_cast<double>(asset->world_y());
-    };
-    auto depth_order = [&distance_from_anchor](Asset* lhs, Asset* rhs) {
-        if (lhs == rhs) {
-            return false;
-        }
-        if (!lhs || !rhs) {
-            return rhs != nullptr;
-        }
-        const double ld = distance_from_anchor(lhs);
-        const double rd = distance_from_anchor(rhs);
-        if (ld != rd) {
-            return ld > rd; // draw farther (larger Y-distance) first
-        }
-        return lhs < rhs;
-    };
-
-    active_assets.erase(std::remove_if(active_assets.begin(),
-                                       active_assets.end(),
-                                       [&](Asset* asset) {
-                                           if (!asset) {
-                                               return true;
-                                           }
-                                           if (asset->dead) {
-                                               return true;
-                                           }
-                                           const bool is_visible = asset->last_visible_frame_id == current_frame_id;
-                                           if (!is_visible) {
-                                               if (asset->last_active_frame_id == previous_active_frame_id) {
-                                                   active_changed = true;
-                                               }
-                                               asset->active = false;
-                                               asset->child_creation_requested_ = false;
-                                               return true;
-                                           }
-                                           const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
-                                           if (!was_active) {
-                                               newly_active_assets.push_back(asset);
-                                               active_changed = true;
-                                           }
-                                           asset->last_active_frame_id = current_frame_id;
-                                           asset->active = true;
-                                           return false;
-                                       }),
-                        active_assets.end());
-
-    // Batch collect assets to add, then bulk insert + single sort
-    // (replaces O(k*n) individual lower_bound+insert with O(n log n) single sort)
-    std::vector<Asset*> assets_to_add;
-    assets_to_add.reserve(visible_candidate_buffer_.size());
-
-    for (Asset* asset : visible_candidate_buffer_) {
+    // Deactivate assets no longer visible this frame.
+    for (Asset* asset : previous_active) {
         if (!asset) {
             continue;
         }
-        if (asset->last_active_frame_id == current_frame_id) {
-            continue;
+        const bool still_active = asset->last_active_frame_id == current_frame_id;
+        if (!still_active && asset->last_active_frame_id == previous_active_frame_id) {
+            active_changed = true;
+            asset->active = false;
+            asset->child_creation_requested_ = false;
         }
-        const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
-        asset->last_active_frame_id = current_frame_id;
-        asset->last_visible_frame_id = current_frame_id;
-        asset->active = true;
-        if (!was_active) {
-            newly_active_assets.push_back(asset);
-        }
-        assets_to_add.push_back(asset);
-        active_changed = true;
     }
-
-    // Bulk append all new assets (O(k) amortized)
-    if (!assets_to_add.empty()) {
-        active_assets.insert(active_assets.end(), assets_to_add.begin(), assets_to_add.end());
-    }
-
-    // Single sort of entire list (O(n log n) once, not O(k*n))
-    if (active_changed || !std::is_sorted(active_assets.begin(), active_assets.end(), depth_order)) {
-        std::sort(active_assets.begin(), active_assets.end(), depth_order);
-    }
-
-    visible_candidate_buffer_.clear();
 
     active_assets_dirty_.store(false, std::memory_order_release);
     if (active_changed) {

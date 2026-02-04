@@ -81,6 +81,12 @@ public:
     const std::vector<Asset*>& getActive() const;
     const std::vector<Asset*>& getFilteredActiveAssets() const;
     const std::vector<world::GridPoint*>& active_points() const { return active_points_; }
+    struct ActiveTraversalEntry {
+        Asset* asset = nullptr;
+        world::GridPoint* grid_point = nullptr;
+        double depth_from_anchor = 0.0;
+    };
+    const std::vector<ActiveTraversalEntry>& active_traversal() const { return active_traversal_; }
     const std::vector<Asset*>& getActiveRaw() const { return active_assets; }
     std::vector<Asset*>& mutable_filtered_active_assets() { return filtered_active_assets; }
     WarpedScreenGrid& getView() { return camera_; }
@@ -254,6 +260,7 @@ private:
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
     std::vector<world::GridPoint*> active_points_;
+    std::vector<ActiveTraversalEntry> active_traversal_;
     std::vector<Asset*> removal_queue;
     std::mutex removal_queue_mutex_;
     std::vector<Asset*> non_player_update_buffer_;

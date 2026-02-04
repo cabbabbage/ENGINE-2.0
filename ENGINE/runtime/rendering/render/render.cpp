@@ -528,10 +528,8 @@ void SceneRenderer::render() {
 
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
-    cam.rebuild_grid(grid, assets_->frame_delta_seconds());
-    assets_->rebuild_active_from_screen_grid();
 
-    const auto& render_assets = assets_->getActive();
+    const auto& render_traversal = assets_->active_traversal();
 
     SDL_SetRenderTarget(renderer_, nullptr);
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
@@ -617,25 +615,22 @@ void SceneRenderer::render() {
         double depth = 0.0;
     };
 
-    const auto depth_from_asset = [&](const Asset* asset) {
-        return depth_from_anchor(static_cast<double>(asset->world_y()));
-    };
-
     size_t asset_index = 0;
     auto advance_asset_candidate = [&]() -> std::optional<AssetRenderCandidate> {
-        while (asset_index < render_assets.size()) {
-            Asset* asset = render_assets[asset_index++];
+        while (asset_index < render_traversal.size()) {
+            const auto& entry = render_traversal[asset_index++];
+            Asset* asset = entry.asset;
             if (!asset || asset->is_hidden() || !asset->info) {
                 continue;
             }
             if (const auto& tiling = asset->tiling_info(); tiling && tiling->is_valid()) {
                 continue;
             }
-            world::GridPoint* gp = cam.grid_point_for_asset(asset);
+            world::GridPoint* gp = entry.grid_point;
             if (!gp || !gp->on_screen) {
                 continue;
             }
-            return AssetRenderCandidate{asset, gp, depth_from_asset(asset)};
+            return AssetRenderCandidate{asset, gp, entry.depth_from_anchor};
         }
         return std::nullopt;
     };
@@ -823,7 +818,8 @@ void SceneRenderer::render() {
         }};
 
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-        for (Asset* asset : render_assets) {
+        for (const auto& entry : render_traversal) {
+            Asset* asset = entry.asset;
             if (!asset || asset->is_hidden() || !asset->info || !asset->anim_) {
                 continue;
             }

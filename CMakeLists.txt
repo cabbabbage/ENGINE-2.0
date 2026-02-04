@@ -45,14 +45,30 @@ endforeach()
 # Sources
 # ------------------------------------------
 file(GLOB_RECURSE ENGINE_SRC CONFIGURE_DEPENDS
-    ${CMAKE_SOURCE_DIR}/ENGINE/*.cpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/*.c
-    ${CMAKE_SOURCE_DIR}/ENGINE/*.hpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/*.h
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/*.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/*.c
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/*.hpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/*.h
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.c
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.hpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.h
+    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.c
+    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.hpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.h
 )
 
 list(REMOVE_DUPLICATES ENGINE_SRC)
-list(REMOVE_ITEM ENGINE_SRC "${CMAKE_SOURCE_DIR}/ENGINE/dev_mode/frame_editor_session_child_timelines.cpp")
+# Exclude standalone tool entry points from the main engine binary
+list(REMOVE_ITEM ENGINE_SRC
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/asset_tool_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/set_rebuild_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/cache_validator_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/apply_effects_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui/tinyfiledialogs.c"
+)
 
 add_executable(engine ${ENGINE_SRC})
 
@@ -125,23 +141,59 @@ endif()
 
 # OpenGL (needed by glad-backed GL apps)
 find_package(OpenGL REQUIRED)
+if (WIN32)
+    # Ensure opengl32.lib is found even when Windows SDK lib paths are not on the default LIB search list.
+    set(_WINSDK_KITS_ROOT "C:/Program Files (x86)/Windows Kits/10/Lib")
+    if (EXISTS "${_WINSDK_KITS_ROOT}")
+        file(GLOB _winsdk_versions LIST_DIRECTORIES true "${_WINSDK_KITS_ROOT}/*")
+        list(SORT _winsdk_versions COMPARE NATURAL ORDER DESCENDING)
+        list(GET _winsdk_versions 0 _winsdk_latest)
+        set(_winsdk_um_x64 "${_winsdk_latest}/um/x64")
+        set(_winsdk_ucrt_x64 "${_winsdk_latest}/ucrt/x64")
+    endif()
+    find_library(OPENGL32_ABSOLUTE
+        NAMES opengl32 OpenGL32
+        PATHS "${_winsdk_um_x64}" "${_WINSDK_KITS_ROOT}"
+        PATH_SUFFIXES "um/x64" "x64"
+    )
+    if (OPENGL32_ABSOLUTE AND TARGET OpenGL::GL)
+        set_property(TARGET OpenGL::GL PROPERTY IMPORTED_IMPLIB "${OPENGL32_ABSOLUTE}")
+        set_property(TARGET OpenGL::GL PROPERTY IMPORTED_LOCATION "${OPENGL32_ABSOLUTE}")
+    endif()
+    if (EXISTS "${_winsdk_um_x64}")
+        set(WINSDK_UM_X64_LIBDIR "${_winsdk_um_x64}")
+    endif()
+    if (EXISTS "${_winsdk_ucrt_x64}")
+        set(WINSDK_UCRT_X64_LIBDIR "${_winsdk_ucrt_x64}")
+    endif()
+endif()
+if (MSVC)
+    set(_VCTOOLS_ROOT "C:/VS2022/BuildTools/VC/Tools/MSVC")
+    if (EXISTS "${_VCTOOLS_ROOT}")
+        file(GLOB _vctools_versions LIST_DIRECTORIES true "${_VCTOOLS_ROOT}/*")
+        list(SORT _vctools_versions COMPARE NATURAL ORDER DESCENDING)
+        list(GET _vctools_versions 0 _vctools_latest)
+        set(MSVC_LIB_DIR "${_vctools_latest}/lib/x64")
+    endif()
+endif()
 
 # ------------------------------------------
 # Include dirs
 # ------------------------------------------
 target_include_directories(engine
-    PRIVATE
-        ${CMAKE_SOURCE_DIR}/ENGINE
-        ${CMAKE_SOURCE_DIR}/ENGINE/asset
-        ${CMAKE_SOURCE_DIR}/ENGINE/core
-        ${CMAKE_SOURCE_DIR}/ENGINE/dev_mode
-        ${CMAKE_SOURCE_DIR}/ENGINE/render
-        ${CMAKE_SOURCE_DIR}/ENGINE/render_pipeline
-        ${CMAKE_SOURCE_DIR}/ENGINE/map_generation
-        ${CMAKE_SOURCE_DIR}/ENGINE/spawn
-        ${CMAKE_SOURCE_DIR}/ENGINE/ui
-        ${CMAKE_SOURCE_DIR}/ENGINE/utils
-)
+      PRIVATE
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/app
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/assets
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/audio
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn
+          ${CMAKE_SOURCE_DIR}/ENGINE/editor
+          ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
+          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
+  )
 
 target_compile_definitions(engine PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
 
@@ -164,6 +216,18 @@ target_link_libraries(engine
         ${GLAD_TARGET}
         OpenGL::GL
 )
+if (WINSDK_UM_X64_LIBDIR)
+    target_link_directories(engine PRIVATE "${WINSDK_UM_X64_LIBDIR}")
+endif()
+if (WINSDK_UCRT_X64_LIBDIR)
+    target_link_directories(engine PRIVATE "${WINSDK_UCRT_X64_LIBDIR}")
+endif()
+if (MSVC_LIB_DIR)
+    target_link_directories(engine PRIVATE "${MSVC_LIB_DIR}")
+endif()
+if (OPENGL32_ABSOLUTE)
+    target_link_libraries(engine PRIVATE ${OPENGL32_ABSOLUTE})
+endif()
 
 # Link Windows COM/Shell libs for modern file dialogs
 if (WIN32)
@@ -183,60 +247,57 @@ endif()
 # ------------------------------------------
 # Unit tests (doctest-based)
 # ------------------------------------------
+set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/TESTS")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
 add_executable(engine_tests
-    TESTS/test_main.cpp
-    TESTS/test_dev_json_store.cpp
-    TESTS/test_manifest_loader.cpp
-    TESTS/test_scene_renderer_prereqs.cpp
-    TESTS/test_animation_child_visibility.cpp
-    TESTS/test_animation_child_runtime.cpp
-    TESTS/test_animation_child_clone.cpp
-    TESTS/test_frame_editor_async_payload.cpp
-    TESTS/test_attack_validation.cpp
-    TESTS/frame_editor_session_test_helpers.cpp
-    ENGINE/asset/animation.cpp
-    ENGINE/asset/surface_utils.cpp
-    ENGINE/asset/animation_cloner.cpp
-    ENGINE/animation_update/child_attachment_controller.cpp
-    ENGINE/animation_update/attack_validation.cpp
-    ENGINE/dev_mode/asset_sections/animation_editor_window/frame_editor/children/FrameChildrenEditor.cpp
-    ENGINE/dev_mode/asset_sections/animation_editor_window/AnimationDocument.cpp
-    ENGINE/dev_mode/dm_styles.cpp
-    ENGINE/dev_mode/core/dev_json_store.cpp
-    ENGINE/dev_mode/core/manifest_store.cpp
-    ENGINE/dev_mode/manifest_asset_utils.cpp
-    ENGINE/dev_mode/tag_utils.cpp
-    ENGINE/dev_mode/draw_utils.cpp
-    ENGINE/dev_mode/font_cache.cpp
-    ENGINE/dev_mode/widgets.cpp
-    ENGINE/dev_mode/frame_editors/shared/Point3DEditor.cpp
-    ENGINE/core/manifest/manifest_loader.cpp
-    ENGINE/utils/log.cpp
-    ENGINE/utils/cache_manager.cpp
-    ENGINE/utils/loading_status_notifier.cpp
+    ${TESTS_SOURCE_DIR}/test_main.cpp
+    ${TESTS_SOURCE_DIR}/test_dev_json_store.cpp
+    ${TESTS_SOURCE_DIR}/test_manifest_loader.cpp
+    ${TESTS_SOURCE_DIR}/test_scene_renderer_prereqs.cpp
+    ${TESTS_SOURCE_DIR}/test_animation_child_visibility.cpp
+    ${TESTS_SOURCE_DIR}/test_animation_child_runtime.cpp
+    ${TESTS_SOURCE_DIR}/test_animation_child_clone.cpp
+    ${TESTS_SOURCE_DIR}/test_frame_editor_async_payload.cpp
+    ${TESTS_SOURCE_DIR}/test_attack_validation.cpp
+    ${TESTS_SOURCE_DIR}/frame_editor_session_test_helpers.cpp
+    ENGINE/runtime/assets/asset/animation.cpp
+    ENGINE/runtime/assets/asset/surface_utils.cpp
+    ENGINE/runtime/assets/asset/animation_cloner.cpp
+    ENGINE/runtime/animation/child_attachment_controller.cpp
+    ENGINE/runtime/animation/attack_validation.cpp
+    ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
+    ENGINE/editor/devtools/dm_styles.cpp
+    ENGINE/editor/devtools/core/dev_json_store.cpp
+    ENGINE/editor/devtools/core/manifest_store.cpp
+    ENGINE/editor/devtools/manifest_asset_utils.cpp
+    ENGINE/editor/devtools/tag_utils.cpp
+    ENGINE/editor/devtools/draw_utils.cpp
+    ENGINE/editor/devtools/font_cache.cpp
+    ENGINE/editor/devtools/widgets.cpp
+    ENGINE/editor/devtools/frame_editors/shared/Point3DEditor.cpp
+    ENGINE/runtime/core/manifest/manifest_loader.cpp
+    ENGINE/runtime/utils/utils/log.cpp
+    ENGINE/runtime/utils/utils/cache_manager.cpp
+    ENGINE/runtime/utils/utils/loading_status_notifier.cpp
   )
 
 target_include_directories(engine_tests
-    PRIVATE
-        ${CMAKE_SOURCE_DIR}/ENGINE
-        ${CMAKE_SOURCE_DIR}/ENGINE/asset
-        ${CMAKE_SOURCE_DIR}/ENGINE/core
-        ${CMAKE_SOURCE_DIR}/ENGINE/dev_mode
-        ${CMAKE_SOURCE_DIR}/ENGINE/render
-        ${CMAKE_SOURCE_DIR}/ENGINE/render_pipeline
-        ${CMAKE_SOURCE_DIR}/ENGINE/map_generation
-        ${CMAKE_SOURCE_DIR}/ENGINE/spawn
-        ${CMAKE_SOURCE_DIR}/ENGINE/ui
-        ${CMAKE_SOURCE_DIR}/ENGINE/utils
-        ${CMAKE_SOURCE_DIR}/external
-)
+      PRIVATE
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/app
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/assets
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+          ${CMAKE_SOURCE_DIR}/ENGINE/editor
+          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
+          ${CMAKE_SOURCE_DIR}/external
+  )
 
 target_compile_definitions(engine_tests PRIVATE
     DEV_MODE_DISABLE_JSON_DEBOUNCE=1
     PROJECT_ROOT="${TEST_ROOT}"
     FRAME_EDITOR_TEST_PUBLIC_ACCESS=1
     FRAME_EDITOR_ACCESS=public
+    DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
 )
 
 target_link_libraries(engine_tests
@@ -249,6 +310,18 @@ target_link_libraries(engine_tests
         ${GLAD_TARGET}
         OpenGL::GL
 )
+if (WINSDK_UM_X64_LIBDIR)
+    target_link_directories(engine_tests PRIVATE "${WINSDK_UM_X64_LIBDIR}")
+endif()
+if (WINSDK_UCRT_X64_LIBDIR)
+    target_link_directories(engine_tests PRIVATE "${WINSDK_UCRT_X64_LIBDIR}")
+endif()
+if (MSVC_LIB_DIR)
+    target_link_directories(engine_tests PRIVATE "${MSVC_LIB_DIR}")
+endif()
+if (OPENGL32_ABSOLUTE)
+    target_link_libraries(engine_tests PRIVATE ${OPENGL32_ABSOLUTE})
+endif()
 
 if (WIN32)
     target_link_libraries(engine_tests PRIVATE Ole32 Shell32)
@@ -258,24 +331,30 @@ endif()
 # Isolated WorldGrid tests (lightweight target)
 # ------------------------------------------
 add_executable(engine_world_tests
-    TESTS/test_main.cpp
-    TESTS/test_world_grid_same_chunk_move.cpp
-    ENGINE/world/world_grid.cpp
-    ENGINE/world/chunk_manager.cpp
-    ENGINE/utils/grid_math.cpp
-    ENGINE/utils/log.cpp
-    TESTS/stubs/chunk_stubs.cpp
+    ${TESTS_SOURCE_DIR}/test_main.cpp
+    ${TESTS_SOURCE_DIR}/test_world_grid_same_chunk_move.cpp
+    ENGINE/runtime/gameplay/world/world_grid.cpp
+    ENGINE/runtime/gameplay/world/grid_point.cpp
+    ENGINE/runtime/gameplay/world/chunk_manager.cpp
+    ENGINE/runtime/utils/utils/grid_math.cpp
+    ENGINE/runtime/utils/utils/log.cpp
+    ENGINE/TESTS/stubs/asset/Asset_world_tests_stubs.cpp
+    ${TESTS_SOURCE_DIR}/stubs/chunk_stubs.cpp
 )
 
 target_include_directories(engine_world_tests
-    PRIVATE
-        ${CMAKE_SOURCE_DIR}/TESTS/stubs
-        ${CMAKE_SOURCE_DIR}/ENGINE
-    ${CMAKE_SOURCE_DIR}/external
+      PRIVATE
+          ${TESTS_SOURCE_DIR}/stubs
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+          ${CMAKE_SOURCE_DIR}/ENGINE/editor
+          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
+          ${CMAKE_SOURCE_DIR}/external
 )
 
 target_compile_definitions(engine_world_tests PRIVATE
     PROJECT_ROOT="${TEST_ROOT}"
+    DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
 )
 
 # No heavy libs needed; these sources don't call into SDL functions
@@ -284,3 +363,102 @@ target_link_libraries(engine_world_tests
     PRIVATE
         SDL2::SDL2 ${_SDL2MAIN_TARGET}
 )
+if (WINSDK_UM_X64_LIBDIR)
+    target_link_directories(engine_world_tests PRIVATE "${WINSDK_UM_X64_LIBDIR}")
+endif()
+if (WINSDK_UCRT_X64_LIBDIR)
+    target_link_directories(engine_world_tests PRIVATE "${WINSDK_UCRT_X64_LIBDIR}")
+endif()
+if (MSVC_LIB_DIR)
+    target_link_directories(engine_world_tests PRIVATE "${MSVC_LIB_DIR}")
+endif()
+
+# ------------------------------------------
+# C++ Cache Tools (ENGINE/tools)
+# ------------------------------------------
+
+# Asset Tool CLI - main cache generator
+add_executable(asset_tool_cli
+    ENGINE/tools/cli/asset_tool_cli.cpp
+    ENGINE/tools/cli/image_cache_generator.cpp
+)
+target_include_directories(asset_tool_cli PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+    ${CMAKE_SOURCE_DIR}/external
+)
+target_compile_definitions(asset_tool_cli PRIVATE
+    IMGCACHE_STB_IMAGE_IMPL=1
+    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
+)
+target_link_libraries(asset_tool_cli PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
+# Set Rebuild Values CLI - manifest manipulation
+add_executable(set_rebuild_cli
+    ENGINE/tools/cli/set_rebuild_cli.cpp
+    ENGINE/tools/cli/image_cache_generator.cpp
+)
+target_include_directories(set_rebuild_cli PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+    ${CMAKE_SOURCE_DIR}/external
+)
+target_compile_definitions(set_rebuild_cli PRIVATE
+    IMGCACHE_STB_IMAGE_IMPL=1
+    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
+)
+target_link_libraries(set_rebuild_cli PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
+# Cache Validator CLI - cache integrity validation
+add_executable(cache_validator_cli
+    ENGINE/tools/cli/cache_validator_cli.cpp
+    ENGINE/tools/cli/image_cache_generator.cpp
+)
+target_include_directories(cache_validator_cli PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+    ${CMAKE_SOURCE_DIR}/external
+)
+target_compile_definitions(cache_validator_cli PRIVATE
+    IMGCACHE_STB_IMAGE_IMPL=1
+    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
+)
+target_link_libraries(cache_validator_cli PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
+# Apply Effects CLI - effect preview generation
+add_executable(apply_effects_cli
+    ENGINE/tools/cli/apply_effects_cli.cpp
+    ENGINE/tools/cli/image_cache_generator.cpp
+)
+target_include_directories(apply_effects_cli PRIVATE
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+    ${CMAKE_SOURCE_DIR}/external
+)
+target_compile_definitions(apply_effects_cli PRIVATE
+    IMGCACHE_STB_IMAGE_IMPL=1
+    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
+)
+target_link_libraries(apply_effects_cli PRIVATE
+    nlohmann_json::nlohmann_json
+)
+
+# Output all tools to ENGINE/tools directory
+foreach(tool_target asset_tool_cli set_rebuild_cli cache_validator_cli apply_effects_cli)
+    set_target_properties(${tool_target} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/ENGINE/tools"
+    )
+    # Set output directory for all configurations
+    foreach(cfg Debug Release RelWithDebInfo MinSizeRel)
+        string(TOUPPER "${cfg}" CFG_UP)
+        set_target_properties(${tool_target} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY_${CFG_UP} "${CMAKE_SOURCE_DIR}/ENGINE/tools"
+        )
+    endforeach()
+endforeach()

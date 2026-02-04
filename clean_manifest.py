@@ -5,8 +5,9 @@ Script to remove deprecated fields from manifest.json asset entries.
 Deprecated fields identified from codebase analysis:
 - Animation level: crop_frames, flipped_source, inherit_source_movement,
                    reverse_source, rnd_start, speed_multiplier, on_end
-- Frame level: needs_rebuild
+- Frame level: needs_rebuild, children (legacy child payloads)
 - Asset level: animation_children, async_children (legacy child formats)
+- Movement entries: embedded legacy child arrays ("children")
 """
 
 import json
@@ -27,18 +28,45 @@ DEPRECATED_ANIMATION_FIELDS = {
     'flip_vertical_source',
     'flip_movement_horizontal',
     'flip_movement_vertical',
-    'child_timelines',  # Timeline entries (new format)
-    'children',         # Timeline entries (legacy format)
+    # NOTE: child_timelines is the new format and must stay; do not strip it here.
+    'children',  # Legacy timeline payloads
 }
 
 DEPRECATED_FRAME_FIELDS = {
     'needs_rebuild',
+    'children',  # Legacy per-frame child payloads
 }
 
 DEPRECATED_ASSET_FIELDS = {
     'animation_children',
     'async_children',
 }
+
+
+def _is_legacy_child_list(value: Any) -> bool:
+    """Heuristically detect legacy child arrays attached to movement entries."""
+    if not isinstance(value, list):
+        return False
+    if not value:
+        return False
+    # Movement child payloads are typically lists of lists with 5-6 numeric/bool entries.
+    return all(isinstance(item, list) and len(item) >= 5 for item in value)
+
+
+def clean_movement_entry(entry: Any) -> Any:
+    """Strip legacy child payloads from a single movement entry (dict or list)."""
+    if isinstance(entry, dict):
+        entry.pop('children', None)
+        entry.pop('child_timelines', None)  # child_timelines inside movement is legacy/invalid
+        return entry
+
+    if isinstance(entry, list):
+        # Legacy format often puts child arrays as the last element; drop them.
+        while entry and _is_legacy_child_list(entry[-1]):
+            entry = entry[:-1]
+        return entry
+
+    return entry
 
 
 def clean_frame(frame: Dict[str, Any]) -> Dict[str, Any]:
@@ -57,6 +85,10 @@ def clean_animation(animation: Dict[str, Any]) -> Dict[str, Any]:
     # Clean frames within animations
     if 'frames' in animation and isinstance(animation['frames'], list):
         animation['frames'] = [clean_frame(frame) for frame in animation['frames']]
+
+    # Clean movement entries (legacy child arrays)
+    if 'movement' in animation and isinstance(animation['movement'], list):
+        animation['movement'] = [clean_movement_entry(m) for m in animation['movement']]
 
     # Clean movement paths if they contain frames
     if 'movement_paths' in animation and isinstance(animation['movement_paths'], list):
@@ -92,34 +124,53 @@ def clean_manifest(manifest: Dict[str, Any]) -> Dict[str, Any]:
     return manifest
 
 
-def count_removals(original: Dict[str, Any], cleaned: Dict[str, Any]) -> Dict[str, int]:
-    """Count removed deprecated fields for reporting."""
+def count_deprecated(manifest: Dict[str, Any]) -> Dict[str, int]:
+    """Count occurrences of deprecated fields to measure cleanup impact."""
     counts = {
         'animation_fields': 0,
         'frame_fields': 0,
         'asset_fields': 0,
+        'movement_children': 0,
     }
 
-    if 'assets' not in original:
+    assets = manifest.get('assets')
+    if not isinstance(assets, dict):
         return counts
 
-    for asset_name, asset in original['assets'].items():
-        # Count asset-level removals
+    for asset in assets.values():
+        if not isinstance(asset, dict):
+            continue
+
         for field in DEPRECATED_ASSET_FIELDS:
             if field in asset:
                 counts['asset_fields'] += 1
 
-        # Count animation-level removals
-        if 'animations' in asset and isinstance(asset['animations'], dict):
-            for anim_name, animation in asset['animations'].items():
-                for field in DEPRECATED_ANIMATION_FIELDS:
-                    if field in animation:
-                        counts['animation_fields'] += 1
+        animations = asset.get('animations')
+        if not isinstance(animations, dict):
+            continue
 
-                # Count frame-level removals
-                if 'frames' in animation and isinstance(animation['frames'], list):
-                    counts['frame_fields'] += len([f for f in animation['frames']
-                                                   if isinstance(f, dict) and any(k in f for k in DEPRECATED_FRAME_FIELDS)])
+        for animation in animations.values():
+            if not isinstance(animation, dict):
+                continue
+
+            for field in DEPRECATED_ANIMATION_FIELDS:
+                if field in animation:
+                    counts['animation_fields'] += 1
+
+            frames = animation.get('frames')
+            if isinstance(frames, list):
+                counts['frame_fields'] += sum(
+                    1 for frame in frames
+                    if isinstance(frame, dict) and any(k in frame for k in DEPRECATED_FRAME_FIELDS)
+                )
+
+            movement = animation.get('movement')
+            if isinstance(movement, list):
+                for entry in movement:
+                    if isinstance(entry, dict) and 'children' in entry:
+                        counts['movement_children'] += 1
+                    elif isinstance(entry, list) and entry and _is_legacy_child_list(entry[-1]):
+                        counts['movement_children'] += 1
 
     return counts
 
@@ -146,19 +197,23 @@ def main():
         print(f"ERROR: Failed to read manifest.json: {e}")
         return 1
 
-    # Count removals before cleaning
+    # Count deprecated fields before cleaning
     print("\nAnalyzing deprecated fields...")
-    removal_counts = count_removals(manifest, manifest)
+    before_counts = count_deprecated(manifest)
 
     # Clean the manifest
     cleaned_manifest = clean_manifest(manifest)
 
-    # Report results
-    total_removed = sum(removal_counts.values())
-    print(f"\nDeprecated fields found and removed:")
-    print(f"  - Asset-level fields: {removal_counts['asset_fields']}")
-    print(f"  - Animation-level fields: {removal_counts['animation_fields']}")
-    print(f"  - Frame-level fields: {removal_counts['frame_fields']}")
+    # Count after cleaning to show delta
+    after_counts = count_deprecated(cleaned_manifest)
+    removed_counts = {k: before_counts[k] - after_counts[k] for k in before_counts}
+    total_removed = sum(removed_counts.values())
+
+    print(f"\nDeprecated fields removed:")
+    print(f"  - Asset-level fields: {removed_counts['asset_fields']}")
+    print(f"  - Animation-level fields: {removed_counts['animation_fields']}")
+    print(f"  - Frame-level fields: {removed_counts['frame_fields']}")
+    print(f"  - Movement child payloads: {removed_counts['movement_children']}")
     print(f"  - TOTAL: {total_removed}")
 
     if total_removed == 0:

@@ -16,11 +16,14 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 - Asset tools regenerate animation and lighting caches from manifest flags to keep generated art in sync.
 
 ## Project Layout
-- `ENGINE/`: Runtime source for assets, controllers, rendering, UI, and dev tools.
-- `SRC/`: Source art and `info.json` definitions; includes loading screen content.
+- `ENGINE/runtime/`: Runtime source for assets, controllers, rendering, UI, and shared utilities.
+- `ENGINE/editor/devtools/`: In-engine editors for assets, maps, lighting, and spawn tooling.
+- `ENGINE/tooling/asset_pipeline/`: Offline pipelines (asset toolkit, cache manager, effect parsers) that feed the runtime cache.
+- `resources/`: Source art, icons, loading screens, fog textures, and other media consumed at runtime.
+- `cache/`: Generated texture/cache exports produced by the asset pipeline and tooling.
 - `MAPS/`: Map layouts, rooms, and spawn data referenced by the manifest.
 - `content/`: Runtime content packs (e.g., `content/test`, `content/forrest`).
-- `engine/tools/`: Helper scripts like `set_rebuild_values.py`, `asset_tool.py`, and `light_tool.py`.
+- `engine/tools/`: C++ cache utilities like `asset_tool_cli`, `set_rebuild_cli`, and `apply_effects_cli`.
 - `TESTS/`: Unit tests for core systems.
 - `vcpkg/`, `external/`: Dependency management and bundled libs.
 
@@ -34,7 +37,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 - Reduces render quality for responsiveness and exposes editors for maps, assets, lighting, and spawns. Settings persist in `dev_mode_settings.json`.
 
 ## Custom Controllers
-- Add new controllers under `ENGINE/animation_update/custom_controllers/` and register them in `ControllerFactory::create_by_key`.
+- Add new controllers under `ENGINE/runtime/animation/controllers/custom_controllers/` and register them in `ControllerFactory::create_by_key`.
 - Link from content with `"custom_controller_key": "YourController"` in an asset `info.json` or via the Dev Mode editors.
 
 ## Testing

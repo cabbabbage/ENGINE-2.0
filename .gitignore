@@ -9,7 +9,6 @@ Makefile
 vcpkg
 vcpkg_installed/
 key.txt
-SRC/
 release/
 Tasks/
 .claude
@@ -24,6 +23,7 @@ x64/
 *.user
 *.obj
 *.log
+log.txt
 *.tlog
 *.pdb
 *.idb

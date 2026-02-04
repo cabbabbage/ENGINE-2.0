@@ -123,7 +123,7 @@ for /r "%REPO_ROOT%" %%F in (*.ilk) do (
 
 set "DESKTOP=%USERPROFILE%\Desktop"
 set "SHORTCUT=%DESKTOP%\VI.lnk"
-set "ICONFILE=%REPO_ROOT%\SRC\MISC_CONTENT\vibble.ico"
+set "ICONFILE=%REPO_ROOT%\resources\misc_content\vibble.ico"
 set "ROOT_DIR=%REPO_ROOT%"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^

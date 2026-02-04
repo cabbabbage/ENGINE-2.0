@@ -27,14 +27,14 @@ Modify core document and transaction classes, then update all frame editors to u
 - None required - all changes will be to existing files
 
 **Files to Modify**:
-- `ENGINE/dev_mode/asset_sections/animation_editor_window/AnimationDocument.hpp` - Add immediate save method declarations
-- `ENGINE/dev_mode/asset_sections/animation_editor_window/AnimationDocument.cpp` - Implement immediate save methods
-- `ENGINE/dev_mode/frame_editors/shared/ManifestTransaction.hpp` - Add immediate persist support
-- `ENGINE/dev_mode/frame_editors/MovementFrameEditor.cpp` - Use immediate save for movement frame changes
-- `ENGINE/dev_mode/frame_editors/SyncChildrenFrameEditor.cpp` - Use immediate save for sync child timeline changes
-- `ENGINE/dev_mode/frame_editors/AsyncChildrenFrameEditor.cpp` - Use immediate save for async child timeline changes
-- `ENGINE/dev_mode/frame_editors/AttackGeoFrameEditor.cpp` - Use immediate save for attack geometry changes
-- `ENGINE/dev_mode/frame_editors/HitGeoFrameEditor.cpp` - Use immediate save for hit geometry changes
+- `ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.hpp` - Add immediate save method declarations
+- `ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp` - Implement immediate save methods
+- `ENGINE/editor/devtools/frame_editors/shared/ManifestTransaction.hpp` - Add immediate persist support
+- `ENGINE/editor/devtools/frame_editors/MovementFrameEditor.cpp` - Use immediate save for movement frame changes
+- `ENGINE/editor/devtools/frame_editors/SyncChildrenFrameEditor.cpp` - Use immediate save for sync child timeline changes
+- `ENGINE/editor/devtools/frame_editors/AsyncChildrenFrameEditor.cpp` - Use immediate save for async child timeline changes
+- `ENGINE/editor/devtools/frame_editors/AttackGeoFrameEditor.cpp` - Use immediate save for attack geometry changes
+- `ENGINE/editor/devtools/frame_editors/HitGeoFrameEditor.cpp` - Use immediate save for hit geometry changes
 
 **Configuration Files**:
 - None - no configuration changes needed

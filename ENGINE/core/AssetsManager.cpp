@@ -2223,3 +2223,22 @@ void Assets::rebuild_active_from_screen_grid() {
 
     last_active_rebuild_frame_id_ = current_frame_id;
 }
+
+void Assets::touch_last_frame_counter() {
+    last_frame_counter_ = SDL_GetPerformanceCounter();
+}
+
+bool Assets::has_pending_dev_work() const {
+    if (pending_initial_rebuild_) return true;
+    if (popup_manager_.has_active_content()) return true;
+    if (quick_task_popup_ && quick_task_popup_->is_open()) return true;
+
+    // Check player for in-flight movement plan
+    if (player && player->anim_runtime_ && player->anim_runtime_->has_active_plan()) return true;
+
+    // Check all active non-player assets for in-flight movement plans
+    for (const Asset* a : non_player_update_buffer_) {
+        if (a && a->anim_runtime_ && a->anim_runtime_->has_active_plan()) return true;
+    }
+    return false;
+}

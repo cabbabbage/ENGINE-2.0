@@ -1273,3 +1273,7 @@ SDL_Point AnimationRuntime::convert_delta_to_world(SDL_Point delta, int resoluti
     (void)resolution;
     return delta;
 }
+
+bool AnimationRuntime::has_active_plan() const {
+    return planner_iface_ && !planner_iface_->current_plan()->strides.empty();
+}

@@ -317,3 +317,7 @@ float PopupManager::compute_indicator_alpha(Uint32 now) const {
     const float elapsed = static_cast<float>(now - indicator_.fade_start_ms);
     return 1.0f - std::clamp(elapsed / span, 0.0f, 1.0f);
 }
+
+bool PopupManager::has_active_content() const {
+    return toast_.visible || indicator_.showing;
+}

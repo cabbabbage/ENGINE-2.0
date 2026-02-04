@@ -49,6 +49,8 @@ public:
     bool wasScancodePressed(SDL_Scancode sc) const { return keys_pressed_[sc]; }
     bool wasScancodeReleased(SDL_Scancode sc) const { return keys_released_[sc]; }
 
+    bool has_activity() const;
+
     using ScreenToWorldFunction = std::function<SDL_Point(SDL_Point)>;
     void set_screen_to_world_mapper(ScreenToWorldFunction fn);
     void clear_screen_to_world_mapper();

@@ -588,7 +588,7 @@ void ForegroundBackgroundEffectPanel::update_preview_and_manifest() {
             return;
         }
 
-        generate_preview_with_python(image_to_use, current_settings_);
+        generate_preview_with_cli(image_to_use, current_settings_);
     } else {
         preview_dirty_ = true;
     }
@@ -657,7 +657,7 @@ bool ForegroundBackgroundEffectPanel::load_depth_cue_settings_from_manifest() {
     std::cout << "[DepthCuePanel] Loaded global image effect settings\n";
     return true;
 }
-void ForegroundBackgroundEffectPanel::generate_preview_with_python(
+void ForegroundBackgroundEffectPanel::generate_preview_with_cli(
     const std::string& image_path,
     const camera_effects::ImageEffectSettings& settings
 ) {

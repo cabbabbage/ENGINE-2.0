@@ -200,6 +200,9 @@ public:
 
     const std::vector<world::Chunk*>& active_chunks() const { return world_grid_.active_chunks(); }
 
+    bool has_pending_dev_work() const;
+    void touch_last_frame_counter();
+
 private:
     void save_map_info_json();
     void hydrate_map_info_sections();

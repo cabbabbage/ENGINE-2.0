@@ -810,12 +810,12 @@ int main(int argc, char* argv[]) {
         }
 
         if (rebuild_queue.has_pending_asset_work()) {
-                vibble::log::info("[Main] Processing queued asset rebuilds via asset_tool.py...");
-                if (rebuild_queue.run_asset_tool()) {
-                        vibble::log::info("[Main] Asset rebuilds completed.");
-                } else {
-                        vibble::log::warn("[Main] asset_tool.py reported an error.");
-                }
+        vibble::log::info("[Main] Processing queued asset rebuilds via asset_tool_cli (C++ cache generator)...");
+        if (rebuild_queue.run_asset_tool()) {
+            vibble::log::info("[Main] Asset rebuilds completed.");
+        } else {
+            vibble::log::warn("[Main] asset_tool_cli reported an error.");
+        }
         } else {
                 vibble::log::info("[Main] No queued asset rebuilds detected.");
         }

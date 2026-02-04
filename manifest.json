@@ -667,78 +667,30 @@
       "animations": {
         "default": {
           "frames": [
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            },
-            {
-              "needs_rebuild": false
-            }
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
           ],
           "locked": false,
           "loop": true,
@@ -813,17 +765,7 @@
               0,
               0,
               [],
-              [],
-              [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ]
+              []
             ]
           ],
           "movement_total": {
@@ -889,9 +831,7 @@
             "reverse": false
           },
           "frames": [
-            {
-              "needs_rebuild": true
-            }
+            {}
           ],
           "hit_geometry": [
             {
@@ -961,16 +901,6 @@
           "loop": true,
           "movement": [
             {
-              "children": [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
@@ -1083,17 +1013,7 @@
               0,
               0,
               false,
-              [],
-              [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ]
+              []
             ]
           ],
           "movement_total": {
@@ -1167,7 +1087,7 @@
                   "center_z": 1230.8443603515625,
                   "half_height": 702.7274780273438,
                   "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
+                  "rotation": -178.48147583007812
                 }
               ]
             },
@@ -1197,121 +1117,41 @@
           "loop": true,
           "movement": [
             {
-              "children": [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
             },
             {
-              "children": [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ],
               "dx": 0,
               "dy": 0,
               "dz": 0
@@ -1338,9 +1178,7 @@
             "reverse": false
           },
           "frames": [
-            {
-              "needs_rebuild": true
-            }
+            {}
           ],
           "loop": true,
           "number_of_frames": 1,
@@ -1534,17 +1372,7 @@
           "movement": [
             [
               0,
-              0,
-              [
-                [
-                  0,
-                  0,
-                  0,
-                  0.0,
-                  true,
-                  true
-                ]
-              ]
+              0
             ]
           ],
           "movement_total": {
@@ -1706,7 +1534,7 @@
                   "center_z": 5163.4951171875,
                   "half_height": 1570.3231201171875,
                   "half_width": 5179.4228515625,
-                  "rotation": -93.25064086914063
+                  "rotation": -93.25064086914062
                 }
               ]
             }
@@ -2239,24 +2067,12 @@
             "reverse": false
           },
           "frames": [
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            }
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
           ],
           "hit_geometry": [
             {
@@ -2395,9 +2211,7 @@
             "reverse": false
           },
           "frames": [
-            {
-              "needs_rebuild": true
-            }
+            {}
           ],
           "loop": true,
           "number_of_frames": 1,
@@ -2424,24 +2238,12 @@
             "reverse": false
           },
           "frames": [
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            },
-            {
-              "needs_rebuild": true
-            }
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
           ],
           "hit_geometry": [
             {

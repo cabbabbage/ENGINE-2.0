@@ -205,22 +205,37 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
         }
     }
 
-    auto vertices = occupancy.vertices_in_area(sweep_area);
     struct Cell {
         vibble::grid::Occupancy::Vertex* vertex = nullptr;
         Room* owner = nullptr;
 };
+    std::unordered_map<vibble::grid::Occupancy::Vertex*, Room*> ownership;
+    ownership.reserve(1024);
+    for (const auto& room_ptr : rooms) {
+        Room* room = room_ptr.get();
+        if (!room || !room->room_area) {
+            continue;
+        }
+        auto verts = occupancy.vertices_in_area(*room->room_area);
+        ownership.reserve(ownership.size() + verts.size());
+        for (auto* vertex : verts) {
+            if (!vertex) {
+                continue;
+            }
+            auto [it, inserted] = ownership.emplace(vertex, room);
+            if (!inserted) {
+                Room* current_owner = it->second;
+                if ((!current_owner || !current_owner->inherits_map_assets()) && room->inherits_map_assets()) {
+                    it->second = room;
+                }
+            }
+        }
+    }
+
     std::vector<Cell> cells;
-    cells.reserve(vertices.size());
-    for (auto* vertex : vertices) {
-        if (!vertex) {
-            continue;
-        }
-        Room* owner = resolve_owner(vertex->world, rooms);
-        if (!owner) {
-            continue;
-        }
-        cells.push_back(Cell{vertex, owner});
+    cells.reserve(ownership.size());
+    for (auto& entry : ownership) {
+        cells.push_back(Cell{entry.first, entry.second});
     }
 
     if (cells.empty()) {

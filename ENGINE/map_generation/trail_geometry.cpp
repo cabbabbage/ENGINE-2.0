@@ -131,9 +131,13 @@ bool TrailGeometry::attempt_trail_connection(Room* a,
                                              devmode::core::ManifestStore* manifest_store,
                                              Room::ManifestWriter manifest_writer)
 {
-        std::cout << "[TrailGeometry] Attempting trail between " << a->room_name << " and " << b->room_name << "\n";
+        if (testing) {
+                std::cout << "[TrailGeometry] Attempting trail between " << a->room_name << " and " << b->room_name << "\n";
+        }
         if (!trail_config) {
-                std::cout << "[TrailGeometry] Missing trail configuration for '" << trail_name << "'\n";
+                if (testing) {
+                        std::cout << "[TrailGeometry] Missing trail configuration for '" << trail_name << "'\n";
+                }
                 if (testing) {
                         std::cout << "[TrailGen] Missing trail configuration for '" << trail_name << "'\n";
                 }
@@ -145,8 +149,8 @@ bool TrailGeometry::attempt_trail_connection(Room* a,
         const int curvyness = config.value("curvyness", 2);
         const std::string name = config.value("name", trail_name.empty() ? std::string("trail_segment") : trail_name);
         const double width = static_cast<double>(std::max(min_width, max_width));
-        std::cout << "[TrailGeometry] Using trail template: " << name << " width=" << width << " curvyness=" << curvyness << "\n";
         if (testing) {
+                std::cout << "[TrailGeometry] Using trail template: " << name << " width=" << width << " curvyness=" << curvyness << "\n";
                 std::cout << "[TrailGen] Using trail template: " << name
                 << "  width=" << width
                 << "  curvyness=" << curvyness << "\n";
@@ -205,10 +209,16 @@ bool TrailGeometry::attempt_trail_connection(Room* a,
 	auto [aminx, aminy, amaxx, amaxy] = a->room_area->get_bounds();
 	auto [bminx, bminy, bmaxx, bmaxy] = b->room_area->get_bounds();
 
+        std::vector<SDL_Point> full_line;
+        full_line.reserve(static_cast<size_t>(curvyness) + 6);
+        std::vector<SDL_Point> polygon;
+        std::vector<Area::Point> pts;
+
 	for (int attempt = 0; attempt < 1000; ++attempt) {
-		std::cout << "[TrailGeometry] Attempt " << attempt + 1 << "\n";
-		std::vector<SDL_Point> full_line;
-		full_line.reserve(static_cast<size_t>(curvyness) + 6);
+		if (testing) {
+			std::cout << "[TrailGeometry] Attempt " << attempt + 1 << "\n";
+		}
+		full_line.clear();
 		full_line.push_back(a_interior);
 		full_line.push_back(a_edge);
 		auto middle = build_centerline(a_outside, b_outside, curvyness, rng);
@@ -216,18 +226,58 @@ bool TrailGeometry::attempt_trail_connection(Room* a,
 		full_line.push_back(b_edge);
 		full_line.push_back(b_interior);
 
-		std::cout << "[TrailGeometry] Built centerline with " << full_line.size() << " points\n";
-		auto polygon = extrude_centerline(full_line, width);
-		std::cout << "[TrailGeometry] Extruded to polygon with " << polygon.size() << " points\n";
+		if (testing) {
+			std::cout << "[TrailGeometry] Built centerline with " << full_line.size() << " points\n";
+		}
+		polygon = extrude_centerline(full_line, width);
+		if (testing) {
+			std::cout << "[TrailGeometry] Extruded to polygon with " << polygon.size() << " points\n";
+		}
 
-		std::vector<Area::Point> pts;
+                if (polygon.empty()) {
+                        continue;
+                }
+
+                int cminx = polygon[0].x, cmaxx = polygon[0].x;
+                int cminy = polygon[0].y, cmaxy = polygon[0].y;
+                for (const auto& p : polygon) {
+                        cminx = std::min(cminx, p.x);
+                        cmaxx = std::max(cmaxx, p.x);
+                        cminy = std::min(cminy, p.y);
+                        cmaxy = std::max(cmaxy, p.y);
+                }
+
+		int intersection_count = 0;
+		for (auto& area : existing_areas) {
+			auto [minx, miny, maxx, maxy] = area.get_bounds();
+			bool isA = (minx == aminx && miny == aminy && maxx == amaxx && maxy == amaxy);
+			bool isB = (minx == bminx && miny == bminy && maxx == bmaxx && maxy == bmaxy);
+			if (isA || isB) continue;
+			if (cmaxx < minx || maxx < cminx || cmaxy < miny || maxy < cminy) {
+				continue;
+			}
+			if (++intersection_count > allowed_intersections) {
+				break;
+			}
+		}
+		if (testing) {
+			std::cout << "[TrailGeometry] Intersections: " << intersection_count << " (allowed: " << allowed_intersections << ")\n";
+		}
+		if (intersection_count > allowed_intersections) {
+			if (testing && attempt == 999) {
+				std::cout << "[TrailGen] Failed after 1000 attempts due to intersections\n";
+			}
+			continue;
+		}
+
+		pts.clear();
 		pts.reserve(polygon.size());
 		for (auto& p : polygon) {
 			pts.push_back(SDL_Point{ p.x, p.y });
 		}
                 Area candidate("trail_candidate", pts, 3);
 
-		int intersection_count = 0;
+                intersection_count = 0;
 		for (auto& area : existing_areas) {
 			auto [minx, miny, maxx, maxy] = area.get_bounds();
 			bool isA = (minx == aminx && miny == aminy && maxx == amaxx && maxy == amaxy);
@@ -238,12 +288,7 @@ bool TrailGeometry::attempt_trail_connection(Room* a,
 				break;
 			}
 		}
-		std::cout << "[TrailGeometry] Intersections: " << intersection_count << " (allowed: " << allowed_intersections << ")\n";
 		if (intersection_count > allowed_intersections) {
-			std::cout << "[TrailGeometry] Too many intersections, retrying\n";
-			if (testing && attempt == 999) {
-				std::cout << "[TrailGen] Failed after 1000 attempts due to intersections\n";
-			}
 			continue;
 		}
 
@@ -256,12 +301,16 @@ bool TrailGeometry::attempt_trail_connection(Room* a,
 		existing_areas.push_back(candidate);
 		trail_rooms.push_back(std::move(trail_room));
 
-		std::cout << "[TrailGeometry] Trail placed successfully\n";
+		if (testing) {
+			std::cout << "[TrailGeometry] Trail placed successfully\n";
+		}
 		if (testing) {
 			std::cout << "[TrailGen] Trail succeeded on attempt " << attempt + 1 << "\n";
 		}
 		return true;
 	}
-	std::cout << "[TrailGeometry] Failed to place trail after 1000 attempts\n";
+	if (testing) {
+		std::cout << "[TrailGeometry] Failed to place trail after 1000 attempts\n";
+	}
 	return false;
 }

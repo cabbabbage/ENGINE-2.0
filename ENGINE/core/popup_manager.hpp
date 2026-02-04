@@ -19,6 +19,8 @@ public:
     void update(Uint32 now);
     void render(SDL_Renderer* renderer, int screen_w, int screen_h, Uint32 now);
 
+    bool has_active_content() const;
+
 private:
     using TexturePtr = std::unique_ptr<SDL_Texture, decltype(&SDL_DestroyTexture)>;
 

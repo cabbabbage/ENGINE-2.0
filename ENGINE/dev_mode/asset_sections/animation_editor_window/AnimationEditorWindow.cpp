@@ -4,20 +4,23 @@
 #include <SDL_ttf.h>
 
 #include <algorithm>
+#include <array>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <filesystem>
+#include <ctime>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <limits>
 #include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <unordered_set>
 #include <vector>
-#include <array>
-#include <limits>
 
 #include <nlohmann/json.hpp>
 
@@ -2081,7 +2084,8 @@ bool AnimationEditorWindow::does_controller_exist() const {
 
     std::filesystem::path controller_dir = "ENGINE/animation_update/custom_controllers";
     std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
-    return std::filesystem::exists(hpp_path);
+    std::filesystem::path cpp_path = controller_dir / (key + ".cpp");
+    return std::filesystem::exists(hpp_path) && std::filesystem::exists(cpp_path);
 }
 
 std::string AnimationEditorWindow::sanitize_asset_name(const std::string& name) const {
@@ -2114,6 +2118,133 @@ std::string AnimationEditorWindow::generate_class_name(const std::string& asset_
     return class_name + "Controller";
 }
 
+std::vector<std::string> AnimationEditorWindow::collect_available_animation_ids() const {
+    std::vector<std::string> ids;
+    if (document_) {
+        ids = document_->animation_ids();
+    } else if (auto info_ptr = info_.lock()) {
+        ids.reserve(info_ptr->animations.size());
+        for (const auto& entry : info_ptr->animations) {
+            ids.push_back(entry.first);
+        }
+    }
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+    return ids;
+}
+
+std::string AnimationEditorWindow::build_controller_metadata(const std::string& controller_key) const {
+    auto info_ptr = info_.lock();
+    std::ostringstream oss;
+    oss << "// CONTROLLER_META_BEGIN\n";
+    oss << "// Controller: " << controller_key << "\n";
+    if (info_ptr) {
+        oss << "// Asset: " << info_ptr->name;
+        if (!info_ptr->type.empty()) {
+            oss << " (type: " << info_ptr->type << ")";
+        }
+        oss << "\n";
+    }
+    const auto ids = collect_available_animation_ids();
+    oss << "// Available animations [" << ids.size() << "]:";
+    if (ids.empty()) {
+        oss << " <none>\n";
+    } else {
+        oss << "\n";
+        for (const auto& id : ids) {
+            oss << "//   - " << id << "\n";
+        }
+    }
+    const auto now = std::chrono::system_clock::now();
+    const std::time_t now_c = std::chrono::system_clock::to_time_t(now);
+    oss << "// Generated: " << std::put_time(std::localtime(&now_c), "%Y-%m-%d %H:%M:%S") << "\n";
+    oss << "// CONTROLLER_META_END\n\n";
+    return oss.str();
+}
+
+bool AnimationEditorWindow::write_or_update_controller_metadata(const std::filesystem::path& path,
+                                                                 const std::string& metadata) const {
+    if (path.empty()) return false;
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec)) {
+        return false;
+    }
+
+    std::ifstream in(path);
+    if (!in.is_open()) return false;
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    in.close();
+
+    const std::string begin_tag = "// CONTROLLER_META_BEGIN";
+    const std::string end_tag = "// CONTROLLER_META_END";
+    std::size_t begin_pos = content.find(begin_tag);
+    std::size_t end_pos = content.find(end_tag);
+
+    std::string new_content;
+    if (begin_pos != std::string::npos && end_pos != std::string::npos && end_pos > begin_pos) {
+        end_pos = content.find('\n', end_pos);
+        if (end_pos == std::string::npos) end_pos = content.size();
+        new_content = content.substr(0, begin_pos) + metadata + content.substr(end_pos);
+    } else {
+        new_content = metadata + content;
+    }
+
+    if (new_content == content) return true;
+
+    std::ofstream out(path, std::ios::trunc);
+    if (!out.is_open()) return false;
+    out << new_content;
+    return true;
+}
+
+void AnimationEditorWindow::ensure_controller_factory_registration(const std::string& key,
+                                                                   const std::string& class_name) const {
+    const std::filesystem::path factory_path = "ENGINE/asset/controller_factory.cpp";
+    std::error_code ec;
+    if (!std::filesystem::exists(factory_path, ec)) {
+        return;
+    }
+
+    std::ifstream in(factory_path);
+    if (!in.is_open()) return;
+    std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    in.close();
+
+    bool modified = false;
+    const std::string include_line = "#include \"animation_update/custom_controllers/" + key + ".hpp\"";
+    if (content.find(include_line) == std::string::npos) {
+        auto include_pos = content.find("#include \"animation_update/custom_controllers/default_controller.hpp\"");
+        if (include_pos != std::string::npos) {
+            content.insert(include_pos, include_line + "\n");
+        } else {
+            content = include_line + "\n" + content;
+        }
+        modified = true;
+    }
+
+    const std::string branch = "                if (matches(\"" + key + "\"))\n"
+                               "                        return std::make_unique<" + class_name + ">(assets_, self);\n";
+
+    const std::string marker = "// <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>";
+    auto marker_pos = content.find(marker);
+    if (marker_pos != std::string::npos) {
+        auto insert_pos = content.find('\n', marker_pos);
+        if (insert_pos != std::string::npos) {
+            insert_pos += 1;
+            if (content.find(branch, marker_pos) == std::string::npos) {
+                content.insert(insert_pos, branch);
+                modified = true;
+            }
+        }
+    }
+
+    if (!modified) return;
+
+    std::ofstream out(factory_path, std::ios::trunc);
+    if (!out.is_open()) return;
+    out << content;
+}
+
 void AnimationEditorWindow::add_controller() {
     auto info_ptr = info_.lock();
     if (!info_ptr) {
@@ -2138,8 +2269,13 @@ void AnimationEditorWindow::add_controller() {
         return;
     }
 
+    std::filesystem::create_directories(controller_dir);
+
+    const std::string metadata = build_controller_metadata(key);
+
     std::ostringstream hpp_builder;
-    hpp_builder << "#pragma once\n"
+    hpp_builder << metadata
+                << "#pragma once\n"
                 << "#include \"asset/asset_controller.hpp\"\n"
                 << "\n"
                 << "class Assets;\n"
@@ -2152,8 +2288,8 @@ void AnimationEditorWindow::add_controller() {
                 << "    ~" << class_name << "() override = default;\n"
                 << "\n"
                 << "    void init();\n"
-                << "\n"
                 << "    void update(const Input& in) override;\n"
+                << "    void process_pending_attacks(Asset& self) override;\n"
                 << "\n"
                 << "private:\n"
                 << "    Assets* assets_ = nullptr;\n"
@@ -2162,13 +2298,14 @@ void AnimationEditorWindow::add_controller() {
     std::string hpp_content = hpp_builder.str();
 
     std::ostringstream cpp_builder;
-    cpp_builder << "#include \"" << key << ".hpp\"\n"
+    cpp_builder << metadata
+                << "#include \"" << key << ".hpp\"\n"
                 << "\n"
                 << "#include \"asset/Asset.hpp\"\n"
                 << "#include \"asset/animation.hpp\"\n"
                 << "#include \"asset/asset_info.hpp\"\n"
                 << "#include \"animation_update/animation_update.hpp\"\n"
-                << "#include \"utils/range_util.hpp\"\n"
+                << "#include \"utils/input.hpp\"\n"
                 << "#include <string>\n"
                 << "\n"
                 << class_name << "::" << class_name << "(Assets* assets, Asset* self)\n"
@@ -2182,6 +2319,12 @@ void AnimationEditorWindow::add_controller() {
                 << "    auto it = self_->info->animations.find(default_anim);\n"
                 << "    if (it != self_->info->animations.end() && !it->second.frames.empty()) {\n"
                 << "        self_->anim_->move(SDL_Point{0, 0}, default_anim);\n"
+                << "        return;\n"
+                << "    }\n"
+                << "\n"
+                << "    if (!self_->info->animations.empty()) {\n"
+                << "        const auto& first = *self_->info->animations.begin();\n"
+                << "        self_->anim_->move(SDL_Point{0, 0}, first.first);\n"
                 << "    }\n"
                 << "}\n"
                 << "\n"
@@ -2190,11 +2333,25 @@ void AnimationEditorWindow::add_controller() {
                 << "\n"
                 << "    const std::string default_anim{ animation_update::detail::kDefaultAnimation };\n"
                 << "    auto it = self_->info->animations.find(default_anim);\n"
-                << "    if (it == self_->info->animations.end() || it->second.frames.empty()) return;\n"
-                << "\n"
-                << "    if (self_->current_animation != default_anim || self_->current_frame == nullptr) {\n"
-                << "        self_->anim_->move(SDL_Point{0, 0}, default_anim);\n"
+                << "    if (it != self_->info->animations.end() && !it->second.frames.empty()) {\n"
+                << "        if (self_->current_animation != default_anim || self_->current_frame == nullptr) {\n"
+                << "            self_->anim_->move(SDL_Point{0, 0}, default_anim);\n"
+                << "        }\n"
+                << "        return;\n"
                 << "    }\n"
+                << "\n"
+                << "    if (!self_->info->animations.empty()) {\n"
+                << "        const auto& first = *self_->info->animations.begin();\n"
+                << "        if (self_->current_animation != first.first || self_->current_frame == nullptr) {\n"
+                << "            self_->anim_->move(SDL_Point{0, 0}, first.first);\n"
+                << "        }\n"
+                << "    }\n"
+                << "}\n"
+                << "\n"
+                << "void " << class_name << "::process_pending_attacks(Asset& self_ref) {\n"
+                << "    (void)self_ref;\n"
+                << "    if (!self_ || !self_->info || !self_->anim_) return;\n"
+                << "    // TODO: implement attack handling if this asset uses attack queues.\n"
                 << "}\n";
     std::string cpp_content = cpp_builder.str();
 
@@ -2214,7 +2371,8 @@ void AnimationEditorWindow::add_controller() {
     cpp_file << cpp_content;
     cpp_file.close();
 
-    info_ptr->custom_controller_key = key;
+    // Register the new controller with the factory so runtime lookups succeed.
+    ensure_controller_factory_registration(key, class_name);
 
     set_status_message("Controller created.", 240);
     update_controller_button_label();
@@ -2238,6 +2396,10 @@ void AnimationEditorWindow::open_controller() {
         set_status_message("Controller file does not exist.", 180);
         return;
     }
+
+    const std::string metadata = build_controller_metadata(key);
+    write_or_update_controller_metadata(hpp_path, metadata);
+    write_or_update_controller_metadata(controller_dir / (key + ".cpp"), metadata);
 
     std::string cmd = "cmd /c start \"\" \"" + hpp_path.string() + "\"";
     int result = std::system(cmd.c_str());
@@ -2270,7 +2432,7 @@ bool AnimationEditorWindow::rebuild_animation_via_pipeline(const std::shared_ptr
         return true;
     }
     if (!coordinator.run_asset_tool()) {
-        set_status_message("asset_tool.py failed; see logs for details.", 240);
+        set_status_message("asset_tool_cli failed; see logs for details.", 240);
         return false;
     }
 
@@ -2319,7 +2481,7 @@ bool AnimationEditorWindow::rebuild_all_animations_via_pipeline(const std::share
         return true;
     }
     if (!coordinator.run_asset_tool()) {
-        set_status_message("asset_tool.py failed; see logs for details.", 240);
+        set_status_message("asset_tool_cli failed; see logs for details.", 240);
         return false;
     }
 

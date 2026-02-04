@@ -63,7 +63,9 @@ void MenuUI::game_loop() {
 
 	while (!quit) {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
+                bool had_events = false;
 		while (SDL_PollEvent(&e)) {
+                        had_events = true;
                         const bool menu_was_active = menu_active_;
 			if (e.type == SDL_QUIT) {
 					quit = true;
@@ -98,11 +100,19 @@ void MenuUI::game_loop() {
                         if (game_assets_) game_assets_->handle_sdl_event(e);
                 }
 
-                if (game_assets_ && input_) {
+                // Compute dev idle condition: skip update+render when in dev mode with no input and no pending work
+                const bool dev_idle = dev_mode_
+                    && !menu_active_
+                    && input_ && !input_->has_activity()
+                    && game_assets_ && !game_assets_->has_pending_dev_work();
+
+                if (!dev_idle && game_assets_ && input_) {
                         game_assets_->update(*input_);
+                } else if (dev_idle && game_assets_) {
+                        game_assets_->touch_last_frame_counter();
                 }
 
-                if (game_assets_) {
+                if (!dev_idle && game_assets_) {
                         static bool opened_asset_info_once = false;
                         if (!opened_asset_info_once) {
                                 const auto& active = game_assets_->getActive();
@@ -123,7 +133,9 @@ void MenuUI::game_loop() {
                         }
                 }
 
-                SDL_RenderPresent(renderer_);
+                if (!dev_idle) {
+                        SDL_RenderPresent(renderer_);
+                }
 
                 if (input_) input_->update();
 

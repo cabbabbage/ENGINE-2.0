@@ -52,7 +52,6 @@ file(GLOB_RECURSE ENGINE_SRC CONFIGURE_DEPENDS
 )
 
 list(REMOVE_DUPLICATES ENGINE_SRC)
-list(REMOVE_ITEM ENGINE_SRC "${CMAKE_SOURCE_DIR}/ENGINE/dev_mode/frame_editor_session_child_timelines.cpp")
 # Exclude standalone tool entry points from the main engine binary
 list(REMOVE_ITEM ENGINE_SRC
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/asset_tool_cli.cpp"

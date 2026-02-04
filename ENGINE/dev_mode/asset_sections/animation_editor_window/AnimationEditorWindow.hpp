@@ -112,6 +112,10 @@ class AnimationEditorWindow {
     std::string sanitize_asset_name(const std::string& name) const;
     std::string generate_controller_key(const std::string& asset_name) const;
     std::string generate_class_name(const std::string& asset_name) const;
+    std::vector<std::string> collect_available_animation_ids() const;
+    std::string build_controller_metadata(const std::string& controller_key) const;
+    bool write_or_update_controller_metadata(const std::filesystem::path& path, const std::string& metadata) const;
+    void ensure_controller_factory_registration(const std::string& key, const std::string& class_name) const;
     void add_controller();
     void open_controller();
     void apply_speed_multiplier_from_dropdown();

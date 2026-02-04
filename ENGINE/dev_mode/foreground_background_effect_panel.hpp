@@ -78,7 +78,7 @@ private:
     void save_depth_cue_settings_to_manifest();
     bool load_depth_cue_settings_from_manifest();
     void update_preview_and_manifest();
-    void generate_preview_with_python(const std::string& image_path, const camera_effects::ImageEffectSettings& settings);
+    void generate_preview_with_cli(const std::string& image_path, const camera_effects::ImageEffectSettings& settings);
     void load_preview_texture(const std::string& image_path);
     bool settings_equal(const camera_effects::ImageEffectSettings& a, const camera_effects::ImageEffectSettings& b, float epsilon = 1e-5f) const;
     bool should_skip_preview(const std::string& source_path, EffectMode mode, const camera_effects::ImageEffectSettings& settings) const;

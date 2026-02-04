@@ -2,7 +2,7 @@
 #include <utility>
 
 #include "asset/Asset.hpp"
-#include "world/chunk.hpp"
+#include "gameplay/world/chunk.hpp"
 
 namespace world {
 

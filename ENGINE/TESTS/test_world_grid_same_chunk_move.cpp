@@ -1,6 +1,6 @@
 #include "doctest/doctest.h"
 
-#include "world/world_grid.hpp"
+#include "gameplay/world/world_grid.hpp"
 #include "asset/Asset.hpp" // Resolved to TESTS/stubs/asset/Asset.hpp in the isolated test target
 
 using namespace world;

@@ -7,7 +7,7 @@
 #include <unordered_set>
 #include <filesystem>
 
-#include "main.hpp"
+#include "app/main.hpp"
 #include "styles.hpp"
 #include "button.hpp"
 

@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <vector>
 
-#include "world/grid_point.hpp"
+#include "gameplay/world/grid_point.hpp"
 
 namespace world { class WorldGrid; }
 

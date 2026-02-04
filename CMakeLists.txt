@@ -67,6 +67,7 @@ list(REMOVE_ITEM ENGINE_SRC
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/cache_validator_cli.cpp"
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/apply_effects_cli.cpp"
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui/tinyfiledialogs.c"
 )
 
 add_executable(engine ${ENGINE_SRC})
@@ -182,6 +183,8 @@ endif()
 target_include_directories(engine
       PRIVATE
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/app
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/assets
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core
@@ -281,6 +284,8 @@ add_executable(engine_tests
 target_include_directories(engine_tests
       PRIVATE
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/app
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/assets
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
           ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
@@ -376,6 +381,7 @@ add_executable(asset_tool_cli
 )
 target_include_directories(asset_tool_cli PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
     ${CMAKE_SOURCE_DIR}/external
 )
 target_compile_definitions(asset_tool_cli PRIVATE
@@ -404,6 +410,7 @@ add_executable(cache_validator_cli
 )
 target_include_directories(cache_validator_cli PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
     ${CMAKE_SOURCE_DIR}/external
 )
 target_compile_definitions(cache_validator_cli PRIVATE
@@ -421,6 +428,7 @@ add_executable(apply_effects_cli
 )
 target_include_directories(apply_effects_cli PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
     ${CMAKE_SOURCE_DIR}/external
 )
 target_compile_definitions(apply_effects_cli PRIVATE

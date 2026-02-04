@@ -49,7 +49,7 @@
 #define IMGCACHE_STB_IMAGE_IMPL
 #define STB_IMAGE_IMPLEMENTATION
 #endif
-#include "../utils/stb_image.h"
+#include "utils/stb_image.h"
 
 #if defined(IMGCACHE_STB_IMAGE_WRITE_IMPL) && !defined(STB_IMAGE_WRITE_IMPLEMENTATION)
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -58,7 +58,7 @@
 #define IMGCACHE_STB_IMAGE_WRITE_IMPL
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #endif
-#include "../utils/stb_image_write.h"
+#include "utils/stb_image_write.h"
 
 namespace imgcache {
 

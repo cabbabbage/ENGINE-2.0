@@ -50,7 +50,13 @@ static inline bool file_missing_or_older(const fs::path& p,
         // Allow a small slack so freshly written cache files (which are created
         // just before manifest.json is rewritten) are not treated as stale.
         if (slack.count() > 0) {
-            baseline -= slack;
+            auto slack_ft = std::chrono::duration_cast<fs::file_time_type::duration>(slack);
+            // Avoid underflow if slack exceeds epoch distance
+            if (slack_ft < baseline.time_since_epoch()) {
+                baseline -= slack_ft;
+            } else {
+                baseline = fs::file_time_type::min();
+            }
         }
         if (t < baseline) return true;
     }

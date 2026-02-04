@@ -5,6 +5,7 @@
 #include <limits>
 #include <nlohmann/json.hpp>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "assets/Asset.hpp"
@@ -30,6 +31,106 @@ SDL_Point round_point(const SDL_FPoint& pt) {
 }
 
 constexpr float kLockedDepthValue = 1.0f;  // Sync child timelines keep Y (depth) fixed
+
+int read_int_field(const nlohmann::json& value, int fallback) {
+    if (value.is_number_integer()) {
+        try {
+            return value.get<int>();
+        } catch (...) {
+        }
+    } else if (value.is_number()) {
+        try {
+            return static_cast<int>(value.get<double>());
+        } catch (...) {
+        }
+    } else if (value.is_string()) {
+        try {
+            return std::stoi(value.get<std::string>());
+        } catch (...) {
+        }
+    }
+    return fallback;
+}
+
+float read_float_field(const nlohmann::json& value, float fallback) {
+    if (value.is_number()) {
+        try {
+            return static_cast<float>(value.get<double>());
+        } catch (...) {
+        }
+    } else if (value.is_string()) {
+        try {
+            return std::stof(value.get<std::string>());
+        } catch (...) {
+        }
+    }
+    return fallback;
+}
+
+int resolve_child_index(const nlohmann::json& entry, const std::vector<std::string>& child_assets) {
+    int idx = -1;
+    if (entry.contains("child_index")) {
+        idx = read_int_field(entry["child_index"], -1);
+    }
+    if (idx < 0 && entry.contains("child")) {
+        idx = read_int_field(entry["child"], -1);
+    }
+    if (idx < 0 && entry.contains("asset") && entry["asset"].is_string()) {
+        const std::string asset_name = entry["asset"].get<std::string>();
+        auto it = std::find(child_assets.begin(), child_assets.end(), asset_name);
+        if (it != child_assets.end()) {
+            idx = static_cast<int>(std::distance(child_assets.begin(), it));
+        }
+    }
+    if (idx < 0 || idx >= static_cast<int>(child_assets.size())) {
+        return -1;
+    }
+    return idx;
+}
+
+struct AsyncStartData {
+    std::vector<float> start_times;
+    std::vector<bool> has_start;
+};
+
+AsyncStartData extract_async_start_data(const nlohmann::json& payload,
+                                        const std::vector<std::string>& child_assets) {
+    AsyncStartData data;
+    data.start_times.assign(child_assets.size(), 0.0f);
+    data.has_start.assign(child_assets.size(), false);
+    auto it = payload.find("child_timelines");
+    if (it == payload.end() || !it->is_array()) {
+        return data;
+    }
+    for (const auto& entry : *it) {
+        if (!entry.is_object()) {
+            continue;
+        }
+        if (child_timelines::timeline_entry_is_static(entry)) {
+            continue;
+        }
+        const int idx = resolve_child_index(entry, child_assets);
+        if (idx < 0) {
+            continue;
+        }
+        float start_time = 0.0f;
+        int start_frame = 0;
+        if (entry.contains("start_time")) {
+            start_time = read_float_field(entry["start_time"], 0.0f);
+        }
+        if (entry.contains("start_frame")) {
+            start_frame = read_int_field(entry["start_frame"], 0);
+        }
+        if (start_time <= 0.0f && start_frame > 0) {
+            start_time = static_cast<float>(start_frame) / static_cast<float>(kBaseAnimationFps);
+        }
+        if (start_time > 0.0f) {
+            data.start_times[static_cast<std::size_t>(idx)] = start_time;
+            data.has_start[static_cast<std::size_t>(idx)] = true;
+        }
+    }
+    return data;
+}
 }  // namespace
 
 void SyncChildrenFrameEditor::begin(const FrameEditorContext& context) {
@@ -807,29 +908,15 @@ void SyncChildrenFrameEditor::ensure_manifest_transaction() {
         auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
         nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
 
-        nlohmann::json child_timelines = nlohmann::json::array();
-        for (std::size_t child_idx = 0; child_idx < child_assets_.size(); ++child_idx) {
-            nlohmann::json child_entry = {{"child", static_cast<int>(child_idx)},
-                                         {"asset", child_assets_[child_idx]},
-                                         {"mode", "static"}};
-
-            nlohmann::json frames = nlohmann::json::array();
-            if (child_idx < static_frames_by_child_.size()) {
-                for (const auto& sample : static_frames_by_child_[child_idx]) {
-                    frames.push_back({
-                        {"dx", static_cast<int>(std::lround(sample.dx))},
-                        {"dy", static_cast<int>(std::lround(sample.dy))},
-                        {"dz", static_cast<double>(sample.dz)},
-                        {"degree", static_cast<double>(sample.degree)},
-                        {"visible", sample.visible}
-                    });
-                }
-            }
-            child_entry["frames"] = frames;
-            child_timelines.push_back(child_entry);
-        }
-
-        payload["child_timelines"] = child_timelines;
+        AsyncStartData async_start = extract_async_start_data(payload, child_assets_);
+        payload["child_timelines"] = child_timelines::build_child_timelines_payload(
+            payload,
+            static_frames_by_child_,
+            child_assets_,
+            child_modes_,
+            async_timelines_by_child_,
+            async_start.start_times,
+            async_start.has_start);
         return context_.document->update_animation_payload(context_.animation_id, payload);
     });
 }
@@ -848,32 +935,15 @@ void SyncChildrenFrameEditor::force_save_to_disk() {
     auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
     nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
 
-    nlohmann::json child_timelines = nlohmann::json::array();
-    for (std::size_t child_idx = 0; child_idx < child_assets_.size(); ++child_idx) {
-        nlohmann::json child_entry = {
-            {"child", static_cast<int>(child_idx)},
-            {"asset", child_assets_[child_idx]},
-            {"mode", "static"}
-        };
-
-        nlohmann::json frames = nlohmann::json::array();
-        if (child_idx < static_frames_by_child_.size()) {
-            for (size_t frame_idx = 0; frame_idx < static_frames_by_child_[child_idx].size(); ++frame_idx) {
-                const auto& sample = static_frames_by_child_[child_idx][frame_idx];
-                frames.push_back({
-                    {"dx", static_cast<int>(std::lround(sample.dx))},
-                    {"dy", static_cast<int>(std::lround(sample.dy))},
-                    {"dz", static_cast<double>(sample.dz)},
-                    {"degree", static_cast<double>(sample.degree)},
-                    {"visible", sample.visible}
-                });
-            }
-        }
-        child_entry["frames"] = frames;
-        child_timelines.push_back(child_entry);
-    }
-
-    payload["child_timelines"] = child_timelines;
+    AsyncStartData async_start = extract_async_start_data(payload, child_assets_);
+    payload["child_timelines"] = child_timelines::build_child_timelines_payload(
+        payload,
+        static_frames_by_child_,
+        child_assets_,
+        child_modes_,
+        async_timelines_by_child_,
+        async_start.start_times,
+        async_start.has_start);
 
     if (context_.document->update_animation_payload(context_.animation_id, payload)) {
         context_.document->save_to_file_checked(true);

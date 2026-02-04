@@ -127,9 +127,6 @@ void FrameEditorSession::end() {
         target_->set_hidden(prev_asset_hidden_);
     }
     if (assets_) {
-        if (edit_camera_locked_) {
-            restore_edit_camera_state();
-        }
         restore_camera_state();
     }
 
@@ -149,9 +146,6 @@ void FrameEditorSession::end() {
     selection_state_.reset();
     editor_context_ = {};
     camera_lock_state_.valid = false;
-    edit_camera_state_.valid = false;
-    tilt_locked_ = false;
-    edit_camera_locked_ = false;
 
     if (saved_host_callback) {
         saved_host_callback(saved_animation_id);
@@ -297,49 +291,7 @@ void FrameEditorSession::restore_camera_state() {
     cam.set_zoom_percent(camera_lock_state_.camera_zoom_percent_before);
     cam.set_manual_zoom_override(camera_lock_state_.manual_zoom_override_before);
     camera_lock_state_.valid = false;
-    tilt_locked_ = false;
 }
-
-void FrameEditorSession::capture_edit_camera_state() {
-    if (!assets_) {
-        return;
-    }
-    WarpedScreenGrid& cam = assets_->getView();
-    edit_camera_state_.manual_override_before = cam.is_manual_height_override();
-    edit_camera_state_.focus_override_before = cam.has_focus_override();
-    edit_camera_state_.focus_point_before = cam.get_focus_override_point();
-    edit_camera_state_.screen_center_before = cam.get_screen_center();
-    edit_camera_state_.tilt_override_before = cam.tilt_override();
-    edit_camera_state_.manual_zoom_override_before = cam.is_manual_zoom_override();
-    edit_camera_state_.camera_zoom_percent_before = cam.get_zoom_percent();
-    edit_camera_state_.valid = true;
-}
-
-void FrameEditorSession::restore_edit_camera_state() {
-    if (!assets_ || !edit_camera_state_.valid) {
-        edit_camera_locked_ = false;
-        return;
-    }
-    WarpedScreenGrid& cam = assets_->getView();
-    cam.set_manual_height_override(edit_camera_state_.manual_override_before);
-    if (edit_camera_state_.focus_override_before) {
-        cam.set_focus_override(edit_camera_state_.focus_point_before);
-    } else {
-        cam.clear_focus_override();
-    }
-    cam.set_screen_center(edit_camera_state_.screen_center_before);
-    if (edit_camera_state_.tilt_override_before.has_value()) {
-        cam.set_tilt_override(*edit_camera_state_.tilt_override_before);
-    } else {
-        cam.clear_tilt_override();
-    }
-    cam.set_zoom_percent(edit_camera_state_.camera_zoom_percent_before);
-    cam.set_manual_zoom_override(edit_camera_state_.manual_zoom_override_before);
-    edit_camera_state_.valid = false;
-    tilt_locked_ = false;
-    edit_camera_locked_ = false;
-}
-
 
 std::unique_ptr<devmode::frame_editors::FrameEditorBase> FrameEditorSession::create_editor(Mode mode) {
     return ::create_editor(mode);

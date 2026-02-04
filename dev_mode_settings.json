@@ -3,7 +3,7 @@
         "asset_filter": {
             "current_room": true,
             "filters_expanded": false,
-            "fog": true,
+            "fog": false,
             "initialized": true,
             "map_assets": false,
             "methods": {
@@ -19,7 +19,7 @@
             "render_dark_mask": false,
             "types": {
                 "area": false,
-                "boundary": true,
+                "boundary": false,
                 "enemy": false,
                 "npc": false,
                 "object": true,

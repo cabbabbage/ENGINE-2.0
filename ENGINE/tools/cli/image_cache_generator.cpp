@@ -1016,7 +1016,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     if (src_idx < 0 || src_idx >= static_cast<int>(frame_paths.size())) continue;
                     if (!opt.filters.matches_source_frame(src_idx)) continue;
 
-                    bool needs = opt.force_rebuild || flagged_set.count(src_idx) > 0;
+                    bool flagged = flagged_set.count(src_idx) > 0;
+                    bool needs = opt.force_rebuild || flagged;
                     fs::file_time_type baseline = effects_cache_mtime;
                     if (bundle_mtime > baseline) {
                         baseline = bundle_mtime;
@@ -1024,16 +1025,24 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     if (src_idx >= 0 && src_idx < static_cast<int>(frame_mtimes.size())) {
                         baseline = std::max(baseline, frame_mtimes[static_cast<size_t>(src_idx)]);
                     }
+
+                    fs::path npath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Normal, out_idx);
+                    fs::path fpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Foreground, out_idx);
+                    fs::path bpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Background, out_idx);
+
+                    bool outputs_stale =
+                        file_missing_or_stale(npath, baseline) ||
+                        file_missing_or_stale(fpath, baseline) ||
+                        file_missing_or_stale(bpath, baseline);
+
+                    // If this frame was flagged but every expected output is already fresh relative
+                    // to the latest inputs, skip the work and just clear the flag later.
+                    if (flagged && !opt.force_rebuild && !outputs_stale) {
+                        continue;
+                    }
+
                     if (!needs) {
-                        // Missing output triggers rebuild
-                        fs::path npath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Normal, out_idx);
-                        fs::path fpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Foreground, out_idx);
-                        fs::path bpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Background, out_idx);
-                        if (file_missing_or_stale(npath, baseline) ||
-                            file_missing_or_stale(fpath, baseline) ||
-                            file_missing_or_stale(bpath, baseline)) {
-                            needs = true;
-                        }
+                        needs = outputs_stale;
                     }
                     if (needs) {
                         output_groups[src_idx].push_back(out_idx);
@@ -1091,23 +1100,18 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         }
     }
 
+    result.stats.tasks_total = tasks.size();
+    result.stats.assets_touched = assets_touched.size();
+    result.stats.animations_touched = anims_touched.size();
+
     // Dry run: report and exit
     if (opt.dry_run) {
         std::ostringstream ss;
         ss << "Dry run: " << tasks.size() << " tasks";
         log.info(ss.str());
         result.ok = true;
-        result.stats.tasks_total = tasks.size();
         return result;
     }
-
-    if (tasks.empty()) {
-        result.ok = true;
-        return result;
-    }
-
-    // Execute tasks in thread pool
-    ThreadPool pool(workers);
 
     std::atomic<bool> any_fail{false};
     std::mutex err_mu;
@@ -1118,106 +1122,109 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     std::atomic<std::uint64_t> tasks_ok{0};
     std::atomic<std::uint64_t> tasks_fail{0};
 
-    for (const WorkItem& w : tasks) {
-        pool.enqueue([&log, &w, &any_fail, &err_mu, &first_error, &pngs_written, &pngs_skipped, &tasks_ok, &tasks_fail]() {
-            if (any_fail.load(std::memory_order_relaxed)) {
-                // We still allow other tasks to finish, but no need to do extra work.
-            }
+    if (!tasks.empty()) {
+        // Execute tasks in thread pool
+        ThreadPool pool(workers);
 
-            std::ostringstream hdr;
-            hdr << "[" << w.asset_name << "/" << w.anim_name
-                << " src=" << w.src_frame_index
-                << " scale=" << w.scale_pct
-                << " outs=" << w.out_indices.size() << "]";
-            log.info(hdr.str());
+        for (const WorkItem& w : tasks) {
+            pool.enqueue([&log, &w, &any_fail, &err_mu, &first_error, &pngs_written, &pngs_skipped, &tasks_ok, &tasks_fail]() {
+                if (any_fail.load(std::memory_order_relaxed)) {
+                    // We still allow other tasks to finish, but no need to do extra work.
+                }
 
-            std::string err;
-            auto src_img_opt = ImageCacheGenerator::LoadPngRGBA(w.src_png_path, err);
-            if (!src_img_opt) {
-                tasks_fail.fetch_add(1);
-                any_fail.store(true);
-                std::lock_guard<std::mutex> lk(err_mu);
-                if (first_error.empty()) first_error = "Load failed: " + w.src_png_path.string() + " : " + err;
-                log.error("Load failed: " + w.src_png_path.string() + " : " + err);
-                return;
-            }
-            ImageRGBA src_img = *src_img_opt;
+                std::ostringstream hdr;
+                hdr << "[" << w.asset_name << "/" << w.anim_name
+                    << " src=" << w.src_frame_index
+                    << " scale=" << w.scale_pct
+                    << " outs=" << w.out_indices.size() << "]";
+                log.info(hdr.str());
 
-            auto resized_opt = resize_lanczos_rgba(src_img,
-                                                  std::max(1, static_cast<int>(std::lround(src_img.w * w.scale_factor))),
-                                                  std::max(1, static_cast<int>(std::lround(src_img.h * w.scale_factor))),
-                                                  err);
-            if (!resized_opt) {
-                tasks_fail.fetch_add(1);
-                any_fail.store(true);
-                std::lock_guard<std::mutex> lk(err_mu);
-                if (first_error.empty()) first_error = "Resize failed: " + w.src_png_path.string() + " : " + err;
-                log.error("Resize failed: " + w.src_png_path.string() + " : " + err);
-                return;
-            }
-
-            ImageRGBA img = *resized_opt;
-
-            if (w.crop_bounds_scaled) {
-                const CropBounds& cb = *w.crop_bounds_scaled;
-                img = crop_rgba_margins(img, cb.left, cb.top, cb.right_margin, cb.bottom_margin);
-            }
-
-            // Apply effects once
-            ImageRGBA fg_img = apply_color_effects_like_python(img, w.fx_foreground, true);
-            ImageRGBA bg_img = apply_color_effects_like_python(img, w.fx_background, false);
-
-            // Save all requested output indices
-            for (int out_idx : w.out_indices) {
-                fs::path npath = w.out_normal_dir / (std::to_string(out_idx) + ".png");
-                fs::path fpath = w.out_foreground_dir / (std::to_string(out_idx) + ".png");
-                fs::path bpath = w.out_background_dir / (std::to_string(out_idx) + ".png");
-
-                // Python overwrites files for scheduled outputs, so we always write.
-                std::string e1;
-                if (!ImageCacheGenerator::SavePngRGBA(npath, img, e1)) {
+                std::string err;
+                auto src_img_opt = ImageCacheGenerator::LoadPngRGBA(w.src_png_path, err);
+                if (!src_img_opt) {
                     tasks_fail.fetch_add(1);
                     any_fail.store(true);
                     std::lock_guard<std::mutex> lk(err_mu);
-                    if (first_error.empty()) first_error = "Save failed: " + npath.string() + " : " + e1;
-                    log.error("Save failed: " + npath.string() + " : " + e1);
+                    if (first_error.empty()) first_error = "Load failed: " + w.src_png_path.string() + " : " + err;
+                    log.error("Load failed: " + w.src_png_path.string() + " : " + err);
                     return;
                 }
-                std::string e2;
-                if (!ImageCacheGenerator::SavePngRGBA(fpath, fg_img, e2)) {
+                ImageRGBA src_img = *src_img_opt;
+
+                auto resized_opt = resize_lanczos_rgba(src_img,
+                                                      std::max(1, static_cast<int>(std::lround(src_img.w * w.scale_factor))),
+                                                      std::max(1, static_cast<int>(std::lround(src_img.h * w.scale_factor))),
+                                                      err);
+                if (!resized_opt) {
                     tasks_fail.fetch_add(1);
                     any_fail.store(true);
                     std::lock_guard<std::mutex> lk(err_mu);
-                    if (first_error.empty()) first_error = "Save failed: " + fpath.string() + " : " + e2;
-                    log.error("Save failed: " + fpath.string() + " : " + e2);
-                    return;
-                }
-                std::string e3;
-                if (!ImageCacheGenerator::SavePngRGBA(bpath, bg_img, e3)) {
-                    tasks_fail.fetch_add(1);
-                    any_fail.store(true);
-                    std::lock_guard<std::mutex> lk(err_mu);
-                    if (first_error.empty()) first_error = "Save failed: " + bpath.string() + " : " + e3;
-                    log.error("Save failed: " + bpath.string() + " : " + e3);
+                    if (first_error.empty()) first_error = "Resize failed: " + w.src_png_path.string() + " : " + err;
+                    log.error("Resize failed: " + w.src_png_path.string() + " : " + err);
                     return;
                 }
 
-                pngs_written.fetch_add(3);
-            }
+                ImageRGBA img = *resized_opt;
 
-            tasks_ok.fetch_add(1);
-        });
+                if (w.crop_bounds_scaled) {
+                    const CropBounds& cb = *w.crop_bounds_scaled;
+                    img = crop_rgba_margins(img, cb.left, cb.top, cb.right_margin, cb.bottom_margin);
+                }
+
+                // Apply effects once
+                ImageRGBA fg_img = apply_color_effects_like_python(img, w.fx_foreground, true);
+                ImageRGBA bg_img = apply_color_effects_like_python(img, w.fx_background, false);
+
+                // Save all requested output indices
+                for (int out_idx : w.out_indices) {
+                    fs::path npath = w.out_normal_dir / (std::to_string(out_idx) + ".png");
+                    fs::path fpath = w.out_foreground_dir / (std::to_string(out_idx) + ".png");
+                    fs::path bpath = w.out_background_dir / (std::to_string(out_idx) + ".png");
+
+                    // Python overwrites files for scheduled outputs, so we always write.
+                    std::string e1;
+                    if (!ImageCacheGenerator::SavePngRGBA(npath, img, e1)) {
+                        tasks_fail.fetch_add(1);
+                        any_fail.store(true);
+                        std::lock_guard<std::mutex> lk(err_mu);
+                        if (first_error.empty()) first_error = "Save failed: " + npath.string() + " : " + e1;
+                        log.error("Save failed: " + npath.string() + " : " + e1);
+                        return;
+                    }
+                    std::string e2;
+                    if (!ImageCacheGenerator::SavePngRGBA(fpath, fg_img, e2)) {
+                        tasks_fail.fetch_add(1);
+                        any_fail.store(true);
+                        std::lock_guard<std::mutex> lk(err_mu);
+                        if (first_error.empty()) first_error = "Save failed: " + fpath.string() + " : " + e2;
+                        log.error("Save failed: " + fpath.string() + " : " + e2);
+                        return;
+                    }
+                    std::string e3;
+                    if (!ImageCacheGenerator::SavePngRGBA(bpath, bg_img, e3)) {
+                        tasks_fail.fetch_add(1);
+                        any_fail.store(true);
+                        std::lock_guard<std::mutex> lk(err_mu);
+                        if (first_error.empty()) first_error = "Save failed: " + bpath.string() + " : " + e3;
+                        log.error("Save failed: " + bpath.string() + " : " + e3);
+                        return;
+                    }
+
+                    pngs_written.fetch_add(3);
+                }
+
+                tasks_ok.fetch_add(1);
+            });
+        }
+
+        // Wait for all scheduled work
+        pool.wait_idle();
     }
 
-    pool.wait_idle();
-
-    result.stats.tasks_total = tasks.size();
     result.stats.tasks_succeeded = tasks_ok.load();
     result.stats.tasks_failed = tasks_fail.load();
     result.stats.pngs_written = pngs_written.load();
     result.stats.pngs_skipped_existing = pngs_skipped.load();
-    result.stats.assets_touched = assets_touched.size();
-    result.stats.animations_touched = anims_touched.size();
 
     if (any_fail.load()) {
         result.ok = false;
@@ -1226,6 +1233,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         result.rebuild_queue_written = false;
         return result;
     }
+
+    result.ok = true;
 
     // Clear only originally-flagged frames (python behavior), after full success
     for (auto& c : to_clear) {

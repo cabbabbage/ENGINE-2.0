@@ -64,11 +64,7 @@ private:
     std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(Mode mode);
 
     void capture_camera_state();
-    void lock_camera_state();
     void restore_camera_state();
-    void capture_edit_camera_state();
-    void restore_edit_camera_state();
-    void enforce_camera_locks(WarpedScreenGrid& cam);
     bool should_render_asset(const Asset* asset) const;
 
     Assets* assets_ = nullptr;
@@ -101,10 +97,6 @@ private:
         double camera_zoom_percent_before = 0.0;
     };
     CameraLockState camera_lock_state_{};
-    CameraLockState edit_camera_state_{};
-    bool tilt_locked_ = false;
-    float locked_tilt_deg_ = 0.0f;
-    bool edit_camera_locked_ = false;
 
     DevCameraControls camera_controls_;
 };

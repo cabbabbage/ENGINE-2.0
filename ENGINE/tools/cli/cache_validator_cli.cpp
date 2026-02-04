@@ -10,6 +10,10 @@
 #include <iostream>
 #include <string>
 #include <filesystem>
+#include <optional>
+#include <system_error>
+#include <cmath>
+#include <algorithm>
 
 #include <nlohmann/json.hpp>
 
@@ -18,6 +22,82 @@ using json = nlohmann::ordered_json;
 
 constexpr int ANIMATION_SCALE_PCTS[] = {75, 50, 25, 10};
 constexpr const char* VARIANTS[] = {"normal", "foreground", "background"};
+
+static std::optional<fs::path> resolve_manifest(const fs::path& explicit_path) {
+    if (!explicit_path.empty()) return explicit_path;
+
+    imgcache::GeneratorOptions opts;
+    auto discovered = imgcache::ImageCacheGenerator::ResolveManifestPath(opts);
+    if (discovered) return *discovered;
+    return std::nullopt;
+}
+
+static inline fs::file_time_type safe_last_write_time(const fs::path& p) {
+    std::error_code ec;
+    auto t = fs::last_write_time(p, ec);
+    if (ec) return fs::file_time_type::min();
+    return t;
+}
+
+static inline bool file_missing_or_older(const fs::path& p, fs::file_time_type baseline) {
+    std::error_code ec;
+    if (!fs::exists(p, ec) || ec) return true;
+    auto t = fs::last_write_time(p, ec);
+    if (ec) return true;
+    if (baseline != fs::file_time_type::min() && t < baseline) return true;
+    uintmax_t sz = fs::file_size(p, ec);
+    if (ec) return true;
+    return sz < 32; // heuristically treat tiny files as invalid
+}
+
+static inline int manifest_frame_count(const json& anim) {
+    if (anim.is_object() && anim.contains("frames") && anim["frames"].is_array()) {
+        return static_cast<int>(anim["frames"].size());
+    }
+    if (anim.is_object() && anim.contains("number_of_frames") && anim["number_of_frames"].is_number_integer()) {
+        return std::max(0, anim["number_of_frames"].get<int>());
+    }
+    return 0;
+}
+
+static inline float normalize_speed_multiplier(float raw) {
+    static constexpr float kSpeedMultipliers[] = {0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
+    if (!std::isfinite(raw) || raw <= 0.0f) return 1.0f;
+    float best = kSpeedMultipliers[0];
+    float best_diff = std::fabs(best - raw);
+    for (float c : kSpeedMultipliers) {
+        float d = std::fabs(c - raw);
+        if (d < best_diff) {
+            best_diff = d;
+            best = c;
+        }
+    }
+    return best;
+}
+
+static inline float get_speed_multiplier(const json& anim) {
+    if (!anim.is_object()) return 1.0f;
+    float raw = 1.0f;
+    if (anim.contains("speed_multiplier") && anim["speed_multiplier"].is_number()) {
+        raw = anim["speed_multiplier"].get<float>();
+    } else if (anim.contains("speed_factor") && anim["speed_factor"].is_number()) {
+        raw = anim["speed_factor"].get<float>();
+    }
+    return normalize_speed_multiplier(raw);
+}
+
+static std::vector<fs::path> enumerate_source_frames(const fs::path& anim_dir) {
+    std::vector<fs::path> frames;
+    int idx = 0;
+    for (;;) {
+        fs::path candidate = anim_dir / (std::to_string(idx) + ".png");
+        std::error_code ec;
+        if (!fs::exists(candidate, ec) || ec) break;
+        frames.push_back(candidate);
+        ++idx;
+    }
+    return frames;
+}
 
 // Helper to navigate animations (handles both nested and flat structures)
 json* find_animations_object(json& manifest, const std::string& asset_name) {
@@ -83,47 +163,20 @@ void normalize_frames(json& anim, int frame_count) {
     anim["frames"] = frames;
 }
 
-// Get frame count from animation metadata
-int get_frame_count(const json& anim) {
-    if (anim.is_object() && anim.contains("number_of_frames") && anim["number_of_frames"].is_number_integer()) {
-        return std::max(0, anim["number_of_frames"].get<int>());
-    }
-    return 0;
-}
-
-// Get speed multiplier from animation metadata
-float get_speed_multiplier(const json& anim) {
-    if (!anim.is_object()) {
-        return 1.0f;
-    }
-
-    // Check speed_multiplier first, then speed_factor
-    if (anim.contains("speed_multiplier") && anim["speed_multiplier"].is_number()) {
-        return anim["speed_multiplier"].get<float>();
-    }
-    if (anim.contains("speed_factor") && anim["speed_factor"].is_number()) {
-        return anim["speed_factor"].get<float>();
-    }
-
-    return 1.0f;
-}
-
-// Check if all cache files exist for a given output frame
-bool animation_output_exists(const fs::path& anim_cache_root, int output_idx) {
+// Check if any expected output is missing or older than baseline
+bool animation_output_missing_or_stale(const fs::path& anim_cache_root,
+                                       int output_idx,
+                                       fs::file_time_type baseline_time) {
     for (int scale_pct : ANIMATION_SCALE_PCTS) {
         fs::path scale_dir = anim_cache_root / ("scale_" + std::to_string(scale_pct));
-        if (!fs::is_directory(scale_dir)) {
-            return false;
-        }
-
         for (const char* variant : VARIANTS) {
             fs::path frame_path = scale_dir / variant / (std::to_string(output_idx) + ".png");
-            if (!fs::is_regular_file(frame_path)) {
-                return false;
+            if (file_missing_or_older(frame_path, baseline_time)) {
+                return true;
             }
         }
     }
-    return true;
+    return false;
 }
 
 // Mark all frames as needing rebuild
@@ -153,60 +206,70 @@ bool validate_animation_cache(
     const std::string& asset_name,
     const std::string& anim_name,
     json& anim_meta,
-    const fs::path& cache_root
+    const json& asset_meta,
+    const fs::path& cache_root,
+    const fs::path& manifest_dir,
+    fs::file_time_type manifest_mtime
 ) {
-    // Get frame count
-    int frame_count = get_frame_count(anim_meta);
-    normalize_frames(anim_meta, frame_count);
+    int frame_count = manifest_frame_count(anim_meta);
 
-    if (frame_count <= 0) {
-        return false;
+    fs::path asset_src_dir = imgcache::ImageCacheGenerator::ResolveAssetSourceDir(
+        manifest_dir, manifest_dir, asset_name, nlohmann::json(asset_meta));
+
+    // Discover animation directory matching python rules
+    fs::path anim_src_dir = asset_src_dir;
+    auto discovered = imgcache::ImageCacheGenerator::DiscoverAnimations(asset_src_dir);
+    for (const auto& pair : discovered) {
+        if (pair.first == anim_name) {
+            anim_src_dir = pair.second;
+            break;
+        }
+    }
+    if (anim_name != "default" && anim_src_dir == asset_src_dir) {
+        fs::path candidate = asset_src_dir / anim_name;
+        if (fs::exists(candidate)) anim_src_dir = candidate;
     }
 
-    if (!anim_meta.contains("frames") || !anim_meta["frames"].is_array()) {
+    std::vector<fs::path> source_frames = enumerate_source_frames(anim_src_dir);
+    if (!source_frames.empty()) {
+        frame_count = std::max(frame_count, static_cast<int>(source_frames.size()));
+    }
+
+    normalize_frames(anim_meta, frame_count);
+    if (!anim_meta.contains("frames") || !anim_meta["frames"].is_array() || frame_count <= 0) {
         return false;
     }
 
     auto& frames = anim_meta["frames"];
 
-    // Check if animation cache directory exists
     fs::path anim_cache_root = cache_root / asset_name / "animations" / anim_name;
     if (!fs::is_directory(anim_cache_root)) {
         return mark_all_frames_missing(frames);
     }
 
-    // Get speed multiplier and build output sequence
     float speed_multiplier = get_speed_multiplier(anim_meta);
     std::vector<int> frame_sequence = imgcache::ImageCacheGenerator::BuildSpeedFrameSequence(frame_count, speed_multiplier);
+    if (frame_sequence.empty()) return false;
 
-    if (frame_sequence.empty()) {
-        return false;
-    }
-
-    // Check each output frame
     bool changed = false;
     for (size_t output_idx = 0; output_idx < frame_sequence.size(); ++output_idx) {
         int source_idx = frame_sequence[output_idx];
-
-        if (source_idx < 0 || source_idx >= static_cast<int>(frames.size())) {
-            continue;
-        }
+        if (source_idx < 0 || source_idx >= static_cast<int>(frames.size())) continue;
 
         auto& frame_entry = frames[source_idx];
-        if (!frame_entry.is_object()) {
-            continue;
-        }
+        if (!frame_entry.is_object()) frame_entry = json::object();
 
-        // Skip if already marked for rebuild
         bool already_marked = frame_entry.contains("needs_rebuild") &&
-                             frame_entry["needs_rebuild"].is_boolean() &&
-                             frame_entry["needs_rebuild"].get<bool>();
-        if (already_marked) {
-            continue;
+                              frame_entry["needs_rebuild"].is_boolean() &&
+                              frame_entry["needs_rebuild"].get<bool>();
+        if (already_marked) continue;
+
+        fs::file_time_type baseline = manifest_mtime;
+        if (source_idx >= 0 && source_idx < static_cast<int>(source_frames.size())) {
+            baseline = std::max(baseline, safe_last_write_time(source_frames[source_idx]));
         }
 
-        // Check if output exists
-        if (!animation_output_exists(anim_cache_root, static_cast<int>(output_idx))) {
+        if (animation_output_missing_or_stale(anim_cache_root, static_cast<int>(output_idx), baseline)) {
             frame_entry["needs_rebuild"] = true;
             changed = true;
         }
@@ -241,7 +304,7 @@ void for_each_animation(json& manifest, Func callback) {
 
         for (auto& [anim_name, anim_meta] : anims_obj->items()) {
             if (anim_meta.is_object()) {
-                callback(asset_name, anim_name, anim_meta);
+                callback(asset_name, asset_meta, anim_name, anim_meta);
             }
         }
     }
@@ -279,9 +342,18 @@ int main(int argc, char** argv) {
     }
 
     // Default manifest path if not specified
-    if (manifest_path.empty()) {
-        manifest_path = fs::path(argv[0]).parent_path().parent_path() / "manifest.json";
+    auto resolved = resolve_manifest(manifest_path);
+    if (!resolved) {
+        std::cerr << "Error: could not locate manifest.json (searched upward from CWD). Use --manifest <path>.\n";
+        return 3;
     }
+    manifest_path = *resolved;
+    fs::path manifest_dir = manifest_path.parent_path();
+    fs::file_time_type manifest_mtime = safe_last_write_time(manifest_path);
+
+    imgcache::GeneratorOptions generator_opts;
+    generator_opts.manifest_path = manifest_path;
+    fs::path cache_root = imgcache::ImageCacheGenerator::ResolveCacheRoot(manifest_dir, generator_opts);
 
     // Load manifest
     std::cout << "Loading manifest: " << manifest_path.string() << "\n";
@@ -293,14 +365,15 @@ int main(int argc, char** argv) {
 
     json manifest = load_result.value;
 
-    // Determine cache root
-    fs::path cache_root = manifest_path.parent_path() / "cache";
     std::cout << "Cache root: " << cache_root.string() << "\n";
 
     // Validate cache
     bool changed = false;
-    for_each_animation(manifest, [&](const std::string& asset_name, const std::string& anim_name, json& anim_meta) {
-        if (validate_animation_cache(asset_name, anim_name, anim_meta, cache_root)) {
+    for_each_animation(manifest, [&](const std::string& asset_name,
+                                     const json& asset_meta,
+                                     const std::string& anim_name,
+                                     json& anim_meta) {
+        if (validate_animation_cache(asset_name, anim_name, anim_meta, asset_meta, cache_root, manifest_dir, manifest_mtime)) {
             changed = true;
         }
     });

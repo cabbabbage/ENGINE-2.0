@@ -181,6 +181,24 @@ static inline bool file_exists(const fs::path& p) {
     return fs::exists(p, ec) && !ec;
 }
 
+static inline fs::file_time_type safe_last_write_time(const fs::path& p) {
+    std::error_code ec;
+    auto t = fs::last_write_time(p, ec);
+    if (ec) return fs::file_time_type::min();
+    return t;
+}
+
+static inline bool file_missing_or_stale(const fs::path& p, fs::file_time_type baseline) {
+    std::error_code ec;
+    if (!fs::exists(p, ec) || ec) return true;
+    auto t = fs::last_write_time(p, ec);
+    if (ec) return true;
+    if (baseline != fs::file_time_type::min() && t < baseline) return true;
+    uintmax_t sz = fs::file_size(p, ec);
+    if (ec) return true;
+    return sz < 32;
+}
+
 // -----------------------------
 // Minimal thread pool
 // -----------------------------
@@ -929,6 +947,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         return result;
     }
 
+    const fs::file_time_type manifest_mtime = safe_last_write_time(manifest_path);
+
     if (!manifest.is_object() || !manifest.contains("assets") || !manifest["assets"].is_object()) {
         result.ok = false;
         result.error = "Manifest 'assets' block is missing or invalid.";
@@ -1008,6 +1028,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                 log.warn("No frames found for asset '" + asset_name + "' animation '" + anim_name + "' in " + anim_dir.string());
                 continue;
             }
+            std::vector<fs::file_time_type> frame_mtimes(frame_paths.size(), fs::file_time_type::min());
+            for (size_t i = 0; i < frame_paths.size(); ++i) frame_mtimes[i] = safe_last_write_time(frame_paths[i]);
 
             // Load or create anim_meta
             ordered_json anim_meta = ordered_json::object();
@@ -1065,12 +1087,20 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     if (!opt.filters.matches_source_frame(src_idx)) continue;
 
                     bool needs = opt.force_rebuild || flagged_set.count(src_idx) > 0;
+                    fs::file_time_type baseline = manifest_mtime;
+                    if (src_idx >= 0 && src_idx < static_cast<int>(frame_mtimes.size())) {
+                        baseline = std::max(baseline, frame_mtimes[static_cast<size_t>(src_idx)]);
+                    }
                     if (!needs) {
                         // Missing output triggers rebuild
                         fs::path npath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Normal, out_idx);
                         fs::path fpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Foreground, out_idx);
                         fs::path bpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Background, out_idx);
-                        if (!file_exists(npath) || !file_exists(fpath) || !file_exists(bpath)) needs = true;
+                        if (file_missing_or_stale(npath, baseline) ||
+                            file_missing_or_stale(fpath, baseline) ||
+                            file_missing_or_stale(bpath, baseline)) {
+                            needs = true;
+                        }
                     }
                     if (needs) {
                         output_groups[src_idx].push_back(out_idx);

@@ -396,9 +396,16 @@ target_link_libraries(asset_tool_cli PRIVATE
 # Set Rebuild Values CLI - manifest manipulation
 add_executable(set_rebuild_cli
     ENGINE/tools/cli/set_rebuild_cli.cpp
+    ENGINE/tools/cli/image_cache_generator.cpp
 )
 target_include_directories(set_rebuild_cli PRIVATE
     ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+    ${CMAKE_SOURCE_DIR}/external
+)
+target_compile_definitions(set_rebuild_cli PRIVATE
+    IMGCACHE_STB_IMAGE_IMPL=1
+    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
 )
 target_link_libraries(set_rebuild_cli PRIVATE
     nlohmann_json::nlohmann_json

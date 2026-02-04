@@ -5,11 +5,13 @@
 // Supports modes: all, asset, animation, frame
 
 #include "cache_helper.hpp"
+#include "image_cache_generator.hpp"
 
 #include <iostream>
 #include <string>
 #include <cstring>
 #include <filesystem>
+#include <optional>
 
 #include <nlohmann/json.hpp>
 
@@ -208,6 +210,15 @@ void mark_frame_for_rebuild(json& manifest, const std::string& target_asset, con
     }
 }
 
+static std::optional<fs::path> resolve_manifest(const fs::path& explicit_path) {
+    if (!explicit_path.empty()) return explicit_path;
+
+    imgcache::GeneratorOptions opts;
+    auto discovered = imgcache::ImageCacheGenerator::ResolveManifestPath(opts);
+    if (discovered) return *discovered;
+    return std::nullopt;
+}
+
 void print_usage(const char* prog_name) {
     std::cout << "Usage: " << prog_name << " <mode> [args...] [--manifest <path>]\n\n";
     std::cout << "MODES:\n";
@@ -287,9 +298,12 @@ int main(int argc, char** argv) {
     }
 
     // Default manifest path if not specified
-    if (manifest_path.empty()) {
-        manifest_path = fs::path(argv[0]).parent_path().parent_path() / "manifest.json";
+    auto resolved = resolve_manifest(manifest_path);
+    if (!resolved) {
+        std::cerr << "Error: could not locate manifest.json (searched upward from CWD). Use --manifest <path>.\n";
+        return 3;
     }
+    manifest_path = *resolved;
 
     // Load manifest
     std::cout << "Loading manifest: " << manifest_path.string() << "\n";

@@ -51,18 +51,18 @@ public:
             result = commit_();
         } else {
             const bool applied = apply_mode_edits();
-            if (applied) {
-                pending_persist_ = true;
-            }
+            pending_persist_ = pending_persist_ || applied;
             if (!validate()) {
                 committing_ = false;
                 return false;
             }
-            if (persist_to_disk && context_ && context_->document) {
-                result = context_->document->save_to_file_checked(true);
-                if (result) {
-                    pending_persist_ = false;
-                }
+        }
+
+        const bool should_persist = (persist_to_disk || immediate_persist_) && context_ && context_->document;
+        if (result && should_persist) {
+            result = context_->document->save_to_file_checked(true);
+            if (result) {
+                pending_persist_ = false;
             }
         }
 

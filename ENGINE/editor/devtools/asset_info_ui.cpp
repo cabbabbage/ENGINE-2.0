@@ -26,6 +26,7 @@
 #include "utils/cache_manager.hpp"
 #include "widgets.hpp"
 #include "tag_utils.hpp"
+#include "assets/asset/primary_asset_cache.hpp"
 
 #include "DockableCollapsible.hpp"
 #include "FloatingPanelLayoutManager.hpp"
@@ -1694,6 +1695,14 @@ void AssetInfoUI::on_animation_document_saved() {
     if (!reloaded) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to reload animations for %s.", info_->name.c_str());
         return;
+    }
+
+    // Rebuild and persist the bundle immediately so dev-mode edits stay the cache truth source.
+    {
+        PrimaryAssetCache cache(renderer);
+        if (!cache.save_current(*info_)) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Bundle rebuild failed for %s; runtime cache may be stale.", info_->name.c_str());
+        }
     }
 
     info_->loadAnimations(renderer);

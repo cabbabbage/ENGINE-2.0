@@ -908,6 +908,9 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     ordered_json rebuild_queue = LoadRebuildQueue(rebuild_queue_path);
     bool rebuild_queue_dirty = false;
 
+    ordered_json metadata_cache = LoadAssetMetadataCache(cache_root);
+    bool metadata_cache_dirty = false;
+
     // Collect tasks
     std::vector<WorkItem> tasks;
     tasks.reserve(2048);
@@ -922,6 +925,7 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
 
     std::unordered_set<std::string> assets_touched;
     std::unordered_set<std::string> anims_touched;
+    std::unordered_map<std::string, std::string> asset_meta_hashes;
 
     const fs::path assets_root = manifest_dir / "resources" / "assets";
     std::vector<std::string> asset_names;
@@ -944,8 +948,10 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         if (!opt.filters.matches_asset(asset_name)) continue;
 
         AssetRecord asset = BuildAssetRecord(manifest_dir, repo_root, cache_root, asset_name);
-        const fs::path bundle_path = cache_root / asset_name / "bundle.bin";
-        const fs::file_time_type bundle_mtime = safe_last_write_time(bundle_path);
+        const std::string current_meta_hash = BuildImageMetadataHash(asset.meta);
+        asset_meta_hashes[asset_name] = current_meta_hash;
+        const std::string cached_meta_hash = CachedImageMetadataHash(metadata_cache, asset_name);
+        const bool asset_meta_changed = !current_meta_hash.empty() && current_meta_hash != cached_meta_hash;
 
         const ordered_json* anim_payloads = AnimationsObject(asset.meta);
 
@@ -1019,9 +1025,6 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     bool flagged = flagged_set.count(src_idx) > 0;
                     bool needs = opt.force_rebuild || flagged;
                     fs::file_time_type baseline = effects_cache_mtime;
-                    if (bundle_mtime > baseline) {
-                        baseline = bundle_mtime;
-                    }
                     if (src_idx >= 0 && src_idx < static_cast<int>(frame_mtimes.size())) {
                         baseline = std::max(baseline, frame_mtimes[static_cast<size_t>(src_idx)]);
                     }
@@ -1031,6 +1034,7 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                     fs::path bpath = CachePaths::frame_png_path(cache_root, asset_name, anim_name, pct, Variant::Background, out_idx);
 
                     bool outputs_stale =
+                        asset_meta_changed ||
                         file_missing_or_stale(npath, baseline) ||
                         file_missing_or_stale(fpath, baseline) ||
                         file_missing_or_stale(bpath, baseline);
@@ -1262,6 +1266,25 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
             return result;
         }
         result.rebuild_queue_written = true;
+    }
+
+    if (!assets_touched.empty()) {
+        for (const auto& asset_name : assets_touched) {
+            auto it = asset_meta_hashes.find(asset_name);
+            if (it == asset_meta_hashes.end() || it->second.empty()) {
+                continue;
+            }
+            UpdateAssetMetadataCache(metadata_cache, asset_name, it->second);
+            metadata_cache_dirty = true;
+        }
+    }
+
+    if (metadata_cache_dirty) {
+        if (!SaveAssetMetadataCache(cache_root, metadata_cache)) {
+            result.ok = false;
+            result.error = "Failed to write asset metadata cache: " + (cache_root / "asset_metadata_cache.json").string();
+            return result;
+        }
     }
 
     result.ok = true;

@@ -67,7 +67,6 @@ list(REMOVE_ITEM ENGINE_SRC
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/cache_validator_cli.cpp"
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/apply_effects_cli.cpp"
     "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui/tinyfiledialogs.c"
 )
 
 add_executable(engine ${ENGINE_SRC})

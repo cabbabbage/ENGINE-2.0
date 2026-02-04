@@ -61,6 +61,7 @@ GridPoint::GridPoint(const GridPoint& other)
     , screen_data_frame_updated(other.screen_data_frame_updated)
     , screen_data_valid(other.screen_data_valid)
     , last_camera_state_version_(other.last_camera_state_version_)
+    , last_region_query_stamp(other.last_region_query_stamp)
     , occupants()  // Leave empty - unique_ptrs cannot be copied
     , children_with_assets(0)  // Reset - no assets copied
     , active_child_mask(0)  // Reset - no child state copied

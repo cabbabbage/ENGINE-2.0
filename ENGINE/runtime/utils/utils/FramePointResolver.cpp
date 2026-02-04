@@ -11,14 +11,33 @@
 namespace devmode::frame_editors {
 
 SDL_Point FramePointResolver::anchor_world() const {
-    return SDL_Point{0, 0};
+    if (!asset_) {
+        return SDL_Point{0, 0};
+    }
+    return animation_update::detail::bottom_middle_for(*asset_, asset_->world_point());
 }
 
 float FramePointResolver::parent_height_px() const {
-    return static_cast<float>(asset_->height());
+    if (!asset_) {
+        return 0.0f;
+    }
+
+    int height_px = asset_->height();
+    if (height_px <= 0) {
+        if (SDL_Texture* tex = asset_->get_current_frame()) {
+            int w = 0;
+            if (SDL_QueryTexture(tex, nullptr, nullptr, &w, &height_px) != 0) {
+                height_px = 0;
+            }
+        }
+    }
+    return static_cast<float>(height_px);
 }
 
 float FramePointResolver::base_world_z() const {
+    if (!asset_) {
+        return 0.0f;
+    }
     return static_cast<float>(asset_->world_z());
 }
 
@@ -32,6 +51,9 @@ float FramePointResolver::to_percent(float world_z) const {
 }
 
 float FramePointResolver::to_world_z(float z_percent) const {
+    if (!asset_) {
+        return 0.0f;
+    }
     const float height = parent_height_px();
     const float base_z = base_world_z();
     return base_z + (z_percent * height);
@@ -47,11 +69,17 @@ float FramePointResolver::to_percent_xy(float world_coord) const {
 
 float FramePointResolver::to_world_xy(float coord_percent) const {
     const float height = parent_height_px();
+    if (height <= 0.0f) {
+        return 0.0f;
+    }
     return coord_percent * height;
 }
 
 FramePointResolver::Displacement_percent_vals FramePointResolver::to_percent_displacement(int x, int y, int z, const Asset* source_asset) const {
     FramePointResolver::Displacement_percent_vals vals{};
+    if (!source_asset) {
+        return vals;
+    }
     int source_height = source_asset->height();
 
     if (source_height > 0) {
@@ -63,6 +91,9 @@ FramePointResolver::Displacement_percent_vals FramePointResolver::to_percent_dis
 }
 
 world::GridPoint* FramePointResolver::to_grid_point_displacement(FramePointResolver::Displacement_percent_vals vals, const Asset* source_asset) const {
+    if (!source_asset) {
+        return nullptr;
+    }
     world::GridPoint* source_gp = source_asset->grid_point();
     if (!source_gp) return nullptr;
 

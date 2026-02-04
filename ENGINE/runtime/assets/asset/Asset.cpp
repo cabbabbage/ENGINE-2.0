@@ -454,6 +454,7 @@ void Asset::set_current_animation(const std::string& name)
 		Animation& anim = it->second;
 		anim.change(current_frame, static_frame);
 		frame_progress = 0.0f;
+		refresh_cached_dimensions();
 	}
 }
 

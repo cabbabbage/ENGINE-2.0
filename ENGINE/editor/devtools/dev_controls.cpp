@@ -2471,9 +2471,9 @@ void DevControls::remove_spawn_group_assets(const std::string& spawn_id) {
         purge_asset(asset);
         if (asset) {
             asset->Delete();
-            (void)assets_->world_grid().remove_asset(asset);
         }
     }
+    assets_->process_pending_removals();
     assets_->rebuild_from_grid_state();
     assets_->refresh_active_asset_lists();
 }

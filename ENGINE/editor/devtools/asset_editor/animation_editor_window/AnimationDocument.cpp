@@ -751,6 +751,8 @@ bool AnimationDocument::save_to_file_checked(bool fire_callback) const {
         base_data_ = root;
     }
     if (saved) {
+        // Force immediate persistence to disk so dev-mode edits are visible without debounce.
+        devmode::core::DevJsonStore::instance().flush_all();
         dirty_ = false;
     }
     if (saved && fire_callback && on_saved_callback_) {

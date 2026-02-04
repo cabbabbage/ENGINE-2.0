@@ -202,6 +202,7 @@ struct GridPoint {
     mutable std::uint64_t screen_data_frame_updated = 0;
     mutable bool          screen_data_valid         = false;
     mutable std::uint64_t last_camera_state_version_ = 0;
+    mutable std::uint64_t last_region_query_stamp = 0;
 
     // Smart caching: returns true if projection calculation is needed
     bool needs_projection_update(std::uint64_t current_frame, std::uint64_t camera_version) const {

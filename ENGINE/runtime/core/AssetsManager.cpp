@@ -305,7 +305,9 @@ void Assets::save_map_info_json() {
     }
     if (!store->update_map_entry(map_id_, map_info_json_)) {
         std::cerr << "[Assets] Failed to persist map manifest entry for " << map_id_ << "\n";
+        return;
     }
+    store->flush();
 }
 
 void Assets::persist_map_info_json() {
@@ -1723,6 +1725,10 @@ bool Assets::process_removals() {
     }
 
     return true;
+}
+
+bool Assets::process_pending_removals() {
+    return process_removals();
 }
 
 void Assets::render_overlays(SDL_Renderer* renderer) {

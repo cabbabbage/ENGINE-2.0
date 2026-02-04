@@ -133,15 +133,6 @@ void mark_frame_for_rebuild(json& queue,
     SetFrameFlag(*anim_entry, frame_idx, true);
 }
 
-static std::optional<fs::path> resolve_manifest(const fs::path& explicit_path) {
-    if (!explicit_path.empty()) return explicit_path;
-
-    imgcache::GeneratorOptions opts;
-    auto discovered = imgcache::ImageCacheGenerator::ResolveManifestPath(opts);
-    if (discovered) return *discovered;
-    return std::nullopt;
-}
-
 void print_usage(const char* prog_name) {
     std::cout << "Usage: " << prog_name << " <mode> [args...] [--manifest <path>] [--cache-root <path>]\n\n";
     std::cout << "MODES:\n";
@@ -230,7 +221,7 @@ int main(int argc, char** argv) {
 
     fs::path repo_root;
     fs::path manifest_dir;
-    auto resolved = resolve_manifest(manifest_path);
+    auto resolved = ResolveManifestOrExplicit(manifest_path);
     if (resolved) {
         manifest_path = *resolved;
         manifest_dir = manifest_path.parent_path();

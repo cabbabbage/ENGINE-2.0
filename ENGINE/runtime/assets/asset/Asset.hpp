@@ -135,7 +135,13 @@ class Asset {
     int world_y() const { return pos_ ? pos_->world_y() : initial_world_pos_.y; }
     int world_z() const { return pos_ ? pos_->world_z() : 0; }
     SDL_Point world_point() const { return SDL_Point{world_x(), world_y()}; }
-    int height() const { return cached_h; }
+    int height() const {
+        if (cached_h <= 0) {
+            // Refresh lazily to avoid stale dimensions when textures change.
+            const_cast<Asset*>(this)->refresh_cached_dimensions();
+        }
+        return cached_h;
+    }
     void move_to_world_position(int world_x, int world_y, int world_z = 0);
     void set_world_z(int world_z);
 

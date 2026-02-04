@@ -7,7 +7,6 @@
 #include <limits>
 #include <optional>
 #include <string>
-#include <unordered_set>
 #include <utility>
 
 #include "assets/Asset.hpp"
@@ -119,6 +118,12 @@ void WorldGrid::set_origin(const GridPoint& origin) {
 
 void WorldGrid::invalidate_active_cache() {
     chunks_.clear_active();
+}
+
+std::uint64_t WorldGrid::next_traversal_stamp() const {
+    const std::uint64_t next = traversal_stamp_ + 1;
+    traversal_stamp_ = (next == 0) ? 1 : next;
+    return traversal_stamp_;
 }
 
 const ChunkManager& WorldGrid::chunks() const {
@@ -463,7 +468,7 @@ std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
     const int safe_max_z = std::max(min_world_z, max_world_z);
 
     std::vector<GridPoint*> result;
-    std::unordered_set<GridId> visited;
+    const std::uint64_t visit_stamp = next_traversal_stamp();
     std::vector<GridPoint*> stack = gather_roots<GridPoint>(points_, roots_);
 
     auto push_child = [&](GridPoint* parent, GridPoint::ChildDirection dir) {
@@ -482,9 +487,10 @@ std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
         GridPoint* node = stack.back();
         stack.pop_back();
         if (!node) continue;
-        if (!visited.insert(node->id).second) {
+        if (node->last_region_query_stamp == visit_stamp) {
             continue;
         }
+        node->last_region_query_stamp = visit_stamp;
 
         if (skip_inactive_branches && !node->has_assets_or_active_children()) {
             if (metrics) ++metrics->branches_skipped;
@@ -525,7 +531,7 @@ std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& world_bo
     const int safe_max_z = std::max(min_world_z, max_world_z);
 
     std::vector<const GridPoint*> result;
-    std::unordered_set<GridId> visited;
+    const std::uint64_t visit_stamp = next_traversal_stamp();
     std::vector<const GridPoint*> stack = gather_roots<const GridPoint>(points_, roots_);
 
     auto push_child = [&](const GridPoint* parent, GridPoint::ChildDirection dir) {
@@ -544,9 +550,10 @@ std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& world_bo
         const GridPoint* node = stack.back();
         stack.pop_back();
         if (!node) continue;
-        if (!visited.insert(node->id).second) {
+        if (node->last_region_query_stamp == visit_stamp) {
             continue;
         }
+        node->last_region_query_stamp = visit_stamp;
 
         if (skip_inactive_branches && !node->has_assets_or_active_children()) {
             if (metrics) ++metrics->branches_skipped;

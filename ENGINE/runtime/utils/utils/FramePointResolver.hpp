@@ -10,7 +10,7 @@ namespace devmode::frame_editors {
 
 /**
  * Utility for converting stored frame point data (x/y offsets + z percentage)
- * into usable world‑space coordinates relative to an asset.
+ * into usable world-space coordinates relative to an asset.
  *
  * Z is stored as a percentage of the parent asset's current height:
  *   0.0 -> on the floor, 1.0 -> top of asset's vertical bounds.
@@ -30,7 +30,7 @@ class FramePointResolver {
 
     explicit FramePointResolver(const Asset* asset) : asset_(asset) {}
 
-    // Anchor = bottom‑middle of the asset in world space.
+    // Anchor = bottom-middle of the asset in world space.
     SDL_Point anchor_world() const;
 
     // Get parent asset's height in pixels (for percent calculations)

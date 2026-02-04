@@ -350,4 +350,13 @@ private:
     ImageCacheGenerator() = delete;
 };
 
+// Convenience: use an explicit manifest path when provided, otherwise discover it by walking upward.
+inline std::optional<fs::path> ResolveManifestOrExplicit(const fs::path& explicit_path) {
+    if (!explicit_path.empty()) {
+        return explicit_path;
+    }
+    GeneratorOptions opts;
+    return ImageCacheGenerator::ResolveManifestPath(opts);
+}
+
 } // namespace imgcache

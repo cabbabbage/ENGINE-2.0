@@ -26,15 +26,6 @@ using namespace imgcache;
 constexpr int ANIMATION_SCALE_PCTS[] = {75, 50, 25, 10};
 constexpr const char* VARIANTS[] = {"normal", "foreground", "background"};
 
-static std::optional<fs::path> resolve_manifest(const fs::path& explicit_path) {
-    if (!explicit_path.empty()) return explicit_path;
-
-    imgcache::GeneratorOptions opts;
-    auto discovered = imgcache::ImageCacheGenerator::ResolveManifestPath(opts);
-    if (discovered) return *discovered;
-    return std::nullopt;
-}
-
 static inline fs::file_time_type safe_last_write_time(const fs::path& p) {
     std::error_code ec;
     auto t = fs::last_write_time(p, ec);
@@ -222,7 +213,7 @@ int main(int argc, char** argv) {
     fs::path repo_root;
     fs::path manifest_dir;
 
-    auto resolved = resolve_manifest(manifest_path);
+    auto resolved = ResolveManifestOrExplicit(manifest_path);
     if (resolved) {
         manifest_path = *resolved;
         manifest_dir = manifest_path.parent_path();
@@ -267,6 +258,8 @@ int main(int argc, char** argv) {
     json rebuild_queue = LoadRebuildQueue(rebuild_queue_path);
     bool changed = false;
 
+    json metadata_cache = LoadAssetMetadataCache(cache_root);
+
     const fs::path assets_root = repo_root / "resources" / "assets";
     std::vector<std::string> asset_names = DiscoverAssetNames(assets_root);
     if (asset_names.empty() && rebuild_queue.contains("assets") && rebuild_queue["assets"].is_object()) {
@@ -278,8 +271,9 @@ int main(int argc, char** argv) {
     for (const auto& asset_name : asset_names) {
         imgcache::AssetRecord asset = BuildAssetRecord(manifest_dir, repo_root, cache_root, asset_name);
         const json* anim_payloads = AnimationsObject(asset.meta);
-        const fs::path bundle_path = cache_root / asset_name / "bundle.bin";
-        const fs::file_time_type bundle_mtime = safe_last_write_time(bundle_path);
+        const std::string current_meta_hash = BuildImageMetadataHash(asset.meta);
+        const std::string cached_meta_hash = CachedImageMetadataHash(metadata_cache, asset_name);
+        const bool asset_meta_changed = !current_meta_hash.empty() && current_meta_hash != cached_meta_hash;
 
         for (const auto& anim_name : asset.anim_names) {
             json anim_meta = json::object();
@@ -295,7 +289,7 @@ int main(int argc, char** argv) {
             }
 
             fs::path anim_cache_root = cache_root / asset_name / "animations" / anim_name;
-            if (effects_mismatch || !fs::is_directory(anim_cache_root)) {
+            if (effects_mismatch || asset_meta_changed || !fs::is_directory(anim_cache_root)) {
                 if (mark_all_frames(rebuild_queue, asset_name, anim_name, frame_count)) {
                     changed = true;
                 }
@@ -335,9 +329,6 @@ int main(int argc, char** argv) {
                 }
 
                 fs::file_time_type baseline = effects_cache_mtime;
-                if (bundle_mtime > baseline) {
-                    baseline = bundle_mtime;
-                }
                 if (source_idx >= 0 && source_idx < static_cast<int>(source_frames.size())) {
                     baseline = std::max(baseline, safe_last_write_time(source_frames[source_idx]));
                 }

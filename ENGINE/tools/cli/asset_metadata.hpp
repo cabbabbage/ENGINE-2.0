@@ -8,6 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "cache_helper.hpp"
 #include "bundle_metadata.hpp"
 #include "image_cache_generator.hpp"
 
@@ -68,6 +69,86 @@ struct AssetRecord {
     std::unordered_map<std::string, fs::path> discovered_anims;
     std::vector<std::string> anim_names;
 };
+
+inline ordered_json BuildImageMetadataSnippet(const ordered_json& asset_meta) {
+    ordered_json snippet = ordered_json::object();
+    if (!asset_meta.is_object()) {
+        return snippet;
+    }
+
+    if (asset_meta.contains("size_settings")) {
+        snippet["size_settings"] = asset_meta["size_settings"];
+    }
+
+    const ordered_json* anims = AnimationsObject(asset_meta);
+    if (anims && anims->is_object()) {
+        snippet["animations"] = *anims;
+    }
+
+    if (asset_meta.contains("animation_children")) {
+        snippet["animation_children"] = asset_meta["animation_children"];
+    }
+
+    if (asset_meta.contains("async_children")) {
+        snippet["async_children"] = asset_meta["async_children"];
+    }
+
+    return snippet;
+}
+
+inline std::string BuildImageMetadataHash(const ordered_json& asset_meta) {
+    return CacheHelper::StableHashHex_BLAKE2b16(BuildImageMetadataSnippet(asset_meta));
+}
+
+inline ordered_json LoadAssetMetadataCache(const fs::path& cache_root) {
+    const fs::path cache_path = cache_root / "asset_metadata_cache.json";
+    auto result = CacheHelper::LoadJsonFile(cache_path.string());
+    if (result.ok && result.value.is_object()) {
+        ordered_json cache = result.value;
+        if (!cache.contains("assets") || !cache["assets"].is_object()) {
+            cache["assets"] = ordered_json::object();
+        }
+        return cache;
+    }
+
+    ordered_json cache = ordered_json::object();
+    cache["assets"] = ordered_json::object();
+    return cache;
+}
+
+inline bool SaveAssetMetadataCache(const fs::path& cache_root, const ordered_json& cache) {
+    const fs::path cache_path = cache_root / "asset_metadata_cache.json";
+    auto result = CacheHelper::WriteJsonFile(cache_path.string(), nlohmann::json(cache));
+    return result.ok;
+}
+
+inline std::string CachedImageMetadataHash(const ordered_json& cache, const std::string& asset_name) {
+    if (!cache.is_object() || !cache.contains("assets") || !cache["assets"].is_object()) {
+        return {};
+    }
+    const auto& assets = cache["assets"];
+    auto it = assets.find(asset_name);
+    if (it == assets.end() || !it->is_object()) {
+        return {};
+    }
+    const auto& entry = *it;
+    if (entry.contains("image_meta_hash") && entry["image_meta_hash"].is_string()) {
+        return entry["image_meta_hash"].get<std::string>();
+    }
+    return {};
+}
+
+inline void UpdateAssetMetadataCache(ordered_json& cache,
+                                     const std::string& asset_name,
+                                     const std::string& hash) {
+    if (!cache.is_object()) {
+        cache = ordered_json::object();
+    }
+    if (!cache.contains("assets") || !cache["assets"].is_object()) {
+        cache["assets"] = ordered_json::object();
+    }
+    cache["assets"][asset_name] = ordered_json::object({{"image_meta_hash", hash}});
+}
 
 inline fs::path ResolveAnimDir(const fs::path& asset_src_dir,
                                const std::string& anim_name,

@@ -465,7 +465,8 @@ void AsyncChildrenFrameEditor::ensure_manifest_transaction() {
         return;
     }
     manifest_txn_.begin(context_);
-    manifest_txn_.set_deferred_persist(true);
+    manifest_txn_.set_immediate_persist(true);
+    manifest_txn_.set_deferred_persist(false);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;

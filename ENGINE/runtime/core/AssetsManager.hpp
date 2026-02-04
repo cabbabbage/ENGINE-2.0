@@ -210,6 +210,7 @@ public:
     bool has_pending_dev_work(bool include_animation_plans = true) const;
     bool should_step_dev_frame(const Input& input) const;
     void touch_last_frame_counter();
+    bool process_pending_removals();
 
 private:
     void save_map_info_json();

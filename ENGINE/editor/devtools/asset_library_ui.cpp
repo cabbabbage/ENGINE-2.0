@@ -1589,6 +1589,9 @@ void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer
         for (Asset* asset : doomed) {
             asset->Delete();
         }
+        assets_owner_->process_pending_removals();
+        assets_owner_->rebuild_from_grid_state();
+        assets_owner_->refresh_active_asset_lists();
     }
 
     bool manifest_flush_required = false;

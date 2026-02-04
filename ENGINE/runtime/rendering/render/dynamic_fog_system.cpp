@@ -43,25 +43,30 @@ bool DynamicFogSystem::initialize(SDL_Renderer* renderer) {
 
     renderer_ = renderer;
 
-    // Load fog textures from fog/ directory
-    std::string fog_dir = "fog";
+    // Load fog textures from resources/fog directory off the project root
+#ifdef PROJECT_ROOT
+    const fs::path fog_root = fs::path(PROJECT_ROOT);
+#else
+    const fs::path fog_root = fs::current_path();
+#endif
+    const fs::path fog_dir = (fog_root / "resources" / "fog").lexically_normal();
     if (!fs::exists(fog_dir)) {
-        vibble::log::warn("[DynamicFogSystem] Fog directory not found: " + fog_dir);
+        vibble::log::warn("[DynamicFogSystem] Fog directory not found: " + fog_dir.generic_string());
         return false;
     }
 
     int loaded_count = 0;
     for (int i = 1; i <= kNumFogTextures; ++i) {
-        std::string filename = fog_dir + "/" + "fog_" + std::to_string(i) + ".png";
+        const fs::path filename = fog_dir / ("fog_" + std::to_string(i) + ".png");
 
         if (!fs::exists(filename)) {
-            vibble::log::warn("[DynamicFogSystem] Fog texture not found: " + filename);
+            vibble::log::warn("[DynamicFogSystem] Fog texture not found: " + filename.generic_string());
             continue;
         }
 
-        SDL_Surface* surface = IMG_Load(filename.c_str());
+        SDL_Surface* surface = IMG_Load(filename.generic_string().c_str());
         if (!surface) {
-            vibble::log::warn("[DynamicFogSystem] Failed to load fog texture: " + filename);
+            vibble::log::warn("[DynamicFogSystem] Failed to load fog texture: " + filename.generic_string());
             continue;
         }
 
@@ -69,7 +74,7 @@ bool DynamicFogSystem::initialize(SDL_Renderer* renderer) {
         SDL_FreeSurface(surface);
 
         if (!texture) {
-            vibble::log::warn("[DynamicFogSystem] Failed to create SDL_Texture for: " + filename);
+            vibble::log::warn("[DynamicFogSystem] Failed to create SDL_Texture for: " + filename.generic_string());
             continue;
         }
 

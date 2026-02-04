@@ -22,10 +22,14 @@ class WorldGrid;
 
 class DynamicBoundarySystem {
 public:
-    struct BoundaryFrame {
+    struct BoundaryFrameVariant {
         SDL_Texture* texture = nullptr;
         int width = 0;
         int height = 0;
+    };
+
+    struct BoundaryFrame {
+        std::vector<BoundaryFrameVariant> variants;
         float duration_ms = 41.67f;  // ~24 fps default
     };
 

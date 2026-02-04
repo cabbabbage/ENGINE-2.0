@@ -75,6 +75,7 @@ private:
     Asset::AnimationChildAttachment* find_child_slot(const std::string& name);
     void       restart_child_timeline(Asset::AnimationChildAttachment& slot);
     float      parent_world_z() const;
+    float      compute_attachment_scale() const;
 
     void       apply_pending_move();
 

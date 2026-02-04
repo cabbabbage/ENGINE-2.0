@@ -191,13 +191,18 @@ inline SDL_Point rounded_world_point(const SDL_FPoint& point) {
     };
 }
 
-float compute_boundary_asset_scale(DynamicBoundarySystem::BoundaryCandidate& candidate,
-                                   const WarpedScreenGrid& cam,
-                                   const Assets* assets,
-                                   const SDL_FPoint& world_pos,
-                                   int world_z) {
+struct BoundaryScaleResult {
+    float remainder_scale = 1.0f;
+    int variant_index = 0;
+};
+
+BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::BoundaryCandidate& candidate,
+                                                 const WarpedScreenGrid& cam,
+                                                 const Assets* assets,
+                                                 const SDL_FPoint& world_pos,
+                                                 int world_z) {
     if (!candidate.info) {
-        return 1.0f;
+        return BoundaryScaleResult{};
     }
 
     const SDL_Point world_pt = rounded_world_point(world_pos);
@@ -245,7 +250,7 @@ float compute_boundary_asset_scale(DynamicBoundarySystem::BoundaryCandidate& can
     if (!std::isfinite(remainder_scale) || remainder_scale <= 0.0f) {
         remainder_scale = 1.0f;
     }
-    return remainder_scale;
+    return BoundaryScaleResult{remainder_scale, selection.index};
 }
 }
 
@@ -446,7 +451,29 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
 
                 frame_state.frame_index = current_index;
                 const BoundaryFrame& active_frame = candidate.frames[current_index];
-                SDL_Texture* texture = active_frame.texture;
+                const BoundaryScaleResult scale_result =
+                    compute_boundary_asset_scale(candidate, cam, assets, world_pos, world_z);
+                const int variant_index = scale_result.variant_index;
+                const auto& variants = active_frame.variants;
+                const BoundaryFrameVariant* frame_variant = nullptr;
+                if (!variants.empty()) {
+                    const int clamped_index = std::clamp(variant_index, 0, static_cast<int>(variants.size()) - 1);
+                    if (variants[clamped_index].texture) {
+                        frame_variant = &variants[clamped_index];
+                    } else {
+                        for (const auto& variant : variants) {
+                            if (variant.texture) {
+                                frame_variant = &variant;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (!frame_variant || !frame_variant->texture) {
+                    continue;
+                }
+
+                SDL_Texture* texture = frame_variant->texture;
                 if (!texture) {
                     continue;
                 }
@@ -456,8 +483,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 sprite.world_pos = world_pos;
                 sprite.screen_pos = screen_pos;
                 sprite.world_z = world_z;
-                sprite.texture_w = active_frame.width;
-                sprite.texture_h = active_frame.height;
+                sprite.texture_w = frame_variant->width;
+                sprite.texture_h = frame_variant->height;
                 if (sprite.texture_w <= 0 || sprite.texture_h <= 0) {
                     int texture_w = 0;
                     int texture_h = 0;
@@ -469,11 +496,10 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 if (sprite.texture_w <= 0 || sprite.texture_h <= 0) {
                     continue;
                 }
-                const float candidate_asset_scale = compute_boundary_asset_scale(candidate, cam, assets, world_pos, world_z);
                 const float config_scale = base_size_scale();
-                sprite.asset_scale = candidate_asset_scale;
-                sprite.world_width = static_cast<float>(sprite.texture_w) * candidate_asset_scale * config_scale;
-                sprite.world_height = static_cast<float>(sprite.texture_h) * candidate_asset_scale * config_scale;
+                sprite.asset_scale = scale_result.remainder_scale;
+                sprite.world_width = static_cast<float>(sprite.texture_w) * scale_result.remainder_scale * config_scale;
+                sprite.world_height = static_cast<float>(sprite.texture_h) * scale_result.remainder_scale * config_scale;
                 if (!std::isfinite(sprite.world_width) || sprite.world_width <= 0.0f ||
                     !std::isfinite(sprite.world_height) || sprite.world_height <= 0.0f) {
                     continue;
@@ -593,23 +619,34 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
             if (!frame || frame->variants.empty()) {
                 continue;
             }
-            const FrameVariant& variant = frame->variants.front();
-            if (!variant.base_texture) {
-                continue;
-            }
             BoundaryFrame boundary_frame;
-            boundary_frame.texture = variant.base_texture;
-            boundary_frame.duration_ms = variant.base_texture ? kDefaultAnimationFrameMs : 0.0f;
-            SDL_QueryTexture(boundary_frame.texture, nullptr, nullptr, &boundary_frame.width, &boundary_frame.height);
-            candidate.frames.push_back(boundary_frame);
+            boundary_frame.duration_ms = kDefaultAnimationFrameMs;
+            boundary_frame.variants.reserve(frame->variants.size());
+            bool has_texture = false;
+            for (const FrameVariant& variant : frame->variants) {
+                if (!variant.base_texture) {
+                    boundary_frame.variants.push_back(BoundaryFrameVariant{nullptr, 0, 0});
+                    continue;
+                }
+                BoundaryFrameVariant frame_variant;
+                frame_variant.texture = variant.base_texture;
+                SDL_QueryTexture(frame_variant.texture, nullptr, nullptr, &frame_variant.width, &frame_variant.height);
+                boundary_frame.variants.push_back(frame_variant);
+                has_texture = true;
+            }
+            if (has_texture) {
+                candidate.frames.push_back(boundary_frame);
+            }
         }
     }
 
     if (candidate.frames.empty() && info->preview_texture) {
         BoundaryFrame boundary_frame;
-        boundary_frame.texture = info->preview_texture;
         boundary_frame.duration_ms = kDefaultAnimationFrameMs;
-        SDL_QueryTexture(boundary_frame.texture, nullptr, nullptr, &boundary_frame.width, &boundary_frame.height);
+        BoundaryFrameVariant frame_variant;
+        frame_variant.texture = info->preview_texture;
+        SDL_QueryTexture(frame_variant.texture, nullptr, nullptr, &frame_variant.width, &frame_variant.height);
+        boundary_frame.variants.push_back(frame_variant);
         candidate.frames.push_back(boundary_frame);
     }
 

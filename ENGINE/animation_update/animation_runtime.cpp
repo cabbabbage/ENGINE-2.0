@@ -75,6 +75,26 @@ std::string resolve_animation(const Asset& asset, const std::string& requested) 
 bool same_point(SDL_Point lhs, SDL_Point rhs) {
     return lhs.x == rhs.x && lhs.y == rhs.y;
 }
+
+std::vector<SDL_Point> build_escape_directions(SDL_Point primary) {
+    std::vector<SDL_Point> dirs;
+    dirs.reserve(5);
+    auto add = [&](SDL_Point d) {
+        if (d.x == 0 && d.y == 0) return;
+        for (const auto& e : dirs) { if (e.x == d.x && e.y == d.y) return; }
+        dirs.push_back(d);
+    };
+    if (primary.x == 0 && primary.y == 0) {
+        dirs = {{1,0},{-1,0},{0,1},{0,-1}};
+    } else {
+        add(primary);
+        add({primary.x, 0});
+        add({0, primary.y});
+        add({primary.y, -primary.x});
+        add({-primary.y, primary.x});
+    }
+    return dirs;
+}
 }
 
 AnimationRuntime::AnimationRuntime(Asset* self, Assets* assets)
@@ -89,6 +109,25 @@ float AnimationRuntime::parent_world_z() const {
         return static_cast<float>(gp->world_z());
     }
     return 0.0f;
+}
+
+float AnimationRuntime::compute_attachment_scale() const {
+    float perspective_scale = 1.0f;
+    if (assets_owner_ && self_ && self_->info) {
+        const WarpedScreenGrid& cam = assets_owner_->getView();
+        if (const auto* gp = cam.grid_point_for_asset(self_)) {
+            perspective_scale = std::max(0.0001f, gp->perspective_scale);
+        }
+    }
+    float remainder = self_->current_remaining_scale_adjustment;
+    if (!std::isfinite(remainder) || remainder <= 0.0f) {
+        remainder = 1.0f;
+    }
+    float scale = remainder / std::max(0.0001f, perspective_scale);
+    if (!std::isfinite(scale) || scale <= 0.0f) {
+        scale = 1.0f;
+    }
+    return scale;
 }
 
 void AnimationRuntime::set_debug_enabled(bool enabled) {
@@ -513,24 +552,6 @@ void AnimationRuntime::advance_child_frames(float dt) {
     if (!self_ || self_->animation_children_.empty()) {
         return;
     }
-    auto compute_attachment_scale = [&]() -> float {
-        float perspective_scale = 1.0f;
-        if (assets_owner_ && self_ && self_->info) {
-            const WarpedScreenGrid& cam = assets_owner_->getView();
-            if (const auto* gp = cam.grid_point_for_asset(self_)) {
-                perspective_scale = std::max(0.0001f, gp->perspective_scale);
-            }
-        }
-        float remainder = self_->current_remaining_scale_adjustment;
-        if (!std::isfinite(remainder) || remainder <= 0.0f) {
-            remainder = 1.0f;
-        }
-        float scale = remainder / std::max(0.0001f, perspective_scale);
-        if (!std::isfinite(scale) || scale <= 0.0f) {
-            scale = 1.0f;
-        }
-        return scale;
-};
     std::vector<const AnimationFrame*> previous_frames;
     previous_frames.reserve(self_->animation_children_.size());
     for (const auto& slot : self_->animation_children_) {
@@ -602,24 +623,6 @@ void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFr
     if (!self_ || self_->animation_children_.empty()) {
         return;
     }
-    auto compute_attachment_scale = [&]() -> float {
-        float perspective_scale = 1.0f;
-        if (assets_owner_ && self_ && self_->info) {
-            const WarpedScreenGrid& cam = assets_owner_->getView();
-            if (const auto* gp = cam.grid_point_for_asset(self_)) {
-                perspective_scale = std::max(0.0001f, gp->perspective_scale);
-            }
-        }
-        float remainder = self_->current_remaining_scale_adjustment;
-        if (!std::isfinite(remainder) || remainder <= 0.0f) {
-            remainder = 1.0f;
-        }
-        float scale = remainder / std::max(0.0001f, perspective_scale);
-        if (!std::isfinite(scale) || scale <= 0.0f) {
-            scale = 1.0f;
-    }
-        return scale;
-};
     std::vector<bool> prev_visible;
     std::vector<float> prev_rotation;
     std::vector<SDL_Point> prev_world;
@@ -1003,26 +1006,7 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
     }
     SDL_Point primary{ (push.x > 0) ? 1 : (push.x < 0 ? -1 : 0),
                        (push.y > 0) ? 1 : (push.y < 0 ? -1 : 0) };
-    auto add_direction = [&](std::vector<SDL_Point>& dirs, SDL_Point dir) {
-        if (dir.x == 0 && dir.y == 0) return;
-        const auto it = std::find_if(dirs.begin(), dirs.end(), [&](const SDL_Point& existing) {
-            return existing.x == dir.x && existing.y == dir.y;
-        });
-        if (it == dirs.end()) dirs.push_back(dir);
-};
-    std::vector<SDL_Point> directions;
-    if (primary.x == 0 && primary.y == 0) {
-        directions.push_back(SDL_Point{ 1, 0 });
-        directions.push_back(SDL_Point{ -1, 0 });
-        directions.push_back(SDL_Point{ 0, 1 });
-        directions.push_back(SDL_Point{ 0, -1 });
-    } else {
-        add_direction(directions, primary);
-        add_direction(directions, SDL_Point{ primary.x, 0 });
-        add_direction(directions, SDL_Point{ 0, primary.y });
-        add_direction(directions, SDL_Point{ primary.y, -primary.x });
-        add_direction(directions, SDL_Point{ -primary.y, primary.x });
-    }
+    std::vector<SDL_Point> directions = build_escape_directions(primary);
     const auto inside_disallowed = [&](const world::GridPoint& bottom) {
         bool blocked = false;
         const Assets* assets = assets_owner_ ? assets_owner_ : (self_ ? self_->get_assets() : nullptr);
@@ -1167,26 +1151,7 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     }
     SDL_Point primary{ (push.x > 0) ? 1 : (push.x < 0 ? -1 : 0),
                        (push.y > 0) ? 1 : (push.y < 0 ? -1 : 0) };
-    auto add_direction = [&](std::vector<SDL_Point>& dirs, SDL_Point dir) {
-        if (dir.x == 0 && dir.y == 0) return;
-        const auto it = std::find_if(dirs.begin(), dirs.end(), [&](const SDL_Point& existing) {
-            return existing.x == dir.x && existing.y == dir.y;
-        });
-        if (it == dirs.end()) dirs.push_back(dir);
-};
-    std::vector<SDL_Point> directions;
-    if (primary.x == 0 && primary.y == 0) {
-        directions.push_back(SDL_Point{ 1, 0 });
-        directions.push_back(SDL_Point{ -1, 0 });
-        directions.push_back(SDL_Point{ 0, 1 });
-        directions.push_back(SDL_Point{ 0, -1 });
-    } else {
-        add_direction(directions, primary);
-        add_direction(directions, SDL_Point{ primary.x, 0 });
-        add_direction(directions, SDL_Point{ 0, primary.y });
-        add_direction(directions, SDL_Point{ primary.y, -primary.x });
-        add_direction(directions, SDL_Point{ -primary.y, primary.x });
-    }
+    std::vector<SDL_Point> directions = build_escape_directions(primary);
     std::vector<SDL_Point> tail;
     for (std::size_t i = next_checkpoint_index_ + 1; i < planner_iface_->plan_.sanitized_checkpoints.size(); ++i) {
         tail.push_back(planner_iface_->plan_.sanitized_checkpoints[i]);

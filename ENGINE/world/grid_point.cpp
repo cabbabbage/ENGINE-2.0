@@ -97,19 +97,24 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     // Transform to camera space
     const Vec3 to_point = world_meters - cam_pos;
     const double depth_along_forward = dot(to_point, cam_forward);
-    const double distance = length(to_point);
+    const double distance_sq = dot(to_point, to_point);
 
-    // Early rejection for points behind or outside clipping planes
+    // Early rejection for points behind or outside clipping planes (using squared distances to avoid sqrt)
+    const double near_plane_sq = params.near_plane * params.near_plane;
+    const double far_plane_sq = params.far_plane * params.far_plane;
     if (depth_along_forward <= params.near_plane ||
-        distance < params.near_plane ||
-        distance > params.far_plane ||
-        !std::isfinite(distance)) {
+        distance_sq < near_plane_sq ||
+        distance_sq > far_plane_sq ||
+        !std::isfinite(distance_sq)) {
         screen = SDL_FPoint{0.0f, 0.0f};
         parallax_dx = 0.0f;
         on_screen = false;
         screen_data_valid = true;
         return;
     }
+
+    // Compute actual distance only after rejection checks pass
+    const double distance = std::sqrt(distance_sq);
 
     // Project to camera space
     const double cam_x = dot(to_point, cam_right);

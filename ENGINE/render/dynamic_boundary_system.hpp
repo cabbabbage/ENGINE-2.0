@@ -3,6 +3,8 @@
 #include <SDL.h>
 #include <nlohmann/json.hpp>
 
+#include "render/scaling_logic.hpp"
+
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -13,6 +15,7 @@
 class WarpedScreenGrid;
 class AssetLibrary;
 class Assets;
+class AssetInfo;
 namespace world {
 class WorldGrid;
 }
@@ -30,7 +33,9 @@ public:
         SDL_Texture* texture = nullptr;
         SDL_FPoint   world_pos{0.0f, 0.0f};
         SDL_FPoint   screen_pos{0.0f, 0.0f};
-        float        scale = 1.0f;
+        float        asset_scale = 1.0f;
+        float        world_width = 0.0f;
+        float        world_height = 0.0f;
         int          world_z = 0;
         int          texture_w = 0;
         int          texture_h = 0;
@@ -48,6 +53,8 @@ public:
         int         chance = 0;
         bool        is_null = false;
         std::vector<BoundaryFrame> frames;
+        std::shared_ptr<AssetInfo> info;
+        render_pipeline::ScalingLogic::HysteresisState hysteresis_state;
     };
 
     struct BoundaryType {
@@ -116,11 +123,13 @@ private:
 
     nlohmann::json last_boundary_json_;
     std::uint64_t  config_revision_ = 0;
+    std::uint64_t  warning_revision_ = 0;
 
     std::vector<BoundaryType> boundary_types_;
     std::unordered_map<BoundaryKey, int, BoundaryKeyHash> boundary_assignments_;
     std::unordered_map<BoundaryKey, FrameState, BoundaryKeyHash> animation_states_;
     std::vector<BoundarySprite> active_boundary_sprites_;
+    std::unordered_set<int> dense_type_warnings_;
 
     void parse_boundary_config(const nlohmann::json& map_info);
     void build_candidate_frames(BoundaryCandidate& candidate);

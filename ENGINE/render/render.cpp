@@ -606,7 +606,6 @@ void SceneRenderer::render() {
             });
     }
     size_t boundary_index = 0;
-    const float boundary_size_scale = DynamicBoundarySystem::base_size_scale();
     const float boundary_cull_margin = 64.0f;
     const float boundary_vertical_offset = DynamicBoundarySystem::vertical_offset();
 
@@ -702,8 +701,11 @@ void SceneRenderer::render() {
         const float world_x = sprite.world_pos.x;
         const float world_y = sprite.world_pos.y;
         const float world_z = static_cast<float>(sprite.world_z);
-        const float boundary_world_width = static_cast<float>(sprite.texture_w) * boundary_size_scale * sprite.scale;
-        const float boundary_world_height = static_cast<float>(sprite.texture_h) * boundary_size_scale * sprite.scale;
+        const float boundary_world_width = sprite.world_width;
+        const float boundary_world_height = sprite.world_height;
+        if (boundary_world_width <= 0.0f || boundary_world_height <= 0.0f) {
+            return;
+        }
         const float half_width = boundary_world_width * 0.5f;
         const float height = boundary_world_height;
 

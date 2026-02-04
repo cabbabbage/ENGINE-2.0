@@ -3,6 +3,7 @@
 #include "world/world_grid.hpp"
 #include "asset/asset_library.hpp"
 #include "asset/asset_info.hpp"
+#include "render/scaling_logic.hpp"
 #include "asset/animation.hpp"
 #include "core/AssetsManager.hpp"
 #include "map_generation/room.hpp"
@@ -26,6 +27,7 @@ constexpr float kMaxVerticalOffset = 300.0f;
 constexpr float kMinRandomJitter = 0.0f;
 constexpr float kMaxRandomJitter = 500.0f;
 constexpr float kDefaultAnimationFrameMs = 1000.0f / 24.0f;
+constexpr long long kMaxBoundaryCells = 250000;
 
 inline std::uint64_t mix_uint64(std::uint64_t seed, std::uint64_t value) {
     seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
@@ -174,6 +176,77 @@ inline world::GridPoint::RegionKind classify_region_at(const std::vector<Room*>&
     }
     return world::GridPoint::RegionKind::Boundary;
 }
+
+inline float make_positive_scale(float value, float fallback = 1.0f) {
+    if (std::isfinite(value) && value > 0.0f) {
+        return static_cast<float>(value);
+    }
+    return fallback;
+}
+
+inline SDL_Point rounded_world_point(const SDL_FPoint& point) {
+    return SDL_Point{
+        static_cast<int>(std::lround(point.x)),
+        static_cast<int>(std::lround(point.y))
+    };
+}
+
+float compute_boundary_asset_scale(DynamicBoundarySystem::BoundaryCandidate& candidate,
+                                   const WarpedScreenGrid& cam,
+                                   const Assets* assets,
+                                   const SDL_FPoint& world_pos,
+                                   int world_z) {
+    if (!candidate.info) {
+        return 1.0f;
+    }
+
+    const SDL_Point world_pt = rounded_world_point(world_pos);
+    const WarpedScreenGrid::RenderEffects effects =
+        cam.compute_render_effects(world_pt, 0.0f, 0.0f, WarpedScreenGrid::RenderSmoothingKey{}, world_z);
+
+    const float perspective_scale = make_positive_scale(effects.distance_scale);
+    const float base_scale = (std::isfinite(candidate.info->scale_factor) && candidate.info->scale_factor > 0.0f)
+        ? candidate.info->scale_factor
+        : 1.0f;
+    const float current_scale = base_scale * perspective_scale;
+
+    float camera_scale = 1.0f;
+    if (assets) {
+        camera_scale = static_cast<float>(std::max(0.0001, assets->getView().get_scale()));
+        if (!std::isfinite(camera_scale) || camera_scale <= 0.0f) {
+            camera_scale = 1.0f;
+        }
+    }
+
+    float desired_variant_scale = current_scale / camera_scale;
+    if (!std::isfinite(desired_variant_scale) || desired_variant_scale <= 0.0f) {
+        desired_variant_scale = current_scale;
+    }
+
+    const auto& steps = (!candidate.info->scale_variants.empty())
+        ? candidate.info->scale_variants
+        : render_pipeline::ScalingLogic::DefaultScaleSteps();
+
+    auto selection = render_pipeline::ScalingLogic::Choose(desired_variant_scale,
+                                                           steps,
+                                                           candidate.hysteresis_state,
+                                                           current_scale,
+                                                           render_pipeline::ScalingLogic::HysteresisOptions{});
+    candidate.hysteresis_state.last_index = selection.index;
+    candidate.hysteresis_state.min_scale = selection.hysteresis_min;
+    candidate.hysteresis_state.max_scale = selection.hysteresis_max;
+
+    float stored_scale = selection.stored_scale;
+    if (!std::isfinite(stored_scale) || stored_scale <= 0.0f) {
+        stored_scale = 1.0f;
+    }
+
+    float remainder_scale = current_scale / stored_scale;
+    if (!std::isfinite(remainder_scale) || remainder_scale <= 0.0f) {
+        remainder_scale = 1.0f;
+    }
+    return remainder_scale;
+}
 }
 
 DynamicBoundarySystem::DynamicBoundarySystem() = default;
@@ -225,6 +298,11 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         return;
     }
 
+    if (warning_revision_ != config_revision_) {
+        warning_revision_ = config_revision_;
+        dense_type_warnings_.clear();
+    }
+
     SDL_FPoint view_center = cam.get_view_center_f();
     double view_height = cam.view_height_world();
     const float margin = static_cast<float>(view_height) * 0.5f;
@@ -240,25 +318,61 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     const float max_random_jitter = std::clamp(config().max_random_jitter, kMinRandomJitter, kMaxRandomJitter);
     const std::vector<ExclusionArea> exclusion_areas = collect_exclusion_areas(assets);
     const std::vector<Room*>& rooms = assets ? assets->rooms() : std::vector<Room*>{};
+    const int max_resolution_layer = std::max(0, grid.max_resolution_layers() - 1);
 
     for (size_t type_idx = 0; type_idx < boundary_types_.size(); ++type_idx) {
-        const BoundaryType& btype = boundary_types_[type_idx];
-        const int resolution_layer = std::clamp(btype.grid_resolution, 0, grid.max_resolution_layers());
+        BoundaryType& btype = boundary_types_[type_idx];
+        const int resolution_layer = std::clamp(btype.grid_resolution, 0, max_resolution_layer);
         const int base_spacing = grid.grid_spacing_for_layer(resolution_layer);
         if (base_spacing <= 0) {
             continue;
         }
-        const int grid_spacing = scaled_spacing(base_spacing, spacing_multiplier);
+        int grid_spacing = scaled_spacing(base_spacing, spacing_multiplier);
+        if (grid_spacing <= 0) {
+            continue;
+        }
 
         const float min_x = visible_bounds.x;
         const float max_x = visible_bounds.x + visible_bounds.w;
         const float min_y = visible_bounds.y;
         const float max_y = visible_bounds.y + visible_bounds.h;
 
-        const int start_idx_x = static_cast<int>(std::floor((min_x - static_cast<float>(grid_origin.world_x())) / grid_spacing));
-        const int end_idx_x = static_cast<int>(std::ceil((max_x - static_cast<float>(grid_origin.world_x())) / grid_spacing));
-        const int start_idx_y = static_cast<int>(std::floor((min_y - static_cast<float>(grid_origin.world_y())) / grid_spacing));
-        const int end_idx_y = static_cast<int>(std::ceil((max_y - static_cast<float>(grid_origin.world_y())) / grid_spacing));
+        auto compute_span = [&](int spacing, int& start_x, int& end_x, int& start_y, int& end_y) {
+            start_x = static_cast<int>(std::floor((min_x - static_cast<float>(grid_origin.world_x())) / spacing));
+            end_x = static_cast<int>(std::ceil((max_x - static_cast<float>(grid_origin.world_x())) / spacing));
+            start_y = static_cast<int>(std::floor((min_y - static_cast<float>(grid_origin.world_y())) / spacing));
+            end_y = static_cast<int>(std::ceil((max_y - static_cast<float>(grid_origin.world_y())) / spacing));
+        };
+
+        int start_idx_x = 0;
+        int end_idx_x = 0;
+        int start_idx_y = 0;
+        int end_idx_y = 0;
+        compute_span(grid_spacing, start_idx_x, end_idx_x, start_idx_y, end_idx_y);
+        const long long count_x = static_cast<long long>(end_idx_x) - static_cast<long long>(start_idx_x) + 1;
+        const long long count_y = static_cast<long long>(end_idx_y) - static_cast<long long>(start_idx_y) + 1;
+        long long total_cells = (count_x > 0 && count_y > 0) ? count_x * count_y : 0;
+        if (total_cells > kMaxBoundaryCells) {
+            const double scale = std::sqrt(static_cast<double>(total_cells) / static_cast<double>(kMaxBoundaryCells));
+            const int spacing_scale = std::max(1, static_cast<int>(std::ceil(scale)));
+            const int adjusted_spacing = grid_spacing * spacing_scale;
+            if (adjusted_spacing > grid_spacing) {
+                grid_spacing = adjusted_spacing;
+                compute_span(grid_spacing, start_idx_x, end_idx_x, start_idx_y, end_idx_y);
+                const long long new_count_x = static_cast<long long>(end_idx_x) - static_cast<long long>(start_idx_x) + 1;
+                const long long new_count_y = static_cast<long long>(end_idx_y) - static_cast<long long>(start_idx_y) + 1;
+                total_cells = (new_count_x > 0 && new_count_y > 0) ? new_count_x * new_count_y : 0;
+            }
+        }
+        if (total_cells > kMaxBoundaryCells) {
+            if (dense_type_warnings_.insert(static_cast<int>(type_idx)).second) {
+                vibble::log::warn(std::string{"[DynamicBoundarySystem] Skipping dense boundary type '"} +
+                                  btype.display_name + "' (grid_resolution=" +
+                                  std::to_string(btype.grid_resolution) +
+                                  ") to avoid excessive cells.");
+            }
+            continue;
+        }
 
         const int world_z = 0;
 
@@ -271,7 +385,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 if (candidate_idx < 0 || candidate_idx >= static_cast<int>(btype.candidates.size())) {
                     continue;
                 }
-                const BoundaryCandidate& candidate = btype.candidates[candidate_idx];
+                BoundaryCandidate& candidate = btype.candidates[candidate_idx];
                 if (candidate.is_null || candidate.frames.empty()) {
                     continue;
                 }
@@ -341,7 +455,6 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 sprite.texture = texture;
                 sprite.world_pos = world_pos;
                 sprite.screen_pos = screen_pos;
-                sprite.scale = static_cast<float>(grid_spacing) / static_cast<float>(std::max(1, base_spacing));
                 sprite.world_z = world_z;
                 sprite.texture_w = active_frame.width;
                 sprite.texture_h = active_frame.height;
@@ -352,6 +465,18 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                         sprite.texture_w = texture_w;
                         sprite.texture_h = texture_h;
                     }
+                }
+                if (sprite.texture_w <= 0 || sprite.texture_h <= 0) {
+                    continue;
+                }
+                const float candidate_asset_scale = compute_boundary_asset_scale(candidate, cam, assets, world_pos, world_z);
+                const float config_scale = base_size_scale();
+                sprite.asset_scale = candidate_asset_scale;
+                sprite.world_width = static_cast<float>(sprite.texture_w) * candidate_asset_scale * config_scale;
+                sprite.world_height = static_cast<float>(sprite.texture_h) * candidate_asset_scale * config_scale;
+                if (!std::isfinite(sprite.world_width) || sprite.world_width <= 0.0f ||
+                    !std::isfinite(sprite.world_height) || sprite.world_height <= 0.0f) {
+                    continue;
                 }
                 sprite.boundary_type_index = static_cast<int>(type_idx);
                 sprite.candidate_index = candidate_idx;
@@ -454,6 +579,7 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
         candidate.is_null = true;
         return;
     }
+    candidate.info = info;
 
     std::string animation_id = !info->start_animation.empty() ? info->start_animation : "default";
     auto anim_it = info->animations.find(animation_id);

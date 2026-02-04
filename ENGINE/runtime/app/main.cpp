@@ -707,7 +707,7 @@ void run(SDL_Window* window,
     std::shared_ptr<AssetLibrary> shared_asset_library =
         std::make_shared<AssetLibrary>(false);
     vibble::log::info("[Main] Preparing asset metadata cache...");
-    shared_asset_library->load_all_from_SRC();
+                shared_asset_library->load_all_from_resources();
     { SDL_Event ev; while (SDL_PollEvent(&ev)) {} }
     vibble::log::info(std::string("[Main] Asset metadata cache ready for ") + std::to_string(shared_asset_library->all().size()) + " asset(s).");
     vibble::log::info("[Main] Loading cached asset resources...");
@@ -787,7 +787,7 @@ void run(SDL_Window* window,
             delete rebuilder;
             vibble::log::info("[Main] Asset cache rebuild complete.");
             vibble::log::info("[Main] Refreshing shared asset library after cache rebuild...");
-            shared_asset_library->load_all_from_SRC();
+            shared_asset_library->load_all_from_resources();
             shared_asset_library->loadAllAnimations(renderer);
             vibble::log::info("[Main] Shared asset library refreshed.");
         }

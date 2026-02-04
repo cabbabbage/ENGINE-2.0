@@ -10,7 +10,7 @@ class AssetLibrary {
 
 	public:
     explicit AssetLibrary(bool auto_load = true);
-    void load_all_from_SRC();
+    void load_all_from_resources();
     void add_asset(const std::string& name, const nlohmann::json& metadata);
     std::shared_ptr<AssetInfo> get(const std::string& name) const;
     const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>& all() const;

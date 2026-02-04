@@ -104,10 +104,10 @@ std::vector<std::filesystem::path> dataset_roots() {
     std::unordered_set<std::string> seen;
     std::vector<std::filesystem::path> candidates;
 #ifdef PROJECT_ROOT
-    candidates.emplace_back(std::filesystem::path(PROJECT_ROOT) / "SRC");
+    candidates.emplace_back(std::filesystem::path(PROJECT_ROOT) / "resources");
     candidates.emplace_back(std::filesystem::path(PROJECT_ROOT) / "content");
 #endif
-    candidates.emplace_back("SRC");
+    candidates.emplace_back("resources");
     candidates.emplace_back("content");
 
     for (const auto& candidate : candidates) {

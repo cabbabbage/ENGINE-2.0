@@ -92,8 +92,8 @@ bool is_inside_assets_root(const fs::path& path) {
     return path_has_prefix(path, asset_paths::assets_root_path());
 }
 
-bool is_inside_src_root(const fs::path& path) {
-    return path_has_prefix(path, fs::path("SRC"));
+bool is_inside_resources_root(const fs::path& path) {
+    return path_has_prefix(path, fs::path("resources"));
 }
 
 void copy_directory_contents(const fs::path& source, const fs::path& destination, const std::string& asset_name) {
@@ -136,7 +136,7 @@ fs::path ensure_assets_storage(const fs::path& candidate, const AssetInfo& info)
         return normalized_candidate;
     }
 
-    if (!normalized_candidate.empty() && !is_inside_src_root(normalized_candidate)) {
+    if (!normalized_candidate.empty() && !is_inside_resources_root(normalized_candidate)) {
         return normalized_candidate;
     }
 

@@ -32,7 +32,7 @@ fs::path LoadingScreen::project_root() const {
 }
 
 fs::path LoadingScreen::loading_content_root() const {
-    return project_root() / "SRC" / "LOADING CONTENT";
+    return project_root() / "resources" / "LOADING CONTENT";
 }
 
 std::vector<fs::path> LoadingScreen::list_images_in(const fs::path& dir, bool recursive) const {

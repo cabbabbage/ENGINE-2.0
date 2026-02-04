@@ -18,7 +18,7 @@
 namespace {
 
 std::filesystem::path assets_root_path() {
-        return (std::filesystem::path("SRC") / "assets").lexically_normal();
+        return (std::filesystem::path("resources") / "assets").lexically_normal();
 }
 
 struct AnimationFolderInfo {
@@ -276,11 +276,11 @@ std::vector<std::string> discover_asset_directories(const std::filesystem::path&
 
 AssetLibrary::AssetLibrary(bool auto_load) {
         if (auto_load) {
-                load_all_from_SRC();
+                load_all_from_resources();
         }
 }
 
-void AssetLibrary::load_all_from_SRC() {
+void AssetLibrary::load_all_from_resources() {
         info_by_name_.clear();
         animations_fully_cached_ = false;
 
@@ -522,6 +522,6 @@ void AssetLibrary::loadAnimationsFor(SDL_Renderer* renderer, const std::unordere
 
 bool AssetLibrary::remove(const std::string& name) {
     const bool removed = info_by_name_.erase(name) > 0;
-    load_all_from_SRC();
+    load_all_from_resources();
     return removed;
 }

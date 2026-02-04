@@ -1776,7 +1776,7 @@ bool AssetInfoUI::duplicate_current_asset(const std::string& raw_name) {
         manifest_store_->flush();
 
         if (assets_) {
-            assets_->library().load_all_from_SRC();
+            assets_->library().load_all_from_resources();
             if (SDL_Renderer* renderer = assets_->renderer()) {
                 assets_->library().ensureAllAnimationsLoaded(renderer);
             }

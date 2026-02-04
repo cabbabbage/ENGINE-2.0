@@ -6,7 +6,7 @@
 namespace devmode::asset_paths {
 
 inline std::filesystem::path assets_root_path() {
-    static const std::filesystem::path root = (std::filesystem::path("SRC") / "assets").lexically_normal();
+    static const std::filesystem::path root = (std::filesystem::path("resources") / "assets").lexically_normal();
     return root;
 }
 
@@ -22,7 +22,7 @@ inline bool is_protected_asset_root(const std::filesystem::path& path) {
         return true;
     }
     const auto normalized = path.lexically_normal();
-    static const auto src_root = std::filesystem::path("SRC").lexically_normal();
+    static const auto src_root = std::filesystem::path("resources").lexically_normal();
     static const auto assets_root = assets_root_path();
     return normalized == src_root || normalized == assets_root;
 }

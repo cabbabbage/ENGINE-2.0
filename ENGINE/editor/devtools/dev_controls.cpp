@@ -3270,7 +3270,7 @@ bool DevControls::boundary_assets_visible() const {
     if (!enabled_) {
         return true;
     }
-    return other_settings_.is_type_filter_enabled(asset_types::boundary);
+    return other_settings_.is_type_filter_enabled(std::string(asset_types::boundary));
 }
 
 bool DevControls::persist_map_info_to_disk() {

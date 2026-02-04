@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "shared/formatting.hpp"
+#include "devtools/shared/shared/formatting.hpp"
 #include "widgets.hpp"
 
 class FloatSliderWidget : public Widget {

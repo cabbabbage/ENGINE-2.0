@@ -180,11 +180,17 @@ endif()
 # Include dirs
 # ------------------------------------------
 target_include_directories(engine
-    PRIVATE
-        ${CMAKE_SOURCE_DIR}/ENGINE/runtime
-        ${CMAKE_SOURCE_DIR}/ENGINE/editor
-        ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
-)
+      PRIVATE
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/ui
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/core
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/audio
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn
+          ${CMAKE_SOURCE_DIR}/ENGINE/editor
+          ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
+          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
+  )
 
 target_compile_definitions(engine PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
 
@@ -273,12 +279,13 @@ add_executable(engine_tests
   )
 
 target_include_directories(engine_tests
-    PRIVATE
-        ${CMAKE_SOURCE_DIR}/ENGINE/runtime
-        ${CMAKE_SOURCE_DIR}/ENGINE/editor
-        ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
-        ${CMAKE_SOURCE_DIR}/external
-)
+      PRIVATE
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+          ${CMAKE_SOURCE_DIR}/ENGINE/editor
+          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
+          ${CMAKE_SOURCE_DIR}/external
+  )
 
 target_compile_definitions(engine_tests PRIVATE
     DEV_MODE_DISABLE_JSON_DEBOUNCE=1
@@ -329,12 +336,13 @@ add_executable(engine_world_tests
 )
 
 target_include_directories(engine_world_tests
-    PRIVATE
-        ${TESTS_SOURCE_DIR}/stubs
-        ${CMAKE_SOURCE_DIR}/ENGINE/runtime
-        ${CMAKE_SOURCE_DIR}/ENGINE/editor
-        ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
-        ${CMAKE_SOURCE_DIR}/external
+      PRIVATE
+          ${TESTS_SOURCE_DIR}/stubs
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+          ${CMAKE_SOURCE_DIR}/ENGINE/editor
+          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
+          ${CMAKE_SOURCE_DIR}/external
 )
 
 target_compile_definitions(engine_world_tests PRIVATE

@@ -22,7 +22,7 @@
 #include "devtools/draw_utils.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/float_slider_widget.hpp"
-#include "devtools/shared/formatting.hpp"
+#include "devtools/shared/shared/formatting.hpp"
 #include "devtools/widgets.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/input.hpp"

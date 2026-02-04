@@ -13,7 +13,7 @@
 #include <utility>
 
 #include "dm_styles.hpp"
-#include "shared/formatting.hpp"
+#include "devtools/shared/shared/formatting.hpp"
 
 struct DMWidgetTooltipState {
     bool enabled = false;

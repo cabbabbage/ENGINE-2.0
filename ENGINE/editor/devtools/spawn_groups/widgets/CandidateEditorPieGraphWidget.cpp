@@ -16,7 +16,7 @@
 #include "../../dm_icons.hpp"
 #include "../../dm_styles.hpp"
 #include "../../draw_utils.hpp"
-#include "../../../utils/input.hpp"
+#include "utils/input.hpp"
 
 namespace {
 constexpr double kPi = 3.14159265358979323846;

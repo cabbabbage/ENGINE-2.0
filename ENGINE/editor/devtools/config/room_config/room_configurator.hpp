@@ -15,7 +15,7 @@ namespace devmode::core { class ManifestStore; }
 
 #include "SlidingWindowContainer.hpp"
 #include "widgets.hpp"
-#include "../spawn_group_config/SpawnGroupConfig.hpp"
+#include "../../spawn_groups/SpawnGroupConfig.hpp"
 
 class Input;
 class Room;

@@ -2203,6 +2203,14 @@ void Assets::rebuild_active_from_screen_grid() {
             });
         }
     }
+    // Depth-sort traversal so rendering can interleave with fog/boundary sprites in a single pass.
+    std::stable_sort(
+        active_traversal_.begin(),
+        active_traversal_.end(),
+        [](const ActiveTraversalEntry& a, const ActiveTraversalEntry& b) {
+            return a.depth_from_anchor > b.depth_from_anchor;
+        });
+
     // Deactivate assets no longer visible this frame.
     for (Asset* asset : previous_active) {
         if (!asset) {

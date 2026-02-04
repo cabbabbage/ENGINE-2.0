@@ -19,7 +19,7 @@
             "render_dark_mask": false,
             "types": {
                 "area": false,
-                "boundary": false,
+                "boundary": true,
                 "enemy": false,
                 "npc": false,
                 "object": true,

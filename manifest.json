@@ -1,4 +1,6 @@
-{  "image_effects": {
+{
+  "assets": {},
+  "image_effects": {
     "background": {
       "blur": 1.950000004768376,
       "brightness": -0.899999904632568,

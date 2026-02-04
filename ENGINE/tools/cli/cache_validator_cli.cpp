@@ -1,11 +1,12 @@
 // cache_validator_cli.cpp
 //
-// CLI tool to validate cache integrity and mark missing frames for rebuild
+// CLI tool to validate cache integrity and mark missing frames for rebuild queue
 // Replaces cache_validator.py
 // Checks that all expected cache files exist for each animation
 
+#include "asset_metadata.hpp"
 #include "image_cache_generator.hpp"
-#include "cache_helper.hpp"
+#include "rebuild_queue.hpp"
 
 #include <iostream>
 #include <string>
@@ -19,6 +20,7 @@
 
 namespace fs = std::filesystem;
 using json = nlohmann::ordered_json;
+using namespace imgcache;
 
 constexpr int ANIMATION_SCALE_PCTS[] = {75, 50, 25, 10};
 constexpr const char* VARIANTS[] = {"normal", "foreground", "background"};
@@ -65,14 +67,8 @@ static inline bool file_missing_or_older(const fs::path& p,
     return sz < 32; // heuristically treat tiny files as invalid
 }
 
-static inline int manifest_frame_count(const json& anim) {
-    if (anim.is_object() && anim.contains("frames") && anim["frames"].is_array()) {
-        return static_cast<int>(anim["frames"].size());
-    }
-    if (anim.is_object() && anim.contains("number_of_frames") && anim["number_of_frames"].is_number_integer()) {
-        return std::max(0, anim["number_of_frames"].get<int>());
-    }
-    return 0;
+static inline int source_frame_count(const std::vector<fs::path>& frames) {
+    return static_cast<int>(frames.size());
 }
 
 static inline float normalize_speed_multiplier(float raw) {
@@ -101,83 +97,6 @@ static inline float get_speed_multiplier(const json& anim) {
     return normalize_speed_multiplier(raw);
 }
 
-static std::vector<fs::path> enumerate_source_frames(const fs::path& anim_dir) {
-    std::vector<fs::path> frames;
-    int idx = 0;
-    for (;;) {
-        fs::path candidate = anim_dir / (std::to_string(idx) + ".png");
-        std::error_code ec;
-        if (!fs::exists(candidate, ec) || ec) break;
-        frames.push_back(candidate);
-        ++idx;
-    }
-    return frames;
-}
-
-// Helper to navigate animations (handles both nested and flat structures)
-json* find_animations_object(json& manifest, const std::string& asset_name) {
-    if (!manifest.contains("assets") || !manifest["assets"].is_object()) {
-        return nullptr;
-    }
-
-    auto& assets = manifest["assets"];
-    if (!assets.contains(asset_name) || !assets[asset_name].is_object()) {
-        return nullptr;
-    }
-
-    auto& asset = assets[asset_name];
-    if (!asset.contains("animations") || !asset["animations"].is_object()) {
-        return nullptr;
-    }
-
-    auto& animations = asset["animations"];
-
-    // Check for nested structure: animations["animations"]
-    if (animations.contains("animations") && animations["animations"].is_object()) {
-        return &animations["animations"];
-    }
-
-    // Flat structure: animations itself
-    return &animations;
-}
-
-// Normalize frames array to match frame_count
-void normalize_frames(json& anim, int frame_count) {
-    if (!anim.is_object()) {
-        return;
-    }
-
-    if (frame_count < 0) {
-        frame_count = 0;
-    }
-
-    json frames;
-    if (anim.contains("frames") && anim["frames"].is_array()) {
-        frames = anim["frames"];
-    } else {
-        frames = json::array();
-    }
-
-    // Extend frames array if needed
-    while (static_cast<int>(frames.size()) < frame_count) {
-        json frame_obj = json::object();
-        frame_obj["needs_rebuild"] = false;
-        frames.push_back(frame_obj);
-    }
-
-    // Truncate if too many
-    if (static_cast<int>(frames.size()) > frame_count) {
-        json trimmed = json::array();
-        const int limit = std::max(0, frame_count);
-        for (int i = 0; i < limit && i < static_cast<int>(frames.size()); ++i) {
-            trimmed.push_back(frames[i]);
-        }
-        frames = std::move(trimmed);
-    }
-
-    anim["frames"] = frames;
-}
-
 // Check if any expected output is missing or older than baseline
 bool animation_output_missing_or_stale(const fs::path& anim_cache_root,
                                        int output_idx,
@@ -195,151 +114,27 @@ bool animation_output_missing_or_stale(const fs::path& anim_cache_root,
     return false;
 }
 
-// Mark all frames as needing rebuild
-bool mark_all_frames_missing(json& frames) {
-    bool changed = false;
-    if (!frames.is_array()) {
+// Mark all frames for rebuild in queue
+bool mark_all_frames(json& queue, const std::string& asset_name, const std::string& anim_name, int frame_count) {
+    json* anim_entry = FindAnimEntry(queue, asset_name, anim_name, true);
+    if (!anim_entry) {
         return false;
     }
-
-    for (auto& frame : frames) {
-        if (frame.is_object()) {
-            // Only mark if not already marked
-            bool already_marked = frame.contains("needs_rebuild") &&
-                                 frame["needs_rebuild"].is_boolean() &&
-                                 frame["needs_rebuild"].get<bool>();
-            if (!already_marked) {
-                frame["needs_rebuild"] = true;
-                changed = true;
-            }
-        }
-    }
-    return changed;
-}
-
-// Validate cache for a single animation
-bool validate_animation_cache(
-    const std::string& asset_name,
-    const std::string& anim_name,
-    json& anim_meta,
-    const json& asset_meta,
-    const fs::path& cache_root,
-    const fs::path& manifest_dir,
-    fs::file_time_type manifest_mtime
-) {
-    int frame_count = manifest_frame_count(anim_meta);
-
-    fs::path asset_src_dir = imgcache::ImageCacheGenerator::ResolveAssetSourceDir(
-        manifest_dir, manifest_dir, asset_name, nlohmann::json(asset_meta));
-
-    // Discover animation directory matching python rules
-    fs::path anim_src_dir = asset_src_dir;
-    auto discovered = imgcache::ImageCacheGenerator::DiscoverAnimations(asset_src_dir);
-    for (const auto& pair : discovered) {
-        if (pair.first == anim_name) {
-            anim_src_dir = pair.second;
-            break;
-        }
-    }
-    if (anim_name != "default" && anim_src_dir == asset_src_dir) {
-        fs::path candidate = asset_src_dir / anim_name;
-        if (fs::exists(candidate)) anim_src_dir = candidate;
-    }
-
-    std::vector<fs::path> source_frames = enumerate_source_frames(anim_src_dir);
-    if (!source_frames.empty()) {
-        frame_count = std::max(frame_count, static_cast<int>(source_frames.size()));
-    }
-
-    normalize_frames(anim_meta, frame_count);
-    if (!anim_meta.contains("frames") || !anim_meta["frames"].is_array() || frame_count <= 0) {
-        return false;
-    }
-
-    auto& frames = anim_meta["frames"];
-
-    fs::path anim_cache_root = cache_root / asset_name / "animations" / anim_name;
-    if (!fs::is_directory(anim_cache_root)) {
-        return mark_all_frames_missing(frames);
-    }
-
-    float speed_multiplier = get_speed_multiplier(anim_meta);
-    std::vector<int> frame_sequence = imgcache::ImageCacheGenerator::BuildSpeedFrameSequence(frame_count, speed_multiplier);
-    if (frame_sequence.empty()) return false;
-
-    constexpr auto kTimestampSlack = std::chrono::seconds(2);
-
-    bool changed = false;
-    for (size_t output_idx = 0; output_idx < frame_sequence.size(); ++output_idx) {
-        int source_idx = frame_sequence[output_idx];
-        if (source_idx < 0 || source_idx >= static_cast<int>(frames.size())) continue;
-
-        auto& frame_entry = frames[source_idx];
-        if (!frame_entry.is_object()) frame_entry = json::object();
-
-        bool already_marked = frame_entry.contains("needs_rebuild") &&
-                              frame_entry["needs_rebuild"].is_boolean() &&
-                              frame_entry["needs_rebuild"].get<bool>();
-        if (already_marked) continue;
-
-        fs::file_time_type baseline = manifest_mtime;
-        if (source_idx >= 0 && source_idx < static_cast<int>(source_frames.size())) {
-            baseline = std::max(baseline, safe_last_write_time(source_frames[source_idx]));
-        }
-
-        if (animation_output_missing_or_stale(anim_cache_root,
-                                              static_cast<int>(output_idx),
-                                              baseline,
-                                              kTimestampSlack)) {
-            frame_entry["needs_rebuild"] = true;
-            changed = true;
-        }
-    }
-
-    return changed;
-}
-
-// Iterate all animations and validate
-template<typename Func>
-void for_each_animation(json& manifest, Func callback) {
-    if (!manifest.contains("assets") || !manifest["assets"].is_object()) {
-        return;
-    }
-
-    auto& assets = manifest["assets"];
-    for (auto& [asset_name, asset_meta] : assets.items()) {
-        if (!asset_meta.is_object() || !asset_meta.contains("animations")) {
-            continue;
-        }
-
-        auto& animations = asset_meta["animations"];
-        if (!animations.is_object()) {
-            continue;
-        }
-
-        // Handle nested structure: animations["animations"]
-        json* anims_obj = &animations;
-        if (animations.contains("animations") && animations["animations"].is_object()) {
-            anims_obj = &animations["animations"];
-        }
-
-        for (auto& [anim_name, anim_meta] : anims_obj->items()) {
-            if (anim_meta.is_object()) {
-                callback(asset_name, asset_meta, anim_name, anim_meta);
-            }
-        }
-    }
+    MarkAllFrames(*anim_entry, frame_count, true);
+    return true;
 }
 
 void print_usage(const char* prog_name) {
-    std::cout << "Usage: " << prog_name << " [--manifest <path>]\n\n";
+    std::cout << "Usage: " << prog_name << " [--manifest <path>] [--cache-root <path>]\n\n";
     std::cout << "OPTIONS:\n";
-    std::cout << "  --manifest <path>    Path to manifest.json (default: ../manifest.json)\n\n";
+    std::cout << "  --manifest <path>    Path to manifest.json (default: ../manifest.json)\n";
+    std::cout << "  --cache-root <path>  Path to cache root (default: <repo>/cache)\n\n";
     std::cout << "Validates cache integrity and marks frames with missing cache files for rebuild.\n";
 }
 
 int main(int argc, char** argv) {
     fs::path manifest_path;
+    fs::path cache_root_override;
 
     // Parse arguments
     for (int i = 1; i < argc; ++i) {
@@ -350,6 +145,13 @@ int main(int argc, char** argv) {
                 return 2;
             }
             manifest_path = argv[++i];
+        }
+        else if (arg == "--cache-root") {
+            if (i + 1 >= argc) {
+                std::cerr << "Error: --cache-root requires a path argument\n";
+                return 2;
+            }
+            cache_root_override = argv[++i];
         }
         else if (arg == "--help" || arg == "-h") {
             print_usage(argv[0]);
@@ -362,54 +164,139 @@ int main(int argc, char** argv) {
         }
     }
 
-    // Default manifest path if not specified
+    fs::path repo_root;
+    fs::path manifest_dir;
+    fs::file_time_type manifest_mtime = fs::file_time_type::min();
+
     auto resolved = resolve_manifest(manifest_path);
-    if (!resolved) {
-        std::cerr << "Error: could not locate manifest.json (searched upward from CWD). Use --manifest <path>.\n";
+    if (resolved) {
+        manifest_path = *resolved;
+        manifest_dir = manifest_path.parent_path();
+        repo_root = manifest_dir;
+        manifest_mtime = safe_last_write_time(manifest_path);
+        std::cout << "Using manifest: " << manifest_path.string() << "\n";
+    } else if (cache_root_override.empty()) {
+        std::cerr << "Error: could not locate manifest.json (searched upward from CWD). Use --manifest <path> or --cache-root.\n";
         return 3;
     }
-    manifest_path = *resolved;
-    fs::path manifest_dir = manifest_path.parent_path();
-    fs::file_time_type manifest_mtime = safe_last_write_time(manifest_path);
+
+    if (repo_root.empty() && !cache_root_override.empty()) {
+        repo_root = cache_root_override.parent_path();
+        manifest_dir = repo_root;
+    }
 
     imgcache::GeneratorOptions generator_opts;
-    generator_opts.manifest_path = manifest_path;
-    fs::path cache_root = imgcache::ImageCacheGenerator::ResolveCacheRoot(manifest_dir, generator_opts);
-
-    // Load manifest
-    std::cout << "Loading manifest: " << manifest_path.string() << "\n";
-    auto load_result = imgcache::CacheHelper::LoadJsonFile(manifest_path.string());
-    if (!load_result.ok) {
-        std::cerr << "Error: failed to load manifest: " << load_result.error << "\n";
-        return 3;
+    if (!manifest_path.empty()) {
+        generator_opts.manifest_path = manifest_path;
     }
 
-    json manifest = load_result.value;
+    fs::path cache_root = cache_root_override.empty()
+                              ? imgcache::ImageCacheGenerator::ResolveCacheRoot(repo_root, generator_opts)
+                              : cache_root_override;
 
     std::cout << "Cache root: " << cache_root.string() << "\n";
 
-    // Validate cache
+    const fs::path rebuild_queue_path = ResolveRebuildQueuePath(cache_root);
+    json rebuild_queue = LoadRebuildQueue(rebuild_queue_path);
     bool changed = false;
-    for_each_animation(manifest, [&](const std::string& asset_name,
-                                     const json& asset_meta,
-                                     const std::string& anim_name,
-                                     json& anim_meta) {
-        if (validate_animation_cache(asset_name, anim_name, anim_meta, asset_meta, cache_root, manifest_dir, manifest_mtime)) {
-            changed = true;
-        }
-    });
 
-    // Write manifest if changed
+    const fs::path assets_root = repo_root / "resources" / "assets";
+    std::vector<std::string> asset_names = DiscoverAssetNames(assets_root);
+    if (asset_names.empty() && rebuild_queue.contains("assets") && rebuild_queue["assets"].is_object()) {
+        for (auto it = rebuild_queue["assets"].begin(); it != rebuild_queue["assets"].end(); ++it) {
+            asset_names.push_back(it.key());
+        }
+    }
+
+    for (const auto& asset_name : asset_names) {
+        imgcache::AssetRecord asset = BuildAssetRecord(manifest_dir, repo_root, cache_root, asset_name);
+        const json* anim_payloads = AnimationsObject(asset.meta);
+        const fs::path bundle_path = cache_root / asset_name / "bundle.bin";
+        const fs::file_time_type bundle_mtime = safe_last_write_time(bundle_path);
+
+        for (const auto& anim_name : asset.anim_names) {
+            json anim_meta = json::object();
+            if (anim_payloads && anim_payloads->contains(anim_name) && (*anim_payloads)[anim_name].is_object()) {
+                anim_meta = (*anim_payloads)[anim_name];
+            }
+
+            const fs::path anim_dir = ResolveAnimDir(asset.source_dir, anim_name, anim_meta, asset.discovered_anims);
+            std::vector<fs::path> source_frames = imgcache::ImageCacheGenerator::EnumerateSourceFrames(anim_dir);
+            const int frame_count = source_frame_count(source_frames);
+            if (frame_count <= 0) {
+                continue;
+            }
+
+            fs::path anim_cache_root = cache_root / asset_name / "animations" / anim_name;
+            if (!fs::is_directory(anim_cache_root)) {
+                if (mark_all_frames(rebuild_queue, asset_name, anim_name, frame_count)) {
+                    changed = true;
+                }
+                continue;
+            }
+
+            json* anim_entry = FindAnimEntry(rebuild_queue, asset_name, anim_name, true);
+            if (!anim_entry) {
+                continue;
+            }
+            EnsureFramesArray(*anim_entry, frame_count);
+            auto& frames = (*anim_entry)["frames"];
+
+            const float speed_multiplier = get_speed_multiplier(anim_meta);
+            std::vector<int> frame_sequence = imgcache::ImageCacheGenerator::BuildSpeedFrameSequence(frame_count, speed_multiplier);
+            if (frame_sequence.empty()) {
+                continue;
+            }
+
+            constexpr auto kTimestampSlack = std::chrono::seconds(2);
+            for (size_t output_idx = 0; output_idx < frame_sequence.size(); ++output_idx) {
+                const int source_idx = frame_sequence[output_idx];
+                if (source_idx < 0 || source_idx >= frame_count) {
+                    continue;
+                }
+
+                auto& frame_entry = frames[source_idx];
+                bool already_marked = false;
+                if (frame_entry.is_boolean()) {
+                    already_marked = frame_entry.get<bool>();
+                } else if (frame_entry.is_object() && frame_entry.contains("needs_rebuild") &&
+                           frame_entry["needs_rebuild"].is_boolean()) {
+                    already_marked = frame_entry["needs_rebuild"].get<bool>();
+                }
+                if (already_marked) {
+                    continue;
+                }
+
+                fs::file_time_type baseline = manifest_mtime;
+                if (bundle_mtime > baseline) {
+                    baseline = bundle_mtime;
+                }
+                if (source_idx >= 0 && source_idx < static_cast<int>(source_frames.size())) {
+                    baseline = std::max(baseline, safe_last_write_time(source_frames[source_idx]));
+                }
+
+                if (animation_output_missing_or_stale(anim_cache_root,
+                                                      static_cast<int>(output_idx),
+                                                      baseline,
+                                                      kTimestampSlack)) {
+                    if (!frame_entry.is_object()) {
+                        frame_entry = json::object();
+                    }
+                    frame_entry["needs_rebuild"] = true;
+                    changed = true;
+                }
+            }
+        }
+    }
+
     if (changed) {
-        std::cout << "Detected missing cache files; marking entries for rebuild.\n";
-        auto write_result = imgcache::CacheHelper::WriteJsonFile(manifest_path.string(), manifest);
-        if (!write_result.ok) {
-            std::cerr << "Error: failed to write manifest: " << write_result.error << "\n";
+        std::cout << "Detected missing cache files; updating rebuild queue.\n";
+        if (!SaveRebuildQueue(rebuild_queue_path, rebuild_queue)) {
+            std::cerr << "Error: failed to write rebuild queue: " << rebuild_queue_path.string() << "\n";
             return 3;
         }
-        std::cout << "Manifest updated successfully.\n";
-    }
-    else {
+        std::cout << "Rebuild queue updated successfully.\n";
+    } else {
         std::cout << "Cache validation passed; no missing files detected.\n";
     }
 

@@ -97,7 +97,7 @@ void RebuildQueueCoordinator::request_frame(const std::string& asset_name,
 }
 
 bool RebuildQueueCoordinator::has_pending_asset_work() const {
-    return manifest_has_needs_rebuild();
+    return queue_has_needs_rebuild();
 }
 
 bool RebuildQueueCoordinator::run_asset_tool(const std::string& command_prefix) const {
@@ -109,19 +109,19 @@ bool RebuildQueueCoordinator::run_asset_tool(const std::string& command_prefix) 
 
 void RebuildQueueCoordinator::mark_all_frames_for_rebuild() const {
     const fs::path tool = tool_path(repo_root_, "set_rebuild_cli");
-    run_cpp_tool(tool, {"all", "--manifest", manifest_path_.string()}, "");
+    run_cpp_tool(tool, {"all", "--cache-root", cache_root_.string()}, "");
 }
 
 void RebuildQueueCoordinator::mark_asset_for_rebuild(const std::string& asset_name) const {
     const fs::path tool = tool_path(repo_root_, "set_rebuild_cli");
-    run_cpp_tool(tool, {"asset", asset_name, "--manifest", manifest_path_.string()}, "");
+    run_cpp_tool(tool, {"asset", asset_name, "--cache-root", cache_root_.string()}, "");
 }
 
 void RebuildQueueCoordinator::mark_animation_for_rebuild(const std::string& asset_name,
                                                          const std::string& animation) const {
     const fs::path tool = tool_path(repo_root_, "set_rebuild_cli");
     run_cpp_tool(tool,
-                 {"animation", asset_name, animation, "--manifest", manifest_path_.string()},
+                 {"animation", asset_name, animation, "--cache-root", cache_root_.string()},
                  "");
 }
 
@@ -130,27 +130,28 @@ void RebuildQueueCoordinator::mark_frame_for_rebuild(const std::string& asset_na
                                                      int frame_index) const {
     const fs::path tool = tool_path(repo_root_, "set_rebuild_cli");
     run_cpp_tool(tool,
-                 {"frame", asset_name, animation, std::to_string(frame_index), "--manifest", manifest_path_.string()},
+                 {"frame", asset_name, animation, std::to_string(frame_index), "--cache-root", cache_root_.string()},
                  "");
 }
 
 
-bool RebuildQueueCoordinator::manifest_has_needs_rebuild() const {
-    std::ifstream in(manifest_path_);
+bool RebuildQueueCoordinator::queue_has_needs_rebuild() const {
+    const fs::path queue_path = cache_root_ / "rebuild_queue.json";
+    std::ifstream in(queue_path);
     if (!in.good()) {
         return false;
     }
-    json manifest_json;
+    json queue;
     try {
-        in >> manifest_json;
+        in >> queue;
     } catch (...) {
         return false;
     }
-    auto assets_it = manifest_json.find("assets");
-    if (assets_it == manifest_json.end() || !assets_it->is_object()) {
+    if (!queue.is_object() || !queue.contains("assets") || !queue["assets"].is_object()) {
         return false;
     }
-    for (auto it = assets_it->begin(); it != assets_it->end(); ++it) {
+    const auto& assets = queue["assets"];
+    for (auto it = assets.begin(); it != assets.end(); ++it) {
         if (!it->is_object()) {
             continue;
         }
@@ -158,10 +159,7 @@ bool RebuildQueueCoordinator::manifest_has_needs_rebuild() const {
         if (anims_it == it->end() || !anims_it->is_object()) {
             continue;
         }
-        json anims = *anims_it;
-        if (anims.contains("animations") && anims["animations"].is_object()) {
-            anims = anims["animations"];
-        }
+        const json& anims = *anims_it;
         for (auto a_it = anims.begin(); a_it != anims.end(); ++a_it) {
             if (!a_it->is_object()) {
                 continue;
@@ -172,7 +170,11 @@ bool RebuildQueueCoordinator::manifest_has_needs_rebuild() const {
                 continue;
             }
             for (const auto& frame_entry : *frames_it) {
-                if (frame_entry.is_object()) {
+                if (frame_entry.is_boolean()) {
+                    if (frame_entry.get<bool>()) {
+                        return true;
+                    }
+                } else if (frame_entry.is_object()) {
                     auto flag = frame_entry.find("needs_rebuild");
                     if (flag != frame_entry.end() && flag->is_boolean() && flag->get<bool>()) {
                         return true;
@@ -277,7 +279,7 @@ bool RebuildQueueCoordinator::validate_manifest_cache(const std::string& command
         mark_all_frames_for_rebuild();
     }
     const fs::path tool = tool_path(repo_root_, "cache_validator_cli");
-    if (!run_cpp_tool(tool, {"--manifest", manifest_path_.string()}, command_prefix)) {
+    if (!run_cpp_tool(tool, {"--manifest", manifest_path_.string(), "--cache-root", cache_root_.string()}, command_prefix)) {
         vibble::log::warn("[RebuildQueue] Cache validation failed; queueing full asset rebuild.");
         mark_all_frames_for_rebuild();
         return false;

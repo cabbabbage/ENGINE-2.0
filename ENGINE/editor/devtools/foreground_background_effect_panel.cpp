@@ -8,7 +8,6 @@
 #include "devtools/font_cache.hpp"
 #include "devtools/widgets.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
-#include "utils/cache_manager.hpp"
 #include "utils/rebuild_queue.hpp"
 
 #include <SDL_image.h>
@@ -1006,6 +1005,43 @@ void ForegroundBackgroundEffectPanel::purge_mismatched_caches(std::uint64_t fg_h
     if (!fs::exists(cache_root, ec) || !fs::is_directory(cache_root, ec)) {
         return;
     }
+    const fs::path effects_hash_path = cache_root / "effects_hash.json";
+    bool hashes_match = false;
+    if (!force_purge) {
+        nlohmann::json meta;
+        std::ifstream in(effects_hash_path);
+        if (in.good()) {
+            try {
+                in >> meta;
+            } catch (...) {
+                meta = nlohmann::json::object();
+            }
+        }
+        auto read_hash = [&](const char* key, std::uint64_t& value) -> bool {
+            if (!meta.contains(key)) {
+                return false;
+            }
+            const auto& node = meta.at(key);
+            if (!node.is_number_integer() && !node.is_number_unsigned()) {
+                return false;
+            }
+            try {
+                value = node.get<std::uint64_t>();
+            } catch (...) {
+                return false;
+            }
+            return true;
+        };
+        std::uint64_t stored_fg = 0;
+        std::uint64_t stored_bg = 0;
+        const bool has_fg = read_hash("foreground_effect_hash", stored_fg);
+        const bool has_bg = read_hash("background_effect_hash", stored_bg);
+        hashes_match = has_fg && has_bg && stored_fg == fg_hash && stored_bg == bg_hash;
+        if (hashes_match) {
+            return;
+        }
+    }
+
     for (const auto& asset_entry : fs::directory_iterator(cache_root, ec)) {
         if (!asset_entry.is_directory()) {
             continue;
@@ -1018,35 +1054,6 @@ void ForegroundBackgroundEffectPanel::purge_mismatched_caches(std::uint64_t fg_h
             if (!anim_entry.is_directory()) {
                 continue;
             }
-            const fs::path meta_path = anim_entry.path() / "metadata.json";
-            nlohmann::json meta;
-            if (!CacheManager::load_metadata(meta_path.generic_string(), meta)) {
-                continue;
-            }
-            auto read_hash = [&](const char* key, std::uint64_t& value) -> bool {
-                if (!meta.contains(key)) {
-                    return false;
-                }
-                const auto& node = meta.at(key);
-                if (!node.is_number_integer() && !node.is_number_unsigned()) {
-                    return false;
-                }
-                try {
-                    value = node.get<std::uint64_t>();
-                } catch (...) {
-                    return false;
-                }
-                return true;
-};
-            std::uint64_t stored_fg = 0;
-            std::uint64_t stored_bg = 0;
-            const bool has_fg = read_hash("foreground_effect_hash", stored_fg);
-            const bool has_bg = read_hash("background_effect_hash", stored_bg);
-            const bool hashes_match = has_fg && has_bg && stored_fg == fg_hash && stored_bg == bg_hash;
-            if (!force_purge && hashes_match) {
-                continue;
-            }
-
             std::error_code scale_ec;
             for (const auto& scale_entry : fs::directory_iterator(anim_entry.path(), scale_ec)) {
                 if (!scale_entry.is_directory()) {
@@ -1062,6 +1069,14 @@ void ForegroundBackgroundEffectPanel::purge_mismatched_caches(std::uint64_t fg_h
                 fs::remove_all(scale_entry.path() / "background", remove_ec);
             }
         }
+    }
+
+    nlohmann::json updated = nlohmann::json::object();
+    updated["foreground_effect_hash"] = fg_hash;
+    updated["background_effect_hash"] = bg_hash;
+    std::ofstream out(effects_hash_path);
+    if (out.is_open()) {
+        out << updated.dump(2);
     }
 }
 

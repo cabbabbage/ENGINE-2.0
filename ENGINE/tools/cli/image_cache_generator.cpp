@@ -24,6 +24,9 @@
 
 #include "image_cache_generator.hpp"
 
+#include "asset_metadata.hpp"
+#include "rebuild_queue.hpp"
+
 #include <algorithm>
 #include <atomic>
 #include <cmath>
@@ -133,47 +136,6 @@ static inline std::string read_text_file(const fs::path& p, std::string& err) {
         return {};
     }
     return ss.str();
-}
-
-static inline bool write_text_file_atomic(const fs::path& p, const std::string& text, std::string& err) {
-    err.clear();
-    try {
-        fs::create_directories(p.parent_path());
-        fs::path tmp = p;
-        tmp += ".tmp";
-
-        {
-            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
-            if (!out) {
-                err = "Failed to open for write: " + tmp.string();
-                return false;
-            }
-            out.write(text.data(), static_cast<std::streamsize>(text.size()));
-            if (!out) {
-                err = "Failed while writing: " + tmp.string();
-                return false;
-            }
-        }
-
-        std::error_code ec;
-        fs::rename(tmp, p, ec);
-        if (!ec) return true;
-
-        // Windows replace fallback
-        std::error_code ec2;
-        fs::remove(p, ec2);
-        fs::rename(tmp, p, ec);
-        if (ec) {
-            std::error_code ec3;
-            fs::remove(tmp, ec3);
-            err = "Failed to replace file: " + p.string() + " (" + ec.message() + ")";
-            return false;
-        }
-        return true;
-    } catch (const std::exception& e) {
-        err = std::string("Exception during write: ") + e.what();
-        return false;
-    }
 }
 
 static inline bool file_exists(const fs::path& p) {
@@ -767,49 +729,8 @@ static ImageRGBA apply_color_effects_like_python(const ImageRGBA& src, const Eff
 }
 
 // -----------------------------
-// Manifest helpers matching asset_tool.py behavior
+// Animation metadata helpers
 // -----------------------------
-static inline ordered_json* get_anim_payloads_for_asset(ordered_json& asset_meta) {
-    if (!asset_meta.is_object()) return nullptr;
-    if (!asset_meta.contains("animations")) return nullptr;
-
-    ordered_json& payloads = asset_meta["animations"];
-    if (payloads.is_object() && payloads.contains("animations") && payloads["animations"].is_object()) {
-        return &payloads["animations"];
-    }
-    if (payloads.is_object()) return &payloads;
-    return nullptr;
-}
-
-static inline std::vector<int> frames_requiring_rebuild(const ordered_json& frames) {
-    std::vector<int> out;
-    if (!frames.is_array()) return out;
-    for (size_t i = 0; i < frames.size(); ++i) {
-        const ordered_json& e = frames[i];
-        if (e.is_object() && e.contains("needs_rebuild") && e["needs_rebuild"].is_boolean() && e["needs_rebuild"].get<bool>()) {
-            out.push_back(static_cast<int>(i));
-        }
-    }
-    return out;
-}
-
-static inline void ensure_frame_metadata(ordered_json& anim_meta, int frame_count) {
-    if (!anim_meta.is_object()) return;
-    ordered_json frames = ordered_json::array();
-    if (anim_meta.contains("frames") && anim_meta["frames"].is_array()) {
-        frames = anim_meta["frames"];
-    }
-    if (frame_count < 0) frame_count = 0;
-    if (static_cast<int>(frames.size()) < frame_count) {
-        int add = frame_count - static_cast<int>(frames.size());
-        for (int i = 0; i < add; ++i) {
-            ordered_json entry = ordered_json::object();
-            entry["needs_rebuild"] = false;
-            frames.push_back(entry);
-        }
-    }
-    anim_meta["frames"] = frames;
-}
 
 static inline float read_speed_multiplier(const ordered_json& anim_meta) {
     if (!anim_meta.is_object()) return 1.0f;
@@ -948,10 +869,9 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     }
 
     const fs::file_time_type manifest_mtime = safe_last_write_time(manifest_path);
-
-    if (!manifest.is_object() || !manifest.contains("assets") || !manifest["assets"].is_object()) {
+    if (!manifest.is_object()) {
         result.ok = false;
-        result.error = "Manifest 'assets' block is missing or invalid.";
+        result.error = "Manifest root is not a JSON object.";
         return result;
     }
 
@@ -982,45 +902,62 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         workers = (hc > 1) ? (hc - 1) : 1;
     }
 
+    // Load rebuild queue
+    const fs::path rebuild_queue_path = ResolveRebuildQueuePath(cache_root);
+    ordered_json rebuild_queue = LoadRebuildQueue(rebuild_queue_path);
+    bool rebuild_queue_dirty = false;
+
     // Collect tasks
     std::vector<WorkItem> tasks;
     tasks.reserve(2048);
 
     // Track per-animation flagged indices to clear if everything succeeds
     struct FlagClear {
-        ordered_json* frames_array = nullptr; // points inside manifest
+        std::string asset_name;
+        std::string anim_name;
         std::vector<int> flagged;
     };
     std::vector<FlagClear> to_clear;
 
-    auto& assets_block = manifest["assets"];
-
     std::unordered_set<std::string> assets_touched;
     std::unordered_set<std::string> anims_touched;
 
+    const fs::path assets_root = manifest_dir / "resources" / "assets";
+    std::vector<std::string> asset_names;
+    if (!opt.filters.assets.empty()) {
+        asset_names.assign(opt.filters.assets.begin(), opt.filters.assets.end());
+    } else {
+        asset_names = DiscoverAssetNames(assets_root);
+    }
+    if (asset_names.empty() && rebuild_queue.contains("assets") && rebuild_queue["assets"].is_object()) {
+        for (auto it = rebuild_queue["assets"].begin(); it != rebuild_queue["assets"].end(); ++it) {
+            asset_names.push_back(it.key());
+        }
+    }
+
+    EffectsParams fx_fg = parse_effects_block(manifest, "foreground");
+    EffectsParams fx_bg = parse_effects_block(manifest, "background");
+
     // Iterate assets
-    for (auto it = assets_block.begin(); it != assets_block.end(); ++it) {
-        const std::string asset_name = it.key();
-        ordered_json& asset_meta = it.value();
-        if (!asset_meta.is_object()) continue;
+    for (const auto& asset_name : asset_names) {
         if (!opt.filters.matches_asset(asset_name)) continue;
 
-        fs::path asset_src_dir = ResolveAssetSourceDir(manifest_dir, repo_root, asset_name, nlohmann::json(asset_meta));
+        AssetRecord asset = BuildAssetRecord(manifest_dir, repo_root, cache_root, asset_name);
+        const fs::path bundle_path = cache_root / asset_name / "bundle.bin";
+        const fs::file_time_type bundle_mtime = safe_last_write_time(bundle_path);
 
-        // Discover animations
-        std::vector<std::pair<std::string, fs::path>> anims = DiscoverAnimations(asset_src_dir);
+        const ordered_json* anim_payloads = AnimationsObject(asset.meta);
 
-        ordered_json* payloads_ptr = get_anim_payloads_for_asset(asset_meta);
-        ordered_json dummy_payloads = ordered_json::object();
-        ordered_json& anim_payloads = payloads_ptr ? *payloads_ptr : dummy_payloads;
-
-        EffectsParams fx_fg = parse_effects_block(manifest, "foreground");
-        EffectsParams fx_bg = parse_effects_block(manifest, "background");
-
-        for (const auto& a : anims) {
-            const std::string anim_name = a.first;
-            const fs::path anim_dir = a.second;
+        for (const auto& anim_name : asset.anim_names) {
             if (!opt.filters.matches_anim(anim_name)) continue;
+
+            ordered_json anim_meta = ordered_json::object();
+            if (anim_payloads && anim_payloads->is_object() &&
+                anim_payloads->contains(anim_name) && (*anim_payloads)[anim_name].is_object()) {
+                anim_meta = (*anim_payloads)[anim_name];
+            }
+
+            const fs::path anim_dir = ResolveAnimDir(asset.source_dir, anim_name, anim_meta, asset.discovered_anims);
 
             // Enumerate numeric frames
             std::vector<fs::path> frame_paths = EnumerateSourceFrames(anim_dir);
@@ -1031,16 +968,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
             std::vector<fs::file_time_type> frame_mtimes(frame_paths.size(), fs::file_time_type::min());
             for (size_t i = 0; i < frame_paths.size(); ++i) frame_mtimes[i] = safe_last_write_time(frame_paths[i]);
 
-            // Load or create anim_meta
-            ordered_json anim_meta = ordered_json::object();
-            if (anim_payloads.is_object() && anim_payloads.contains(anim_name) && anim_payloads[anim_name].is_object()) {
-                anim_meta = anim_payloads[anim_name];
-            }
-
-            ensure_frame_metadata(anim_meta, static_cast<int>(frame_paths.size()));
-            ordered_json& frames_meta = anim_meta["frames"];
-
-            std::vector<int> flagged = frames_requiring_rebuild(frames_meta);
+            const ordered_json* queue_anim_entry = FindAnimEntry(rebuild_queue, asset_name, anim_name, false);
+            std::vector<int> flagged = queue_anim_entry ? FlaggedFrames(*queue_anim_entry) : std::vector<int>{};
             std::unordered_set<int> flagged_set(flagged.begin(), flagged.end());
 
             bool crop_frames = read_crop_frames(anim_meta);
@@ -1088,6 +1017,9 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
 
                     bool needs = opt.force_rebuild || flagged_set.count(src_idx) > 0;
                     fs::file_time_type baseline = manifest_mtime;
+                    if (bundle_mtime > baseline) {
+                        baseline = bundle_mtime;
+                    }
                     if (src_idx >= 0 && src_idx < static_cast<int>(frame_mtimes.size())) {
                         baseline = std::max(baseline, frame_mtimes[static_cast<size_t>(src_idx)]);
                     }
@@ -1153,28 +1085,9 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
             // Only clear the frames that were flagged at the start, and only after full success.
             // This matches Python: it clears only flagged_frames, not missing-output rebuilds.
             if (!flagged.empty()) {
-                // We need a pointer into manifest's anim_meta frames.
-                // We only commit anim_meta back to manifest if overall success, to satisfy the stricter spec.
-                // So record the path to clear later by locating frames array in manifest.
-                // Ensure a live object in manifest structure:
-                if (!payloads_ptr) {
-                    // If asset had no animations block, python still updates only when did_work.
-                    // We keep behavior: we will not create new animations payloads unless success.
-                } else {
-                    // Store updated anim_meta back into payloads so we can clear later
-                    anim_payloads[anim_name] = anim_meta;
-                    ordered_json& frames_ref = anim_payloads[anim_name]["frames"];
-                    to_clear.push_back(FlagClear{&frames_ref, flagged});
-                }
-            } else {
-                // Still store anim_meta back so frame metadata expansion would persist only on success if work was done.
-                if (payloads_ptr) anim_payloads[anim_name] = anim_meta;
+                to_clear.push_back(FlagClear{asset_name, anim_name, flagged});
             }
         }
-
-        // If asset had no animations object, we intentionally do not create it here.
-        // Python only writes animations payloads when did_work and animations existed.
-        // In our stricter failure policy, we will commit manifest only if all tasks succeed.
     }
 
     // Dry run: report and exit
@@ -1308,32 +1221,37 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     if (any_fail.load()) {
         result.ok = false;
         result.error = first_error.empty() ? "One or more tasks failed." : first_error;
-        // HARD RULE: do not write manifest if any frame failed
-        result.manifest_written = false;
+        // HARD RULE: do not write rebuild queue if any frame failed
+        result.rebuild_queue_written = false;
         return result;
     }
 
     // Clear only originally-flagged frames (python behavior), after full success
     for (auto& c : to_clear) {
-        if (!c.frames_array || !(*c.frames_array).is_array()) continue;
-        ordered_json& frames = *c.frames_array;
+        ordered_json* anim_entry = FindAnimEntry(rebuild_queue, c.asset_name, c.anim_name, true);
+        if (!anim_entry) {
+            continue;
+        }
+        EnsureFramesArray(*anim_entry,
+                          c.flagged.empty() ? 0 : (*std::max_element(c.flagged.begin(), c.flagged.end()) + 1));
+        auto& frames = (*anim_entry)["frames"];
         for (int idx : c.flagged) {
             if (idx < 0 || idx >= static_cast<int>(frames.size())) continue;
-            if (frames[idx].is_object()) frames[idx]["needs_rebuild"] = false;
+            auto& entry = frames[idx];
+            if (!entry.is_object()) entry = ordered_json::object();
+            entry["needs_rebuild"] = false;
+            rebuild_queue_dirty = true;
         }
     }
 
-    // Write manifest (indent=2) only on full success
-    {
-        std::string out_text = manifest.dump(2) + "\n";
-        std::string werr;
-        if (!write_text_file_atomic(manifest_path, out_text, werr)) {
+    if (rebuild_queue_dirty) {
+        if (!SaveRebuildQueue(rebuild_queue_path, rebuild_queue)) {
             result.ok = false;
-            result.error = "Failed to write manifest: " + werr;
-            result.manifest_written = false;
+            result.error = "Failed to write rebuild queue: " + rebuild_queue_path.string();
+            result.rebuild_queue_written = false;
             return result;
         }
-        result.manifest_written = true;
+        result.rebuild_queue_written = true;
     }
 
     result.ok = true;

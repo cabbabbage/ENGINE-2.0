@@ -36,7 +36,7 @@ private:
     void mark_frame_for_rebuild(const std::string& asset_name, const std::string& animation, int frame_index) const;
 
     bool run_cpp_tool(const std::filesystem::path& tool, const std::vector<std::string>& args, const std::string& command_prefix) const;
-    bool manifest_has_needs_rebuild() const;
+    bool queue_has_needs_rebuild() const;
 };
 
 }

@@ -258,7 +258,7 @@ struct GenResult {
     bool ok = false;
     std::string error;
 
-    bool manifest_written = false;
+    bool rebuild_queue_written = false;
     GenStats stats;
 };
 
@@ -269,15 +269,15 @@ class ImageCacheGenerator final {
 public:
     // Entry point.
     // Must reproduce Python behavior:
-    // - Manifest parsing and asset iteration
+    // - Manifest parsing (for global effects) and asset iteration
     // - Animation discovery (subdirs vs default)
     // - Source frame enumeration: 0.png..N.png stopping at first missing
     // - Speed multiplier expansion mapping output frames to source frames
     // - Crop bounds union behavior when enabled
     // - Rebuild decision: needs_rebuild true OR output missing, plus force option
     // - Write output PNGs into the exact cache structure
-    // - Clear needs_rebuild only after full successful generation
-    // - Never write manifest if any frame fails
+    // - Clear rebuild queue flags only after full successful generation
+    // - Never write the rebuild queue if any frame fails
     static GenResult Run(const GeneratorOptions& opt, ILogger& log);
 
     // -------------------------

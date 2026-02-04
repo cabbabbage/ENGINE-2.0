@@ -1,7 +1,7 @@
 // asset_tool_cli.cpp
 //
 // CLI wrapper for ImageCacheGenerator - replaces asset_tool.py
-// Processes animation frames marked with needs_rebuild=true in manifest.json
+// Processes animation frames marked with needs_rebuild=true in cache/rebuild_queue.json
 // Generates cache structure: cache/<asset>/animations/<anim>/scale_<pct>/{normal,foreground,background}/<idx>.png
 
 #include "image_cache_generator.hpp"
@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
         std::cout << "  Tasks succeeded: " << result.stats.tasks_succeeded
                   << " / " << result.stats.tasks_total << "\n";
         std::cout << "  PNGs written: " << result.stats.pngs_written << "\n";
-        std::cout << "  Manifest updated: " << (result.manifest_written ? "yes" : "no") << "\n";
+        std::cout << "  Rebuild queue updated: " << (result.rebuild_queue_written ? "yes" : "no") << "\n";
 
         if (result.stats.tasks_total == 0) {
             logger.info("No work required - all cache files up to date");
@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
         std::cerr << "  Error: " << result.error << "\n";
         std::cerr << "  Tasks succeeded: " << result.stats.tasks_succeeded
                   << " / " << result.stats.tasks_total << "\n";
-        std::cerr << "  Manifest updated: " << (result.manifest_written ? "yes" : "no") << "\n";
+        std::cerr << "  Rebuild queue updated: " << (result.rebuild_queue_written ? "yes" : "no") << "\n";
 
         return 1;
     }

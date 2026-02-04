@@ -173,6 +173,8 @@ bool Animation::rebuild_frame(int frame_index,
         cache_entry.textures[variant_idx] = base_tex;
         cache_entry.widths[variant_idx] = base_w;
         cache_entry.heights[variant_idx] = base_h;
+        cache_entry.source_rects[variant_idx] = SDL_Rect{0, 0, base_w, base_h};
+        cache_entry.uses_atlas[variant_idx] = false;
         cache_entry.foreground_textures[variant_idx] = fg_tex;
         cache_entry.background_textures[variant_idx] = bg_tex;
     }
@@ -190,6 +192,10 @@ bool Animation::rebuild_frame(int frame_index,
             variant.base_texture = cache_entry.textures[v];
             variant.foreground_texture = (v < cache_entry.foreground_textures.size()) ? cache_entry.foreground_textures[v] : nullptr;
             variant.background_texture = (v < cache_entry.background_textures.size()) ? cache_entry.background_textures[v] : nullptr;
+            variant.source_rect = SDL_Rect{0, 0,
+                                           (v < cache_entry.widths.size() ? cache_entry.widths[v] : 0),
+                                           (v < cache_entry.heights.size() ? cache_entry.heights[v] : 0)};
+            variant.uses_atlas = (v < cache_entry.uses_atlas.size()) ? cache_entry.uses_atlas[v] : false;
             frame.variants.push_back(variant);
         }
     }
@@ -220,24 +226,23 @@ bool Animation::rebuild_animation(SDL_Renderer* renderer,
 }
 
 void Animation::clear_texture_cache() {
+    std::unordered_set<SDL_Texture*> destroyed;
+    auto destroy_once = [&destroyed](SDL_Texture*& tex) {
+        if (tex && destroyed.insert(tex).second) {
+            SDL_DestroyTexture(tex);
+        }
+        tex = nullptr;
+    };
+
     for (auto& cache_entry : frame_cache_) {
         for (SDL_Texture*& tex : cache_entry.textures) {
-            if (tex) {
-                SDL_DestroyTexture(tex);
-                tex = nullptr;
-            }
+            destroy_once(tex);
         }
         for (SDL_Texture*& tex : cache_entry.foreground_textures) {
-            if (tex) {
-                SDL_DestroyTexture(tex);
-                tex = nullptr;
-            }
+            destroy_once(tex);
         }
         for (SDL_Texture*& tex : cache_entry.background_textures) {
-            if (tex) {
-                SDL_DestroyTexture(tex);
-                tex = nullptr;
-            }
+            destroy_once(tex);
         }
     }
     frame_cache_.clear();
@@ -373,6 +378,14 @@ void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches,
                     FrameVariant variant;
                     variant.varient = static_cast<int>(v);
                     variant.base_texture = cache.textures[v];
+                    if (v < cache.source_rects.size()) {
+                        variant.source_rect = cache.source_rects[v];
+                    } else {
+                        variant.source_rect = SDL_Rect{0, 0,
+                                                       (v < cache.widths.size()) ? cache.widths[v] : 0,
+                                                       (v < cache.heights.size()) ? cache.heights[v] : 0};
+                    }
+                    variant.uses_atlas = (v < cache.uses_atlas.size()) ? cache.uses_atlas[v] : false;
                     if (v < cache.foreground_textures.size()) {
                         variant.foreground_texture = cache.foreground_textures[v];
                     }
@@ -491,6 +504,8 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
             dst_cache.textures[variant_idx] = dst_tex;
             dst_cache.widths[variant_idx] = tex_w;
             dst_cache.heights[variant_idx] = tex_h;
+            dst_cache.source_rects[variant_idx] = SDL_Rect{0, 0, tex_w, tex_h};
+            dst_cache.uses_atlas[variant_idx] = false;
 
             SDL_Texture* src_fg = (variant_idx < src_cache.foreground_textures.size()) ? src_cache.foreground_textures[variant_idx] : nullptr;
             if (src_fg) {

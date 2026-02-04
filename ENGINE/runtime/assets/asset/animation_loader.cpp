@@ -483,7 +483,8 @@ void AnimationLoader::load(Animation& animation,
                      int& original_canvas_width,
                      int& original_canvas_height,
                      bool scaling_refresh_pending,
-                     LoadDiagnostics* diagnostics)
+                     LoadDiagnostics* diagnostics,
+                     PrebuiltAnimationFrames* prebuilt_frames)
 {
         const auto load_start = std::chrono::steady_clock::now();
         bool       loaded_from_cache = false;
@@ -496,16 +497,9 @@ void AnimationLoader::load(Animation& animation,
 };
         const double safe_scale = sanitize_scale_factor(scale_factor);
         animation.clear_texture_cache();
-        const bool prefer_cached = !scaling_refresh_pending;
-
-        const bool supports_depthcue_cache = false;
-        bool effect_hash_mismatch = false;
         animation.variant_steps_ = info.scale_variants;
+        (void)root_cache;
 
-        const fs::path cache_folder_path = fs::path(root_cache) / trigger;
-        if (animation.variant_steps_.empty()) {
-                animation.variant_steps_ = discover_cached_scale_steps(cache_folder_path);
-        }
         if (animation.variant_steps_.empty()) {
                 render_pipeline::ScalingLogic::NormalizeVariantSteps(animation.variant_steps_);
         }
@@ -727,174 +721,22 @@ void AnimationLoader::load(Animation& animation,
                         }
                 }
         } else if (animation.source.kind == "folder") {
-
-                const fs::path cache_folder_path = fs::path(root_cache) / trigger;
-                std::string cache_folder = cache_folder_path.string();
-
-                std::size_t variant_count = animation.variant_steps_.size();
-                if (variant_count == 0) {
-                        animation.variant_steps_.push_back(1.0f);
-                        variant_count = 1;
+                if (prebuilt_frames && !prebuilt_frames->frames.empty()) {
+                        animation.variant_steps_ = prebuilt_frames->variant_steps;
+                        animation.frame_cache_ = std::move(prebuilt_frames->frames);
                         info.scale_variants = animation.variant_steps_;
-                }
-
-                std::vector<VariantLayerPaths> variant_paths;
-                variant_paths.reserve(variant_count);
-                for (std::size_t idx = 0; idx < variant_count; ++idx) {
-                        variant_paths.push_back(build_variant_layer_paths(cache_folder, animation.variant_steps_, idx));
-                }
-
-                auto free_surface_lists = [](std::vector<std::vector<SDL_Surface*>>& lists) {
-                        for (auto& list : lists) {
-                                for (SDL_Surface* surf : list) {
-                                        if (surf) {
-                                                SDL_FreeSurface(surf);
-                                        }
-                                }
-                                list.clear();
-                        }
-};
-
-                int frame_count = 0;
-                std::size_t working_variant_idx = 0;
-                for (std::size_t idx = 0; idx < variant_paths.size(); ++idx) {
-                        const fs::path normal_folder_path(variant_paths[idx].normal_folder);
-                        const fs::path test_frame = normal_folder_path / "0.png";
-
-                        std::error_code test_ec;
-                        if (fs::exists(test_frame, test_ec) && !test_ec) {
-                                frame_count = count_png_files(variant_paths[idx].normal_folder);
-                                if (frame_count > 0) {
-                                        working_variant_idx = idx;
-                                        break;
-                                }
-                        }
-                }
-
-                if (frame_count == 0) {
+                        original_canvas_width = prebuilt_frames->canvas_width;
+                        original_canvas_height = prebuilt_frames->canvas_height;
+                        scaled_sprite_w = prebuilt_frames->canvas_width;
+                        scaled_sprite_h = prebuilt_frames->canvas_height;
+                        loaded_from_cache = true;
+                } else {
+                        cache_invalid_detected = true;
+                        std::cerr << "[AnimationLoader] " << info.name << "::" << trigger
+                                  << " missing bundle frames; legacy cache fallback disabled.\n";
                         flush_diagnostics();
                         return;
                 }
-
-                std::vector<std::vector<SDL_Surface*>> variant_surfaces(variant_count);
-                std::vector<std::vector<SDL_Surface*>> foreground_surfaces(variant_count);
-                std::vector<std::vector<SDL_Surface*>> background_surfaces(variant_count);
-                bool all_surfaces_loaded = true;
-                for (std::size_t idx = 0; idx < variant_count; ++idx) {
-                        const VariantLayerPaths& paths = variant_paths[idx];
-                        std::vector<SDL_Surface*> loaded;
-                        bool loaded_ok = CacheManager::load_surface_sequence(paths.normal_folder, frame_count, loaded);
-                        if (loaded_ok && static_cast<int>(loaded.size()) == frame_count) {
-                                variant_surfaces[idx] = std::move(loaded);
-                        } else {
-                                all_surfaces_loaded = false;
-                                std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                          << " failed to load variant " << idx << " from " << paths.normal_folder << "\n";
-                                break;
-                        }
-
-                        std::vector<SDL_Surface*> fg_loaded;
-                        if (CacheManager::load_surface_sequence(paths.foreground_folder, frame_count, fg_loaded) &&
-                            static_cast<int>(fg_loaded.size()) == frame_count) {
-                                foreground_surfaces[idx] = std::move(fg_loaded);
-                        }
-
-                        std::vector<SDL_Surface*> bg_loaded;
-                        if (CacheManager::load_surface_sequence(paths.background_folder, frame_count, bg_loaded) &&
-                            static_cast<int>(bg_loaded.size()) == frame_count) {
-                                background_surfaces[idx] = std::move(bg_loaded);
-                        }
-
-                }
-
-                if (!all_surfaces_loaded || variant_surfaces[0].empty() || !variant_surfaces[0][0]) {
-                        std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                                  << " cache surfaces not found or incomplete, cannot load animation\n";
-                        free_surface_lists(variant_surfaces);
-                        free_surface_lists(foreground_surfaces);
-                        free_surface_lists(background_surfaces);
-                        flush_diagnostics();
-                        return;
-                }
-
-                const int expected_frames = static_cast<int>(variant_surfaces[0].size());
-                std::cout << "[AnimationLoader] " << info.name << "::" << trigger
-                          << " loaded " << expected_frames << " cached frame(s) for "
-                          << variant_count << " variant(s)\n";
-
-                original_canvas_width  = variant_surfaces[0][0]->w;
-                original_canvas_height = variant_surfaces[0][0]->h;
-                scaled_sprite_w        = scaled_dimension(variant_surfaces[0][0]->w, safe_scale);
-                scaled_sprite_h        = scaled_dimension(variant_surfaces[0][0]->h, safe_scale);
-
-                int orig_w = variant_surfaces[0][0]->w;
-                int orig_h = variant_surfaces[0][0]->h;
-
-                if ((scaled_sprite_w <= 0 || scaled_sprite_h <= 0) && orig_w > 0 && orig_h > 0) {
-                        int fallback_w = scaled_dimension(orig_w, safe_scale);
-                        int fallback_h = scaled_dimension(orig_h, safe_scale);
-                        if (fallback_w <= 0) fallback_w = 1;
-                        if (fallback_h <= 0) fallback_h = 1;
-                        scaled_sprite_w = fallback_w;
-                        scaled_sprite_h = fallback_h;
-                }
-
-                animation.frames.clear();
-                animation.frame_cache_.clear();
-                animation.frames.reserve(expected_frames);
-
-                animation.frame_cache_.reserve(expected_frames);
-
-                for (std::size_t frame_idx = 0; frame_idx < variant_surfaces[0].size(); ++frame_idx) {
-                        Animation::FrameCache cache_entry;
-                        cache_entry.resize(variant_count);
-                        for (std::size_t variant_idx = 0; variant_idx < variant_count; ++variant_idx) {
-                                SDL_Surface* surface = (frame_idx < variant_surfaces[variant_idx].size()) ? variant_surfaces[variant_idx][frame_idx] : nullptr;
-                                SDL_Texture* tex_variant = nullptr;
-                                if (surface) {
-                                        tex_variant = CacheManager::surface_to_texture(renderer, surface);
-                                        if (tex_variant) {
-                                                apply_scale_mode(tex_variant, info);
-                                        }
-                                }
-                                int tex_w = surface ? surface->w : 0;
-                                int tex_h = surface ? surface->h : 0;
-                                if (tex_variant && (tex_w == 0 || tex_h == 0)) {
-                                        SDL_QueryTexture(tex_variant, nullptr, nullptr, &tex_w, &tex_h);
-                                }
-                                cache_entry.textures[variant_idx] = tex_variant;
-                                cache_entry.widths[variant_idx]   = tex_w;
-                                cache_entry.heights[variant_idx]  = tex_h;
-
-                                SDL_Texture* fg_tex = nullptr;
-                                if (frame_idx < foreground_surfaces[variant_idx].size() && foreground_surfaces[variant_idx][frame_idx]) {
-                                        fg_tex = CacheManager::surface_to_texture(renderer, foreground_surfaces[variant_idx][frame_idx]);
-                                        if (fg_tex) {
-                                                apply_scale_mode(fg_tex, info);
-                                        }
-                                }
-                                cache_entry.foreground_textures[variant_idx] = fg_tex;
-
-                                SDL_Texture* bg_tex = nullptr;
-                                if (frame_idx < background_surfaces[variant_idx].size() && background_surfaces[variant_idx][frame_idx]) {
-                                        bg_tex = CacheManager::surface_to_texture(renderer, background_surfaces[variant_idx][frame_idx]);
-                                        if (bg_tex) {
-                                                apply_scale_mode(bg_tex, info);
-                                        }
-                                }
-                                cache_entry.background_textures[variant_idx] = bg_tex;
-
-                        }
-                        animation.frame_cache_.push_back(std::move(cache_entry));
-                }
-
-                free_surface_lists(variant_surfaces);
-                free_surface_lists(foreground_surfaces);
-                free_surface_lists(background_surfaces);
-                if (animation.reverse_source && !animation.frame_cache_.empty()) {
-                        std::reverse(animation.frame_cache_.begin(), animation.frame_cache_.end());
-                }
-                loaded_from_cache = true;
         }
 
         if (animation.frame_cache_.empty() &&
@@ -1046,6 +888,10 @@ void AnimationLoader::load(Animation& animation,
                                 variant.base_texture = cache.textures[v];
                                 if (v < cache.foreground_textures.size()) variant.foreground_texture = cache.foreground_textures[v];
                                 if (v < cache.background_textures.size()) variant.background_texture = cache.background_textures[v];
+                                variant.source_rect = SDL_Rect{0, 0,
+                                                                (v < cache.widths.size()) ? cache.widths[v] : 0,
+                                                                (v < cache.heights.size()) ? cache.heights[v] : 0};
+                                variant.uses_atlas = (v < cache.uses_atlas.size()) ? cache.uses_atlas[v] : false;
                                 f.variants.push_back(variant);
                             }
                         }

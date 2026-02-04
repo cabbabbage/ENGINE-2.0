@@ -38,5 +38,6 @@
     "asset_directory": "resources/assets/car",
     "asset_name": "car",
     "asset_type": "object",
-    "start": "default"
+    "start": "default",
+    "cache_atlas": true
 }

@@ -38,5 +38,6 @@
     "asset_directory": "resources/assets/Vibble_eyes",
     "asset_name": "Vibble_eyes",
     "asset_type": "object",
-    "start": "default"
+    "start": "default",
+    "cache_atlas": true
 }

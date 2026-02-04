@@ -71,5 +71,6 @@
     "asset_directory": "resources/assets/Bush_1",
     "asset_name": "Bush_1",
     "asset_type": "object",
-    "start": "default"
+    "start": "default",
+    "cache_atlas": true
 }

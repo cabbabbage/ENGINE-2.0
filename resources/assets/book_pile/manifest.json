@@ -33,5 +33,6 @@
     "asset_directory": "resources/assets/book_pile",
     "asset_name": "book_pile",
     "asset_type": "object",
-    "start": "default"
+    "start": "default",
+    "cache_atlas": true
 }

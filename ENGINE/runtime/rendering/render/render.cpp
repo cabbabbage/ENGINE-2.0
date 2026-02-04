@@ -288,23 +288,45 @@ bool build_perspective_mesh(const RenderObject& obj,
         return false;
     }
 
+    int atlas_w = 0;
+    int atlas_h = 0;
+    if (SDL_QueryTexture(obj.texture, nullptr, nullptr, &atlas_w, &atlas_h) != 0 || atlas_w <= 0 || atlas_h <= 0) {
+        return false;
+    }
+
     int tex_w = obj.texture_w;
     int tex_h = obj.texture_h;
     if (!obj.has_texture_size) {
-        if (SDL_QueryTexture(obj.texture, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
-            return false;
-        }
+        tex_w = atlas_w;
+        tex_h = atlas_h;
     }
     if (tex_w <= 0 || tex_h <= 0) {
         return false;
     }
 
-    const float padding_x = 0.5f / static_cast<float>(tex_w);
-    const float padding_y = 0.5f / static_cast<float>(tex_h);
-    float u0 = padding_x;
-    float u1 = 1.0f - padding_x;
-    float v0 = padding_y;
-    float v1 = 1.0f - padding_y;
+    float u0 = 0.0f;
+    float u1 = 1.0f;
+    float v0 = 0.0f;
+    float v1 = 1.0f;
+
+    if (obj.has_src_rect) {
+        const SDL_Rect& r = obj.src_rect;
+        const float pad_x = 0.5f / static_cast<float>(atlas_w);
+        const float pad_y = 0.5f / static_cast<float>(atlas_h);
+        u0 = (static_cast<float>(r.x) + pad_x) / static_cast<float>(atlas_w);
+        u1 = (static_cast<float>(r.x + r.w) - pad_x) / static_cast<float>(atlas_w);
+        v0 = (static_cast<float>(r.y) + pad_y) / static_cast<float>(atlas_h);
+        v1 = (static_cast<float>(r.y + r.h) - pad_y) / static_cast<float>(atlas_h);
+        tex_w = r.w;
+        tex_h = r.h;
+    } else {
+        const float padding_x = 0.5f / static_cast<float>(tex_w);
+        const float padding_y = 0.5f / static_cast<float>(tex_h);
+        u0 = padding_x;
+        u1 = 1.0f - padding_x;
+        v0 = padding_y;
+        v1 = 1.0f - padding_y;
+    }
 
     if ((obj.flip & SDL_FLIP_HORIZONTAL) != 0) {
         std::swap(u0, u1);

@@ -33,5 +33,6 @@
     "asset_directory": "resources/assets/book_1",
     "asset_name": "book_1",
     "asset_type": "object",
-    "start": "default"
+    "start": "default",
+    "cache_atlas": true
 }

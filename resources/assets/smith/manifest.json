@@ -38,5 +38,6 @@
     "asset_directory": "resources/assets/smith",
     "asset_name": "smith",
     "asset_type": "object",
-    "start": "default"
+    "start": "default",
+    "cache_atlas": true
 }

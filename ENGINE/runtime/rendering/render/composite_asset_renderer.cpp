@@ -48,14 +48,15 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
 
     auto add_render_object = [&](SDL_Texture* tex,
                                  SDL_Rect rect,
-                                 SDL_Color color = {255, 255, 255, 255},
-                                 SDL_BlendMode blend = SDL_BLENDMODE_BLEND,
-                                 bool apply_scale = true,
-                                 double angle = 0.0,
-                                 std::optional<SDL_Point> center = std::nullopt,
-                                 SDL_RendererFlip flip = SDL_FLIP_NONE,
-                                 std::optional<SDL_Point> texture_size = std::nullopt,
-                                 float world_z_offset = 0.0f) {
+                                  SDL_Color color = {255, 255, 255, 255},
+                                  SDL_BlendMode blend = SDL_BLENDMODE_BLEND,
+                                  bool apply_scale = true,
+                                  double angle = 0.0,
+                                  std::optional<SDL_Point> center = std::nullopt,
+                                  SDL_RendererFlip flip = SDL_FLIP_NONE,
+                                  std::optional<SDL_Point> texture_size = std::nullopt,
+                                  float world_z_offset = 0.0f,
+                                  std::optional<SDL_Rect> src_rect = std::nullopt) {
         if (!tex) return;
         if (apply_scale) {
             rect.w = static_cast<int>(std::lround(static_cast<float>(rect.w) * package_scale));
@@ -89,12 +90,17 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             obj.has_texture_size = (obj.texture_w > 0 && obj.texture_h > 0);
         }
         obj.world_z_offset = world_z_offset;
+        if (src_rect.has_value()) {
+            obj.has_src_rect = true;
+            obj.src_rect = src_rect.value();
+        }
         asset->render_package.push_back(obj);
     };
 
     SDL_Texture* base_tex = nullptr;
     SDL_Texture* depth_cue_foreground = nullptr;
     SDL_Texture* depth_cue_background = nullptr;
+    const FrameVariant* selected_variant = nullptr;
 
     if (asset->info) {
         auto anim_it = asset->info->animations.find(asset->current_animation);
@@ -105,6 +111,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                     int variant_idx = asset->current_variant_index;
                     variant_idx = std::clamp(variant_idx, 0, static_cast<int>(variants.size()) - 1);
                     const FrameVariant& variant = variants[static_cast<std::size_t>(variant_idx)];
+                    selected_variant = &variant;
                     base_tex = variant.get_base_texture();
                     depth_cue_foreground = variant.get_foreground_texture();
                     depth_cue_background = variant.get_background_texture();
@@ -118,16 +125,30 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
     }
 
     if (base_tex) {
-        int w, h;
-        SDL_QueryTexture(base_tex, nullptr, nullptr, &w, &h);
+        int texture_w = 0;
+        int texture_h = 0;
+        SDL_QueryTexture(base_tex, nullptr, nullptr, &texture_w, &texture_h);
+
+        SDL_Rect src_rect{0, 0, texture_w, texture_h};
+        bool has_src_rect = false;
+        int frame_w = texture_w;
+        int frame_h = texture_h;
+        if (selected_variant) {
+            if (selected_variant->source_rect.w > 0 && selected_variant->source_rect.h > 0) {
+                frame_w = selected_variant->source_rect.w;
+                frame_h = selected_variant->source_rect.h;
+                src_rect = selected_variant->source_rect;
+            }
+            has_src_rect = selected_variant->uses_atlas;
+        }
 
         float remainder = asset->current_remaining_scale_adjustment;
         if (!std::isfinite(remainder) || remainder <= 0.0f) {
             remainder = 1.0f;
         }
         const float base_adjustment = remainder;
-        int final_w = static_cast<int>(std::lround(static_cast<float>(w) * base_adjustment));
-        int final_h = static_cast<int>(std::lround(static_cast<float>(h) * base_adjustment));
+        int final_w = static_cast<int>(std::lround(static_cast<float>(frame_w) * base_adjustment));
+        int final_h = static_cast<int>(std::lround(static_cast<float>(frame_h) * base_adjustment));
         final_w = std::max(1, final_w);
         final_h = std::max(1, final_h);
 
@@ -147,8 +168,9 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                           0.0,
                           std::nullopt,
                           base_flip,
-                          SDL_Point{w, h},
-                          asset->world_z_offset());
+                          SDL_Point{frame_w, frame_h},
+                          asset->world_z_offset(),
+                          has_src_rect ? std::optional<SDL_Rect>(src_rect) : std::nullopt);
 
         bool have_vertical_distance = false;
         float vertical_distance_from_center = 0.0f;

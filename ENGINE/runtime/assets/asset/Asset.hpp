@@ -53,6 +53,8 @@ struct RenderObject {
     int texture_h = 0;
     bool has_texture_size = false;
     float world_z_offset = 0.0f;
+    bool has_src_rect = false;
+    SDL_Rect src_rect{0, 0, 0, 0};
 };
 
 using RenderCompositePackage = std::vector<RenderObject>;

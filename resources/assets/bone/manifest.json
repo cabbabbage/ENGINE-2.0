@@ -33,5 +33,6 @@
     "asset_directory": "resources/assets/bone",
     "asset_name": "bone",
     "asset_type": "object",
-    "start": "default"
+    "start": "default",
+    "cache_atlas": true
 }

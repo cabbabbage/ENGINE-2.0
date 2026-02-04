@@ -169,7 +169,7 @@
                             "center_z": 5163.4951171875,
                             "half_height": 1570.3231201171875,
                             "half_width": 5179.4228515625,
-                            "rotation": -93.25064086914063
+                            "rotation": -93.25064086914062
                         }
                     ]
                 }
@@ -223,5 +223,6 @@
     "spawn_groups": [],
     "start": "default",
     "tags": [],
-    "tillable": false
+    "tillable": false,
+    "cache_atlas": true
 }

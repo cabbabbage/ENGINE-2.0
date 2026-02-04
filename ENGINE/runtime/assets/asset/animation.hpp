@@ -38,6 +38,8 @@ public:
         std::vector<int> heights;
         std::vector<SDL_Texture*> foreground_textures;
         std::vector<SDL_Texture*> background_textures;
+        std::vector<SDL_Rect> source_rects;
+        std::vector<bool> uses_atlas;
 
         void resize(std::size_t variant_count) {
             textures.assign(variant_count, nullptr);
@@ -45,6 +47,8 @@ public:
             heights.assign(variant_count, 0);
             foreground_textures.assign(variant_count, nullptr);
             background_textures.assign(variant_count, nullptr);
+            source_rects.assign(variant_count, SDL_Rect{0, 0, 0, 0});
+            uses_atlas.assign(variant_count, false);
         }
 };
 
@@ -127,4 +131,12 @@ private:
     void rebuild_child_start_events_from_timelines();
     void bind_textures_to_frame(AnimationFrame& frame) const;
     void refresh_frame_texture_bindings();
+};
+
+struct PrebuiltAnimationFrames {
+    std::vector<Animation::FrameCache> frames;
+    std::vector<float> variant_steps;
+    int canvas_width = 0;
+    int canvas_height = 0;
+    bool uses_atlas = false;
 };

@@ -33,5 +33,6 @@
     "asset_directory": "resources/assets/skull_pile",
     "asset_name": "skull_pile",
     "asset_type": "object",
-    "start": "default"
+    "start": "default",
+    "cache_atlas": true
 }

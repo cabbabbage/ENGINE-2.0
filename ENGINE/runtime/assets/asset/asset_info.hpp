@@ -191,6 +191,7 @@ class AssetInfo {
     std::unordered_set<std::string> tag_lookup_;
     std::unordered_set<std::string> anti_tag_lookup_;
     friend class AnimationLoader;
+    friend class PrimaryAssetCache;
     friend class ChildLoader;
 #if defined(ASSET_INFO_ENABLE_TEST_ACCESS)
     friend struct AssetInfoTestAccess;

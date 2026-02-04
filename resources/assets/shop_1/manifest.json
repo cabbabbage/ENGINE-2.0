@@ -38,5 +38,6 @@
     "asset_directory": "resources/assets/shop_1",
     "asset_name": "shop_1",
     "asset_type": "object",
-    "start": "default"
+    "start": "default",
+    "cache_atlas": true
 }

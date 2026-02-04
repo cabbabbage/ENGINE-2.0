@@ -245,5 +245,6 @@
     "spawn_groups": [],
     "start": "default",
     "tags": [],
-    "tillable": false
+    "tillable": false,
+    "cache_atlas": true
 }

@@ -323,14 +323,7 @@ void AssetLibrary::load_all_from_resources() {
         }
 
         manifest.assets = raw_assets;
-        if (manifest_dirty) {
-                try {
-                        manifest::save_manifest(manifest);
-                        vibble::log::info("[AssetLibrary] Manifest assets section synchronized with resources/assets contents.");
-                } catch (const std::exception& error) {
-                        vibble::log::warn(std::string("[AssetLibrary] Failed to persist manifest sync: ") + error.what());
-                }
-        }
+        // Asset metadata is persisted in cache bundles; do not write assets back to manifest.json.
 
         int loaded = 0;
         int failed = 0;

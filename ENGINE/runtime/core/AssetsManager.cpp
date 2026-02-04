@@ -21,6 +21,7 @@
 #include "utils/map_grid_settings.hpp"
 #include "utils/quick_task_popup.hpp"
 #include "utils/log.hpp"
+#include "assets/asset/primary_asset_cache.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -435,6 +436,14 @@ bool Assets::boundary_assets_visible() const {
 Assets::~Assets() {
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
+
+    // Persist current asset state to bundle caches on teardown (dev mode exit).
+    PrimaryAssetCache cache(renderer_);
+    for (const auto& entry : library_.all()) {
+        if (entry.second) {
+            cache.save_current(*entry.second);
+        }
+    }
 
     if (input) {
         input->clear_screen_to_world_mapper();

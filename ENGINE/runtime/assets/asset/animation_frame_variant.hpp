@@ -16,6 +16,8 @@ public:
     SDL_Texture* base_texture        = nullptr;
     SDL_Texture* foreground_texture  = nullptr;
     SDL_Texture* background_texture  = nullptr;
+    SDL_Rect source_rect{0, 0, 0, 0};
+    bool uses_atlas = false;
     SDL_Texture* get_base_texture() const        { return base_texture; }
     SDL_Texture* get_foreground_texture() const  { return foreground_texture; }
     SDL_Texture* get_background_texture() const  { return background_texture; }

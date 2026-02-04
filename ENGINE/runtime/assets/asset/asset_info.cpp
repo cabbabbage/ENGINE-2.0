@@ -4,6 +4,7 @@
 #include "assets/animation_loader.hpp"
 #include "assets/info_methods/asset_child_loader.hpp"
 #include "utils/cache_manager.hpp"
+#include "assets/asset/primary_asset_cache.hpp"
 #include "utils/rebuild_queue.hpp"
 #include "core/manifest/manifest_loader.hpp"
 #include <algorithm>
@@ -653,7 +654,16 @@ AssetInfo::AssetInfo(const std::string& asset_folder_name, const nlohmann::json&
 
 std::shared_ptr<AssetInfo> AssetInfo::from_manifest_entry(const std::string& asset_folder_name,
                                                          const nlohmann::json& metadata) {
-    return std::make_shared<AssetInfo>(asset_folder_name, metadata);
+    // Prefer bundle metadata snapshot when available to keep manifest assets lean.
+    nlohmann::json meta = metadata;
+    const std::filesystem::path bundle_path = std::filesystem::path("cache") / asset_folder_name / "bundle.bin";
+    CacheManager::BundleData bundle;
+    if (CacheManager::load_bundle(bundle_path.generic_string(), bundle)) {
+        if (bundle.metadata_snapshot.is_object()) {
+            meta = bundle.metadata_snapshot;
+        }
+    }
+    return std::make_shared<AssetInfo>(asset_folder_name, meta);
 }
 
 void AssetInfo::set_manifest_store_provider(ManifestStoreProvider provider) {
@@ -716,34 +726,21 @@ bool AssetInfo::commit_manifest() {
                 payload["asset_name"] = name;
         }
 
-        auto& provider = manifest_store_provider_slot();
-        if (!provider) {
-                std::cerr << "[AssetInfo] Manifest store provider unavailable; cannot commit '" << name << "'\n";
-                return false;
+        // Persist asset state to the primary bundle cache instead of manifest.json.
+        try {
+                PrimaryAssetCache cache(nullptr);
+                if (!cache.save_current(*this)) {
+                        std::cerr << "[AssetInfo] Failed to save bundle for '" << name << "'\n";
+                        return false;
+                }
+                info_json_ = std::move(payload);
+                return true;
+        } catch (const std::exception& ex) {
+                std::cerr << "[AssetInfo] Exception during bundle save for '" << name << "': " << ex.what() << "\n";
+        } catch (...) {
+                std::cerr << "[AssetInfo] Unknown error saving bundle for '" << name << "'\n";
         }
-
-        auto* store = provider();
-        if (!store) {
-                std::cerr << "[AssetInfo] Manifest store not provided; cannot commit '" << name << "'\n";
-                return false;
-        }
-
-        auto session = store->begin_asset_edit(name, true);
-        if (!session) {
-                std::cerr << "[AssetInfo] Failed to open manifest session for '" << name << "'\n";
-                return false;
-        }
-
-        session.data() = payload;
-        if (!session.commit()) {
-                std::cerr << "[AssetInfo] Failed to commit manifest payload for '" << name << "'\n";
-                session.cancel();
-                return false;
-        }
-
-        store->flush();
-        info_json_ = std::move(payload);
-        return true;
+        return false;
 }
 
 void AssetInfo::set_asset_type(const std::string &t) {
@@ -1604,6 +1601,12 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
     SDL_Texture* dummy_base_sprite = nullptr;
     int dummy_w = 0;
     int dummy_h = 0;
+    std::unordered_map<std::string, PrebuiltAnimationFrames> prebuilt_frames;
+    CacheManager::BundleData bundle_data;
+    if (renderer) {
+        PrimaryAssetCache primary_cache(renderer);
+        primary_cache.load_or_build(*this, prebuilt_frames, bundle_data);
+    }
 
     auto parse_source_animation = [](const nlohmann::json& payload) -> std::optional<std::string> {
         if (!payload.contains("source") || !payload["source"].is_object()) {
@@ -1641,7 +1644,12 @@ void AssetInfo::loadAnimations(SDL_Renderer* renderer) {
     std::filesystem::path cache_root = std::filesystem::path("cache") / this->name / "animations";
     auto load_single = [&](const std::string& name, const nlohmann::json& json) {
         Animation& anim = animations[name];
-        AnimationLoader::load(anim, name, json, *this, dir_path_, cache_root.string(), scale_factor, renderer, dummy_base_sprite, dummy_w, dummy_h, original_canvas_width, original_canvas_height, false);
+        PrebuiltAnimationFrames* prebuilt = nullptr;
+        auto pre_it = prebuilt_frames.find(name);
+        if (pre_it != prebuilt_frames.end()) {
+            prebuilt = &pre_it->second;
+        }
+        AnimationLoader::load(anim, name, json, *this, dir_path_, cache_root.string(), scale_factor, renderer, dummy_base_sprite, dummy_w, dummy_h, original_canvas_width, original_canvas_height, false, nullptr, prebuilt);
 };
 
     std::vector<std::pair<std::string, nlohmann::json>> deferred;

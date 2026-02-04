@@ -704,5 +704,6 @@
     },
     "start": "default",
     "tags": [],
-    "update_radius": 0
+    "update_radius": 0,
+    "cache_atlas": true
 }

@@ -150,19 +150,19 @@ float read_float_field(const nlohmann::json& data, const char* key, float fallba
 }
 
 std::filesystem::path assets_root_for(const std::string& asset_name) {
-    std::filesystem::path base = std::filesystem::path("SRC") / "assets";
+    std::filesystem::path base = std::filesystem::path("resources") / "assets";
     if (!asset_name.empty()) {
         base /= asset_name;
     }
     return base.lexically_normal();
 }
 
-bool path_starts_with_src(const std::filesystem::path& path) {
+bool path_starts_with_resources(const std::filesystem::path& path) {
     if (path.empty()) {
         return false;
     }
     const std::string generic = path.lexically_normal().generic_string();
-    return generic == "SRC" || generic.rfind("SRC/", 0) == 0;
+    return generic == "resources" || generic.rfind("resources/", 0) == 0;
 }
 
 std::string prefer_assets_directory(const std::string& configured, const std::string& asset_name) {
@@ -173,7 +173,7 @@ std::string prefer_assets_directory(const std::string& configured, const std::st
     }
 
     std::filesystem::path candidate = std::filesystem::path(configured).lexically_normal();
-    if (!path_starts_with_src(candidate)) {
+    if (!path_starts_with_resources(candidate)) {
         return candidate.generic_string();
     }
 

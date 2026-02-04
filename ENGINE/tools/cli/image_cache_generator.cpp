@@ -4,7 +4,7 @@
 // Mirrors the current Python pipeline behavior found in asset_tool.py and apply_color_effects.py:
 //
 // - Repo root discovery: search upward for manifest.json
-// - Asset src resolution: default <manifest_dir>/SRC/assets/<asset>, or asset_directory override
+// - Asset src resolution: default <manifest_dir>/resources/assets/<asset>, or asset_directory override
 // - Animation discovery: subdirectories, else single "default"
 // - Frame enumeration: 0.png, 1.png, ... stop at first missing
 // - Speed multiplier expansion: closest of {0.25, 0.5, 1.0, 2.0, 4.0}
@@ -936,7 +936,7 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
     }
 
     // Repo root is defined by python as the directory containing manifest.json (search upward).
-    // The python tool defaults asset src to: <manifest_dir>/SRC/assets/<asset>
+    // The python tool defaults asset src to: <manifest_dir>/resources/assets/<asset>
     fs::path repo_root = manifest_dir;
 
     // Cache root
@@ -1355,7 +1355,7 @@ fs::path ImageCacheGenerator::ResolveAssetSourceDir(const fs::path& manifest_dir
                                                     const fs::path& repo_root,
                                                     const std::string& asset_name,
                                                     const nlohmann::json& asset_obj) {
-    // Python: if asset_directory missing, default is <manifest_dir>/SRC/assets/<asset>
+    // Python: if asset_directory missing, default is <manifest_dir>/resources/assets/<asset>
     if (asset_obj.is_object() && asset_obj.contains("asset_directory")) {
         std::string src = asset_obj["asset_directory"].is_string() ? asset_obj["asset_directory"].get<std::string>() : "";
         if (!src.empty()) {
@@ -1364,7 +1364,7 @@ fs::path ImageCacheGenerator::ResolveAssetSourceDir(const fs::path& manifest_dir
             return manifest_dir / p;
         }
     }
-    return manifest_dir / "SRC" / "assets" / asset_name;
+    return manifest_dir / "resources" / "assets" / asset_name;
 }
 
 std::vector<std::pair<std::string, fs::path>> ImageCacheGenerator::DiscoverAnimations(const fs::path& asset_src_dir) {

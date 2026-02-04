@@ -45,10 +45,18 @@ endforeach()
 # Sources
 # ------------------------------------------
 file(GLOB_RECURSE ENGINE_SRC CONFIGURE_DEPENDS
-    ${CMAKE_SOURCE_DIR}/ENGINE/src/*.cpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/src/*.c
-    ${CMAKE_SOURCE_DIR}/ENGINE/src/*.hpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/src/*.h
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/*.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/*.c
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/*.hpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/*.h
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.c
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.hpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.h
+    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.c
+    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.hpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.h
 )
 
 list(REMOVE_DUPLICATES ENGINE_SRC)
@@ -173,8 +181,9 @@ endif()
 # ------------------------------------------
 target_include_directories(engine
     PRIVATE
-        ${CMAKE_SOURCE_DIR}/ENGINE/src
-        ${CMAKE_SOURCE_DIR}/ENGINE/src/tooling
+        ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+        ${CMAKE_SOURCE_DIR}/ENGINE/editor
+        ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
 )
 
 target_compile_definitions(engine PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
@@ -241,30 +250,32 @@ add_executable(engine_tests
     TESTS/test_frame_editor_async_payload.cpp
     TESTS/test_attack_validation.cpp
     TESTS/frame_editor_session_test_helpers.cpp
-    ENGINE/src/assets/asset/animation.cpp
-    ENGINE/src/assets/asset/surface_utils.cpp
-    ENGINE/src/assets/asset/animation_cloner.cpp
-    ENGINE/src/animation/child_attachment_controller.cpp
-    ENGINE/src/animation/attack_validation.cpp
-    ENGINE/src/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
-    ENGINE/src/devtools/dm_styles.cpp
-    ENGINE/src/devtools/core/dev_json_store.cpp
-    ENGINE/src/devtools/core/manifest_store.cpp
-    ENGINE/src/devtools/manifest_asset_utils.cpp
-    ENGINE/src/devtools/tag_utils.cpp
-    ENGINE/src/devtools/draw_utils.cpp
-    ENGINE/src/devtools/font_cache.cpp
-    ENGINE/src/devtools/widgets.cpp
-    ENGINE/src/devtools/frame_editors/shared/Point3DEditor.cpp
-    ENGINE/src/core/manifest/manifest_loader.cpp
-    ENGINE/src/utils/log.cpp
-    ENGINE/src/utils/cache_manager.cpp
-    ENGINE/src/utils/loading_status_notifier.cpp
+    ENGINE/runtime/assets/asset/animation.cpp
+    ENGINE/runtime/assets/asset/surface_utils.cpp
+    ENGINE/runtime/assets/asset/animation_cloner.cpp
+    ENGINE/runtime/animation/child_attachment_controller.cpp
+    ENGINE/runtime/animation/attack_validation.cpp
+    ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
+    ENGINE/editor/devtools/dm_styles.cpp
+    ENGINE/editor/devtools/core/dev_json_store.cpp
+    ENGINE/editor/devtools/core/manifest_store.cpp
+    ENGINE/editor/devtools/manifest_asset_utils.cpp
+    ENGINE/editor/devtools/tag_utils.cpp
+    ENGINE/editor/devtools/draw_utils.cpp
+    ENGINE/editor/devtools/font_cache.cpp
+    ENGINE/editor/devtools/widgets.cpp
+    ENGINE/editor/devtools/frame_editors/shared/Point3DEditor.cpp
+    ENGINE/runtime/core/manifest/manifest_loader.cpp
+    ENGINE/runtime/utils/utils/log.cpp
+    ENGINE/runtime/utils/utils/cache_manager.cpp
+    ENGINE/runtime/utils/utils/loading_status_notifier.cpp
   )
 
 target_include_directories(engine_tests
     PRIVATE
-        ${CMAKE_SOURCE_DIR}/ENGINE/src
+        ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+        ${CMAKE_SOURCE_DIR}/ENGINE/editor
+        ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
         ${CMAKE_SOURCE_DIR}/external
 )
 
@@ -308,18 +319,20 @@ endif()
 add_executable(engine_world_tests
     TESTS/test_main.cpp
     TESTS/test_world_grid_same_chunk_move.cpp
-    ENGINE/src/gameplay/world/world_grid.cpp
-    ENGINE/src/gameplay/world/grid_point.cpp
-    ENGINE/src/gameplay/world/chunk_manager.cpp
-    ENGINE/src/utils/grid_math.cpp
-    ENGINE/src/utils/log.cpp
+    ENGINE/runtime/gameplay/world/world_grid.cpp
+    ENGINE/runtime/gameplay/world/grid_point.cpp
+    ENGINE/runtime/gameplay/world/chunk_manager.cpp
+    ENGINE/runtime/utils/utils/grid_math.cpp
+    ENGINE/runtime/utils/utils/log.cpp
     TESTS/stubs/chunk_stubs.cpp
 )
 
 target_include_directories(engine_world_tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/TESTS/stubs
-        ${CMAKE_SOURCE_DIR}/ENGINE/src
+        ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+        ${CMAKE_SOURCE_DIR}/ENGINE/editor
+        ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
         ${CMAKE_SOURCE_DIR}/external
 )
 

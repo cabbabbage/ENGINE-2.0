@@ -61,11 +61,11 @@ void ensure_directory_exists(const std::filesystem::path& dir,
 }
 
 void ensure_project_structure(const std::filesystem::path& root) {
-    ensure_directory_exists(root / "SRC", "SRC root");
-    ensure_directory_exists(root / "SRC" / "assets", "SRC assets");
-    ensure_directory_exists(root / "SRC" / "misc_content", "SRC misc content");
-    ensure_directory_exists(root / "SRC" / "loading_screen_content", "SRC loading screen content");
-    ensure_directory_exists(root / "SRC" / "LOADING CONTENT", "SRC loading content");
+    ensure_directory_exists(root / "resources", "resources root");
+    ensure_directory_exists(root / "resources" / "assets", "resources assets");
+    ensure_directory_exists(root / "resources" / "misc_content", "resources misc content");
+    ensure_directory_exists(root / "resources" / "loading_screen_content", "resources loading screen content");
+    ensure_directory_exists(root / "resources" / "LOADING CONTENT", "resources loading content");
 }
 
 void write_manifest_file(const std::filesystem::path& path,

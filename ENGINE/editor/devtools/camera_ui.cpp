@@ -31,7 +31,7 @@ namespace {
     constexpr float kPi     = 3.14159265358979323846f;
     constexpr float kRadToDeg = 180.0f / kPi;
     constexpr float kDegToRad = kPi / 180.0f;
-    constexpr const char* kCameraIconPath = "SRC/icons/camera.png";
+    constexpr const char* kCameraIconPath = "resources/icons/camera.png";
 
     float wrap_angle_deg(float raw_value) {
         if (!std::isfinite(raw_value)) {

@@ -52,7 +52,7 @@ MainMenu::MainMenu(SDL_Renderer* renderer,
         };
 
         if (!find_background_path(pick_loading_image())) {
-                const fs::path bg_folder = resolve_manifest_path("SRC/misc_content/backgrounds");
+                const fs::path bg_folder = resolve_manifest_path("resources/misc_content/backgrounds");
                 if (fs::exists(bg_folder) && fs::is_directory(bg_folder)) {
                         const fs::path fallback = firstImageIn(bg_folder);
                         find_background_path(fallback);
@@ -62,7 +62,7 @@ MainMenu::MainMenu(SDL_Renderer* renderer,
         if (!background_image_path_.empty()) {
                 cached_bg_tex_ = loadTexture(background_image_path_);
                 if (!cached_bg_tex_) {
-                        const fs::path bg_folder = resolve_manifest_path("SRC/misc_content/backgrounds");
+                        const fs::path bg_folder = resolve_manifest_path("resources/misc_content/backgrounds");
                         const fs::path fallback = firstImageIn(bg_folder);
                         if (!fallback.empty() && fallback != background_image_path_) {
                                 std::cerr << "[MainMenu] Falling back to smaller background: " << fallback << "\n";
@@ -278,7 +278,7 @@ std::filesystem::path MainMenu::resolve_manifest_path(const std::string& forward
 }
 
 std::filesystem::path MainMenu::loading_content_root() const {
-	return resolve_manifest_path("SRC/LOADING CONTENT");
+	return resolve_manifest_path("resources/LOADING CONTENT");
 }
 
 std::vector<fs::path> MainMenu::list_loading_images(const fs::path& root, bool recursive) const {

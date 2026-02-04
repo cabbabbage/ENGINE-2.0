@@ -85,7 +85,7 @@ TEST_CASE("manifest store helper removes asset entries") {
     initial["assets"] = {
         {"Alpha", {
             {"asset_name", "Alpha"},
-            {"asset_directory", "SRC/assets/Alpha"},
+        {"asset_directory", "resources/assets/Alpha"},
             {"asset_type", "Object"}
         }}
     };

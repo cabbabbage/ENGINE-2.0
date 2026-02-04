@@ -288,7 +288,7 @@ public:
     static fs::path ResolveCacheRoot(const fs::path& repo_root, const GeneratorOptions& opt);
 
     // Resolve asset source directory:
-    // default: <repo_root>/SRC/assets/<asset_name>
+    // default: <repo_root>/resources/assets/<asset_name>
     // override: manifest asset_directory (relative to manifest dir unless absolute)
     static fs::path ResolveAssetSourceDir(const fs::path& manifest_dir,
                                           const fs::path& repo_root,

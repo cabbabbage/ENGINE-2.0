@@ -326,7 +326,7 @@ void AssetLibrary::load_all_from_SRC() {
         if (manifest_dirty) {
                 try {
                         manifest::save_manifest(manifest);
-                        vibble::log::info("[AssetLibrary] Manifest assets section synchronized with SRC/assets contents.");
+                        vibble::log::info("[AssetLibrary] Manifest assets section synchronized with resources/assets contents.");
                 } catch (const std::exception& error) {
                         vibble::log::warn(std::string("[AssetLibrary] Failed to persist manifest sync: ") + error.what());
                 }

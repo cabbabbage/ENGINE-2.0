@@ -502,6 +502,15 @@ public:
                 "Each candidate set requires a unique grid resolution.", DMStyles::Label().color, true);
         }
 
+        if (!regen_button_) {
+            regen_button_ = std::make_unique<DMButton>("Regenerate Boundaries",
+                                                       &DMStyles::AccentButton(),
+                                                       180,
+                                                       DMButton::height());
+            regen_button_widget_ =
+                std::make_unique<ButtonWidget>(regen_button_.get(), [this]() { this->handle_global_regen(); });
+        }
+
         if (!add_button_) {
             add_button_ = std::make_unique<DMButton>("Add New", &DMStyles::CreateButton(), 140, DMButton::height());
             add_button_widget_ = std::make_unique<ButtonWidget>(add_button_.get(), [this]() { this->add_group(); });
@@ -675,6 +684,10 @@ private:
             rows.push_back({instructions_label_.get()});
         }
 
+        if (regen_button_widget_) {
+            rows.push_back({regen_button_widget_.get()});
+        }
+
         if (add_button_widget_) {
             rows.push_back({add_button_widget_.get()});
         }
@@ -724,11 +737,8 @@ private:
             group.pie_widget->set_on_add_candidate([this, spawn_id = group.spawn_id](const std::string& value) {
                 this->add_candidate_from_search(spawn_id, value);
             });
-            if (regen_callback_) {
-                group.pie_widget->set_on_regenerate([this, spawn_id = group.spawn_id]() { this->handle_regen(spawn_id); });
-            } else {
-                group.pie_widget->set_on_regenerate({});
-            }
+            // Single regen button at panel level; keep per-group regen disabled.
+            group.pie_widget->set_on_regenerate({});
             group.pie_widget->set_candidates_from_json(entry);
             rows.push_back({group.pie_widget.get()});
 
@@ -876,6 +886,29 @@ private:
         notify_save(true);
     }
 
+    void handle_global_regen() {
+        if (!section_) return;
+        const bool sanitized = sanitize_groups();
+        if (sanitized) {
+            rebuild_rows(false);
+        } else {
+            sync_group_widgets();
+        }
+        int current_seed = 0;
+        try {
+            current_seed = section_->value("regen_seed", 0);
+        } catch (...) {
+            current_seed = 0;
+        }
+        (*section_)["regen_seed"] = std::max(0, current_seed) + 1;
+        if (save_callback_) {
+            save_callback_();
+        }
+        if (regen_callback_) {
+            regen_callback_(*section_);
+        }
+    }
+
     void handle_regen(const std::string& spawn_id) {
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry) return;
@@ -903,6 +936,8 @@ private:
 
     std::unique_ptr<LabelWidget> ownership_label_widget_{};
     std::unique_ptr<LabelWidget> instructions_label_{};
+    std::unique_ptr<DMButton> regen_button_{};
+    std::unique_ptr<ButtonWidget> regen_button_widget_{};
     std::unique_ptr<DMButton> add_button_{};
     std::unique_ptr<ButtonWidget> add_button_widget_{};
     std::vector<GroupWidgets> group_widgets_{};

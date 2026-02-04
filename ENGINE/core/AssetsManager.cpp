@@ -657,8 +657,15 @@ void Assets::set_input(Input* m) {
 
 void Assets::update(const Input& input)
 {
-    ++frame_id_;
     const std::uint64_t now_counter = SDL_GetPerformanceCounter();
+
+    if (!should_step_dev_frame(input)) {
+        last_frame_dt_seconds_ = 0.0f;
+        last_frame_counter_    = now_counter;
+        return;
+    }
+
+    ++frame_id_;
     float dt = 1.0f / 60.0f;
     if (last_frame_counter_ != 0 && perf_counter_frequency_ > 0.0) {
         const double elapsed = static_cast<double>(now_counter - last_frame_counter_) / perf_counter_frequency_;
@@ -719,9 +726,7 @@ void Assets::update(const Input& input)
             if (player->info) {
                 player->update_scale_values();
             }
-            if (!player->dead && player->anim_runtime_) {
-                player->anim_runtime_->update();
-            }
+            // In dev mode, do NOT advance animation frames — keep things frozen/paused
             player->request_child_timeline_creation_if_needed();
         } else {
 
@@ -771,9 +776,7 @@ void Assets::update(const Input& input)
             if (asset->info) {
                 asset->update_scale_values();
             }
-            if (!asset->dead && asset->anim_runtime_) {
-                asset->anim_runtime_->update();
-            }
+            // In dev mode, do NOT advance animation frames — keep things frozen/paused
             asset->request_child_timeline_creation_if_needed();
         } else {
 
@@ -2228,10 +2231,43 @@ void Assets::touch_last_frame_counter() {
     last_frame_counter_ = SDL_GetPerformanceCounter();
 }
 
-bool Assets::has_pending_dev_work() const {
+bool Assets::should_step_dev_frame(const Input& input) const {
+    if (!dev_mode) {
+        return true;
+    }
+
+    // Explicit frame editor sessions should always be allowed to step.
+    if (dev_controls_ && dev_controls_->is_frame_editor_session_active()) {
+        return true;
+    }
+
+    // Direct user interaction (mouse / keyboard) warrants a tick.
+    if (input.has_activity()) {
+        return true;
+    }
+
+    // Allow ticks while the camera is animating (zoom/height easing).
+    if (camera_.is_height_animating()) {
+        return true;
+    }
+
+    // Handle lightweight dev work (popups, initial rebuilds, quick task modal)
+    // but ignore long-running animation plans to keep the scene paused.
+    if (has_pending_dev_work(false)) {
+        return true;
+    }
+
+    return false;
+}
+
+bool Assets::has_pending_dev_work(bool include_animation_plans) const {
     if (pending_initial_rebuild_) return true;
     if (popup_manager_.has_active_content()) return true;
     if (quick_task_popup_ && quick_task_popup_->is_open()) return true;
+
+    if (!include_animation_plans) {
+        return false;
+    }
 
     // Check player for in-flight movement plan
     if (player && player->anim_runtime_ && player->anim_runtime_->has_active_plan()) return true;

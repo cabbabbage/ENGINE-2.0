@@ -128,6 +128,7 @@ private:
     nlohmann::json last_boundary_json_;
     std::uint64_t  config_revision_ = 0;
     std::uint64_t  warning_revision_ = 0;
+    std::uint64_t  boundary_regen_seed_ = 0;
 
     std::vector<BoundaryType> boundary_types_;
     std::unordered_map<BoundaryKey, int, BoundaryKeyHash> boundary_assignments_;

@@ -200,7 +200,8 @@ public:
 
     const std::vector<world::Chunk*>& active_chunks() const { return world_grid_.active_chunks(); }
 
-    bool has_pending_dev_work() const;
+    bool has_pending_dev_work(bool include_animation_plans = true) const;
+    bool should_step_dev_frame(const Input& input) const;
     void touch_last_frame_counter();
 
 private:

@@ -2263,7 +2263,7 @@ void AnimationEditorWindow::add_controller() {
     std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
     std::filesystem::path cpp_path = controller_dir / (key + ".cpp");
 
-    if (std::filesystem::exists(hpp_path)) {
+    if (std::filesystem::exists(hpp_path) && std::filesystem::exists(cpp_path)) {
         set_status_message("Controller already exists.", 180);
         update_controller_button_label();
         return;
@@ -2396,10 +2396,12 @@ void AnimationEditorWindow::open_controller() {
         set_status_message("Controller file does not exist.", 180);
         return;
     }
+    std::string class_name = generate_class_name(sanitized);
 
     const std::string metadata = build_controller_metadata(key);
     write_or_update_controller_metadata(hpp_path, metadata);
     write_or_update_controller_metadata(controller_dir / (key + ".cpp"), metadata);
+    ensure_controller_factory_registration(key, class_name);
 
     std::string cmd = "cmd /c start \"\" \"" + hpp_path.string() + "\"";
     int result = std::system(cmd.c_str());

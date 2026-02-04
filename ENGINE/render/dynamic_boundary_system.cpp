@@ -148,6 +148,18 @@ inline int scaled_spacing(int base_spacing, float multiplier) {
     return static_cast<int>(rounded);
 }
 
+inline int spacing_for_resolution(int resolution) {
+    const int clamped = vibble::grid::clamp_resolution(resolution);
+    long long value = 1;
+    for (int i = 0; i < clamped; ++i) {
+        if (value > static_cast<long long>(std::numeric_limits<int>::max()) / 3LL) {
+            return std::numeric_limits<int>::max();
+        }
+        value *= 3LL;
+    }
+    return static_cast<int>(value);
+}
+
 inline world::GridPoint::RegionKind classify_region_at(const std::vector<Room*>& rooms,
                                                        SDL_Point pt,
                                                        const Room** owner_out) {
@@ -323,12 +335,11 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     const float max_random_jitter = std::clamp(config().max_random_jitter, kMinRandomJitter, kMaxRandomJitter);
     const std::vector<ExclusionArea> exclusion_areas = collect_exclusion_areas(assets);
     const std::vector<Room*>& rooms = assets ? assets->rooms() : std::vector<Room*>{};
-    const int max_resolution_layer = std::max(0, grid.max_resolution_layers() - 1);
 
     for (size_t type_idx = 0; type_idx < boundary_types_.size(); ++type_idx) {
         BoundaryType& btype = boundary_types_[type_idx];
-        const int resolution_layer = std::clamp(btype.grid_resolution, 0, max_resolution_layer);
-        const int base_spacing = grid.grid_spacing_for_layer(resolution_layer);
+        const int resolution_layer = vibble::grid::clamp_resolution(btype.grid_resolution);
+        const int base_spacing = spacing_for_resolution(resolution_layer);
         if (base_spacing <= 0) {
             continue;
         }
@@ -538,7 +549,7 @@ DynamicBoundarySystem::BoundaryKey DynamicBoundarySystem::make_key(int group_idx
 }
 
 std::uint64_t DynamicBoundarySystem::hash_key(const BoundaryKey& key) const {
-    std::uint64_t hash = 0;
+    std::uint64_t hash = mix_uint64(boundary_regen_seed_, 0x9e3779b97f4a7c15ULL);
     hash = mix_uint64(hash, static_cast<std::uint64_t>(key.group));
     hash = mix_uint64(hash, static_cast<std::uint64_t>(key.resolution_layer));
     hash = mix_uint64(hash, static_cast<std::uint64_t>(key.grid_x));
@@ -660,16 +671,24 @@ void DynamicBoundarySystem::parse_boundary_config(const nlohmann::json& map_info
     if (boundary_it == map_info.end() || !boundary_it->is_object()) {
         boundary_types_.clear();
         last_boundary_json_ = nlohmann::json{};
+        boundary_regen_seed_ = 0;
         config_dirty_ = false;
         clear_runtime_caches();
         return;
     }
 
     const nlohmann::json& boundary_data = *boundary_it;
+    try {
+        boundary_regen_seed_ = static_cast<std::uint64_t>(
+            std::max<long long>(0, boundary_data.value("regen_seed", 0LL)));
+    } catch (...) {
+        boundary_regen_seed_ = 0;
+    }
     const auto selectors_it = boundary_data.find("candidate_selectors");
     if (selectors_it == boundary_data.end() || !selectors_it->is_array()) {
         boundary_types_.clear();
         last_boundary_json_ = boundary_data;
+        boundary_regen_seed_ = 0;
         config_dirty_ = false;
         clear_runtime_caches();
         return;
@@ -741,6 +760,7 @@ void DynamicBoundarySystem::clear_runtime_caches() {
 void DynamicBoundarySystem::invalidate_config() {
     config_dirty_ = true;
     last_boundary_json_ = nlohmann::json{};
+    boundary_regen_seed_ = 0;
     clear_runtime_caches();
 }
 

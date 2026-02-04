@@ -1,4 +1,5 @@
 #include "generate_trails.hpp"
+#include "generate_rooms.hpp"
 #include "trail_geometry.hpp"
 #include <nlohmann/json.hpp>
 #include <cmath>
@@ -242,33 +243,18 @@ std::vector<std::pair<Room*, Room*>> GenerateTrails::plan_maze_connections(
         std::vector<CandidateEdge> candidates;
         candidates.reserve(unique_rooms.size() * kNearestNeighborCount);
 
+        RoomSpatialIndex spatial_index(unique_rooms);
         for (size_t i = 0; i < unique_rooms.size(); ++i) {
                 Room* a = unique_rooms[i];
                 if (!a) continue;
                 auto [ax, ay] = room_center(a);
-                std::vector<std::pair<double, size_t>> neighbors;
-                neighbors.reserve(unique_rooms.size());
-                for (size_t j = 0; j < unique_rooms.size(); ++j) {
-                        if (i == j) continue;
-                        Room* b = unique_rooms[j];
-                        if (!b) continue;
-                        auto [bx, by] = room_center(b);
-                        double dx = ax - bx;
-                        double dy = ay - by;
-                        double dist = std::hypot(dx, dy);
-                        neighbors.emplace_back(dist, j);
-                }
-                std::sort(neighbors.begin(), neighbors.end(),
-                          [](const auto& lhs, const auto& rhs) {
-                                  return lhs.first < rhs.first;
-                          });
-                const int limit = std::min<int>(kNearestNeighborCount, static_cast<int>(neighbors.size()));
-                for (int n = 0; n < limit; ++n) {
-                        Room* b = unique_rooms[neighbors[n].second];
+                auto neighbors = spatial_index.find_k_nearest({static_cast<int>(ax), static_cast<int>(ay)}, kNearestNeighborCount + 1);
+                for (const auto& [dist_sq, b] : neighbors) {
+                        if (b == a) continue;
                         auto key = canonical_pair(a, b);
                         if (!key.first || !key.second) continue;
                         if (!blocked_pairs.insert(key).second) continue;
-                        candidates.push_back(CandidateEdge{ a, b, neighbors[n].first, 0.0 });
+                        candidates.push_back(CandidateEdge{ a, b, std::sqrt(dist_sq), 0.0 });
                 }
         }
 

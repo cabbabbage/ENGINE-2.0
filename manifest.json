@@ -1087,7 +1087,7 @@
                   "center_z": 1230.8443603515625,
                   "half_height": 702.7274780273438,
                   "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007812
+                  "rotation": -178.48147583007813
                 }
               ]
             },
@@ -1534,7 +1534,7 @@
                   "center_z": 5163.4951171875,
                   "half_height": 1570.3231201171875,
                   "half_width": 5179.4228515625,
-                  "rotation": -93.25064086914062
+                  "rotation": -93.25064086914063
                 }
               ]
             }
@@ -2587,7 +2587,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 18,
+            "grid_resolution": 6,
             "locked": false,
             "max_number": 1,
             "min_number": 1,
@@ -2597,9 +2597,39 @@
             "resolve_geometry_to_room_size": false,
             "resolve_quantity_to_room_size": false,
             "spawn_id": "spn-test-map_boundary"
+          },
+          {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              },
+              {
+                "chance": 5,
+                "name": "Bush_1"
+              },
+              {
+                "chance": 0.25,
+                "name": "Grass_1"
+              }
+            ],
+            "display_name": "batch_map_boundary",
+            "enforce_spacing": false,
+            "explicit_flip": false,
+            "force_flipped": false,
+            "grid_resolution": 5,
+            "locked": false,
+            "max_number": 1,
+            "min_number": 1,
+            "position": "Random",
+            "resolution": 0,
+            "resolve_geometry_to_room_size": false,
+            "resolve_quantity_to_room_size": false,
+            "spawn_id": "spn-f4c3c3e24f0c"
           }
         ],
-        "inherits_map_assets": false
+        "inherits_map_assets": false,
+        "regen_seed": 2
       },
       "map_grid_settings": {
         "grid_resolution": 5

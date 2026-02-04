@@ -1,7 +1,7 @@
 #include "doctest/doctest.h"
 
-#include "animation_update/animation_update.hpp"
-#include "animation_update/child_attachment_controller.hpp"
+#include "animation/animation_update.hpp"
+#include "animation/child_attachment_controller.hpp"
 #include "asset/animation.hpp"
 #include "asset/animation_frame.hpp"
 #include <SDL.h>

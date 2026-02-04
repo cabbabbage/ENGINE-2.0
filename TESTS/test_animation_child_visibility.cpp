@@ -1,7 +1,7 @@
 #include "doctest/doctest.h"
 
-#include "animation_update/child_attachment_controller.hpp"
-#include "animation_update/child_attachment_math.hpp"
+#include "animation/child_attachment_controller.hpp"
+#include "animation/child_attachment_math.hpp"
 
 TEST_CASE("AnimationChildFrameData defaults to visible when flag is omitted") {
     AnimationChildFrameData child;

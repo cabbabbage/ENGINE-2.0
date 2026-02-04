@@ -6,7 +6,7 @@
 #include <nlohmann/json.hpp>
 
 #define FRAME_EDITOR_TEST_PUBLIC_ACCESS
-#include "dev_mode/asset_sections/animation_editor_window/frame_editor/children/FrameChildrenEditor.hpp"
+#include "devtools/asset_sections/animation_editor_window/frame_editor/children/FrameChildrenEditor.hpp"
 #undef FRAME_EDITOR_TEST_PUBLIC_ACCESS
 
 using animation_editor::FrameChildrenEditor;

@@ -1,7 +1,7 @@
 #include "doctest/doctest.h"
 
 #include "asset/animation_frame.hpp"
-#include "animation_update/attack_validation.hpp"
+#include "animation/attack_validation.hpp"
 
 using animation_update::AttackValidation;
 using animation_update::ChildAttachmentSnapshot;

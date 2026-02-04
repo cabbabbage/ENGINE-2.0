@@ -8,8 +8,8 @@
 #include <chrono>
 
 #include "core/manifest/manifest_loader.hpp"
-#include "dev_mode/core/manifest_store.hpp"
-#include "dev_mode/manifest_asset_utils.hpp"
+#include "devtools/core/manifest_store.hpp"
+#include "devtools/manifest_asset_utils.hpp"
 #include "utils/log.hpp"
 
 #include <nlohmann/json.hpp>

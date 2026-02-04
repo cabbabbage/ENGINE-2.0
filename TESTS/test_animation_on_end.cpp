@@ -1,7 +1,7 @@
 #include "doctest/doctest.h"
 
 #include "asset/animation.hpp"
-#include "dev_mode/asset_sections/animation_editor_window/string_utils.hpp"
+#include "devtools/asset_sections/animation_editor_window/string_utils.hpp"
 
 TEST_CASE("Reserved animation names recognized") {
     using animation_editor::strings::is_reserved_animation_name;

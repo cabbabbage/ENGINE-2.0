@@ -8,9 +8,9 @@ class DMNumericStepper {};
 class DMTextBox {};
 class DMCheckbox {};
 
-#include "dev_mode/frame_editor_session.hpp"
-#include "render/camera_controller.hpp"
-#include "render/warped_screen_grid.hpp"
+#include "devtools/frame_editor_session.hpp"
+#include "rendering/render/camera_controller.hpp"
+#include "rendering/render/warped_screen_grid.hpp"
 #include "utils/area.hpp"
 
 FrameEditorSession::FrameEditorSession() = default;

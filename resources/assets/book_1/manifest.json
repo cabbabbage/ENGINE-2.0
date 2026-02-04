@@ -30,7 +30,7 @@
             "speed_multiplier": 1.0
         }
     },
-    "asset_directory": "SRC/assets/book_1",
+    "asset_directory": "resources/assets/book_1",
     "asset_name": "book_1",
     "asset_type": "object",
     "start": "default"

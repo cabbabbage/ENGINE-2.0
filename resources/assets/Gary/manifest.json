@@ -688,7 +688,7 @@
         }
     },
     "anti_tags": [],
-    "asset_directory": "SRC/assets/Gary",
+    "asset_directory": "resources/assets/Gary",
     "asset_name": "Gary",
     "asset_type": "object",
     "can_invert": false,

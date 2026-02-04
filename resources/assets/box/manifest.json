@@ -30,7 +30,7 @@
             "speed_multiplier": 1.0
         }
     },
-    "asset_directory": "SRC/assets/box",
+    "asset_directory": "resources/assets/box",
     "asset_name": "box",
     "asset_type": "object",
     "start": "default"

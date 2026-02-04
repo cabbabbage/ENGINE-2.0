@@ -68,7 +68,7 @@
             "speed_multiplier": 1.0
         }
     },
-    "asset_directory": "SRC/assets/Bush_1",
+    "asset_directory": "resources/assets/Bush_1",
     "asset_name": "Bush_1",
     "asset_type": "object",
     "start": "default"

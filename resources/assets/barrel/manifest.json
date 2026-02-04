@@ -200,7 +200,7 @@
         }
     },
     "anti_tags": [],
-    "asset_directory": "SRC/assets/barrel",
+    "asset_directory": "resources/assets/barrel",
     "asset_name": "barrel",
     "asset_type": "object",
     "async_children": [],

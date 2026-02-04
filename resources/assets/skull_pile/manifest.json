@@ -30,7 +30,7 @@
             "speed_multiplier": 1.0
         }
     },
-    "asset_directory": "SRC/assets/skull_pile",
+    "asset_directory": "resources/assets/skull_pile",
     "asset_name": "skull_pile",
     "asset_type": "object",
     "start": "default"

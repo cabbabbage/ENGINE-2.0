@@ -226,7 +226,7 @@
         }
     },
     "anti_tags": [],
-    "asset_directory": "SRC/assets/spider",
+    "asset_directory": "resources/assets/spider",
     "asset_name": "spider",
     "asset_type": "enemy",
     "async_children": [],

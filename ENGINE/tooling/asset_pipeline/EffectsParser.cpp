@@ -292,7 +292,7 @@ bool AssetProcessor::processAllAssets(const std::string& manifest_path) {
                 } else {
                     // Default source directory structure
                     std::filesystem::path manifest_dir = std::filesystem::path(manifest_path).parent_path();
-                    source_dir = (manifest_dir / "SRC" / "assets" / asset_name).string();
+                    source_dir = (manifest_dir / "resources" / "assets" / asset_name).string();
                 }
 
                 if (!processAsset(asset_name, source_dir)) {

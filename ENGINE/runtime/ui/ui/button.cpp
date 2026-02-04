@@ -177,8 +177,8 @@ void ensure_overlays_loaded() {
     }
 
     std::vector<fs::path> search_dirs;
-    search_dirs.push_back((base / "SRC" / "misc_content" / "glass_texture").lexically_normal());
-    search_dirs.push_back((fs::current_path() / "SRC" / "misc_content" / "glass_texture").lexically_normal());
+    search_dirs.push_back((base / "resources" / "misc_content" / "glass_texture").lexically_normal());
+    search_dirs.push_back((fs::current_path() / "resources" / "misc_content" / "glass_texture").lexically_normal());
 
     std::vector<fs::path> unique_dirs;
     for (const auto& dir : search_dirs) {

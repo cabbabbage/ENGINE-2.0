@@ -77,7 +77,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Bartender",
+      "asset_directory": "resources/assets/Bartender",
       "asset_name": "Bartender",
       "lighting_info": [],
       "start": "default"
@@ -108,7 +108,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Bush_1",
+      "asset_directory": "resources/assets/Bush_1",
       "asset_name": "Bush_1",
       "asset_type": "object",
       "lighting_info": [],
@@ -139,7 +139,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Candle",
+      "asset_directory": "resources/assets/Candle",
       "asset_name": "Candle",
       "lighting_info": [],
       "start": "default"
@@ -216,7 +216,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Carrie",
+      "asset_directory": "resources/assets/Carrie",
       "asset_name": "Carrie",
       "lighting_info": [],
       "start": "default"
@@ -248,7 +248,7 @@
         }
       },
       "anti_tags": [],
-      "asset_directory": "SRC/assets/Casino",
+      "asset_directory": "resources/assets/Casino",
       "asset_name": "Casino",
       "asset_type": "object",
       "lighting_info": [],
@@ -374,7 +374,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Davey",
+      "asset_directory": "resources/assets/Davey",
       "asset_name": "Davey",
       "lighting_info": [],
       "start": "default"
@@ -404,7 +404,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Fountain",
+      "asset_directory": "resources/assets/Fountain",
       "asset_name": "Fountain",
       "lighting_info": [],
       "start": "default"
@@ -461,7 +461,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Frog",
+      "asset_directory": "resources/assets/Frog",
       "asset_name": "Frog",
       "lighting_info": [],
       "start": "Default"
@@ -538,7 +538,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Gary",
+      "asset_directory": "resources/assets/Gary",
       "asset_name": "Gary",
       "lighting_info": [],
       "start": "default"
@@ -569,7 +569,7 @@
         }
       },
       "anti_tags": [],
-      "asset_directory": "SRC/assets/Grass_1",
+      "asset_directory": "resources/assets/Grass_1",
       "asset_name": "Grass_1",
       "asset_type": "object",
       "lighting_info": [],
@@ -610,7 +610,7 @@
         }
       },
       "anti_tags": [],
-      "asset_directory": "SRC/assets/Grass_2",
+      "asset_directory": "resources/assets/Grass_2",
       "asset_name": "Grass_2",
       "asset_type": "object",
       "lighting_info": [],
@@ -639,7 +639,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Pub",
+      "asset_directory": "resources/assets/Pub",
       "asset_name": "Pub",
       "lighting_info": [],
       "start": "default"
@@ -658,7 +658,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Town_Hall",
+      "asset_directory": "resources/assets/Town_Hall",
       "asset_name": "Town_Hall",
       "lighting_info": [],
       "start": "default"
@@ -700,7 +700,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Tree_1",
+      "asset_directory": "resources/assets/Tree_1",
       "asset_name": "Tree_1",
       "asset_type": "object",
       "lighting_info": [],
@@ -721,7 +721,7 @@
         }
       },
       "anti_tags": [],
-      "asset_directory": "SRC/assets/Tree_2",
+      "asset_directory": "resources/assets/Tree_2",
       "asset_name": "Tree_2",
       "lighting_info": [],
       "neighbor_search_distance": 500,
@@ -746,7 +746,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/Tree_3",
+      "asset_directory": "resources/assets/Tree_3",
       "asset_name": "Tree_3",
       "asset_type": "object",
       "lighting_info": [],
@@ -1192,7 +1192,7 @@
       "anti_tags": [],
       "apply_distance_scaling": true,
       "apply_vertical_scaling": true,
-      "asset_directory": "SRC/assets/Vibble",
+      "asset_directory": "resources/assets/Vibble",
       "asset_name": "Vibble",
       "asset_type": "player",
       "can_invert": false,
@@ -1338,7 +1338,7 @@
         }
       },
       "anti_tags": [],
-      "asset_directory": "SRC/assets/Vibble_attack_1",
+      "asset_directory": "resources/assets/Vibble_attack_1",
       "asset_name": "Vibble_attack_1",
       "asset_type": "object",
       "lighting_info": [],
@@ -1388,7 +1388,7 @@
         }
       },
       "anti_tags": [],
-      "asset_directory": "SRC/assets/Vibble_eyes",
+      "asset_directory": "resources/assets/Vibble_eyes",
       "asset_name": "Vibble_eyes",
       "asset_type": "object",
       "lighting_info": [],
@@ -1560,7 +1560,7 @@
         }
       },
       "anti_tags": [],
-      "asset_directory": "SRC/assets/barrel",
+      "asset_directory": "resources/assets/barrel",
       "asset_name": "barrel",
       "asset_type": "object",
       "can_invert": true,
@@ -1598,7 +1598,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/bone",
+      "asset_directory": "resources/assets/bone",
       "asset_name": "bone",
       "lighting_info": [],
       "start": "default"
@@ -1617,7 +1617,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/bone_2",
+      "asset_directory": "resources/assets/bone_2",
       "asset_name": "bone_2",
       "lighting_info": [],
       "start": "default"
@@ -1636,7 +1636,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/book_1",
+      "asset_directory": "resources/assets/book_1",
       "asset_name": "book_1",
       "lighting_info": [],
       "start": "default"
@@ -1655,7 +1655,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/book_2",
+      "asset_directory": "resources/assets/book_2",
       "asset_name": "book_2",
       "lighting_info": [],
       "start": "default"
@@ -1674,7 +1674,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/book_pile",
+      "asset_directory": "resources/assets/book_pile",
       "asset_name": "book_pile",
       "lighting_info": [],
       "start": "default"
@@ -1693,7 +1693,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/book_pile_2",
+      "asset_directory": "resources/assets/book_pile_2",
       "asset_name": "book_pile_2",
       "lighting_info": [],
       "start": "default"
@@ -1712,7 +1712,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/bottle",
+      "asset_directory": "resources/assets/bottle",
       "asset_name": "bottle",
       "lighting_info": [],
       "start": "default"
@@ -1731,7 +1731,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/box",
+      "asset_directory": "resources/assets/box",
       "asset_name": "box",
       "lighting_info": [],
       "start": "default"
@@ -1750,7 +1750,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/car",
+      "asset_directory": "resources/assets/car",
       "asset_name": "car",
       "lighting_info": [],
       "start": "default"
@@ -1769,7 +1769,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/church",
+      "asset_directory": "resources/assets/church",
       "asset_name": "church",
       "lighting_info": [],
       "start": "default"
@@ -1788,7 +1788,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/flower_red",
+      "asset_directory": "resources/assets/flower_red",
       "asset_name": "flower_red",
       "lighting_info": [],
       "start": "default"
@@ -1807,7 +1807,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/grass_3",
+      "asset_directory": "resources/assets/grass_3",
       "asset_name": "grass_3",
       "lighting_info": [],
       "start": "default"
@@ -1826,7 +1826,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/grass_4",
+      "asset_directory": "resources/assets/grass_4",
       "asset_name": "grass_4",
       "lighting_info": [],
       "start": "default"
@@ -1845,7 +1845,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/grave_1",
+      "asset_directory": "resources/assets/grave_1",
       "asset_name": "grave_1",
       "lighting_info": [],
       "start": "default"
@@ -1864,7 +1864,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/grave_2",
+      "asset_directory": "resources/assets/grave_2",
       "asset_name": "grave_2",
       "lighting_info": [],
       "start": "default"
@@ -1883,7 +1883,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/lantern",
+      "asset_directory": "resources/assets/lantern",
       "asset_name": "lantern",
       "lighting_info": [],
       "start": "default"
@@ -1902,7 +1902,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/latern_left",
+      "asset_directory": "resources/assets/latern_left",
       "asset_name": "latern_left",
       "lighting_info": [],
       "start": "default"
@@ -1921,7 +1921,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/shop_1",
+      "asset_directory": "resources/assets/shop_1",
       "asset_name": "shop_1",
       "lighting_info": [],
       "start": "default"
@@ -1940,7 +1940,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/shop_2",
+      "asset_directory": "resources/assets/shop_2",
       "asset_name": "shop_2",
       "lighting_info": [],
       "start": "default"
@@ -1959,7 +1959,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/skull_1",
+      "asset_directory": "resources/assets/skull_1",
       "asset_name": "skull_1",
       "lighting_info": [],
       "start": "default"
@@ -1978,7 +1978,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/skull_pile",
+      "asset_directory": "resources/assets/skull_pile",
       "asset_name": "skull_pile",
       "lighting_info": [],
       "start": "default"
@@ -1997,7 +1997,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/smith",
+      "asset_directory": "resources/assets/smith",
       "asset_name": "smith",
       "lighting_info": [],
       "start": "default"
@@ -2329,7 +2329,7 @@
         }
       },
       "anti_tags": [],
-      "asset_directory": "SRC/assets/spider",
+      "asset_directory": "resources/assets/spider",
       "asset_name": "spider",
       "asset_type": "enemy",
       "lighting_info": [],
@@ -2363,7 +2363,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/tex",
+      "asset_directory": "resources/assets/tex",
       "asset_name": "tex",
       "lighting_info": [],
       "start": "default"
@@ -2382,7 +2382,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/top_hat",
+      "asset_directory": "resources/assets/top_hat",
       "asset_name": "top_hat",
       "lighting_info": [],
       "start": "default"
@@ -2414,7 +2414,7 @@
         }
       },
       "anti_tags": [],
-      "asset_directory": "SRC/assets/trail",
+      "asset_directory": "resources/assets/trail",
       "asset_name": "trail",
       "asset_type": "texture",
       "can_invert": false,
@@ -2453,7 +2453,7 @@
           }
         }
       },
-      "asset_directory": "SRC/assets/yellow_flower",
+      "asset_directory": "resources/assets/yellow_flower",
       "asset_name": "yellow_flower",
       "lighting_info": [],
       "start": "default"

@@ -772,7 +772,7 @@
             "speed_multiplier": 1.0
         }
     },
-    "asset_directory": "SRC/assets/Vibble",
+    "asset_directory": "resources/assets/Vibble",
     "asset_name": "Vibble",
     "asset_type": "player",
     "start": "default"

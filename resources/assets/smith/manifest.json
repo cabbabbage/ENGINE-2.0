@@ -35,7 +35,7 @@
             "speed_multiplier": 1.0
         }
     },
-    "asset_directory": "SRC/assets/smith",
+    "asset_directory": "resources/assets/smith",
     "asset_name": "smith",
     "asset_type": "object",
     "start": "default"

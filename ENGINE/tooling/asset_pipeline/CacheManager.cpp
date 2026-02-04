@@ -125,7 +125,7 @@ CacheValidationResult CacheManager::validateAnimationCache(const std::string& as
 
         // If we can't determine frame count, try to find source frames
         if (frame_count == 0) {
-            fs::path src_asset_dir = fs::path(manifest_path).parent_path() / "SRC" / "assets" / asset_name;
+            fs::path src_asset_dir = fs::path(manifest_path).parent_path() / "resources" / "assets" / asset_name;
             fs::path anim_src_dir = src_asset_dir / animation_name;
 
             if (fs::exists(anim_src_dir)) {
@@ -411,7 +411,7 @@ bool CacheManager::rebuildMissingCacheFiles(const std::string& manifest_path,
 
             // Get source directory
             fs::path src_asset_dir = fs::path(manifest_path).parent_path() /
-                "SRC" / "assets" / report.asset_name;
+                "resources" / "assets" / report.asset_name;
             fs::path anim_src_dir = src_asset_dir / report.animation_name;
 
             if (!fs::exists(anim_src_dir)) {
@@ -786,7 +786,7 @@ bool AssetProcessingPipeline::processAllAssetsWithCacheManagement(const std::str
                 } else {
                     // Default source directory structure
                     fs::path manifest_dir = fs::path(manifest_path).parent_path();
-                    source_dir = (manifest_dir / "SRC" / "assets" / asset_name).string();
+                    source_dir = (manifest_dir / "resources" / "assets" / asset_name).string();
                 }
 
                 if (processAssetIfNeeded(manifest, asset_name, source_dir)) {
@@ -852,7 +852,7 @@ bool AssetProcessingPipeline::processAssetsNeedingRebuild(const std::string& man
                     source_dir = asset_data["asset_directory"].get<std::string>();
                 } else {
                     fs::path manifest_dir = fs::path(manifest_path).parent_path();
-                    source_dir = (manifest_dir / "SRC" / "assets" / asset_name).string();
+                    source_dir = (manifest_dir / "resources" / "assets" / asset_name).string();
                 }
 
                 // Only process if asset needs rebuilding

@@ -17,7 +17,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 
 ## Project Layout
 - `ENGINE/src/`: Runtime source for assets, controllers, rendering, UI, and dev tools.
-- `SRC/`: Source art and `info.json` definitions; includes loading screen content.
+- `resources/`: Source art and `info.json` definitions; includes loading screen content.
 - `MAPS/`: Map layouts, rooms, and spawn data referenced by the manifest.
 - `content/`: Runtime content packs (e.g., `content/test`, `content/forrest`).
 - `engine/tools/`: C++ cache utilities like `asset_tool_cli`, `set_rebuild_cli`, and `apply_effects_cli`.

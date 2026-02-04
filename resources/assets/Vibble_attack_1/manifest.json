@@ -169,7 +169,7 @@
         }
     },
     "anti_tags": [],
-    "asset_directory": "SRC/assets/Vibble_attack_1",
+    "asset_directory": "resources/assets/Vibble_attack_1",
     "asset_name": "Vibble_attack_1",
     "asset_type": "object",
     "async_children": [],

@@ -337,6 +337,7 @@ add_executable(engine_world_tests
     ENGINE/runtime/gameplay/world/chunk_manager.cpp
     ENGINE/runtime/utils/utils/grid_math.cpp
     ENGINE/runtime/utils/utils/log.cpp
+    ENGINE/TESTS/stubs/asset/Asset_world_tests_stubs.cpp
     ${TESTS_SOURCE_DIR}/stubs/chunk_stubs.cpp
 )
 

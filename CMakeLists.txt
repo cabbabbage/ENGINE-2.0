@@ -297,6 +297,7 @@ target_compile_definitions(engine_tests PRIVATE
     PROJECT_ROOT="${TEST_ROOT}"
     FRAME_EDITOR_TEST_PUBLIC_ACCESS=1
     FRAME_EDITOR_ACCESS=public
+    DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
 )
 
 target_link_libraries(engine_tests
@@ -353,6 +354,7 @@ target_include_directories(engine_world_tests
 
 target_compile_definitions(engine_world_tests PRIVATE
     PROJECT_ROOT="${TEST_ROOT}"
+    DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
 )
 
 # No heavy libs needed; these sources don't call into SDL functions

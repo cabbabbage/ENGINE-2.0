@@ -3,6 +3,13 @@
 #include <cstdlib>
 #include <fstream>
 #include <system_error>
+#include <sstream>
+#include <vector>
+#include <cerrno>
+
+#ifdef _WIN32
+#include <process.h>
+#endif
 
 #include "core/manifest/manifest_loader.hpp"
 #include "utils/log.hpp"
@@ -44,6 +51,14 @@ RebuildQueueCoordinator::RebuildQueueCoordinator() {
     repo_root_ = default_repo_root();
     manifest_path_ = fs::absolute(manifest::manifest_path());
     cache_root_ = repo_root_ / "cache";
+
+    // Ensure the cache root exists before any tool runs; missing directories
+    // previously caused downstream tools to bail out without generating images.
+    std::error_code ec;
+    fs::create_directories(cache_root_, ec);
+    if (ec) {
+        vibble::log::warn(std::string{"[RebuildQueue] Failed to create cache root '"} + cache_root_.string() + "': " + ec.message());
+    }
 }
 
 void RebuildQueueCoordinator::request_full_asset_rebuild() const {
@@ -87,7 +102,9 @@ bool RebuildQueueCoordinator::has_pending_asset_work() const {
 
 bool RebuildQueueCoordinator::run_asset_tool(const std::string& command_prefix) const {
     const fs::path tool = tool_path(repo_root_, "asset_tool_cli");
-    return run_cpp_tool(tool, {}, command_prefix);
+    return run_cpp_tool(tool,
+                        {"--manifest", manifest_path_.string(), "--cache-root", cache_root_.string()},
+                        command_prefix);
 }
 
 void RebuildQueueCoordinator::mark_all_frames_for_rebuild() const {
@@ -176,36 +193,96 @@ bool RebuildQueueCoordinator::run_cpp_tool(const fs::path& tool,
         return false;
     }
 
-    std::string command = "\"" + tool.string() + "\"";
-    for (const auto& arg : args) {
-        // Escape quotes in arguments
-        std::string escaped = arg;
-        size_t pos = 0;
-        while ((pos = escaped.find('"', pos)) != std::string::npos) {
-            escaped.insert(pos, "\\");
-            pos += 2;
+    auto render_command = [](const std::vector<std::string>& argv) {
+        std::ostringstream oss;
+        bool first = true;
+        for (const auto& token : argv) {
+            if (!first) {
+                oss << ' ';
+            }
+            first = false;
+            oss << '"' << token << '"';
         }
-        command += " \"" + escaped + "\"";
-    }
+        return oss.str();
+    };
 
-    std::string full_command = command_prefix.empty() ? command : (command_prefix + command);
+    std::vector<std::string> argv;
+    argv.reserve(args.size() + 1);
+    argv.push_back(tool.string());
+    argv.insert(argv.end(), args.begin(), args.end());
+
+    const std::string command_text = render_command(argv);
     vibble::log::info(std::string{"[RebuildQueue] Running "} + tool.filename().string());
 
-    int ret = std::system(full_command.c_str());
+    // If a prefix is explicitly provided, preserve legacy shell behaviour.
+    if (!command_prefix.empty()) {
+        const std::string full_command = command_prefix + command_text;
+        int ret = std::system(full_command.c_str());
+        if (ret != 0) {
+            vibble::log::warn(std::string{"[RebuildQueue] Tool exited with code "} + std::to_string(ret));
+            vibble::log::debug(std::string{"[RebuildQueue] Command: "} + full_command);
+            return false;
+        }
+        return true;
+    }
+
+#ifdef _WIN32
+    // Spawn directly to avoid cmd.exe quoting issues seen in the logs.
+    std::vector<std::wstring> wargs;
+    wargs.reserve(argv.size());
+    for (const auto& arg : argv) {
+        wargs.emplace_back(std::filesystem::path(arg).native());
+    }
+
+    std::vector<wchar_t*> wargv;
+    wargv.reserve(wargs.size() + 1);
+    for (auto& w : wargs) {
+        wargv.push_back(w.data());
+    }
+    wargv.push_back(nullptr);
+
+    intptr_t ret = _wspawnv(_P_WAIT, tool.c_str(), wargv.data());
+    if (ret == -1) {
+        vibble::log::warn(std::string{"[RebuildQueue] Failed to launch tool: "} + command_text + " (" + std::to_string(errno) + ")");
+        return false;
+    }
     if (ret != 0) {
         vibble::log::warn(std::string{"[RebuildQueue] Tool exited with code "} + std::to_string(ret));
+        vibble::log::debug(std::string{"[RebuildQueue] Command: "} + command_text);
         return false;
     }
     return true;
+#else
+    int ret = std::system(command_text.c_str());
+    if (ret != 0) {
+        vibble::log::warn(std::string{"[RebuildQueue] Tool exited with code "} + std::to_string(ret));
+        vibble::log::debug(std::string{"[RebuildQueue] Command: "} + command_text);
+        return false;
+    }
+    return true;
+#endif
 }
 
 bool RebuildQueueCoordinator::validate_manifest_cache(const std::string& command_prefix) const {
+    std::error_code ec;
+    if (!fs::is_directory(cache_root_)) {
+        fs::create_directories(cache_root_, ec);
+        if (ec) {
+            vibble::log::warn(std::string{"[RebuildQueue] Cache root missing and could not be created: "} + ec.message());
+        }
+    }
+
     if (!fs::is_directory(cache_root_)) {
         vibble::log::warn("[RebuildQueue] Cache root missing; queueing full asset rebuild.");
         mark_all_frames_for_rebuild();
     }
     const fs::path tool = tool_path(repo_root_, "cache_validator_cli");
-    return run_cpp_tool(tool, {"--manifest", manifest_path_.string()}, command_prefix);
+    if (!run_cpp_tool(tool, {"--manifest", manifest_path_.string()}, command_prefix)) {
+        vibble::log::warn("[RebuildQueue] Cache validation failed; queueing full asset rebuild.");
+        mark_all_frames_for_rebuild();
+        return false;
+    }
+    return true;
 }
 
 }

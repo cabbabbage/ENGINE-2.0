@@ -4,16 +4,36 @@
       "animations": {
         "back": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -24,12 +44,24 @@
         },
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -40,12 +72,24 @@
         },
         "forward": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -56,18 +100,42 @@
         },
         "right": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -86,7 +154,42 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -118,18 +221,42 @@
       "animations": {
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -148,16 +275,36 @@
       "animations": {
         "back": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -168,7 +315,9 @@
         },
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -179,12 +328,24 @@
         },
         "forward": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -195,18 +356,42 @@
         },
         "right": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -225,7 +410,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -275,18 +462,42 @@
       "animations": {
         "back": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -297,30 +508,78 @@
         },
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -331,18 +590,42 @@
         },
         "forward": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -353,18 +636,42 @@
         },
         "right": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -383,18 +690,42 @@
       "animations": {
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -413,7 +744,9 @@
       "animations": {
         "Default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -424,12 +757,24 @@
         },
         "Move Forward": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -440,18 +785,42 @@
         },
         "Move Left": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -470,16 +839,36 @@
       "animations": {
         "back": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -490,7 +879,9 @@
         },
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -501,12 +892,24 @@
         },
         "forward": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -517,18 +920,42 @@
         },
         "right": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -547,18 +974,42 @@
       "animations": {
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -588,18 +1039,42 @@
       "animations": {
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -629,7 +1104,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -648,7 +1125,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -667,30 +1146,78 @@
       "animations": {
         "default": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -710,7 +1237,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -736,7 +1265,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -756,7 +1287,24 @@
       "animations": {
         "attack": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -831,7 +1379,9 @@
             "reverse": false
           },
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "hit_geometry": [
             {
@@ -890,7 +1440,9 @@
             }
           ],
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "hit_geometry": [
             {
@@ -962,7 +1514,30 @@
             }
           ],
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "hit_geometry": [
             {
@@ -1069,14 +1644,30 @@
             }
           ],
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "hit_geometry": [
             {
@@ -1178,7 +1769,9 @@
             "reverse": false
           },
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "loop": true,
           "number_of_frames": 1,
@@ -1266,7 +1859,24 @@
             }
           ],
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "hit_geometry": [
             {
@@ -1365,7 +1975,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1415,23 +2027,57 @@
       "animations": {
         "damaged": {
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1523,7 +2169,9 @@
             }
           ],
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "hit_geometry": [
             {
@@ -1588,7 +2236,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1607,7 +2257,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1626,7 +2278,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1645,7 +2299,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1664,7 +2320,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1683,7 +2341,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1702,7 +2362,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1721,7 +2383,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1740,7 +2404,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1759,7 +2425,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1778,7 +2446,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1797,7 +2467,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1816,7 +2488,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1835,7 +2509,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1854,7 +2530,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1873,7 +2551,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1892,7 +2572,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1911,7 +2593,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1930,7 +2614,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1949,7 +2635,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1968,7 +2656,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -1987,7 +2677,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2009,7 +2701,9 @@
             []
           ],
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "hit_geometry": [
             {
@@ -2067,12 +2761,24 @@
             "reverse": false
           },
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "hit_geometry": [
             {
@@ -2112,12 +2818,24 @@
             []
           ],
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "hit_geometry": [
             {
@@ -2211,7 +2929,9 @@
             "reverse": false
           },
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "loop": true,
           "number_of_frames": 1,
@@ -2238,12 +2958,24 @@
             "reverse": false
           },
           "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            },
+            {
+              "needs_rebuild": true
+            }
           ],
           "hit_geometry": [
             {
@@ -2353,7 +3085,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2372,7 +3106,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2391,7 +3127,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,
@@ -2443,7 +3181,9 @@
       "animations": {
         "default": {
           "frames": [
-            {}
+            {
+              "needs_rebuild": true
+            }
           ],
           "locked": false,
           "loop": true,

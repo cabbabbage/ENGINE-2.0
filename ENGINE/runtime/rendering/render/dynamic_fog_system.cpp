@@ -70,6 +70,8 @@ bool DynamicFogSystem::initialize(SDL_Renderer* renderer) {
             continue;
         }
 
+        const int surf_w = surface->w;
+        const int surf_h = surface->h;
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
         SDL_FreeSurface(surface);
 
@@ -78,7 +80,7 @@ bool DynamicFogSystem::initialize(SDL_Renderer* renderer) {
             continue;
         }
 
-        fog_textures_.push_back(texture);
+        fog_textures_.push_back(FogTexture{texture, surf_w, surf_h});
         ++loaded_count;
     }
 
@@ -144,14 +146,8 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
                     continue;
                 }
 
-                SDL_Texture* fog_tex = fog_textures_[fog_index];
-                if (!fog_tex) {
-                    continue;
-                }
-
-                // Get texture dimensions
-                int tex_w = 0, tex_h = 0;
-                if (SDL_QueryTexture(fog_tex, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+                const auto& fog_tex_entry = fog_textures_[fog_index];
+                if (!fog_tex_entry.texture || fog_tex_entry.width <= 0 || fog_tex_entry.height <= 0) {
                     continue;
                 }
 
@@ -166,20 +162,23 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
                     continue;
                 }
 
-                // Create fog sprite (scale will be calculated during rendering based on projection)
-                FogSprite sprite;
-                sprite.texture = fog_tex;
-                sprite.world_pos = world_pos;
-                sprite.screen_pos = screen_pos;
-                sprite.scale = 1.0f;  // Base scale, warping will handle perspective
-                sprite.world_z = world_z;
-                sprite.texture_w = tex_w;
-                sprite.texture_h = tex_h;
-
-                active_fog_sprites_.push_back(sprite);
+                active_fog_sprites_.push_back(FogSprite{
+                    fog_tex_entry.texture, world_pos, screen_pos, 1.0f, world_z,
+                    fog_tex_entry.width, fog_tex_entry.height
+                });
             }
         }
     }
+
+    // Depth-sort so render.cpp can merge fog into the interleaved draw order without copying
+    const double anchor_y = cam.anchor_world_y();
+    std::sort(active_fog_sprites_.begin(), active_fog_sprites_.end(),
+        [anchor_y](const FogSprite& a, const FogSprite& b) {
+            const double da = anchor_y - static_cast<double>(a.world_pos.y);
+            const double db = anchor_y - static_cast<double>(b.world_pos.y);
+            if (da != db) return da > db;
+            return a.world_pos.x < b.world_pos.x;
+        });
 }
 
 void DynamicFogSystem::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam) {

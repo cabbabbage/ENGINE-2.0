@@ -572,41 +572,20 @@ void SceneRenderer::render() {
         return anchor_world_y - world_y;
     };
 
-    std::vector<DynamicFogSystem::FogSprite> fog_sprites;
-    if (dynamic_fog_system_ && should_render_fog) {
-        fog_sprites = dynamic_fog_system_->get_fog_sprites();
-        std::sort(fog_sprites.begin(), fog_sprites.end(),
-            [&](const auto& a, const auto& b) {
-                const double da = depth_from_anchor(static_cast<double>(a.world_pos.y));
-                const double db = depth_from_anchor(static_cast<double>(b.world_pos.y));
-                if (da != db) {
-                    return da > db;
-                }
-                return a.world_pos.x < b.world_pos.x;
-            });
-    }
+    // Sprites are depth-sorted inside their respective update() calls; bind directly, no copy.
+    static const std::vector<DynamicFogSystem::FogSprite>      kEmptyFogSprites;
+    static const std::vector<DynamicBoundarySystem::BoundarySprite> kEmptyBoundarySprites;
+    const auto& fog_sprites      = (dynamic_fog_system_ && should_render_fog)
+        ? dynamic_fog_system_->get_fog_sprites()         : kEmptyFogSprites;
+    const auto& boundary_sprites = should_render_boundaries
+        ? dynamic_boundary_system_->get_boundary_sprites() : kEmptyBoundarySprites;
+
     size_t fog_index = 0;
-    const float fog_size_scale = DynamicFogSystem::base_size_scale();
-    const float fog_cull_margin = 64.0f;
-
-    const float fog_vertical_offset = DynamicFogSystem::vertical_offset();
-
-    // Get and sort boundary sprites
-    std::vector<DynamicBoundarySystem::BoundarySprite> boundary_sprites;
-    if (should_render_boundaries) {
-        boundary_sprites = dynamic_boundary_system_->get_boundary_sprites();
-        std::sort(boundary_sprites.begin(), boundary_sprites.end(),
-            [&](const auto& a, const auto& b) {
-                const double da = depth_from_anchor(static_cast<double>(a.world_pos.y));
-                const double db = depth_from_anchor(static_cast<double>(b.world_pos.y));
-                if (da != db) {
-                    return da > db;
-                }
-                return a.world_pos.x < b.world_pos.x;
-            });
-    }
     size_t boundary_index = 0;
-    const float boundary_cull_margin = 64.0f;
+    const float fog_size_scale          = DynamicFogSystem::base_size_scale();
+    const float fog_cull_margin         = 64.0f;
+    const float fog_vertical_offset     = DynamicFogSystem::vertical_offset();
+    const float boundary_cull_margin    = 64.0f;
     const float boundary_vertical_offset = DynamicBoundarySystem::vertical_offset();
 
     struct AssetRenderCandidate {
@@ -637,40 +616,34 @@ void SceneRenderer::render() {
 
     auto next_asset = advance_asset_candidate();
 
-    auto render_fog_sprite = [&](const DynamicFogSystem::FogSprite& sprite) {
-        if (!sprite.texture || sprite.texture_w <= 0 || sprite.texture_h <= 0) {
+    // Shared ground-sprite renderer used for both fog and boundary decorations.
+    // world_width / world_height are the pre-scaled world-space dimensions to project.
+    auto render_ground_sprite = [&](SDL_Texture* texture, float world_x, float world_y,
+                                    float world_z, float world_width, float world_height,
+                                    int tex_w, int tex_h, float vert_offset, float cull_margin) {
+        if (!texture || tex_w <= 0 || tex_h <= 0 || world_width <= 0.0f || world_height <= 0.0f) {
             return;
         }
-
-        const float world_x = sprite.world_pos.x;
-        const float world_y = sprite.world_pos.y;
-        const float world_z = static_cast<float>(sprite.world_z);
-        const float fog_world_width = static_cast<float>(sprite.texture_w) * fog_size_scale * sprite.scale;
-        const float fog_world_height = static_cast<float>(sprite.texture_h) * fog_size_scale * sprite.scale;
-        const float half_width = fog_world_width * 0.5f;
-        const float height = fog_world_height;
+        const float half_width = world_width * 0.5f;
+        const float height = world_height;
 
         SDL_FPoint base_screen{};
         if (!project_world_point(cam, world_x, world_y, world_z, base_screen)) {
             return;
         }
 
-        const float adjusted_y = base_screen.y + fog_vertical_offset;
-        const float left = base_screen.x - half_width;
-        const float right = base_screen.x + half_width;
-        const float top = adjusted_y - height;
-        const float bottom = adjusted_y;
-        if (right < -fog_cull_margin || left > static_cast<float>(screen_width_) + fog_cull_margin ||
-            bottom < -fog_cull_margin || top > static_cast<float>(screen_height_) + fog_cull_margin) {
+        const float adjusted_y = base_screen.y + vert_offset;
+        if (base_screen.x + half_width < -cull_margin ||
+            base_screen.x - half_width > static_cast<float>(screen_width_) + cull_margin ||
+            adjusted_y < -cull_margin ||
+            adjusted_y - height > static_cast<float>(screen_height_) + cull_margin) {
             return;
         }
 
-        const float padding_x = 0.5f / static_cast<float>(sprite.texture_w);
-        const float padding_y = 0.5f / static_cast<float>(sprite.texture_h);
-        const float u0 = padding_x;
-        const float u1 = 1.0f - padding_x;
-        const float v0 = padding_y;
-        const float v1 = 1.0f - padding_y;
+        const float padding_x = 0.5f / static_cast<float>(tex_w);
+        const float padding_y = 0.5f / static_cast<float>(tex_h);
+        const float u0 = padding_x,  u1 = 1.0f - padding_x;
+        const float v0 = padding_y,  v1 = 1.0f - padding_y;
 
         SDL_Vertex vertices[4]{};
         vertices[0].position = SDL_FPoint{base_screen.x - half_width, adjusted_y - height};
@@ -684,66 +657,10 @@ void SceneRenderer::render() {
         vertices[2].tex_coord = SDL_FPoint{u1, v1};
         vertices[3].tex_coord = SDL_FPoint{u0, v1};
 
-        SDL_SetTextureBlendMode(sprite.texture, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
-        SDL_SetTextureAlphaMod(sprite.texture, 255);
-        SDL_RenderGeometry(renderer_, sprite.texture, vertices, 4, kQuadIndices, 6);
-    };
-
-    auto render_boundary_sprite = [&](const DynamicBoundarySystem::BoundarySprite& sprite) {
-        if (!sprite.texture || sprite.texture_w <= 0 || sprite.texture_h <= 0) {
-            return;
-        }
-
-        const float world_x = sprite.world_pos.x;
-        const float world_y = sprite.world_pos.y;
-        const float world_z = static_cast<float>(sprite.world_z);
-        const float boundary_world_width = sprite.world_width;
-        const float boundary_world_height = sprite.world_height;
-        if (boundary_world_width <= 0.0f || boundary_world_height <= 0.0f) {
-            return;
-        }
-        const float half_width = boundary_world_width * 0.5f;
-        const float height = boundary_world_height;
-
-        SDL_FPoint base_screen{};
-        if (!project_world_point(cam, world_x, world_y, world_z, base_screen)) {
-            return;
-        }
-
-        const float adjusted_y = base_screen.y + boundary_vertical_offset;
-        const float left = base_screen.x - half_width;
-        const float right = base_screen.x + half_width;
-        const float top = adjusted_y - height;
-        const float bottom = adjusted_y;
-        if (right < -boundary_cull_margin || left > static_cast<float>(screen_width_) + boundary_cull_margin ||
-            bottom < -boundary_cull_margin || top > static_cast<float>(screen_height_) + boundary_cull_margin) {
-            return;
-        }
-
-        const float padding_x = 0.5f / static_cast<float>(sprite.texture_w);
-        const float padding_y = 0.5f / static_cast<float>(sprite.texture_h);
-        const float u0 = padding_x;
-        const float u1 = 1.0f - padding_x;
-        const float v0 = padding_y;
-        const float v1 = 1.0f - padding_y;
-
-        SDL_Vertex vertices[4]{};
-        vertices[0].position = SDL_FPoint{base_screen.x - half_width, adjusted_y - height};
-        vertices[1].position = SDL_FPoint{base_screen.x + half_width, adjusted_y - height};
-        vertices[2].position = SDL_FPoint{base_screen.x + half_width, adjusted_y};
-        vertices[3].position = SDL_FPoint{base_screen.x - half_width, adjusted_y};
-        const SDL_Color white{255, 255, 255, 255};
-        vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
-        vertices[0].tex_coord = SDL_FPoint{u0, v0};
-        vertices[1].tex_coord = SDL_FPoint{u1, v0};
-        vertices[2].tex_coord = SDL_FPoint{u1, v1};
-        vertices[3].tex_coord = SDL_FPoint{u0, v1};
-
-        SDL_SetTextureBlendMode(sprite.texture, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
-        SDL_SetTextureAlphaMod(sprite.texture, 255);
-        SDL_RenderGeometry(renderer_, sprite.texture, vertices, 4, kQuadIndices, 6);
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureColorMod(texture, 255, 255, 255);
+        SDL_SetTextureAlphaMod(texture, 255);
+        SDL_RenderGeometry(renderer_, texture, vertices, 4, kQuadIndices, 6);
     };
 
     while (next_asset || fog_index < fog_sprites.size() || boundary_index < boundary_sprites.size()) {
@@ -797,10 +714,17 @@ void SceneRenderer::render() {
 
             next_asset = advance_asset_candidate();
         } else if (boundary_index < boundary_sprites.size() && boundary_depth == max_depth) {
-            render_boundary_sprite(boundary_sprites[boundary_index]);
+            const auto& bs = boundary_sprites[boundary_index];
+            render_ground_sprite(bs.texture, bs.world_pos.x, bs.world_pos.y, static_cast<float>(bs.world_z),
+                                 bs.world_width, bs.world_height,
+                                 bs.texture_w, bs.texture_h, boundary_vertical_offset, boundary_cull_margin);
             ++boundary_index;
         } else if (fog_index < fog_sprites.size()) {
-            render_fog_sprite(fog_sprites[fog_index]);
+            const auto& fs = fog_sprites[fog_index];
+            render_ground_sprite(fs.texture, fs.world_pos.x, fs.world_pos.y, static_cast<float>(fs.world_z),
+                                 static_cast<float>(fs.texture_w) * fog_size_scale * fs.scale,
+                                 static_cast<float>(fs.texture_h) * fog_size_scale * fs.scale,
+                                 fs.texture_w, fs.texture_h, fog_vertical_offset, fog_cull_margin);
             ++fog_index;
         } else {
             break;

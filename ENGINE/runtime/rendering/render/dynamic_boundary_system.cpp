@@ -42,25 +42,12 @@ inline std::uint64_t xorshift64(std::uint64_t value) {
 }
 
 inline bool is_trail_string(const std::string& text) {
-    if (text.empty()) {
-        return false;
-    }
-    bool all_space = true;
-    for (unsigned char ch : text) {
-        if (!std::isspace(ch)) {
-            all_space = false;
-            break;
-        }
-    }
-    if (all_space) {
-        return false;
-    }
-    std::string lower;
-    lower.reserve(text.size());
-    for (unsigned char ch : text) {
-        lower.push_back(static_cast<char>(std::tolower(ch)));
-    }
-    return lower == "trail";
+    if (text.size() != 5) return false;
+    return std::tolower(static_cast<unsigned char>(text[0])) == 't' &&
+           std::tolower(static_cast<unsigned char>(text[1])) == 'r' &&
+           std::tolower(static_cast<unsigned char>(text[2])) == 'a' &&
+           std::tolower(static_cast<unsigned char>(text[3])) == 'i' &&
+           std::tolower(static_cast<unsigned char>(text[4])) == 'l';
 }
 
 struct ExclusionArea {
@@ -526,6 +513,16 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             }
         }
     }
+
+    // Depth-sort so render.cpp can merge boundaries into the interleaved draw order without copying
+    const double anchor_y = cam.anchor_world_y();
+    std::sort(active_boundary_sprites_.begin(), active_boundary_sprites_.end(),
+        [anchor_y](const BoundarySprite& a, const BoundarySprite& b) {
+            const double da = anchor_y - static_cast<double>(a.world_pos.y);
+            const double db = anchor_y - static_cast<double>(b.world_pos.y);
+            if (da != db) return da > db;
+            return a.world_pos.x < b.world_pos.x;
+        });
 }
 
 std::size_t DynamicBoundarySystem::BoundaryKeyHash::operator()(const DynamicBoundarySystem::BoundaryKey& key) const noexcept {

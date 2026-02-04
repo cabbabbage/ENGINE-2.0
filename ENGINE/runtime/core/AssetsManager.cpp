@@ -2094,13 +2094,12 @@ void Assets::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& i
 
 namespace {
 inline bool is_trail_string(const std::string& text) {
-    if (text.empty()) return false;
-    std::string lower;
-    lower.reserve(text.size());
-    for (unsigned char ch : text) {
-        lower.push_back(static_cast<char>(std::tolower(ch)));
-    }
-    return lower == "trail";
+    if (text.size() != 5) return false;
+    return std::tolower(static_cast<unsigned char>(text[0])) == 't' &&
+           std::tolower(static_cast<unsigned char>(text[1])) == 'r' &&
+           std::tolower(static_cast<unsigned char>(text[2])) == 'a' &&
+           std::tolower(static_cast<unsigned char>(text[3])) == 'i' &&
+           std::tolower(static_cast<unsigned char>(text[4])) == 'l';
 }
 }
 

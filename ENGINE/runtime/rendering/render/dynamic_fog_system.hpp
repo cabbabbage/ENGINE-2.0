@@ -78,8 +78,14 @@ private:
     static constexpr float kMinRandomJitter = 0.0f;
     static constexpr float kMaxRandomJitter = 500.0f;
 
-    // Fog textures (10 base textures loaded once)
-    std::vector<SDL_Texture*> fog_textures_;
+    struct FogTexture {
+        SDL_Texture* texture = nullptr;
+        int width = 0;
+        int height = 0;
+    };
+
+    // Fog textures (10 base textures loaded once, dimensions cached at load)
+    std::vector<FogTexture> fog_textures_;
 
     // Track which fog texture index assigned to each grid point
     // Key: world coordinates as hash, Value: fog texture index (0-9)

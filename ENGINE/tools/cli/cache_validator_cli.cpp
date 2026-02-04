@@ -39,12 +39,21 @@ static inline fs::file_time_type safe_last_write_time(const fs::path& p) {
     return t;
 }
 
-static inline bool file_missing_or_older(const fs::path& p, fs::file_time_type baseline) {
+static inline bool file_missing_or_older(const fs::path& p,
+                                         fs::file_time_type baseline,
+                                         std::chrono::nanoseconds slack = std::chrono::nanoseconds{0}) {
     std::error_code ec;
     if (!fs::exists(p, ec) || ec) return true;
     auto t = fs::last_write_time(p, ec);
     if (ec) return true;
-    if (baseline != fs::file_time_type::min() && t < baseline) return true;
+    if (baseline != fs::file_time_type::min()) {
+        // Allow a small slack so freshly written cache files (which are created
+        // just before manifest.json is rewritten) are not treated as stale.
+        if (slack.count() > 0) {
+            baseline -= slack;
+        }
+        if (t < baseline) return true;
+    }
     uintmax_t sz = fs::file_size(p, ec);
     if (ec) return true;
     return sz < 32; // heuristically treat tiny files as invalid
@@ -166,12 +175,13 @@ void normalize_frames(json& anim, int frame_count) {
 // Check if any expected output is missing or older than baseline
 bool animation_output_missing_or_stale(const fs::path& anim_cache_root,
                                        int output_idx,
-                                       fs::file_time_type baseline_time) {
+                                       fs::file_time_type baseline_time,
+                                       std::chrono::nanoseconds slack) {
     for (int scale_pct : ANIMATION_SCALE_PCTS) {
         fs::path scale_dir = anim_cache_root / ("scale_" + std::to_string(scale_pct));
         for (const char* variant : VARIANTS) {
             fs::path frame_path = scale_dir / variant / (std::to_string(output_idx) + ".png");
-            if (file_missing_or_older(frame_path, baseline_time)) {
+            if (file_missing_or_older(frame_path, baseline_time, slack)) {
                 return true;
             }
         }
@@ -251,6 +261,8 @@ bool validate_animation_cache(
     std::vector<int> frame_sequence = imgcache::ImageCacheGenerator::BuildSpeedFrameSequence(frame_count, speed_multiplier);
     if (frame_sequence.empty()) return false;
 
+    constexpr auto kTimestampSlack = std::chrono::seconds(2);
+
     bool changed = false;
     for (size_t output_idx = 0; output_idx < frame_sequence.size(); ++output_idx) {
         int source_idx = frame_sequence[output_idx];
@@ -269,7 +281,10 @@ bool validate_animation_cache(
             baseline = std::max(baseline, safe_last_write_time(source_frames[source_idx]));
         }
 
-        if (animation_output_missing_or_stale(anim_cache_root, static_cast<int>(output_idx), baseline)) {
+        if (animation_output_missing_or_stale(anim_cache_root,
+                                              static_cast<int>(output_idx),
+                                              baseline,
+                                              kTimestampSlack)) {
             frame_entry["needs_rebuild"] = true;
             changed = true;
         }

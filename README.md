@@ -16,7 +16,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 - Asset tools regenerate animation and lighting caches from manifest flags to keep generated art in sync.
 
 ## Project Layout
-- `ENGINE/`: Runtime source for assets, controllers, rendering, UI, and dev tools.
+- `ENGINE/src/`: Runtime source for assets, controllers, rendering, UI, and dev tools.
 - `SRC/`: Source art and `info.json` definitions; includes loading screen content.
 - `MAPS/`: Map layouts, rooms, and spawn data referenced by the manifest.
 - `content/`: Runtime content packs (e.g., `content/test`, `content/forrest`).
@@ -34,7 +34,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 - Reduces render quality for responsiveness and exposes editors for maps, assets, lighting, and spawns. Settings persist in `dev_mode_settings.json`.
 
 ## Custom Controllers
-- Add new controllers under `ENGINE/animation_update/custom_controllers/` and register them in `ControllerFactory::create_by_key`.
+- Add new controllers under `ENGINE/src/animation/controllers/custom_controllers/` and register them in `ControllerFactory::create_by_key`.
 - Link from content with `"custom_controller_key": "YourController"` in an asset `info.json` or via the Dev Mode editors.
 
 ## Testing

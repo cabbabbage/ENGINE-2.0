@@ -561,7 +561,9 @@ void SceneRenderer::render() {
     }
 
     // Update boundary system before rendering (uses frame delta of 16.67ms as estimate)
-    const bool should_render_boundaries = dynamic_boundary_system_ && dynamic_boundary_system_->is_initialized();
+    const bool boundary_assets_visible = assets_->boundary_assets_visible();
+    const bool should_render_boundaries =
+        boundary_assets_visible && dynamic_boundary_system_ && dynamic_boundary_system_->is_initialized();
     const float boundary_delta_ms = static_cast<float>(assets_->frame_delta_seconds() * 1000.0);
     if (should_render_boundaries) {
         dynamic_boundary_system_->update(cam, grid, assets_, boundary_delta_ms);

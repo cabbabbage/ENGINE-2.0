@@ -45,20 +45,20 @@ endforeach()
 # Sources
 # ------------------------------------------
 file(GLOB_RECURSE ENGINE_SRC CONFIGURE_DEPENDS
-    ${CMAKE_SOURCE_DIR}/ENGINE/*.cpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/*.c
-    ${CMAKE_SOURCE_DIR}/ENGINE/*.hpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/*.h
+    ${CMAKE_SOURCE_DIR}/ENGINE/src/*.cpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/src/*.c
+    ${CMAKE_SOURCE_DIR}/ENGINE/src/*.hpp
+    ${CMAKE_SOURCE_DIR}/ENGINE/src/*.h
 )
 
 list(REMOVE_DUPLICATES ENGINE_SRC)
 # Exclude standalone tool entry points from the main engine binary
 list(REMOVE_ITEM ENGINE_SRC
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/asset_tool_cli.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/set_rebuild_cli.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cache_validator_cli.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/apply_effects_cli.cpp"
-    "${CMAKE_SOURCE_DIR}/ENGINE/tools/image_cache_generator.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/asset_tool_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/set_rebuild_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/cache_validator_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/apply_effects_cli.cpp"
+    "${CMAKE_SOURCE_DIR}/ENGINE/tools/cli/image_cache_generator.cpp"
 )
 
 add_executable(engine ${ENGINE_SRC})
@@ -173,16 +173,8 @@ endif()
 # ------------------------------------------
 target_include_directories(engine
     PRIVATE
-        ${CMAKE_SOURCE_DIR}/ENGINE
-        ${CMAKE_SOURCE_DIR}/ENGINE/asset
-        ${CMAKE_SOURCE_DIR}/ENGINE/core
-        ${CMAKE_SOURCE_DIR}/ENGINE/dev_mode
-        ${CMAKE_SOURCE_DIR}/ENGINE/render
-        ${CMAKE_SOURCE_DIR}/ENGINE/render_pipeline
-        ${CMAKE_SOURCE_DIR}/ENGINE/map_generation
-        ${CMAKE_SOURCE_DIR}/ENGINE/spawn
-        ${CMAKE_SOURCE_DIR}/ENGINE/ui
-        ${CMAKE_SOURCE_DIR}/ENGINE/utils
+        ${CMAKE_SOURCE_DIR}/ENGINE/src
+        ${CMAKE_SOURCE_DIR}/ENGINE/src/tooling
 )
 
 target_compile_definitions(engine PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
@@ -249,39 +241,30 @@ add_executable(engine_tests
     TESTS/test_frame_editor_async_payload.cpp
     TESTS/test_attack_validation.cpp
     TESTS/frame_editor_session_test_helpers.cpp
-    ENGINE/asset/animation.cpp
-    ENGINE/asset/surface_utils.cpp
-    ENGINE/asset/animation_cloner.cpp
-    ENGINE/animation_update/child_attachment_controller.cpp
-    ENGINE/animation_update/attack_validation.cpp
-    ENGINE/dev_mode/asset_sections/animation_editor_window/AnimationDocument.cpp
-    ENGINE/dev_mode/dm_styles.cpp
-    ENGINE/dev_mode/core/dev_json_store.cpp
-    ENGINE/dev_mode/core/manifest_store.cpp
-    ENGINE/dev_mode/manifest_asset_utils.cpp
-    ENGINE/dev_mode/tag_utils.cpp
-    ENGINE/dev_mode/draw_utils.cpp
-    ENGINE/dev_mode/font_cache.cpp
-    ENGINE/dev_mode/widgets.cpp
-    ENGINE/dev_mode/frame_editors/shared/Point3DEditor.cpp
-    ENGINE/core/manifest/manifest_loader.cpp
-    ENGINE/utils/log.cpp
-    ENGINE/utils/cache_manager.cpp
-    ENGINE/utils/loading_status_notifier.cpp
+    ENGINE/src/assets/asset/animation.cpp
+    ENGINE/src/assets/asset/surface_utils.cpp
+    ENGINE/src/assets/asset/animation_cloner.cpp
+    ENGINE/src/animation/child_attachment_controller.cpp
+    ENGINE/src/animation/attack_validation.cpp
+    ENGINE/src/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
+    ENGINE/src/devtools/dm_styles.cpp
+    ENGINE/src/devtools/core/dev_json_store.cpp
+    ENGINE/src/devtools/core/manifest_store.cpp
+    ENGINE/src/devtools/manifest_asset_utils.cpp
+    ENGINE/src/devtools/tag_utils.cpp
+    ENGINE/src/devtools/draw_utils.cpp
+    ENGINE/src/devtools/font_cache.cpp
+    ENGINE/src/devtools/widgets.cpp
+    ENGINE/src/devtools/frame_editors/shared/Point3DEditor.cpp
+    ENGINE/src/core/manifest/manifest_loader.cpp
+    ENGINE/src/utils/log.cpp
+    ENGINE/src/utils/cache_manager.cpp
+    ENGINE/src/utils/loading_status_notifier.cpp
   )
 
 target_include_directories(engine_tests
     PRIVATE
-        ${CMAKE_SOURCE_DIR}/ENGINE
-        ${CMAKE_SOURCE_DIR}/ENGINE/asset
-        ${CMAKE_SOURCE_DIR}/ENGINE/core
-        ${CMAKE_SOURCE_DIR}/ENGINE/dev_mode
-        ${CMAKE_SOURCE_DIR}/ENGINE/render
-        ${CMAKE_SOURCE_DIR}/ENGINE/render_pipeline
-        ${CMAKE_SOURCE_DIR}/ENGINE/map_generation
-        ${CMAKE_SOURCE_DIR}/ENGINE/spawn
-        ${CMAKE_SOURCE_DIR}/ENGINE/ui
-        ${CMAKE_SOURCE_DIR}/ENGINE/utils
+        ${CMAKE_SOURCE_DIR}/ENGINE/src
         ${CMAKE_SOURCE_DIR}/external
 )
 
@@ -325,19 +308,19 @@ endif()
 add_executable(engine_world_tests
     TESTS/test_main.cpp
     TESTS/test_world_grid_same_chunk_move.cpp
-    ENGINE/world/world_grid.cpp
-    ENGINE/world/grid_point.cpp
-    ENGINE/world/chunk_manager.cpp
-    ENGINE/utils/grid_math.cpp
-    ENGINE/utils/log.cpp
+    ENGINE/src/gameplay/world/world_grid.cpp
+    ENGINE/src/gameplay/world/grid_point.cpp
+    ENGINE/src/gameplay/world/chunk_manager.cpp
+    ENGINE/src/utils/grid_math.cpp
+    ENGINE/src/utils/log.cpp
     TESTS/stubs/chunk_stubs.cpp
 )
 
 target_include_directories(engine_world_tests
     PRIVATE
         ${CMAKE_SOURCE_DIR}/TESTS/stubs
-        ${CMAKE_SOURCE_DIR}/ENGINE
-    ${CMAKE_SOURCE_DIR}/external
+        ${CMAKE_SOURCE_DIR}/ENGINE/src
+        ${CMAKE_SOURCE_DIR}/external
 )
 
 target_compile_definitions(engine_world_tests PRIVATE
@@ -366,11 +349,11 @@ endif()
 
 # Asset Tool CLI - main cache generator
 add_executable(asset_tool_cli
-    ENGINE/tools/asset_tool_cli.cpp
-    ENGINE/tools/image_cache_generator.cpp
+    ENGINE/tools/cli/asset_tool_cli.cpp
+    ENGINE/tools/cli/image_cache_generator.cpp
 )
 target_include_directories(asset_tool_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
     ${CMAKE_SOURCE_DIR}/external
 )
 target_compile_definitions(asset_tool_cli PRIVATE
@@ -383,10 +366,10 @@ target_link_libraries(asset_tool_cli PRIVATE
 
 # Set Rebuild Values CLI - manifest manipulation
 add_executable(set_rebuild_cli
-    ENGINE/tools/set_rebuild_cli.cpp
+    ENGINE/tools/cli/set_rebuild_cli.cpp
 )
 target_include_directories(set_rebuild_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
 )
 target_link_libraries(set_rebuild_cli PRIVATE
     nlohmann_json::nlohmann_json
@@ -394,11 +377,11 @@ target_link_libraries(set_rebuild_cli PRIVATE
 
 # Cache Validator CLI - cache integrity validation
 add_executable(cache_validator_cli
-    ENGINE/tools/cache_validator_cli.cpp
-    ENGINE/tools/image_cache_generator.cpp
+    ENGINE/tools/cli/cache_validator_cli.cpp
+    ENGINE/tools/cli/image_cache_generator.cpp
 )
 target_include_directories(cache_validator_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
     ${CMAKE_SOURCE_DIR}/external
 )
 target_compile_definitions(cache_validator_cli PRIVATE
@@ -411,11 +394,11 @@ target_link_libraries(cache_validator_cli PRIVATE
 
 # Apply Effects CLI - effect preview generation
 add_executable(apply_effects_cli
-    ENGINE/tools/apply_effects_cli.cpp
-    ENGINE/tools/image_cache_generator.cpp
+    ENGINE/tools/cli/apply_effects_cli.cpp
+    ENGINE/tools/cli/image_cache_generator.cpp
 )
 target_include_directories(apply_effects_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools
+    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
     ${CMAKE_SOURCE_DIR}/external
 )
 target_compile_definitions(apply_effects_cli PRIVATE

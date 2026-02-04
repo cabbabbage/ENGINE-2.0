@@ -425,6 +425,13 @@ bool Assets::fog_visible() const {
     return dev_controls_->fog_visible();
 }
 
+bool Assets::boundary_assets_visible() const {
+    if (!dev_controls_ || !dev_controls_->is_enabled()) {
+        return true;
+    }
+    return dev_controls_->boundary_assets_visible();
+}
+
 Assets::~Assets() {
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
@@ -865,6 +872,10 @@ void Assets::update(const Input& input)
     }
 
     render_overlays(renderer());
+
+    last_camera_state_version_for_dev_ = camera_.camera_state_version();
+    last_dev_active_state_version_snapshot_ = dev_active_state_version_;
+    dev_frame_initialized_ = true;
 }
 
 void Assets::rebuild_non_player_update_buffer_if_needed() {
@@ -1175,6 +1186,9 @@ void Assets::set_dev_mode(bool mode) {
 
         if (enabled_ok) {
             dev_mode = true;
+            dev_frame_initialized_ = false;
+            last_camera_state_version_for_dev_ = camera_.camera_state_version();
+            last_dev_active_state_version_snapshot_ = dev_active_state_version_;
             show_dev_notice("Dev Mode enabled (Ctrl+D to toggle)", 2000);
         } else {
 
@@ -1193,6 +1207,9 @@ void Assets::set_dev_mode(bool mode) {
         } catch (...) {
         }
         dev_mode = false;
+        dev_frame_initialized_ = false;
+        last_camera_state_version_for_dev_ = camera_.camera_state_version();
+        last_dev_active_state_version_snapshot_ = dev_active_state_version_;
         show_dev_notice("Dev Mode disabled", 1500);
     }
 
@@ -2241,18 +2258,30 @@ bool Assets::should_step_dev_frame(const Input& input) const {
         return true;
     }
 
-    // Direct user interaction (mouse / keyboard) warrants a tick.
+    if (!dev_frame_initialized_) {
+        return true;
+    }
+
+    if (camera_.camera_state_version() != last_camera_state_version_for_dev_) {
+        return true;
+    }
+
+    if (dev_active_state_version_ != last_dev_active_state_version_snapshot_) {
+        return true;
+    }
+
+    if (camera_.is_height_animating() ||
+        camera_settings_dirty_ ||
+        grid_dirty_ ||
+        needs_filtered_active_refresh_ ||
+        active_assets_dirty_.load(std::memory_order_acquire)) {
+        return true;
+    }
+
     if (input.has_activity()) {
         return true;
     }
 
-    // Allow ticks while the camera is animating (zoom/height easing).
-    if (camera_.is_height_animating()) {
-        return true;
-    }
-
-    // Handle lightweight dev work (popups, initial rebuilds, quick task modal)
-    // but ignore long-running animation plans to keep the scene paused.
     if (has_pending_dev_work(false)) {
         return true;
     }

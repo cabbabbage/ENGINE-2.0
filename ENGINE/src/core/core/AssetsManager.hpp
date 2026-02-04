@@ -118,6 +118,7 @@ public:
     void set_movement_debug_visible(bool visible);
     bool movement_debug_visible() const { return movement_debug_visible_; }
     bool fog_visible() const;
+    bool boundary_assets_visible() const;
     // Force the camera to refresh from current room settings on next update.
     void mark_camera_dirty();
 
@@ -354,5 +355,8 @@ private:
     bool needs_filtered_active_refresh_ = true;
     bool last_dev_controls_enabled_ = false;
     std::uint64_t last_dev_filter_state_version_ = 0;
+    std::uint64_t last_camera_state_version_for_dev_ = 0;
+    std::uint64_t last_dev_active_state_version_snapshot_ = 0;
+    bool dev_frame_initialized_ = false;
 };
 #include "utils/map_grid_settings.hpp"

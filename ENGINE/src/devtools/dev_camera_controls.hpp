@@ -28,6 +28,7 @@ private:
     SDL_Point pan_start_center_{0, 0};
     SDL_Point last_pan_center_{0, 0};
     bool has_last_pan_center_ = false;
+    std::optional<SDL_FPoint> pan_start_world_point_;
     SDL_Point tilt_start_mouse_screen_{0, 0};
     float tilt_start_degrees_ = 0.0f;
 };

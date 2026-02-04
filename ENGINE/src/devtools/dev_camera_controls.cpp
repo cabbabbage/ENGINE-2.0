@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <optional>
 
 namespace {
 constexpr float kTiltDegreesPerPixel = 0.2f;
@@ -64,6 +65,7 @@ void DevCameraControls::handle_input(WarpedScreenGrid& cam,
         pan_drag_pending_ = false;
         has_last_pan_center_ = false;
         tilting_ = false;
+        pan_start_world_point_ = std::nullopt;
     }
 
     if (input.wasPressed(Input::LEFT)) {
@@ -89,6 +91,7 @@ void DevCameraControls::handle_input(WarpedScreenGrid& cam,
             pan_drag_pending_ = true;
             pan_start_mouse_screen_ = mouse;
             pan_start_center_ = cam.get_screen_center();
+            pan_start_world_point_ = cam.screen_to_map(mouse);
         } else {
             panning_ = false;
             pan_drag_pending_ = false;
@@ -98,6 +101,7 @@ void DevCameraControls::handle_input(WarpedScreenGrid& cam,
     if (!left_down) {
         pan_drag_pending_ = false;
         tilting_ = false;
+        pan_start_world_point_ = std::nullopt;
     }
 
     if (ctrl_down && !panning_) {
@@ -150,24 +154,41 @@ void DevCameraControls::handle_input(WarpedScreenGrid& cam,
     if (dx == 0 && dy == 0) {
         return;
     }
-    SDL_Point new_center{
-        pan_start_center_.x - dx,
-        pan_start_center_.y - dy
-    };
+    SDL_Point target_center = cam.get_screen_center();
+    bool applied_world_lock = false;
+    if (pan_start_world_point_.has_value()) {
+        const SDL_FPoint current_world = cam.screen_to_map(mouse);
+        if (std::isfinite(current_world.x) && std::isfinite(current_world.y)) {
+            const double world_dx = pan_start_world_point_->x - current_world.x;
+            const double world_dy = pan_start_world_point_->y - current_world.y;
+            if (std::abs(world_dx) > 0.0 || std::abs(world_dy) > 0.0) {
+                target_center.x = static_cast<int>(std::lround(target_center.x + world_dx));
+                target_center.y = static_cast<int>(std::lround(target_center.y + world_dy));
+                applied_world_lock = true;
+            }
+        }
+    }
+    if (!applied_world_lock) {
+        target_center = SDL_Point{
+            pan_start_center_.x - dx,
+            pan_start_center_.y - dy
+        };
+    }
     if (has_last_pan_center_ &&
-        new_center.x == last_pan_center_.x &&
-        new_center.y == last_pan_center_.y) {
+        target_center.x == last_pan_center_.x &&
+        target_center.y == last_pan_center_.y) {
         return;
     }
-    cam.set_focus_override(new_center);
-    cam.set_screen_center(new_center);
-    last_pan_center_ = new_center;
+    cam.set_focus_override(target_center);
+    cam.set_screen_center(target_center);
+    last_pan_center_ = target_center;
     has_last_pan_center_ = true;
 }
 
 void DevCameraControls::cancel(WarpedScreenGrid& cam) {
     pan_drag_pending_ = false;
     tilting_ = false;
+    pan_start_world_point_ = std::nullopt;
     if (!panning_) {
         return;
     }

@@ -3266,6 +3266,13 @@ bool DevControls::fog_visible() const {
     return other_settings_.fog_visible();
 }
 
+bool DevControls::boundary_assets_visible() const {
+    if (!enabled_) {
+        return true;
+    }
+    return other_settings_.is_type_filter_enabled(asset_types::boundary);
+}
+
 bool DevControls::persist_map_info_to_disk() {
     if (!assets_) {
         std::cerr << "[DevControls] Cannot persist map info: assets manager not set\n";

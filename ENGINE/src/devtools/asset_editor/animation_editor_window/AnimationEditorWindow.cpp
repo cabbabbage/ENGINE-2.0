@@ -2082,7 +2082,7 @@ bool AnimationEditorWindow::does_controller_exist() const {
     if (sanitized.empty()) return false;
     std::string key = generate_controller_key(sanitized);
 
-    std::filesystem::path controller_dir = "ENGINE/animation_update/custom_controllers";
+    std::filesystem::path controller_dir = "ENGINE/src/animation/controllers/custom_controllers";
     std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
     std::filesystem::path cpp_path = controller_dir / (key + ".cpp");
     return std::filesystem::exists(hpp_path) && std::filesystem::exists(cpp_path);
@@ -2199,7 +2199,7 @@ bool AnimationEditorWindow::write_or_update_controller_metadata(const std::files
 
 void AnimationEditorWindow::ensure_controller_factory_registration(const std::string& key,
                                                                    const std::string& class_name) const {
-    const std::filesystem::path factory_path = "ENGINE/asset/controller_factory.cpp";
+    const std::filesystem::path factory_path = "ENGINE/src/assets/asset/controller_factory.cpp";
     std::error_code ec;
     if (!std::filesystem::exists(factory_path, ec)) {
         return;
@@ -2259,7 +2259,7 @@ void AnimationEditorWindow::add_controller() {
     std::string key = generate_controller_key(sanitized);
     std::string class_name = generate_class_name(sanitized);
 
-    std::filesystem::path controller_dir = "ENGINE/animation_update/custom_controllers";
+    std::filesystem::path controller_dir = "ENGINE/src/animation/controllers/custom_controllers";
     std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
     std::filesystem::path cpp_path = controller_dir / (key + ".cpp");
 
@@ -2304,7 +2304,7 @@ void AnimationEditorWindow::add_controller() {
                 << "#include \"assets/Asset.hpp\"\n"
                 << "#include \"assets/animation.hpp\"\n"
                 << "#include \"assets/asset_info.hpp\"\n"
-                << "#include \"animation_update/animation_update.hpp\"\n"
+                << "#include \"animation/animation_update.hpp\"\n"
                 << "#include \"utils/input.hpp\"\n"
                 << "#include <string>\n"
                 << "\n"
@@ -2390,7 +2390,7 @@ void AnimationEditorWindow::open_controller() {
         return;
     }
     std::string key = generate_controller_key(sanitized);
-    std::filesystem::path controller_dir = "ENGINE/animation_update/custom_controllers";
+    std::filesystem::path controller_dir = "ENGINE/src/animation/controllers/custom_controllers";
     std::filesystem::path hpp_path = controller_dir / (key + ".hpp");
     if (!std::filesystem::exists(hpp_path)) {
         set_status_message("Controller file does not exist.", 180);

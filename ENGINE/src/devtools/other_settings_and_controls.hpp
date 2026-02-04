@@ -69,6 +69,7 @@ public:
     void reset();
 
     bool passes(const Asset& asset) const;
+    bool is_type_filter_enabled(const std::string& type) const;
 
     void set_grid_resolution_range(int min_resolution, int max_resolution);
     void set_grid_resolution_value(int resolution);

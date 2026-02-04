@@ -668,6 +668,10 @@ bool OtherSettingsAndControls::passes(const Asset& asset) const {
     return true;
 }
 
+bool OtherSettingsAndControls::is_type_filter_enabled(const std::string& type) const {
+    return type_filter_enabled(type);
+}
+
 void OtherSettingsAndControls::rebuild_map_spawn_ids() {
     map_spawn_ids_.clear();
     if (!map_info_json_) {

@@ -114,6 +114,7 @@ public:
 
     void filter_active_assets(std::vector<Asset*>& assets) const;
     bool fog_visible() const;
+    bool boundary_assets_visible() const;
 
     bool is_grid_overlay_enabled() const { return grid_overlay_enabled_; }
     bool is_snap_to_grid_enabled() const { return snap_to_grid_enabled_; }

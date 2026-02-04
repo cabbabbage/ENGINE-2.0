@@ -71,8 +71,8 @@ void CustomControllerService::set_asset_root(const std::filesystem::path& asset_
         throw std::runtime_error("Unable to locate ENGINE directory from " + asset_root_.string());
     }
 
-    controller_dir_ = engine_root_ / "animation_update" / "custom_controllers";
-    controller_factory_cpp_ = engine_root_ / "asset" / "controller_factory.cpp";
+    controller_dir_ = engine_root_ / "src" / "animation" / "controllers" / "custom_controllers";
+    controller_factory_cpp_ = engine_root_ / "src" / "assets" / "asset" / "controller_factory.cpp";
 }
 
 void CustomControllerService::set_manifest_store(devmode::core::ManifestStore* store) {

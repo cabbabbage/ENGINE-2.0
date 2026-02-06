@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 namespace devmode::frame_editors {
 
@@ -79,3 +79,4 @@ struct SelectionState {
 };
 
 }  // namespace devmode::frame_editors
+

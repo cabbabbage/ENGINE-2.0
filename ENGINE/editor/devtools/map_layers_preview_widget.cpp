@@ -93,7 +93,7 @@ void draw_text(SDL_Renderer* renderer, const std::string& text, int x, int y, co
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (tex) {
         SDL_Rect dst{x, y, surf->w, surf->h};
-        SDL_RenderCopy(renderer, tex, nullptr, &dst);
+        SDL_RenderTexture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
     SDL_FreeSurface(surf);
@@ -116,7 +116,7 @@ void draw_circle(SDL_Renderer* renderer, int cx, int cy, int radius, SDL_Color c
             double angle = step * static_cast<double>(i);
             int x = cx + static_cast<int>(std::lround(std::cos(angle) * r));
             int y = cy + static_cast<int>(std::lround(std::sin(angle) * r));
-            SDL_RenderDrawLine(renderer, prev_x, prev_y, x, y);
+            SDL_RenderLine(renderer, prev_x, prev_y, x, y);
             prev_x = x;
             prev_y = y;
         }
@@ -131,7 +131,7 @@ void fill_circle(SDL_Renderer* renderer, int cx, int cy, int radius, SDL_Color c
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
     for (int y = -radius; y <= radius; ++y) {
         int dx = static_cast<int>(std::sqrt(static_cast<double>(radius * radius - y * y)));
-        SDL_RenderDrawLine(renderer, cx - dx, cy + y, cx + dx, cy + y);
+        SDL_RenderLine(renderer, cx - dx, cy + y, cx + dx, cy + y);
     }
 }
 
@@ -149,12 +149,12 @@ void fill_ring(SDL_Renderer* renderer, int cx, int cy, int inner_radius, int out
     for (int y = -outer_radius; y <= outer_radius; ++y) {
         int outer_dx = static_cast<int>(std::sqrt(static_cast<double>(outer_radius * outer_radius - y * y)));
         if (inner_radius == 0 || std::abs(y) > inner_radius) {
-            SDL_RenderDrawLine(renderer, cx - outer_dx, cy + y, cx + outer_dx, cy + y);
+            SDL_RenderLine(renderer, cx - outer_dx, cy + y, cx + outer_dx, cy + y);
             continue;
         }
         int inner_dx = static_cast<int>(std::sqrt(static_cast<double>(inner_radius * inner_radius - y * y)));
-        SDL_RenderDrawLine(renderer, cx - outer_dx, cy + y, cx - inner_dx, cy + y);
-        SDL_RenderDrawLine(renderer, cx + inner_dx, cy + y, cx + outer_dx, cy + y);
+        SDL_RenderLine(renderer, cx - outer_dx, cy + y, cx - inner_dx, cy + y);
+        SDL_RenderLine(renderer, cx + inner_dx, cy + y, cx + outer_dx, cy + y);
     }
 }
 }
@@ -1011,7 +1011,7 @@ void MapLayersPreviewWidget::render_room_legend(SDL_Renderer* renderer) const {
         SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
         SDL_RenderFillRect(renderer, &swatch);
         SDL_SetRenderDrawColor(renderer, border_color.r, border_color.g, border_color.b, border_color.a);
-        SDL_RenderDrawRect(renderer, &swatch);
+        SDL_RenderRect(renderer, &swatch);
 
         DMLabelStyle label_style = base_label;
         if (hovered) {
@@ -1025,3 +1025,4 @@ void MapLayersPreviewWidget::render_room_legend(SDL_Renderer* renderer) const {
         }
     }
 }
+

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <array>
 #include <functional>
 #include <memory>
@@ -210,3 +210,4 @@ private:
 };
 
 }
+

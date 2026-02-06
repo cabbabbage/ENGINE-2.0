@@ -247,13 +247,13 @@ void MenuUI::blitText(SDL_Renderer* r,
 			if (tex_shadow) {
 					SDL_Rect dsts { x+2, y+2, surf_shadow->w, surf_shadow->h };
 					SDL_SetTextureAlphaMod(tex_shadow, 130);
-					SDL_RenderCopy(r, tex_shadow, nullptr, &dsts);
+					SDL_RenderTexture(r, tex_shadow, nullptr, &dsts);
 					SDL_DestroyTexture(tex_shadow);
 			}
 		}
 		if (tex_text) {
 			SDL_Rect dst { x, y, surf_text->w, surf_text->h };
-			SDL_RenderCopy(r, tex_text, nullptr, &dst);
+			SDL_RenderTexture(r, tex_text, nullptr, &dst);
 			SDL_DestroyTexture(tex_text);
 		}
 	}
@@ -342,3 +342,4 @@ void MenuUI::doToggleDevMode() {
                 std::cout << "[MenuUI] Closing menu after mode switch\n";
         }
 }
+

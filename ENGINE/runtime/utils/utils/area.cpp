@@ -325,7 +325,7 @@ void Area::create_area_texture(SDL_Renderer* renderer) {
         }
         if (!line_points.empty()) {
                 line_points.push_back(line_points.front());
-                SDL_RenderDrawLines(renderer, line_points.data(), static_cast<int>(line_points.size()));
+                SDL_RenderLines(renderer, line_points.data(), static_cast<int>(line_points.size()));
         }
 	SDL_SetRenderTarget(renderer, prev_target);
 	texture_ = target;
@@ -397,4 +397,5 @@ void Area::set_resolution(int r) {
                 update_geometry_data();
         }
 }
+
 

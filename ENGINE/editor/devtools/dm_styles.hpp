@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <string>
 
@@ -127,3 +127,4 @@ struct DMSpacing {
 
   static int header_gap();
 };
+

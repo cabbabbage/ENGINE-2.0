@@ -1,6 +1,6 @@
 #include "CroppingService.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
 #include <algorithm>
@@ -224,4 +224,5 @@ void CroppingService::crop_images_with_bounds(const std::vector<std::filesystem:
 }
 
 }
+
 

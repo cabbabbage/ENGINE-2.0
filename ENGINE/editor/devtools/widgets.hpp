@@ -1,7 +1,7 @@
 #pragma once
 #define DM_WIDGETS_INCLUDED
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <array>
 #include <memory>
@@ -689,3 +689,4 @@ private:
     bool editable_ = true;
     SDL_Rect rect_cache_{0, 0, 0, 0};
 };
+

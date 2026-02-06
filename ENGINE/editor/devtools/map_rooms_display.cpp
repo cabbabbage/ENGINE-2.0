@@ -213,7 +213,7 @@ void MapRoomsDisplay::render(SDL_Renderer* renderer) const {
         SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
         SDL_RenderFillRect(renderer, &row.rect);
         SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-        SDL_RenderDrawRect(renderer, &row.rect);
+        SDL_RenderRect(renderer, &row.rect);
 
         const int padding = DMSpacing::small_gap();
         const int base_swatch = std::max(12, row.rect.h - padding * 2);
@@ -234,7 +234,7 @@ void MapRoomsDisplay::render(SDL_Renderer* renderer) const {
             SDL_RenderFillRect(renderer, &swatch);
             SDL_Color swatch_outline = DMStyles::Border();
             SDL_SetRenderDrawColor(renderer, swatch_outline.r, swatch_outline.g, swatch_outline.b, swatch_outline.a);
-            SDL_RenderDrawRect(renderer, &swatch);
+            SDL_RenderRect(renderer, &swatch);
             text_x = swatch.x + swatch.w + padding;
         }
 
@@ -258,13 +258,13 @@ void MapRoomsDisplay::render(SDL_Renderer* renderer) const {
         SDL_SetRenderDrawColor(renderer, delete_fill.r, delete_fill.g, delete_fill.b, delete_fill.a);
         SDL_RenderFillRect(renderer, &row.delete_rect);
         SDL_SetRenderDrawColor(renderer, delete_style.border.r, delete_style.border.g, delete_style.border.b, delete_style.border.a);
-        SDL_RenderDrawRect(renderer, &row.delete_rect);
+        SDL_RenderRect(renderer, &row.delete_rect);
 
         SDL_Color glyph = delete_style.text;
         SDL_SetRenderDrawColor(renderer, glyph.r, glyph.g, glyph.b, glyph.a);
         const int inset = std::max(2, row.delete_rect.w / 4);
-        SDL_RenderDrawLine(renderer, row.delete_rect.x + inset, row.delete_rect.y + inset, row.delete_rect.x + row.delete_rect.w - inset, row.delete_rect.y + row.delete_rect.h - inset);
-        SDL_RenderDrawLine(renderer, row.delete_rect.x + inset, row.delete_rect.y + row.delete_rect.h - inset, row.delete_rect.x + row.delete_rect.w - inset, row.delete_rect.y + inset);
+        SDL_RenderLine(renderer, row.delete_rect.x + inset, row.delete_rect.y + inset, row.delete_rect.x + row.delete_rect.w - inset, row.delete_rect.y + row.delete_rect.h - inset);
+        SDL_RenderLine(renderer, row.delete_rect.x + inset, row.delete_rect.y + row.delete_rect.h - inset, row.delete_rect.x + row.delete_rect.w - inset, row.delete_rect.y + inset);
     }
 }
 
@@ -479,4 +479,5 @@ void MapRoomsDisplay::delete_room_entry(const std::string& key) {
         on_rooms_changed_();
     }
 }
+
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <functional>
 #include <memory>
@@ -192,4 +192,5 @@ protected:
     std::string_view lock_settings_namespace() const override;
     std::string_view lock_settings_id() const override;
 };
+
 

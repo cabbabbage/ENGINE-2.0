@@ -1,6 +1,6 @@
-﻿#pragma once
+#pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <functional>
 #include <memory>
@@ -100,3 +100,4 @@ private:
 
     DevCameraControls camera_controls_;
 };
+

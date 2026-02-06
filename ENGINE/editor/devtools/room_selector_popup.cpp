@@ -179,13 +179,13 @@ void RoomSelectorPopup::render(SDL_Renderer* renderer) const {
     dm_draw::DrawRoundedOutline( renderer, rect_, DMStyles::CornerRadius(), 1, border);
 
     SDL_Rect prev_clip{};
-    SDL_RenderGetClipRect(renderer, &prev_clip);
+    SDL_GetRenderClipRect(renderer, &prev_clip);
 #if SDL_VERSION_ATLEAST(2,0,4)
-    const SDL_bool was_clipping = SDL_RenderIsClipEnabled(renderer);
+    const SDL_bool was_clipping = SDL_RenderClipEnabled(renderer);
 #else
     const SDL_bool was_clipping = (prev_clip.w != 0 || prev_clip.h != 0) ? SDL_TRUE : SDL_FALSE;
 #endif
-    SDL_RenderSetClipRect(renderer, &content_clip_);
+    SDL_SetRenderClipRect(renderer, &content_clip_);
 
     layout_widgets();
     for (const auto& btn : buttons_) {
@@ -193,9 +193,9 @@ void RoomSelectorPopup::render(SDL_Renderer* renderer) const {
     }
 
     if (was_clipping == SDL_TRUE) {
-        SDL_RenderSetClipRect(renderer, &prev_clip);
+        SDL_SetRenderClipRect(renderer, &prev_clip);
     } else {
-        SDL_RenderSetClipRect(renderer, nullptr);
+        SDL_SetRenderClipRect(renderer, nullptr);
     }
 }
 
@@ -293,4 +293,5 @@ void RoomSelectorPopup::position_from_anchor() const {
     rect_.x = anchor_rect_.x + anchor_rect_.w + DMSpacing::item_gap();
     rect_.y = anchor_rect_.y;
 }
+
 

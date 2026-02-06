@@ -1,6 +1,6 @@
 #include "camera_ui.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 #include <algorithm>
 #include <array>
@@ -140,7 +140,7 @@ public:
 
         SDL_Color border = DMStyles::AccentButton().border;
         SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-        SDL_RenderDrawRect(renderer, &rect_);
+        SDL_RenderRect(renderer, &rect_);
 
         const int pad = padding();
         SDL_Rect content{ rect_.x + pad, rect_.y + pad, rect_.w - 2 * pad, rect_.h - 2 * pad };
@@ -667,3 +667,5 @@ void CameraUIPanel::apply_settings_if_needed() {
 
     assets_->on_camera_settings_changed();
 }
+
+

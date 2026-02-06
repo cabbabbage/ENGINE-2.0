@@ -1,6 +1,6 @@
 #include "AnimationInspectorPanel.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
 #include <algorithm>
@@ -55,11 +55,11 @@ class ClipScope {
         if (!renderer_ || clip.w <= 0 || clip.h <= 0) {
             return;
         }
-        previous_clip_enabled_ = SDL_RenderIsClipEnabled(renderer_);
+        previous_clip_enabled_ = SDL_RenderClipEnabled(renderer_);
         if (previous_clip_enabled_) {
-            SDL_RenderGetClipRect(renderer_, &previous_clip_);
+            SDL_GetRenderClipRect(renderer_, &previous_clip_);
         }
-        SDL_RenderSetClipRect(renderer_, &clip);
+        SDL_SetRenderClipRect(renderer_, &clip);
         active_ = true;
     }
 
@@ -70,9 +70,9 @@ class ClipScope {
             return;
         }
         if (previous_clip_enabled_) {
-            SDL_RenderSetClipRect(renderer_, &previous_clip_);
+            SDL_SetRenderClipRect(renderer_, &previous_clip_);
         } else {
-            SDL_RenderSetClipRect(renderer_, nullptr);
+            SDL_SetRenderClipRect(renderer_, nullptr);
         }
         active_ = false;
     }
@@ -107,7 +107,7 @@ void render_label(SDL_Renderer* renderer, const DMLabelStyle& style, const std::
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (texture) {
         SDL_Rect dst{x, y, surface->w, surface->h};
-        SDL_RenderCopy(renderer, texture, nullptr, &dst);
+        SDL_RenderTexture(renderer, texture, nullptr, &dst);
         SDL_DestroyTexture(texture);
     }
 
@@ -1084,7 +1084,12 @@ void AnimationInspectorPanel::render_preview(SDL_Renderer* renderer) const {
         if (texture) {
             int tex_w = 0;
             int tex_h = 0;
-            SDL_QueryTexture(texture, nullptr, nullptr, &tex_w, &tex_h);
+            float tex_wf = 0.0f;
+            float tex_hf = 0.0f;
+            if (SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+                tex_w = static_cast<int>(std::lround(tex_wf));
+                tex_h = static_cast<int>(std::lround(tex_hf));
+            }
             const int padding = kInspectorPadding;
             int avail_w = std::max(1, preview_rect_.w - padding * 2);
             int avail_h = std::max(1, preview_rect_.h - padding * 2);
@@ -1094,11 +1099,11 @@ void AnimationInspectorPanel::render_preview(SDL_Renderer* renderer) const {
             SDL_Rect dst{preview_rect_.x + (preview_rect_.w - draw_w) / 2,
                          preview_rect_.y + (preview_rect_.h - draw_h) / 2, draw_w, draw_h};
 
-            SDL_RendererFlip flip_flags = SDL_FLIP_NONE;
-            if (preview_flip_x_) flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_HORIZONTAL);
-            if (preview_flip_y_) flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_VERTICAL);
+            SDL_FlipMode flip_flags = SDL_FLIP_NONE;
+            if (preview_flip_x_) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
+            if (preview_flip_y_) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
 
-            SDL_RenderCopyEx(renderer, texture, nullptr, &dst, 0.0, nullptr, flip_flags);
+            SDL_RenderTextureRotated(renderer, texture, nullptr, &dst, 0.0, nullptr, flip_flags);
         } else {
             const DMLabelStyle& style = DMStyles::Label();
             const std::string text = "No Preview Available";
@@ -1594,3 +1599,5 @@ void AnimationInspectorPanel::refresh_start_indicator() {
 }
 
 }
+
+

@@ -190,7 +190,7 @@ static void stroke_rect(SDL_Renderer* r, const SDL_Rect& rc, SDL_Color c) {
 
 	SDL_SetRenderDrawColor(r, c.r, c.g, c.b, 255);
 
-	SDL_RenderDrawRect(r, &rc);
+	SDL_RenderRect(r, &rc);
 
 }
 
@@ -234,7 +234,7 @@ void Slider::draw_knob(SDL_Renderer* r, const SDL_Rect& krect, bool hovered) con
 
 	const int gx = krect.x + krect.w/2;
 
-	SDL_RenderDrawLine(r, gx, krect.y + 4, gx, krect.y + krect.h - 4);
+	SDL_RenderLine(r, gx, krect.y + 4, gx, krect.y + krect.h - 4);
 
 }
 
@@ -262,7 +262,7 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
                     SDL_Rect dst{ rect_.x + ui_spacing::kLabelHorizontalInset, label_top, surf->w, surf->h };
 
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    SDL_RenderTexture(r, tex, nullptr, &dst);
 
                     SDL_DestroyTexture(tex);
 
@@ -298,7 +298,7 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
                     SDL_Rect dst{ value_x, value_y, surf->w, surf->h };
 
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    SDL_RenderTexture(r, tex, nullptr, &dst);
 
                     SDL_DestroyTexture(tex);
 
@@ -335,4 +335,5 @@ void Slider::render(SDL_Renderer* renderer) const {
 	draw_text(renderer);
 
 }
+
 

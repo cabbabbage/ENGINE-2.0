@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -163,3 +163,4 @@ private:
     int grid_resolution_min_ = 0;
     int grid_resolution_max_ = 0;
 };
+

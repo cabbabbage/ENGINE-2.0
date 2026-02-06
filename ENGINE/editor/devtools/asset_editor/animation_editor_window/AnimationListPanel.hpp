@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include "EditorUIPrimitives.hpp"
 
@@ -75,3 +75,4 @@ class AnimationListPanel {
 };
 
 }
+

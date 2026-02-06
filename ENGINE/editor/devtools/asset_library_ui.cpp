@@ -8,6 +8,7 @@
 #include <sstream>
 #include <cctype>
 #include <system_error>
+#include <cmath>
 #include "utils/input.hpp"
 #include "utils/string_utils.hpp"
 #include "assets/asset_library.hpp"
@@ -53,6 +54,18 @@ namespace {
             normalized.erase(normalized.begin());
         }
         return normalized;
+    }
+
+    void texture_size(SDL_Texture* tex, int& out_w, int& out_h) {
+        float wf = 0.0f;
+        float hf = 0.0f;
+        if (tex && SDL_GetTextureSize(tex, &wf, &hf)) {
+            out_w = static_cast<int>(std::lround(wf));
+            out_h = static_cast<int>(std::lround(hf));
+        } else {
+            out_w = 0;
+            out_h = 0;
+        }
     }
 
     bool remove_directory_if_exists(const fs::path& path) {
@@ -473,8 +486,8 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
                 SDL_Color check = DMStyles::CheckboxCheckColor();
                 SDL_SetRenderDrawColor(r, check.r, check.g, check.b, check.a);
                 const int inset = std::max(3, button_rect.w / 5);
-                SDL_RenderDrawLine(r, button_rect.x + inset, button_rect.y + button_rect.h / 2, button_rect.x + button_rect.w / 2, button_rect.y + button_rect.h - inset + 1);
-                SDL_RenderDrawLine(r, button_rect.x + button_rect.w / 2, button_rect.y + button_rect.h - inset + 1, button_rect.x + button_rect.w - inset, button_rect.y + inset);
+                SDL_RenderLine(r, button_rect.x + inset, button_rect.y + button_rect.h / 2, button_rect.x + button_rect.w / 2, button_rect.y + button_rect.h - inset + 1);
+                SDL_RenderLine(r, button_rect.x + button_rect.w / 2, button_rect.y + button_rect.h - inset + 1, button_rect.x + button_rect.w - inset, button_rect.y + inset);
             }
         } else {
             const auto& delete_style = DMStyles::DeleteButton();
@@ -488,8 +501,8 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
             dm_draw::DrawRoundedOutline( r, button_rect, corner_radius, 1, delete_style.border);
             SDL_SetRenderDrawColor(r, delete_style.text.r, delete_style.text.g, delete_style.text.b, delete_style.text.a);
             const int cross_inset = std::max(bevel_depth + 1, button_rect.w / 4);
-            SDL_RenderDrawLine(r, button_rect.x + cross_inset, button_rect.y + cross_inset, button_rect.x + button_rect.w - cross_inset, button_rect.y + button_rect.h - cross_inset);
-            SDL_RenderDrawLine(r, button_rect.x + button_rect.w - cross_inset, button_rect.y + cross_inset, button_rect.x + cross_inset, button_rect.y + button_rect.h - cross_inset);
+            SDL_RenderLine(r, button_rect.x + cross_inset, button_rect.y + cross_inset, button_rect.x + button_rect.w - cross_inset, button_rect.y + button_rect.h - cross_inset);
+            SDL_RenderLine(r, button_rect.x + button_rect.w - cross_inset, button_rect.y + cross_inset, button_rect.x + cross_inset, button_rect.y + button_rect.h - cross_inset);
         }
 
         int label_left = button_rect.x + button_rect.w + pad;
@@ -534,7 +547,7 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
             if (tex) {
                 int tw = 0;
                 int th = 0;
-                SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+                texture_size(tex, tw, th);
                 if (tw > 0 && th > 0) {
                     SDL_Rect image_rect{ rect_.x + pad,
                                          label_rect.y + label_rect.h + pad,
@@ -548,7 +561,7 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
                             int dh = static_cast<int>(th * scale);
                             SDL_Rect dst{ image_rect.x + (image_rect.w - dw) / 2,
                                           image_rect.y + (image_rect.h - dh) / 2, dw, dh };
-                            SDL_RenderCopy(r, tex, nullptr, &dst);
+                            SDL_RenderTexture(r, tex, nullptr, &dst);
                         }
                     }
                 }
@@ -571,13 +584,13 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
                 if (tex) {
                     int dw = 0;
                     int dh = 0;
-                    SDL_QueryTexture(tex, nullptr, nullptr, &dw, &dh);
+                    texture_size(tex, dw, dh);
                     if (dw > label_rect.w) {
                         dw = label_rect.w;
                     }
                     SDL_Rect dst{ label_rect.x,
                                   label_rect.y + std::max(0, (label_rect.h - dh) / 2), dw, dh };
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    SDL_RenderTexture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -685,9 +698,9 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
         dm_draw::DrawRoundedOutline( r, button_rect, corner_radius, 1, delete_style.border);
         SDL_SetRenderDrawColor(r, delete_style.text.r, delete_style.text.g, delete_style.text.b, delete_style.text.a);
         const int cross_inset = std::max(bevel_depth + 1, button_rect.w / 4);
-        SDL_RenderDrawLine(r, button_rect.x + cross_inset, button_rect.y + cross_inset, button_rect.x + button_rect.w - cross_inset, button_rect.y + button_rect.h - cross_inset);
-        SDL_RenderDrawLine(r, button_rect.x + button_rect.w - cross_inset, button_rect.y + cross_inset, button_rect.x + cross_inset, button_rect.y + button_rect.h - cross_inset);
-        SDL_RenderDrawLine(r, button_rect.x + cross_inset, button_rect.y + button_rect.h - cross_inset, button_rect.x + button_rect.w - cross_inset, button_rect.y + cross_inset);
+        SDL_RenderLine(r, button_rect.x + cross_inset, button_rect.y + cross_inset, button_rect.x + button_rect.w - cross_inset, button_rect.y + button_rect.h - cross_inset);
+        SDL_RenderLine(r, button_rect.x + button_rect.w - cross_inset, button_rect.y + cross_inset, button_rect.x + cross_inset, button_rect.y + button_rect.h - cross_inset);
+        SDL_RenderLine(r, button_rect.x + cross_inset, button_rect.y + button_rect.h - cross_inset, button_rect.x + button_rect.w - cross_inset, button_rect.y + cross_inset);
 
         int label_left = button_rect.x + button_rect.w + pad;
         int label_right = rect_.x + rect_.w - pad;
@@ -735,10 +748,10 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                 if (tex) {
                     int dw = 0;
                     int dh = 0;
-                    SDL_QueryTexture(tex, nullptr, nullptr, &dw, &dh);
+                    texture_size(tex, dw, dh);
                     SDL_Rect dst{ label_rect.x,
                                   label_rect.y + std::max(0, (label_rect.h - dh) / 2), std::min(dw, label_rect.w), dh };
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    SDL_RenderTexture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -775,7 +788,7 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                         int dh = std::min(icon_h, preview_rect.h);
                         SDL_Rect dst{preview_rect.x + (preview_rect.w - dw) / 2,
                                      preview_rect.y + (preview_rect.h - dh) / 2, dw, dh};
-                        SDL_RenderCopy(r, tex, nullptr, &dst);
+                        SDL_RenderTexture(r, tex, nullptr, &dst);
                         SDL_DestroyTexture(tex);
                     }
                 }
@@ -804,10 +817,10 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                 if (tex) {
                     int dw = 0;
                     int dh = 0;
-                    SDL_QueryTexture(tex, nullptr, nullptr, &dw, &dh);
+                    texture_size(tex, dw, dh);
                     SDL_Rect dst{ footer_rect.x,
                                   footer_rect.y + std::max(0, (footer_rect.h - dh) / 2), std::min(dw, footer_rect.w), dh };
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    SDL_RenderTexture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -888,10 +901,10 @@ struct AssetLibraryUI::RoomAreaTileWidget : public Widget {
                 SDL_FreeSurface(surf);
                 if (tex) {
                     int dw=0, dh=0;
-                    SDL_QueryTexture(tex, nullptr, nullptr, &dw, &dh);
+                    texture_size(tex, dw, dh);
                     if (dw > label_rect.w) dw = label_rect.w;
                     SDL_Rect dst{ label_rect.x, label_rect.y + std::max(0, (label_rect.h - dh)/2), dw, dh };
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    SDL_RenderTexture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -2198,11 +2211,11 @@ void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
                 if (tex) {
                     int tw = 0;
                     int th = 0;
-                    SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+                    texture_size(tex, tw, th);
                     SDL_Rect dst{ text_rect.x,
                                   text_rect.y,
                                   std::min(tw, text_rect.w), std::min(th, text_rect.h) };
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    SDL_RenderTexture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -2230,14 +2243,14 @@ void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
                     if (tex) {
                         int tw = 0;
                         int th = 0;
-                        SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+                        texture_size(tex, tw, th);
                         const int interior_h = std::max(0, rect.h - 2 * bevel_depth);
                         int text_y = rect.y + bevel_depth + std::max(0, interior_h - th) / 2;
                         text_y = std::max(text_y, rect.y + bevel_depth);
                         text_y = std::min(text_y, rect.y + rect.h - bevel_depth - th);
                         SDL_Rect dst{
                             rect.x + (rect.w - tw) / 2, text_y, tw, th };
-                        SDL_RenderCopy(r, tex, nullptr, &dst);
+                        SDL_RenderTexture(r, tex, nullptr, &dst);
                         SDL_DestroyTexture(tex);
                     }
                 }
@@ -2332,3 +2345,5 @@ void AssetLibraryUI::set_expanded(bool e) {
 bool AssetLibraryUI::is_expanded() const {
     return floating_ && floating_->is_expanded();
 }
+
+

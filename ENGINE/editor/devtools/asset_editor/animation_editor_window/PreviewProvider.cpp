@@ -1,6 +1,6 @@
 #include "PreviewProvider.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
 #include <algorithm>
@@ -706,3 +706,4 @@ std::vector<std::filesystem::path> PreviewProvider::find_frame_sequence(const st
 }
 
 }
+

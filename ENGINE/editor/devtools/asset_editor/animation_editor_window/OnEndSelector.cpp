@@ -1,6 +1,6 @@
 #include "OnEndSelector.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <array>
@@ -250,4 +250,5 @@ int OnEndSelector::find_option_index(const std::string& value) const {
 }
 
 }
+
 

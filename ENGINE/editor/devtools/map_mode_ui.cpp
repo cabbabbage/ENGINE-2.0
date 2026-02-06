@@ -21,7 +21,7 @@
 #include "dm_styles.hpp"
 #include "utils/input.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <SDL_log.h>
 #include <algorithm>
 #include <cctype>
@@ -1002,15 +1002,15 @@ void MapModeUI::render(SDL_Renderer* renderer) const {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 170);
         SDL_RenderFillRect(renderer, &preview_rect);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 220);
-        SDL_RenderDrawRect(renderer, &preview_rect);
+        SDL_RenderRect(renderer, &preview_rect);
         if (map_color_sampling_preview_valid_) {
             SDL_SetRenderDrawColor(renderer, map_color_sampling_preview_.r, map_color_sampling_preview_.g, map_color_sampling_preview_.b, 255);
             SDL_RenderFillRect(renderer, &inner_rect);
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 220);
-            SDL_RenderDrawRect(renderer, &inner_rect);
+            SDL_RenderRect(renderer, &inner_rect);
         } else {
             SDL_SetRenderDrawColor(renderer, 120, 120, 120, 220);
-            SDL_RenderDrawRect(renderer, &inner_rect);
+            SDL_RenderRect(renderer, &inner_rect);
         }
     }
 }
@@ -1585,3 +1585,5 @@ void MapModeUI::complete_map_color_sampling(SDL_Color color) {
         apply_cb(color);
     }
 }
+
+

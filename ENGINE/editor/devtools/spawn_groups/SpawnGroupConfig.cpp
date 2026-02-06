@@ -1,4 +1,4 @@
-﻿#include "SpawnGroupConfig.hpp"
+#include "SpawnGroupConfig.hpp"
 
 #include <algorithm>
 #include <array>
@@ -75,7 +75,7 @@ public:
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         if (texture) {
             SDL_Rect dst{rect_.x, rect_.y, surface->w, surface->h};
-            SDL_RenderCopy(renderer, texture, nullptr, &dst);
+            SDL_RenderTexture(renderer, texture, nullptr, &dst);
             SDL_DestroyTexture(texture);
         }
         SDL_FreeSurface(surface);
@@ -540,7 +540,7 @@ struct SpawnGroupConfig::Entry {
             }
         }
 
-        toggle_button_ = std::make_unique<DMButton>("â–¶", &DMStyles::ListButton(), 28, DMButton::height());
+        toggle_button_ = std::make_unique<DMButton>("▶", &DMStyles::ListButton(), 28, DMButton::height());
         toggle_widget_ = std::make_unique<ButtonWidget>(toggle_button_.get(), [this]() {
             expanded_state_ = !expanded_state_;
             if (expanded_state_) owner_->expand_group(spawn_id());
@@ -563,13 +563,13 @@ struct SpawnGroupConfig::Entry {
             });
         });
 
-        priority_up_button_ = std::make_unique<DMButton>(u8"↑", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
+        priority_up_button_ = std::make_unique<DMButton>(u8"?", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
         priority_up_widget_ = std::make_unique<PriorityButtonWidget>(priority_up_button_.get(), [this]() {
             if (!owner_) return;
             owner_->nudge_priority(*this, -1);
         });
 
-        priority_down_button_ = std::make_unique<DMButton>(u8"↓", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
+        priority_down_button_ = std::make_unique<DMButton>(u8"?", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
         priority_down_widget_ = std::make_unique<PriorityButtonWidget>(priority_down_button_.get(), [this]() {
             if (!owner_) return;
             owner_->nudge_priority(*this, 1);
@@ -2522,3 +2522,4 @@ void SpawnGroupConfig::EntryController::set_quantity_hidden(bool hidden) {
     if (!entry_) return;
     entry_->set_quantity_hidden(hidden);
 }
+

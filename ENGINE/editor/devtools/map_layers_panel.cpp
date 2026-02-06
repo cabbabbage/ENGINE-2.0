@@ -829,7 +829,7 @@ void MapLayersPanel::render_layers_list(SDL_Renderer* renderer) const {
     SDL_RenderFillRect(renderer, &area);
 
     const SDL_Color border = DMStyles::Border();
-    SDL_RenderDrawRect(renderer, &area);
+    SDL_RenderRect(renderer, &area);
 
     const int padding = DMSpacing::small_gap();
     const DMLabelStyle& label_style = DMStyles::Label();
@@ -885,7 +885,7 @@ void MapLayersPanel::render_layers_list(SDL_Renderer* renderer) const {
             outline = lighten(outline, 0.2f);
         }
         SDL_SetRenderDrawColor(renderer, outline.r, outline.g, outline.b, outline.a);
-        SDL_RenderDrawRect(renderer, &rect);
+        SDL_RenderRect(renderer, &rect);
 
         SDL_Rect accent{rect.x, rect.y, accent_width, rect.h};
         SDL_Color accent_color = outline;
@@ -930,13 +930,13 @@ void MapLayersPanel::render_layers_list(SDL_Renderer* renderer) const {
                 delete_outline = lighten(delete_outline, 0.1f);
             }
             SDL_SetRenderDrawColor(renderer, delete_outline.r, delete_outline.g, delete_outline.b, delete_outline.a);
-            SDL_RenderDrawRect(renderer, &delete_rect);
+            SDL_RenderRect(renderer, &delete_rect);
 
             const int cross_pad = std::max(3, delete_rect.w / 4);
             SDL_Color cross_color{255, 255, 255, 255};
             SDL_SetRenderDrawColor(renderer, cross_color.r, cross_color.g, cross_color.b, cross_color.a);
-            SDL_RenderDrawLine(renderer, delete_rect.x + cross_pad, delete_rect.y + cross_pad, delete_rect.x + delete_rect.w - cross_pad - 1, delete_rect.y + delete_rect.h - cross_pad - 1);
-            SDL_RenderDrawLine(renderer, delete_rect.x + delete_rect.w - cross_pad - 1, delete_rect.y + cross_pad, delete_rect.x + cross_pad, delete_rect.y + delete_rect.h - cross_pad - 1);
+            SDL_RenderLine(renderer, delete_rect.x + cross_pad, delete_rect.y + cross_pad, delete_rect.x + delete_rect.w - cross_pad - 1, delete_rect.y + delete_rect.h - cross_pad - 1);
+            SDL_RenderLine(renderer, delete_rect.x + delete_rect.w - cross_pad - 1, delete_rect.y + cross_pad, delete_rect.x + cross_pad, delete_rect.y + delete_rect.h - cross_pad - 1);
         }
 
         const std::string level = std::string{"Lvl "} + std::to_string(row.index);
@@ -1441,7 +1441,7 @@ void MapLayersPanel::render_validation_summary(SDL_Renderer* renderer, const SDL
     SDL_SetRenderDrawColor(renderer, 18, 26, 42, 230);
     SDL_RenderFillRect(renderer, &area);
     SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g, DMStyles::Border().b, DMStyles::Border().a);
-    SDL_RenderDrawRect(renderer, &area);
+    SDL_RenderRect(renderer, &area);
 
     int y = area.y + DMSpacing::small_gap();
     const DMLabelStyle base_style = validation_label_style();
@@ -1806,3 +1806,4 @@ void MapLayersPanel::render_min_edge_input(SDL_Renderer* renderer, const SDL_Rec
         DrawLabelText(renderer, min_edge_note_, min_edge_note_rect_.x, min_edge_note_rect_.y, style);
     }
 }
+

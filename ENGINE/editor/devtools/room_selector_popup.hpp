@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 class DMButton;
 class DMTextBox;
@@ -64,4 +64,5 @@ private:
     int pressed_index_ = -1;
     std::string pressed_room_{};
 };
+
 

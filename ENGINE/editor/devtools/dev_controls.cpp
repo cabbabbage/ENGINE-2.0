@@ -1,6 +1,6 @@
 #include "dev_controls.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <fstream>
 #include <sstream>
 #include <array>
@@ -163,7 +163,7 @@ public:
         }
 
         SDL_Rect dst{x, y, it->second.size.x, it->second.size.y};
-        SDL_RenderCopy(renderer, it->second.texture, nullptr, &dst);
+        SDL_RenderTexture(renderer, it->second.texture, nullptr, &dst);
     }
 
     void clear() {
@@ -1586,7 +1586,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 const bool is_major = (static_cast<long long>(std::llround(line_value)) % (cell * major_interval) == 0);
                 SDL_Color c = is_major ? major : minor;
                 SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-                SDL_RenderDrawLines(renderer, polyline.data(), static_cast<int>(polyline.size()));
+                SDL_RenderLines(renderer, polyline.data(), static_cast<int>(polyline.size()));
             };
 
             auto update_horizon_for_polyline = [&](const std::vector<SDL_Point>& polyline) {
@@ -1646,7 +1646,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 SDL_GetRenderDrawBlendMode(renderer, &prev_mode2);
                 SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
                 SDL_SetRenderDrawColor(renderer, 255, 140, 0, 220);
-                SDL_RenderDrawLine(renderer, xi, 0, xi, screen_h_);
+                SDL_RenderLine(renderer, xi, 0, xi, screen_h_);
                 SDL_SetRenderDrawBlendMode(renderer, prev_mode2);
             }
 
@@ -1695,7 +1695,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                     SDL_Color c = major;
                     SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
                     const int yi = static_cast<int>(std::lround(hy));
-                    SDL_RenderDrawLine(renderer, 0, yi, screen_w_, yi);
+                    SDL_RenderLine(renderer, 0, yi, screen_w_, yi);
                 }
             }
 
@@ -1746,9 +1746,9 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 const int line_y = static_cast<int>(std::lround(clamped_y));
                 const SDL_Color cull_color{0, 255, 255, 220};
                 SDL_SetRenderDrawColor(renderer, cull_color.r, cull_color.g, cull_color.b, cull_color.a);
-                SDL_RenderDrawLine(renderer, 0, line_y, screen_w_, line_y);
+                SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);
                 const int marker_x = screen_w_ / 2;
-                SDL_RenderDrawLine(renderer, marker_x - 8, line_y, marker_x + 8, line_y);
+                SDL_RenderLine(renderer, marker_x - 8, line_y, marker_x + 8, line_y);
                 DMLabelStyle style = DMStyles::Label();
                 style.color = cull_color;
                 const int label_y = std::max(0, line_y - style.font_size - 2);
@@ -1804,7 +1804,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             const int yi = static_cast<int>(std::lround(y));
             SDL_Color actual_color = is_hover_or_drag ? SDL_Color{255, 255, 255, 220} : color;
             SDL_SetRenderDrawColor(renderer, actual_color.r, actual_color.g, actual_color.b, actual_color.a);
-            SDL_RenderDrawLine(renderer, 0, yi, screen_w_, yi);
+            SDL_RenderLine(renderer, 0, yi, screen_w_, yi);
 };
         auto draw_label = [&](float line_y, const SDL_Color& color, const std::string& text) {
             DMLabelStyle style = base_label;
@@ -1845,8 +1845,8 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         const int offset_start = -thickness / 2;
         const int offset_end   =  thickness / 2;
         for (int o = offset_start; o <= offset_end; ++o) {
-            SDL_RenderDrawLine(renderer, cx - arm, cy + o, cx + arm, cy + o);
-            SDL_RenderDrawLine(renderer, cx + o, cy - arm, cx + o, cy + arm);
+            SDL_RenderLine(renderer, cx - arm, cy + o, cx + arm, cy + o);
+            SDL_RenderLine(renderer, cx + o, cy - arm, cx + o, cy + arm);
         }
 
         SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
@@ -3375,7 +3375,7 @@ void DevControls::render_grid_overlay() {
                 const bool is_major = (static_cast<long long>(std::llround(line_value)) % (cell * major_interval) == 0);
                 SDL_Color c = is_major ? major : minor;
                 SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-                SDL_RenderDrawLines(renderer, polyline.data(), static_cast<int>(polyline.size()));
+                SDL_RenderLines(renderer, polyline.data(), static_cast<int>(polyline.size()));
             };
 
             auto update_horizon_for_polyline = [&](const std::vector<SDL_Point>& polyline) {
@@ -3435,7 +3435,7 @@ void DevControls::render_grid_overlay() {
                 SDL_GetRenderDrawBlendMode(renderer, &prev_mode2);
                 SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
                 SDL_SetRenderDrawColor(renderer, 255, 140, 0, 220);
-                SDL_RenderDrawLine(renderer, xi, 0, xi, screen_h_);
+                SDL_RenderLine(renderer, xi, 0, xi, screen_h_);
                 SDL_SetRenderDrawBlendMode(renderer, prev_mode2);
             }
 
@@ -3485,7 +3485,7 @@ void DevControls::render_grid_overlay() {
                     SDL_Color c = major;
                     SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
                     const int yi = static_cast<int>(std::lround(hy));
-                    SDL_RenderDrawLine(renderer, 0, yi, screen_w_, yi);
+                    SDL_RenderLine(renderer, 0, yi, screen_w_, yi);
                 }
             }
 
@@ -3503,3 +3503,5 @@ void DevControls::render_grid_overlay() {
         }
     }
 }
+
+

@@ -418,7 +418,7 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
 #endif
 };
 
-    auto clone_texture = [&](SDL_Texture* src, int width_hint, int height_hint, SDL_RendererFlip flip_flags, int* out_w = nullptr, int* out_h = nullptr) -> SDL_Texture* {
+    auto clone_texture = [&](SDL_Texture* src, int width_hint, int height_hint, SDL_FlipMode flip_flags, int* out_w = nullptr, int* out_h = nullptr) -> SDL_Texture* {
         if (!src) return nullptr;
 
         Uint32 fmt = SDL_PIXELFORMAT_RGBA8888;
@@ -448,9 +448,9 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
 
         SDL_Rect rect{ 0, 0, tex_w, tex_h };
         if (flip_flags != SDL_FLIP_NONE) {
-            SDL_RenderCopyEx(renderer, src, nullptr, &rect, 0.0, nullptr, flip_flags);
+            SDL_RenderTextureRotated(renderer, src, nullptr, &rect, 0.0, nullptr, flip_flags);
         } else {
-            SDL_RenderCopy(renderer, src, nullptr, &rect);
+            SDL_RenderTexture(renderer, src, nullptr, &rect);
         }
 
         SDL_SetRenderTarget(renderer, prev_target);
@@ -474,12 +474,12 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
         return false;
     }
 
-    SDL_RendererFlip flip_flags = SDL_FLIP_NONE;
+    SDL_FlipMode flip_flags = SDL_FLIP_NONE;
     if (flip_horizontal) {
-        flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_HORIZONTAL);
+        flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
     }
     if (flip_vertical) {
-        flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_VERTICAL);
+        flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
     }
 
     frame_cache_.reserve(frame_count);
@@ -641,3 +641,4 @@ const Animation::AudioClip* Animation::audio_data() const {
     }
     return &audio_clip;
 }
+

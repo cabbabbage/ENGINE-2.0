@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <nlohmann/json_fwd.hpp>
 
@@ -67,4 +67,5 @@ private:
     std::function<void()> on_rooms_changed_{};
     std::function<void()> on_create_room_{};
 };
+
 

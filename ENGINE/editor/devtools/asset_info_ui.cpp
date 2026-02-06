@@ -848,13 +848,13 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
         SDL_SetRenderDrawColor(r, bg.r, bg.g, bg.b, 220);
         SDL_RenderFillRect(r, &preview_rect);
         SDL_SetRenderDrawColor(r, border.r, border.g, border.b, border.a);
-        SDL_RenderDrawRect(r, &preview_rect);
+        SDL_RenderRect(r, &preview_rect);
         if (color_sampling_preview_valid_) {
             SDL_Color fill = color_sampling_preview_;
             SDL_SetRenderDrawColor(r, fill.r, fill.g, fill.b, fill.a);
             SDL_RenderFillRect(r, &inner_rect);
             SDL_SetRenderDrawColor(r, border.r, border.g, border.b, border.a);
-            SDL_RenderDrawRect(r, &inner_rect);
+            SDL_RenderRect(r, &inner_rect);
         }
     }
 
@@ -918,7 +918,7 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
                                   text_y,
                                   tw,
                                   th };
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    SDL_RenderTexture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -949,15 +949,17 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
                     SDL_Texture* tex = SDL_CreateTextureFromSurface(r, text);
                     SDL_FreeSurface(text);
                     if (tex) {
-                        int tw = 0;
-                        int th = 0;
-                        SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+                        float twf = 0.0f;
+                        float thf = 0.0f;
+                        SDL_GetTextureSize(tex, &twf, &thf);
+                        const int tw = static_cast<int>(std::lround(twf));
+                        const int th = static_cast<int>(std::lround(thf));
                         const int interior_h = std::max(0, rect.h - 2 * bevel_depth);
                         int text_y = rect.y + bevel_depth + std::max(0, interior_h - th) / 2;
                         text_y = std::max(text_y, rect.y + bevel_depth);
                         text_y = std::min(text_y, rect.y + rect.h - bevel_depth - th);
                         SDL_Rect dst{ rect.x + (rect.w - tw) / 2, text_y, tw, th };
-                        SDL_RenderCopy(r, tex, nullptr, &dst);
+                        SDL_RenderTexture(r, tex, nullptr, &dst);
                         SDL_DestroyTexture(tex);
                     }
                 }
@@ -1002,7 +1004,12 @@ float AssetInfoUI::compute_player_screen_height(const WarpedScreenGrid& cam) con
     int pw = player_asset->cached_w;
     int ph = player_asset->cached_h;
     if ((pw == 0 || ph == 0) && player_frame) {
-        SDL_QueryTexture(player_frame, nullptr, nullptr, &pw, &ph);
+        float pwf = 0.0f;
+        float phf = 0.0f;
+        if (SDL_GetTextureSize(player_frame, &pwf, &phf)) {
+            pw = static_cast<int>(std::lround(pwf));
+            ph = static_cast<int>(std::lround(phf));
+        }
     }
     if ((pw == 0 || ph == 0) && player_asset->info) {
         pw = player_asset->info->original_canvas_width;
@@ -1996,3 +2003,4 @@ bool AssetInfoUI::handle_delete_modal_event(const SDL_Event& e) {
     }
     return false;
 }
+

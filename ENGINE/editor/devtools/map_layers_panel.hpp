@@ -7,7 +7,7 @@
 #include <vector>
 #include <chrono>
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <nlohmann/json_fwd.hpp>
 
@@ -211,4 +211,5 @@ private:
     SDL_Color min_edge_note_color_{255, 255, 255, 255};
     std::chrono::steady_clock::time_point min_edge_note_expiration_{};
 };
+
 

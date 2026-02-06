@@ -416,7 +416,7 @@ void MapEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint
     SDL_Texture* text_tex = SDL_CreateTextureFromSurface(renderer, text_surface);
     if (text_tex) {
         SDL_Rect dst{bg_rect.x + kLabelPadding, bg_rect.y + kLabelPadding, text_surface->w, text_surface->h};
-        SDL_RenderCopy(renderer, text_tex, nullptr, &dst);
+        SDL_RenderTexture(renderer, text_tex, nullptr, &dst);
         SDL_DestroyTexture(text_tex);
     }
     SDL_FreeSurface(text_surface);
@@ -739,3 +739,4 @@ SDL_Rect MapEditor::effective_label_bounds() const {
     }
     return area;
 }
+

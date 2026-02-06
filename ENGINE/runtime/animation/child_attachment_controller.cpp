@@ -57,11 +57,11 @@ void update_dimensions(Asset::AnimationChildAttachment& slot) {
     if (!texture) {
         return;
     }
-    int width = 0;
-    int height = 0;
-    if (SDL_QueryTexture(texture, nullptr, nullptr, &width, &height) == 0) {
-        slot.cached_w = width;
-        slot.cached_h = height;
+    float width = 0.0f;
+    float height = 0.0f;
+    if (SDL_GetTextureSize(texture, &width, &height)) {
+        slot.cached_w = static_cast<int>(std::lround(width));
+        slot.cached_h = static_cast<int>(std::lround(height));
     }
 }
 

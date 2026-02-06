@@ -249,7 +249,7 @@ void DMWidgetTooltipRender(SDL_Renderer* renderer, const SDL_Rect& bounds, const
 
     const SDL_Color border = tooltip_icon_border();
     SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-    SDL_RenderDrawRect(renderer, &icon_rect);
+    SDL_RenderRect(renderer, &icon_rect);
 
     const auto icon_style = tooltip_icon_label_style();
     const std::string icon_text{DMIcons::Info()};
@@ -556,7 +556,7 @@ void DMTextBox::draw_text(SDL_Renderer* r, const std::string& s, int x, int y, i
             SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
             if (tex) {
                 SDL_Rect dst{ x, line_y, surf->w, surf->h };
-                SDL_RenderCopy(r, tex, nullptr, &dst);
+                SDL_RenderTexture(r, tex, nullptr, &dst);
                 SDL_DestroyTexture(tex);
             }
             line_y += surf->h;
@@ -621,7 +621,7 @@ void DMTextBox::render(SDL_Renderer* r) const {
             }
             const SDL_Color caret = DMStyles::TextCaretColor();
             SDL_SetRenderDrawColor(r, caret.r, caret.g, caret.b, caret.a);
-            SDL_RenderDrawLine(r, caret_x, caret_y, caret_x, caret_y + caret_height);
+            SDL_RenderLine(r, caret_x, caret_y, caret_x, caret_y + caret_height);
         }
     }
     if (tooltip_state_) {
@@ -1544,7 +1544,7 @@ void DMSlider::render(SDL_Renderer* r) const {
         SDL_RenderFillRect(r, &rect_);
         SDL_Color outline = DMStyles::Border();
         SDL_SetRenderDrawColor(r, outline.r, outline.g, outline.b, 160);
-        SDL_RenderDrawRect(r, &rect_);
+        SDL_RenderRect(r, &rect_);
     }
     if (tooltip_state_) {
         DMWidgetTooltipRender(r, rect_, *tooltip_state_);
@@ -2527,7 +2527,7 @@ void DMDropdown::render(SDL_Renderer* r) const {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
                 if (tex) {
                     SDL_Rect dst{ label_rect_.x, label_rect_.y, surf->w, surf->h };
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    SDL_RenderTexture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
                 SDL_FreeSurface(surf);
@@ -2568,7 +2568,7 @@ void DMDropdown::render(SDL_Renderer* r) const {
                 const int centered = box_rect_.x + std::max(0, (text_area_width - surf->w) / 2);
                 const int dst_x = std::clamp(centered, text_x_min, text_x_max);
                 SDL_Rect dst{ dst_x, box_rect_.y + (box_rect_.h - surf->h)/2, surf->w, surf->h };
-                SDL_RenderCopy(r, tex, nullptr, &dst);
+                SDL_RenderTexture(r, tex, nullptr, &dst);
                 SDL_DestroyTexture(tex);
             }
             SDL_FreeSurface(surf);
@@ -2584,8 +2584,8 @@ void DMDropdown::render(SDL_Renderer* r) const {
         SDL_Color arrow_color = border;
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(r, arrow_color.r, arrow_color.g, arrow_color.b, arrow_color.a);
-        SDL_RenderDrawLine(r, arrow_center_x - arrow_half_width, arrow_center_y - arrow_half_height, arrow_center_x, arrow_center_y + arrow_half_height);
-        SDL_RenderDrawLine(r, arrow_center_x + arrow_half_width, arrow_center_y - arrow_half_height, arrow_center_x, arrow_center_y + arrow_half_height);
+        SDL_RenderLine(r, arrow_center_x - arrow_half_width, arrow_center_y - arrow_half_height, arrow_center_x, arrow_center_y + arrow_half_height);
+        SDL_RenderLine(r, arrow_center_x + arrow_half_width, arrow_center_y - arrow_half_height, arrow_center_x, arrow_center_y + arrow_half_height);
     }
     if (tooltip_state_) {
         DMWidgetTooltipRender(r, rect_, *tooltip_state_);
@@ -2653,7 +2653,7 @@ void DMDropdown::render_options(SDL_Renderer* r) const {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
             if (tex) {
                 SDL_Rect dst{ rect.x + (rect.w - surf->w) / 2, rect.y + (rect.h - surf->h) / 2, surf->w, surf->h };
-                SDL_RenderCopy(r, tex, nullptr, &dst);
+                SDL_RenderTexture(r, tex, nullptr, &dst);
                 SDL_DestroyTexture(tex);
             }
             SDL_FreeSurface(surf);
@@ -2732,3 +2732,4 @@ void DMDropdown::begin_focus() {
     has_pending_index_ = true;
     hovered_option_index_ = pending_index_;
 }
+

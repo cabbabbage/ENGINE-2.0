@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include "FrameEditorBase.hpp"
 #include "animation/child_attachment_controller.hpp"
@@ -93,3 +93,4 @@ private:
 };
 
 }  // namespace devmode::frame_editors
+

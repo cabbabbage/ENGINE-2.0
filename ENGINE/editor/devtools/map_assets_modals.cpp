@@ -82,7 +82,7 @@ public:
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         if (texture) {
             SDL_Rect dst{rect_.x, rect_.y, surface->w, surface->h};
-            SDL_RenderCopy(renderer, texture, nullptr, &dst);
+            SDL_RenderTexture(renderer, texture, nullptr, &dst);
             SDL_DestroyTexture(texture);
         }
         SDL_FreeSurface(surface);
@@ -1216,3 +1216,4 @@ void BoundarySpawnGroupModal::ensure_visible_position() {
 
     position_initialized_ = true;
 }
+

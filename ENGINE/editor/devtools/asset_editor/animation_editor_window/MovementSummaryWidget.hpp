@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include "core/AssetsManager.hpp"
 
@@ -64,3 +64,4 @@ class MovementSummaryWidget {
 };
 
 }
+

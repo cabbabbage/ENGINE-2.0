@@ -324,7 +324,7 @@ void MapLayerControlsDisplay::render(SDL_Renderer* renderer) const {
             SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
             SDL_RenderFillRect(renderer, &candidate.background_rect);
             SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-            SDL_RenderDrawRect(renderer, &candidate.background_rect);
+            SDL_RenderRect(renderer, &candidate.background_rect);
         }
 
         SDL_Point label_size = measure_label(candidate.display_label);
@@ -802,3 +802,4 @@ void MapLayerControlsDisplay::handle_create_room() {
     on_create_room_();
     mark_dirty();
 }
+

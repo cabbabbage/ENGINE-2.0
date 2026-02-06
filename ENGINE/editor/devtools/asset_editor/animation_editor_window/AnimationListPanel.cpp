@@ -1,6 +1,6 @@
 #include "AnimationListPanel.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -254,7 +254,7 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
     clip.w = std::max(0, clip.w - inset * 2);
     clip.h = std::max(0, clip.h - inset * 2);
     if (clip.w > 0 && clip.h > 0) {
-        SDL_RenderSetClipRect(renderer, &clip);
+        SDL_SetRenderClipRect(renderer, &clip);
     }
 
     const DMButtonStyle& list_style = DMStyles::ListButton();
@@ -300,16 +300,18 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
         if (preview_provider_) {
             SDL_Texture* texture = preview_provider_->get_preview_texture(renderer, row.id);
             if (texture) {
-                int tex_w = 0;
-                int tex_h = 0;
-                SDL_QueryTexture(texture, nullptr, nullptr, &tex_w, &tex_h);
+                float tex_wf = 0.0f;
+                float tex_hf = 0.0f;
+                SDL_GetTextureSize(texture, &tex_wf, &tex_hf);
+                const int tex_w = static_cast<int>(std::lround(tex_wf));
+                const int tex_h = static_cast<int>(std::lround(tex_hf));
                 if (tex_w > 0 && tex_h > 0 && preview_rect.w > 0 && preview_rect.h > 0) {
                     float scale = std::min(static_cast<float>(preview_rect.w) / static_cast<float>(tex_w), static_cast<float>(preview_rect.h) / static_cast<float>(tex_h));
                     int draw_w = std::max(1, static_cast<int>(tex_w * scale));
                     int draw_h = std::max(1, static_cast<int>(tex_h * scale));
                     SDL_Rect dst{preview_rect.x + (preview_rect.w - draw_w) / 2,
                                  preview_rect.y + (preview_rect.h - draw_h) / 2, draw_w, draw_h};
-                    SDL_RenderCopy(renderer, texture, nullptr, &dst);
+                    SDL_RenderTexture(renderer, texture, nullptr, &dst);
                     content_x = preview_rect.x + preview_rect.w + row_padding;
                 }
             }
@@ -368,7 +370,7 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
         }
     }
 
-    SDL_RenderSetClipRect(renderer, nullptr);
+    SDL_SetRenderClipRect(renderer, nullptr);
 }
 
 bool AnimationListPanel::handle_event(const SDL_Event& e) {
@@ -741,3 +743,5 @@ void AnimationListPanel::ensure_layout() const {
     self->layout_rows();
 }
 }
+
+

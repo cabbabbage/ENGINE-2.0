@@ -1,6 +1,6 @@
 #include "float_slider_widget.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <array>
@@ -129,3 +129,4 @@ std::optional<int> FloatSliderWidget::parse_units(const std::string& text) const
         return std::nullopt;
     }
 }
+

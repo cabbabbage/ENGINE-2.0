@@ -3,7 +3,7 @@
 #include "draw_utils.hpp"
 #include "utils/input.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
 #include <algorithm>
@@ -45,7 +45,7 @@ void draw_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (tex) {
         SDL_Rect dst{x, y, surf->w, surf->h};
-        SDL_RenderCopy(renderer, tex, nullptr, &dst);
+        SDL_RenderTexture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
     SDL_FreeSurface(surf);
@@ -269,7 +269,7 @@ void DevFooterBar::render(SDL_Renderer* renderer) const {
     SDL_Color highlight = DMStyles::HighlightColor();
     highlight.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(highlight.a * 0.35f), 0, 255));
     SDL_SetRenderDrawColor(renderer, highlight.r, highlight.g, highlight.b, highlight.a);
-    SDL_RenderDrawLine(renderer, rect_.x, rect_.y, rect_.x + rect_.w - 1, rect_.y);
+    SDL_RenderLine(renderer, rect_.x, rect_.y, rect_.x + rect_.w - 1, rect_.y);
 
     const bool draw_separator = (grid_checkbox_ && grid_stepper_) && (title_bounds_.w > 0 || !buttons_.empty());
     if (draw_separator) {
@@ -277,7 +277,7 @@ void DevFooterBar::render(SDL_Renderer* renderer) const {
         separator.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(separator.a * 0.8f), 0, 255));
         SDL_SetRenderDrawColor(renderer, separator.r, separator.g, separator.b, separator.a);
         const int separator_x = std::min(rect_.x + rect_.w - 1, grid_controls_right_ + kFooterGroupGap / 2);
-        SDL_RenderDrawLine(renderer, separator_x, rect_.y + kFooterVerticalPadding, separator_x, rect_.y + rect_.h - kFooterVerticalPadding);
+        SDL_RenderLine(renderer, separator_x, rect_.y + kFooterVerticalPadding, separator_x, rect_.y + rect_.h - kFooterVerticalPadding);
     }
 
     if (depth_effects_checkbox_) {
@@ -544,3 +544,5 @@ void DevFooterBar::set_depth_effects_enabled(bool enabled) {
 void DevFooterBar::set_depth_effects_callbacks(std::function<void(bool)> cb) {
     on_depth_effects_toggle_ = std::move(cb);
 }
+
+

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -89,3 +89,4 @@ private:
     ExtraResultsProvider extra_results_provider_{};
     AssetFilter asset_filter_{};
 };
+

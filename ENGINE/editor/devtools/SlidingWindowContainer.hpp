@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <functional>
 #include <memory>
 #include <string>
@@ -130,4 +130,5 @@ private:
     mutable int last_screen_h_ = 0;
     mutable bool layout_dirty_ = true;
 };
+
 

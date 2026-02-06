@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <functional>
 #include <memory>
@@ -439,3 +439,4 @@ private:
     mutable std::unordered_map<Asset*, AssetSpatialEntry> asset_bounds_cache_;
     mutable std::unordered_map<int64_t, std::vector<Asset*>> spatial_grid_;
 };
+

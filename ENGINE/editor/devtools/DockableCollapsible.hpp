@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -212,3 +212,4 @@ protected:
     void apply_embedded_bounds(const SDL_Rect& bounds, int screen_w, int screen_h);
     void restore_snapshot(const EmbeddedSnapshot& snapshot);
 };
+

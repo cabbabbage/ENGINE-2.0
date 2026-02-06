@@ -57,7 +57,7 @@ void QuickTaskPopup::render(SDL_Renderer* renderer) {
     SDL_SetRenderDrawColor(renderer, 40, 40, 45, 255);
     SDL_RenderFillRect(renderer, &popup_rect_);
     SDL_SetRenderDrawColor(renderer, 80, 80, 100, 255);
-    SDL_RenderDrawRect(renderer, &popup_rect_);
+    SDL_RenderRect(renderer, &popup_rect_);
 
     if (assignee_dd_) assignee_dd_->render(renderer);
     if (assigner_dd_) assigner_dd_->render(renderer);
@@ -279,3 +279,4 @@ void QuickTaskPopup::persist_all() {
     cline_file_.save(cline_tasks_);
     rebuild_ui();
 }
+

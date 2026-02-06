@@ -781,7 +781,7 @@ void TagEditorWidget::draw_label(SDL_Renderer* r, const std::string& text, const
         SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
         if (tex) {
             SDL_Rect dst{ rect.x, rect.y, surf->w, surf->h };
-            SDL_RenderCopy(r, tex, nullptr, &dst);
+            SDL_RenderTexture(r, tex, nullptr, &dst);
             SDL_DestroyTexture(tex);
         }
         SDL_FreeSurface(surf);
@@ -958,3 +958,4 @@ bool TagEditorWidget::event_targets_rect(const SDL_Event& e, const SDL_Rect& rec
     if (!relevant) return false;
     return SDL_PointInRect(&p, &rect) != 0;
 }
+

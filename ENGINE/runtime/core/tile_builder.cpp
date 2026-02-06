@@ -228,9 +228,14 @@ void build_grid_tiles(SDL_Renderer* renderer,
         SDL_Texture* texture = a->get_current_frame();
         if (!texture) continue;
 
-        int tex_w = 0;
-        int tex_h = 0;
-        if (SDL_QueryTexture(texture, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+        float tex_wf = 0.0f;
+        float tex_hf = 0.0f;
+        if (!SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+            continue;
+        }
+        const int tex_w = static_cast<int>(std::lround(tex_wf));
+        const int tex_h = static_cast<int>(std::lround(tex_hf));
+        if (tex_w <= 0 || tex_h <= 0) {
             continue;
         }
 
@@ -340,7 +345,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
                         continue;
                     }
 
-                    SDL_RenderCopy(renderer, ctx->texture, &src, &dest);
+                    SDL_RenderTexture(renderer, ctx->texture, &src, &dest);
                 }
 
                 SDL_SetRenderTarget(renderer, prev);
@@ -355,3 +360,4 @@ void build_grid_tiles(SDL_Renderer* renderer,
 }
 
 }
+

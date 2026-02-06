@@ -63,7 +63,7 @@ void RenderRoomBoundsOverlay(
                 screen_points.push_back(first);
             }
             SDL_SetRenderDrawColor(renderer, style.outline.r, style.outline.g, style.outline.b, style.outline.a);
-            SDL_RenderDrawLines(renderer, screen_points.data(), static_cast<int>(screen_points.size()));
+            SDL_RenderLines(renderer, screen_points.data(), static_cast<int>(screen_points.size()));
         }
     }
 
@@ -72,12 +72,13 @@ void RenderRoomBoundsOverlay(
                             static_cast<int>(std::lround(center_screen_f.y))};
     int arm = compute_center_arm(cam);
     SDL_SetRenderDrawColor(renderer, style.center.r, style.center.g, style.center.b, style.center.a);
-    SDL_RenderDrawLine(renderer, center_screen.x - arm, center_screen.y, center_screen.x + arm, center_screen.y);
-    SDL_RenderDrawLine(renderer, center_screen.x, center_screen.y - arm, center_screen.x, center_screen.y + arm);
+    SDL_RenderLine(renderer, center_screen.x - arm, center_screen.y, center_screen.x + arm, center_screen.y);
+    SDL_RenderLine(renderer, center_screen.x, center_screen.y - arm, center_screen.x, center_screen.y + arm);
 
     SDL_SetRenderDrawColor(renderer, prev_r, prev_g, prev_b, prev_a);
     SDL_SetRenderDrawBlendMode(renderer, prev_mode);
 }
 
 }
+
 

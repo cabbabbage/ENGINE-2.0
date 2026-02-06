@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 class Input;
 struct SDL_Renderer;
@@ -27,3 +27,4 @@ public:
 };
 
 }  // namespace devmode::frame_editors
+

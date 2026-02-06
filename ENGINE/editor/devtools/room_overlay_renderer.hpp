@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 class Area;
 class WarpedScreenGrid;
 
@@ -17,4 +17,5 @@ RoomBoundsOverlayStyle ResolveRoomBoundsOverlayStyle(SDL_Color base_color);
 void RenderRoomBoundsOverlay( SDL_Renderer* renderer, const WarpedScreenGrid& cam, const Area& area, const RoomBoundsOverlayStyle& style);
 
 }
+
 

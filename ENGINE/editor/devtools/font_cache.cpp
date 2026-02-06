@@ -95,7 +95,7 @@ bool DMFontCache::draw_text(SDL_Renderer* renderer,
         return false;
     }
     SDL_Rect dst{x, y, surf->w, surf->h};
-    SDL_RenderCopy(renderer, tex, nullptr, &dst);
+    SDL_RenderTexture(renderer, tex, nullptr, &dst);
     SDL_DestroyTexture(tex);
     if (out_rect) {
         *out_rect = dst;
@@ -148,4 +148,5 @@ bool DrawLabelText(SDL_Renderer* renderer,
     }
     return result;
 }
+
 

@@ -82,8 +82,8 @@ namespace {
         const float ry = static_cast<float>(arc_height);
 
         auto draw_thick_segment = [r](int x0, int y0, int x1, int y1) {
-            SDL_RenderDrawLine(r, x0, y0, x1, y1);
-            SDL_RenderDrawLine(r, x0, y0 + 1, x1, y1 + 1);
+            SDL_RenderLine(r, x0, y0, x1, y1);
+            SDL_RenderLine(r, x0, y0 + 1, x1, y1 + 1);
 };
 
         SDL_SetRenderDrawColor(r, stroke.r, stroke.g, stroke.b, stroke.a);
@@ -120,7 +120,7 @@ namespace {
         const int key_center_y = body.y + body.h / 2 - key_radius / 2;
         for (int dy = -key_radius; dy <= key_radius; ++dy) {
             const int span = static_cast<int>(std::sqrt(static_cast<double>(key_radius * key_radius - dy * dy)) + 0.5);
-            SDL_RenderDrawLine(r, key_center_x - span, key_center_y + dy, key_center_x + span, key_center_y + dy);
+            SDL_RenderLine(r, key_center_x - span, key_center_y + dy, key_center_x + span, key_center_y + dy);
         }
 
         SDL_Rect stem{ key_center_x - std::max(1, key_radius / 3),
@@ -871,13 +871,13 @@ void DockableCollapsible::render(SDL_Renderer* r) const {
     if (!expanded_) return;
 
     SDL_Rect prev_clip;
-    SDL_RenderGetClipRect(r, &prev_clip);
+    SDL_GetRenderClipRect(r, &prev_clip);
 #if SDL_VERSION_ATLEAST(2,0,4)
-    const SDL_bool was_clipping = SDL_RenderIsClipEnabled(r);
+    const SDL_bool was_clipping = SDL_RenderClipEnabled(r);
 #else
     const SDL_bool was_clipping = (prev_clip.w != 0 || prev_clip.h != 0) ? SDL_TRUE : SDL_FALSE;
 #endif
-    SDL_RenderSetClipRect(r, &body_viewport_);
+    SDL_SetRenderClipRect(r, &body_viewport_);
 
     for (auto& row : rows_) {
         for (auto* w : row) {
@@ -891,9 +891,9 @@ void DockableCollapsible::render(SDL_Renderer* r) const {
     }
 
     if (was_clipping == SDL_TRUE) {
-        SDL_RenderSetClipRect(r, &prev_clip);
+        SDL_SetRenderClipRect(r, &prev_clip);
     } else {
-        SDL_RenderSetClipRect(r, nullptr);
+        SDL_SetRenderClipRect(r, nullptr);
     }
 }
 
@@ -1400,3 +1400,4 @@ void DockableCollapsible::render_embedded(SDL_Renderer* renderer, const SDL_Rect
     rendering_embedded_ = previous_rendering_state;
     restore_snapshot(snapshot);
 }
+

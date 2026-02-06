@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <functional>
 #include <string>
@@ -39,4 +39,5 @@ class AnimationListContextMenu {
 };
 
 }
+
 

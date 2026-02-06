@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <cstddef>
 #include <functional>
 #include <memory>
@@ -251,3 +251,4 @@ private:
     std::function<void(bool)> header_visibility_controller_{};
     std::function<void(Room*)> on_camera_changed_;
 };
+

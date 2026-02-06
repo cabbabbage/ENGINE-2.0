@@ -347,7 +347,13 @@ std::filesystem::path MainMenu::firstImageIn(const fs::path& folder) const {
 SDL_Rect MainMenu::coverDst(SDL_Texture* tex) const {
 	if (!tex) return SDL_Rect{0,0,screen_w_,screen_h_};
 	int tw=0, th=0;
-	SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+	{
+		float twf = 0.0f, thf = 0.0f;
+		if (SDL_GetTextureSize(tex, &twf, &thf)) {
+			tw = static_cast<int>(std::lround(twf));
+			th = static_cast<int>(std::lround(thf));
+		}
+	}
 	if (tw<=0 || th<=0) return SDL_Rect{0,0,screen_w_,screen_h_};
 	const double ar = double(tw)/double(th);
 	int w = screen_w_;
@@ -362,7 +368,13 @@ SDL_Rect MainMenu::coverDst(SDL_Texture* tex) const {
 SDL_Rect MainMenu::fitCenter(SDL_Texture* tex, int max_w, int max_h, int cx, int cy) const {
 	if (!tex) return SDL_Rect{ cx - max_w/2, cy - max_h/2, max_w, max_h };
 	int tw=0, th=0;
-	SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+	{
+		float twf = 0.0f, thf = 0.0f;
+		if (SDL_GetTextureSize(tex, &twf, &thf)) {
+			tw = static_cast<int>(std::lround(twf));
+			th = static_cast<int>(std::lround(thf));
+		}
+	}
 	if (tw<=0 || th<=0) return SDL_Rect{ cx - max_w/2, cy - max_h/2, max_w, max_h };
 	const double ar = double(tw)/double(th);
 	int w = max_w;
@@ -405,13 +417,13 @@ void MainMenu::blitText(SDL_Renderer* r,
 			if (tex_shadow) {
 					SDL_Rect dsts { x+2, y+2, surf_shadow->w, surf_shadow->h };
 					SDL_SetTextureAlphaMod(tex_shadow, 130);
-					SDL_RenderCopy(r, tex_shadow, nullptr, &dsts);
+					SDL_RenderTexture(r, tex_shadow, nullptr, &dsts);
 					SDL_DestroyTexture(tex_shadow);
 			}
 		}
 		if (tex_text) {
 			SDL_Rect dst { x, y, surf_text->w, surf_text->h };
-			SDL_RenderCopy(r, tex_text, nullptr, &dst);
+			SDL_RenderTexture(r, tex_text, nullptr, &dst);
 			SDL_DestroyTexture(tex_text);
 		}
 	}
@@ -455,7 +467,7 @@ void MainMenu::renderAnimatedBackground(SDL_Texture* tex) const {
         if (!tex) return;
 
         SDL_Rect dst = coverDst(tex);
-        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+        SDL_RenderTexture(renderer_, tex, nullptr, &dst);
 }
 
 void MainMenu::drawVignette(Uint8 alpha) const {
@@ -464,3 +476,4 @@ void MainMenu::drawVignette(Uint8 alpha) const {
         SDL_Rect v{0,0,screen_w_,screen_h_};
         SDL_RenderFillRect(renderer_, &v);
 }
+

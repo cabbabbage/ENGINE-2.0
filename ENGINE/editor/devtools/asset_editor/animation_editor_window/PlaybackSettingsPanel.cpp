@@ -1,6 +1,6 @@
 #include "PlaybackSettingsPanel.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cctype>
@@ -699,4 +699,5 @@ void PlaybackSettingsPanel::refresh_inherited_message() {
 }
 
 }
+
 

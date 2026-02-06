@@ -1495,7 +1495,7 @@ void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
     dm_draw::DrawRoundedOutline( renderer, bg_rect, radius, 1, border_color);
 
     SDL_Rect dst{bg_rect.x + kLabelPadding, bg_rect.y + kLabelPadding, cache.text_size.x, cache.text_size.y};
-    SDL_RenderCopy(renderer, cache.texture, nullptr, &dst);
+    SDL_RenderTexture(renderer, cache.texture, nullptr, &dst);
 }
 
 SDL_Rect RoomEditor::label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const {
@@ -1816,8 +1816,8 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 220);
             const int cross = 8;
-            SDL_RenderDrawLine(renderer, screen.x - cross, screen.y, screen.x + cross, screen.y);
-            SDL_RenderDrawLine(renderer, screen.x, screen.y - cross, screen.x, screen.y + cross);
+            SDL_RenderLine(renderer, screen.x - cross, screen.y, screen.x + cross, screen.y);
+            SDL_RenderLine(renderer, screen.x, screen.y - cross, screen.x, screen.y + cross);
         }
 
         if (is_shift_key_down()) {
@@ -1853,7 +1853,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         bounds.w + i * 2,
                         bounds.h + i * 2
 };
-                    SDL_RenderDrawRect(renderer, &r);
+                    SDL_RenderRect(renderer, &r);
                 }
             }
         }
@@ -1906,11 +1906,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                 double angle = (static_cast<double>(i) / static_cast<double>(segments)) * 2.0 * M_PI;
                 int px = screen_center.x + static_cast<int>(std::lround(std::cos(angle) * static_cast<double>(radius_px)));
                 int py = screen_center.y + static_cast<int>(std::lround(std::sin(angle) * static_cast<double>(radius_px)));
-                SDL_RenderDrawPoint(renderer, px, py);
+                SDL_RenderPoint(renderer, px, py);
             }
             const int cross = std::max(6, radius_px / 4);
-            SDL_RenderDrawLine(renderer, screen_center.x - cross, screen_center.y, screen_center.x + cross, screen_center.y);
-            SDL_RenderDrawLine(renderer, screen_center.x, screen_center.y - cross, screen_center.x, screen_center.y + cross);
+            SDL_RenderLine(renderer, screen_center.x - cross, screen_center.y, screen_center.x + cross, screen_center.y);
+            SDL_RenderLine(renderer, screen_center.x, screen_center.y - cross, screen_center.x, screen_center.y + cross);
         }
 
     }
@@ -5688,3 +5688,4 @@ bool RoomEditor::spawn_group_locked(const std::string& spawn_id) const {
     } catch (...) {}
     return false;
 }
+

@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include "dm_styles.hpp"
 #include "widgets.hpp"
@@ -105,3 +105,4 @@ private:
     std::function<void(int, bool)> on_grid_resolution_change_;
     int grid_controls_right_ = 0;
 };
+

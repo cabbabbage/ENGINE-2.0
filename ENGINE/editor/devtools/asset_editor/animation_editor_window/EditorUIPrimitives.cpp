@@ -1,6 +1,6 @@
 #include "EditorUIPrimitives.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -101,3 +101,4 @@ void draw_panel_background(SDL_Renderer* renderer, const SDL_Rect& bounds) {
 }
 
 }
+

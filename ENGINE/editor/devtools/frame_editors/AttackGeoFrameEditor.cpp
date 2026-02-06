@@ -1,6 +1,6 @@
 #include "AttackGeoFrameEditor.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -545,14 +545,14 @@ void AttackGeoFrameEditor::render_attack_geometry(SDL_Renderer* renderer) const 
             SDL_FPoint p{
                 u * u * start_screen.x + 2.0f * u * t * control_screen.x + t * t * end_screen.x,
                 u * u * start_screen.y + 2.0f * u * t * control_screen.y + t * t * end_screen.y};
-            SDL_RenderDrawLineF(renderer, prev.x, prev.y, p.x, p.y);
+            SDL_RenderLine(renderer, prev.x, prev.y, p.x, p.y);
             prev = p;
         }
 
         if (selected) {
             SDL_SetRenderDrawColor(renderer, 180, 180, 180, 180);
-            SDL_RenderDrawLineF(renderer, start_screen.x, start_screen.y, control_screen.x, control_screen.y);
-            SDL_RenderDrawLineF(renderer, control_screen.x, control_screen.y, end_screen.x, end_screen.y);
+            SDL_RenderLine(renderer, start_screen.x, start_screen.y, control_screen.x, control_screen.y);
+            SDL_RenderLine(renderer, control_screen.x, control_screen.y, end_screen.x, end_screen.y);
         }
 
         // Determine which point is currently selected
@@ -854,3 +854,5 @@ bool AttackGeoFrameEditor::ui_contains_point(const SDL_Point& p) const {
 }
 
 }  // namespace devmode::frame_editors
+
+

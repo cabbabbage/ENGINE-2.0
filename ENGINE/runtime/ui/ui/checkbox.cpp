@@ -41,7 +41,7 @@ void Checkbox::render(SDL_Renderer* r) const {
 					SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
 					if (tex) {
 								SDL_Rect dst{ rect_.x, rect_.y, surf->w, surf->h };
-								SDL_RenderCopy(r, tex, nullptr, &dst);
+								SDL_RenderTexture(r, tex, nullptr, &dst);
 								SDL_DestroyTexture(tex);
 					}
 					SDL_FreeSurface(surf);
@@ -63,7 +63,7 @@ void Checkbox::render(SDL_Renderer* r) const {
 	SDL_Color border_off = Styles::GoldDim();
 	SDL_Color frame = hovered_ ? border_on : border_off;
 	SDL_SetRenderDrawColor(r, frame.r, frame.g, frame.b, 255);
-	SDL_RenderDrawRect(r, &box);
+	SDL_RenderRect(r, &box);
 	if (value_) {
 		SDL_Rect inner{ box.x + 4, box.y + 4, box.w - 8, box.h - 8 };
 		SDL_Color fill = Styles::Ivory();
@@ -74,3 +74,4 @@ void Checkbox::render(SDL_Renderer* r) const {
 
 int Checkbox::width()  { return 300; }
 int Checkbox::height() { return 28;  }
+

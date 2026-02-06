@@ -164,7 +164,7 @@ void PopupManager::render(SDL_Renderer* renderer, int screen_w, int screen_h, Ui
                                      DMStyles::ShadowIntensity());
 
             SDL_SetTextureBlendMode(toast_.texture.get(), SDL_BLENDMODE_BLEND);
-            SDL_RenderCopy(renderer, toast_.texture.get(), nullptr, &dest);
+            SDL_RenderTexture(renderer, toast_.texture.get(), nullptr, &dest);
         }
     }
 
@@ -206,7 +206,7 @@ void PopupManager::render(SDL_Renderer* renderer, int screen_w, int screen_h, Ui
 
                 SDL_SetTextureBlendMode(indicator_.texture.get(), SDL_BLENDMODE_BLEND);
                 SDL_SetTextureAlphaMod(indicator_.texture.get(), alpha_byte);
-                SDL_RenderCopy(renderer, indicator_.texture.get(), nullptr, &dest);
+                SDL_RenderTexture(renderer, indicator_.texture.get(), nullptr, &dest);
             }
         }
     }
@@ -321,3 +321,4 @@ float PopupManager::compute_indicator_alpha(Uint32 now) const {
 bool PopupManager::has_active_content() const {
     return toast_.visible || indicator_.showing;
 }
+

@@ -1,6 +1,6 @@
 #include "HitGeoFrameEditor.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <array>
@@ -612,7 +612,7 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
         for (int i = 0; i < 4; ++i) {
             const SDL_FPoint& a = corners[i];
             const SDL_FPoint& b = corners[(i + 1) % 4];
-            SDL_RenderDrawLineF(renderer, a.x, a.y, b.x, b.y);
+            SDL_RenderLine(renderer, a.x, a.y, b.x, b.y);
         }
     }
 
@@ -740,3 +740,5 @@ bool HitGeoFrameEditor::ui_contains_point(const SDL_Point& pt) const {
 
 
 }  // namespace devmode::frame_editors
+
+

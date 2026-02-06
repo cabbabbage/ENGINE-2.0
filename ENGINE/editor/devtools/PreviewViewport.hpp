@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <string>
 
@@ -53,4 +53,5 @@ private:
     mutable int    cached_height_      = 0;
     mutable Uint32 cached_format_      = 0;
 };
+
 

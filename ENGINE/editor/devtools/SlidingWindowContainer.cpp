@@ -502,20 +502,20 @@ void SlidingWindowContainer::render(SDL_Renderer* renderer, int screen_w, int sc
     }
 
     SDL_Rect prev_clip;
-    SDL_RenderGetClipRect(renderer, &prev_clip);
+    SDL_GetRenderClipRect(renderer, &prev_clip);
 #if SDL_VERSION_ATLEAST(2,0,4)
-    const SDL_bool was_clipping = SDL_RenderIsClipEnabled(renderer);
+    const SDL_bool was_clipping = SDL_RenderClipEnabled(renderer);
 #else
     const SDL_bool was_clipping = (prev_clip.w != 0 || prev_clip.h != 0) ? SDL_TRUE : SDL_FALSE;
 #endif
     SDL_Rect panel_clip = panel_;
-    SDL_RenderSetClipRect(renderer, &panel_clip);
+    SDL_SetRenderClipRect(renderer, &panel_clip);
 
     SDL_Rect content_clip = content_clip_rect_;
     if (content_clip_enabled_ && content_clip.w > 0 && content_clip.h > 0) {
         SDL_Rect intersection;
         if (SDL_IntersectRect(&panel_clip, &content_clip, &intersection) == SDL_TRUE) {
-            SDL_RenderSetClipRect(renderer, &intersection);
+            SDL_SetRenderClipRect(renderer, &intersection);
         }
     }
 
@@ -523,7 +523,7 @@ void SlidingWindowContainer::render(SDL_Renderer* renderer, int screen_w, int sc
         render_function_(renderer);
     }
 
-    SDL_RenderSetClipRect(renderer, &panel_clip);
+    SDL_SetRenderClipRect(renderer, &panel_clip);
 
     if (scrollbar_visible_ && max_scroll_ > 0 && scroll_track_rect_.w > 0 && scroll_track_rect_.h > 0) {
         SDL_Rect track = scroll_track_rect_;
@@ -540,9 +540,9 @@ void SlidingWindowContainer::render(SDL_Renderer* renderer, int screen_w, int sc
     }
 
     if (was_clipping == SDL_TRUE) {
-        SDL_RenderSetClipRect(renderer, &prev_clip);
+        SDL_SetRenderClipRect(renderer, &prev_clip);
     } else {
-        SDL_RenderSetClipRect(renderer, nullptr);
+        SDL_SetRenderClipRect(renderer, nullptr);
     }
 }
 
@@ -802,3 +802,4 @@ void SlidingWindowContainer::update_editor_interaction_block_state() {
         editor_interaction_blocker_(should_block);
     }
 }
+

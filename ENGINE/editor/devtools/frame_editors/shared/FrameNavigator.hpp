@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <functional>
 #include <memory>
 #include <string>
@@ -55,3 +55,4 @@ private:
 };
 
 }  // namespace devmode::frame_editors
+

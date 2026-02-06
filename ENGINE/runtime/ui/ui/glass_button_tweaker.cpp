@@ -48,7 +48,7 @@ void render_text(SDL_Renderer* renderer, TTF_Font* font, const std::string& text
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (texture) {
         SDL_Rect dst{ x, y, surface->w, surface->h };
-        SDL_RenderCopy(renderer, texture, nullptr, &dst);
+        SDL_RenderTexture(renderer, texture, nullptr, &dst);
         SDL_DestroyTexture(texture);
     }
     SDL_FreeSurface(surface);
@@ -640,7 +640,7 @@ void GlassButtonTweaker::render(SDL_Renderer* renderer, int screen_w, int screen
     SDL_SetRenderDrawColor(renderer, 12, 12, 20, 220);
     SDL_RenderFillRect(renderer, &panel_rect_);
     SDL_SetRenderDrawColor(renderer, 255, 255, 255, 70);
-    SDL_RenderDrawRect(renderer, &panel_rect_);
+    SDL_RenderRect(renderer, &panel_rect_);
 
     TTF_Font* font = Styles::LabelSmallSecondary().open_font();
     if (!font) return;
@@ -676,7 +676,7 @@ void GlassButtonTweaker::render(SDL_Renderer* renderer, int screen_w, int screen
             SDL_SetRenderDrawColor(renderer, 40, 40, 40, 220);
             SDL_RenderFillRect(renderer, &hit.sliderRect);
             SDL_SetRenderDrawColor(renderer, 200, 200, 200, 70);
-            SDL_RenderDrawRect(renderer, &hit.sliderRect);
+            SDL_RenderRect(renderer, &hit.sliderRect);
 
             const Range r = range_for_field_label(field.label, field.kind);
             float t = 0.0f;
@@ -710,7 +710,7 @@ void GlassButtonTweaker::render(SDL_Renderer* renderer, int screen_w, int screen
         SDL_SetRenderDrawColor(renderer, 28, 28, 28, 220);
         SDL_RenderFillRect(renderer, &hit.valueRect);
         SDL_SetRenderDrawColor(renderer, 200, 200, 200, 70);
-        SDL_RenderDrawRect(renderer, &hit.valueRect);
+        SDL_RenderRect(renderer, &hit.valueRect);
 
         std::string valueText = format_field_value(style, field);
         if (st.editing_text && st.edit_index == idx) {
@@ -753,7 +753,7 @@ void GlassButtonTweaker::render(SDL_Renderer* renderer, int screen_w, int screen
         SDL_SetRenderDrawColor(renderer, 60, 60, 60, 220);
         SDL_RenderFillRect(renderer, &rect);
         SDL_SetRenderDrawColor(renderer, 200, 200, 200, 120);
-        SDL_RenderDrawRect(renderer, &rect);
+        SDL_RenderRect(renderer, &rect);
 
         int tw = 0, th = 0;
         TTF_SizeText(font, text.c_str(), &tw, &th);
@@ -768,3 +768,4 @@ void GlassButtonTweaker::render(SDL_Renderer* renderer, int screen_w, int screen
 
     TTF_CloseFont(font);
 }
+

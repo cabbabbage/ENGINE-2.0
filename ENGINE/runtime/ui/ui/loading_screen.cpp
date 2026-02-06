@@ -1,5 +1,6 @@
 #include "loading_screen.hpp"
 #include <SDL3_image/SDL_image.h>
+#include <cmath>
 #include <fstream>
 #include <sstream>
 #include <random>
@@ -87,7 +88,7 @@ void LoadingScreen::draw_text(TTF_Font* font, const std::string& txt, int x, int
 	SDL_FreeSurface(surf);
 	if (!tex) return;
 	SDL_Rect dst{ x, y, tw, th };
-	SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+	SDL_RenderTexture(renderer_, tex, nullptr, &dst);
 	SDL_DestroyTexture(tex);
 }
 
@@ -124,7 +125,7 @@ void LoadingScreen::render_justified_text(TTF_Font* font, const std::string& tex
 			SDL_Surface* surf=TTF_RenderText_Blended(font,l[i].c_str(),col);
 			if(!surf)continue; SDL_Texture* tex=SDL_CreateTextureFromSurface(renderer_,surf);
 			int tw=surf->w,th=surf->h; SDL_FreeSurface(surf);
-			if(!tex)continue; SDL_Rect dst{x,line_y,tw,th}; SDL_RenderCopy(renderer_,tex,nullptr,&dst); SDL_DestroyTexture(tex);
+			if(!tex)continue; SDL_Rect dst{x,line_y,tw,th}; SDL_RenderTexture(renderer_,tex,nullptr,&dst); SDL_DestroyTexture(tex);
 			x+=ww[i]+space_w;
 		}
 		line_y+=word_h; if(line_y>=rect.y+rect.h) break;
@@ -212,7 +213,7 @@ void LoadingScreen::draw_frame() {
 
         if (current_texture_) {
                 SDL_Rect dst = coverDest(current_texture_);
-                SDL_RenderCopy(renderer_, current_texture_, nullptr, &dst);
+                SDL_RenderTexture(renderer_, current_texture_, nullptr, &dst);
         }
 
         const bool has_message = !message_.empty();
@@ -229,7 +230,12 @@ void LoadingScreen::draw_frame() {
 SDL_Rect LoadingScreen::coverDest(SDL_Texture* tex) const {
         if (!tex) return SDL_Rect{0, 0, screen_w_, screen_h_};
         int tw = 0; int th = 0;
-        SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+        float twf = 0.0f;
+        float thf = 0.0f;
+        if (SDL_GetTextureSize(tex, &twf, &thf)) {
+                tw = static_cast<int>(std::lround(twf));
+                th = static_cast<int>(std::lround(thf));
+        }
         if (tw <= 0 || th <= 0) return SDL_Rect{0, 0, screen_w_, screen_h_};
         const double ar = static_cast<double>(tw) / static_cast<double>(th);
         int w = screen_w_;
@@ -240,3 +246,4 @@ SDL_Rect LoadingScreen::coverDest(SDL_Texture* tex) const {
         }
         return SDL_Rect{ (screen_w_ - w) / 2, (screen_h_ - h) / 2, w, h };
 }
+

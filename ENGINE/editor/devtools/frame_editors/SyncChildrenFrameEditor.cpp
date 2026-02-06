@@ -562,10 +562,10 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
             if (!is_visible_in_frame) {
                 SDL_SetRenderDrawColor(renderer, 255, 0, 0, 180);
                 constexpr int x_size = 12;
-                SDL_RenderDrawLine(renderer,
+                SDL_RenderLine(renderer,
                                  static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) - x_size,
                                  static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) + x_size);
-                SDL_RenderDrawLine(renderer,
+                SDL_RenderLine(renderer,
                                  static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) - x_size,
                                  static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) + x_size);
             }
@@ -575,10 +575,10 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
             if (!is_visible_in_frame) {
                 SDL_SetRenderDrawColor(renderer, 255, 0, 0, 120);
                 constexpr int x_size = 8;
-                SDL_RenderDrawLine(renderer,
+                SDL_RenderLine(renderer,
                                  static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) - x_size,
                                  static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) + x_size);
-                SDL_RenderDrawLine(renderer,
+                SDL_RenderLine(renderer,
                                  static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) - x_size,
                                  static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) + x_size);
             }
@@ -1038,3 +1038,4 @@ void SyncChildrenFrameEditor::reset_current_frame() {
 }
 
 }  // namespace devmode::frame_editors
+

@@ -13,7 +13,7 @@
 struct SDL_Rect;
 union SDL_Event;
 struct SDL_Renderer;
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include "devtools/dm_styles.hpp"
 #include "devtools/widgets.hpp"
@@ -202,3 +202,4 @@ class AnimationInspectorPanel {
 };
 
 }
+

@@ -1,6 +1,6 @@
 #include "MovementFrameEditor.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -326,7 +326,7 @@ void MovementFrameEditor::render_world(SDL_Renderer* renderer) const {
         }
         SDL_FPoint a = screen_points[i - 1];
         SDL_FPoint b = screen_points[i];
-        SDL_RenderDrawLine(renderer, static_cast<int>(std::lround(a.x)), static_cast<int>(std::lround(a.y)),
+        SDL_RenderLine(renderer, static_cast<int>(std::lround(a.x)), static_cast<int>(std::lround(a.y)),
                            static_cast<int>(std::lround(b.x)), static_cast<int>(std::lround(b.y)));
     }
 
@@ -706,3 +706,5 @@ bool MovementFrameEditor::ui_contains_point(const SDL_Point& pt) const {
 }
 
 }  // namespace devmode::frame_editors
+
+

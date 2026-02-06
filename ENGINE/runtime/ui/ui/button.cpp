@@ -467,7 +467,7 @@ void Button::render(SDL_Renderer* renderer) const {
         if (s) {
             SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
             SDL_Rect dst{ rect_.x + (rect_.w - tw)/2, rect_.y + (rect_.h - th)/2, tw, th };
-            SDL_RenderCopy(renderer, t, nullptr, &dst);
+            SDL_RenderTexture(renderer, t, nullptr, &dst);
             SDL_DestroyTexture(t);
             SDL_FreeSurface(s);
         }
@@ -485,7 +485,7 @@ void Button::draw_deco(SDL_Renderer* r, const SDL_Rect& b, bool hovered) const {
     SDL_SetRenderDrawColor(r, 20,20,20, hovered ? 120 : 96);
     SDL_RenderFillRect(r, &b);
     SDL_SetRenderDrawColor(r, 255,255,255, 36);
-    SDL_RenderDrawRect(r, &b);
+    SDL_RenderRect(r, &b);
 }
 
 const GlassButtonStyle& Button::default_glass_style() {
@@ -769,7 +769,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
     SDL_Texture* tex = to_texture(renderer, comp.get());
     if (!tex) return;
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_RenderCopy(renderer, tex, nullptr, &r);
+    SDL_RenderTexture(renderer, tex, nullptr, &r);
     SDL_DestroyTexture(tex);
 }
 
@@ -809,13 +809,13 @@ void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const
         }};
         for (auto o : offs) {
             SDL_Rect d{ x + o.x, y + o.y, s_stroke->w, s_stroke->h };
-            SDL_RenderCopy(renderer, t_stroke, nullptr, &d);
+            SDL_RenderTexture(renderer, t_stroke, nullptr, &d);
         }
     }
     if (t_text) {
         SDL_SetTextureBlendMode(t_text, SDL_BLENDMODE_BLEND);
         SDL_Rect d{ x, y, s_text->w, s_text->h };
-        SDL_RenderCopy(renderer, t_text, nullptr, &d);
+        SDL_RenderTexture(renderer, t_text, nullptr, &d);
     }
 
     if (t_text) SDL_DestroyTexture(t_text);
@@ -824,3 +824,4 @@ void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const
     if (s_stroke) SDL_FreeSurface(s_stroke);
     TTF_CloseFont(font);
 }
+

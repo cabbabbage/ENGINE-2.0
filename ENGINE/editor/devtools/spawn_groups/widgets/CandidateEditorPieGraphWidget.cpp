@@ -357,16 +357,16 @@ void CandidateEditorPieGraphWidget::render(SDL_Renderer* renderer) const {
 
     if (search_visible()) {
         SDL_Rect previous_clip;
-        SDL_bool had_clip = SDL_RenderIsClipEnabled(renderer);
+        SDL_bool had_clip = SDL_RenderClipEnabled(renderer);
         if (had_clip) {
-            SDL_RenderGetClipRect(renderer, &previous_clip);
+            SDL_GetRenderClipRect(renderer, &previous_clip);
         }
-        SDL_RenderSetClipRect(renderer, &rect_);
+        SDL_SetRenderClipRect(renderer, &rect_);
         search_assets_->render(renderer);
         if (had_clip) {
-            SDL_RenderSetClipRect(renderer, &previous_clip);
+            SDL_SetRenderClipRect(renderer, &previous_clip);
         } else {
-            SDL_RenderSetClipRect(renderer, nullptr);
+            SDL_SetRenderClipRect(renderer, nullptr);
         }
     }
 }
@@ -738,7 +738,7 @@ void CandidateEditorPieGraphWidget::render_empty(SDL_Renderer* renderer, const L
     border.a = 220;
     SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
     if (!outline.empty()) {
-        SDL_RenderDrawLines(renderer, outline.data(), static_cast<int>(outline.size()));
+        SDL_RenderLines(renderer, outline.data(), static_cast<int>(outline.size()));
     }
 
     const SDL_Color text_color = DMStyles::Label().color;
@@ -811,7 +811,7 @@ void CandidateEditorPieGraphWidget::render_slices(SDL_Renderer* renderer, const 
         SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
         for (int s = 0; s <= segments; ++s) {
             double t = angle + sweep * (static_cast<double>(s) / segments);
-            SDL_RenderDrawLine(renderer, static_cast<int>(std::round(layout.center.x)), static_cast<int>(std::round(layout.center.y)), static_cast<int>(std::round(layout.center.x + slice_radius * std::cos(t))), static_cast<int>(std::round(layout.center.y + slice_radius * std::sin(t))));
+            SDL_RenderLine(renderer, static_cast<int>(std::round(layout.center.x)), static_cast<int>(std::round(layout.center.y)), static_cast<int>(std::round(layout.center.x + slice_radius * std::cos(t))), static_cast<int>(std::round(layout.center.y + slice_radius * std::sin(t))));
         }
 #endif
 
@@ -839,7 +839,7 @@ void CandidateEditorPieGraphWidget::render_outline(SDL_Renderer* renderer, const
     border.a = 220;
     SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
     if (!outline.empty()) {
-        SDL_RenderDrawLines(renderer, outline.data(), static_cast<int>(outline.size()));
+        SDL_RenderLines(renderer, outline.data(), static_cast<int>(outline.size()));
     }
 }
 
@@ -925,7 +925,7 @@ SDL_Rect CandidateEditorPieGraphWidget::draw_text(SDL_Renderer* renderer, TTF_Fo
 
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (tex) {
-        SDL_RenderCopy(renderer, tex, nullptr, &dst);
+        SDL_RenderTexture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
     SDL_FreeSurface(surf);
@@ -1012,3 +1012,4 @@ void CandidateEditorPieGraphWidget::notify_layout_change() const {
 bool CandidateEditorPieGraphWidget::search_visible() const {
     return search_assets_ && search_assets_->visible();
 }
+

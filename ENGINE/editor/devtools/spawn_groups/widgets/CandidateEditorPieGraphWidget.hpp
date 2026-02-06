@@ -1,6 +1,6 @@
 #pragma once
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 #include <functional>
 #include <memory>
@@ -101,4 +101,5 @@ private:
     mutable bool search_visible_previous_ = false;
     int last_search_height_ = 0;
 };
+
 

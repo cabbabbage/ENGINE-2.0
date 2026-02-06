@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 
 inline SDL_Color mix_color(SDL_Color a, SDL_Color b, float t) {
     t = std::clamp(t, 0.0f, 1.0f);
@@ -39,3 +39,4 @@ inline float display_color_luminance(SDL_Color color) {
 inline bool colors_equal(SDL_Color lhs, SDL_Color rhs) {
     return lhs.r == rhs.r && lhs.g == rhs.g && lhs.b == rhs.b && lhs.a == rhs.a;
 }
+

@@ -552,8 +552,8 @@ inline SDL_Texture* CreateScaledTexture(SDL_Renderer* renderer,
     }
 
     Uint32 format = SDL_PIXELFORMAT_RGBA8888;
-    if (SDL_QueryTexture(source, &format, nullptr, nullptr, nullptr) != 0) {
-        format = SDL_PIXELFORMAT_RGBA8888;
+    if (SDL_PropertiesID props = SDL_GetTextureProperties(source)) {
+        format = static_cast<Uint32>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, format));
     }
 
     SDL_Texture* scaled = SDL_CreateTexture(renderer, format, SDL_TEXTUREACCESS_TARGET, dst_w, dst_h);
@@ -574,7 +574,7 @@ inline SDL_Texture* CreateScaledTexture(SDL_Renderer* renderer,
     SDL_RenderClear(renderer);
 
     SDL_Rect dst{0, 0, dst_w, dst_h};
-    SDL_RenderCopy(renderer, source, nullptr, &dst);
+    SDL_RenderTexture(renderer, source, nullptr, &dst);
 
     SDL_SetRenderTarget(renderer, previous_target);
     return scaled;
@@ -635,3 +635,4 @@ inline void ClearShadowStateFor(const Asset* ) {
 }
 
 }
+

@@ -1,6 +1,6 @@
 #include "SourceConfigPanel.hpp"
 
-#include "sdl3_render_compat.hpp"
+#include <SDL3/SDL.h>
 #include <SDL_log.h>
 
 #include <algorithm>
@@ -1145,8 +1145,11 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
 
     if (max_width <= 0 || max_height <= 0) return;
 
-    int tex_w, tex_h;
-    SDL_QueryTexture(frame_texture, nullptr, nullptr, &tex_w, &tex_h);
+    float tex_wf = 0.0f;
+    float tex_hf = 0.0f;
+    SDL_GetTextureSize(frame_texture, &tex_wf, &tex_hf);
+    const int tex_w = static_cast<int>(std::lround(tex_wf));
+    const int tex_h = static_cast<int>(std::lround(tex_hf));
 
     if (tex_w <= 0 || tex_h <= 0) return;
 
@@ -1164,24 +1167,26 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
     SDL_Rect dst_rect{draw_x, draw_y, draw_w, draw_h};
 
     SDL_Rect prev_clip;
-    SDL_RenderGetClipRect(renderer, &prev_clip);
+    SDL_GetRenderClipRect(renderer, &prev_clip);
 
     bool had_clip = (prev_clip.w > 0 && prev_clip.h > 0 && prev_clip.x >= 0 && prev_clip.y >= 0);
 
     SDL_Rect clip_rect = {bounds_.x, bounds_.y, bounds_.w, bounds_.h};
-    SDL_RenderSetClipRect(renderer, &clip_rect);
+    SDL_SetRenderClipRect(renderer, &clip_rect);
 
-    SDL_RendererFlip flip_flags = SDL_FLIP_NONE;
-    if (flip_x) flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_HORIZONTAL);
-    if (flip_y) flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_VERTICAL);
+    SDL_FlipMode flip_flags = SDL_FLIP_NONE;
+    if (flip_x) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
+    if (flip_y) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
 
-    SDL_RenderCopyEx(renderer, frame_texture, nullptr, &dst_rect, 0.0, nullptr, flip_flags);
+    SDL_RenderTextureRotated(renderer, frame_texture, nullptr, &dst_rect, 0.0, nullptr, flip_flags);
 
     if (had_clip) {
-        SDL_RenderSetClipRect(renderer, &prev_clip);
+        SDL_SetRenderClipRect(renderer, &prev_clip);
     } else {
-        SDL_RenderSetClipRect(renderer, nullptr);
+        SDL_SetRenderClipRect(renderer, nullptr);
     }
 }
 
 }
+
+

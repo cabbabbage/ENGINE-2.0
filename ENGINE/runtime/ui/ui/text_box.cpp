@@ -184,7 +184,7 @@ void TextBox::draw_text(SDL_Renderer* r, const std::string& s, int x, int y, SDL
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
                 if (tex) {
                         SDL_Rect dst{ x, y, surf->w, surf->h };
-                        SDL_RenderCopy(r, tex, nullptr, &dst);
+                        SDL_RenderTexture(r, tex, nullptr, &dst);
                         SDL_DestroyTexture(tex);
                 }
                 SDL_FreeSurface(surf);
@@ -206,7 +206,7 @@ void TextBox::render(SDL_Renderer* r) const {
         SDL_Color border_off = Styles::GoldDim();
         SDL_Color frame = (hovered_ || editing_) ? border_on : border_off;
         SDL_SetRenderDrawColor(r, frame.r, frame.g, frame.b, 255);
-        SDL_RenderDrawRect(r, &box);
+        SDL_RenderRect(r, &box);
         SDL_Color textCol = Styles::Ivory();
         auto lines = line_info();
         int line_height = font_height();
@@ -251,7 +251,7 @@ void TextBox::render_caret(SDL_Renderer* r, int line_height) const {
         int text_y = rect_.y + kVerticalPadding + static_cast<int>(line_index) * line_height;
         int caret_x = rect_.x + kHorizontalPadding + w;
         SDL_SetRenderDrawColor(r, style.color.r, style.color.g, style.color.b, style.color.a);
-        SDL_RenderDrawLine(r, caret_x, text_y, caret_x, text_y + font_height);
+        SDL_RenderLine(r, caret_x, text_y, caret_x, text_y + font_height);
         TTF_CloseFont(f);
 }
 
@@ -353,3 +353,4 @@ size_t TextBox::line_index_from_position(size_t pos, const std::vector<LineInfo>
         }
         return lines.size() - 1;
 }
+

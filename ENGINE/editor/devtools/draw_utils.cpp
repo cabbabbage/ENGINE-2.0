@@ -37,12 +37,12 @@ SDL_Color blend_toward(const SDL_Color& color, float amount, bool lighten) {
 
 void draw_horizontal(SDL_Renderer* renderer, int y, int x0, int x1) {
     if (x0 > x1) std::swap(x0, x1);
-    SDL_RenderDrawLine(renderer, x0, y, x1, y);
+    SDL_RenderLine(renderer, x0, y, x1, y);
 }
 
 void draw_vertical(SDL_Renderer* renderer, int x, int y0, int y1) {
     if (y0 > y1) std::swap(y0, y1);
-    SDL_RenderDrawLine(renderer, x, y0, x, y1);
+    SDL_RenderLine(renderer, x, y0, x, y1);
 }
 
 bool compute_horizontal_span(const SDL_Rect& rect, int effective_radius, int inset, int y, int& out_start, int& out_end) {
@@ -181,7 +181,7 @@ void fill_rounded_rect(SDL_Renderer* renderer,
         const float t = static_cast<float>(y - rect.y) / static_cast<float>(span);
         SDL_Color line_color = color_provider(t);
         SDL_SetRenderDrawColor(renderer, line_color.r, line_color.g, line_color.b, line_color.a);
-        SDL_RenderDrawLine(renderer, span_start, y, span_end, y);
+        SDL_RenderLine(renderer, span_start, y, span_end, y);
     }
 }
 
@@ -238,7 +238,7 @@ void DrawBeveledRect(
         int span_start = 0;
         int span_end = -1;
         if (compute_horizontal_span(rect, effective_radius, 0, y, span_start, span_end)) {
-            SDL_RenderDrawLine(renderer, span_start, y, span_end, y);
+            SDL_RenderLine(renderer, span_start, y, span_end, y);
         }
     }
 
@@ -277,4 +277,5 @@ void DrawRoundedFocusRing(
 }
 
 }
+
 

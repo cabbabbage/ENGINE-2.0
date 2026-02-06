@@ -4,15 +4,15 @@
   "builtin-baseline": "a30ac1bd011913356d31c5c97dd836d63e9c92cf",
   "dependencies": [
     "nlohmann-json",
-    "sdl2",
+    "sdl3",
     {
-      "name": "sdl2-image",
+      "name": "sdl3-image",
       "features": [
         "libjpeg-turbo"
       ]
     },
-    "sdl2-mixer",
-    "sdl2-ttf",
+    "sdl3-mixer",
+    "sdl3-ttf",
     "glad",
     "opengl"
   ]

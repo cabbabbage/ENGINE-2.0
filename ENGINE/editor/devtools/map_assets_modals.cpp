@@ -9,7 +9,7 @@
 #include <vector>
 #include <unordered_set>
 
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include "DockableCollapsible.hpp"
 #include "FloatingPanelLayoutManager.hpp"

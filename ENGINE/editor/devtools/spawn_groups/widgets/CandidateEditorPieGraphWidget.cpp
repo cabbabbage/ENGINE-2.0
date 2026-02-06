@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <nlohmann/json.hpp>
 
 #include "../../search_assets.hpp"

@@ -7,7 +7,7 @@
 #include <vector>
 #include <cstdint>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "assets/Asset.hpp"
 #include "assets/asset_types.hpp"

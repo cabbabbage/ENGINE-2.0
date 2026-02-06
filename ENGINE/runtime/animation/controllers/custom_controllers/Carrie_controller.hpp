@@ -2,7 +2,7 @@
 #include "assets/asset_controller.hpp"
 
 #include <random>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 class Assets;
 class Asset;

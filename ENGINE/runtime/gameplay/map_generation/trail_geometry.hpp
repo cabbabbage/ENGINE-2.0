@@ -7,7 +7,7 @@
 #include <memory>
 #include <random>
 #include <utility>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
 namespace devmode::core {

@@ -4,7 +4,7 @@
 #include "rendering/render/scaling_logic.hpp"
 #include "utils/log.hpp"
 
-#include <SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 #include <filesystem>
 #include <fstream>
 #include <unordered_set>

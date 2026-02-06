@@ -3,7 +3,7 @@
 #include "rendering/render/camera_controller.hpp"
 #include "rendering/render/image_effect_settings.hpp"
 #include "utils/area.hpp"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <cstdint>
 #include <algorithm>
 #include <optional>

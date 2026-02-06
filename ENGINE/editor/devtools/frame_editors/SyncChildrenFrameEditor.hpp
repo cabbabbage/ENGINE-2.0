@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include "FrameEditorBase.hpp"
 #include "animation/child_attachment_controller.hpp"

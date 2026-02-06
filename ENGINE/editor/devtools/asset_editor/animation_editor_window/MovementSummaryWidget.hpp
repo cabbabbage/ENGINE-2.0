@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include "core/AssetsManager.hpp"
 

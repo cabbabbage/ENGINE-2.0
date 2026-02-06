@@ -5,7 +5,7 @@
 #include <cmath>
 #include <limits>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "assets/animation_frame.hpp"
 

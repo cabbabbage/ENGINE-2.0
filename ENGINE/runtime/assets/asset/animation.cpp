@@ -7,8 +7,8 @@
 #include "rendering/render/scaling_logic.hpp"
 #include "utils/loading_status_notifier.hpp"
 #include "utils/log.hpp"
-#include <SDL_image.h>
-#include <SDL_mixer.h>
+#include <SDL3_image/SDL_image.h>
+#include <SDL3_mixer/SDL_mixer.h>
 #include <algorithm>
 #include <array>
 #include <cctype>

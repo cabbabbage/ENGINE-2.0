@@ -1,8 +1,8 @@
 #pragma once
 #define DM_WIDGETS_INCLUDED
 
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include "sdl3_render_compat.hpp"
+#include <SDL3_ttf/SDL_ttf.h>
 #include <array>
 #include <memory>
 #include <optional>

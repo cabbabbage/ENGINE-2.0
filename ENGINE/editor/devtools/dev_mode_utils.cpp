@@ -1,7 +1,7 @@
 #include "dev_mode_utils.hpp"
 
 #include "dm_styles.hpp"
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <algorithm>
 #include <string>
 #include <unordered_map>

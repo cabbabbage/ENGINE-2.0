@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include <nlohmann/json.hpp>
 #include "utils/display_color.hpp"

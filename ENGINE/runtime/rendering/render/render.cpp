@@ -16,7 +16,7 @@
 #include <utility>
 #include <vector>
 
-#include <SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 
 #include "assets/Asset.hpp"
 #include "assets/asset_library.hpp"

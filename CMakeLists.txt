@@ -99,10 +99,10 @@ if(NOT nlohmann_json_FOUND)
         message(FATAL_ERROR "nlohmann_json not found. Install the package or add it to ${_NLOHMANN_JSON_DIR}")
     endif()
 endif()
-find_package(SDL2 CONFIG REQUIRED)
-find_package(SDL2_image CONFIG REQUIRED)
-find_package(SDL2_mixer CONFIG REQUIRED)
-find_package(SDL2_ttf CONFIG REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
+find_package(SDL3_image CONFIG REQUIRED)
+find_package(SDL3_mixer CONFIG REQUIRED)
+find_package(SDL3_ttf CONFIG REQUIRED)
 
 # Try glad via package config first (vcpkg provides this)
 find_package(glad CONFIG QUIET)
@@ -199,19 +199,13 @@ target_compile_definitions(engine PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
 # ------------------------------------------
 # Link libraries
 # ------------------------------------------
-# SDL2main is not present on all platforms; link it only if the target exists.
-set(_SDL2MAIN_TARGET "")
-if(TARGET SDL2::SDL2main)
-    set(_SDL2MAIN_TARGET SDL2::SDL2main)
-endif()
-
 target_link_libraries(engine
     PRIVATE
         nlohmann_json::nlohmann_json
-        SDL2::SDL2 ${_SDL2MAIN_TARGET}
-        SDL2_image::SDL2_image
-        SDL2_mixer::SDL2_mixer
-        SDL2_ttf::SDL2_ttf
+        SDL3::SDL3
+        SDL3_image::SDL3_image
+        SDL3_mixer::SDL3_mixer
+        SDL3_ttf::SDL3_ttf
         ${GLAD_TARGET}
         OpenGL::GL
 )
@@ -302,10 +296,10 @@ target_compile_definitions(engine_tests PRIVATE
 target_link_libraries(engine_tests
     PRIVATE
         nlohmann_json::nlohmann_json
-        SDL2::SDL2 ${_SDL2MAIN_TARGET}
-        SDL2_image::SDL2_image
-        SDL2_mixer::SDL2_mixer
-        SDL2_ttf::SDL2_ttf
+        SDL3::SDL3
+        SDL3_image::SDL3_image
+        SDL3_mixer::SDL3_mixer
+        SDL3_ttf::SDL3_ttf
         ${GLAD_TARGET}
         OpenGL::GL
 )
@@ -360,7 +354,7 @@ target_compile_definitions(engine_world_tests PRIVATE
 # or OpenGL, they only use SDL types.
 target_link_libraries(engine_world_tests
     PRIVATE
-        SDL2::SDL2 ${_SDL2MAIN_TARGET}
+        SDL3::SDL3
 )
 if (WINSDK_UM_X64_LIBDIR)
     target_link_directories(engine_world_tests PRIVATE "${WINSDK_UM_X64_LIBDIR}")

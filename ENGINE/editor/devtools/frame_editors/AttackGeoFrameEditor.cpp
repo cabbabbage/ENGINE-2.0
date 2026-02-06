@@ -1,6 +1,6 @@
 #include "AttackGeoFrameEditor.hpp"
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -260,7 +260,7 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
     bool overlay_valid = false;
     if (point_3d_editor_) {
         // Use the cached container from Point3DEditor (set during render_overlays)
-        // This avoids issues with SDL_GetRendererOutputSize(nullptr, ...) failing
+        // This avoids issues with SDL_GetCurrentRenderOutputSize(nullptr, ...) failing
         overlay_rect = point_3d_editor_->get_cached_container();
         overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
         if (point_3d_editor_->handle_event(e, overlay_rect)) {
@@ -444,7 +444,7 @@ void AttackGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     // Render Point3DEditor overlays at the bottom
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
-        SDL_GetRendererOutputSize(renderer, &sw, &sh);
+        SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
         int height = point_3d_editor_->get_overlay_height(sw);
         SDL_Rect bottom_container{0, sh - height, sw, height};
         point_3d_editor_->render_overlays(renderer, bottom_container);
@@ -454,7 +454,7 @@ void AttackGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
 void AttackGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     if (!renderer) return;
     int sw = 0, sh = 0;
-    SDL_GetRendererOutputSize(renderer, &sw, &sh);
+    SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
     const int padding = DMSpacing::small_gap();
     const int width = 320;
     const int x = padding;

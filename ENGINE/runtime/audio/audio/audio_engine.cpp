@@ -3,8 +3,8 @@
 #include "assets/Asset.hpp"
 #include "assets/animation.hpp"
 
-#include <SDL.h>
-#include <SDL_mixer.h>
+#include <SDL3/SDL.h>
+#include <SDL3_mixer/SDL_mixer.h>
 #include <algorithm>
 #include <array>
 #include <cctype>

@@ -3,7 +3,7 @@
 #include <vector>
 #include <memory>
 #include <unordered_set>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 class Assets;
 class Asset;

@@ -1,6 +1,6 @@
 #include "OnEndSelector.hpp"
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include <algorithm>
 #include <array>

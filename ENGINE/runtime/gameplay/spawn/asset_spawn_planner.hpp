@@ -5,7 +5,7 @@
 #include <string>
 #include <unordered_set>
 #include <functional>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include "assets/asset_info.hpp"
 #include "assets/asset_library.hpp"
 #include "utils/area.hpp"

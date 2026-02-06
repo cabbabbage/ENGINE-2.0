@@ -1,6 +1,6 @@
 #include "EditorUIPrimitives.hpp"
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include <algorithm>
 #include <cmath>

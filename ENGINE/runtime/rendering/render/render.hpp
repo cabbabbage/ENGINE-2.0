@@ -9,7 +9,7 @@
 #include "rendering/render/scaling_logic.hpp"
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <nlohmann/json.hpp>
 

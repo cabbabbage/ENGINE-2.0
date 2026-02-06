@@ -1,6 +1,6 @@
 #include "float_slider_widget.hpp"
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include <algorithm>
 #include <array>

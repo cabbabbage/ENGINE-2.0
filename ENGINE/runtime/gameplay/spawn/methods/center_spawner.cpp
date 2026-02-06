@@ -1,6 +1,6 @@
 #include "center_spawner.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "spawn_context.hpp"
 #include "check.hpp"

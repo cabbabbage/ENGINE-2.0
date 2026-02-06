@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include "DockableCollapsible.hpp"
 #include "devtools/float_slider_widget.hpp"

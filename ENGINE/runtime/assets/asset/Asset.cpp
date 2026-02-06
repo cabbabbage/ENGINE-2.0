@@ -32,7 +32,7 @@
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
 static std::mt19937& asset_rng()
 {

@@ -3,8 +3,8 @@
 #include "draw_utils.hpp"
 #include "utils/input.hpp"
 
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include "sdl3_render_compat.hpp"
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include <algorithm>
 

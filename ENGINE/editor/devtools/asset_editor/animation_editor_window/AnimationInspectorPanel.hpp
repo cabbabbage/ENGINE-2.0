@@ -13,7 +13,7 @@
 struct SDL_Rect;
 union SDL_Event;
 struct SDL_Renderer;
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include "devtools/dm_styles.hpp"
 #include "devtools/widgets.hpp"

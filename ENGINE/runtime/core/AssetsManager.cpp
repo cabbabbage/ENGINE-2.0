@@ -43,8 +43,8 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <array>
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 namespace {
 

@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 #include <nlohmann/json.hpp>
 
 class Input;

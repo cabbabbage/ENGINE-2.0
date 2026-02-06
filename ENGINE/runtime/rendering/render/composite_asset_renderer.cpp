@@ -179,7 +179,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             const WarpedScreenGrid& cam = assets_->getView();
             if (const auto* gp = cam.grid_point_for_asset(asset)) {
                 int screen_width = 0, screen_height = 0;
-                SDL_GetRendererOutputSize(renderer_, &screen_width, &screen_height);
+                SDL_GetCurrentRenderOutputSize(renderer_, &screen_width, &screen_height);
                 const float center_y = static_cast<float>(screen_height) * 0.5f;
                 vertical_distance_from_center = std::abs(gp->screen.y - center_y);
                 is_above_center = gp->screen.y < center_y;

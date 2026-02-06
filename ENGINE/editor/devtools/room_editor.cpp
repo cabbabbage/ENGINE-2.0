@@ -139,13 +139,6 @@ static bool is_visible_pixel_at(SDL_Renderer* renderer, SDL_Point screen_point) 
     SDL_Rect r{ screen_point.x, screen_point.y, 1, 1 };
 
     Uint32 fmt = SDL_PIXELFORMAT_RGBA8888;
-#if SDL_MAJOR_VERSION >= 2
-    SDL_RendererInfo info{};
-    if (SDL_GetRendererInfo(renderer, &info) == 0 && info.num_texture_formats > 0) {
-
-        fmt = info.texture_formats[0];
-    }
-#endif
 
     if (SDL_RenderReadPixels(renderer, &r, fmt, &pixel, sizeof(pixel)) != 0) {
 

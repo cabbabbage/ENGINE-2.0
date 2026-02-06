@@ -2,7 +2,7 @@
 #define VIBBLE_CONTROLLER_HPP
 
 #include "assets/asset_controller.hpp"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <string>
 #include <chrono>
 #include <thread>

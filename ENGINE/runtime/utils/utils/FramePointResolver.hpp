@@ -1,7 +1,7 @@
 #pragma once
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 class Asset;
 class Assets;

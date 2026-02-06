@@ -3,7 +3,7 @@
 #include <string_view>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "animation/animation_update.hpp"
 #include "assets/Asset.hpp"

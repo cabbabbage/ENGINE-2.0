@@ -4,7 +4,7 @@
 #include <utility>
 
 #include <SDL_log.h>
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include <nlohmann/json.hpp>
 

@@ -1,6 +1,6 @@
 #include "dev_controls.hpp"
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 #include <fstream>
 #include <sstream>
 #include <array>
@@ -71,7 +71,7 @@
 #include <iostream>
 #include <random>
 #include <nlohmann/json.hpp>
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 using devmode::sdl::event_point;
 using devmode::sdl::is_pointer_event;

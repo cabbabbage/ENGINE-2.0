@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 namespace animation_editor {
 

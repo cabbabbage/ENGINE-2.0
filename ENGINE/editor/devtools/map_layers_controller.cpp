@@ -6,7 +6,7 @@
 #include "devtools/dev_controls_persistence.hpp"
 #include "utils/display_color.hpp"
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include <algorithm>
 #include <cctype>

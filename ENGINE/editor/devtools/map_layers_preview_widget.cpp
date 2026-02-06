@@ -12,7 +12,7 @@
 #include <utility>
 
 #include <nlohmann/json.hpp>
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include "dm_styles.hpp"
 #include "draw_utils.hpp"

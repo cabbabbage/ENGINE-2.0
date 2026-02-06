@@ -21,7 +21,7 @@
 #include "dm_styles.hpp"
 #include "utils/input.hpp"
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 #include <SDL_log.h>
 #include <algorithm>
 #include <cctype>

@@ -7,7 +7,7 @@
 #include <vector>
 #include <chrono>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include <nlohmann/json_fwd.hpp>
 

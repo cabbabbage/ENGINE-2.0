@@ -1,7 +1,7 @@
 #include "main_menu.hpp"
 
-#include <SDL_image.h>
-#include <SDL_ttf.h>
+#include <SDL3_image/SDL_image.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <algorithm>
 #include <array>
 #include <utility>

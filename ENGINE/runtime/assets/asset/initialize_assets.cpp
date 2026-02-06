@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <iostream>
 #include <memory>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 void InitializeAssets::initialize(Assets& assets,
                                   std::vector<Room*> rooms,

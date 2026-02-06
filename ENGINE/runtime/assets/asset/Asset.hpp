@@ -9,7 +9,7 @@
 #include <vector>
 #include <memory>
 #include <optional>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <limits>
 #include <cstdint>
 #include <unordered_map>

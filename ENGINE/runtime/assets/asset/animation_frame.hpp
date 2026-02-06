@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vector>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "animation/combat_geometry.hpp"
 #include "animation_frame_variant.hpp"

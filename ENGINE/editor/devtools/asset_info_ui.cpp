@@ -53,7 +53,7 @@
 #include "search_assets.hpp"
 #include "devtools/widgets/ChildrenTimelinesPanel.hpp"
 #include "draw_utils.hpp"
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include "devtools/manifest_spawn_group_utils.hpp"
 #include "devtools/manifest_asset_utils.hpp"
 #include "devtools/asset_paths.hpp"

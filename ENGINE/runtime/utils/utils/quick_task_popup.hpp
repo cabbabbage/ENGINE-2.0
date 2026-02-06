@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "utils/simple_tasks_markdown.hpp"
 

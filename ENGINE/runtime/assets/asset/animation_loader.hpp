@@ -2,7 +2,7 @@
 
 #include <string>
 #include <nlohmann/json.hpp>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 class Animation;
 class AssetInfo;

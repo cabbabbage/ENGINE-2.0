@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include "EditorUIPrimitives.hpp"
 

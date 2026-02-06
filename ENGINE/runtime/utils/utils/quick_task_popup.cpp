@@ -2,7 +2,7 @@
 #include "devtools/widgets.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/font_cache.hpp"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <algorithm>
 
 QuickTaskPopup::QuickTaskPopup() = default;
@@ -43,7 +43,7 @@ void QuickTaskPopup::render(SDL_Renderer* renderer) {
     if (!is_open_) return;
 
     int screen_w, screen_h;
-    SDL_GetRendererOutputSize(renderer, &screen_w, &screen_h);
+    SDL_GetCurrentRenderOutputSize(renderer, &screen_w, &screen_h);
     SDL_Rect screen_rect = {0, 0, screen_w, screen_h};
 
     if (layout_dirty_ || popup_rect_.w == 0) {

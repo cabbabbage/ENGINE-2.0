@@ -5,7 +5,7 @@
 #include "gameplay/world/grid_point.hpp"
 #include "utils/log.hpp"
 
-#include <SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 #include <random>
 #include <cmath>
 #include <algorithm>

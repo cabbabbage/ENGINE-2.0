@@ -4,9 +4,9 @@
 #include "AudioImporter.hpp"
 #include "PanelLayoutConstants.hpp"
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 #include <SDL_log.h>
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include <algorithm>
 #include <filesystem>

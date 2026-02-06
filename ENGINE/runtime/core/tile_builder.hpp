@@ -2,7 +2,7 @@
 
 #include <vector>
 #include <memory>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 struct MapGridSettings;
 class Asset;

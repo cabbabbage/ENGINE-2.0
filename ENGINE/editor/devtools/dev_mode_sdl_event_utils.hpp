@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 inline SDL_Point event_point_from_event(const SDL_Event& e) {
     if (e.type == SDL_MOUSEMOTION) {

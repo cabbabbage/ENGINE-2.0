@@ -17,7 +17,7 @@
 #include "dm_styles.hpp"
 #include <iostream>
 #include <filesystem>
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "DockableCollapsible.hpp"

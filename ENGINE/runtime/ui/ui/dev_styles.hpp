@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include "ui/styles.hpp"
 #include "utils/text_style.hpp"
 

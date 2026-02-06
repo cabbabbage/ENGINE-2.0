@@ -6,7 +6,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 #include "animation_child_data.hpp"
 #include "animation_frame.hpp"

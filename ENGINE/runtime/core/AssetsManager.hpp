@@ -3,7 +3,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "assets/asset_library.hpp"
 #include "core/popup_manager.hpp"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <atomic>
 #include <functional>
 #include <memory>

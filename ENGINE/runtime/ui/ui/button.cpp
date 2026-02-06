@@ -12,7 +12,7 @@
 #include <vector>
 #include <limits>
 
-#include <SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 
 #include "core/manifest/manifest_loader.hpp"
 

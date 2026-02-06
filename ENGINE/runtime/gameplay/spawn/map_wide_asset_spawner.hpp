@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <nlohmann/json_fwd.hpp>
 
 #include "utils/map_grid_settings.hpp"

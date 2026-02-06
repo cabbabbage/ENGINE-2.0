@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 inline SDL_Color mix_color(SDL_Color a, SDL_Color b, float t) {
     t = std::clamp(t, 0.0f, 1.0f);

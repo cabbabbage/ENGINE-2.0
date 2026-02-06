@@ -15,7 +15,7 @@
 #include <cstddef>
 #include <string>
 #include <cstdlib>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include "assets/Asset.hpp"
 #include "assets/asset_library.hpp"
 #include "assets/asset_types.hpp"

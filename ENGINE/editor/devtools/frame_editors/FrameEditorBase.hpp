@@ -2,7 +2,7 @@
 
 #include <memory>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 class Input;
 struct SDL_Renderer;

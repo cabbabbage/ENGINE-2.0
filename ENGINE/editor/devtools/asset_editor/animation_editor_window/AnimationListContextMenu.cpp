@@ -1,6 +1,6 @@
 #include "AnimationListContextMenu.hpp"
 
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include <algorithm>
 #include <utility>

@@ -1,6 +1,6 @@
 #include "button_settings.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <SDL_log.h>
 
 #include <fstream>

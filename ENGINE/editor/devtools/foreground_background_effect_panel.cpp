@@ -10,7 +10,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/rebuild_queue.hpp"
 
-#include <SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 
 #include <algorithm>
 #include <cmath>

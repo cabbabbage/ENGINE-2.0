@@ -7,7 +7,7 @@
 #include <utility>
 #include <vector>
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 
 #include "dm_styles.hpp"
 #include "widgets.hpp"

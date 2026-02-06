@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include "sdl3_render_compat.hpp"
 #include <functional>
 #include <memory>
 #include <optional>

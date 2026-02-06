@@ -1,7 +1,7 @@
 #include "PreviewProvider.hpp"
 
-#include <SDL.h>
-#include <SDL_image.h>
+#include "sdl3_render_compat.hpp"
+#include <SDL3_image/SDL_image.h>
 
 #include <algorithm>
 #include <array>

@@ -6,7 +6,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "assets/Asset.hpp"
 #include "stride_types.hpp"

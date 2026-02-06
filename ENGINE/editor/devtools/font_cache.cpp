@@ -1,4 +1,5 @@
 #include "font_cache.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include "dm_styles.hpp"
 
@@ -95,7 +96,7 @@ bool DMFontCache::draw_text(SDL_Renderer* renderer,
         return false;
     }
     SDL_Rect dst{x, y, surf->w, surf->h};
-    SDL_RenderTexture(renderer, tex, nullptr, &dst);
+    sdl_render::Texture(renderer, tex, nullptr, &dst);
     SDL_DestroyTexture(tex);
     if (out_rect) {
         *out_rect = dst;
@@ -148,5 +149,7 @@ bool DrawLabelText(SDL_Renderer* renderer,
     }
     return result;
 }
+
+
 
 

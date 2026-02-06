@@ -1,4 +1,5 @@
 #include "asset_library_ui.hpp"
+#include "utils/sdl_render_conversions.hpp"
 #include <algorithm>
 #include <unordered_map>
 #include <functional>
@@ -460,7 +461,7 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
     void render(SDL_Renderer* r) const override {
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(r, kTileBG.r, kTileBG.g, kTileBG.b, kTileBG.a);
-        SDL_RenderFillRect(r, &rect_);
+        sdl_render::FillRect(r, &rect_);
 
         const int pad = kPad;
         const int label_h = 24;
@@ -561,7 +562,7 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
                             int dh = static_cast<int>(th * scale);
                             SDL_Rect dst{ image_rect.x + (image_rect.w - dw) / 2,
                                           image_rect.y + (image_rect.h - dh) / 2, dw, dh };
-                            SDL_RenderTexture(r, tex, nullptr, &dst);
+                            sdl_render::Texture(r, tex, nullptr, &dst);
                         }
                     }
                 }
@@ -570,7 +571,7 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
         if (hovered) {
             SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_ADD);
             SDL_SetRenderDrawColor(r, kTileHL.r, kTileHL.g, kTileHL.b, kTileHL.a);
-            SDL_RenderFillRect(r, &rect_);
+            sdl_render::FillRect(r, &rect_);
         }
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         const int tile_radius = std::min(DMStyles::CornerRadius(), std::min(rect_.w, rect_.h) / 2);
@@ -590,7 +591,7 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
                     }
                     SDL_Rect dst{ label_rect.x,
                                   label_rect.y + std::max(0, (label_rect.h - dh) / 2), dw, dh };
-                    SDL_RenderTexture(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -675,7 +676,7 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
     void render(SDL_Renderer* r) const override {
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(r, kTileBG.r, kTileBG.g, kTileBG.b, kTileBG.a);
-        SDL_RenderFillRect(r, &rect_);
+        sdl_render::FillRect(r, &rect_);
 
         const int pad = kPad;
         const int label_h = 26;
@@ -751,7 +752,7 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                     texture_size(tex, dw, dh);
                     SDL_Rect dst{ label_rect.x,
                                   label_rect.y + std::max(0, (label_rect.h - dh) / 2), std::min(dw, label_rect.w), dh };
-                    SDL_RenderTexture(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -788,7 +789,7 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                         int dh = std::min(icon_h, preview_rect.h);
                         SDL_Rect dst{preview_rect.x + (preview_rect.w - dw) / 2,
                                      preview_rect.y + (preview_rect.h - dh) / 2, dw, dh};
-                        SDL_RenderTexture(r, tex, nullptr, &dst);
+                        sdl_render::Texture(r, tex, nullptr, &dst);
                         SDL_DestroyTexture(tex);
                     }
                 }
@@ -820,7 +821,7 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                     texture_size(tex, dw, dh);
                     SDL_Rect dst{ footer_rect.x,
                                   footer_rect.y + std::max(0, (footer_rect.h - dh) / 2), std::min(dw, footer_rect.w), dh };
-                    SDL_RenderTexture(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -829,7 +830,7 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
         if (hovered) {
             SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_ADD);
             SDL_SetRenderDrawColor(r, kTileHL.r, kTileHL.g, kTileHL.b, kTileHL.a);
-            SDL_RenderFillRect(r, &rect_);
+            sdl_render::FillRect(r, &rect_);
         }
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         const int tile_radius = std::min(DMStyles::CornerRadius(), std::min(rect_.w, rect_.h) / 2);
@@ -884,7 +885,7 @@ struct AssetLibraryUI::RoomAreaTileWidget : public Widget {
     void render(SDL_Renderer* r) const override {
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(r, kTileBG.r, kTileBG.g, kTileBG.b, kTileBG.a);
-        SDL_RenderFillRect(r, &rect_);
+        sdl_render::FillRect(r, &rect_);
 
         const int pad = kPad;
         const SDL_Color border = kTileBd;
@@ -904,7 +905,7 @@ struct AssetLibraryUI::RoomAreaTileWidget : public Widget {
                     texture_size(tex, dw, dh);
                     if (dw > label_rect.w) dw = label_rect.w;
                     SDL_Rect dst{ label_rect.x, label_rect.y + std::max(0, (label_rect.h - dh)/2), dw, dh };
-                    SDL_RenderTexture(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -913,7 +914,7 @@ struct AssetLibraryUI::RoomAreaTileWidget : public Widget {
         if (hovered) {
             SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_ADD);
             SDL_SetRenderDrawColor(r, kTileHL.r, kTileHL.g, kTileHL.b, kTileHL.a);
-            SDL_RenderFillRect(r, &rect_);
+            sdl_render::FillRect(r, &rect_);
         }
     }
 };
@@ -2153,7 +2154,7 @@ void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(r, 0, 0, 0, 160);
         SDL_Rect overlay{ 0, 0, screen_w, screen_h };
-        SDL_RenderFillRect(r, &overlay);
+        sdl_render::FillRect(r, &overlay);
 
         if (delete_modal_rect_.w == 0 || delete_modal_rect_.h == 0) {
             const_cast<AssetLibraryUI*>(this)->update_delete_modal_geometry(screen_w, screen_h);
@@ -2215,7 +2216,7 @@ void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
                     SDL_Rect dst{ text_rect.x,
                                   text_rect.y,
                                   std::min(tw, text_rect.w), std::min(th, text_rect.h) };
-                    SDL_RenderTexture(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -2250,7 +2251,7 @@ void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
                         text_y = std::min(text_y, rect.y + rect.h - bevel_depth - th);
                         SDL_Rect dst{
                             rect.x + (rect.w - tw) / 2, text_y, tw, th };
-                        SDL_RenderTexture(r, tex, nullptr, &dst);
+                        sdl_render::Texture(r, tex, nullptr, &dst);
                         SDL_DestroyTexture(tex);
                     }
                 }
@@ -2345,5 +2346,7 @@ void AssetLibraryUI::set_expanded(bool e) {
 bool AssetLibraryUI::is_expanded() const {
     return floating_ && floating_->is_expanded();
 }
+
+
 
 

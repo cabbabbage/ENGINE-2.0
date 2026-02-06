@@ -1,4 +1,5 @@
 #include "map_mode_ui.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include "map_layers_preview_panel.hpp"
 #include "DockableCollapsible.hpp"
@@ -977,7 +978,21 @@ void MapModeUI::render(SDL_Renderer* renderer) const {
     if (map_color_sampling_active_ && renderer) {
         SDL_Rect sample_rect{map_color_sampling_cursor_.x, map_color_sampling_cursor_.y, 1, 1};
         Uint32 pixel = 0;
-        if (SDL_RenderReadPixels(renderer, &sample_rect, SDL_PIXELFORMAT_ARGB8888, &pixel, sizeof(pixel)) == 0) {
+        if (SDL_Surface* captured = SDL_RenderReadPixels(renderer, &sample_rect)) {
+            SDL_Surface* working = captured;
+            if (captured->format != SDL_PIXELFORMAT_ARGB8888) {
+                working = SDL_ConvertSurfaceFormat(captured, SDL_PIXELFORMAT_ARGB8888);
+                SDL_DestroySurface(captured);
+                captured = nullptr;
+            }
+            if (working && working->pixels) {
+                pixel = *static_cast<const Uint32*>(working->pixels);
+                SDL_DestroySurface(working);
+            } else {
+                if (working) SDL_DestroySurface(working);
+                map_color_sampling_preview_valid_ = false;
+                return;
+            }
             Uint8 r = 0, g = 0, b = 0, a = 0;
             if (SDL_PixelFormat* format = SDL_AllocFormat(SDL_PIXELFORMAT_ARGB8888)) {
                 SDL_GetRGBA(pixel, format, &r, &g, &b, &a);
@@ -1000,17 +1015,17 @@ void MapModeUI::render(SDL_Renderer* renderer) const {
                             std::max(0, preview_rect.w - 8), std::max(0, preview_rect.h - 8)};
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 170);
-        SDL_RenderFillRect(renderer, &preview_rect);
+        sdl_render::FillRect(renderer, &preview_rect);
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 220);
-        SDL_RenderRect(renderer, &preview_rect);
+        sdl_render::Rect(renderer, &preview_rect);
         if (map_color_sampling_preview_valid_) {
             SDL_SetRenderDrawColor(renderer, map_color_sampling_preview_.r, map_color_sampling_preview_.g, map_color_sampling_preview_.b, 255);
-            SDL_RenderFillRect(renderer, &inner_rect);
+            sdl_render::FillRect(renderer, &inner_rect);
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 220);
-            SDL_RenderRect(renderer, &inner_rect);
+            sdl_render::Rect(renderer, &inner_rect);
         } else {
             SDL_SetRenderDrawColor(renderer, 120, 120, 120, 220);
-            SDL_RenderRect(renderer, &inner_rect);
+            sdl_render::Rect(renderer, &inner_rect);
         }
     }
 }
@@ -1585,5 +1600,7 @@ void MapModeUI::complete_map_color_sampling(SDL_Color color) {
         apply_cb(color);
     }
 }
+
+
 
 

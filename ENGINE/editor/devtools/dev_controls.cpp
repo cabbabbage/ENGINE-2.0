@@ -1,4 +1,5 @@
 #include "dev_controls.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
 #include <fstream>
@@ -163,7 +164,7 @@ public:
         }
 
         SDL_Rect dst{x, y, it->second.size.x, it->second.size.y};
-        SDL_RenderTexture(renderer, it->second.texture, nullptr, &dst);
+        sdl_render::Texture(renderer, it->second.texture, nullptr, &dst);
     }
 
     void clear() {
@@ -1586,7 +1587,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 const bool is_major = (static_cast<long long>(std::llround(line_value)) % (cell * major_interval) == 0);
                 SDL_Color c = is_major ? major : minor;
                 SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-                SDL_RenderLines(renderer, polyline.data(), static_cast<int>(polyline.size()));
+                sdl_render::Lines(renderer, polyline.data(), static_cast<int>(polyline.size()));
             };
 
             auto update_horizon_for_polyline = [&](const std::vector<SDL_Point>& polyline) {
@@ -3375,7 +3376,7 @@ void DevControls::render_grid_overlay() {
                 const bool is_major = (static_cast<long long>(std::llround(line_value)) % (cell * major_interval) == 0);
                 SDL_Color c = is_major ? major : minor;
                 SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-                SDL_RenderLines(renderer, polyline.data(), static_cast<int>(polyline.size()));
+                sdl_render::Lines(renderer, polyline.data(), static_cast<int>(polyline.size()));
             };
 
             auto update_horizon_for_polyline = [&](const std::vector<SDL_Point>& polyline) {
@@ -3503,5 +3504,7 @@ void DevControls::render_grid_overlay() {
         }
     }
 }
+
+
 
 

@@ -1,4 +1,5 @@
 #include "room_editor.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -140,8 +141,21 @@ static bool is_visible_pixel_at(SDL_Renderer* renderer, SDL_Point screen_point) 
 
     Uint32 fmt = SDL_PIXELFORMAT_RGBA8888;
 
-    if (SDL_RenderReadPixels(renderer, &r, fmt, &pixel, sizeof(pixel)) != 0) {
-
+    if (SDL_Surface* captured = SDL_RenderReadPixels(renderer, &r)) {
+        SDL_Surface* working = captured;
+        if (captured->format != fmt) {
+            working = SDL_ConvertSurfaceFormat(captured, static_cast<SDL_PixelFormat>(fmt));
+            SDL_DestroySurface(captured);
+            captured = nullptr;
+        }
+        if (working && working->pixels) {
+            pixel = *static_cast<const Uint32*>(working->pixels);
+            SDL_DestroySurface(working);
+        } else {
+            if (working) SDL_DestroySurface(working);
+            return true;
+        }
+    } else {
         return true;
     }
 
@@ -1495,7 +1509,7 @@ void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
     dm_draw::DrawRoundedOutline( renderer, bg_rect, radius, 1, border_color);
 
     SDL_Rect dst{bg_rect.x + kLabelPadding, bg_rect.y + kLabelPadding, cache.text_size.x, cache.text_size.y};
-    SDL_RenderTexture(renderer, cache.texture, nullptr, &dst);
+    sdl_render::Texture(renderer, cache.texture, nullptr, &dst);
 }
 
 SDL_Rect RoomEditor::label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const {
@@ -1853,7 +1867,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         bounds.w + i * 2,
                         bounds.h + i * 2
 };
-                    SDL_RenderRect(renderer, &r);
+                    sdl_render::Rect(renderer, &r);
                 }
             }
         }
@@ -2838,7 +2852,12 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
     int fw = asset->cached_w;
     int fh = asset->cached_h;
     if ((fw == 0 || fh == 0) && tex) {
-        SDL_QueryTexture(tex, nullptr, nullptr, &fw, &fh);
+        float fwf = 0.0f;
+        float fhf = 0.0f;
+        if (SDL_GetTextureSize(tex, &fwf, &fhf)) {
+            fw = static_cast<int>(std::lround(fwf));
+            fh = static_cast<int>(std::lround(fhf));
+        }
         if (asset->cached_w == 0) asset->cached_w = fw;
         if (asset->cached_h == 0) asset->cached_h = fh;
     }
@@ -5688,4 +5707,6 @@ bool RoomEditor::spawn_group_locked(const std::string& spawn_id) const {
     } catch (...) {}
     return false;
 }
+
+
 

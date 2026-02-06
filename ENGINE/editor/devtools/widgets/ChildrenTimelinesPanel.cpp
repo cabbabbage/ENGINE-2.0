@@ -1,4 +1,5 @@
 #include "ChildrenTimelinesPanel.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -67,7 +68,7 @@ class ChildLabelWidget : public Widget {
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         if (texture) {
             SDL_Rect dst{rect_.x, rect_.y + (rect_.h - surface->h) / 2, surface->w, surface->h};
-            SDL_RenderTexture(renderer, texture, nullptr, &dst);
+            sdl_render::Texture(renderer, texture, nullptr, &dst);
             SDL_DestroyTexture(texture);
         }
         SDL_FreeSurface(surface);
@@ -405,4 +406,6 @@ bool ChildrenTimelinesPanel::apply_mode_to_all_animations(const std::string& chi
 }
 
 }
+
+
 

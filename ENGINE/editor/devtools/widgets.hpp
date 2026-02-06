@@ -2,6 +2,7 @@
 #define DM_WIDGETS_INCLUDED
 
 #include <SDL3/SDL.h>
+#include "utils/sdl_render_conversions.hpp"
 #include <SDL3_ttf/SDL_ttf.h>
 #include <array>
 #include <memory>
@@ -676,7 +677,7 @@ public:
             SDL_Rect overlay_rect = rect();
             SDL_Color overlay{40, 40, 40, 140};
             SDL_SetRenderDrawColor(r, overlay.r, overlay.g, overlay.b, overlay.a);
-            SDL_RenderFillRect(r, &overlay_rect);
+            sdl_render::FillRect(r, &overlay_rect);
         }
     }
     void set_value(bool value) {
@@ -689,4 +690,6 @@ private:
     bool editable_ = true;
     SDL_Rect rect_cache_{0, 0, 0, 0};
 };
+
+
 

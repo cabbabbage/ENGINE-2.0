@@ -1,4 +1,5 @@
 #include "SlidingWindowContainer.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -488,7 +489,7 @@ void SlidingWindowContainer::render(SDL_Renderer* renderer, int screen_w, int sc
             Uint8 alpha = static_cast<Uint8>(std::clamp(pulse_frames_ * 12, 0, 180));
             const SDL_Color accent = DMStyles::AccentButton().hover_bg;
             SDL_SetRenderDrawColor(renderer, accent.r, accent.g, accent.b, alpha);
-            SDL_RenderFillRect(renderer, &header_region);
+            sdl_render::FillRect(renderer, &header_region);
         }
 
         if (header_nav_button_) {
@@ -802,4 +803,6 @@ void SlidingWindowContainer::update_editor_interaction_block_state() {
         editor_interaction_blocker_(should_block);
     }
 }
+
+
 

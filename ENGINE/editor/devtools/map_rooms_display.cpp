@@ -1,4 +1,5 @@
 #include "map_rooms_display.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -211,9 +212,9 @@ void MapRoomsDisplay::render(SDL_Renderer* renderer) const {
             fill = hover_fill;
         }
         SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-        SDL_RenderFillRect(renderer, &row.rect);
+        sdl_render::FillRect(renderer, &row.rect);
         SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-        SDL_RenderRect(renderer, &row.rect);
+        sdl_render::Rect(renderer, &row.rect);
 
         const int padding = DMSpacing::small_gap();
         const int base_swatch = std::max(12, row.rect.h - padding * 2);
@@ -231,10 +232,10 @@ void MapRoomsDisplay::render(SDL_Renderer* renderer) const {
                 swatch_color.a = 255;
             }
             SDL_SetRenderDrawColor(renderer, swatch_color.r, swatch_color.g, swatch_color.b, swatch_color.a);
-            SDL_RenderFillRect(renderer, &swatch);
+            sdl_render::FillRect(renderer, &swatch);
             SDL_Color swatch_outline = DMStyles::Border();
             SDL_SetRenderDrawColor(renderer, swatch_outline.r, swatch_outline.g, swatch_outline.b, swatch_outline.a);
-            SDL_RenderRect(renderer, &swatch);
+            sdl_render::Rect(renderer, &swatch);
             text_x = swatch.x + swatch.w + padding;
         }
 
@@ -256,9 +257,9 @@ void MapRoomsDisplay::render(SDL_Renderer* renderer) const {
             delete_fill = delete_style.hover_bg;
         }
         SDL_SetRenderDrawColor(renderer, delete_fill.r, delete_fill.g, delete_fill.b, delete_fill.a);
-        SDL_RenderFillRect(renderer, &row.delete_rect);
+        sdl_render::FillRect(renderer, &row.delete_rect);
         SDL_SetRenderDrawColor(renderer, delete_style.border.r, delete_style.border.g, delete_style.border.b, delete_style.border.a);
-        SDL_RenderRect(renderer, &row.delete_rect);
+        sdl_render::Rect(renderer, &row.delete_rect);
 
         SDL_Color glyph = delete_style.text;
         SDL_SetRenderDrawColor(renderer, glyph.r, glyph.g, glyph.b, glyph.a);
@@ -479,5 +480,7 @@ void MapRoomsDisplay::delete_room_entry(const std::string& key) {
         on_rooms_changed_();
     }
 }
+
+
 
 

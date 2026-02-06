@@ -1,4 +1,5 @@
 #include "DockableCollapsible.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include "FloatingDockableManager.hpp"
 #include "FloatingPanelLayoutManager.hpp"
@@ -126,7 +127,7 @@ namespace {
         SDL_Rect stem{ key_center_x - std::max(1, key_radius / 3),
                        key_center_y,
                        std::max(2, key_radius / 2), std::max(2, body.h / 3) };
-        SDL_RenderFillRect(r, &stem);
+        sdl_render::FillRect(r, &stem);
     }
 
     class LayoutTimingScope {
@@ -912,14 +913,14 @@ void DockableCollapsible::render_locked_children_overlay(SDL_Renderer* r) const 
             SDL_Rect widget_rect = w->rect();
             SDL_Rect clipped;
             if (SDL_IntersectRect(&widget_rect, &body_viewport_, &clipped)) {
-                SDL_RenderFillRect(r, &clipped);
+                sdl_render::FillRect(r, &clipped);
             }
         }
     }
 
     SDL_Color content_overlay{20, 20, 20, 110};
     SDL_SetRenderDrawColor(r, content_overlay.r, content_overlay.g, content_overlay.b, content_overlay.a);
-    SDL_RenderFillRect(r, &body_viewport_);
+    sdl_render::FillRect(r, &body_viewport_);
 }
 
 void DockableCollapsible::layout() {
@@ -1400,4 +1401,6 @@ void DockableCollapsible::render_embedded(SDL_Renderer* renderer, const SDL_Rect
     rendering_embedded_ = previous_rendering_state;
     restore_snapshot(snapshot);
 }
+
+
 

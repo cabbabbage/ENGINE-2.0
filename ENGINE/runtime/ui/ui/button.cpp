@@ -1,4 +1,5 @@
 #include "button.hpp"
+#include "utils/sdl_render_conversions.hpp"
 #include "button_settings.hpp"
 
 #include <algorithm>
@@ -319,13 +320,23 @@ inline SDL_Rect clamp_to_view(SDL_Renderer* r, SDL_Rect rect) {
 
 SurfacePtr capture(SDL_Renderer* renderer, const SDL_Rect& rect) {
     if (rect.w <= 0 || rect.h <= 0) return {};
-    SurfacePtr s = make_surface_ptr(SDL_CreateRGBSurfaceWithFormat(0, rect.w, rect.h, 32, SDL_PIXELFORMAT_RGBA32));
-    if (!s) return {};
-    if (SDL_RenderReadPixels(renderer, &rect, s->format->format, s->pixels, s->pitch) != 0) {
+    SDL_Surface* captured = SDL_RenderReadPixels(renderer, &rect);
+    if (!captured) {
         SDL_Log("GlassButton: SDL_RenderReadPixels failed: %s", SDL_GetError());
         return {};
     }
-    return s;
+
+    SDL_Surface* working = captured;
+    if (captured->format != SDL_PIXELFORMAT_RGBA32) {
+        working = SDL_ConvertSurfaceFormat(captured, SDL_PIXELFORMAT_RGBA32);
+        SDL_DestroySurface(captured);
+        if (!working) {
+            SDL_Log("GlassButton: SDL_ConvertSurfaceFormat failed: %s", SDL_GetError());
+            return {};
+        }
+    }
+
+    return make_surface_ptr(working);
 }
 
 static inline uint32_t wang_hash(uint32_t x) {
@@ -467,7 +478,7 @@ void Button::render(SDL_Renderer* renderer) const {
         if (s) {
             SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
             SDL_Rect dst{ rect_.x + (rect_.w - tw)/2, rect_.y + (rect_.h - th)/2, tw, th };
-            SDL_RenderTexture(renderer, t, nullptr, &dst);
+            sdl_render::Texture(renderer, t, nullptr, &dst);
             SDL_DestroyTexture(t);
             SDL_FreeSurface(s);
         }
@@ -483,9 +494,9 @@ int  Button::height() { return 64; }
 void Button::draw_deco(SDL_Renderer* r, const SDL_Rect& b, bool hovered) const {
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(r, 20,20,20, hovered ? 120 : 96);
-    SDL_RenderFillRect(r, &b);
+    sdl_render::FillRect(r, &b);
     SDL_SetRenderDrawColor(r, 255,255,255, 36);
-    SDL_RenderRect(r, &b);
+    sdl_render::Rect(r, &b);
 }
 
 const GlassButtonStyle& Button::default_glass_style() {
@@ -769,7 +780,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
     SDL_Texture* tex = to_texture(renderer, comp.get());
     if (!tex) return;
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_RenderTexture(renderer, tex, nullptr, &r);
+    sdl_render::Texture(renderer, tex, nullptr, &r);
     SDL_DestroyTexture(tex);
 }
 
@@ -809,13 +820,13 @@ void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const
         }};
         for (auto o : offs) {
             SDL_Rect d{ x + o.x, y + o.y, s_stroke->w, s_stroke->h };
-            SDL_RenderTexture(renderer, t_stroke, nullptr, &d);
+            sdl_render::Texture(renderer, t_stroke, nullptr, &d);
         }
     }
     if (t_text) {
         SDL_SetTextureBlendMode(t_text, SDL_BLENDMODE_BLEND);
         SDL_Rect d{ x, y, s_text->w, s_text->h };
-        SDL_RenderTexture(renderer, t_text, nullptr, &d);
+        sdl_render::Texture(renderer, t_text, nullptr, &d);
     }
 
     if (t_text) SDL_DestroyTexture(t_text);
@@ -824,4 +835,6 @@ void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const
     if (s_stroke) SDL_FreeSurface(s_stroke);
     TTF_CloseFont(font);
 }
+
+
 

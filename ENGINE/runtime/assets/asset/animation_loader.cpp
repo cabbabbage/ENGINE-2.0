@@ -952,12 +952,17 @@ void AnimationLoader::load(Animation& animation,
         int frame_width  = 0;
         int frame_height = 0;
         if (!animation.frame_cache_.empty()) {
-                frame_width  = animation.frame_cache_[0].widths[0];
-                frame_height = animation.frame_cache_[0].heights[0];
-                if ((frame_width <= 0 || frame_height <= 0) && animation.frame_cache_[0].textures[0]) {
-                        SDL_QueryTexture(animation.frame_cache_[0].textures[0], nullptr, nullptr, &frame_width, &frame_height);
-                }
-        }
+		frame_width  = animation.frame_cache_[0].widths[0];
+		frame_height = animation.frame_cache_[0].heights[0];
+		if ((frame_width <= 0 || frame_height <= 0) && animation.frame_cache_[0].textures[0]) {
+				float fw = 0.0f;
+				float fh = 0.0f;
+				if (SDL_GetTextureSize(animation.frame_cache_[0].textures[0], &fw, &fh)) {
+					frame_width = static_cast<int>(std::lround(fw));
+					frame_height = static_cast<int>(std::lround(fh));
+				}
+		}
+}
 
         const auto load_end        = std::chrono::steady_clock::now();
         const double elapsed_secs  = std::chrono::duration<double>(load_end - load_start).count();

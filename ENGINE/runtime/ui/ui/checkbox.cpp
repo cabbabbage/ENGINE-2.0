@@ -1,4 +1,5 @@
 #include "checkbox.hpp"
+#include "utils/sdl_render_conversions.hpp"
 #include "utils/text_style.hpp"
 #include "ui/styles.hpp"
 Checkbox::Checkbox(const std::string& label, bool value)
@@ -41,7 +42,7 @@ void Checkbox::render(SDL_Renderer* r) const {
 					SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
 					if (tex) {
 								SDL_Rect dst{ rect_.x, rect_.y, surf->w, surf->h };
-								SDL_RenderTexture(r, tex, nullptr, &dst);
+								sdl_render::Texture(r, tex, nullptr, &dst);
 								SDL_DestroyTexture(tex);
 					}
 					SDL_FreeSurface(surf);
@@ -58,20 +59,22 @@ void Checkbox::render(SDL_Renderer* r) const {
 };
 	SDL_Color bg = Styles::Slate(); bg.a = 160;
 	SDL_SetRenderDrawColor(r, bg.r, bg.g, bg.b, bg.a);
-	SDL_RenderFillRect(r, &box);
+	sdl_render::FillRect(r, &box);
 	SDL_Color border_on  = Styles::Gold();
 	SDL_Color border_off = Styles::GoldDim();
 	SDL_Color frame = hovered_ ? border_on : border_off;
 	SDL_SetRenderDrawColor(r, frame.r, frame.g, frame.b, 255);
-	SDL_RenderRect(r, &box);
+	sdl_render::Rect(r, &box);
 	if (value_) {
 		SDL_Rect inner{ box.x + 4, box.y + 4, box.w - 8, box.h - 8 };
 		SDL_Color fill = Styles::Ivory();
 		SDL_SetRenderDrawColor(r, fill.r, fill.g, fill.b, fill.a ? fill.a : 200);
-		SDL_RenderFillRect(r, &inner);
+		sdl_render::FillRect(r, &inner);
 	}
 }
 
 int Checkbox::width()  { return 300; }
 int Checkbox::height() { return 28;  }
+
+
 

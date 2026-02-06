@@ -1,4 +1,5 @@
 #include "map_layers_panel.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -826,10 +827,10 @@ void MapLayersPanel::render_layers_list(SDL_Renderer* renderer) const {
 
     const SDL_Color panel_bg = DMStyles::PanelBG();
     SDL_SetRenderDrawColor(renderer, panel_bg.r, panel_bg.g, panel_bg.b, panel_bg.a);
-    SDL_RenderFillRect(renderer, &area);
+    sdl_render::FillRect(renderer, &area);
 
     const SDL_Color border = DMStyles::Border();
-    SDL_RenderRect(renderer, &area);
+    sdl_render::Rect(renderer, &area);
 
     const int padding = DMSpacing::small_gap();
     const DMLabelStyle& label_style = DMStyles::Label();
@@ -874,7 +875,7 @@ void MapLayersPanel::render_layers_list(SDL_Renderer* renderer) const {
         }
 
         SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-        SDL_RenderFillRect(renderer, &rect);
+        sdl_render::FillRect(renderer, &rect);
 
         SDL_Color outline = severity_color(row.invalid, row.warning, selected || dependency);
         if (selected) {
@@ -885,7 +886,7 @@ void MapLayersPanel::render_layers_list(SDL_Renderer* renderer) const {
             outline = lighten(outline, 0.2f);
         }
         SDL_SetRenderDrawColor(renderer, outline.r, outline.g, outline.b, outline.a);
-        SDL_RenderRect(renderer, &rect);
+        sdl_render::Rect(renderer, &rect);
 
         SDL_Rect accent{rect.x, rect.y, accent_width, rect.h};
         SDL_Color accent_color = outline;
@@ -899,7 +900,7 @@ void MapLayersPanel::render_layers_list(SDL_Renderer* renderer) const {
             accent_color = dependency_outline;
         }
         SDL_SetRenderDrawColor(renderer, accent_color.r, accent_color.g, accent_color.b, accent_color.a);
-        SDL_RenderFillRect(renderer, &accent);
+        sdl_render::FillRect(renderer, &accent);
 
         const int text_x = rect.x + accent_width + padding;
         const int text_y = rect.y + padding;
@@ -923,14 +924,14 @@ void MapLayersPanel::render_layers_list(SDL_Renderer* renderer) const {
             }
 
             SDL_SetRenderDrawColor(renderer, delete_fill.r, delete_fill.g, delete_fill.b, delete_fill.a);
-            SDL_RenderFillRect(renderer, &delete_rect);
+            sdl_render::FillRect(renderer, &delete_rect);
 
             SDL_Color delete_outline = delete_border;
             if (delete_hovered) {
                 delete_outline = lighten(delete_outline, 0.1f);
             }
             SDL_SetRenderDrawColor(renderer, delete_outline.r, delete_outline.g, delete_outline.b, delete_outline.a);
-            SDL_RenderRect(renderer, &delete_rect);
+            sdl_render::Rect(renderer, &delete_rect);
 
             const int cross_pad = std::max(3, delete_rect.w / 4);
             SDL_Color cross_color{255, 255, 255, 255};
@@ -956,7 +957,7 @@ void MapLayersPanel::render_layers_list(SDL_Renderer* renderer) const {
             int badge_x = std::max(text_x, badge_right - 8);
             SDL_Rect badge{badge_x, rect.y + rect.h / 2 - 4, 8, 8};
             SDL_SetRenderDrawColor(renderer, dot.r, dot.g, dot.b, dot.a);
-            SDL_RenderFillRect(renderer, &badge);
+            sdl_render::FillRect(renderer, &badge);
         }
     }
 
@@ -972,7 +973,7 @@ void MapLayersPanel::render_layers_list(SDL_Renderer* renderer) const {
                            area.w - padding * 2, kDropIndicatorThickness};
         SDL_Color drop_color = DMStyles::AccentButton().bg;
         SDL_SetRenderDrawColor(renderer, drop_color.r, drop_color.g, drop_color.b, drop_color.a);
-        SDL_RenderFillRect(renderer, &drop_rect);
+        sdl_render::FillRect(renderer, &drop_rect);
     }
 }
 
@@ -1439,9 +1440,9 @@ void MapLayersPanel::render_validation_summary(SDL_Renderer* renderer, const SDL
     SDL_Rect area = rect;
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, 18, 26, 42, 230);
-    SDL_RenderFillRect(renderer, &area);
+    sdl_render::FillRect(renderer, &area);
     SDL_SetRenderDrawColor(renderer, DMStyles::Border().r, DMStyles::Border().g, DMStyles::Border().b, DMStyles::Border().a);
-    SDL_RenderRect(renderer, &area);
+    sdl_render::Rect(renderer, &area);
 
     int y = area.y + DMSpacing::small_gap();
     const DMLabelStyle base_style = validation_label_style();
@@ -1806,4 +1807,6 @@ void MapLayersPanel::render_min_edge_input(SDL_Renderer* renderer, const SDL_Rec
         DrawLabelText(renderer, min_edge_note_, min_edge_note_rect_.x, min_edge_note_rect_.y, style);
     }
 }
+
+
 

@@ -1,4 +1,5 @@
 #include "widgets.hpp"
+#include "utils/sdl_render_conversions.hpp"
 #include "draw_utils.hpp"
 #include "font_cache.hpp"
 #include "dm_icons.hpp"
@@ -245,11 +246,11 @@ void DMWidgetTooltipRender(SDL_Renderer* renderer, const SDL_Rect& bounds, const
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     const SDL_Color bg = tooltip_icon_background(state.icon_hovered);
     SDL_SetRenderDrawColor(renderer, bg.r, bg.g, bg.b, bg.a);
-    SDL_RenderFillRect(renderer, &icon_rect);
+    sdl_render::FillRect(renderer, &icon_rect);
 
     const SDL_Color border = tooltip_icon_border();
     SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-    SDL_RenderRect(renderer, &icon_rect);
+    sdl_render::Rect(renderer, &icon_rect);
 
     const auto icon_style = tooltip_icon_label_style();
     const std::string icon_text{DMIcons::Info()};
@@ -556,7 +557,7 @@ void DMTextBox::draw_text(SDL_Renderer* r, const std::string& s, int x, int y, i
             SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
             if (tex) {
                 SDL_Rect dst{ x, line_y, surf->w, surf->h };
-                SDL_RenderTexture(r, tex, nullptr, &dst);
+                sdl_render::Texture(r, tex, nullptr, &dst);
                 SDL_DestroyTexture(tex);
             }
             line_y += surf->h;
@@ -1541,10 +1542,10 @@ void DMSlider::render(SDL_Renderer* r) const {
         overlay.a = 180;
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(r, overlay.r, overlay.g, overlay.b, overlay.a);
-        SDL_RenderFillRect(r, &rect_);
+        sdl_render::FillRect(r, &rect_);
         SDL_Color outline = DMStyles::Border();
         SDL_SetRenderDrawColor(r, outline.r, outline.g, outline.b, 160);
-        SDL_RenderRect(r, &rect_);
+        sdl_render::Rect(r, &rect_);
     }
     if (tooltip_state_) {
         DMWidgetTooltipRender(r, rect_, *tooltip_state_);
@@ -2154,7 +2155,7 @@ void DMRangeSlider::render(SDL_Renderer* r) const {
         SDL_Rect band{ knob.x + inset, knob.y + 3, band_w, std::max(2, knob.h - 6) };
         if (align_right) band.x = knob.x + knob.w - band_w - inset;
         SDL_SetRenderDrawColor(r, color.r, color.g, color.b, color.a);
-        SDL_RenderFillRect(r, &band);
+        sdl_render::FillRect(r, &band);
 };
     draw_knob_band(kmin, border_min, false);
     draw_knob_band(kmax, border_max, true);
@@ -2527,7 +2528,7 @@ void DMDropdown::render(SDL_Renderer* r) const {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
                 if (tex) {
                     SDL_Rect dst{ label_rect_.x, label_rect_.y, surf->w, surf->h };
-                    SDL_RenderTexture(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
                 SDL_FreeSurface(surf);
@@ -2568,7 +2569,7 @@ void DMDropdown::render(SDL_Renderer* r) const {
                 const int centered = box_rect_.x + std::max(0, (text_area_width - surf->w) / 2);
                 const int dst_x = std::clamp(centered, text_x_min, text_x_max);
                 SDL_Rect dst{ dst_x, box_rect_.y + (box_rect_.h - surf->h)/2, surf->w, surf->h };
-                SDL_RenderTexture(r, tex, nullptr, &dst);
+                sdl_render::Texture(r, tex, nullptr, &dst);
                 SDL_DestroyTexture(tex);
             }
             SDL_FreeSurface(surf);
@@ -2653,7 +2654,7 @@ void DMDropdown::render_options(SDL_Renderer* r) const {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
             if (tex) {
                 SDL_Rect dst{ rect.x + (rect.w - surf->w) / 2, rect.y + (rect.h - surf->h) / 2, surf->w, surf->h };
-                SDL_RenderTexture(r, tex, nullptr, &dst);
+                sdl_render::Texture(r, tex, nullptr, &dst);
                 SDL_DestroyTexture(tex);
             }
             SDL_FreeSurface(surf);
@@ -2732,4 +2733,6 @@ void DMDropdown::begin_focus() {
     has_pending_index_ = true;
     hovered_option_index_ = pending_index_;
 }
+
+
 

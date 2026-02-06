@@ -1,4 +1,5 @@
 #include "text_box.hpp"
+#include "utils/sdl_render_conversions.hpp"
 #include <algorithm>
 #include <cstring>
 #include <limits>
@@ -184,7 +185,7 @@ void TextBox::draw_text(SDL_Renderer* r, const std::string& s, int x, int y, SDL
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
                 if (tex) {
                         SDL_Rect dst{ x, y, surf->w, surf->h };
-                        SDL_RenderTexture(r, tex, nullptr, &dst);
+                        sdl_render::Texture(r, tex, nullptr, &dst);
                         SDL_DestroyTexture(tex);
                 }
                 SDL_FreeSurface(surf);
@@ -201,12 +202,12 @@ void TextBox::render(SDL_Renderer* r) const {
         SDL_Rect box{ rect_.x, rect_.y, rect_.w, rect_.h };
         SDL_Color bg = Styles::Slate(); bg.a = 160;
         SDL_SetRenderDrawColor(r, bg.r, bg.g, bg.b, bg.a);
-        SDL_RenderFillRect(r, &box);
+        sdl_render::FillRect(r, &box);
         SDL_Color border_on  = Styles::Gold();
         SDL_Color border_off = Styles::GoldDim();
         SDL_Color frame = (hovered_ || editing_) ? border_on : border_off;
         SDL_SetRenderDrawColor(r, frame.r, frame.g, frame.b, 255);
-        SDL_RenderRect(r, &box);
+        sdl_render::Rect(r, &box);
         SDL_Color textCol = Styles::Ivory();
         auto lines = line_info();
         int line_height = font_height();
@@ -353,4 +354,6 @@ size_t TextBox::line_index_from_position(size_t pos, const std::vector<LineInfo>
         }
         return lines.size() - 1;
 }
+
+
 

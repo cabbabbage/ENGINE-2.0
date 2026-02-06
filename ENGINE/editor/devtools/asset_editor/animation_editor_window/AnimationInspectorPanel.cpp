@@ -1,4 +1,5 @@
 #include "AnimationInspectorPanel.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -107,7 +108,7 @@ void render_label(SDL_Renderer* renderer, const DMLabelStyle& style, const std::
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (texture) {
         SDL_Rect dst{x, y, surface->w, surface->h};
-        SDL_RenderTexture(renderer, texture, nullptr, &dst);
+        sdl_render::Texture(renderer, texture, nullptr, &dst);
         SDL_DestroyTexture(texture);
     }
 
@@ -1103,7 +1104,7 @@ void AnimationInspectorPanel::render_preview(SDL_Renderer* renderer) const {
             if (preview_flip_x_) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
             if (preview_flip_y_) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
 
-            SDL_RenderTextureRotated(renderer, texture, nullptr, &dst, 0.0, nullptr, flip_flags);
+            sdl_render::TextureRotated(renderer, texture, nullptr, &dst, 0.0, nullptr, flip_flags);
         } else {
             const DMLabelStyle& style = DMStyles::Label();
             const std::string text = "No Preview Available";
@@ -1218,11 +1219,11 @@ void AnimationInspectorPanel::render_scrollbar(SDL_Renderer* renderer) const {
     SDL_Color track_color = DMStyles::PanelHeader();
     track_color.a = static_cast<Uint8>(std::min(120, static_cast<int>(track_color.a)));
     SDL_SetRenderDrawColor(renderer, track_color.r, track_color.g, track_color.b, track_color.a);
-    SDL_RenderFillRect(renderer, &scrollbar_track_);
+    sdl_render::FillRect(renderer, &scrollbar_track_);
 
     SDL_Color thumb_color = DMStyles::AccentButton().hover_bg;
     SDL_SetRenderDrawColor(renderer, thumb_color.r, thumb_color.g, thumb_color.b, 230);
-    SDL_RenderFillRect(renderer, &scrollbar_thumb_);
+    sdl_render::FillRect(renderer, &scrollbar_thumb_);
 }
 
 void AnimationInspectorPanel::render_overlays(SDL_Renderer* renderer) const {
@@ -1599,5 +1600,7 @@ void AnimationInspectorPanel::refresh_start_indicator() {
 }
 
 }
+
+
 
 

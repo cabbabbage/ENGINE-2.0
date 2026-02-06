@@ -1,4 +1,5 @@
 #include "AnimationListPanel.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -311,7 +312,7 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
                     int draw_h = std::max(1, static_cast<int>(tex_h * scale));
                     SDL_Rect dst{preview_rect.x + (preview_rect.w - draw_w) / 2,
                                  preview_rect.y + (preview_rect.h - draw_h) / 2, draw_w, draw_h};
-                    SDL_RenderTexture(renderer, texture, nullptr, &dst);
+                    sdl_render::Texture(renderer, texture, nullptr, &dst);
                     content_x = preview_rect.x + preview_rect.w + row_padding;
                 }
             }
@@ -743,5 +744,7 @@ void AnimationListPanel::ensure_layout() const {
     self->layout_rows();
 }
 }
+
+
 
 

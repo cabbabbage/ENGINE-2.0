@@ -1,4 +1,5 @@
 #include "SpawnGroupConfig.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <array>
@@ -75,7 +76,7 @@ public:
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         if (texture) {
             SDL_Rect dst{rect_.x, rect_.y, surface->w, surface->h};
-            SDL_RenderTexture(renderer, texture, nullptr, &dst);
+            sdl_render::Texture(renderer, texture, nullptr, &dst);
             SDL_DestroyTexture(texture);
         }
         SDL_FreeSurface(surface);
@@ -311,7 +312,7 @@ public:
             SDL_Rect r = rect();
             SDL_Color overlay{40, 40, 40, 140};
             SDL_SetRenderDrawColor(renderer, overlay.r, overlay.g, overlay.b, overlay.a);
-            SDL_RenderFillRect(renderer, &r);
+            sdl_render::FillRect(renderer, &r);
         }
     }
 
@@ -380,7 +381,7 @@ public:
             SDL_Rect r = rect();
             SDL_Color overlay{40, 40, 40, 140};
             SDL_SetRenderDrawColor(renderer, overlay.r, overlay.g, overlay.b, overlay.a);
-            SDL_RenderFillRect(renderer, &r);
+            sdl_render::FillRect(renderer, &r);
         }
     }
 
@@ -450,7 +451,7 @@ public:
             SDL_Rect r = rect();
             SDL_Color overlay{40, 40, 40, 140};
             SDL_SetRenderDrawColor(renderer, overlay.r, overlay.g, overlay.b, overlay.a);
-            SDL_RenderFillRect(renderer, &r);
+            sdl_render::FillRect(renderer, &r);
         }
     }
 
@@ -1961,7 +1962,7 @@ void SpawnGroupConfig::render_content(SDL_Renderer* r) const {
     if (source.w > 0 && source.h > 0) {
         const SDL_Color& bg = DMStyles::PanelBG();
         SDL_SetRenderDrawColor(r, bg.r, bg.g, bg.b, bg.a);
-        SDL_RenderFillRect(r, &source);
+        sdl_render::FillRect(r, &source);
     }
     SDL_Rect placeholder = drag_state_.placeholder_rect;
     placeholder.x = body_viewport_.x;
@@ -1969,7 +1970,7 @@ void SpawnGroupConfig::render_content(SDL_Renderer* r) const {
     if (placeholder.w > 0 && placeholder.h > 0) {
         const SDL_Color& highlight = DMStyles::HighlightColor();
         SDL_SetRenderDrawColor(r, highlight.r, highlight.g, highlight.b, highlight.a);
-        SDL_RenderFillRect(r, &placeholder);
+        sdl_render::FillRect(r, &placeholder);
     }
 }
 
@@ -2522,4 +2523,6 @@ void SpawnGroupConfig::EntryController::set_quantity_hidden(bool hidden) {
     if (!entry_) return;
     entry_->set_quantity_hidden(hidden);
 }
+
+
 

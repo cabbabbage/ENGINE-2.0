@@ -1,4 +1,5 @@
 #include "color_range_widget.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <array>
@@ -327,7 +328,7 @@ void DMColorRangeWidget::Picker::render(SDL_Renderer* r) const {
     SDL_Color bg = DMStyles::PanelBG();
     bg.a = 255;
     SDL_SetRenderDrawColor(r, bg.r, bg.g, bg.b, bg.a);
-    SDL_RenderFillRect(r, &rect_);
+    sdl_render::FillRect(r, &rect_);
 
     DockableCollapsible::render(r);
 }
@@ -520,3 +521,5 @@ void DMColorRangeWidget::apply_sampled_color(SDL_Color color) {
     ranged.a = make_channel(clamped.a);
     set_value(ranged);
 }
+
+

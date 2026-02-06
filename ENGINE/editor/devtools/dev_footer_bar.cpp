@@ -1,4 +1,5 @@
 #include "dev_footer_bar.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include "draw_utils.hpp"
 #include "utils/input.hpp"
@@ -45,7 +46,7 @@ void draw_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (tex) {
         SDL_Rect dst{x, y, surf->w, surf->h};
-        SDL_RenderTexture(renderer, tex, nullptr, &dst);
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
     SDL_FreeSurface(surf);
@@ -544,5 +545,7 @@ void DevFooterBar::set_depth_effects_enabled(bool enabled) {
 void DevFooterBar::set_depth_effects_callbacks(std::function<void(bool)> cb) {
     on_depth_effects_toggle_ = std::move(cb);
 }
+
+
 
 

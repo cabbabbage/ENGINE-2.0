@@ -1,4 +1,5 @@
 #include "rendering/render/render.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <array>
@@ -799,7 +800,7 @@ void SceneRenderer::render() {
                             SDL_RenderLine(renderer_, static_cast<int>(std::lround(screen_cur.x)), static_cast<int>(std::lround(screen_cur.y)), static_cast<int>(std::lround(screen_next.x)), static_cast<int>(std::lround(screen_next.y)));
                             SDL_Rect dot{
                                 static_cast<int>(std::lround(screen_next.x)) - 2, static_cast<int>(std::lround(screen_next.y)) - 2, 4, 4 };
-                            SDL_RenderFillRect(renderer_, &dot);
+                            sdl_render::FillRect(renderer_, &dot);
                             cursor = next;
                         }
                     }
@@ -967,7 +968,7 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
 
     SDL_SetTextureColorMod(sky_texture_, 255, 255, 255);
     SDL_SetTextureAlphaMod(sky_texture_, 255);
-    SDL_RenderTexture(renderer_, sky_texture_, nullptr, &dst);
+    sdl_render::Texture(renderer_, sky_texture_, nullptr, &dst);
 }
 
 bool SceneRenderer::ensure_floor_gradient_texture() {
@@ -1055,6 +1056,8 @@ void SceneRenderer::render_floor_gradient() {
 
     SDL_SetTextureColorMod(floor_gradient_texture_, 255, 255, 255);
     SDL_SetTextureAlphaMod(floor_gradient_texture_, 255);
-    SDL_RenderTexture(renderer_, floor_gradient_texture_, nullptr, &dst);
+    sdl_render::Texture(renderer_, floor_gradient_texture_, nullptr, &dst);
 }
+
+
 

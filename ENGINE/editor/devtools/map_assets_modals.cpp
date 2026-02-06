@@ -1,4 +1,5 @@
 #include "map_assets_modals.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -82,7 +83,7 @@ public:
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         if (texture) {
             SDL_Rect dst{rect_.x, rect_.y, surface->w, surface->h};
-            SDL_RenderTexture(renderer, texture, nullptr, &dst);
+            sdl_render::Texture(renderer, texture, nullptr, &dst);
             SDL_DestroyTexture(texture);
         }
         SDL_FreeSurface(surface);
@@ -1216,4 +1217,6 @@ void BoundarySpawnGroupModal::ensure_visible_position() {
 
     position_initialized_ = true;
 }
+
+
 

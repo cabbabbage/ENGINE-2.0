@@ -1,4 +1,5 @@
 #include "asset_info_ui.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -90,6 +91,37 @@ void configure_panel_for_container(DockableCollapsible* panel) {
     panel->force_pointer_ready();
     panel->set_embedded_focus_state(false);
     panel->set_embedded_interaction_enabled(false);
+}
+
+bool read_pixel(SDL_Renderer* renderer, const SDL_Rect& rect, Uint32 format, Uint32& out_pixel) {
+    out_pixel = 0;
+    if (!renderer) {
+        return false;
+    }
+
+    SDL_Surface* captured = SDL_RenderReadPixels(renderer, &rect);
+    if (!captured) {
+        return false;
+    }
+
+    SDL_Surface* working = captured;
+    if (format != 0 && format != static_cast<Uint32>(captured->format)) {
+        working = SDL_ConvertSurfaceFormat(captured, static_cast<SDL_PixelFormat>(format));
+        SDL_DestroySurface(captured);
+        captured = nullptr;
+        if (!working) {
+            return false;
+        }
+    }
+
+    if (!working->pixels) {
+        SDL_DestroySurface(working);
+        return false;
+    }
+
+    out_pixel = *static_cast<const Uint32*>(working->pixels);
+    SDL_DestroySurface(working);
+    return true;
 }
 
 std::string resolve_asset_manifest_key(devmode::core::ManifestStore* store, const std::string& selection) {
@@ -589,7 +621,7 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
             if (last_renderer_) {
                 SDL_Rect sample_rect{ color_sampling_cursor_.x, color_sampling_cursor_.y, 1, 1 };
                 Uint32 pixel = 0;
-                if (SDL_RenderReadPixels(last_renderer_, &sample_rect, SDL_PIXELFORMAT_ARGB8888, &pixel, sizeof(pixel)) == 0) {
+                if (read_pixel(last_renderer_, sample_rect, SDL_PIXELFORMAT_ARGB8888, pixel)) {
                     Uint8 r = 0, g = 0, b = 0, a = 0;
                     if (SDL_PixelFormat* fmt = SDL_AllocFormat(SDL_PIXELFORMAT_ARGB8888)) {
                         SDL_GetRGBA(pixel, fmt, &r, &g, &b, &a);
@@ -820,7 +852,7 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
     if (color_sampling_active_ && r) {
         SDL_Rect sample_rect{ color_sampling_cursor_.x, color_sampling_cursor_.y, 1, 1 };
         Uint32 pixel = 0;
-        if (SDL_RenderReadPixels(r, &sample_rect, SDL_PIXELFORMAT_ARGB8888, &pixel, sizeof(pixel)) == 0) {
+        if (read_pixel(r, sample_rect, SDL_PIXELFORMAT_ARGB8888, pixel)) {
             Uint8 rr = 0, gg = 0, bb = 0, aa = 0;
             if (SDL_PixelFormat* fmt = SDL_AllocFormat(SDL_PIXELFORMAT_ARGB8888)) {
                 SDL_GetRGBA(pixel, fmt, &rr, &gg, &bb, &aa);
@@ -846,15 +878,15 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
         SDL_Color border = DMStyles::Border();
         SDL_Color bg = dm_draw::DarkenColor(DMStyles::PanelBG(), 0.1f);
         SDL_SetRenderDrawColor(r, bg.r, bg.g, bg.b, 220);
-        SDL_RenderFillRect(r, &preview_rect);
+        sdl_render::FillRect(r, &preview_rect);
         SDL_SetRenderDrawColor(r, border.r, border.g, border.b, border.a);
-        SDL_RenderRect(r, &preview_rect);
+        sdl_render::Rect(r, &preview_rect);
         if (color_sampling_preview_valid_) {
             SDL_Color fill = color_sampling_preview_;
             SDL_SetRenderDrawColor(r, fill.r, fill.g, fill.b, fill.a);
-            SDL_RenderFillRect(r, &inner_rect);
+            sdl_render::FillRect(r, &inner_rect);
             SDL_SetRenderDrawColor(r, border.r, border.g, border.b, border.a);
-            SDL_RenderRect(r, &inner_rect);
+            sdl_render::Rect(r, &inner_rect);
         }
     }
 
@@ -918,7 +950,7 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
                                   text_y,
                                   tw,
                                   th };
-                    SDL_RenderTexture(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
             }
@@ -959,7 +991,7 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
                         text_y = std::max(text_y, rect.y + bevel_depth);
                         text_y = std::min(text_y, rect.y + rect.h - bevel_depth - th);
                         SDL_Rect dst{ rect.x + (rect.w - tw) / 2, text_y, tw, th };
-                        SDL_RenderTexture(r, tex, nullptr, &dst);
+                        sdl_render::Texture(r, tex, nullptr, &dst);
                         SDL_DestroyTexture(tex);
                     }
                 }
@@ -2003,4 +2035,6 @@ bool AssetInfoUI::handle_delete_modal_event(const SDL_Event& e) {
     }
     return false;
 }
+
+
 

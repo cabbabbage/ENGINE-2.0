@@ -1,4 +1,5 @@
 #include "main_menu.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -417,13 +418,13 @@ void MainMenu::blitText(SDL_Renderer* r,
 			if (tex_shadow) {
 					SDL_Rect dsts { x+2, y+2, surf_shadow->w, surf_shadow->h };
 					SDL_SetTextureAlphaMod(tex_shadow, 130);
-					SDL_RenderTexture(r, tex_shadow, nullptr, &dsts);
+					sdl_render::Texture(r, tex_shadow, nullptr, &dsts);
 					SDL_DestroyTexture(tex_shadow);
 			}
 		}
 		if (tex_text) {
 			SDL_Rect dst { x, y, surf_text->w, surf_text->h };
-			SDL_RenderTexture(r, tex_text, nullptr, &dst);
+			sdl_render::Texture(r, tex_text, nullptr, &dst);
 			SDL_DestroyTexture(tex_text);
 		}
 	}
@@ -467,13 +468,15 @@ void MainMenu::renderAnimatedBackground(SDL_Texture* tex) const {
         if (!tex) return;
 
         SDL_Rect dst = coverDst(tex);
-        SDL_RenderTexture(renderer_, tex, nullptr, &dst);
+        sdl_render::Texture(renderer_, tex, nullptr, &dst);
 }
 
 void MainMenu::drawVignette(Uint8 alpha) const {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, alpha);
         SDL_Rect v{0,0,screen_w_,screen_h_};
-        SDL_RenderFillRect(renderer_, &v);
+        sdl_render::FillRect(renderer_, &v);
 }
+
+
 

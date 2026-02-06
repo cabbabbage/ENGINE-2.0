@@ -1,4 +1,5 @@
 #include "MovementSummaryWidget.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -56,7 +57,7 @@ void render_summary_label(SDL_Renderer* renderer, const std::string& text, int x
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (texture) {
         SDL_Rect dst{x, y, surface->w, surface->h};
-        SDL_RenderTexture(renderer, texture, nullptr, &dst);
+        sdl_render::Texture(renderer, texture, nullptr, &dst);
         SDL_DestroyTexture(texture);
     }
 
@@ -478,5 +479,7 @@ void MovementSummaryWidget::apply_resolved_totals(const ResolvedMovement& resolv
 }
 
 }
+
+
 
 

@@ -1,4 +1,5 @@
 #include "loading_screen.hpp"
+#include "utils/sdl_render_conversions.hpp"
 #include <SDL3_image/SDL_image.h>
 #include <cmath>
 #include <fstream>
@@ -88,7 +89,7 @@ void LoadingScreen::draw_text(TTF_Font* font, const std::string& txt, int x, int
 	SDL_FreeSurface(surf);
 	if (!tex) return;
 	SDL_Rect dst{ x, y, tw, th };
-	SDL_RenderTexture(renderer_, tex, nullptr, &dst);
+	sdl_render::Texture(renderer_, tex, nullptr, &dst);
 	SDL_DestroyTexture(tex);
 }
 
@@ -125,7 +126,7 @@ void LoadingScreen::render_justified_text(TTF_Font* font, const std::string& tex
 			SDL_Surface* surf=TTF_RenderText_Blended(font,l[i].c_str(),col);
 			if(!surf)continue; SDL_Texture* tex=SDL_CreateTextureFromSurface(renderer_,surf);
 			int tw=surf->w,th=surf->h; SDL_FreeSurface(surf);
-			if(!tex)continue; SDL_Rect dst{x,line_y,tw,th}; SDL_RenderTexture(renderer_,tex,nullptr,&dst); SDL_DestroyTexture(tex);
+			if(!tex)continue; SDL_Rect dst{x,line_y,tw,th}; sdl_render::Texture(renderer_,tex,nullptr,&dst); SDL_DestroyTexture(tex);
 			x+=ww[i]+space_w;
 		}
 		line_y+=word_h; if(line_y>=rect.y+rect.h) break;
@@ -213,7 +214,7 @@ void LoadingScreen::draw_frame() {
 
         if (current_texture_) {
                 SDL_Rect dst = coverDest(current_texture_);
-                SDL_RenderTexture(renderer_, current_texture_, nullptr, &dst);
+                sdl_render::Texture(renderer_, current_texture_, nullptr, &dst);
         }
 
         const bool has_message = !message_.empty();
@@ -246,4 +247,6 @@ SDL_Rect LoadingScreen::coverDest(SDL_Texture* tex) const {
         }
         return SDL_Rect{ (screen_w_ - w) / 2, (screen_h_ - h) / 2, w, h };
 }
+
+
 

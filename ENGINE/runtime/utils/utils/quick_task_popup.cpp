@@ -1,4 +1,5 @@
 #include "quick_task_popup.hpp"
+#include "utils/sdl_render_conversions.hpp"
 #include "devtools/widgets.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/font_cache.hpp"
@@ -52,12 +53,12 @@ void QuickTaskPopup::render(SDL_Renderer* renderer) {
     }
 
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
-    SDL_RenderFillRect(renderer, &screen_rect);
+    sdl_render::FillRect(renderer, &screen_rect);
 
     SDL_SetRenderDrawColor(renderer, 40, 40, 45, 255);
-    SDL_RenderFillRect(renderer, &popup_rect_);
+    sdl_render::FillRect(renderer, &popup_rect_);
     SDL_SetRenderDrawColor(renderer, 80, 80, 100, 255);
-    SDL_RenderRect(renderer, &popup_rect_);
+    sdl_render::Rect(renderer, &popup_rect_);
 
     if (assignee_dd_) assignee_dd_->render(renderer);
     if (assigner_dd_) assigner_dd_->render(renderer);
@@ -279,4 +280,6 @@ void QuickTaskPopup::persist_all() {
     cline_file_.save(cline_tasks_);
     rebuild_ui();
 }
+
+
 

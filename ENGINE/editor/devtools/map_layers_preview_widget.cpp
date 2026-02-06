@@ -1,4 +1,5 @@
 #include "map_layers_preview_widget.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -93,7 +94,7 @@ void draw_text(SDL_Renderer* renderer, const std::string& text, int x, int y, co
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (tex) {
         SDL_Rect dst{x, y, surf->w, surf->h};
-        SDL_RenderTexture(renderer, tex, nullptr, &dst);
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
     SDL_FreeSurface(surf);
@@ -767,7 +768,7 @@ void MapLayersPreviewWidget::render_preview(SDL_Renderer* renderer) const {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     const SDL_Color bg = DMStyles::PanelBG();
     SDL_SetRenderDrawColor(renderer, bg.r, bg.g, bg.b, bg.a);
-    SDL_RenderFillRect(renderer, &rect);
+    sdl_render::FillRect(renderer, &rect);
 
     const SDL_Color border = DMStyles::Border();
     dm_draw::DrawRoundedOutline(renderer, rect, DMStyles::CornerRadius(), 1, border);
@@ -978,7 +979,7 @@ void MapLayersPreviewWidget::render_room_legend(SDL_Renderer* renderer) const {
     SDL_Color legend_bg = lighten(panel_bg, 0.06f);
     legend_bg.a = panel_bg.a;
     SDL_SetRenderDrawColor(renderer, legend_bg.r, legend_bg.g, legend_bg.b, legend_bg.a);
-    SDL_RenderFillRect(renderer, &legend);
+    sdl_render::FillRect(renderer, &legend);
 
     const SDL_Color border_color = DMStyles::Border();
     dm_draw::DrawRoundedOutline(renderer, legend, DMStyles::CornerRadius(), 1, border_color);
@@ -1009,9 +1010,9 @@ void MapLayersPreviewWidget::render_room_legend(SDL_Renderer* renderer) const {
         }
         fill.a = hovered ? 220 : 180;
         SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-        SDL_RenderFillRect(renderer, &swatch);
+        sdl_render::FillRect(renderer, &swatch);
         SDL_SetRenderDrawColor(renderer, border_color.r, border_color.g, border_color.b, border_color.a);
-        SDL_RenderRect(renderer, &swatch);
+        sdl_render::Rect(renderer, &swatch);
 
         DMLabelStyle label_style = base_label;
         if (hovered) {
@@ -1025,4 +1026,6 @@ void MapLayersPreviewWidget::render_room_legend(SDL_Renderer* renderer) const {
         }
     }
 }
+
+
 

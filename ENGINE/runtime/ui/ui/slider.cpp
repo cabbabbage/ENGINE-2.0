@@ -1,4 +1,5 @@
 #include "slider.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 
@@ -182,7 +183,7 @@ static void fill_rect(SDL_Renderer* r, const SDL_Rect& rc, SDL_Color c) {
 
 	SDL_SetRenderDrawColor(r, c.r, c.g, c.b, c.a);
 
-	SDL_RenderFillRect(r, &rc);
+	sdl_render::FillRect(r, &rc);
 
 }
 
@@ -190,7 +191,7 @@ static void stroke_rect(SDL_Renderer* r, const SDL_Rect& rc, SDL_Color c) {
 
 	SDL_SetRenderDrawColor(r, c.r, c.g, c.b, 255);
 
-	SDL_RenderRect(r, &rc);
+	sdl_render::Rect(r, &rc);
 
 }
 
@@ -262,7 +263,7 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
                     SDL_Rect dst{ rect_.x + ui_spacing::kLabelHorizontalInset, label_top, surf->w, surf->h };
 
-                    SDL_RenderTexture(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
 
                     SDL_DestroyTexture(tex);
 
@@ -298,7 +299,7 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
                     SDL_Rect dst{ value_x, value_y, surf->w, surf->h };
 
-                    SDL_RenderTexture(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
 
                     SDL_DestroyTexture(tex);
 
@@ -335,5 +336,7 @@ void Slider::render(SDL_Renderer* renderer) const {
 	draw_text(renderer);
 
 }
+
+
 
 

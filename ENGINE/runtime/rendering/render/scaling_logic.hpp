@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include "utils/sdl_render_conversions.hpp"
 #include <array>
 #include <cmath>
 #include <cstddef>
@@ -574,7 +575,7 @@ inline SDL_Texture* CreateScaledTexture(SDL_Renderer* renderer,
     SDL_RenderClear(renderer);
 
     SDL_Rect dst{0, 0, dst_w, dst_h};
-    SDL_RenderTexture(renderer, source, nullptr, &dst);
+    sdl_render::Texture(renderer, source, nullptr, &dst);
 
     SDL_SetRenderTarget(renderer, previous_target);
     return scaled;
@@ -635,4 +636,6 @@ inline void ClearShadowStateFor(const Asset* ) {
 }
 
 }
+
+
 

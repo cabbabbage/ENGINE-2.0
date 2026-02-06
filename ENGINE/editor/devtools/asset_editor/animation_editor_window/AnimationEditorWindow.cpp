@@ -1,4 +1,5 @@
 #include "AnimationEditorWindow.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -178,7 +179,7 @@ void render_label(SDL_Renderer* renderer, const std::string& text, int x, int y)
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (tex) {
         SDL_Rect dst{x, y, surf->w, surf->h};
-        SDL_RenderTexture(renderer, tex, nullptr, &dst);
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
     SDL_FreeSurface(surf);
@@ -1270,7 +1271,7 @@ void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) 
         inspector_background_cache_ &&
         inspector_background_cache_rect_.w == inspector_rect_.w &&
         inspector_background_cache_rect_.h == inspector_rect_.h) {
-        SDL_RenderTexture(renderer, inspector_background_cache_, nullptr, &inspector_rect_);
+        sdl_render::Texture(renderer, inspector_background_cache_, nullptr, &inspector_rect_);
         return;
     }
 
@@ -1291,7 +1292,7 @@ void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) 
     inspector_background_cache_ = cache;
     inspector_background_cache_rect_ = SDL_Rect{inspector_rect_.x, inspector_rect_.y, inspector_rect_.w, inspector_rect_.h};
     inspector_background_dirty_ = false;
-    SDL_RenderTexture(renderer, cache, nullptr, &inspector_rect_);
+    sdl_render::Texture(renderer, cache, nullptr, &inspector_rect_);
 }
 
 bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
@@ -2721,5 +2722,7 @@ std::optional<std::filesystem::path> AnimationEditorWindow::pick_audio_file() co
 }
 
 }
+
+
 
 

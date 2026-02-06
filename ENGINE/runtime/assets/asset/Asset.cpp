@@ -874,9 +874,11 @@ void Asset::refresh_cached_dimensions() {
         if ((width <= 0 || height <= 0)) {
                 SDL_Texture* frame = get_current_variant_texture();
                 if (frame) {
-                        if (SDL_QueryTexture(frame, nullptr, nullptr, &width, &height) != 0) {
-                                width = 0;
-                                height = 0;
+                        float wf = 0.0f;
+                        float hf = 0.0f;
+                        if (SDL_GetTextureSize(frame, &wf, &hf)) {
+                                width = static_cast<int>(std::lround(wf));
+                                height = static_cast<int>(std::lround(hf));
                         }
                 }
         }

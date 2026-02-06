@@ -1,4 +1,5 @@
 #include "map_layer_controls_display.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -322,9 +323,9 @@ void MapLayerControlsDisplay::render(SDL_Renderer* renderer) const {
                 border = active_border;
             }
             SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-            SDL_RenderFillRect(renderer, &candidate.background_rect);
+            sdl_render::FillRect(renderer, &candidate.background_rect);
             SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-            SDL_RenderRect(renderer, &candidate.background_rect);
+            sdl_render::Rect(renderer, &candidate.background_rect);
         }
 
         SDL_Point label_size = measure_label(candidate.display_label);
@@ -802,4 +803,6 @@ void MapLayerControlsDisplay::handle_create_room() {
     on_create_room_();
     mark_dirty();
 }
+
+
 

@@ -1,4 +1,5 @@
 #include "room_overlay_renderer.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <cmath>
 #include <algorithm>
@@ -63,7 +64,7 @@ void RenderRoomBoundsOverlay(
                 screen_points.push_back(first);
             }
             SDL_SetRenderDrawColor(renderer, style.outline.r, style.outline.g, style.outline.b, style.outline.a);
-            SDL_RenderLines(renderer, screen_points.data(), static_cast<int>(screen_points.size()));
+            sdl_render::Lines(renderer, screen_points.data(), static_cast<int>(screen_points.size()));
         }
     }
 
@@ -80,5 +81,7 @@ void RenderRoomBoundsOverlay(
 }
 
 }
+
+
 
 

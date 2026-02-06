@@ -1,4 +1,5 @@
 #include "PreviewViewport.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <cmath>
 #include <utility>
@@ -76,7 +77,7 @@ bool PreviewViewport::present(const SDL_Rect& dst, SDL_Texture* texture, const S
         SDL_SetTextureBlendMode(target, desired);
     }
 
-    bool success = SDL_RenderTexture(renderer_, target, src, &dst);
+    bool success = sdl_render::Texture(renderer_, target, src, &dst);
 
     if (desired != saved_mode) {
         SDL_SetTextureBlendMode(target, saved_mode);
@@ -137,5 +138,7 @@ void PreviewViewport::refreshTextureInfo() const {
 
     texture_info_valid_ = true;
 }
+
+
 
 

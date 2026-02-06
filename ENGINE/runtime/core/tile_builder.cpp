@@ -1,4 +1,5 @@
 #include "tile_builder.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -345,7 +346,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
                         continue;
                     }
 
-                    SDL_RenderTexture(renderer, ctx->texture, &src, &dest);
+                    sdl_render::Texture(renderer, ctx->texture, &src, &dest);
                 }
 
                 SDL_SetRenderTarget(renderer, prev);
@@ -360,4 +361,6 @@ void build_grid_tiles(SDL_Renderer* renderer,
 }
 
 }
+
+
 

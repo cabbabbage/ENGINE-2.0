@@ -1,4 +1,5 @@
 #include "SourceConfigPanel.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL_log.h>
@@ -188,7 +189,7 @@ void SourceConfigPanel::render(SDL_Renderer* renderer) const {
         indicator.y = indicator.y + indicator.h - 6;
         indicator.h = 6;
         SDL_SetRenderDrawColor(renderer, 0xc0, 0x9a, 0x2b, 255);
-        SDL_RenderFillRect(renderer, &indicator);
+        sdl_render::FillRect(renderer, &indicator);
     }
 }
 
@@ -1178,7 +1179,7 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
     if (flip_x) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
     if (flip_y) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
 
-    SDL_RenderTextureRotated(renderer, frame_texture, nullptr, &dst_rect, 0.0, nullptr, flip_flags);
+    sdl_render::TextureRotated(renderer, frame_texture, nullptr, &dst_rect, 0.0, nullptr, flip_flags);
 
     if (had_clip) {
         SDL_SetRenderClipRect(renderer, &prev_clip);
@@ -1188,5 +1189,7 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
 }
 
 }
+
+
 
 

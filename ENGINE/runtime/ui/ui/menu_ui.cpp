@@ -1,4 +1,5 @@
 #include "ui/menu_ui.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include "ui/tinyfiledialogs.h"
 #include "asset_loader.hpp"
@@ -179,7 +180,7 @@ void MenuUI::render() {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 100);
 	SDL_Rect bg{0, 0, screen_w_, screen_h_};
-	SDL_RenderFillRect(renderer_, &bg);
+	sdl_render::FillRect(renderer_, &bg);
 	drawVignette(110);
 	const std::string title = "PAUSE MENU";
 	SDL_Rect trect{ 0, 60, screen_w_, 60 };
@@ -247,13 +248,13 @@ void MenuUI::blitText(SDL_Renderer* r,
 			if (tex_shadow) {
 					SDL_Rect dsts { x+2, y+2, surf_shadow->w, surf_shadow->h };
 					SDL_SetTextureAlphaMod(tex_shadow, 130);
-					SDL_RenderTexture(r, tex_shadow, nullptr, &dsts);
+					sdl_render::Texture(r, tex_shadow, nullptr, &dsts);
 					SDL_DestroyTexture(tex_shadow);
 			}
 		}
 		if (tex_text) {
 			SDL_Rect dst { x, y, surf_text->w, surf_text->h };
-			SDL_RenderTexture(r, tex_text, nullptr, &dst);
+			sdl_render::Texture(r, tex_text, nullptr, &dst);
 			SDL_DestroyTexture(tex_text);
 		}
 	}
@@ -279,7 +280,7 @@ void MenuUI::drawVignette(Uint8 alpha) const {
 	SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 	SDL_SetRenderDrawColor(renderer_, 0, 0, 0, alpha);
 	SDL_Rect v{0,0,screen_w_,screen_h_};
-	SDL_RenderFillRect(renderer_, &v);
+	sdl_render::FillRect(renderer_, &v);
 }
 
 void MenuUI::doExit() {
@@ -342,4 +343,6 @@ void MenuUI::doToggleDevMode() {
                 std::cout << "[MenuUI] Closing menu after mode switch\n";
         }
 }
+
+
 

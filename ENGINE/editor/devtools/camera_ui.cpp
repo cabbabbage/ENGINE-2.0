@@ -1,4 +1,5 @@
 #include "camera_ui.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
@@ -136,11 +137,11 @@ public:
         SDL_Color accent = DMStyles::AccentButton().bg;
         SDL_Color background{ accent.r, accent.g, accent.b, static_cast<Uint8>(220) };
         SDL_SetRenderDrawColor(renderer, background.r, background.g, background.b, background.a);
-        SDL_RenderFillRect(renderer, &rect_);
+        sdl_render::FillRect(renderer, &rect_);
 
         SDL_Color border = DMStyles::AccentButton().border;
         SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-        SDL_RenderRect(renderer, &rect_);
+        sdl_render::Rect(renderer, &rect_);
 
         const int pad = padding();
         SDL_Rect content{ rect_.x + pad, rect_.y + pad, rect_.w - 2 * pad, rect_.h - 2 * pad };
@@ -667,5 +668,7 @@ void CameraUIPanel::apply_settings_if_needed() {
 
     assets_->on_camera_settings_changed();
 }
+
+
 
 

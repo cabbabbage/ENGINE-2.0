@@ -1,4 +1,5 @@
 #include "CandidateEditorPieGraphWidget.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <array>
@@ -620,7 +621,7 @@ void CandidateEditorPieGraphWidget::draw_background(SDL_Renderer* renderer) cons
     SDL_Color bg = DMStyles::PanelBG();
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(renderer, bg.r, bg.g, bg.b, 200);
-    SDL_RenderFillRect(renderer, &rect_);
+    sdl_render::FillRect(renderer, &rect_);
 }
 
 void CandidateEditorPieGraphWidget::update_internal_layout() {
@@ -738,7 +739,7 @@ void CandidateEditorPieGraphWidget::render_empty(SDL_Renderer* renderer, const L
     border.a = 220;
     SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
     if (!outline.empty()) {
-        SDL_RenderLines(renderer, outline.data(), static_cast<int>(outline.size()));
+        sdl_render::Lines(renderer, outline.data(), static_cast<int>(outline.size()));
     }
 
     const SDL_Color text_color = DMStyles::Label().color;
@@ -839,7 +840,7 @@ void CandidateEditorPieGraphWidget::render_outline(SDL_Renderer* renderer, const
     border.a = 220;
     SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
     if (!outline.empty()) {
-        SDL_RenderLines(renderer, outline.data(), static_cast<int>(outline.size()));
+        sdl_render::Lines(renderer, outline.data(), static_cast<int>(outline.size()));
     }
 }
 
@@ -865,7 +866,7 @@ void CandidateEditorPieGraphWidget::render_legend(SDL_Renderer* renderer, const 
                 SDL_Color row_bg = DMStyles::PanelHeader();
                 Uint8 alpha = static_cast<Uint8>(is_active && is_hovered ? 220 : (is_active ? 200 : 170));
                 SDL_SetRenderDrawColor(renderer, row_bg.r, row_bg.g, row_bg.b, alpha);
-                SDL_RenderFillRect(renderer, &row_rect);
+                sdl_render::FillRect(renderer, &row_rect);
             }
 
             SDL_Color swatch = color_for_index(i);
@@ -925,7 +926,7 @@ SDL_Rect CandidateEditorPieGraphWidget::draw_text(SDL_Renderer* renderer, TTF_Fo
 
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (tex) {
-        SDL_RenderTexture(renderer, tex, nullptr, &dst);
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
     SDL_FreeSurface(surf);
@@ -1012,4 +1013,6 @@ void CandidateEditorPieGraphWidget::notify_layout_change() const {
 bool CandidateEditorPieGraphWidget::search_visible() const {
     return search_assets_ && search_assets_->visible();
 }
+
+
 

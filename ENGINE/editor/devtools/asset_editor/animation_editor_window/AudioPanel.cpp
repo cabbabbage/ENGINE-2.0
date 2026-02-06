@@ -1,4 +1,5 @@
 #include "AudioPanel.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include "AnimationDocument.hpp"
 #include "AudioImporter.hpp"
@@ -58,7 +59,7 @@ void render_label(SDL_Renderer* renderer, const std::string& text, int x, int y,
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (tex) {
         SDL_Rect dst{x, y, surf->w, surf->h};
-        SDL_RenderTexture(renderer, tex, nullptr, &dst);
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
     SDL_FreeSurface(surf);
@@ -483,6 +484,8 @@ void AudioPanel::refresh_inherited_message() {
 }
 
 }
+
+
 
 
 

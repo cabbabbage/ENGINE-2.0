@@ -1,4 +1,5 @@
 #include "devtools/foreground_background_effect_panel.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include "assets/asset_info.hpp"
 #include "assets/animation.hpp"
@@ -72,9 +73,9 @@ public:
         if (!renderer) return;
 
         SDL_SetRenderDrawColor(renderer, 18, 20, 26, 255);
-        SDL_RenderFillRect(renderer, &rect_);
+        sdl_render::FillRect(renderer, &rect_);
         SDL_SetRenderDrawColor(renderer, 38, 42, 52, 255);
-        SDL_RenderRect(renderer, &rect_);
+        sdl_render::Rect(renderer, &rect_);
 
         if (processed_texture_) {
             const int padding = 8;
@@ -113,7 +114,7 @@ private:
         const int draw_h = static_cast<int>(std::round(static_cast<float>(tex_h) * scale));
         SDL_Rect dst{
             area.x + (area.w - draw_w) / 2, area.y + (area.h - draw_h) / 2, draw_w, draw_h };
-        SDL_RenderTexture(renderer, tex, nullptr, &dst);
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
     }
 
     SDL_Rect rect_{0,0,0,200};
@@ -1093,4 +1094,6 @@ void ForegroundBackgroundEffectPanel::request_preview_rebuild() {
         preview_dirty_ = true;
     }
 }
+
+
 

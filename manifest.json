@@ -29,40 +29,13 @@
         }
       },
       "camera_settings": {
-        "background_effects": {
-          "blur": 0.0,
-          "brightness": 0.0,
-          "contrast": 0.0,
-          "hue": 0.0,
-          "saturation_blue": 0.0,
-          "saturation_green": 0.0,
-          "saturation_red": 0.0
-        },
-        "background_plane_screen_y": 0.0,
-        "background_texture_max_opacity": 255,
         "base_height_px": 1000.0,
-        "extra_cull_margin": 4670.0,
-        "foreground_effects": {
-          "blur": 0.0,
-          "brightness": 0.0,
-          "contrast": 0.0,
-          "hue": 0.0,
-          "saturation_blue": 0.0,
-          "saturation_green": 0.0,
-          "saturation_red": 0.0
-        },
-        "foreground_plane_screen_y": 1080.0,
-        "foreground_texture_max_opacity": 255,
-        "meters_per_100_world_px": 0.5399999618530273,
-        "min_visible_screen_ratio": 0.005000000353902578,
+        "extra_cull_margin": 150.0,
+        "meters_per_100_world_px": 0.9999999403953552,
+        "min_visible_screen_ratio": 0.003000000026077032,
         "near_camera_max_perspective_scale": 4.0,
         "offscreen_fade_amount_px": 200.0,
-        "pre_horizon_lock_offset_px": 80.0,
-        "render_quality_percent": 100,
-        "scale_variant_hysteresis_margin": 0.05000000074505806,
-        "texture_opacity_falloff_method": 0,
-        "texture_warp_percent": 100.0,
-        "texture_warp_y_offset_px": 0.0
+        "render_quality_percent": 100
       },
       "content_root": "content/test",
       "map_assets_data": {
@@ -427,37 +400,8 @@
                 }
               ],
               "display_name": "Vibble",
-              "dx": 1918,
-              "dy": 1099,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 6376,
-              "origional_width": 6376,
-              "position": "Exact",
-              "priority": 5,
-              "resolution": 5,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-b16000a93281"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "Vibble"
-                }
-              ],
-              "display_name": "Vibble",
-              "dx": 613,
-              "dy": 1774,
+              "dx": 1099,
+              "dy": 334,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -470,7 +414,7 @@
               "resolution": 5,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-7eeba0521ef9"
+              "spawn_id": "spn-c341292a767e"
             }
           ]
         },

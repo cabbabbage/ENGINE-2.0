@@ -3284,13 +3284,24 @@ void RoomEditor::handle_click(const Input& input) {
 
     click_buffer_frames_ = std::max(0, click_buffer_frames_ - 1);
 
-    const bool asset_info_open =
-        (active_modal_ == ActiveModal::AssetInfo) || (info_ui_ && info_ui_->is_visible());
-    const bool floating_modal_open = FloatingDockableManager::instance().active_panel() != nullptr;
+    const bool asset_info_open = 
+        (active_modal_ == ActiveModal::AssetInfo) || (info_ui_ && info_ui_->is_visible()); 
+    const bool floating_modal_open = FloatingDockableManager::instance().active_panel() != nullptr; 
 
-    if (asset_info_open || floating_modal_open) {
-        return;
-    }
+    if (asset_info_open || floating_modal_open) { 
+        return; 
+    } 
+
+    const bool alt_modifier = 
+        input.isScancodeDown(SDL_SCANCODE_LALT) || input.isScancodeDown(SDL_SCANCODE_RALT); 
+    const bool shift_modifier = 
+        input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT); 
+    if (alt_modifier && shift_modifier && hovered_asset_) { 
+        const std::string spawn_id = hovered_asset_->spawn_id; 
+        if (!spawn_id.empty() && delete_spawn_group_internal(spawn_id)) { 
+            return; 
+        } 
+    } 
 
     if (hovered_asset_) {
         Asset* nearest = hovered_asset_;

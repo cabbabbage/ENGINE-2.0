@@ -32,7 +32,7 @@ SDL_Surface* duplicate_surface(SDL_Surface* surface) {
 
 std::uint64_t hash_surface_pixels(SDL_Surface* surface, std::uint64_t seed) {
     if (!surface || !surface->pixels) {
-        return mix_signature(seed);
+        return mix_signature(seed, 0);
     }
     seed = mix_signature(seed, static_cast<std::uint64_t>(surface->w));
     seed = mix_signature(seed, static_cast<std::uint64_t>(surface->h));

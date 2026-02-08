@@ -84,8 +84,8 @@ inline SDL_Color unpack(Uint32 px) {
 #endif
     return c;
 }
-inline Uint32 pack(const SDL_PixelFormatDetails* fmt, const SDL_Color& c) {
-    return fmt ? SDL_MapRGBA(fmt, c.r, c.g, c.b, c.a) : 0;
+inline Uint32 pack(const SDL_PixelFormatDetails* fmt, const SDL_Palette* palette, const SDL_Color& c) {
+    return fmt ? SDL_MapRGBA(fmt, palette, c.r, c.g, c.b, c.a) : 0;
 }
 inline float luminance(const SDL_Color& c) {
     return (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) / 255.0f;
@@ -545,6 +545,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
 
     if (!SDL_LockSurface(comp.get())) return;
     const SDL_PixelFormatDetails* fmt = SDL_GetPixelFormatDetails(comp->format);
+    const SDL_Palette* comp_palette = comp->palette;
     if (!fmt) {
         SDL_UnlockSurface(comp.get());
         return;
@@ -768,7 +769,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
             Lacc += luminance(final_col);
             ++Lcount;
 
-            dst[y * dpitch + x] = pack(fmt, out);
+            dst[y * dpitch + x] = pack(fmt, comp_palette, out);
         }
     }
 

@@ -845,7 +845,7 @@ int main(int argc, char* argv[]) {
         }
 
         if (!TTF_Init()) {
-                vibble::log::error(std::string("TTF_Init failed: ") + TTF_GetError());
+                vibble::log::error(std::string("TTF_Init failed: ") + SDL_GetError());
                 SDL_Quit();
                 return 1;
         }

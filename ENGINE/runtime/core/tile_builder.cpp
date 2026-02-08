@@ -312,7 +312,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
                 }
                 if (!any) continue;
 
-                SDL_Texture* tile_tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, tile_world.w, tile_world.h);
+                SDL_Texture* tile_tex = SDL_CreateTexture(renderer, static_cast<SDL_PixelFormat>(SDL_PIXELFORMAT_RGBA32), SDL_TEXTUREACCESS_TARGET, tile_world.w, tile_world.h);
                 if (!tile_tex) continue;
                 SDL_SetTextureBlendMode(tile_tex, SDL_BLENDMODE_BLEND);
                 SDL_SetTextureScaleMode(tile_tex, SDL_SCALEMODE_LINEAR);

@@ -1282,7 +1282,7 @@ void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) 
         inspector_background_cache_ = nullptr;
     }
 
-    SDL_Texture* cache = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, inspector_rect_.w, inspector_rect_.h);
+    SDL_Texture* cache = SDL_CreateTexture(renderer, static_cast<SDL_PixelFormat>(SDL_PIXELFORMAT_RGBA8888), SDL_TEXTUREACCESS_TARGET, inspector_rect_.w, inspector_rect_.h);
     if (!cache) {
         return;
     }

@@ -421,14 +421,14 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     auto clone_texture = [&](SDL_Texture* src, int width_hint, int height_hint, SDL_FlipMode flip_flags, int* out_w = nullptr, int* out_h = nullptr) -> SDL_Texture* {
         if (!src) return nullptr;
 
-        Uint32 fmt = SDL_PIXELFORMAT_RGBA8888;
+        SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA8888;
         int access = 0;
         int tex_w = width_hint;
         int tex_h = height_hint;
 
         const bool need_dims = tex_w <= 0 || tex_h <= 0;
         if (SDL_PropertiesID props = SDL_GetTextureProperties(src)) {
-            fmt    = static_cast<Uint32>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, fmt));
+            fmt    = static_cast<SDL_PixelFormat>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, fmt));
             access = static_cast<int>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_ACCESS_NUMBER, access));
         }
         if (need_dims) {

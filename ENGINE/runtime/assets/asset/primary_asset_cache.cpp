@@ -206,7 +206,8 @@ bool PrimaryAssetCache::build_variant_atlases(CacheManager::BundleAnimation& ani
             continue;
         }
         const SDL_PixelFormatDetails* atlas_fmt = SDL_GetPixelFormatDetails(atlas->format);
-        const Uint32 clear_color = atlas_fmt ? SDL_MapRGBA(atlas_fmt, 0, 0, 0, 0) : 0;
+        const SDL_Palette* atlas_palette = atlas->palette;
+        const Uint32 clear_color = atlas_fmt ? SDL_MapRGBA(atlas_fmt, atlas_palette, 0, 0, 0, 0) : 0;
         SDL_FillSurfaceRect(atlas, nullptr, clear_color);
 
         for (std::size_t frame_idx = 0; frame_idx < animation.frames.size(); ++frame_idx) {

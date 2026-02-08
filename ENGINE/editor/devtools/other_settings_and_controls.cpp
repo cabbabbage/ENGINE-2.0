@@ -527,7 +527,7 @@ bool OtherSettingsAndControls::handle_event(const SDL_Event& event) {
         }
         if (entry.button->handle_event(event)) {
             used = true;
-            if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT) {
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
                 set_active_mode(entry.config.id, true);
             }
         }
@@ -539,7 +539,7 @@ bool OtherSettingsAndControls::handle_event(const SDL_Event& event) {
 
     if (filter_toggle_button_ && filter_toggle_button_->handle_event(event)) {
         used = true;
-        if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT) {
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
             set_filters_expanded(!filters_expanded_);
             ensure_layout();
         }

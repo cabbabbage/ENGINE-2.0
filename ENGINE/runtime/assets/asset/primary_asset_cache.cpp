@@ -46,8 +46,8 @@ int count_sequential_png(const fs::path& folder) {
 SDL_Surface* load_rgba_surface(const fs::path& path) {
     SDL_Surface* loaded = CacheManager::load_surface(path.generic_string());
     if (!loaded) return nullptr;
-    SDL_Surface* converted = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA8888, 0);
-    SDL_FreeSurface(loaded);
+    SDL_Surface* converted = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA8888);
+    SDL_DestroySurface(loaded);
     return converted;
 }
 
@@ -57,21 +57,32 @@ CacheManager::BundleFrameLayer make_layer(SDL_Surface* surface) {
         return layer;
     }
     SDL_Surface* rgba = surface;
-    if (surface->format->format != SDL_PIXELFORMAT_RGBA8888) {
-        rgba = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA8888, 0);
-        SDL_FreeSurface(surface);
+    if (surface->format != SDL_PIXELFORMAT_RGBA8888) {
+        rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
+        SDL_DestroySurface(surface);
     }
     layer.width = rgba->w;
     layer.height = rgba->h;
     layer.pitch = rgba->pitch;
-    layer.format = rgba->format ? rgba->format->format : SDL_PIXELFORMAT_RGBA8888;
+    layer.format = rgba ? rgba->format : SDL_PIXELFORMAT_RGBA8888;
     const std::size_t byte_count = static_cast<std::size_t>(layer.pitch) * static_cast<std::size_t>(layer.height);
     layer.pixels.resize(byte_count);
     std::memcpy(layer.pixels.data(), rgba->pixels, byte_count);
     if (rgba != surface) {
-        SDL_FreeSurface(rgba);
+        SDL_DestroySurface(rgba);
     }
     return layer;
+}
+
+SDL_Surface* surface_from_layer(const CacheManager::BundleFrameLayer& layer) {
+    if (layer.empty()) {
+        return nullptr;
+    }
+    return SDL_CreateSurfaceFrom(layer.width,
+                                 layer.height,
+                                 static_cast<SDL_PixelFormat>(layer.format),
+                                 const_cast<std::uint8_t*>(layer.pixels.data()),
+                                 layer.pitch);
 }
 
 std::vector<float> normalized_variant_steps(const AssetInfo& info) {
@@ -95,22 +106,17 @@ CacheManager::BundleFrameLayer scale_layer(const CacheManager::BundleFrameLayer&
     if (src.empty() || !(scale > 0.0f)) {
         return CacheManager::BundleFrameLayer{};
     }
-    SDL_Surface* base = SDL_CreateRGBSurfaceWithFormatFrom(const_cast<std::uint8_t*>(src.pixels.data()),
-                                                           src.width,
-                                                           src.height,
-                                                           32,
-                                                           src.pitch,
-                                                           src.format);
+    SDL_Surface* base = surface_from_layer(src);
     if (!base) {
         return CacheManager::BundleFrameLayer{};
     }
     SDL_Surface* scaled = render_pipeline::CreateScaledSurface(base, scale);
-    SDL_FreeSurface(base);
+    SDL_DestroySurface(base);
     if (!scaled) {
         return CacheManager::BundleFrameLayer{};
     }
     auto layer = make_layer(scaled);
-    SDL_FreeSurface(scaled);
+    SDL_DestroySurface(scaled);
     return layer;
 }
 
@@ -195,26 +201,23 @@ bool PrimaryAssetCache::build_variant_atlases(CacheManager::BundleAnimation& ani
             continue;
         }
 
-        SDL_Surface* atlas = SDL_CreateRGBSurfaceWithFormat(0, used_w, atlas_h, 32, SDL_PIXELFORMAT_RGBA8888);
+        SDL_Surface* atlas = SDL_CreateSurface(used_w, atlas_h, SDL_PIXELFORMAT_RGBA8888);
         if (!atlas) {
             continue;
         }
-        SDL_FillRect(atlas, nullptr, SDL_MapRGBA(atlas->format, 0, 0, 0, 0));
+        const SDL_PixelFormatDetails* atlas_fmt = SDL_GetPixelFormatDetails(atlas->format);
+        const Uint32 clear_color = atlas_fmt ? SDL_MapRGBA(atlas_fmt, 0, 0, 0, 0) : 0;
+        SDL_FillSurfaceRect(atlas, nullptr, clear_color);
 
         for (std::size_t frame_idx = 0; frame_idx < animation.frames.size(); ++frame_idx) {
             if (variant_idx >= animation.frames[frame_idx].variants.size()) continue;
             const auto& variant = animation.frames[frame_idx].variants[variant_idx];
             if (variant.base.empty()) continue;
-            SDL_Surface* surf = SDL_CreateRGBSurfaceWithFormatFrom(const_cast<std::uint8_t*>(variant.base.pixels.data()),
-                                                                   variant.base.width,
-                                                                   variant.base.height,
-                                                                   32,
-                                                                   variant.base.pitch,
-                                                                   variant.base.format);
+            SDL_Surface* surf = surface_from_layer(variant.base);
             if (!surf) continue;
             SDL_Rect dest = rects[frame_idx];
             SDL_BlitSurface(surf, nullptr, atlas, &dest);
-            SDL_FreeSurface(surf);
+            SDL_DestroySurface(surf);
         }
 
         const fs::path atlas_path = cache_root / ("atlas_" + std::to_string(variant_idx) + ".png");
@@ -227,7 +230,7 @@ bool PrimaryAssetCache::build_variant_atlases(CacheManager::BundleAnimation& ani
                 animation.frames[frame_idx].variants[variant_idx].atlas_rect = rects[frame_idx];
             }
         }
-        SDL_FreeSurface(atlas);
+        SDL_DestroySurface(atlas);
     }
 
     return animation.uses_atlas;
@@ -302,9 +305,9 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
                     frame.variants.push_back(std::move(variant));
                 }
 
-                if (base_surface) SDL_FreeSurface(base_surface);
-                if (fg_surface) SDL_FreeSurface(fg_surface);
-                if (bg_surface) SDL_FreeSurface(bg_surface);
+                if (base_surface) SDL_DestroySurface(base_surface);
+                if (fg_surface) SDL_DestroySurface(fg_surface);
+                if (bg_surface) SDL_DestroySurface(bg_surface);
 
                 bundle_anim.frames.push_back(std::move(frame));
             }
@@ -355,7 +358,7 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                     atlas_by_variant[idx] = atlas_tex;
                     atlas_sizes[idx] = SDL_Point{atlas_surface->w, atlas_surface->h};
                 }
-                SDL_FreeSurface(atlas_surface);
+                SDL_DestroySurface(atlas_surface);
             }
         }
 
@@ -375,44 +378,26 @@ bool PrimaryAssetCache::populate_runtime_frames(const AssetInfo& info,
                     cache_entry.uses_atlas[variant_idx] = true;
                     cache_entry.source_rects[variant_idx] = variant.atlas_rect;
                 } else if (!variant.base.empty()) {
-                    SDL_Surface* base_surface = SDL_CreateRGBSurfaceWithFormatFrom(
-                        const_cast<std::uint8_t*>(variant.base.pixels.data()),
-                        variant.base.width,
-                        variant.base.height,
-                        32,
-                        variant.base.pitch,
-                        variant.base.format);
+                    SDL_Surface* base_surface = surface_from_layer(variant.base);
                     SDL_Texture* tex = CacheManager::surface_to_texture(renderer_, base_surface);
                     cache_entry.textures[variant_idx] = tex;
                     cache_entry.widths[variant_idx] = variant.base.width;
                     cache_entry.heights[variant_idx] = variant.base.height;
                     cache_entry.source_rects[variant_idx] = SDL_Rect{0, 0, variant.base.width, variant.base.height};
                     cache_entry.uses_atlas[variant_idx] = false;
-                    SDL_FreeSurface(base_surface);
+                    SDL_DestroySurface(base_surface);
                 }
 
                 if (!variant.foreground.empty()) {
-                    SDL_Surface* fg_surface = SDL_CreateRGBSurfaceWithFormatFrom(
-                        const_cast<std::uint8_t*>(variant.foreground.pixels.data()),
-                        variant.foreground.width,
-                        variant.foreground.height,
-                        32,
-                        variant.foreground.pitch,
-                        variant.foreground.format);
+                    SDL_Surface* fg_surface = surface_from_layer(variant.foreground);
                     cache_entry.foreground_textures[variant_idx] = CacheManager::surface_to_texture(renderer_, fg_surface);
-                    SDL_FreeSurface(fg_surface);
+                    SDL_DestroySurface(fg_surface);
                 }
 
                 if (!variant.background.empty()) {
-                    SDL_Surface* bg_surface = SDL_CreateRGBSurfaceWithFormatFrom(
-                        const_cast<std::uint8_t*>(variant.background.pixels.data()),
-                        variant.background.width,
-                        variant.background.height,
-                        32,
-                        variant.background.pitch,
-                        variant.background.format);
+                    SDL_Surface* bg_surface = surface_from_layer(variant.background);
                     cache_entry.background_textures[variant_idx] = CacheManager::surface_to_texture(renderer_, bg_surface);
-                    SDL_FreeSurface(bg_surface);
+                    SDL_DestroySurface(bg_surface);
                 }
             }
 

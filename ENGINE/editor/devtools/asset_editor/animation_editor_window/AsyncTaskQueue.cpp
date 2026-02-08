@@ -1,6 +1,6 @@
 #include "AsyncTaskQueue.hpp"
 
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 
 #include <chrono>
 #include <utility>

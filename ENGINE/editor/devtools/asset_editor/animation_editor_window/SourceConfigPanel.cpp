@@ -2,7 +2,7 @@
 #include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 
 #include <algorithm>
 #include <cctype>
@@ -206,7 +206,7 @@ bool SourceConfigPanel::handle_event(const SDL_Event& e) {
 
     if (!consumed && use_animation_reference_ && pick_animation_button_ && pick_animation_button_->handle_event(e)) {
         consumed = true;
-        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             import_from_animation();
         }
     }
@@ -216,7 +216,7 @@ bool SourceConfigPanel::handle_event(const SDL_Event& e) {
             auto& button = frame_buttons_[i];
             if (button && button->handle_event(e)) {
                 consumed = true;
-                if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                     switch (i) {
                         case 0:
                             import_from_gif();

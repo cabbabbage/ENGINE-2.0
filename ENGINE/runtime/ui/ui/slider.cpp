@@ -131,7 +131,7 @@ bool Slider::handle_event(const SDL_Event& e) {
 
 	const SDL_Rect krect = knob_rect_for_value(value_);
 
-	if (e.type == SDL_MOUSEMOTION) {
+	if (e.type == SDL_EVENT_MOUSE_MOTION) {
 
 		SDL_Point p{ e.motion.x, e.motion.y };
 
@@ -147,7 +147,7 @@ bool Slider::handle_event(const SDL_Event& e) {
 
 	}
 
-	else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+	else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
 
 		SDL_Point p{ e.button.x, e.button.y };
 
@@ -165,7 +165,7 @@ bool Slider::handle_event(const SDL_Event& e) {
 
 	}
 
-	else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+	else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
 
 		if (dragging_) {
 
@@ -269,7 +269,7 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
                 }
 
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
 
             }
 
@@ -305,7 +305,7 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
                 }
 
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
 
             }
 

@@ -112,15 +112,15 @@ public:
 
         if (owner_->is_dragging_layer()) {
             switch (e.type) {
-                case SDL_MOUSEMOTION:
+                case SDL_EVENT_MOUSE_MOTION:
                     owner_->on_layers_list_mouse_motion(e.motion.y, static_cast<Uint32>(e.motion.state));
                     return true;
-                case SDL_MOUSEBUTTONUP: {
+                case SDL_EVENT_MOUSE_BUTTON_UP: {
                     SDL_Point p = event_point_from_event(e);
                     owner_->on_layers_list_mouse_up(p.y, e.button.button);
                     return true;
                 }
-                case SDL_MOUSEBUTTONDOWN:
+                case SDL_EVENT_MOUSE_BUTTON_DOWN:
                     if (e.button.button == SDL_BUTTON_RIGHT) {
                         owner_->cancel_drag();
                         return true;
@@ -132,15 +132,15 @@ public:
         }
 
         switch (e.type) {
-            case SDL_MOUSEMOTION:
-            case SDL_MOUSEBUTTONDOWN:
-            case SDL_MOUSEBUTTONUP: {
+            case SDL_EVENT_MOUSE_MOTION:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP: {
                 SDL_Point p = event_point_from_event(e);
                 if (SDL_PointInRect(&p, &rect_) == SDL_FALSE) {
-                    if (e.type == SDL_MOUSEMOTION) {
+                    if (e.type == SDL_EVENT_MOUSE_MOTION) {
                         owner_->clear_hover();
                     }
-                    if (e.type == SDL_MOUSEBUTTONUP && owner_->is_dragging_layer()) {
+                    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && owner_->is_dragging_layer()) {
                         owner_->cancel_drag();
                     }
                     return false;
@@ -160,7 +160,7 @@ public:
 
                 owner_->set_hovered_delete_layer(delete_hit_index);
 
-                if (e.type == SDL_MOUSEMOTION) {
+                if (e.type == SDL_EVENT_MOUSE_MOTION) {
                     if (hit_index >= 0) {
                         owner_->set_hovered_layer(hit_index);
                     } else {
@@ -169,7 +169,7 @@ public:
                     return false;
                 }
 
-                if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                     if (hit_index >= 0) {
                         owner_->set_hovered_layer(hit_index);
                         if (delete_hit_index >= 0) {
@@ -182,7 +182,7 @@ public:
                     return false;
                 }
 
-                if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                     if (delete_hit_index >= 0) {
                         owner_->set_hovered_delete_layer(-1);
                         return true;

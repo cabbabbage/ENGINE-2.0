@@ -1,5 +1,7 @@
 #include "room_editor.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -59,7 +61,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <fstream>
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 
 namespace {
 constexpr int kSavedCameraHeightMinPx = 1;
@@ -144,7 +146,7 @@ static bool is_visible_pixel_at(SDL_Renderer* renderer, SDL_Point screen_point) 
     if (SDL_Surface* captured = SDL_RenderReadPixels(renderer, &r)) {
         SDL_Surface* working = captured;
         if (captured->format != fmt) {
-            working = SDL_ConvertSurfaceFormat(captured, static_cast<SDL_PixelFormat>(fmt));
+            working = SDL_ConvertSurface(captured, static_cast<SDL_PixelFormat>(fmt));
             SDL_DestroySurface(captured);
             captured = nullptr;
         }
@@ -160,11 +162,10 @@ static bool is_visible_pixel_at(SDL_Renderer* renderer, SDL_Point screen_point) 
     }
 
     Uint8 a = 255;
-    SDL_PixelFormat* pf = SDL_AllocFormat(fmt);
+    const SDL_PixelFormatDetails* pf = SDL_GetPixelFormatDetails(fmt);
     if (pf) {
         Uint8 r8, g8, b8;
         SDL_GetRGBA(pixel, pf, &r8, &g8, &b8, &a);
-        SDL_FreeFormat(pf);
     }
     return a > 0;
 }
@@ -573,8 +574,8 @@ void RoomEditor::remap_clipboard_entry_to_room(nlohmann::json& entry, Room* room
     }
 
     if (method == "Exact" || method == "Perimeter") {
-        int stored_dx = entry.value("dx", 0);
-        int stored_dy = entry.value("dy", 0);
+        int stored_dx = entry.value("dx");
+        int stored_dy = entry.value("dy");
         int orig_w = std::max(1, entry.value("origional_width", width));
         int orig_h = std::max(1, entry.value("origional_height", height));
         RelativeRoomPosition relative(SDL_Point{stored_dx, stored_dy}, orig_w, orig_h);
@@ -604,8 +605,8 @@ void RoomEditor::ensure_clipboard_position_is_valid(nlohmann::json& entry, Room*
     }
 
     SDL_Point center = room->room_area->get_center();
-    int dx = entry.value("dx", 0);
-    int dy = entry.value("dy", 0);
+    int dx = entry.value("dx");
+    int dy = entry.value("dy");
     SDL_Point candidate{center.x + dx, center.y + dy};
     if (room->room_area->contains_point(candidate)) {
         return;
@@ -652,7 +653,7 @@ std::string RoomEditor::strip_copy_suffix(const std::string& name) {
         return name.substr(0, pos);
     }
     const std::string prefix = "Copy ";
-    if (inside.rfind(prefix, 0) == 0) {
+    if (inside.rfind(prefix) == 0) {
         const bool digits = std::all_of(inside.begin() + prefix.size(), inside.end(), [](unsigned char ch) {
             return std::isdigit(ch) != 0;
         });
@@ -1097,19 +1098,19 @@ if (auto selected = library_ui_->consume_selection()) {
 bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     int mx = 0;
     int my = 0;
-    if (event.type == SDL_MOUSEMOTION) {
+    if (event.type == SDL_EVENT_MOUSE_MOTION) {
         mx = event.motion.x;
         my = event.motion.y;
-    } else if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) {
+    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         mx = event.button.x;
         my = event.button.y;
-    } else if (event.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mx, &my);
+    } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mx, &my);
     }
 
     const bool pointer_event =
-        (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEMOTION);
-    const bool wheel_event = (event.type == SDL_MOUSEWHEEL);
+        (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP || event.type == SDL_EVENT_MOUSE_MOTION);
+    const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_based = pointer_event || wheel_event;
 
     struct RouteResult {
@@ -1468,14 +1469,14 @@ void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
                                    ? SDL_Color{20, 20, 20, 255}
                                    : kLabelText;
 
-        SDL_Surface* text_surface = TTF_RenderUTF8_Blended(label_font_, name.c_str(), text_color);
+        SDL_Surface* text_surface = ttf_util::RenderTextBlended(label_font_, name.c_str(), text_color);
         if (!text_surface) {
             return;
         }
 
         SDL_Texture* new_texture = SDL_CreateTextureFromSurface(renderer, text_surface);
         if (!new_texture) {
-            SDL_FreeSurface(text_surface);
+            SDL_DestroySurface(text_surface);
             return;
         }
 
@@ -1488,7 +1489,7 @@ void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
         cache.last_color = base_color;
         cache.dirty = false;
 
-        SDL_FreeSurface(text_surface);
+        SDL_DestroySurface(text_surface);
     }
 
     if (!cache.texture || cache.text_size.x <= 0 || cache.text_size.y <= 0) {
@@ -2021,7 +2022,7 @@ void RoomEditor::open_asset_info_editor_for_asset(Asset* asset) {
     if (!asset || !asset->info) return;
     std::cout << "Opening AssetInfoUI for asset: " << asset->info->name << std::endl;
     clear_selection();
-    focus_camera_on_asset(asset, 0.8, 0);
+    focus_camera_on_asset(asset, 0.8);
     open_asset_info_editor(asset->info);
     if (info_ui_) info_ui_->set_target_asset(asset);
 }
@@ -2238,7 +2239,7 @@ void RoomEditor::focus_camera_on_room_center(bool reframe_height) {
     cam.set_focus_override(center);
 
     if (reframe_height) {
-        cam.animate_height_to_scale(cam.default_camera_height_for_room(current_room_), 0);
+        cam.animate_height_to_scale(cam.default_camera_height_for_room(current_room_));
     }
     mark_spatial_index_dirty();
 }
@@ -3168,7 +3169,7 @@ std::optional<std::string> RoomEditor::find_room_area_at_point(SDL_Point world_p
             }
 
             AreaMetadata data;
-            data.z = entry.value("z", 0);
+            data.z = entry.value("z");
             data.visible = !(entry.contains("visible") && entry["visible"].is_boolean() && !entry["visible"].get<bool>());
             data.order = order_counter;
             metadata.insert_or_assign(name, data);
@@ -4045,8 +4046,8 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
         }
         drag_perimeter_orig_w_ = orig_w;
         drag_perimeter_orig_h_ = orig_h;
-        const int stored_dx = spawn_entry->value("dx", 0);
-        const int stored_dy = spawn_entry->value("dy", 0);
+        const int stored_dx = spawn_entry->value("dx");
+        const int stored_dy = spawn_entry->value("dy");
         RelativeRoomPosition relative(SDL_Point{stored_dx, stored_dy}, orig_w, orig_h);
         drag_perimeter_center_offset_world_ = relative.scaled_offset(room_w, room_h);
         drag_perimeter_circle_center_.x = drag_room_center_.x + drag_perimeter_center_offset_world_.x;
@@ -5090,13 +5091,13 @@ std::optional<RoomEditor::PerimeterOverlay> RoomEditor::compute_perimeter_overla
         orig_w = std::max(1, room_w);
         orig_h = std::max(1, room_h);
     }
-    int stored_dx = entry->value("dx", 0);
-    int stored_dy = entry->value("dy", 0);
+    int stored_dx = entry->value("dx");
+    int stored_dy = entry->value("dy");
     RelativeRoomPosition relative(SDL_Point{stored_dx, stored_dy}, orig_w, orig_h);
     SDL_Point scaled = relative.scaled_offset(room_w, room_h);
     overlay.center.x += scaled.x;
     overlay.center.y += scaled.y;
-    int base_radius = entry->value("radius", 0);
+    int base_radius = entry->value("radius");
     if (resolve_geometry) {
         const double width_ratio = static_cast<double>(std::max(1, room_w)) / static_cast<double>(std::max(1, orig_w));
         const double height_ratio = static_cast<double>(std::max(1, room_h)) / static_cast<double>(std::max(1, orig_h));
@@ -5657,7 +5658,7 @@ void RoomEditor::save_perimeter_json(nlohmann::json& entry, int dx, int dy, int 
     entry["origional_height"] = orig_h;
     entry["radius"] = radius;
     for (auto it = entry.begin(); it != entry.end(); ) {
-        if (it.key().rfind("sector_", 0) == 0) {
+        if (it.key().rfind("sector_") == 0) {
             it = entry.erase(it);
         } else {
             ++it;

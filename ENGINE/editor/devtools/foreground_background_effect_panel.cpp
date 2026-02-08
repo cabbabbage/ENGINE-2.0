@@ -750,13 +750,13 @@ void ForegroundBackgroundEffectPanel::load_preview_texture(const std::string& im
     current_preview_texture_ = SDL_CreateTextureFromSurface(renderer, surface);
     if (!current_preview_texture_) {
         std::cerr << "[DepthCuePanel] Failed to create texture from surface\n";
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
         return;
     }
 
     current_preview_w_ = surface->w;
     current_preview_h_ = surface->h;
-    SDL_FreeSurface(surface);
+    SDL_DestroySurface(surface);
 
     std::cout << "[DepthCuePanel] Loaded preview texture: " << current_preview_w_ << "x" << current_preview_h_ << "\n";
 }

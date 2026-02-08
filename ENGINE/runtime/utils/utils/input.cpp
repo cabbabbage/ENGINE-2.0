@@ -1,5 +1,6 @@
 #include "input.hpp"
 
+#include <cmath>
 #include <utility>
 
 namespace {
@@ -17,17 +18,17 @@ Input::Button to_button(Uint8 sdl_button) {
 
 void Input::handleEvent(const SDL_Event& e) {
     switch (e.type) {
-    case SDL_MOUSEMOTION:
-        dx_ = e.motion.xrel;
-        dy_ = e.motion.yrel;
-        x_ = e.motion.x;
-        y_ = e.motion.y;
+    case SDL_EVENT_MOUSE_MOTION:
+        dx_ = static_cast<int>(std::lround(e.motion.xrel));
+        dy_ = static_cast<int>(std::lround(e.motion.yrel));
+        x_ = static_cast<int>(std::lround(e.motion.x));
+        y_ = static_cast<int>(std::lround(e.motion.y));
         mouse_motion_dirty_ = true;
         break;
 
-    case SDL_MOUSEBUTTONDOWN:
-    case SDL_MOUSEBUTTONUP: {
-        bool down = (e.type == SDL_MOUSEBUTTONDOWN);
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP: {
+        bool down = (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN);
         Button button = to_button(e.button.button);
         if (button != COUNT) {
             buttons_[button] = down;
@@ -41,19 +42,21 @@ void Input::handleEvent(const SDL_Event& e) {
         break;
     }
 
-    case SDL_MOUSEWHEEL:
-        scrollX_ += e.wheel.x;
-        scrollY_ += e.wheel.y;
+    case SDL_EVENT_MOUSE_WHEEL:
+        scrollX_ += e.wheel.integer_x;
+        scrollY_ += e.wheel.integer_y;
         scroll_dirty_ = true;
         break;
 
-    case SDL_KEYDOWN:
-    case SDL_KEYUP: {
-        SDL_Scancode sc = e.key.keysym.scancode;
-        keys_down_[sc] = (e.type == SDL_KEYDOWN);
-        if (!scancode_dirty_flags_[sc]) {
-            scancode_dirty_flags_[sc] = true;
-            dirty_scancodes_.push_back(sc);
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP: {
+        SDL_Scancode sc = e.key.scancode;
+        if (sc >= 0 && sc < SDL_SCANCODE_COUNT) {
+            keys_down_[sc] = (e.type == SDL_EVENT_KEY_DOWN);
+            if (!scancode_dirty_flags_[sc]) {
+                scancode_dirty_flags_[sc] = true;
+                dirty_scancodes_.push_back(sc);
+            }
         }
         break;
     }
@@ -172,18 +175,18 @@ void Input::consumeMotion() {
 
 void Input::consumeEvent(const SDL_Event& e) {
     switch (e.type) {
-    case SDL_MOUSEBUTTONDOWN:
-    case SDL_MOUSEBUTTONUP: {
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP: {
         Button button = to_button(e.button.button);
         if (button != COUNT) {
             consumeMouseButton(button);
         }
         break;
     }
-    case SDL_MOUSEWHEEL:
+    case SDL_EVENT_MOUSE_WHEEL:
         consumeScroll();
         break;
-    case SDL_MOUSEMOTION:
+    case SDL_EVENT_MOUSE_MOTION:
         consumeMotion();
         break;
     default:

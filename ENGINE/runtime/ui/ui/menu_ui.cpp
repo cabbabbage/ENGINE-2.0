@@ -1,5 +1,6 @@
 #include "ui/menu_ui.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include "ui/tinyfiledialogs.h"
 #include "asset_loader.hpp"
@@ -68,10 +69,10 @@ void MenuUI::game_loop() {
 		while (SDL_PollEvent(&e)) {
                         had_events = true;
                         const bool menu_was_active = menu_active_;
-			if (e.type == SDL_QUIT) {
+			if (e.type == SDL_EVENT_QUIT) {
 					quit = true;
 			}
-                        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE && e.key.repeat == 0) {
+                        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && e.key.repeat == 0) {
                                 bool esc_consumed = false;
                                 if (game_assets_) {
                                         if (game_assets_->is_asset_info_editor_open()) {
@@ -83,9 +84,9 @@ void MenuUI::game_loop() {
                                         toggleMenu();
                                 }
                         }
-                        if (e.type == SDL_KEYDOWN && e.key.repeat == 0) {
-                                const bool ctrl_down = (e.key.keysym.mod & KMOD_CTRL) != 0;
-                                if (ctrl_down && e.key.keysym.sym == SDLK_d) {
+                        if (e.type == SDL_EVENT_KEY_DOWN && e.key.repeat == 0) {
+                                const bool ctrl_down = (e.key.mod & SDL_KMOD_CTRL) != 0;
+                                if (ctrl_down && e.key.key == SDLK_d) {
                                         doToggleDevMode();
                                 }
                         }
@@ -222,7 +223,7 @@ SDL_Point MenuUI::measureText(const LabelStyle& style, const std::string& s) con
 	if (s.empty()) return sz;
 	TTF_Font* f = style.open_font();
 	if (!f) return sz;
-	TTF_SizeText(f, s.c_str(), &sz.x, &sz.y);
+	ttf_util::GetStringSize(f, s, &sz.x, &sz.y);
 	TTF_CloseFont(f);
 	return sz;
 }
@@ -258,8 +259,8 @@ void MenuUI::blitText(SDL_Renderer* r,
 			SDL_DestroyTexture(tex_text);
 		}
 	}
-	if (surf_shadow) SDL_FreeSurface(surf_shadow);
-	if (surf_text)   SDL_FreeSurface(surf_text);
+	if (surf_shadow) SDL_DestroySurface(surf_shadow);
+	if (surf_text)   SDL_DestroySurface(surf_text);
 	TTF_CloseFont(f);
 }
 

@@ -33,16 +33,16 @@ public:
     int getScrollY() const { return scrollY_; }
 
     bool isKeyDown(SDL_Keycode key) const {
-        SDL_Scancode sc = SDL_GetScancodeFromKey(key);
-        return keys_down_[sc];
+        SDL_Scancode sc = SDL_GetScancodeFromKey(key, nullptr);
+        return sc != SDL_SCANCODE_UNKNOWN && keys_down_[sc];
     }
     bool wasKeyPressed(SDL_Keycode key) const {
-        SDL_Scancode sc = SDL_GetScancodeFromKey(key);
-        return keys_pressed_[sc];
+        SDL_Scancode sc = SDL_GetScancodeFromKey(key, nullptr);
+        return sc != SDL_SCANCODE_UNKNOWN && keys_pressed_[sc];
     }
     bool wasKeyReleased(SDL_Keycode key) const {
-        SDL_Scancode sc = SDL_GetScancodeFromKey(key);
-        return keys_released_[sc];
+        SDL_Scancode sc = SDL_GetScancodeFromKey(key, nullptr);
+        return sc != SDL_SCANCODE_UNKNOWN && keys_released_[sc];
     }
 
     bool isScancodeDown(SDL_Scancode sc) const { return keys_down_[sc]; }
@@ -69,15 +69,15 @@ private:
     int dx_ = 0, dy_ = 0;
     int scrollX_ = 0, scrollY_ = 0;
 
-    std::array<bool, SDL_NUM_SCANCODES> keys_down_{};
-    std::array<bool, SDL_NUM_SCANCODES> prev_keys_down_{};
-    std::array<bool, SDL_NUM_SCANCODES> keys_pressed_{};
-    std::array<bool, SDL_NUM_SCANCODES> keys_released_{};
+    std::array<bool, SDL_SCANCODE_COUNT> keys_down_{};
+    std::array<bool, SDL_SCANCODE_COUNT> prev_keys_down_{};
+    std::array<bool, SDL_SCANCODE_COUNT> keys_pressed_{};
+    std::array<bool, SDL_SCANCODE_COUNT> keys_released_{};
 
     std::vector<SDL_Scancode> dirty_scancodes_;
     std::vector<SDL_Scancode> pressed_scancode_buffer_;
     std::vector<SDL_Scancode> released_scancode_buffer_;
-    std::array<bool, SDL_NUM_SCANCODES> scancode_dirty_flags_{};
+    std::array<bool, SDL_SCANCODE_COUNT> scancode_dirty_flags_{};
 
     ScreenToWorldFunction screen_to_world_fn_{};
 

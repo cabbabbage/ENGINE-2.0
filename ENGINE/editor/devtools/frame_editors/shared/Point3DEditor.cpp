@@ -133,7 +133,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
 
     // Check for textbox clicks to set axis
     bool pointer_clicked_textbox = false;
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mouse_pos = {e.button.x, e.button.y};
         const int padding = DMSpacing::small_gap();
         const int inner_w = effective_container.w - padding * 2;
@@ -203,15 +203,15 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
         consumed = true;
     }
 
-    if (!consumed && e.type == SDL_KEYDOWN &&
-        (e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) {
+    if (!consumed && e.type == SDL_EVENT_KEY_DOWN &&
+        (e.key.key == SDLK_UP || e.key.key == SDLK_DOWN)) {
         if (selection_ && selection_->has_target() && selected_point_index_ >= 0 && on_position_changed_) {
             if (!is_axis_enabled(selection_->axis) ||
                 axis_locked_values_[axis_to_index(selection_->axis)].has_value()) {
                 return consumed;
             }
             const float step = (grid_step_world_ > 0.0f) ? grid_step_world_ : 1.0f;
-            const float direction = (e.key.keysym.sym == SDLK_UP) ? 1.0f : -1.0f;
+            const float direction = (e.key.key == SDLK_UP) ? 1.0f : -1.0f;
             SDL_FPoint new_world = selection_->world_pos;
             float new_world_z = selection_->world_z;
             switch (selection_->axis) {
@@ -807,7 +807,7 @@ void Point3DEditor::render_movement_arrows(SDL_Renderer* renderer,
 bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                                       const std::vector<SDL_FPoint>& point_screens,
                                       const std::vector<bool>& point_selectable) {
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point mouse_pos = {e.motion.x, e.motion.y};
         int new_hover = -1;
 
@@ -824,7 +824,7 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
         }
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mouse_pos = {e.button.x, e.button.y};
         Uint32 current_time = SDL_GetTicks();
 

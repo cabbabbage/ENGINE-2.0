@@ -9,7 +9,6 @@
 #include "utils/loading_status_notifier.hpp"
 #include "utils/log.hpp"
 #include <SDL3_image/SDL_image.h>
-#include <SDL3_mixer/SDL_mixer.h>
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -34,7 +33,7 @@ namespace {
 inline void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
 #if SDL_VERSION_ATLEAST(2, 0, 12)
     if (tex) {
-        SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_ScaleModeBest : SDL_ScaleModeNearest);
+        SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
     }
 #else
     (void)tex;
@@ -78,7 +77,7 @@ SDL_Texture* load_texture_from_path(SDL_Renderer* renderer,
         out_w = surf->w;
         out_h = surf->h;
     }
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     return tex;
 }
 
@@ -247,8 +246,8 @@ void Animation::clear_texture_cache() {
         }
     }
     frame_cache_.clear();
-    if (audio_clip.chunk) {
-        audio_clip.chunk.reset();
+    if (audio_clip.buffer) {
+        audio_clip.buffer.reset();
     }
 }
 
@@ -412,9 +411,9 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
         if (!tex) return;
 #if SDL_VERSION_ATLEAST(2, 0, 12)
         if (info.smooth_scaling) {
-            SDL_SetTextureScaleMode(tex, SDL_ScaleModeBest);
+            SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
         } else {
-            SDL_SetTextureScaleMode(tex, SDL_ScaleModeNearest);
+            SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
         }
 #endif
 };
@@ -641,16 +640,11 @@ void Animation::freeze() { frozen = true; }
 
 bool Animation::is_frozen() const { return frozen || frames.size() <= 1; }
 
-bool Animation::has_audio() const { return static_cast<bool>(audio_clip.chunk); }
-
-Mix_Chunk* Animation::audio_chunk() const { return audio_clip.chunk.get(); }
+bool Animation::has_audio() const { return static_cast<bool>(audio_clip.buffer); }
 
 const Animation::AudioClip* Animation::audio_data() const {
-    if (!audio_clip.chunk) {
+    if (!audio_clip.buffer) {
         return nullptr;
     }
     return &audio_clip;
 }
-
-
-

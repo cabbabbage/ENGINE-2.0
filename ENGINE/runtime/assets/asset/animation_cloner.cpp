@@ -12,7 +12,7 @@ namespace {
 void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
     if (!tex) return;
 #if SDL_VERSION_ATLEAST(2, 0, 12)
-    SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_ScaleModeBest : SDL_ScaleModeNearest);
+    SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
 #endif
 }
 

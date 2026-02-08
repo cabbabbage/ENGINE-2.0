@@ -607,7 +607,7 @@ void RoomConfigurator::configure_container(SlidingWindowContainer& container) {
         }
     });
     container.set_event_function([this](const SDL_Event& e) {
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
             this->close();
             return true;
         }
@@ -1040,7 +1040,7 @@ DockableCollapsible* RoomConfigurator::panel_at_point(SDL_Point p) const {
 }
 
 bool RoomConfigurator::handle_panel_focus_event(const SDL_Event& e) {
-    if (e.type != SDL_MOUSEBUTTONDOWN || e.button.button != SDL_BUTTON_LEFT) {
+    if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT) {
         return false;
     }
     SDL_Point pointer{e.button.x, e.button.y};

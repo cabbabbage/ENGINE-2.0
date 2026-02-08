@@ -1,5 +1,6 @@
 #include "map_assets_modals.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -75,7 +76,7 @@ public:
         if (color_.a != 0) color = color_;
         TTF_Font* font = TTF_OpenFont(style.font_path.c_str(), style.font_size);
         if (!font) return;
-        SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text_.c_str(), color);
+        SDL_Surface* surface = ttf_util::RenderTextBlended(font, text_.c_str(), color);
         if (!surface) {
             TTF_CloseFont(font);
             return;
@@ -86,7 +87,7 @@ public:
             sdl_render::Texture(renderer, texture, nullptr, &dst);
             SDL_DestroyTexture(texture);
         }
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
         TTF_CloseFont(font);
     }
 

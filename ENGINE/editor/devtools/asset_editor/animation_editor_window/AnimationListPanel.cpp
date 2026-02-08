@@ -1,5 +1,6 @@
 #include "AnimationListPanel.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -63,10 +64,10 @@ int indent_for_level(int level) {
 
 SDL_Point event_point(const SDL_Event& e) {
     SDL_Point p{0, 0};
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         p.x = e.motion.x;
         p.y = e.motion.y;
-    } else if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         p.x = e.button.x;
         p.y = e.button.y;
     }
@@ -75,17 +76,16 @@ SDL_Point event_point(const SDL_Event& e) {
 
 bool rects_intersect(const SDL_Rect& a, const SDL_Rect& b) {
     SDL_Rect result{};
-    return SDL_IntersectRect(&a, &b, &result) == SDL_TRUE;
+    return SDL_GetRectIntersection(&a, &b, &result);
 }
 
 int resolve_wheel_delta(const SDL_MouseWheelEvent& wheel) {
-    int delta = wheel.y;
+    int delta = wheel.integer_y;
     if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
         delta = -delta;
     }
-#if SDL_VERSION_ATLEAST(2, 0, 18)
     if (delta == 0) {
-        float precise = wheel.preciseY;
+        float precise = wheel.y;
         if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
             precise = -precise;
         }
@@ -94,7 +94,6 @@ int resolve_wheel_delta(const SDL_MouseWheelEvent& wheel) {
             delta = precise > 0.0f ? 1 : -1;
         }
     }
-#endif
     return delta;
 }
 
@@ -377,10 +376,10 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
 bool AnimationListPanel::handle_event(const SDL_Event& e) {
     ensure_layout();
 
-    if (e.type == SDL_MOUSEWHEEL) {
+    if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         int mx = 0;
         int my = 0;
-        SDL_GetMouseState(&mx, &my);
+        sdl_mouse_util::GetMouseState(&mx, &my);
         SDL_Point mouse{mx, my};
         const bool inside_bounds = SDL_PointInRect(&mouse, &bounds_) != 0;
         if (!inside_bounds && !DMWidgetsSliderScrollCaptured()) {
@@ -398,7 +397,7 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
         return changed;
     }
 
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p = event_point(e);
         if (!SDL_PointInRect(&p, &bounds_)) {
             hovered_row_.reset();
@@ -421,7 +420,7 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
         return hovered_row_.has_value() || hovered_delete_row_.has_value();
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         SDL_Point p = event_point(e);
         if (!SDL_PointInRect(&p, &bounds_)) {
             return false;
@@ -471,7 +470,7 @@ bool AnimationListPanel::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_MOUSEBUTTONUP) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         SDL_Point p = event_point(e);
         if (!SDL_PointInRect(&p, &bounds_)) {
             return false;

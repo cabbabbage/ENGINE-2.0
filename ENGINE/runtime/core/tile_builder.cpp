@@ -304,7 +304,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
                 for (const ChunkTileAsset* ctx : tilers) {
                     if (!ctx) continue;
                     SDL_Rect sprite_inter{};
-                    if (SDL_IntersectRect(&ctx->sprite_world, &tile_world, &sprite_inter) && sprite_inter.w > 0 &&
+                    if (SDL_GetRectIntersection(&ctx->sprite_world, &tile_world, &sprite_inter) && sprite_inter.w > 0 &&
                         sprite_inter.h > 0) {
                         any = true;
                         break;
@@ -315,9 +315,9 @@ void build_grid_tiles(SDL_Renderer* renderer,
                 SDL_Texture* tile_tex = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_TARGET, tile_world.w, tile_world.h);
                 if (!tile_tex) continue;
                 SDL_SetTextureBlendMode(tile_tex, SDL_BLENDMODE_BLEND);
-                SDL_SetTextureScaleMode(tile_tex, SDL_ScaleModeLinear);
+                SDL_SetTextureScaleMode(tile_tex, SDL_SCALEMODE_LINEAR);
                 SDL_Texture* prev = SDL_GetRenderTarget(renderer);
-                if (SDL_SetRenderTarget(renderer, tile_tex) != 0) {
+                if (!SDL_SetRenderTarget(renderer, tile_tex)) {
                     SDL_DestroyTexture(tile_tex);
                     SDL_SetRenderTarget(renderer, prev);
                     continue;
@@ -330,7 +330,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
                 for (const ChunkTileAsset* ctx : tilers) {
                     if (!ctx) continue;
                     SDL_Rect sprite_inter{};
-                    if (!SDL_IntersectRect(&ctx->sprite_world, &tile_world, &sprite_inter) || sprite_inter.w <= 0 ||
+                    if (!SDL_GetRectIntersection(&ctx->sprite_world, &tile_world, &sprite_inter) || sprite_inter.w <= 0 ||
                         sprite_inter.h <= 0) {
                         continue;
                     }

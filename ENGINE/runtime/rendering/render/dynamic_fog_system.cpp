@@ -73,7 +73,7 @@ bool DynamicFogSystem::initialize(SDL_Renderer* renderer) {
         const int surf_w = surface->w;
         const int surf_h = surface->h;
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
 
         if (!texture) {
             vibble::log::warn("[DynamicFogSystem] Failed to create SDL_Texture for: " + filename.generic_string());

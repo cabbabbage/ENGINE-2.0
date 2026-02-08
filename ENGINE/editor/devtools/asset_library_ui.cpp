@@ -33,6 +33,7 @@
 #include "tag_library.hpp"
 #include "tag_utils.hpp"
 #include "devtools/asset_paths.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <nlohmann/json.hpp>
 #include <unordered_set>
@@ -378,18 +379,18 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
 
     bool handle_event(const SDL_Event& e) override {
         if (multi_select_enabled) {
-            if (e.type == SDL_MOUSEMOTION) {
+            if (e.type == SDL_EVENT_MOUSE_MOTION) {
                 SDL_Point p{ e.motion.x, e.motion.y };
                 hovered = SDL_PointInRect(&p, &rect_);
                 delete_hovered = SDL_PointInRect(&p, &delete_rect_);
-            } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                 SDL_Point p{ e.button.x, e.button.y };
                 if (SDL_PointInRect(&p, &rect_)) {
                     multi_select_pressed = true;
                     return true;
                 }
                 return false;
-            } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 SDL_Point p{ e.button.x, e.button.y };
                 bool inside = SDL_PointInRect(&p, &rect_);
                 bool was_pressed = multi_select_pressed;
@@ -405,11 +406,11 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
             return false;
         }
 
-        if (e.type == SDL_MOUSEMOTION) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
             SDL_Point p{ e.motion.x, e.motion.y };
             hovered = SDL_PointInRect(&p, &rect_);
             delete_hovered = SDL_PointInRect(&p, &delete_rect_);
-        } else if (e.type == SDL_MOUSEBUTTONDOWN) {
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
             SDL_Point p{ e.button.x, e.button.y };
             if (!SDL_PointInRect(&p, &rect_)) {
                 return false;
@@ -429,7 +430,7 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
                 right_pressed = true;
                 return true;
             }
-        } else if (e.type == SDL_MOUSEBUTTONUP) {
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
             SDL_Point p{ e.button.x, e.button.y };
             if (e.button.button == SDL_BUTTON_LEFT) {
                 bool inside_delete = SDL_PointInRect(&p, &delete_rect_);
@@ -521,12 +522,12 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
             int tw = 0;
             int th = 0;
             const std::string ellipsis = "...";
-            if (TTF_SizeUTF8(label_font, render_label.c_str(), &tw, &th) == 0 && tw > label_rect.w) {
+            if (ttf_util::GetStringSize(label_font, render_label, &tw, &th) && tw > label_rect.w) {
                 std::string base = label_text;
                 while (!base.empty()) {
                     base.pop_back();
                     std::string candidate = base + ellipsis;
-                    if (TTF_SizeUTF8(label_font, candidate.c_str(), &tw, &th) == 0 && tw <= label_rect.w) {
+                    if (ttf_util::GetStringSize(label_font, candidate, &tw, &th) && tw <= label_rect.w) {
                         render_label = std::move(candidate);
                         break;
                     }
@@ -578,10 +579,10 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
         dm_draw::DrawRoundedOutline( r, rect_, tile_radius, 1, kTileBd);
         if (label_font && label_rect.w > 0) {
             SDL_Color text_color = DMStyles::Label().color;
-            SDL_Surface* surf = TTF_RenderUTF8_Blended(label_font, render_label.c_str(), text_color);
+            SDL_Surface* surf = ttf_util::RenderTextBlended(label_font, render_label.c_str(), text_color);
             if (surf) {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
                 if (tex) {
                     int dw = 0;
                     int dh = 0;
@@ -635,11 +636,11 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
     int height_for_width(int) const override { return 180; }
 
     bool handle_event(const SDL_Event& e) override {
-        if (e.type == SDL_MOUSEMOTION) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
             SDL_Point p{ e.motion.x, e.motion.y };
             hovered = SDL_PointInRect(&p, &rect_);
             delete_hovered = SDL_PointInRect(&p, &delete_rect_);
-        } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             SDL_Point p{ e.button.x, e.button.y };
             if (SDL_PointInRect(&p, &delete_rect_)) {
                 delete_pressed = true;
@@ -649,7 +650,7 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                 pressed = true;
                 return true;
             }
-        } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             SDL_Point p{ e.button.x, e.button.y };
             bool inside_delete = SDL_PointInRect(&p, &delete_rect_);
             bool was_delete = delete_pressed;
@@ -726,13 +727,13 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
             std::string render_label = caption;
             int tw = 0;
             int th = 0;
-            if (TTF_SizeUTF8(label_font, render_label.c_str(), &tw, &th) == 0 && tw > label_rect.w) {
+            if (ttf_util::GetStringSize(label_font, render_label, &tw, &th) && tw > label_rect.w) {
                 const std::string ellipsis = "...";
                 std::string base = caption;
                 while (!base.empty()) {
                     base.pop_back();
                     std::string candidate = base + ellipsis;
-                    if (TTF_SizeUTF8(label_font, candidate.c_str(), &tw, &th) == 0 && tw <= label_rect.w) {
+                    if (ttf_util::GetStringSize(label_font, candidate, &tw, &th) && tw <= label_rect.w) {
                         render_label = std::move(candidate);
                         break;
                     }
@@ -742,10 +743,10 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                 }
             }
             SDL_Color text_color = DMStyles::Label().color;
-            SDL_Surface* surf = TTF_RenderUTF8_Blended(label_font, render_label.c_str(), text_color);
+            SDL_Surface* surf = ttf_util::RenderTextBlended(label_font, render_label.c_str(), text_color);
             if (surf) {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
                 if (tex) {
                     int dw = 0;
                     int dh = 0;
@@ -770,7 +771,7 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                 if (!candidate) continue;
                 int tw = 0;
                 int th = 0;
-                if (TTF_SizeUTF8(candidate, icon_text.c_str(), &tw, &th) != 0) continue;
+                if (!ttf_util::GetStringSize(candidate, icon_text, &tw, &th)) continue;
                 icon_font = candidate;
                 icon_w = tw;
                 icon_h = th;
@@ -780,10 +781,10 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
             }
 
             if (icon_font && icon_w > 0 && icon_h > 0) {
-                SDL_Surface* surf = TTF_RenderUTF8_Blended(icon_font, icon_text.c_str(), icon_color);
+                SDL_Surface* surf = ttf_util::RenderTextBlended(icon_font, icon_text.c_str(), icon_color);
                 if (surf) {
                     SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-                    SDL_FreeSurface(surf);
+                    SDL_DestroySurface(surf);
                     if (tex) {
                         int dw = std::min(icon_w, preview_rect.w);
                         int dh = std::min(icon_h, preview_rect.h);
@@ -811,10 +812,10 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
             if (!resolvable) {
                 footer_color = SDL_Color{160, 160, 160, footer_color.a};
             }
-            SDL_Surface* surf = TTF_RenderUTF8_Blended(footer_font, footer_text.c_str(), footer_color);
+            SDL_Surface* surf = ttf_util::RenderTextBlended(footer_font, footer_text.c_str(), footer_color);
             if (surf) {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
                 if (tex) {
                     int dw = 0;
                     int dh = 0;
@@ -859,16 +860,16 @@ struct AssetLibraryUI::RoomAreaTileWidget : public Widget {
     int height_for_width(int) const override { return 112; }
 
     bool handle_event(const SDL_Event& e) override {
-        if (e.type == SDL_MOUSEMOTION) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
             SDL_Point p{ e.motion.x, e.motion.y };
             hovered = SDL_PointInRect(&p, &rect_);
-        } else if (e.type == SDL_MOUSEBUTTONDOWN) {
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
             SDL_Point p{ e.button.x, e.button.y };
             if (e.button.button == SDL_BUTTON_LEFT && SDL_PointInRect(&p, &rect_)) {
                 pressed = true;
                 return true;
             }
-        } else if (e.type == SDL_MOUSEBUTTONUP) {
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
             SDL_Point p{ e.button.x, e.button.y };
             if (e.button.button == SDL_BUTTON_LEFT) {
                 bool was = pressed;
@@ -896,10 +897,10 @@ struct AssetLibraryUI::RoomAreaTileWidget : public Widget {
         TTF_Font* font = devmode::utils::load_font(15);
         SDL_Rect label_rect{ rect_.x + pad, rect_.y + pad, std::max(0, rect_.w - 2*pad), 24 };
         if (font && label_rect.w > 0) {
-            SDL_Surface* surf = TTF_RenderUTF8_Blended(font, label.c_str(), DMStyles::Label().color);
+            SDL_Surface* surf = ttf_util::RenderTextBlended(font, label.c_str(), DMStyles::Label().color);
             if (surf) {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
                 if (tex) {
                     int dw=0, dh=0;
                     texture_size(tex, dw, dh);
@@ -1987,14 +1988,14 @@ bool AssetLibraryUI::handle_delete_modal_event(const SDL_Event& e) {
     if (!showing_delete_popup_) {
         return false;
     }
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p{ e.motion.x, e.motion.y };
         delete_yes_hovered_ = SDL_PointInRect(&p, &delete_yes_rect_);
         delete_no_hovered_ = SDL_PointInRect(&p, &delete_no_rect_);
         delete_skip_hovered_ = SDL_PointInRect(&p, &delete_skip_rect_);
         return SDL_PointInRect(&p, &delete_modal_rect_);
     }
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         if (SDL_PointInRect(&p, &delete_yes_rect_)) {
             delete_yes_pressed_ = true;
@@ -2013,7 +2014,7 @@ bool AssetLibraryUI::handle_delete_modal_event(const SDL_Event& e) {
         }
         return false;
     }
-    if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         const bool inside_yes = SDL_PointInRect(&p, &delete_yes_rect_);
         const bool inside_no = SDL_PointInRect(&p, &delete_no_rect_);
@@ -2045,18 +2046,18 @@ bool AssetLibraryUI::handle_delete_modal_event(const SDL_Event& e) {
         delete_skip_pressed_ = false;
         return consumed;
     }
-    if (e.type == SDL_KEYDOWN) {
-        if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_y || e.key.keysym.sym == SDLK_SPACE) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
+        if (e.key.key == SDLK_RETURN || e.key.key == SDLK_y || e.key.key == SDLK_SPACE) {
             confirm_delete_request();
             return true;
         }
-        if (e.key.keysym.sym == SDLK_ESCAPE || e.key.keysym.sym == SDLK_n) {
+        if (e.key.key == SDLK_ESCAPE || e.key.key == SDLK_n) {
             cancel_delete_request();
             return true;
         }
         return true;
     }
-    if (e.type == SDL_TEXTINPUT) {
+    if (e.type == SDL_EVENT_TEXT_INPUT) {
         return true;
     }
     return false;
@@ -2205,10 +2206,10 @@ void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
         TTF_Font* font = devmode::utils::load_font(18);
         if (font && text_rect.w > 0 && text_rect.h > 0) {
             SDL_Color text_color = DMStyles::Label().color;
-            SDL_Surface* surf = TTF_RenderUTF8_Blended_Wrapped(font, message.c_str(), text_color, text_rect.w);
+            SDL_Surface* surf = ttf_util::RenderTextBlendedWrapped(font, message.c_str(), text_color, text_rect.w);
             if (surf) {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
                 if (tex) {
                     int tw = 0;
                     int th = 0;
@@ -2237,10 +2238,10 @@ void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
                 btn_font = devmode::utils::load_font(16);
             }
             if (btn_font) {
-                SDL_Surface* text = TTF_RenderUTF8_Blended(btn_font, caption.c_str(), style.text);
+                SDL_Surface* text = ttf_util::RenderTextBlended(btn_font, caption.c_str(), style.text);
                 if (text) {
                     SDL_Texture* tex = SDL_CreateTextureFromSurface(r, text);
-                    SDL_FreeSurface(text);
+                    SDL_DestroySurface(text);
                     if (tex) {
                         int tw = 0;
                         int th = 0;
@@ -2272,12 +2273,12 @@ bool AssetLibraryUI::handle_event(const SDL_Event& e) {
             return true;
         }
         switch (e.type) {
-            case SDL_MOUSEBUTTONDOWN:
-            case SDL_MOUSEBUTTONUP:
-            case SDL_MOUSEMOTION:
-            case SDL_MOUSEWHEEL:
-            case SDL_KEYDOWN:
-        case SDL_TEXTINPUT:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EVENT_MOUSE_MOTION:
+            case SDL_EVENT_MOUSE_WHEEL:
+            case SDL_EVENT_KEY_DOWN:
+        case SDL_EVENT_TEXT_INPUT:
             return true;
         default:
             break;
@@ -2290,7 +2291,7 @@ bool AssetLibraryUI::handle_event(const SDL_Event& e) {
         handled = true;
     }
 
-    if (!handled && search_widget_ && search_box_ && e.type == SDL_TEXTINPUT) {
+    if (!handled && search_widget_ && search_box_ && e.type == SDL_EVENT_TEXT_INPUT) {
         if (!search_box_->is_editing()) {
             search_box_->start_editing();
         }
@@ -2314,14 +2315,14 @@ bool AssetLibraryUI::is_input_blocking_at(int mx, int my) const {
     SDL_Point p{ mx, my };
     if (showing_delete_popup_) {
         if (delete_modal_rect_.w > 0 && delete_modal_rect_.h > 0) {
-            if (SDL_PointInRect(&p, &delete_modal_rect_) == SDL_TRUE) {
+            if (SDL_PointInRect(&p, &delete_modal_rect_)) {
                 return true;
             }
         }
 
-        return SDL_PointInRect(&p, &floating_->rect()) == SDL_TRUE;
+        return SDL_PointInRect(&p, &floating_->rect());
     }
-    return SDL_PointInRect(&p, &floating_->rect()) == SDL_TRUE;
+    return SDL_PointInRect(&p, &floating_->rect());
 }
 
 bool AssetLibraryUI::is_dragging_asset() const {

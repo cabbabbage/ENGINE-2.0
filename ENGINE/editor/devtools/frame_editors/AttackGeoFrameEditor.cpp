@@ -1,4 +1,5 @@
 #include "AttackGeoFrameEditor.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -50,7 +51,7 @@ int parse_int(const std::string& text, int fallback) {
 int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
     float precise = wheel.preciseY;
     int delta = wheel.y;
-    if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+    if (wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
         delta = -delta;
         precise = -precise;
     }
@@ -304,10 +305,10 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
     }
 
-    if (e.type == SDL_KEYDOWN) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
         // Arrow keys navigate between points within the frame
         // Use frame navigator buttons/textbox for frame navigation
-        if (e.key.keysym.sym == SDLK_LEFT) {
+        if (e.key.key == SDLK_LEFT) {
             // Navigate to previous point
             if (point_3d_editor_) {
                 int current_point = point_3d_editor_->get_selected_point_index();
@@ -339,7 +340,7 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
                 }
             }
             consumed = true;
-        } else if (e.key.keysym.sym == SDLK_RIGHT) {
+        } else if (e.key.key == SDLK_RIGHT) {
             // Navigate to next point
             if (point_3d_editor_) {
                 int current_point = point_3d_editor_->get_selected_point_index();
@@ -379,12 +380,12 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     SDL_Point mouse_pos = {0, 0};
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         mouse_pos = {e.button.x, e.button.y};
-    } else if (e.type == SDL_MOUSEMOTION) {
+    } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
         mouse_pos = {e.motion.x, e.motion.y};
-    } else if (e.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
     if (!ui_contains_point(mouse_pos)) {

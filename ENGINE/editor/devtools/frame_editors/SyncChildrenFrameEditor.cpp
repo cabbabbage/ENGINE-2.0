@@ -1,4 +1,5 @@
 #include "SyncChildrenFrameEditor.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -433,12 +434,12 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     SDL_Point mouse_pos = {0, 0};
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         mouse_pos = {e.button.x, e.button.y};
-    } else if (e.type == SDL_MOUSEMOTION) {
+    } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
         mouse_pos = {e.motion.x, e.motion.y};
-    } else if (e.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
     const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
@@ -470,9 +471,9 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_KEYDOWN) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
         // No LEFT/RIGHT arrow keys - use frame navigator buttons only
-        if (e.key.keysym.sym == SDLK_TAB) {
+        if (e.key.key == SDLK_TAB) {
             selected_child_index_ = (selected_child_index_ + 1) % std::max(1, static_cast<int>(child_assets_.size()));
             if (selection_state_) {
                 selection_state_->child_index = selected_child_index_;

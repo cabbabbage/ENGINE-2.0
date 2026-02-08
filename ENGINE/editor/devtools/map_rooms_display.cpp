@@ -272,7 +272,7 @@ void MapRoomsDisplay::render(SDL_Renderer* renderer) const {
 bool MapRoomsDisplay::handle_event(const SDL_Event& e) {
     if (create_room_button_) {
         const bool button_used = create_room_button_->handle_event(e);
-        if (button_used && e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (button_used && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             create_room_entry();
         }
         if (button_used) {
@@ -285,9 +285,9 @@ bool MapRoomsDisplay::handle_event(const SDL_Event& e) {
     }
 
     switch (e.type) {
-        case SDL_MOUSEMOTION:
-        case SDL_MOUSEBUTTONDOWN:
-        case SDL_MOUSEBUTTONUP: {
+        case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP: {
             SDL_Point p = event_point_from_event(e);
             bool consumed = false;
             bool hovered = false;
@@ -299,16 +299,16 @@ bool MapRoomsDisplay::handle_event(const SDL_Event& e) {
                     if (SDL_PointInRect(&p, &row.delete_rect) == SDL_TRUE) {
                         hovered_delete_room_ = row.key;
                         delete_hovered = true;
-                        if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                             delete_room_entry(row.key);
                             return true;
                         }
-                        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+                        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                             return true;
                         }
                         break;
                     }
-                    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                         if (on_select_room_) {
                             on_select_room_(row.key);
                         }
@@ -320,7 +320,7 @@ bool MapRoomsDisplay::handle_event(const SDL_Event& e) {
             if (!delete_hovered) {
                 hovered_delete_room_.clear();
             }
-            if (!hovered && e.type == SDL_MOUSEMOTION) {
+            if (!hovered && e.type == SDL_EVENT_MOUSE_MOTION) {
                 clear_hover();
             }
             return consumed;

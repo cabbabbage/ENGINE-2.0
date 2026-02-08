@@ -17,11 +17,11 @@ bool Checkbox::value() const { return value_; }
 
 bool Checkbox::handle_event(const SDL_Event& e) {
 	bool toggled = false;
-	if (e.type == SDL_MOUSEMOTION) {
+	if (e.type == SDL_EVENT_MOUSE_MOTION) {
 		SDL_Point p{ e.motion.x, e.motion.y };
 		hovered_ = SDL_PointInRect(&p, &rect_);
 	}
-	else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+	else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
 		SDL_Point p{ e.button.x, e.button.y };
 		if (SDL_PointInRect(&p, &rect_)) {
 			value_ = !value_;
@@ -45,7 +45,7 @@ void Checkbox::render(SDL_Renderer* r) const {
 								sdl_render::Texture(r, tex, nullptr, &dst);
 								SDL_DestroyTexture(tex);
 					}
-					SDL_FreeSurface(surf);
+					SDL_DestroySurface(surf);
 			}
 			TTF_CloseFont(f);
 		}

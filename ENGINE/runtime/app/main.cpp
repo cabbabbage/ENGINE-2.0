@@ -22,7 +22,6 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
-#include <SDL3_mixer/SDL_mixer.h>
 #include <SDL3_ttf/SDL_ttf.h>
 #include <chrono>
 #include <ctime>
@@ -327,7 +326,7 @@ void MainApp::game_loop() {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
 
                 while (SDL_PollEvent(&e)) {
-                        if (e.type == SDL_QUIT) {
+                        if (e.type == SDL_EVENT_QUIT) {
                                 quit = true;
                         }
                         if (input_) {
@@ -737,7 +736,7 @@ void run(SDL_Window* window,
 
         while (choosing) {
             while (SDL_PollEvent(&e)) {
-                if (e.type == SDL_QUIT) {
+                if (e.type == SDL_EVENT_QUIT) {
                     quit_requested = true;
                     choosing = false;
                     break;
@@ -845,19 +844,6 @@ int main(int argc, char* argv[]) {
                 return 1;
         }
 
-        if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best")) {
-                if (!SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2")) {
-                        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
-                }
-        }
-        vibble::log::info("[Main] Requested high quality texture filtering.");
-
-        if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
-                vibble::log::error(std::string("Mix_OpenAudio failed: ") + Mix_GetError());
-                SDL_Quit();
-                return 1;
-        }
-
         if (!TTF_Init()) {
                 vibble::log::error(std::string("TTF_Init failed: ") + TTF_GetError());
                 SDL_Quit();
@@ -916,6 +902,11 @@ int main(int argc, char* argv[]) {
                 TTF_Quit();
                 SDL_Quit();
                 return 1;
+        }
+        if (!SDL_SetDefaultTextureScaleMode(renderer, SDL_SCALEMODE_LINEAR)) {
+                vibble::log::warn(std::string("[Main] Failed to set linear texture scale mode: ") + SDL_GetError());
+        } else {
+                vibble::log::info("[Main] Using linear texture scale mode for textures.");
         }
 
         const char* renderer_name = SDL_GetRendererName(renderer);

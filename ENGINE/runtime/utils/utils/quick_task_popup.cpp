@@ -99,7 +99,7 @@ void QuickTaskPopup::render(SDL_Renderer* renderer) {
 bool QuickTaskPopup::handle_event(const SDL_Event& event) {
     if (!is_open_) return false;
 
-    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
         handle_escape();
         return true;
     }
@@ -109,7 +109,7 @@ bool QuickTaskPopup::handle_event(const SDL_Event& event) {
     if (assignee_dd_ && assignee_dd_->handle_event(event)) consumed = true;
     if (assigner_dd_ && assigner_dd_->handle_event(event)) consumed = true;
     if (description_box_ && description_box_->handle_event(event)) consumed = true;
-    if (add_button_ && add_button_->handle_event(event) && event.type == SDL_MOUSEBUTTONUP) {
+    if (add_button_ && add_button_->handle_event(event) && event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         consumed = true;
         add_new_task();
     }
@@ -117,7 +117,7 @@ bool QuickTaskPopup::handle_event(const SDL_Event& event) {
     for (size_t i = 0; i < dev_row_widgets_.size(); ++i) {
         auto& rw = dev_row_widgets_[i];
         if (i >= dev_tasks_.size()) break;
-        if (rw.delete_button && rw.delete_button->handle_event(event) && event.type == SDL_MOUSEBUTTONUP) {
+        if (rw.delete_button && rw.delete_button->handle_event(event) && event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
             delete_dev_task(i);
             consumed = true;
             break;
@@ -126,14 +126,14 @@ bool QuickTaskPopup::handle_event(const SDL_Event& event) {
     for (size_t i = 0; i < cline_row_widgets_.size(); ++i) {
         auto& rw = cline_row_widgets_[i];
         if (i >= cline_tasks_.size()) break;
-        if (rw.delete_button && rw.delete_button->handle_event(event) && event.type == SDL_MOUSEBUTTONUP) {
+        if (rw.delete_button && rw.delete_button->handle_event(event) && event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
             delete_cline_task(i);
             consumed = true;
             break;
         }
     }
 
-    if (event.type == SDL_MOUSEMOTION || event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEWHEEL) {
+    if (event.type == SDL_EVENT_MOUSE_MOTION || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP || event.type == SDL_EVENT_MOUSE_WHEEL) {
         return true;
     }
     return consumed;

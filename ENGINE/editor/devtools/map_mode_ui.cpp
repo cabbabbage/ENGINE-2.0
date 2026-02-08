@@ -1,5 +1,6 @@
 #include "map_mode_ui.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include "map_layers_preview_panel.hpp"
 #include "DockableCollapsible.hpp"
@@ -23,7 +24,7 @@
 #include "utils/input.hpp"
 
 #include <SDL3/SDL.h>
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 #include <algorithm>
 #include <cctype>
 #include <cstddef>
@@ -378,19 +379,19 @@ void MapModeUI::bring_panel_to_front(DockableCollapsible* panel) {
 }
 
 bool MapModeUI::is_pointer_event(const SDL_Event& e) const {
-    return e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION;
+    return e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION;
 }
 
 SDL_Point MapModeUI::event_point(const SDL_Event& e) const {
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         return SDL_Point{e.motion.x, e.motion.y};
     }
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         return SDL_Point{e.button.x, e.button.y};
     }
     int mx = 0;
     int my = 0;
-    SDL_GetMouseState(&mx, &my);
+    sdl_mouse_util::GetMouseState(&mx, &my);
     return SDL_Point{mx, my};
 }
 
@@ -423,7 +424,7 @@ bool MapModeUI::handle_floating_panel_event(const SDL_Event& e, bool& used) {
     if (floating_panels_.empty()) return false;
 
     const bool pointer_event = is_pointer_event(e);
-    const bool wheel_event = (e.type == SDL_MOUSEWHEEL);
+    const bool wheel_event = (e.type == SDL_EVENT_MOUSE_WHEEL);
     SDL_Point p = event_point(e);
     bool consumed = false;
 
@@ -436,7 +437,7 @@ bool MapModeUI::handle_floating_panel_event(const SDL_Event& e, bool& used) {
         auto handle_and_check = [&](auto* concrete) -> bool {
             if (!concrete || !concrete->is_visible()) return false;
             if (concrete->handle_event(e)) {
-                if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                     bring_panel_to_front(panel);
                 }
                 used = true;
@@ -451,7 +452,7 @@ bool MapModeUI::handle_floating_panel_event(const SDL_Event& e, bool& used) {
         } else {
             if (!panel->is_visible()) continue;
             if (panel->handle_event(e)) {
-                if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                     bring_panel_to_front(panel);
                 }
                 used = true;
@@ -470,7 +471,7 @@ bool MapModeUI::handle_floating_panel_event(const SDL_Event& e, bool& used) {
         const bool inside = inside_preview || inside_panel;
 
         if ((pointer_event || wheel_event) && inside) {
-            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                 bring_panel_to_front(panel);
             }
             used = true;
@@ -891,26 +892,26 @@ void MapModeUI::update(const Input& input) {
 bool MapModeUI::handle_event(const SDL_Event& e) {
     ensure_panels();
     if (map_color_sampling_active_) {
-        if (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
             map_color_sampling_cursor_ = event_point(e);
         }
-        if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             SDL_Color chosen = map_color_sampling_preview_valid_ ? map_color_sampling_preview_ : SDL_Color{0, 0, 0, 255};
             complete_map_color_sampling(chosen);
             return true;
         }
-        if ((e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_RIGHT) ||
-            (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)) {
+        if ((e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_RIGHT) ||
+            (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE)) {
             cancel_map_color_sampling();
             return true;
         }
         switch (e.type) {
-            case SDL_MOUSEBUTTONDOWN:
-            case SDL_MOUSEBUTTONUP:
-            case SDL_MOUSEMOTION:
-            case SDL_MOUSEWHEEL:
-            case SDL_KEYDOWN:
-            case SDL_KEYUP:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EVENT_MOUSE_MOTION:
+            case SDL_EVENT_MOUSE_WHEEL:
+            case SDL_EVENT_KEY_DOWN:
+            case SDL_EVENT_KEY_UP:
                 return true;
             default:
                 break;
@@ -981,7 +982,7 @@ void MapModeUI::render(SDL_Renderer* renderer) const {
         if (SDL_Surface* captured = SDL_RenderReadPixels(renderer, &sample_rect)) {
             SDL_Surface* working = captured;
             if (captured->format != SDL_PIXELFORMAT_ARGB8888) {
-                working = SDL_ConvertSurfaceFormat(captured, SDL_PIXELFORMAT_ARGB8888);
+                working = SDL_ConvertSurface(captured, SDL_PIXELFORMAT_ARGB8888);
                 SDL_DestroySurface(captured);
                 captured = nullptr;
             }
@@ -994,9 +995,8 @@ void MapModeUI::render(SDL_Renderer* renderer) const {
                 return;
             }
             Uint8 r = 0, g = 0, b = 0, a = 0;
-            if (SDL_PixelFormat* format = SDL_AllocFormat(SDL_PIXELFORMAT_ARGB8888)) {
+            if (const SDL_PixelFormatDetails* format = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_ARGB8888)) {
                 SDL_GetRGBA(pixel, format, &r, &g, &b, &a);
-                SDL_FreeFormat(format);
                 map_color_sampling_preview_ = SDL_Color{r, g, b, a};
                 map_color_sampling_preview_valid_ = true;
             } else {
@@ -1563,7 +1563,7 @@ void MapModeUI::begin_map_color_sampling(const utils::color::RangedColor&,
     map_color_sampling_cancel_ = std::move(on_cancel);
     int mx = 0;
     int my = 0;
-    SDL_GetMouseState(&mx, &my);
+    sdl_mouse_util::GetMouseState(&mx, &my);
     map_color_sampling_cursor_.x = mx;
     map_color_sampling_cursor_.y = my;
     if (!map_color_sampling_cursor_handle_) {

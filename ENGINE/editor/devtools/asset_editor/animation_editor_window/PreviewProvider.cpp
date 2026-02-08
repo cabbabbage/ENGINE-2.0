@@ -18,31 +18,31 @@
 
 namespace {
 
-using SurfacePtr = std::unique_ptr<SDL_Surface, decltype(&SDL_FreeSurface)>;
+using SurfacePtr = std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>;
 using animation_editor::strings::has_numeric_stem;
 
-SurfacePtr make_surface_ptr(SDL_Surface* surface) { return SurfacePtr(surface, SDL_FreeSurface); }
+SurfacePtr make_surface_ptr(SDL_Surface* surface) { return SurfacePtr(surface, SDL_DestroySurface); }
 
 SurfacePtr load_surface_rgba(const std::filesystem::path& path) {
     SDL_Surface* loaded = IMG_Load(path.string().c_str());
     if (!loaded) {
-        return SurfacePtr(nullptr, SDL_FreeSurface);
+        return SurfacePtr(nullptr, SDL_DestroySurface);
     }
-    SDL_Surface* converted = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
-    SDL_FreeSurface(loaded);
+    SDL_Surface* converted = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32);
+    SDL_DestroySurface(loaded);
     if (!converted) {
-        return SurfacePtr(nullptr, SDL_FreeSurface);
+        return SurfacePtr(nullptr, SDL_DestroySurface);
     }
     return make_surface_ptr(converted);
 }
 
 SurfacePtr flip_horizontal(SDL_Surface* surface) {
     if (!surface) {
-        return SurfacePtr(nullptr, SDL_FreeSurface);
+        return SurfacePtr(nullptr, SDL_DestroySurface);
     }
-    SurfacePtr flipped = make_surface_ptr( SDL_CreateRGBSurfaceWithFormat(0, surface->w, surface->h, 32, SDL_PIXELFORMAT_RGBA32));
+    SurfacePtr flipped = make_surface_ptr(SDL_CreateSurface(surface->w, surface->h, SDL_PIXELFORMAT_RGBA32));
     if (!flipped) {
-        return SurfacePtr(nullptr, SDL_FreeSurface);
+        return SurfacePtr(nullptr, SDL_DestroySurface);
     }
 
     if (SDL_MUSTLOCK(surface)) SDL_LockSurface(surface);
@@ -65,11 +65,11 @@ SurfacePtr flip_horizontal(SDL_Surface* surface) {
 
 SurfacePtr flip_vertical(SDL_Surface* surface) {
     if (!surface) {
-        return SurfacePtr(nullptr, SDL_FreeSurface);
+        return SurfacePtr(nullptr, SDL_DestroySurface);
     }
-    SurfacePtr flipped = make_surface_ptr(SDL_CreateRGBSurfaceWithFormat(0, surface->w, surface->h, 32, SDL_PIXELFORMAT_RGBA32));
+    SurfacePtr flipped = make_surface_ptr(SDL_CreateSurface(surface->w, surface->h, SDL_PIXELFORMAT_RGBA32));
     if (!flipped) {
-        return SurfacePtr(nullptr, SDL_FreeSurface);
+        return SurfacePtr(nullptr, SDL_DestroySurface);
     }
 
     if (SDL_MUSTLOCK(surface)) SDL_LockSurface(surface);
@@ -142,7 +142,7 @@ std::vector<int> build_speed_sequence(int frame_count, float multiplier) {
         return sequence;
     }
     sequence.resize(frame_count);
-    std::iota(sequence.begin(), sequence.end(), 0);
+    std::iota(sequence.begin(), sequence.end());
     return sequence;
 }
 
@@ -184,7 +184,7 @@ SDL_Texture* PreviewProvider::get_preview_texture(SDL_Renderer* renderer, const 
 
     asset_root_ = resolve_asset_root();
 
-    ResolvedAnimation resolved = resolve_animation(animation_id, 0);
+    ResolvedAnimation resolved = resolve_animation(animation_id);
     std::string signature = resolved.signature.empty() ? std::string{"anim:"} + animation_id : resolved.signature;
 
     auto it = cache_.find(animation_id);
@@ -220,7 +220,7 @@ SDL_Texture* PreviewProvider::get_frame_texture(SDL_Renderer* renderer, const st
 
     asset_root_ = resolve_asset_root();
 
-    ResolvedAnimation resolved = resolve_animation(animation_id, 0);
+    ResolvedAnimation resolved = resolve_animation(animation_id);
     std::string signature = resolved.signature.empty() ? std::string{"anim:"} + animation_id : resolved.signature;
 
     auto it = frame_cache_.find(animation_id);
@@ -266,7 +266,7 @@ void PreviewProvider::invalidate_all() {
 }
 
 int PreviewProvider::get_frame_count(const std::string& animation_id) const {
-    ResolvedAnimation resolved = resolve_animation(animation_id, 0);
+    ResolvedAnimation resolved = resolve_animation(animation_id);
     return static_cast<int>(resolved.frames.size());
 }
 
@@ -342,7 +342,7 @@ std::vector<std::shared_ptr<SDL_Texture>> PreviewProvider::build_frame_textures(
             continue;
         }
 
-        SurfacePtr temp(nullptr, SDL_FreeSurface);
+        SurfacePtr temp(nullptr, SDL_DestroySurface);
         SDL_Surface* source_surface = surface.get();
         if (request.flip_x) {
             temp = flip_horizontal(surface.get());
@@ -386,7 +386,7 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
         if (!folder.empty()) {
             folder /= animation_id;
         }
-        std::vector<std::filesystem::path> paths = find_frame_sequence(folder, 0);
+        std::vector<std::filesystem::path> paths = find_frame_sequence(folder);
         result.frames.reserve(paths.size());
         for (const auto& path : paths) {
             result.frames.push_back(FrameImageRequest{path, false, false});
@@ -472,7 +472,7 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
         return result;
     }
 
-    int frames = payload.value("number_of_frames", 0);
+    int frames = payload.value("number_of_frames");
     if (frames < 0) frames = 0;
 
     std::string relative_path = source ? source->value("path", std::string{}) : std::string{};
@@ -487,7 +487,7 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
         }
 
         std::string requested_str = lowercase_copy(requested.generic_string());
-        if (requested_str.rfind("src/", 0) == 0) {
+        if (requested_str.rfind("src/") == 0) {
             return true;
         }
 
@@ -498,7 +498,7 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
                     return true;
                 }
                 std::string root_with_sep = root_str + "/";
-                if (requested_str.rfind(root_with_sep, 0) == 0) {
+                if (requested_str.rfind(root_with_sep) == 0) {
                     return true;
                 }
             }

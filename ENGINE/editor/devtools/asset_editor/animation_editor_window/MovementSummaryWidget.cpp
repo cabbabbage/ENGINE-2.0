@@ -1,5 +1,6 @@
 #include "MovementSummaryWidget.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -48,7 +49,7 @@ void render_summary_label(SDL_Renderer* renderer, const std::string& text, int x
         return;
     }
 
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+    SDL_Surface* surface = ttf_util::RenderTextBlended(font, text.c_str(), color);
     if (!surface) {
         TTF_CloseFont(font);
         return;
@@ -61,7 +62,7 @@ void render_summary_label(SDL_Renderer* renderer, const std::string& text, int x
         SDL_DestroyTexture(texture);
     }
 
-    SDL_FreeSurface(surface);
+    SDL_DestroySurface(surface);
     TTF_CloseFont(font);
 }
 
@@ -367,7 +368,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
         return inside;
     };
     switch (e.type) {
-        case SDL_MOUSEMOTION: {
+        case SDL_EVENT_MOUSE_MOTION: {
             SDL_Point p{e.motion.x, e.motion.y};
             if (derived_from_animation_) {
                 button_hovered_ = SDL_PointInRect(&p, &button_rect_) != 0;
@@ -380,7 +381,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             }
             return handled;
         }
-        case SDL_MOUSEBUTTONDOWN: {
+        case SDL_EVENT_MOUSE_BUTTON_DOWN: {
             if (e.button.button != SDL_BUTTON_LEFT) {
                 return false;
             }
@@ -400,7 +401,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 4, p, true) || handled;
             return handled;
         }
-        case SDL_MOUSEBUTTONUP: {
+        case SDL_EVENT_MOUSE_BUTTON_UP: {
             if (e.button.button != SDL_BUTTON_LEFT) {
                 return false;
             }

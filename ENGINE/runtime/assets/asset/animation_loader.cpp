@@ -8,8 +8,8 @@
 #include "rendering/render/render.hpp"
 #include "utils/loading_status_notifier.hpp"
 #include "utils/log.hpp"
+#include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
-#include <SDL3_mixer/SDL_mixer.h>
 #include <algorithm>
 #include <cmath>
 #include <cctype>
@@ -427,14 +427,14 @@ inline int scaled_dimension(int base, double scale) {
         return static_cast<int>(rounded);
 }
 
-using AudioCache = std::unordered_map<std::string, std::weak_ptr<Mix_Chunk>>;
+using AudioCache = std::unordered_map<std::string, std::weak_ptr<Animation::AudioClip::AudioBuffer>>;
 
 AudioCache& get_audio_cache() {
         static AudioCache cache;
         return cache;
 }
 
-std::shared_ptr<Mix_Chunk> load_audio_clip(const std::string& path) {
+std::shared_ptr<Animation::AudioClip::AudioBuffer> load_audio_clip(const std::string& path) {
         if (path.empty()) return {};
         auto& cache = get_audio_cache();
         auto it = cache.find(path);
@@ -447,20 +447,25 @@ std::shared_ptr<Mix_Chunk> load_audio_clip(const std::string& path) {
                 std::cerr << "[Animation] Audio file not found: " << path << "\n";
                 return {};
         }
-        Mix_Chunk* raw = Mix_LoadWAV(path.c_str());
-        if (!raw) {
-                std::cerr << "[Animation] Failed to load audio '" << path << "': " << Mix_GetError() << "\n";
+        SDL_AudioSpec spec{};
+        Uint8* audio_data = nullptr;
+        Uint32 audio_len = 0;
+        if (!SDL_LoadWAV(path.c_str(), &spec, &audio_data, &audio_len)) {
+                std::cerr << "[Animation] Failed to load audio '" << path << "': " << SDL_GetError() << "\n";
                 return {};
         }
-        std::shared_ptr<Mix_Chunk> chunk(raw, Mix_FreeChunk);
-        cache[path] = chunk;
-        return chunk;
+        auto clip = std::make_shared<Animation::AudioClip::AudioBuffer>();
+        clip->spec = spec;
+        clip->samples.assign(audio_data, audio_data + audio_len);
+        SDL_free(audio_data);
+        cache[path] = clip;
+        return clip;
 }
 
 #if SDL_VERSION_ATLEAST(2,0,12)
 void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
         if (tex) {
-                SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_ScaleModeBest : SDL_ScaleModeNearest);
+                SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
         }
 }
 #else
@@ -838,13 +843,13 @@ void AnimationLoader::load(Animation& animation,
                                 animation.audio_clip.name = clip_name;
                                 std::filesystem::path clip_path = std::filesystem::path(dir_path) / (clip_name + ".wav");
                                 animation.audio_clip.path = clip_path.lexically_normal().string();
-                                animation.audio_clip.chunk = load_audio_clip(animation.audio_clip.path);
+                                animation.audio_clip.buffer = load_audio_clip(animation.audio_clip.path);
                         }
                 } catch (...) {
 
                 }
         }
-        if (!animation.audio_clip.chunk && animation.source.kind == "animation" && !animation.source.name.empty()) {
+        if (!animation.audio_clip.buffer && animation.source.kind == "animation" && !animation.source.name.empty()) {
                 auto it = info.animations.find(animation.source.name);
                 if (it != info.animations.end()) {
                         animation.audio_clip = it->second.audio_clip;

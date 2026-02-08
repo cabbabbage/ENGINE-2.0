@@ -1,5 +1,6 @@
 #include "loading_screen.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 #include <SDL3_image/SDL_image.h>
 #include <cmath>
 #include <fstream>
@@ -86,7 +87,7 @@ void LoadingScreen::draw_text(TTF_Font* font, const std::string& txt, int x, int
 	if (!surf) return;
 	SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer_, surf);
 	int tw = surf->w, th = surf->h;
-	SDL_FreeSurface(surf);
+	SDL_DestroySurface(surf);
 	if (!tex) return;
 	SDL_Rect dst{ x, y, tw, th };
 	sdl_render::Texture(renderer_, tex, nullptr, &dst);
@@ -99,13 +100,13 @@ void LoadingScreen::render_justified_text(TTF_Font* font, const std::string& tex
 	std::vector<std::string> words; std::string w;
 	while (iss >> w) words.push_back(w);
 	if (words.empty()) return;
-	int space_w; int space_h; TTF_SizeText(font, " ", &space_w, &space_h);
+	int space_w; int space_h; ttf_util::GetStringSize(font, " ", &space_w, &space_h);
 	std::vector<std::vector<std::string>> lines;
 	std::vector<std::string> cur;
 	auto width_of = [&](const std::vector<std::string>& ws) {
 		int wsum = 0;
 		for (size_t i=0;i<ws.size();++i){
-			int w=0,h=0; TTF_SizeText(font,ws[i].c_str(),&w,&h);
+			int w=0,h=0; ttf_util::GetStringSize(font,ws[i],&w,&h);
 			wsum+=w; if(i+1<ws.size()) wsum+=space_w;
 		}
 		return wsum;
@@ -119,13 +120,13 @@ void LoadingScreen::render_justified_text(TTF_Font* font, const std::string& tex
 	int line_y=rect.y;
 	for(auto& l:lines){
 		int words_total_w=0,word_h=0; std::vector<int> ww(l.size());
-		for(size_t i=0;i<l.size();++i){int w=0,h=0; TTF_SizeText(font,l[i].c_str(),&w,&h); ww[i]=w; words_total_w+=w; word_h=std::max(word_h,h);}
+		for(size_t i=0;i<l.size();++i){int w=0,h=0; ttf_util::GetStringSize(font,l[i],&w,&h); ww[i]=w; words_total_w+=w; word_h=std::max(word_h,h);}
 		int gaps=l.size()-1; int x=rect.x;
 		if(gaps<=0){x=rect.x+(rect.w-words_total_w)/2;}
 		for(size_t i=0;i<l.size();++i){
 			SDL_Surface* surf=TTF_RenderText_Blended(font,l[i].c_str(),col);
 			if(!surf)continue; SDL_Texture* tex=SDL_CreateTextureFromSurface(renderer_,surf);
-			int tw=surf->w,th=surf->h; SDL_FreeSurface(surf);
+			int tw=surf->w,th=surf->h; SDL_DestroySurface(surf);
 			if(!tex)continue; SDL_Rect dst{x,line_y,tw,th}; sdl_render::Texture(renderer_,tex,nullptr,&dst); SDL_DestroyTexture(tex);
 			x+=ww[i]+space_w;
 		}
@@ -175,7 +176,7 @@ void LoadingScreen::draw_frame() {
                         SDL_Surface* surf = IMG_Load(selected_image_path_.string().c_str());
                         if (surf) {
                                 current_texture_ = SDL_CreateTextureFromSurface(renderer_, surf);
-                                SDL_FreeSurface(surf);
+                                SDL_DestroySurface(surf);
                                 if (current_texture_) {
                                         current_texture_path_ = selected_image_path_;
                                 }
@@ -193,7 +194,7 @@ void LoadingScreen::draw_frame() {
         int title_height = 0;
         if (title_font) {
                 int tw = 0, th = 0;
-                TTF_SizeText(title_font, "LOADING...", &tw, &th);
+                ttf_util::GetStringSize(title_font, "LOADING...", &tw, &th);
                 int tx = (screen_w_ - tw) / 2;
                 draw_text(title_font, "LOADING...", tx, 40, white);
                 title_height = th;
@@ -204,7 +205,7 @@ void LoadingScreen::draw_frame() {
                 if (status_font) {
                         int sw = 0;
                         int sh = 0;
-                        TTF_SizeText(status_font, status_text_.c_str(), &sw, &sh);
+                        ttf_util::GetStringSize(status_font, status_text_, &sw, &sh);
                         int sx = (screen_w_ - sw) / 2;
                         int sy = 40 + title_height + 12;
                         draw_text(status_font, status_text_, sx, sy, white);

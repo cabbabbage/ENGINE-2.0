@@ -431,7 +431,7 @@ public:
     bool handle_event(const SDL_Event& e) override {
         if (!b_) return false;
         bool used = b_->handle_event(e);
-        if (used && on_click_ && e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (used && on_click_ && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             on_click_();
         }
         return used;

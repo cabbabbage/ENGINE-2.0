@@ -1,4 +1,5 @@
 #include "MovementFrameEditor.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <SDL3/SDL.h>
 
@@ -259,10 +260,10 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
     }
 
-    if (e.type == SDL_KEYDOWN) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
         // ONLY escape key - no arrow key navigation
         // Use frame navigator buttons/textbox for frame navigation
-        if (e.key.keysym.sym == SDLK_ESCAPE) {
+        if (e.key.key == SDLK_ESCAPE) {
             wants_close_ = true;
             consumed = true;
         }
@@ -274,12 +275,12 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
 
     // Handle mouse events for 3D point manipulation
     SDL_Point mouse_pos = {0, 0};
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         mouse_pos = {e.button.x, e.button.y};
-    } else if (e.type == SDL_MOUSEMOTION) {
+    } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
         mouse_pos = {e.motion.x, e.motion.y};
-    } else if (e.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
     const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);

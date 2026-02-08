@@ -1,6 +1,6 @@
 #include "devtools/core/dev_json_store.hpp"
 
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 
 #include <chrono>
 #include <condition_variable>

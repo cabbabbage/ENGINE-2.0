@@ -1,5 +1,6 @@
 #include "main_menu.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -127,8 +128,8 @@ void MainMenu::buildButtons() {
 }
 
 std::optional<MainMenu::Selection> MainMenu::handle_event(const SDL_Event& e) {
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_e &&
-            (e.key.keysym.mod & KMOD_CTRL)) {
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_e &&
+            (e.key.mod & KMOD_CTRL)) {
                 button_tweaker_.toggle();
                 return std::nullopt;
         }
@@ -226,22 +227,22 @@ SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {
                 const double scale = static_cast<double>(max_dim) / static_cast<double>(std::max(src_w, src_h));
                 target_w = std::max(1, static_cast<int>(std::round(static_cast<double>(src_w) * scale)));
                 target_h = std::max(1, static_cast<int>(std::round(static_cast<double>(src_h) * scale)));
-                SDL_Surface* scaled = SDL_CreateRGBSurfaceWithFormat(0, target_w, target_h, 32, SDL_PIXELFORMAT_ARGB8888);
+                SDL_Surface* scaled = SDL_CreateSurface(target_w, target_h, SDL_PIXELFORMAT_ARGB8888);
                 if (!scaled) {
                         std::cerr << "[MainMenu] Failed to allocate scaled surface ("
                                   << target_w << "x" << target_h << ") for " << abs_utf8_path
                                   << " | " << SDL_GetError() << "\n";
-                        SDL_FreeSurface(loaded);
+                        SDL_DestroySurface(loaded);
                         return nullptr;
                 }
-                if (SDL_BlitScaled(loaded, nullptr, scaled, nullptr) != 0) {
+                if (!SDL_BlitSurfaceScaled(loaded, nullptr, scaled, nullptr, SDL_SCALEMODE_LINEAR)) {
                         std::cerr << "[MainMenu] SDL_BlitScaled failed while downscaling "
                                   << abs_utf8_path << " | " << SDL_GetError() << "\n";
-                        SDL_FreeSurface(loaded);
-                        SDL_FreeSurface(scaled);
+                        SDL_DestroySurface(loaded);
+                        SDL_DestroySurface(scaled);
                         return nullptr;
                 }
-                SDL_FreeSurface(loaded);
+                SDL_DestroySurface(loaded);
                 to_upload = scaled;
         }
 
@@ -253,7 +254,7 @@ SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {
                 std::cerr << "[MainMenu] Loaded downscaled texture (" << to_upload->w << "x" << to_upload->h
                           << ") after renderer failure for " << abs_utf8_path << "\n";
         }
-        SDL_FreeSurface(to_upload);
+        SDL_DestroySurface(to_upload);
         return tex;
 }
 
@@ -392,7 +393,7 @@ SDL_Point MainMenu::measureText(const LabelStyle& style, const std::string& s) c
 	if (s.empty()) return sz;
 	TTF_Font* f = style.open_font();
 	if (!f) return sz;
-	TTF_SizeText(f, s.c_str(), &sz.x, &sz.y);
+	ttf_util::GetStringSize(f, s, &sz.x, &sz.y);
 	TTF_CloseFont(f);
 	return sz;
 }
@@ -428,8 +429,8 @@ void MainMenu::blitText(SDL_Renderer* r,
 			SDL_DestroyTexture(tex_text);
 		}
 	}
-	if (surf_shadow) SDL_FreeSurface(surf_shadow);
-	if (surf_text)   SDL_FreeSurface(surf_text);
+	if (surf_shadow) SDL_DestroySurface(surf_shadow);
+	if (surf_text)   SDL_DestroySurface(surf_text);
 	TTF_CloseFont(f);
 }
 

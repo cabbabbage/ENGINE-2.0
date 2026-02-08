@@ -30,18 +30,6 @@ namespace detail {
         static float cap = 1.0f;
         return cap;
     }
-    inline ::std::once_flag& scale_hint_once() {
-        static ::std::once_flag flag;
-        return flag;
-    }
-}
-
-inline void EnsureBestScaleHint() {
-#if SDL_VERSION_ATLEAST(2,0,12)
-    ::std::call_once(detail::scale_hint_once(), []() {
-        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
-    });
-#endif
 }
 
 struct ScaleSelection {
@@ -552,9 +540,10 @@ inline SDL_Texture* CreateScaledTexture(SDL_Renderer* renderer,
         return nullptr;
     }
 
-    Uint32 format = SDL_PIXELFORMAT_RGBA8888;
+    SDL_PixelFormat format = SDL_PIXELFORMAT_RGBA8888;
     if (SDL_PropertiesID props = SDL_GetTextureProperties(source)) {
-        format = static_cast<Uint32>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, format));
+        const Sint64 fmt = SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, static_cast<Sint64>(format));
+        format = static_cast<SDL_PixelFormat>(fmt);
     }
 
     SDL_Texture* scaled = SDL_CreateTexture(renderer, format, SDL_TEXTUREACCESS_TARGET, dst_w, dst_h);
@@ -563,11 +552,7 @@ inline SDL_Texture* CreateScaledTexture(SDL_Renderer* renderer,
     }
 
     SDL_SetTextureBlendMode(scaled, SDL_BLENDMODE_BLEND);
-#if SDL_VERSION_ATLEAST(2,0,12)
-    SDL_SetTextureScaleMode(scaled, SDL_ScaleModeBest);
-#endif
-
-    EnsureBestScaleHint();
+    SDL_SetTextureScaleMode(scaled, SDL_SCALEMODE_LINEAR);
 
     SDL_Texture* previous_target = SDL_GetRenderTarget(renderer);
     SDL_SetRenderTarget(renderer, scaled);
@@ -587,13 +572,13 @@ inline SDL_Surface* CreateScaledSurface(SDL_Surface* src, float scale) {
     }
 
     if (::std::fabs(scale - 1.0f) <= 1e-4f) {
-        SDL_Surface* copy = SDL_CreateRGBSurfaceWithFormat(0, src->w, src->h, 32, SDL_PIXELFORMAT_RGBA8888);
+        SDL_Surface* copy = SDL_CreateSurface(src->w, src->h, SDL_PIXELFORMAT_RGBA8888);
         if (!copy) {
             return nullptr;
         }
         SDL_Rect rect{0, 0, src->w, src->h};
-        if (SDL_BlitSurface(src, &rect, copy, &rect) != 0) {
-            SDL_FreeSurface(copy);
+        if (!SDL_BlitSurface(src, &rect, copy, &rect)) {
+            SDL_DestroySurface(copy);
             return nullptr;
         }
         return copy;
@@ -602,16 +587,15 @@ inline SDL_Surface* CreateScaledSurface(SDL_Surface* src, float scale) {
     const int dst_w = ::std::max(1, static_cast<int>(::std::lround(static_cast<double>(src->w) * scale)));
     const int dst_h = ::std::max(1, static_cast<int>(::std::lround(static_cast<double>(src->h) * scale)));
 
-    SDL_Surface* dst = SDL_CreateRGBSurfaceWithFormat(0, dst_w, dst_h, 32, SDL_PIXELFORMAT_RGBA8888);
+    SDL_Surface* dst = SDL_CreateSurface(dst_w, dst_h, SDL_PIXELFORMAT_RGBA8888);
     if (!dst) {
         return nullptr;
     }
 
     SDL_Rect src_rect{0, 0, src->w, src->h};
     SDL_Rect dst_rect{0, 0, dst_w, dst_h};
-    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best");
-    if (SDL_BlitScaled(src, &src_rect, dst, &dst_rect) != 0) {
-        SDL_FreeSurface(dst);
+    if (!SDL_BlitSurfaceScaled(src, &src_rect, dst, &dst_rect, SDL_SCALEMODE_LINEAR)) {
+        SDL_DestroySurface(dst);
         return nullptr;
     }
 

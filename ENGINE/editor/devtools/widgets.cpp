@@ -3,7 +3,7 @@
 #include "draw_utils.hpp"
 #include "font_cache.hpp"
 #include "dm_icons.hpp"
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 #include <algorithm>
 #include <charconv>
 #include <cctype>
@@ -16,6 +16,8 @@
 #include <unordered_set>
 #include <utility>
 #include <limits>
+#include "utils/sdl_mouse_utils.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 namespace {
 constexpr int kBoxTopPadding = 8;
@@ -190,7 +192,7 @@ bool DMWidgetTooltipHandleEvent(const SDL_Event& e, const SDL_Rect& bounds, DMWi
 };
 
     switch (e.type) {
-    case SDL_MOUSEMOTION: {
+    case SDL_EVENT_MOUSE_MOTION: {
         const bool inside = point_in_icon(e.motion.x, e.motion.y);
         if (inside) {
             if (!state.icon_hovered) {
@@ -202,22 +204,20 @@ bool DMWidgetTooltipHandleEvent(const SDL_Event& e, const SDL_Rect& bounds, DMWi
         }
         break;
     }
-    case SDL_MOUSEBUTTONDOWN:
-    case SDL_MOUSEBUTTONUP: {
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP: {
         if (point_in_icon(e.button.x, e.button.y)) {
             return true;
         }
         break;
     }
-    case SDL_MOUSEWHEEL:
+    case SDL_EVENT_MOUSE_WHEEL:
         if (state.icon_hovered) {
             return true;
         }
         break;
-    case SDL_WINDOWEVENT:
-        if (e.window.event == SDL_WINDOWEVENT_LEAVE) {
-            DMWidgetTooltipResetHover(state);
-        }
+    case SDL_EVENT_WINDOW_MOUSE_LEAVE:
+        DMWidgetTooltipResetHover(state);
         break;
     default:
         break;
@@ -353,13 +353,13 @@ bool DMButton::handle_event(const SDL_Event& e) {
     if (tooltip_state_ && DMWidgetTooltipHandleEvent(e, rect_, *tooltip_state_)) {
         return true;
     }
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p{ e.motion.x, e.motion.y };
         hovered_ = SDL_PointInRect(&p, &rect_);
-    } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         if (SDL_PointInRect(&p, &rect_)) { pressed_ = true; return true; }
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         bool inside = SDL_PointInRect(&p, &rect_);
         bool was = pressed_;
@@ -492,10 +492,10 @@ bool DMTextBox::handle_event(const SDL_Event& e) {
         return true;
     }
     bool changed = false;
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p{ e.motion.x, e.motion.y };
         hovered_ = SDL_PointInRect(&p, &box_rect_);
-    } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         bool inside = SDL_PointInRect(&p, &box_rect_);
         if (inside) {
@@ -508,32 +508,32 @@ bool DMTextBox::handle_event(const SDL_Event& e) {
             editing_ = false;
             SDL_StopTextInput();
         }
-    } else if (editing_ && e.type == SDL_TEXTINPUT) {
+    } else if (editing_ && e.type == SDL_EVENT_TEXT_INPUT) {
         text_.insert(caret_pos_, e.text.text);
         caret_pos_ += std::strlen(e.text.text);
         changed = true;
-    } else if (editing_ && e.type == SDL_KEYDOWN) {
-        if (e.key.keysym.sym == SDLK_BACKSPACE) {
+    } else if (editing_ && e.type == SDL_EVENT_KEY_DOWN) {
+        if (e.key.key == SDLK_BACKSPACE) {
             if (caret_pos_ > 0 && !text_.empty()) {
                 size_t erase_pos = caret_pos_ - 1;
                 text_.erase(erase_pos, 1);
                 caret_pos_ = erase_pos;
                 changed = true;
             }
-        } else if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_KP_ENTER) {
+        } else if (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER) {
             editing_ = false; SDL_StopTextInput();
-        } else if (e.key.keysym.sym == SDLK_DELETE) {
+        } else if (e.key.key == SDLK_DELETE) {
             if (caret_pos_ < text_.size()) {
                 text_.erase(caret_pos_, 1);
                 changed = true;
             }
-        } else if (e.key.keysym.sym == SDLK_LEFT) {
+        } else if (e.key.key == SDLK_LEFT) {
             if (caret_pos_ > 0) --caret_pos_;
-        } else if (e.key.keysym.sym == SDLK_RIGHT) {
+        } else if (e.key.key == SDLK_RIGHT) {
             if (caret_pos_ < text_.size()) ++caret_pos_;
-        } else if (e.key.keysym.sym == SDLK_HOME) {
+        } else if (e.key.key == SDLK_HOME) {
             caret_pos_ = 0;
-        } else if (e.key.keysym.sym == SDLK_END) {
+        } else if (e.key.key == SDLK_END) {
             caret_pos_ = text_.size();
         }
     }
@@ -552,7 +552,7 @@ void DMTextBox::draw_text(SDL_Renderer* r, const std::string& s, int x, int y, i
     const int gap = DMSpacing::small_gap();
     for (size_t i = 0; i < lines.size(); ++i) {
         const auto& line = lines[i];
-        SDL_Surface* surf = TTF_RenderUTF8_Blended(f, line.c_str(), ls.color);
+        SDL_Surface* surf = ttf_util::RenderTextBlended(f, line.c_str(), ls.color);
         if (surf) {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
             if (tex) {
@@ -562,7 +562,7 @@ void DMTextBox::draw_text(SDL_Renderer* r, const std::string& s, int x, int y, i
             }
             line_y += surf->h;
             if (i + 1 < lines.size()) line_y += gap;
-            SDL_FreeSurface(surf);
+            SDL_DestroySurface(surf);
         }
     }
 }
@@ -604,16 +604,16 @@ void DMTextBox::render(SDL_Renderer* r) const {
             int caret_height = TTF_FontHeight(f);
             const int gap = DMSpacing::small_gap();
             if (!lines.empty()) {
-                for (size_t i = 0; i < lines.size(); ++i) {
-                    const std::string& line = lines[i];
-                    int w = 0, h = 0;
-                    if (!line.empty()) {
-                        TTF_SizeUTF8(f, line.c_str(), &w, &h);
-                    } else {
-                        w = 0; h = TTF_FontHeight(f);
-                    }
-                    if (i + 1 < lines.size()) {
-                        caret_y += h + gap;
+            for (size_t i = 0; i < lines.size(); ++i) {
+                const std::string& line = lines[i];
+                int w = 0, h = 0;
+                if (!line.empty()) {
+                    ttf_util::GetStringSize(f, line, &w, &h);
+                } else {
+                    w = 0; h = TTF_FontHeight(f);
+                }
+                if (i + 1 < lines.size()) {
+                    caret_y += h + gap;
                     } else {
                         caret_x += w;
                         caret_height = (h > 0) ? h : TTF_FontHeight(f);
@@ -643,7 +643,7 @@ std::vector<std::string> DMTextBox::wrap_lines(TTF_Font* f, const std::string& s
             bool consumed_all = false;
             for (size_t i = pos; i <= para.size(); ++i) {
                 std::string trial = para.substr(pos, i - pos);
-                int w=0,h=0; TTF_SizeUTF8(f, trial.c_str(), &w, &h);
+                int w=0,h=0; ttf_util::GetStringSize(f, trial, &w, &h);
                 if (w <= max_width) {
                     best_break = i;
                     if (i < para.size() && std::isspace((unsigned char)para[i])) last_space = i;
@@ -686,7 +686,7 @@ int DMTextBox::compute_label_height(int width) const {
     const int gap = DMSpacing::small_gap();
     for (size_t i = 0; i < lines.size(); ++i) {
         int w = 0, h = 0;
-        TTF_SizeUTF8(f, lines[i].c_str(), &w, &h);
+        ttf_util::GetStringSize(f, lines[i], &w, &h);
         total += h;
         if (i + 1 < lines.size()) total += gap;
     }
@@ -708,7 +708,7 @@ int DMTextBox::compute_text_height(TTF_Font* f, int width) const {
         int line_height = 0;
         if (!line.empty()) {
             int w = 0;
-            if (TTF_SizeUTF8(f, line.c_str(), &w, &line_height) != 0) {
+            if (!ttf_util::GetStringSize(f, line, &w, &line_height)) {
                 line_height = 0;
             }
         }
@@ -788,10 +788,10 @@ bool DMCheckbox::handle_event(const SDL_Event& e) {
     if (tooltip_state_ && DMWidgetTooltipHandleEvent(e, rect_, *tooltip_state_)) {
         return true;
     }
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p{ e.motion.x, e.motion.y };
         hovered_ = SDL_PointInRect(&p, &rect_);
-    } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         if (SDL_PointInRect(&p, &rect_)) { value_ = !value_; return true; }
     }
@@ -961,10 +961,10 @@ bool DMNumericStepper::handle_event(const SDL_Event& e) {
     if (tooltip_state_ && DMWidgetTooltipHandleEvent(e, rect_, *tooltip_state_)) {
         return true;
     }
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p{ e.motion.x, e.motion.y };
         update_hover(p);
-    } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         update_hover(p);
         if (hovered_dec_) {
@@ -975,7 +975,7 @@ bool DMNumericStepper::handle_event(const SDL_Event& e) {
             pressed_inc_ = true;
             return true;
         }
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         update_hover(p);
         bool used = false;
@@ -996,14 +996,14 @@ bool DMNumericStepper::handle_event(const SDL_Event& e) {
             }
         }
         return used || had_dec || had_inc;
-    } else if (e.type == SDL_MOUSEWHEEL) {
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         SDL_Point mouse{0, 0};
-        SDL_GetMouseState(&mouse.x, &mouse.y);
+        sdl_mouse_util::GetMouseState(&mouse.x, &mouse.y);
         if (!SDL_PointInRect(&mouse, &rect_)) {
             return false;
         }
-        int delta = e.wheel.y;
-        if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+        int delta = e.wheel.integer_y;
+        if (e.wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
             delta = -delta;
         }
 #if SDL_VERSION_ATLEAST(2,0,18)
@@ -1318,8 +1318,8 @@ bool DMSlider::handle_event(const SDL_Event& e) {
     if (!enabled_) {
         return false;
     }
-    if (e.type == SDL_KEYDOWN && focused_) {
-        switch (e.key.keysym.sym) {
+    if (e.type == SDL_EVENT_KEY_DOWN && focused_) {
+        switch (e.key.key) {
         case SDLK_LEFT:
         case SDLK_a: {
             apply_interaction_value(display_value() - 1);
@@ -1389,7 +1389,7 @@ bool DMSlider::handle_event(const SDL_Event& e) {
         return inside;
 };
 
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p{ e.motion.x, e.motion.y };
         update_hover(p);
         if (!dragging_ && focused_ && !hovered_) {
@@ -1399,7 +1399,7 @@ bool DMSlider::handle_event(const SDL_Event& e) {
             apply_interaction_value(value_for_x(p.x));
             return true;
         }
-    } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         bool inside = update_hover(p);
         if (inside) {
@@ -1427,7 +1427,7 @@ bool DMSlider::handle_event(const SDL_Event& e) {
         } else if (!dragging_) {
             set_focus(false);
         }
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         bool was_dragging = dragging_;
         dragging_ = false;
         SDL_Point p{ e.button.x, e.button.y };
@@ -1438,12 +1438,12 @@ bool DMSlider::handle_event(const SDL_Event& e) {
         if (was_dragging) {
             return true;
         }
-    } else if (e.type == SDL_MOUSEWHEEL) {
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         if (!focused_) {
             return false;
         }
         SDL_Point mouse{0, 0};
-        SDL_GetMouseState(&mouse.x, &mouse.y);
+        sdl_mouse_util::GetMouseState(&mouse.x, &mouse.y);
         const bool pointer_inside = SDL_PointInRect(&mouse, &rect_);
         if (pointer_inside) {
             update_hover(mouse);
@@ -1451,8 +1451,8 @@ bool DMSlider::handle_event(const SDL_Event& e) {
             hovered_ = false;
             knob_hovered_ = false;
         }
-        int delta = e.wheel.y;
-        if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+        int delta = e.wheel.integer_y;
+        if (e.wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
             delta = -delta;
         }
 #if SDL_VERSION_ATLEAST(2,0,18)
@@ -1945,7 +1945,7 @@ bool DMRangeSlider::handle_event(const SDL_Event& e) {
         return inside;
 };
 
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p{ e.motion.x, e.motion.y };
         update_hover(p);
         bool dragging = false;
@@ -1960,7 +1960,7 @@ bool DMRangeSlider::handle_event(const SDL_Event& e) {
         if (dragging) {
             return true;
         }
-    } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         bool inside = update_hover(p);
         bool focus_changed = false;
@@ -2035,7 +2035,7 @@ bool DMRangeSlider::handle_event(const SDL_Event& e) {
         if (focus_changed) {
             return true;
         }
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         bool was_dragging = dragging_min_ || dragging_max_;
         dragging_min_ = false;
         dragging_max_ = false;
@@ -2049,17 +2049,17 @@ bool DMRangeSlider::handle_event(const SDL_Event& e) {
             (void)committed;
             return true;
         }
-    } else if (e.type == SDL_MOUSEWHEEL) {
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         if (!focused_) {
             return false;
         }
         if (SDL_GetMouseFocus() != nullptr) {
             SDL_Point mouse{0, 0};
-            SDL_GetMouseState(&mouse.x, &mouse.y);
+            sdl_mouse_util::GetMouseState(&mouse.x, &mouse.y);
             update_hover(mouse);
         }
-        int delta = e.wheel.y;
-        if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+        int delta = e.wheel.integer_y;
+        if (e.wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
             delta = -delta;
         }
 #if SDL_VERSION_ATLEAST(2,0,18)
@@ -2347,8 +2347,8 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
     if (tooltip_state_ && DMWidgetTooltipHandleEvent(e, rect_, *tooltip_state_)) {
         return true;
     }
-    if (e.type == SDL_KEYDOWN && focused_) {
-        switch (e.key.keysym.sym) {
+    if (e.type == SDL_EVENT_KEY_DOWN && focused_) {
+        switch (e.key.key) {
         case SDLK_UP:
         case SDLK_w: {
             if (!has_pending_index_) {
@@ -2390,7 +2390,7 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
             break;
         }
     }
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p{ e.motion.x, e.motion.y };
         const bool inside_box = SDL_PointInRect(&p, &box_rect_);
         hovered_ = inside_box;
@@ -2446,7 +2446,7 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
         return consumed;
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         const bool inside = SDL_PointInRect(&p, &box_rect_);
         if (inside) {
@@ -2487,14 +2487,14 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
         return false;
     }
 
-    if (e.type == SDL_MOUSEWHEEL) {
+    if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         if (!(focused_ && active_ == this && !options_.empty())) return false;
         if (!has_pending_index_) {
             pending_index_ = index_;
             has_pending_index_ = true;
         }
-        int raw_delta = e.wheel.y;
-        if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+        int raw_delta = e.wheel.integer_y;
+        if (e.wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
             raw_delta = -raw_delta;
         }
         const int delta = -raw_delta;
@@ -2523,7 +2523,7 @@ void DMDropdown::render(SDL_Renderer* r) const {
         DMLabelStyle lbl = DMStyles::Label();
         TTF_Font* f = TTF_OpenFont(lbl.font_path.c_str(), lbl.font_size);
         if (f) {
-            SDL_Surface* surf = TTF_RenderUTF8_Blended(f, label_.c_str(), lbl.color);
+            SDL_Surface* surf = ttf_util::RenderTextBlended(f, label_.c_str(), lbl.color);
             if (surf) {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
                 if (tex) {
@@ -2531,7 +2531,7 @@ void DMDropdown::render(SDL_Renderer* r) const {
                     sdl_render::Texture(r, tex, nullptr, &dst);
                     SDL_DestroyTexture(tex);
                 }
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
             }
             TTF_CloseFont(f);
         }
@@ -2559,7 +2559,7 @@ void DMDropdown::render(SDL_Renderer* r) const {
             safe_idx = display_idx;
         }
         const char* display = options_.empty() ? "" : options_[safe_idx].c_str();
-        SDL_Surface* surf = TTF_RenderUTF8_Blended(f, display, labelStyle.color);
+        SDL_Surface* surf = ttf_util::RenderTextBlended(f, display, labelStyle.color);
         if (surf) {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
             if (tex) {
@@ -2572,7 +2572,7 @@ void DMDropdown::render(SDL_Renderer* r) const {
                 sdl_render::Texture(r, tex, nullptr, &dst);
                 SDL_DestroyTexture(tex);
             }
-            SDL_FreeSurface(surf);
+            SDL_DestroySurface(surf);
         }
         TTF_CloseFont(f);
     }
@@ -2649,7 +2649,7 @@ void DMDropdown::render_options(SDL_Renderer* r) const {
             text_color = ApplyAlpha(text_color, entry.alpha);
         }
 
-        SDL_Surface* surf = TTF_RenderUTF8_Blended(font, options_[entry.index].c_str(), text_color);
+        SDL_Surface* surf = ttf_util::RenderTextBlended(font, options_[entry.index].c_str(), text_color);
         if (surf) {
             SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
             if (tex) {
@@ -2657,7 +2657,7 @@ void DMDropdown::render_options(SDL_Renderer* r) const {
                 sdl_render::Texture(r, tex, nullptr, &dst);
                 SDL_DestroyTexture(tex);
             }
-            SDL_FreeSurface(surf);
+            SDL_DestroySurface(surf);
         }
     }
     if (font) {
@@ -2677,7 +2677,7 @@ int DMDropdown::compute_label_height(int width) const {
     if (!f) return lbl.font_size;
     int text_w = 0;
     int text_h = 0;
-    TTF_SizeUTF8(f, label_.c_str(), &text_w, &text_h);
+    ttf_util::GetStringSize(f, label_, &text_w, &text_h);
     TTF_CloseFont(f);
     (void)width;
     return text_h;

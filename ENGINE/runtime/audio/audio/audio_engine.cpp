@@ -4,13 +4,13 @@
 #include "assets/animation.hpp"
 
 #include <SDL3/SDL.h>
-#include <SDL3_mixer/SDL_mixer.h>
 #include <algorithm>
 #include <array>
 #include <cctype>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -25,19 +25,7 @@
 namespace fs = std::filesystem;
 
 namespace {
-AudioEngine* g_active_audio_engine = nullptr;
-
-constexpr float kCrossfadeSeconds = 5.0f;
-
-struct LoadedTrack {
-    std::vector<float> samples;
-    size_t frames = 0;
-    int sample_rate = 0;
-    int channels = 0;
-    float peak = 0.0f;
-    float rms = 0.0f;
-    fs::path source_path;
-};
+constexpr float kMusicVolume = 0.6f;
 
 fs::path resolve_with_base(const fs::path& candidate, const fs::path& base_root) {
     if (candidate.empty()) {
@@ -127,6 +115,35 @@ std::vector<fs::path> collect_music_files(const nlohmann::json& audio_manifest,
     return result;
 }
 
+bool load_wav_samples(const fs::path& path,
+                      const SDL_AudioSpec& device_spec,
+                      std::vector<float>& out_samples,
+                      size_t& out_frames) {
+    SDL_AudioSpec src_spec{};
+    Uint8* src_data = nullptr;
+    Uint32 src_len = 0;
+    if (!SDL_LoadWAV(path.u8string().c_str(), &src_spec, &src_data, &src_len)) {
+        std::cerr << "[AudioEngine] Failed to load audio '" << path.u8string() << "': " << SDL_GetError() << "\n";
+        return false;
+    }
+
+    Uint8* dst_data = nullptr;
+    int dst_len = 0;
+    if (!SDL_ConvertAudioSamples(&src_spec, src_data, static_cast<int>(src_len), &device_spec, &dst_data, &dst_len)) {
+        std::cerr << "[AudioEngine] Failed to convert audio '" << path.u8string() << "': " << SDL_GetError() << "\n";
+        SDL_free(src_data);
+        return false;
+    }
+
+    SDL_free(src_data);
+    out_samples.resize(static_cast<size_t>(dst_len) / sizeof(float));
+    std::memcpy(out_samples.data(), dst_data, static_cast<size_t>(dst_len));
+    SDL_free(dst_data);
+    const int channels = device_spec.channels;
+    out_frames = channels > 0 ? out_samples.size() / static_cast<size_t>(channels) : 0;
+    return !out_samples.empty();
+}
+
 }
 
 AudioEngine& AudioEngine::instance() {
@@ -134,20 +151,103 @@ AudioEngine& AudioEngine::instance() {
     return engine;
 }
 
-AudioEngine::MusicTrack::MusicTrack()
-    : music(nullptr, Mix_FreeMusic) {}
+bool AudioEngine::ensure_device() {
+    if (stream_) {
+        return true;
+    }
+    stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,
+                                        &device_spec_,
+                                        &AudioEngine::audio_stream_callback,
+                                        this);
+    if (!stream_) {
+        std::cerr << "[AudioEngine] Failed to open audio stream: " << SDL_GetError() << "\n";
+        return false;
+    }
+    SDL_ResumeAudioDevice(SDL_GetAudioStreamDevice(stream_));
+    return true;
+}
 
-AudioEngine::MusicTrack::MusicTrack(Mix_Music* raw, std::string path)
-    : music(raw, Mix_FreeMusic), file_path(std::move(path)) {}
+void SDLCALL AudioEngine::audio_stream_callback(void* userdata,
+                                                SDL_AudioStream* stream,
+                                                int additional_amount,
+                                                int) {
+    if (!userdata || additional_amount <= 0) {
+        return;
+    }
+    auto* engine = static_cast<AudioEngine*>(userdata);
+    const int sample_count = additional_amount / static_cast<int>(sizeof(float));
+    if (sample_count <= 0) {
+        return;
+    }
+    std::vector<float> mix_buffer(static_cast<size_t>(sample_count), 0.0f);
+    const int frames = engine->device_spec_.channels > 0
+                           ? sample_count / engine->device_spec_.channels
+                           : 0;
+    if (frames > 0) {
+        engine->mix_audio(mix_buffer.data(), frames);
+    }
+    SDL_PutAudioStreamData(stream, mix_buffer.data(), additional_amount);
+}
 
-AudioEngine::MusicTrack::MusicTrack(MusicTrack&& other) noexcept = default;
+void AudioEngine::mix_audio(float* output, int frames) {
+    const int channels = device_spec_.channels;
+    if (channels <= 0 || !output) {
+        return;
+    }
+    std::lock_guard<std::mutex> lock(voice_mutex_);
+    auto it = voices_.begin();
+    while (it != voices_.end()) {
+        Voice& voice = *it;
+        const size_t total_frames = channels > 0 ? voice.samples.size() / static_cast<size_t>(channels) : 0;
+        size_t available = 0;
+        if (voice.frame_offset < total_frames) {
+            available = total_frames - voice.frame_offset;
+        }
+        const size_t frames_to_mix = std::min(static_cast<size_t>(frames), available);
+        for (size_t i = 0; i < frames_to_mix; ++i) {
+            const size_t frame_index = voice.frame_offset + i;
+            const size_t sample_index = frame_index * static_cast<size_t>(channels);
+            const size_t out_index = i * static_cast<size_t>(channels);
+            output[out_index] += voice.samples[sample_index] * voice.left_gain;
+            if (channels > 1) {
+                output[out_index + 1] += voice.samples[sample_index + 1] * voice.right_gain;
+            } else {
+                output[out_index] += voice.samples[sample_index] * voice.right_gain;
+            }
+        }
 
-AudioEngine::MusicTrack& AudioEngine::MusicTrack::operator=(MusicTrack&& other) noexcept = default;
+        voice.frame_offset += frames_to_mix;
+        const bool finished = voice.frame_offset >= total_frames;
+        if (finished) {
+            if (voice.loop && total_frames > 0) {
+                voice.frame_offset = 0;
+                ++it;
+            } else {
+                if (voice.is_music) {
+                    music_finished_.store(true, std::memory_order_relaxed);
+                }
+                it = voices_.erase(it);
+            }
+        } else {
+            ++it;
+        }
+    }
+
+    const size_t total_samples = static_cast<size_t>(frames) * static_cast<size_t>(channels);
+    for (size_t i = 0; i < total_samples; ++i) {
+        output[i] = std::clamp(output[i], -1.0f, 1.0f);
+    }
+}
 
 void AudioEngine::init(const std::string& map_id,
                        const nlohmann::json& audio_manifest,
                        const std::string& content_root_hint) {
     shutdown();
+
+    if (!ensure_device()) {
+        std::cerr << "[AudioEngine] Audio device unavailable; skipping audio init.\n";
+        return;
+    }
 
     std::vector<MusicTrack> loaded;
     std::vector<fs::path> wav_files = collect_music_files(audio_manifest, content_root_hint);
@@ -170,12 +270,12 @@ void AudioEngine::init(const std::string& map_id,
     if (!wav_files.empty()) {
         for (const auto& path : wav_files) {
             std::string abs_path = path.u8string();
-            Mix_Music* raw = Mix_LoadMUS(abs_path.c_str());
-            if (!raw) {
-                std::cerr << "[AudioEngine] Failed to load music '" << abs_path << "': " << Mix_GetError() << "\n";
+            MusicTrack track;
+            track.file_path = abs_path;
+            if (!load_wav_samples(path, device_spec_, track.samples, track.frames)) {
                 continue;
             }
-            loaded.emplace_back(raw, abs_path);
+            loaded.emplace_back(std::move(track));
         }
         if (loaded.size() > 1) {
             std::mt19937 rng{std::random_device{}()};
@@ -194,31 +294,28 @@ void AudioEngine::init(const std::string& map_id,
     pending_next_track_.store(!playlist_.empty(), std::memory_order_relaxed);
 
     if (!playlist_.empty()) {
-        g_active_audio_engine = this;
-        Mix_AllocateChannels(64);
-        Mix_HookMusicFinished(&AudioEngine::music_finished_callback);
-        Mix_VolumeMusic(static_cast<int>(MIX_MAX_VOLUME * 0.6));
         update();
-    } else {
-        g_active_audio_engine = nullptr;
-        Mix_HookMusicFinished(nullptr);
     }
 }
 
 void AudioEngine::shutdown() {
     {
         std::lock_guard<std::mutex> lock(mutex_);
-        if (!playlist_.empty() || playlist_started_) {
-            Mix_HaltMusic();
-        }
         playlist_.clear();
         current_map_.clear();
         next_track_index_ = 0;
         playlist_started_ = false;
     }
+    {
+        std::lock_guard<std::mutex> lock(voice_mutex_);
+        voices_.clear();
+    }
     pending_next_track_.store(false, std::memory_order_relaxed);
-    Mix_HookMusicFinished(nullptr);
-    g_active_audio_engine = nullptr;
+    music_finished_.store(false, std::memory_order_relaxed);
+    if (stream_) {
+        SDL_DestroyAudioStream(stream_);
+        stream_ = nullptr;
+    }
 }
 
 void AudioEngine::play_next_track_locked() {
@@ -235,11 +332,15 @@ void AudioEngine::play_next_track_locked() {
         if (!track.valid()) {
             continue;
         }
-        int loops = (playlist_.size() == 1) ? -1 : 1;
-        int fade_ms = static_cast<int>(kCrossfadeSeconds * 1000.0f);
-        if (Mix_FadeInMusic(track.music.get(), loops, fade_ms) == -1) {
-            std::cerr << "[AudioEngine] Mix_PlayMusic failed for '" << track.file_path << "': " << Mix_GetError() << "\n";
-            continue;
+        Voice voice;
+        voice.samples = track.samples;
+        voice.loop = (playlist_.size() == 1);
+        voice.is_music = true;
+        voice.left_gain = kMusicVolume;
+        voice.right_gain = kMusicVolume;
+        {
+            std::lock_guard<std::mutex> lock(voice_mutex_);
+            voices_.push_back(std::move(voice));
         }
         playlist_started_ = true;
         return;
@@ -247,28 +348,20 @@ void AudioEngine::play_next_track_locked() {
     playlist_started_ = false;
 }
 
-void AudioEngine::handle_music_finished() {
-    pending_next_track_.store(true, std::memory_order_relaxed);
-}
-
-void AudioEngine::music_finished_callback() {
-    if (g_active_audio_engine) {
-        g_active_audio_engine->handle_music_finished();
-    }
-}
-
 void AudioEngine::update() {
-    if (pending_next_track_.exchange(false, std::memory_order_relaxed)) {
+    if (!ensure_device()) {
+        return;
+    }
+    if (music_finished_.exchange(false, std::memory_order_relaxed) ||
+        pending_next_track_.exchange(false, std::memory_order_relaxed)) {
         std::lock_guard<std::mutex> lock(mutex_);
         play_next_track_locked();
         return;
     }
 
-    if (!Mix_PlayingMusic()) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        if (playlist_started_) {
-            play_next_track_locked();
-        }
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!playlist_started_ && !playlist_.empty()) {
+        play_next_track_locked();
     }
 }
 
@@ -281,12 +374,27 @@ void AudioEngine::set_effect_max_distance(float distance) {
 
 void AudioEngine::play_now(const Animation& animation, const Asset& asset) {
     const Animation::AudioClip* clip = animation.audio_data();
-    if (!clip || !clip->chunk) {
+    if (!clip || !clip->buffer) {
         return;
     }
 
-    Mix_Chunk* chunk = clip->chunk.get();
-    if (!chunk) {
+    if (!ensure_device()) {
+        return;
+    }
+
+    const auto& buffer = *clip->buffer;
+    if (buffer.samples.empty()) {
+        return;
+    }
+    Uint8* dst_data = nullptr;
+    int dst_len = 0;
+    if (!SDL_ConvertAudioSamples(&buffer.spec,
+                                 buffer.samples.data(),
+                                 static_cast<int>(buffer.samples.size()),
+                                 &device_spec_,
+                                 &dst_data,
+                                 &dst_len)) {
+        std::cerr << "[AudioEngine] Failed to convert effect audio: " << SDL_GetError() << "\n";
         return;
     }
 
@@ -309,18 +417,9 @@ void AudioEngine::play_now(const Animation& animation, const Asset& asset) {
     distance_scale = distance_scale * distance_scale;
     float final_volume = base_volume * distance_scale;
     if (final_volume <= 0.0f) {
+        SDL_free(dst_data);
         return;
     }
-
-    int channel = Mix_PlayChannel(-1, chunk, 0);
-    if (channel == -1) {
-        std::cerr << "[AudioEngine] Mix_PlayChannel failed: " << Mix_GetError() << "\n";
-        return;
-    }
-
-    int sdl_volume = static_cast<int>(std::lround(final_volume * MIX_MAX_VOLUME));
-    sdl_volume = std::clamp(sdl_volume, 0, MIX_MAX_VOLUME);
-    Mix_Volume(channel, sdl_volume);
 
     float pan_basis = std::cos(asset.angle_from_camera);
     if (!std::isfinite(pan_basis)) {
@@ -338,14 +437,17 @@ void AudioEngine::play_now(const Animation& animation, const Asset& asset) {
     left_mix = std::clamp(left_mix, 0.0f, 1.0f);
     right_mix = std::clamp(right_mix, 0.0f, 1.0f);
 
-    Uint8 left = static_cast<Uint8>(std::lround(left_mix * 255.0f));
-    Uint8 right = static_cast<Uint8>(std::lround(right_mix * 255.0f));
-    if (left == 0 && right == 0) {
-        left = right = 1;
-    }
+    std::vector<float> samples(static_cast<size_t>(dst_len) / sizeof(float));
+    std::memcpy(samples.data(), dst_data, static_cast<size_t>(dst_len));
+    SDL_free(dst_data);
 
-    if (Mix_SetPanning(channel, left, right) == 0) {
-        std::cerr << "[AudioEngine] Mix_SetPanning failed: " << Mix_GetError() << "\n";
+    Voice voice;
+    voice.samples = std::move(samples);
+    voice.left_gain = final_volume * left_mix;
+    voice.right_gain = final_volume * right_mix;
+    voice.loop = false;
+    {
+        std::lock_guard<std::mutex> lock(voice_mutex_);
+        voices_.push_back(std::move(voice));
     }
 }
-

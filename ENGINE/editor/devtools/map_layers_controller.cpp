@@ -13,7 +13,7 @@
 #include <cmath>
 #include <iostream>
 #include <sstream>
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 
 #include <nlohmann/json.hpp>
 

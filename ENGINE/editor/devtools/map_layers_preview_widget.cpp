@@ -1,5 +1,6 @@
 #include "map_layers_preview_widget.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -86,7 +87,7 @@ void draw_text(SDL_Renderer* renderer, const std::string& text, int x, int y, co
     if (!font) {
         return;
     }
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), style.color);
+    SDL_Surface* surf = ttf_util::RenderTextBlended(font, text.c_str(), style.color);
     if (!surf) {
         TTF_CloseFont(font);
         return;
@@ -97,7 +98,7 @@ void draw_text(SDL_Renderer* renderer, const std::string& text, int x, int y, co
         sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     TTF_CloseFont(font);
 }
 
@@ -283,12 +284,12 @@ int MapLayersPreviewWidget::height_for_width(int w) const {
 
 bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
     ensure_latest_visuals();
-    const bool pointer_event = (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP);
+    const bool pointer_event = (e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP);
     if (!pointer_event) {
         return false;
     }
     SDL_Point p{0, 0};
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         p.x = e.motion.x;
         p.y = e.motion.y;
     } else {
@@ -297,7 +298,7 @@ bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
     }
     const bool inside = SDL_PointInRect(&p, &rect_) == SDL_TRUE;
     if (!inside) {
-        if (e.type == SDL_MOUSEMOTION) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
             if (refresh_hovered_) {
                 refresh_hovered_ = false;
                 request_geometry_update();
@@ -308,7 +309,7 @@ bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
     }
 
     const bool over_refresh = SDL_PointInRect(&p, &refresh_button_rect_) == SDL_TRUE;
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         if (refresh_hovered_ != over_refresh) {
             refresh_hovered_ = over_refresh;
             request_geometry_update();
@@ -316,11 +317,11 @@ bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
     }
 
     if (over_refresh) {
-        if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             regenerate_preview();
             return true;
         }
-        if (e.type == SDL_MOUSEMOTION) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
             clear_hover_state();
             return true;
         }
@@ -328,11 +329,11 @@ bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
 
     const int layer_hit = hit_test_layer(p.x, p.y);
     const std::string room_hit = hit_test_room(p.x, p.y);
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         update_hover_state(layer_hit, room_hit);
         return (layer_hit >= 0 || !room_hit.empty());
     }
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         handle_preview_click(layer_hit, room_hit);
         return true;
     }
@@ -958,7 +959,7 @@ void MapLayersPreviewWidget::render_refresh_button(SDL_Renderer* renderer) const
     int text_w = 0;
     int text_h = icon_style.font_size;
     if (TTF_Font* font = icon_style.open_font()) {
-        if (TTF_SizeUTF8(font, refresh_icon.c_str(), &text_w, &text_h) != 0) {
+        if (!ttf_util::GetStringSize(font, refresh_icon, &text_w, &text_h)) {
             text_w = 0;
             text_h = icon_style.font_size;
         }

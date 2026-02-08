@@ -360,13 +360,13 @@ int DMColorRangeWidget::height_for_width(int) const {
 }
 
 bool DMColorRangeWidget::handle_event(const SDL_Event& e) {
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         if (e.button.button != SDL_BUTTON_LEFT) {
             return false;
         }
         SDL_Point p{e.button.x, e.button.y};
         if (SDL_PointInRect(&p, &swatch_rect_)) {
-            if (e.type == SDL_MOUSEBUTTONUP) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
                 open_picker();
             }
             return true;

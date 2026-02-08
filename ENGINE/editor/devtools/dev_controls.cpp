@@ -1,5 +1,7 @@
 #include "dev_controls.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <SDL3/SDL.h>
 #include <fstream>
@@ -186,7 +188,7 @@ private:
         if (!font) {
             return nullptr;
         }
-        SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), style.color);
+        SDL_Surface* surf = ttf_util::RenderTextBlended(font, text.c_str(), style.color);
         if (!surf) {
             return nullptr;
         }
@@ -196,7 +198,7 @@ private:
                 *out_size = SDL_Point{surf->w, surf->h};
             }
         }
-        SDL_FreeSurface(surf);
+        SDL_DestroySurface(surf);
         return texture;
     }
 
@@ -385,15 +387,15 @@ public:
 
     bool handle_event(const SDL_Event& e) {
         if (!visible_) return false;
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
             close();
             return true;
         }
-        if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION) {
-            SDL_Point p{ e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
-                         e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y };
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION) {
+            SDL_Point p{ e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.x : e.button.x,
+                         e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.y : e.button.y };
             if (!SDL_PointInRect(&p, &rect_)) {
-                if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                     close();
                 }
                 return false;
@@ -412,7 +414,7 @@ public:
             btn->set_rect(btn_rect);
             if (btn->handle_event(e)) {
                 used = true;
-                if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                     if (callback_) callback_(rooms_[i].second);
                     close();
                 }
@@ -1240,10 +1242,10 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     }
 
     const bool pointer_event = is_pointer_event(event);
-    const bool wheel_event = (event.type == SDL_MOUSEWHEEL);
+    const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_relevant = pointer_event || wheel_event;
     const bool keyboard_like_event =
-        (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP || event.type == SDL_TEXTINPUT);
+        (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP || event.type == SDL_EVENT_TEXT_INPUT);
     SDL_Point pointer{0, 0};
     if (pointer_relevant) {
         pointer = event_point(event);
@@ -1283,7 +1285,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
                 SDL_Point probe = pointer;
                 if (!pointer_event) {
                     if (!wheel_point_valid) {
-                        SDL_GetMouseState(&wheel_point.x, &wheel_point.y);
+                        sdl_mouse_util::GetMouseState(&wheel_point.x, &wheel_point.y);
                         wheel_point_valid = true;
                     }
                     probe = wheel_point;
@@ -1304,7 +1306,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         return;
     }
 
-    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
         if (layers_panel_open && map_mode_ui_) {
             map_mode_ui_->toggle_layers_panel();
             if (input_) {
@@ -1382,17 +1384,17 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     bool pointer_event_inside_camera = false;
     if (camera_panel_ && camera_panel_->is_visible()) {
         switch (event.type) {
-        case SDL_MOUSEMOTION:
+        case SDL_EVENT_MOUSE_MOTION:
             pointer_event_inside_camera = camera_panel_->is_point_inside(event.motion.x, event.motion.y);
             break;
-        case SDL_MOUSEBUTTONDOWN:
-        case SDL_MOUSEBUTTONUP:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
             pointer_event_inside_camera = camera_panel_->is_point_inside(event.button.x, event.button.y);
             break;
-        case SDL_MOUSEWHEEL: {
+        case SDL_EVENT_MOUSE_WHEEL: {
             int mx = 0;
             int my = 0;
-            SDL_GetMouseState(&mx, &my);
+            sdl_mouse_util::GetMouseState(&mx, &my);
             pointer_event_inside_camera = camera_panel_->is_point_inside(mx, my);
             break;
         }
@@ -1403,17 +1405,17 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     bool pointer_event_inside_image_effect_panel = false;
     if (image_effect_panel_ && image_effect_panel_->is_visible()) {
         switch (event.type) {
-        case SDL_MOUSEMOTION:
+        case SDL_EVENT_MOUSE_MOTION:
             pointer_event_inside_image_effect_panel = image_effect_panel_->is_point_inside(event.motion.x, event.motion.y);
             break;
-        case SDL_MOUSEBUTTONDOWN:
-        case SDL_MOUSEBUTTONUP:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
             pointer_event_inside_image_effect_panel = image_effect_panel_->is_point_inside(event.button.x, event.button.y);
             break;
-        case SDL_MOUSEWHEEL: {
+        case SDL_EVENT_MOUSE_WHEEL: {
             int mx = 0;
             int my = 0;
-            SDL_GetMouseState(&mx, &my);
+            sdl_mouse_util::GetMouseState(&mx, &my);
             pointer_event_inside_image_effect_panel = image_effect_panel_->is_point_inside(mx, my);
             break;
         }

@@ -1,5 +1,7 @@
 #include "AnimationInspectorPanel.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
@@ -99,7 +101,7 @@ void render_label(SDL_Renderer* renderer, const DMLabelStyle& style, const std::
         return;
     }
 
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+    SDL_Surface* surface = ttf_util::RenderTextBlended(font, text.c_str(), color);
     if (!surface) {
         TTF_CloseFont(font);
         return;
@@ -112,7 +114,7 @@ void render_label(SDL_Renderer* renderer, const DMLabelStyle& style, const std::
         SDL_DestroyTexture(texture);
     }
 
-    SDL_FreeSurface(surface);
+    SDL_DestroySurface(surface);
     TTF_CloseFont(font);
 }
 
@@ -126,7 +128,8 @@ int text_width(const DMLabelStyle& style, const std::string& text) {
         return 0;
     }
     int width = 0;
-    if (TTF_SizeUTF8(font, text.c_str(), &width, nullptr) != 0) {
+    int height = 0;
+    if (!ttf_util::GetStringSize(font, text, &width, &height)) {
         width = 0;
     }
     TTF_CloseFont(font);
@@ -134,13 +137,12 @@ int text_width(const DMLabelStyle& style, const std::string& text) {
 }
 
 int resolve_wheel_delta(const SDL_MouseWheelEvent& wheel) {
-    int delta = wheel.y;
+    int delta = wheel.integer_y;
     if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
         delta = -delta;
     }
-#if SDL_VERSION_ATLEAST(2,0,18)
     if (delta == 0) {
-        float precise = wheel.preciseY;
+        float precise = wheel.y;
         if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
             precise = -precise;
         }
@@ -149,15 +151,14 @@ int resolve_wheel_delta(const SDL_MouseWheelEvent& wheel) {
             delta = precise > 0.0f ? 1 : -1;
         }
     }
-#endif
     return delta;
 }
 
 bool is_pointer_event(const SDL_Event& e) {
     switch (e.type) {
-        case SDL_MOUSEBUTTONDOWN:
-        case SDL_MOUSEBUTTONUP:
-        case SDL_MOUSEMOTION:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
+        case SDL_EVENT_MOUSE_MOTION:
             return true;
         default:
             return false;
@@ -547,7 +548,7 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
 
     if (is_pointer_event(e)) {
         SDL_Point p;
-        if (e.type == SDL_MOUSEMOTION) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
             p.x = e.motion.x;
             p.y = e.motion.y;
         } else {
@@ -572,11 +573,11 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
     bool handled = false;
     bool was_editing = name_box_ && name_box_->is_editing();
 
-    if (e.type == SDL_KEYDOWN) {
-        if (e.key.keysym.sym == SDLK_TAB) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
+        if (e.key.key == SDLK_TAB) {
             auto order = focus_order();
             if (!order.empty()) {
-                int direction = (e.key.keysym.mod & KMOD_SHIFT) ? -1 : 1;
+                int direction = (e.key.mod & SDL_KMOD_SHIFT) ? -1 : 1;
                 int count = static_cast<int>(order.size());
                 int next = focus_index_;
                 if (next < 0 || next >= count) {
@@ -595,19 +596,19 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
             auto order = focus_order();
             if (focus_index_ >= 0 && focus_index_ < static_cast<int>(order.size())) {
                 FocusTarget target = order[focus_index_];
-                if ((e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_KP_ENTER ||
-                     e.key.keysym.sym == SDLK_SPACE) &&
+                if ((e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER ||
+                     e.key.key == SDLK_SPACE) &&
                     !(target == FocusTarget::kName && name_box_ && name_box_->is_editing())) {
                     activate_focus_target(target);
                     handled = true;
                 }
             }
         }
-    } else if (e.type == SDL_TEXTINPUT) {
+    } else if (e.type == SDL_EVENT_TEXT_INPUT) {
 
     }
 
-    if (scrollbar_visible_ && e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (scrollbar_visible_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{e.button.x, e.button.y};
         if (SDL_PointInRect(&p, &scrollbar_track_)) {
             const int track_range = std::max(0, scrollbar_track_.h - scrollbar_thumb_.h);
@@ -621,7 +622,7 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{e.button.x, e.button.y};
         FocusTarget clicked = FocusTarget::kNone;
         if (name_box_ && SDL_PointInRect(&p, &name_box_->rect())) {
@@ -706,7 +707,7 @@ void AnimationInspectorPanel::rebuild_widgets() {
             if (!start_button_->handle_event(ev)) {
                 return false;
             }
-            if (ev.type == SDL_MOUSEBUTTONUP && ev.button.button == SDL_BUTTON_LEFT) {
+            if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT) {
                 activate_focus_target(FocusTarget::kStart);
             }
             return true;
@@ -724,7 +725,7 @@ void AnimationInspectorPanel::rebuild_widgets() {
             if (scrub_mode_) {
                 return true;
             }
-            if (ev.type == SDL_MOUSEBUTTONUP && ev.button.button == SDL_BUTTON_LEFT) {
+            if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT) {
                 if (preview_timeline_) {
                     if (preview_timeline_->is_playing()) {
                         preview_timeline_->pause();
@@ -744,7 +745,7 @@ void AnimationInspectorPanel::rebuild_widgets() {
             }
             int before = preview_scrub_slider_->value();
             if (!preview_scrub_slider_->handle_event(ev)) {
-                if (ev.type == SDL_MOUSEBUTTONUP && preview_scrubbing_active_) {
+                if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && preview_scrubbing_active_) {
                     preview_scrubbing_active_ = false;
                     if (!scrub_mode_ && preview_timeline_ && was_playing_before_scrub_) {
                         preview_timeline_->play();
@@ -754,7 +755,7 @@ void AnimationInspectorPanel::rebuild_widgets() {
                 return false;
             }
 
-            if (ev.type == SDL_MOUSEBUTTONDOWN && ev.button.button == SDL_BUTTON_LEFT) {
+            if (ev.type == SDL_EVENT_MOUSE_BUTTON_DOWN && ev.button.button == SDL_BUTTON_LEFT) {
                 preview_scrubbing_active_ = true;
                 was_playing_before_scrub_ = preview_timeline_ && preview_timeline_->is_playing();
                 if (preview_timeline_) {
@@ -766,7 +767,7 @@ void AnimationInspectorPanel::rebuild_widgets() {
                 sync_timeline_to_slider(preview_scrub_slider_->value());
             }
 
-            if (ev.type == SDL_MOUSEBUTTONUP && ev.button.button == SDL_BUTTON_LEFT) {
+            if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT) {
                 if (preview_scrubbing_active_) {
                     preview_scrubbing_active_ = false;
                     if (!scrub_mode_ && preview_timeline_ && was_playing_before_scrub_) {
@@ -801,7 +802,7 @@ void AnimationInspectorPanel::rebuild_widgets() {
             if (!source_frames_button_->handle_event(ev)) {
                 return false;
             }
-            if (ev.type == SDL_MOUSEBUTTONUP && ev.button.button == SDL_BUTTON_LEFT) {
+            if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT) {
                 activate_focus_target(FocusTarget::kSourceFrames);
             }
             return true;
@@ -815,7 +816,7 @@ void AnimationInspectorPanel::rebuild_widgets() {
             if (!source_animation_button_->handle_event(ev)) {
                 return false;
             }
-            if (ev.type == SDL_MOUSEBUTTONUP && ev.button.button == SDL_BUTTON_LEFT) {
+            if (ev.type == SDL_EVENT_MOUSE_BUTTON_UP && ev.button.button == SDL_BUTTON_LEFT) {
                 activate_focus_target(FocusTarget::kSourceAnimation);
             }
             return true;
@@ -1233,12 +1234,12 @@ void AnimationInspectorPanel::render_overlays(SDL_Renderer* renderer) const {
 }
 
 bool AnimationInspectorPanel::handle_scroll_wheel(const SDL_Event& e) {
-    if (e.type != SDL_MOUSEWHEEL) {
+    if (e.type != SDL_EVENT_MOUSE_WHEEL) {
         return false;
     }
     int mx = 0;
     int my = 0;
-    SDL_GetMouseState(&mx, &my);
+    sdl_mouse_util::GetMouseState(&mx, &my);
     SDL_Point mouse{mx, my};
     if (!SDL_PointInRect(&mouse, &bounds_)) {
         return false;

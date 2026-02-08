@@ -13,16 +13,16 @@ SDL_Surface* duplicate_surface(SDL_Surface* surface) {
     if (!surface) {
         return nullptr;
     }
-    SDL_Surface* copy = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA8888, 0);
+    SDL_Surface* copy = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA8888);
     if (!copy) {
         SDL_Surface* fallback =
-            SDL_CreateRGBSurfaceWithFormat(0, surface->w, surface->h, 32, SDL_PIXELFORMAT_RGBA8888);
+            SDL_CreateSurface(surface->w, surface->h, SDL_PIXELFORMAT_RGBA8888);
         if (!fallback) {
             return nullptr;
         }
         SDL_Rect rect{0, 0, surface->w, surface->h};
-        if (SDL_BlitSurface(surface, &rect, fallback, &rect) != 0) {
-            SDL_FreeSurface(fallback);
+        if (!SDL_BlitSurface(surface, &rect, fallback, &rect)) {
+            SDL_DestroySurface(fallback);
             return nullptr;
         }
         copy = fallback;
@@ -32,7 +32,7 @@ SDL_Surface* duplicate_surface(SDL_Surface* surface) {
 
 std::uint64_t hash_surface_pixels(SDL_Surface* surface, std::uint64_t seed) {
     if (!surface || !surface->pixels) {
-        return mix_signature(seed, 0);
+        return mix_signature(seed);
     }
     seed = mix_signature(seed, static_cast<std::uint64_t>(surface->w));
     seed = mix_signature(seed, static_cast<std::uint64_t>(surface->h));

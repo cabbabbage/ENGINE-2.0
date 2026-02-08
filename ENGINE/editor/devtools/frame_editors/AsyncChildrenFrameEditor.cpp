@@ -1,4 +1,5 @@
 #include "devtools/frame_editors/AsyncChildrenFrameEditor.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -28,7 +29,7 @@ constexpr float kFrameInterval = 1.0f / static_cast<float>(kBaseAnimationFps);
 int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
     float precise = wheel.preciseY;
     int delta = wheel.y;
-    if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+    if (wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
         delta = -delta;
         precise = -precise;
     }
@@ -173,12 +174,12 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     SDL_Point mouse_pos = {0, 0};
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         mouse_pos = {e.button.x, e.button.y};
-    } else if (e.type == SDL_MOUSEMOTION) {
+    } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
         mouse_pos = {e.motion.x, e.motion.y};
-    } else if (e.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
@@ -209,8 +210,8 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_KEYDOWN) {
-        switch (e.key.keysym.sym) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
+        switch (e.key.key) {
             // No LEFT/RIGHT arrow keys - use frame navigator buttons only
             case SDLK_TAB:
                 selected_child_index_ = (selected_child_index_ + 1) %

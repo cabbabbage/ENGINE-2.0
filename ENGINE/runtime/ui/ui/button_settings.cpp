@@ -1,7 +1,7 @@
 #include "button_settings.hpp"
 
 #include <SDL3/SDL.h>
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 
 #include <fstream>
 #include <functional>

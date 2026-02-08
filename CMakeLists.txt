@@ -6,6 +6,7 @@ project(VIBBLEEngine)
 # ------------------------------------------
 # Build settings focused on compile speed
 # ------------------------------------------
+add_compile_definitions(SDL_DISABLE_OLD_NAMES)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -101,7 +102,6 @@ if(NOT nlohmann_json_FOUND)
 endif()
 find_package(SDL3 CONFIG REQUIRED)
 find_package(SDL3_image CONFIG REQUIRED)
-find_package(SDL3_mixer CONFIG REQUIRED)
 find_package(SDL3_ttf CONFIG REQUIRED)
 
 # Try glad via package config first (vcpkg provides this)
@@ -204,7 +204,6 @@ target_link_libraries(engine
         nlohmann_json::nlohmann_json
         SDL3::SDL3
         SDL3_image::SDL3_image
-        SDL3_mixer::SDL3_mixer
         SDL3_ttf::SDL3_ttf
         ${GLAD_TARGET}
         OpenGL::GL
@@ -298,7 +297,6 @@ target_link_libraries(engine_tests
         nlohmann_json::nlohmann_json
         SDL3::SDL3
         SDL3_image::SDL3_image
-        SDL3_mixer::SDL3_mixer
         SDL3_ttf::SDL3_ttf
         ${GLAD_TARGET}
         OpenGL::GL

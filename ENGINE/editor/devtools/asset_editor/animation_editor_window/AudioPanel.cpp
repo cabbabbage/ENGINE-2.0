@@ -1,12 +1,13 @@
 #include "AudioPanel.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include "AnimationDocument.hpp"
 #include "AudioImporter.hpp"
 #include "PanelLayoutConstants.hpp"
 
 #include <SDL3/SDL.h>
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
 #include <algorithm>
@@ -37,12 +38,12 @@ void render_label(SDL_Renderer* renderer, const std::string& text, int x, int y,
     if (max_width > 0) {
         int w = 0;
         int h = 0;
-        if (TTF_SizeUTF8(font, clipped.c_str(), &w, &h) == 0 && w > max_width) {
+        if (ttf_util::GetStringSize(font, clipped, &w, &h) && w > max_width) {
             const std::string ellipsis = "...";
             while (!clipped.empty()) {
                 clipped.pop_back();
                 std::string candidate = clipped + ellipsis;
-                if (TTF_SizeUTF8(font, candidate.c_str(), &w, &h) != 0) continue;
+                if (!ttf_util::GetStringSize(font, candidate, &w, &h)) continue;
                 if (w <= max_width) {
                     clipped = std::move(candidate);
                     break;
@@ -51,7 +52,7 @@ void render_label(SDL_Renderer* renderer, const std::string& text, int x, int y,
         }
     }
 
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, clipped.c_str(), color);
+    SDL_Surface* surf = ttf_util::RenderTextBlended(font, clipped.c_str(), color);
     if (!surf) {
         TTF_CloseFont(font);
         return;
@@ -62,7 +63,7 @@ void render_label(SDL_Renderer* renderer, const std::string& text, int x, int y,
         sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     TTF_CloseFont(font);
 }
 

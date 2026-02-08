@@ -33,7 +33,7 @@ bool PreviewViewport::begin() {
         return false;
     }
     previous_target_ = SDL_GetRenderTarget(renderer_);
-    if (SDL_SetRenderTarget(renderer_, target_) != 0) {
+    if (!SDL_SetRenderTarget(renderer_, target_)) {
         previous_target_ = nullptr;
         return false;
     }

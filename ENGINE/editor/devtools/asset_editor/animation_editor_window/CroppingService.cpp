@@ -13,10 +13,10 @@ namespace animation_editor {
 
 namespace {
 
-using SurfacePtr = std::unique_ptr<SDL_Surface, decltype(&SDL_FreeSurface)>;
+using SurfacePtr = std::unique_ptr<SDL_Surface, decltype(&SDL_DestroySurface)>;
 
 SurfacePtr make_surface_ptr(SDL_Surface* surface) {
-    return SurfacePtr(surface, SDL_FreeSurface);
+    return SurfacePtr(surface, SDL_DestroySurface);
 }
 
 }
@@ -53,7 +53,7 @@ SDL_Surface* CroppingService::load_surface_rgba(const std::filesystem::path& pat
         return nullptr;
     }
 
-    SurfacePtr converted = make_surface_ptr(SDL_ConvertSurfaceFormat(loaded.get(), SDL_PIXELFORMAT_RGBA8888, 0));
+    SurfacePtr converted = make_surface_ptr(SDL_ConvertSurface(loaded.get(), SDL_PIXELFORMAT_RGBA8888));
     if (!converted) {
         return nullptr;
     }
@@ -67,7 +67,7 @@ bool CroppingService::save_surface_as_png(SDL_Surface* surface, const std::files
         return false;
     }
 
-#if SDL_IMAGE_VERSION_ATLEAST(2, 0, 0)
+#if SDL_IMAGE_VERSION_ATLEAST(2, 0)
     if (IMG_SavePNG(surface, path.string().c_str()) == 0) {
         return true;
     }
@@ -75,7 +75,7 @@ bool CroppingService::save_surface_as_png(SDL_Surface* surface, const std::files
 
     std::filesystem::path bmp_path = path;
     bmp_path.replace_extension(".bmp");
-    return SDL_SaveBMP(surface, bmp_path.string().c_str()) == 0;
+    return SDL_SaveBMP(surface, bmp_path.string().c_str());
 }
 
 void CroppingService::compute_union_bounds(const std::vector<std::filesystem::path>& frames) {
@@ -108,7 +108,7 @@ void CroppingService::compute_union_bounds(const std::vector<std::filesystem::pa
             continue;
         }
 
-        if (SDL_MUSTLOCK(surface.get()) && SDL_LockSurface(surface.get()) != 0) {
+        if (SDL_MUSTLOCK(surface.get()) && !SDL_LockSurface(surface.get())) {
             continue;
         }
 
@@ -207,7 +207,7 @@ void CroppingService::crop_images_with_bounds(const std::vector<std::filesystem:
             continue;
         }
 
-        SurfacePtr cropped = make_surface_ptr(SDL_CreateRGBSurfaceWithFormat(0, crop_width, crop_height, 32, SDL_PIXELFORMAT_RGBA8888));
+        SurfacePtr cropped = make_surface_ptr(SDL_CreateSurface(crop_width, crop_height, SDL_PIXELFORMAT_RGBA8888));
         if (!cropped) {
             continue;
         }
@@ -215,7 +215,7 @@ void CroppingService::crop_images_with_bounds(const std::vector<std::filesystem:
         SDL_Rect src_rect{left, top, crop_width, crop_height};
         SDL_Rect dst_rect{0, 0, crop_width, crop_height};
 
-        if (SDL_BlitSurface(surface.get(), &src_rect, cropped.get(), &dst_rect) != 0) {
+        if (!SDL_BlitSurface(surface.get(), &src_rect, cropped.get(), &dst_rect)) {
             continue;
         }
 

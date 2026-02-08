@@ -1,5 +1,6 @@
 #include "tag_editor_widget.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include "dm_styles.hpp"
 #include "tag_library.hpp"
@@ -281,7 +282,7 @@ bool TagEditorWidget::handle_event(const SDL_Event& e) {
     if (show_more_tags_btn_ && show_more_tags_btn_->rect().w > 0) {
         if (show_more_tags_btn_->handle_event(e)) {
             used = true;
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 show_all_tag_recs_ = !show_all_tag_recs_;
                 update_toggle_labels();
                 mark_dirty();
@@ -291,7 +292,7 @@ bool TagEditorWidget::handle_event(const SDL_Event& e) {
     if (show_more_anti_btn_ && show_more_anti_btn_->rect().w > 0) {
         if (show_more_anti_btn_->handle_event(e)) {
             used = true;
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 show_all_anti_recs_ = !show_all_anti_recs_;
                 update_toggle_labels();
                 mark_dirty();
@@ -309,8 +310,8 @@ bool TagEditorWidget::handle_event(const SDL_Event& e) {
                 update_search_filter();
                 mark_dirty();
             }
-        } else if (tag_search_box_->is_editing() && e.type == SDL_KEYDOWN &&
-                   (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_KP_ENTER)) {
+        } else if (tag_search_box_->is_editing() && e.type == SDL_EVENT_KEY_DOWN &&
+                   (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER)) {
             used = true;
             add_search_text_as_tag();
         } else if (event_targets_rect(e, tag_search_box_->rect())) {
@@ -320,7 +321,7 @@ bool TagEditorWidget::handle_event(const SDL_Event& e) {
     if (add_tag_btn_ && add_tag_btn_->rect().w > 0) {
         if (add_tag_btn_->handle_event(e)) {
             used = true;
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 add_search_text_as_tag();
             }
         }
@@ -766,7 +767,7 @@ int TagEditorWidget::label_height() {
     }
     int w = 0;
     int h = 0;
-    TTF_SizeUTF8(font, "Tags", &w, &h);
+    ttf_util::GetStringSize(font, "Tags", &w, &h);
     TTF_CloseFont(font);
     cached = h;
     return cached;
@@ -777,7 +778,7 @@ void TagEditorWidget::draw_label(SDL_Renderer* r, const std::string& text, const
     const DMLabelStyle& style = DMStyles::Label();
     TTF_Font* font = style.open_font();
     if (!font) return;
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), style.color);
+    SDL_Surface* surf = ttf_util::RenderTextBlended(font, text.c_str(), style.color);
     if (surf) {
         SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
         if (tex) {
@@ -785,7 +786,7 @@ void TagEditorWidget::draw_label(SDL_Renderer* r, const std::string& text, const
             sdl_render::Texture(r, tex, nullptr, &dst);
             SDL_DestroyTexture(tex);
         }
-        SDL_FreeSurface(surf);
+        SDL_DestroySurface(surf);
     }
     TTF_CloseFont(font);
 }
@@ -796,7 +797,7 @@ void TagEditorWidget::handle_chip_click(const Chip& chip, const SDL_Event& e,
     if (!chip.button) return;
     if (chip.button->handle_event(e)) {
         used = true;
-        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             on_click(chip.value);
         }
     }
@@ -944,12 +945,12 @@ bool TagEditorWidget::event_targets_rect(const SDL_Event& e, const SDL_Rect& rec
     SDL_Point p{0,0};
     bool relevant = false;
     switch (e.type) {
-        case SDL_MOUSEBUTTONDOWN:
-        case SDL_MOUSEBUTTONUP:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
             p = SDL_Point{ e.button.x, e.button.y };
             relevant = true;
             break;
-        case SDL_MOUSEMOTION:
+        case SDL_EVENT_MOUSE_MOTION:
             p = SDL_Point{ e.motion.x, e.motion.y };
             relevant = true;
             break;

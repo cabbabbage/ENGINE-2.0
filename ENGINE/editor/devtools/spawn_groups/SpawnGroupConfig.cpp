@@ -1,5 +1,6 @@
 #include "SpawnGroupConfig.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 #include <array>
@@ -47,7 +48,7 @@ public:
         if (!font) return base;
         int text_w = 0;
         int text_h = 0;
-        if (TTF_SizeUTF8(font, text_.c_str(), &text_w, &text_h) != 0) {
+        if (!ttf_util::GetStringSize(font, text_, &text_w, &text_h)) {
             TTF_CloseFont(font);
             return base;
         }
@@ -68,7 +69,7 @@ public:
         if (color_.a != 0) color = color_;
         TTF_Font* font = TTF_OpenFont(style.font_path.c_str(), style.font_size);
         if (!font) return;
-        SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text_.c_str(), color);
+        SDL_Surface* surface = ttf_util::RenderTextBlended(font, text_.c_str(), color);
         if (!surface) {
             TTF_CloseFont(font);
             return;
@@ -79,7 +80,7 @@ public:
             sdl_render::Texture(renderer, texture, nullptr, &dst);
             SDL_DestroyTexture(texture);
         }
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
         TTF_CloseFont(font);
     }
 
@@ -144,7 +145,7 @@ public:
     bool handle_event(const SDL_Event& e) override {
         if (!button_ || !enabled_) return false;
         bool used = button_->handle_event(e);
-        if (used && on_click_ && e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (used && on_click_ && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             on_click_();
         }
         return used;
@@ -1880,19 +1881,19 @@ void SpawnGroupConfig::update(const Input& input, int screen_w, int screen_h) {
 
 bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
     const bool pointer_event =
-        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION);
+        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
 
     if (drag_state_.active) {
         if (pointer_event) {
             SDL_Point pointer{0, 0};
-            if (e.type == SDL_MOUSEMOTION) {
+            if (e.type == SDL_EVENT_MOUSE_MOTION) {
                 pointer = SDL_Point{e.motion.x, e.motion.y};
             } else {
                 pointer = SDL_Point{e.button.x, e.button.y};
             }
             drag_state_.pointer_y = pointer.y;
             bool inside_panel = SDL_PointInRect(&pointer, &rect_);
-            if (e.type == SDL_MOUSEMOTION) {
+            if (e.type == SDL_EVENT_MOUSE_MOTION) {
                 if (!inside_panel) {
                     cancel_drag();
                 } else {
@@ -1901,7 +1902,7 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
                 process_pending_notifications();
                 return true;
             }
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 drag_state_.pointer_inside = SDL_PointInRect(&pointer, &body_viewport_);
                 if (!inside_panel || !drag_state_.pointer_inside) {
                     cancel_drag();
@@ -1911,17 +1912,17 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
                 process_pending_notifications();
                 return true;
             }
-            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                 process_pending_notifications();
                 return true;
             }
         }
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
             cancel_drag();
             process_pending_notifications();
             return true;
         }
-        if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) {
+        if (e.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
             cancel_drag();
             process_pending_notifications();
             return true;
@@ -1930,7 +1931,7 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
         return true;
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point pointer{e.button.x, e.button.y};
         for (size_t i = 0; i < entries_.size(); ++i) {
             if (!entries_[i]) continue;

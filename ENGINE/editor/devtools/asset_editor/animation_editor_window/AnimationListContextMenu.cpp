@@ -1,4 +1,5 @@
 #include "AnimationListContextMenu.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <SDL3_ttf/SDL_ttf.h>
 
@@ -22,17 +23,17 @@ int measure_text_width(const DMLabelStyle& style, const std::string& text) {
 SDL_Point event_point(const SDL_Event& e) {
     SDL_Point p{0, 0};
     switch (e.type) {
-    case SDL_MOUSEMOTION:
+    case SDL_EVENT_MOUSE_MOTION:
         p.x = e.motion.x;
         p.y = e.motion.y;
         break;
-    case SDL_MOUSEBUTTONDOWN:
-    case SDL_MOUSEBUTTONUP:
+    case SDL_EVENT_MOUSE_BUTTON_DOWN:
+    case SDL_EVENT_MOUSE_BUTTON_UP:
         p.x = e.button.x;
         p.y = e.button.y;
         break;
-    case SDL_MOUSEWHEEL:
-        SDL_GetMouseState(&p.x, &p.y);
+    case SDL_EVENT_MOUSE_WHEEL:
+        sdl_mouse_util::GetMouseState(&p.x, &p.y);
         break;
     default:
         break;
@@ -129,12 +130,12 @@ int AnimationListContextMenu::option_index_at_point(SDL_Point p) const {
 bool AnimationListContextMenu::handle_event(const SDL_Event& e) {
     if (!open_) return false;
 
-    if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+    if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
         close();
         return true;
     }
 
-    if (e.type == SDL_MOUSEWHEEL) {
+    if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         SDL_Point p = event_point(e);
         if (!SDL_PointInRect(&p, &rect_)) {
             close();
@@ -143,13 +144,13 @@ bool AnimationListContextMenu::handle_event(const SDL_Event& e) {
         return true;
     }
 
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p = event_point(e);
         hovered_index_ = option_index_at_point(p);
         return hovered_index_ >= 0;
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
         SDL_Point p = event_point(e);
         if (!SDL_PointInRect(&p, &rect_)) {
             close();
@@ -162,7 +163,7 @@ bool AnimationListContextMenu::handle_event(const SDL_Event& e) {
         return true;
     }
 
-    if (e.type == SDL_MOUSEBUTTONUP) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         SDL_Point p = event_point(e);
         if (!SDL_PointInRect(&p, &rect_)) {
             close();

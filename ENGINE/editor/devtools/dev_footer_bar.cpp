@@ -1,5 +1,7 @@
 #include "dev_footer_bar.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include "draw_utils.hpp"
 #include "utils/input.hpp"
@@ -38,7 +40,7 @@ void draw_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
     const DMLabelStyle& style = DMStyles::Label();
     TTF_Font* font = style.open_font();
     if (!font) return;
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), style.color);
+    SDL_Surface* surf = ttf_util::RenderTextBlended(font, text.c_str(), style.color);
     if (!surf) {
         TTF_CloseFont(font);
         return;
@@ -49,7 +51,7 @@ void draw_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
         sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     TTF_CloseFont(font);
 }
 
@@ -178,15 +180,15 @@ bool DevFooterBar::handle_event(const SDL_Event& e) {
     if (!visible_ || !input_enabled_) return false;
 
     const bool pointer_event =
-        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION);
-    const bool wheel_event = (e.type == SDL_MOUSEWHEEL);
+        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
+    const bool wheel_event = (e.type == SDL_EVENT_MOUSE_WHEEL);
 
     SDL_Point pointer{0, 0};
     if (pointer_event) {
-        pointer.x = (e.type == SDL_MOUSEMOTION) ? e.motion.x : e.button.x;
-        pointer.y = (e.type == SDL_MOUSEMOTION) ? e.motion.y : e.button.y;
+        pointer.x = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.x : e.button.x;
+        pointer.y = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.y : e.button.y;
     } else if (wheel_event) {
-        SDL_GetMouseState(&pointer.x, &pointer.y);
+        sdl_mouse_util::GetMouseState(&pointer.x, &pointer.y);
     }
 
     const bool in_footer = (pointer_event || wheel_event) && SDL_PointInRect(&pointer, &rect_);
@@ -228,7 +230,7 @@ bool DevFooterBar::handle_event(const SDL_Event& e) {
         if (!btn.widget) continue;
         if (btn.widget->handle_event(e)) {
             used = true;
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 if (btn.momentary) {
                     if (btn.on_toggle) btn.on_toggle(true);
                     btn.active = false;
@@ -454,7 +456,7 @@ void DevFooterBar::update_title_width() {
     if (!font) return;
     int w = 0;
     int h = 0;
-    if (TTF_SizeUTF8(font, title_.c_str(), &w, &h) == 0) {
+    if (ttf_util::GetStringSize(font, title_, &w, &h)) {
         title_width_ = w;
     }
     TTF_CloseFont(font);

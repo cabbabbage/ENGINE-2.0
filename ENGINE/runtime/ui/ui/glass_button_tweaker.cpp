@@ -1,5 +1,6 @@
 #include "glass_button_tweaker.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include "button.hpp"
 #include "styles.hpp"
@@ -44,7 +45,7 @@ static inline int clampi(int v, int lo, int hi) { return std::max(lo, std::min(h
 
 void render_text(SDL_Renderer* renderer, TTF_Font* font, const std::string& text, int x, int y, SDL_Color color) {
     if (!renderer || !font || text.empty()) return;
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+    SDL_Surface* surface = ttf_util::RenderTextBlended(font, text.c_str(), color);
     if (!surface) return;
     SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
     if (texture) {
@@ -52,7 +53,7 @@ void render_text(SDL_Renderer* renderer, TTF_Font* font, const std::string& text
         sdl_render::Texture(renderer, texture, nullptr, &dst);
         SDL_DestroyTexture(texture);
     }
-    SDL_FreeSurface(surface);
+    SDL_DestroySurface(surface);
 }
 
 std::string format_decimal(float value) {
@@ -429,7 +430,7 @@ bool GlassButtonTweaker::handle_event(const SDL_Event& e, int screen_w, int scre
     auto& st = state_map()[this];
 
     // Keep track of which row mouse is over for nicer UX.
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         st.mouse_over_index = -1;
         SDL_Point p{ e.motion.x, e.motion.y };
         if (point_in_rect(p, panel_rect_)) {
@@ -457,7 +458,7 @@ bool GlassButtonTweaker::handle_event(const SDL_Event& e, int screen_w, int scre
         }
     }
 
-    if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         if (st.dragging) {
             st.dragging = false;
             st.drag_index = -1;
@@ -465,7 +466,7 @@ bool GlassButtonTweaker::handle_event(const SDL_Event& e, int screen_w, int scre
         }
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
 
         if (!point_in_rect(p, panel_rect_)) return false;
@@ -560,16 +561,16 @@ bool GlassButtonTweaker::handle_event(const SDL_Event& e, int screen_w, int scre
 
     // Text input mode.
     if (st.editing_text) {
-        if (e.type == SDL_TEXTINPUT) {
+        if (e.type == SDL_EVENT_TEXT_INPUT) {
             if (st.edit_buffer.size() < 64) st.edit_buffer += e.text.text;
             return true;
         }
-        if (e.type == SDL_KEYDOWN) {
-            if (e.key.keysym.sym == SDLK_BACKSPACE) {
+        if (e.type == SDL_EVENT_KEY_DOWN) {
+            if (e.key.key == SDLK_BACKSPACE) {
                 if (!st.edit_buffer.empty()) st.edit_buffer.pop_back();
                 return true;
             }
-            if (e.key.keysym.sym == SDLK_ESCAPE) {
+            if (e.key.key == SDLK_ESCAPE) {
                 st.editing_text = false;
                 st.edit_index = -1;
                 st.edit_buffer.clear();
@@ -577,7 +578,7 @@ bool GlassButtonTweaker::handle_event(const SDL_Event& e, int screen_w, int scre
                 update_status("Edit canceled");
                 return true;
             }
-            if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_KP_ENTER) {
+            if (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER) {
                 if (st.edit_index >= 0 && st.edit_index < static_cast<int>(fields_.size())) {
                     auto& style = ButtonSettings::instance().mutable_style();
                     FieldDefinition& field = fields_[st.edit_index];
@@ -595,9 +596,9 @@ bool GlassButtonTweaker::handle_event(const SDL_Event& e, int screen_w, int scre
     }
 
     // Keyboard navigation and nudging.
-    if (e.type == SDL_KEYDOWN) {
-        const bool fast = (e.key.keysym.mod & KMOD_SHIFT) != 0;
-        switch (e.key.keysym.sym) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
+        const bool fast = (e.key.mod & KMOD_SHIFT) != 0;
+        switch (e.key.key) {
             case SDLK_UP:
                 selected_index_ = (selected_index_ + static_cast<int>(fields_.size()) - 1) % static_cast<int>(fields_.size());
                 if (fields_[selected_index_].kind != FieldKind::Color) color_channel_ = 0;
@@ -726,7 +727,7 @@ void GlassButtonTweaker::render(SDL_Renderer* renderer, int screen_w, int screen
         }
 
         int tw = 0, th = 0;
-        TTF_SizeText(font, valueText.c_str(), &tw, &th);
+        ttf_util::GetStringSize(font, valueText, &tw, &th);
         int vx = hit.valueRect.x + hit.valueRect.w - 6 - tw;
         int vy = hit.valueRect.y + (hit.valueRect.h - th) / 2;
         render_text(renderer, font, valueText, vx, vy, SDL_Color{255, 255, 255, 255});
@@ -742,7 +743,7 @@ void GlassButtonTweaker::render(SDL_Renderer* renderer, int screen_w, int screen
             status_text_.clear();
         } else {
             int tw = 0, th = 0;
-            TTF_SizeText(font, status_text_.c_str(), &tw, &th);
+            ttf_util::GetStringSize(font, status_text_, &tw, &th);
             int tx = panel_rect_.x + panel_rect_.w - kPanelPadding - tw;
             int ty = random_button_rect_.y - 24;
             render_text(renderer, font, status_text_, tx, ty, SDL_Color{180, 255, 180, 255});
@@ -757,7 +758,7 @@ void GlassButtonTweaker::render(SDL_Renderer* renderer, int screen_w, int screen
         sdl_render::Rect(renderer, &rect);
 
         int tw = 0, th = 0;
-        TTF_SizeText(font, text.c_str(), &tw, &th);
+        ttf_util::GetStringSize(font, text, &tw, &th);
         int tx = rect.x + (rect.w - tw) / 2;
         int ty = rect.y + (rect.h - th) / 2;
         render_text(renderer, font, text, tx, ty, SDL_Color{230, 230, 230, 255});

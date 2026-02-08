@@ -243,7 +243,7 @@ public:
     bool handle_event(const SDL_Event& e) override {
         if (!button_) return false;
         bool used = button_->handle_event(e);
-        if (used && e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (used && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             set_expanded(!expanded_);
             if (on_toggle_) {
                 on_toggle_(expanded_);

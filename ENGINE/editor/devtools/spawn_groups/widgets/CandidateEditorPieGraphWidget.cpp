@@ -1,5 +1,6 @@
 #include "CandidateEditorPieGraphWidget.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 #include <array>
@@ -74,12 +75,12 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         bool used = search_assets_->handle_event(e);
         bool should_close = false;
 
-        if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             SDL_Point point{e.button.x, e.button.y};
             if (!search_assets_->is_point_inside(point.x, point.y)) {
                 should_close = true;
             }
-        } else if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+        } else if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
             should_close = true;
         }
 
@@ -88,15 +89,15 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             return true;
         }
 
-        if (used || e.type == SDL_TEXTINPUT || e.type == SDL_KEYDOWN || e.type == SDL_KEYUP ||
-            e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION ||
-            e.type == SDL_MOUSEWHEEL) {
+        if (used || e.type == SDL_EVENT_TEXT_INPUT || e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_KEY_UP ||
+            e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION ||
+            e.type == SDL_EVENT_MOUSE_WHEEL) {
             return true;
         }
     }
 
     if (collapse_button_ && collapse_button_->handle_event(e)) {
-        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             collapsed_ = !collapsed_;
             update_collapse_button();
             if (collapsed_) {
@@ -118,7 +119,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
 
     if (should_show_regen_button() && regen_button_) {
         if (regen_button_->handle_event(e)) {
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 if (on_regenerate_) {
                     on_regenerate_();
                 }
@@ -129,7 +130,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
 
     if (should_show_add_button() && add_button_) {
         if (add_button_->handle_event(e)) {
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 open_add_candidate_search();
             }
             return true;
@@ -142,7 +143,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         return false;
     }
 
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         Layout layout = compute_layout();
         double total = total_weight();
         if (total <= 0.0) {
@@ -166,7 +167,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             changed = true;
         }
         return changed;
-    } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         Layout layout = compute_layout();
         double total = total_weight();
         if (total <= 0.0) {
@@ -215,9 +216,9 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             release_scroll_capture();
             return true;
         }
-    } else if (e.type == SDL_MOUSEWHEEL) {
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         if (active_index_ >= 0 && on_adjust_) {
-            double delta_value = static_cast<double>(e.wheel.y);
+            double delta_value = static_cast<double>(e.wheel.integer_y);
             if (std::abs(delta_value) < 1e-6) {
                 delta_value = static_cast<double>(e.wheel.preciseY);
             }
@@ -912,7 +913,7 @@ SDL_Rect CandidateEditorPieGraphWidget::draw_text(SDL_Renderer* renderer, TTF_Fo
         return dst;
     }
 
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+    SDL_Surface* surf = ttf_util::RenderTextBlended(font, text.c_str(), color);
     if (!surf) {
         return dst;
     }
@@ -929,7 +930,7 @@ SDL_Rect CandidateEditorPieGraphWidget::draw_text(SDL_Renderer* renderer, TTF_Fo
         sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     return dst;
 }
 

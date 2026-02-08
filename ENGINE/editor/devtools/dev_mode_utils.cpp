@@ -16,7 +16,7 @@ TTF_Font* load_font(int size) {
     const DMLabelStyle& label = DMStyles::Label();
     TTF_Font* font = TTF_OpenFont(label.font_path.c_str(), size);
     if (!font) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[DevModeUtils] Failed to load font '%s' size %d: %s", label.font_path.c_str(), size, TTF_GetError());
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[DevModeUtils] Failed to load font '%s' size %d: %s", label.font_path.c_str(), size, SDL_GetError());
         return nullptr;
     }
     cache.emplace(size, font);

@@ -947,11 +947,15 @@ bool TagEditorWidget::event_targets_rect(const SDL_Event& e, const SDL_Rect& rec
     switch (e.type) {
         case SDL_EVENT_MOUSE_BUTTON_DOWN:
         case SDL_EVENT_MOUSE_BUTTON_UP:
-            p = SDL_Point{ e.button.x, e.button.y };
+            p = SDL_Point{
+                static_cast<int>(std::lround(e.button.x)),
+                static_cast<int>(std::lround(e.button.y))};
             relevant = true;
             break;
         case SDL_EVENT_MOUSE_MOTION:
-            p = SDL_Point{ e.motion.x, e.motion.y };
+            p = SDL_Point{
+                static_cast<int>(std::lround(e.motion.x)),
+                static_cast<int>(std::lround(e.motion.y))};
             relevant = true;
             break;
         default:

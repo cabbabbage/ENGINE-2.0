@@ -44,14 +44,14 @@ bool TextBox::set_editing(bool e) {
         bool changed = false;
         if (e) {
                 editing_ = true;
-                SDL_StartTextInput();
+                SDL_StartTextInput(SDL_GetKeyboardFocus());
                 caret_pos_ = std::min(caret_pos_, text_.size());
                 edit_origin_ = text_;
                 edit_dirty_ = false;
                 update_caret_column();
         }
         else {
-                SDL_StopTextInput();
+                SDL_StopTextInput(SDL_GetKeyboardFocus());
                 editing_ = false;
                 if (edit_dirty_ && edit_origin_ != text_) changed = true;
                 edit_dirty_ = false;

@@ -1887,9 +1887,13 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
         if (pointer_event) {
             SDL_Point pointer{0, 0};
             if (e.type == SDL_EVENT_MOUSE_MOTION) {
-                pointer = SDL_Point{e.motion.x, e.motion.y};
+                pointer = SDL_Point{
+                    static_cast<int>(std::lround(e.motion.x)),
+                    static_cast<int>(std::lround(e.motion.y))};
             } else {
-                pointer = SDL_Point{e.button.x, e.button.y};
+                pointer = SDL_Point{
+                    static_cast<int>(std::lround(e.button.x)),
+                    static_cast<int>(std::lround(e.button.y))};
             }
             drag_state_.pointer_y = pointer.y;
             bool inside_panel = SDL_PointInRect(&pointer, &rect_);

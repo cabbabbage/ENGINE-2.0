@@ -67,11 +67,9 @@ bool CroppingService::save_surface_as_png(SDL_Surface* surface, const std::files
         return false;
     }
 
-#if SDL_IMAGE_VERSION_ATLEAST(2, 0)
-    if (IMG_SavePNG(surface, path.string().c_str()) == 0) {
+    if (IMG_SavePNG(surface, path.string().c_str())) {
         return true;
     }
-#endif
 
     std::filesystem::path bmp_path = path;
     bmp_path.replace_extension(".bmp");

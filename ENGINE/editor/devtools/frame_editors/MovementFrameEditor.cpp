@@ -276,9 +276,9 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
     // Handle mouse events for 3D point manipulation
     SDL_Point mouse_pos = {0, 0};
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        mouse_pos = {e.button.x, e.button.y};
+        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
     } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        mouse_pos = {e.motion.x, e.motion.y};
+        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
@@ -703,7 +703,7 @@ SDL_FPoint MovementFrameEditor::screen_to_world_relative(const SDL_Point& screen
 }
 
 bool MovementFrameEditor::ui_contains_point(const SDL_Point& pt) const {
-    return SDL_PointInRect(&pt, &ui_rect_) == SDL_TRUE;
+    return SDL_PointInRect(&pt, &ui_rect_);
 }
 
 }  // namespace devmode::frame_editors

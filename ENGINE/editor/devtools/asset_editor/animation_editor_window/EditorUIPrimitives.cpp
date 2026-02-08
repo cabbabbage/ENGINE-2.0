@@ -59,13 +59,12 @@ bool ScrollController::handle_wheel(const SDL_Event& e) {
     }
 
     int delta = e.wheel.integer_y;
-    if (e.wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
+    if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
         delta = -delta;
     }
-#if SDL_VERSION_ATLEAST(2, 0, 18)
     if (delta == 0) {
-        float precise = e.wheel.preciseY;
-        if (e.wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
+        float precise = e.wheel.y;
+        if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
             precise = -precise;
         }
         delta = static_cast<int>(std::round(precise));
@@ -73,7 +72,6 @@ bool ScrollController::handle_wheel(const SDL_Event& e) {
             delta = precise > 0.0f ? 1 : -1;
         }
     }
-#endif
     return apply_wheel_delta(delta);
 }
 

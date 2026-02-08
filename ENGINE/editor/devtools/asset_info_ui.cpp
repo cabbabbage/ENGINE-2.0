@@ -391,7 +391,7 @@ AssetInfoUI::~AssetInfoUI() {
     forcing_high_quality_rendering_ = false;
     cancel_color_sampling(true);
     if (color_sampling_cursor_handle_) {
-        SDL_FreeCursor(color_sampling_cursor_handle_);
+        SDL_DestroyCursor(color_sampling_cursor_handle_);
         color_sampling_cursor_handle_ = nullptr;
     }
 }
@@ -616,17 +616,21 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
         const bool pointer_event =
             (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
         if (pointer_event) {
-            color_sampling_cursor_.x = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.x : e.button.x;
-            color_sampling_cursor_.y = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.y : e.button.y;
+            color_sampling_cursor_.x = (e.type == SDL_EVENT_MOUSE_MOTION)
+                                           ? static_cast<int>(std::lround(e.motion.x))
+                                           : static_cast<int>(std::lround(e.button.x));
+            color_sampling_cursor_.y = (e.type == SDL_EVENT_MOUSE_MOTION)
+                                           ? static_cast<int>(std::lround(e.motion.y))
+                                           : static_cast<int>(std::lround(e.button.y));
         }
         if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             if (last_renderer_) {
                 SDL_Rect sample_rect{ color_sampling_cursor_.x, color_sampling_cursor_.y, 1, 1 };
                 Uint32 pixel = 0;
                 if (read_pixel(last_renderer_, sample_rect, SDL_PIXELFORMAT_ARGB8888, pixel)) {
-                    Uint8 r = 0, g = 0, b = 0, a = 0;
                     if (const SDL_PixelFormatDetails* fmt = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_ARGB8888)) {
-                        SDL_GetRGBA(pixel, fmt, &r, &g, &b, &a);
+                        Uint8 r = 0, g = 0, b = 0, a = 0;
+                        SDL_GetRGBA(pixel, fmt, nullptr, &r, &g, &b, &a);
                         complete_color_sampling(SDL_Color{r, g, b, a});
                         return true;
                     }
@@ -826,7 +830,7 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
         update_delete_modal_geometry(screen_w, screen_h);
     }
     if (showing_duplicate_popup_) {
-        SDL_StartTextInput();
+        SDL_StartTextInput(SDL_GetKeyboardFocus());
     }
 }
 
@@ -854,10 +858,10 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
         SDL_Rect sample_rect{ color_sampling_cursor_.x, color_sampling_cursor_.y, 1, 1 };
         Uint32 pixel = 0;
         if (read_pixel(r, sample_rect, SDL_PIXELFORMAT_ARGB8888, pixel)) {
-            Uint8 rr = 0, gg = 0, bb = 0, aa = 0;
             if (const SDL_PixelFormatDetails* fmt = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_ARGB8888)) {
-                SDL_GetRGBA(pixel, fmt, &rr, &gg, &bb, &aa);
-                const_cast<AssetInfoUI*>(this)->color_sampling_preview_ = SDL_Color{rr, gg, bb, aa};
+                Uint8 r = 0, g = 0, b = 0, a = 0;
+                SDL_GetRGBA(pixel, fmt, nullptr, &r, &g, &b, &a);
+                const_cast<AssetInfoUI*>(this)->color_sampling_preview_ = SDL_Color{r, g, b, a};
                 const_cast<AssetInfoUI*>(this)->color_sampling_preview_valid_ = true;
             } else {
                 const_cast<AssetInfoUI*>(this)->color_sampling_preview_valid_ = false;
@@ -2004,20 +2008,20 @@ void AssetInfoUI::update_delete_modal_geometry(int screen_w, int screen_h) {
 bool AssetInfoUI::handle_delete_modal_event(const SDL_Event& e) {
     if (!showing_delete_popup_) return false;
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p{ static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y)) };
         delete_yes_hovered_ = SDL_PointInRect(&p, &delete_yes_rect_);
         delete_no_hovered_ = SDL_PointInRect(&p, &delete_no_rect_);
         return SDL_PointInRect(&p, &delete_modal_rect_);
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p{ static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y)) };
         if (SDL_PointInRect(&p, &delete_yes_rect_)) { delete_yes_pressed_ = true; return true; }
         if (SDL_PointInRect(&p, &delete_no_rect_)) { delete_no_pressed_ = true; return true; }
         if (SDL_PointInRect(&p, &delete_modal_rect_)) return true;
         return false;
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p{ static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y)) };
         const bool inside_yes = SDL_PointInRect(&p, &delete_yes_rect_);
         const bool inside_no  = SDL_PointInRect(&p, &delete_no_rect_);
         bool consumed = SDL_PointInRect(&p, &delete_modal_rect_);
@@ -2026,8 +2030,8 @@ bool AssetInfoUI::handle_delete_modal_event(const SDL_Event& e) {
         delete_yes_pressed_ = false; delete_no_pressed_ = false; return consumed;
     }
     if (e.type == SDL_EVENT_KEY_DOWN) {
-        if (e.key.key == SDLK_RETURN || e.key.key == SDLK_y || e.key.key == SDLK_SPACE) { confirm_delete_request(); return true; }
-        if (e.key.key == SDLK_ESCAPE || e.key.key == SDLK_n) { cancel_delete_request(); return true; }
+        if (e.key.key == SDLK_RETURN || e.key.key == SDLK_Y || e.key.key == SDLK_SPACE) { confirm_delete_request(); return true; }
+        if (e.key.key == SDLK_ESCAPE || e.key.key == SDLK_N) { cancel_delete_request(); return true; }
         return true;
     }
     if (e.type == SDL_EVENT_TEXT_INPUT) {

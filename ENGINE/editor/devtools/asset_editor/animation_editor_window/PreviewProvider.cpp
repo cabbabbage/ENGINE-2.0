@@ -142,7 +142,7 @@ std::vector<int> build_speed_sequence(int frame_count, float multiplier) {
         return sequence;
     }
     sequence.resize(frame_count);
-    std::iota(sequence.begin(), sequence.end());
+    std::iota(sequence.begin(), sequence.end(), 0);
     return sequence;
 }
 
@@ -386,7 +386,7 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
         if (!folder.empty()) {
             folder /= animation_id;
         }
-        std::vector<std::filesystem::path> paths = find_frame_sequence(folder);
+        std::vector<std::filesystem::path> paths = find_frame_sequence(folder, 0);
         result.frames.reserve(paths.size());
         for (const auto& path : paths) {
             result.frames.push_back(FrameImageRequest{path, false, false});
@@ -472,7 +472,7 @@ PreviewProvider::ResolvedAnimation PreviewProvider::resolve_animation(const std:
         return result;
     }
 
-    int frames = payload.value("number_of_frames");
+    int frames = payload.value("number_of_frames", 0);
     if (frames < 0) frames = 0;
 
     std::string relative_path = source ? source->value("path", std::string{}) : std::string{};

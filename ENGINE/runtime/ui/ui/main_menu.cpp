@@ -129,7 +129,7 @@ void MainMenu::buildButtons() {
 
 std::optional<MainMenu::Selection> MainMenu::handle_event(const SDL_Event& e) {
         if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_e &&
-            (e.key.mod & KMOD_CTRL)) {
+            (e.key.mod & SDL_KMOD_CTRL)) {
                 button_tweaker_.toggle();
                 return std::nullopt;
         }

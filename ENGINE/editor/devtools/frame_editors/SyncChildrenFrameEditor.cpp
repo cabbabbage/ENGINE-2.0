@@ -435,16 +435,16 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
 
     SDL_Point mouse_pos = {0, 0};
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        mouse_pos = {e.button.x, e.button.y};
+        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
     } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        mouse_pos = {e.motion.x, e.motion.y};
+        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
     const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
-    if (SDL_PointInRect(&mouse_pos, &back_rect_) == SDL_FALSE &&
-        SDL_PointInRect(&mouse_pos, &ui_rect_) == SDL_FALSE &&
+    if (!SDL_PointInRect(&mouse_pos, &back_rect_) &&
+        !SDL_PointInRect(&mouse_pos, &ui_rect_) &&
         !pointer_in_overlay) {
         const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
         SDL_Point anchor = asset_anchor_world();

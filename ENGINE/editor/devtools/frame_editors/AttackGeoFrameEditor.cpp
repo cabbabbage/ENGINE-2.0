@@ -49,9 +49,9 @@ int parse_int(const std::string& text, int fallback) {
 }
 
 int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
-    float precise = wheel.preciseY;
-    int delta = wheel.y;
-    if (wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
+    float precise = wheel.y;
+    int delta = wheel.integer_y;
+    if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
         delta = -delta;
         precise = -precise;
     }
@@ -381,9 +381,9 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
 
     SDL_Point mouse_pos = {0, 0};
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        mouse_pos = {e.button.x, e.button.y};
+        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
     } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        mouse_pos = {e.motion.x, e.motion.y};
+        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
@@ -851,7 +851,7 @@ void AttackGeoFrameEditor::refresh_selection_state() {
 }
 
 bool AttackGeoFrameEditor::ui_contains_point(const SDL_Point& p) const {
-    return SDL_PointInRect(&p, &ui_rect_) == SDL_TRUE;
+    return SDL_PointInRect(&p, &ui_rect_);
 }
 
 }  // namespace devmode::frame_editors

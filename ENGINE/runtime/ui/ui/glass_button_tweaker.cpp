@@ -149,9 +149,9 @@ std::unordered_map<const GlassButtonTweaker*, TweakerState>& state_map() {
 
 void ensure_text_input(bool on) {
     if (on) {
-        if (!SDL_IsTextInputActive()) SDL_StartTextInput();
+        if (!SDL_TextInputActive(SDL_GetKeyboardFocus())) SDL_StartTextInput(SDL_GetKeyboardFocus());
     } else {
-        if (SDL_IsTextInputActive()) SDL_StopTextInput();
+        if (SDL_TextInputActive(SDL_GetKeyboardFocus())) SDL_StopTextInput(SDL_GetKeyboardFocus());
     }
 }
 
@@ -597,7 +597,7 @@ bool GlassButtonTweaker::handle_event(const SDL_Event& e, int screen_w, int scre
 
     // Keyboard navigation and nudging.
     if (e.type == SDL_EVENT_KEY_DOWN) {
-        const bool fast = (e.key.mod & KMOD_SHIFT) != 0;
+        const bool fast = (e.key.mod & SDL_KMOD_SHIFT) != 0;
         switch (e.key.key) {
             case SDLK_UP:
                 selected_index_ = (selected_index_ + static_cast<int>(fields_.size()) - 1) % static_cast<int>(fields_.size());

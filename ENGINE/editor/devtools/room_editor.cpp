@@ -141,12 +141,12 @@ static bool is_visible_pixel_at(SDL_Renderer* renderer, SDL_Point screen_point) 
     Uint32 pixel = 0;
     SDL_Rect r{ screen_point.x, screen_point.y, 1, 1 };
 
-    Uint32 fmt = SDL_PIXELFORMAT_RGBA8888;
+    SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA8888;
 
     if (SDL_Surface* captured = SDL_RenderReadPixels(renderer, &r)) {
         SDL_Surface* working = captured;
         if (captured->format != fmt) {
-            working = SDL_ConvertSurface(captured, static_cast<SDL_PixelFormat>(fmt));
+            working = SDL_ConvertSurface(captured, fmt);
             SDL_DestroySurface(captured);
             captured = nullptr;
         }
@@ -165,7 +165,7 @@ static bool is_visible_pixel_at(SDL_Renderer* renderer, SDL_Point screen_point) 
     const SDL_PixelFormatDetails* pf = SDL_GetPixelFormatDetails(fmt);
     if (pf) {
         Uint8 r8, g8, b8;
-        SDL_GetRGBA(pixel, pf, &r8, &g8, &b8, &a);
+        SDL_GetRGBA(pixel, pf, nullptr, &r8, &g8, &b8, &a);
     }
     return a > 0;
 }
@@ -574,8 +574,8 @@ void RoomEditor::remap_clipboard_entry_to_room(nlohmann::json& entry, Room* room
     }
 
     if (method == "Exact" || method == "Perimeter") {
-        int stored_dx = entry.value("dx");
-        int stored_dy = entry.value("dy");
+        int stored_dx = entry.value("dx", 0);
+        int stored_dy = entry.value("dy", 0);
         int orig_w = std::max(1, entry.value("origional_width", width));
         int orig_h = std::max(1, entry.value("origional_height", height));
         RelativeRoomPosition relative(SDL_Point{stored_dx, stored_dy}, orig_w, orig_h);
@@ -605,8 +605,8 @@ void RoomEditor::ensure_clipboard_position_is_valid(nlohmann::json& entry, Room*
     }
 
     SDL_Point center = room->room_area->get_center();
-    int dx = entry.value("dx");
-    int dy = entry.value("dy");
+    int dx = entry.value("dx", 0);
+    int dy = entry.value("dy", 0);
     SDL_Point candidate{center.x + dx, center.y + dy};
     if (room->room_area->contains_point(candidate)) {
         return;
@@ -3169,7 +3169,7 @@ std::optional<std::string> RoomEditor::find_room_area_at_point(SDL_Point world_p
             }
 
             AreaMetadata data;
-            data.z = entry.value("z");
+            data.z = entry.value("z", 0);
             data.visible = !(entry.contains("visible") && entry["visible"].is_boolean() && !entry["visible"].get<bool>());
             data.order = order_counter;
             metadata.insert_or_assign(name, data);
@@ -4046,8 +4046,8 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
         }
         drag_perimeter_orig_w_ = orig_w;
         drag_perimeter_orig_h_ = orig_h;
-        const int stored_dx = spawn_entry->value("dx");
-        const int stored_dy = spawn_entry->value("dy");
+        const int stored_dx = spawn_entry->value("dx", 0);
+        const int stored_dy = spawn_entry->value("dy", 0);
         RelativeRoomPosition relative(SDL_Point{stored_dx, stored_dy}, orig_w, orig_h);
         drag_perimeter_center_offset_world_ = relative.scaled_offset(room_w, room_h);
         drag_perimeter_circle_center_.x = drag_room_center_.x + drag_perimeter_center_offset_world_.x;
@@ -5091,13 +5091,13 @@ std::optional<RoomEditor::PerimeterOverlay> RoomEditor::compute_perimeter_overla
         orig_w = std::max(1, room_w);
         orig_h = std::max(1, room_h);
     }
-    int stored_dx = entry->value("dx");
-    int stored_dy = entry->value("dy");
+    int stored_dx = entry->value("dx", 0);
+    int stored_dy = entry->value("dy", 0);
     RelativeRoomPosition relative(SDL_Point{stored_dx, stored_dy}, orig_w, orig_h);
     SDL_Point scaled = relative.scaled_offset(room_w, room_h);
     overlay.center.x += scaled.x;
     overlay.center.y += scaled.y;
-    int base_radius = entry->value("radius");
+    int base_radius = entry->value("radius", 0);
     if (resolve_geometry) {
         const double width_ratio = static_cast<double>(std::max(1, room_w)) / static_cast<double>(std::max(1, orig_w));
         const double height_ratio = static_cast<double>(std::max(1, room_h)) / static_cast<double>(std::max(1, orig_h));

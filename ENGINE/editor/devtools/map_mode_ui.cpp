@@ -93,7 +93,7 @@ MapModeUI::MapModeUI(Assets* assets)
 MapModeUI::~MapModeUI() {
     cancel_map_color_sampling(true);
     if (map_color_sampling_cursor_handle_) {
-        SDL_FreeCursor(map_color_sampling_cursor_handle_);
+        SDL_DestroyCursor(map_color_sampling_cursor_handle_);
         map_color_sampling_cursor_handle_ = nullptr;
     }
 }
@@ -384,10 +384,14 @@ bool MapModeUI::is_pointer_event(const SDL_Event& e) const {
 
 SDL_Point MapModeUI::event_point(const SDL_Event& e) const {
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        return SDL_Point{e.motion.x, e.motion.y};
+        return SDL_Point{
+            static_cast<int>(std::lround(e.motion.x)),
+            static_cast<int>(std::lround(e.motion.y))};
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        return SDL_Point{e.button.x, e.button.y};
+        return SDL_Point{
+            static_cast<int>(std::lround(e.button.x)),
+            static_cast<int>(std::lround(e.button.y))};
     }
     int mx = 0;
     int my = 0;
@@ -996,7 +1000,7 @@ void MapModeUI::render(SDL_Renderer* renderer) const {
             }
             Uint8 r = 0, g = 0, b = 0, a = 0;
             if (const SDL_PixelFormatDetails* format = SDL_GetPixelFormatDetails(SDL_PIXELFORMAT_ARGB8888)) {
-                SDL_GetRGBA(pixel, format, &r, &g, &b, &a);
+                SDL_GetRGBA(pixel, format, nullptr, &r, &g, &b, &a);
                 map_color_sampling_preview_ = SDL_Color{r, g, b, a};
                 map_color_sampling_preview_valid_ = true;
             } else {

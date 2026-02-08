@@ -220,7 +220,10 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         if (active_index_ >= 0 && on_adjust_) {
             double delta_value = static_cast<double>(e.wheel.integer_y);
             if (std::abs(delta_value) < 1e-6) {
-                delta_value = static_cast<double>(e.wheel.preciseY);
+                delta_value = static_cast<double>(e.wheel.y);
+            }
+            if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+                delta_value = -delta_value;
             }
             wheel_scroll_accumulator_ += delta_value;
 
@@ -359,7 +362,7 @@ void CandidateEditorPieGraphWidget::render(SDL_Renderer* renderer) const {
 
     if (search_visible()) {
         SDL_Rect previous_clip;
-        SDL_bool had_clip = SDL_RenderClipEnabled(renderer);
+        bool had_clip = SDL_RenderClipEnabled(renderer);
         if (had_clip) {
             SDL_GetRenderClipRect(renderer, &previous_clip);
         }
@@ -754,6 +757,9 @@ void CandidateEditorPieGraphWidget::render_slices(SDL_Renderer* renderer, const 
 
     double angle = kStartAngle;
     double used = 0.0;
+    auto to_fcolor = [](SDL_Color c) {
+        return SDL_FColor{c.r / 255.0f, c.g / 255.0f, c.b / 255.0f, c.a / 255.0f};
+    };
 
     for (size_t i = 0; i < candidates_.size(); ++i) {
         const double weight = clamp_positive(candidates_[i].weight);
@@ -791,14 +797,14 @@ void CandidateEditorPieGraphWidget::render_slices(SDL_Renderer* renderer, const 
         verts.reserve(segments + 2);
         SDL_Vertex center_vert{};
         center_vert.position = SDL_FPoint{layout.center.x, layout.center.y};
-        center_vert.color = color;
+        center_vert.color = to_fcolor(color);
         verts.push_back(center_vert);
         for (int s = 0; s <= segments; ++s) {
             double t = angle + sweep * (static_cast<double>(s) / segments);
             SDL_Vertex v{};
             v.position = SDL_FPoint{layout.center.x + slice_radius * static_cast<float>(std::cos(t)),
                                     layout.center.y + slice_radius * static_cast<float>(std::sin(t))};
-            v.color = color;
+            v.color = to_fcolor(color);
             verts.push_back(v);
         }
         std::vector<int> idxs;
@@ -852,7 +858,7 @@ void CandidateEditorPieGraphWidget::render_legend(SDL_Renderer* renderer, const 
 
     if (layout.legend.w > 60) {
         SDL_Color text_color = DMStyles::Label().color;
-        int font_height = TTF_FontHeight(font);
+        int font_height = TTF_GetFontHeight(font);
         int row_height = std::max(font_height + 6, 20);
         cache_legend_rows(layout, row_height);
         for (size_t i = 0; i < candidates_.size(); ++i) {

@@ -39,6 +39,8 @@ float parse_float(const std::string& text, float fallback) {
     }
 }
 
+constexpr float kPi = 3.14159265358979323846f;
+
 float dist_sq(const SDL_FPoint& a, const SDL_FPoint& b) {
     const float dx = a.x - b.x;
     const float dy = a.y - b.y;
@@ -259,9 +261,9 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
 
     SDL_Point mouse_pos = {0, 0};
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        mouse_pos = {e.button.x, e.button.y};
+        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
     } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        mouse_pos = {e.motion.x, e.motion.y};
+        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
@@ -545,8 +547,8 @@ bool HitGeoFrameEditor::build_hitbox_visual(const animation_update::FrameHitGeom
     if (scale <= 0.0001f) return false;
 
     FramePointResolver resolver(context_.target);
-    const float cos_r = std::cos(box.rotation_degrees * static_cast<float>(M_PI) / 180.0f);
-    const float sin_r = std::sin(box.rotation_degrees * static_cast<float>(M_PI) / 180.0f);
+    const float cos_r = std::cos(box.rotation_degrees * kPi / 180.0f);
+    const float sin_r = std::sin(box.rotation_degrees * kPi / 180.0f);
     auto rotate_vec = [&](SDL_FPoint v) -> SDL_FPoint {
         return SDL_FPoint{v.x * cos_r - v.y * sin_r, v.x * sin_r + v.y * cos_r};
     };
@@ -605,7 +607,7 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
         for (int i = 0; i < 4; ++i) {
             verts[i].position.x = corners[i].x;
             verts[i].position.y = corners[i].y;
-            verts[i].color = fill;
+            verts[i].color = SDL_FColor{fill.r / 255.0f, fill.g / 255.0f, fill.b / 255.0f, fill.a / 255.0f};
             verts[i].tex_coord = SDL_FPoint{0.0f, 0.0f};
         }
         SDL_RenderGeometry(renderer, nullptr, verts, 4, indices, 6);
@@ -736,7 +738,7 @@ void HitGeoFrameEditor::refresh_selection_state() {
 }
 
 bool HitGeoFrameEditor::ui_contains_point(const SDL_Point& pt) const {
-    return SDL_PointInRect(&pt, &ui_rect_) == SDL_TRUE;
+    return SDL_PointInRect(&pt, &ui_rect_);
 }
 
 

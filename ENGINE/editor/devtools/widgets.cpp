@@ -448,7 +448,7 @@ void DMTextBox::start_editing() {
     }
     editing_ = true;
     caret_pos_ = text_.size();
-    SDL_StartTextInput();
+    SDL_StartTextInput(SDL_GetKeyboardFocus());
 }
 
 void DMTextBox::stop_editing() {
@@ -456,7 +456,7 @@ void DMTextBox::stop_editing() {
         return;
     }
     editing_ = false;
-    SDL_StopTextInput();
+    SDL_StopTextInput(SDL_GetKeyboardFocus());
 }
 
 int DMTextBox::height_for_width(int w) const {
@@ -493,20 +493,20 @@ bool DMTextBox::handle_event(const SDL_Event& e) {
     }
     bool changed = false;
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p{ static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y)) };
         hovered_ = SDL_PointInRect(&p, &box_rect_);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p{ static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y)) };
         bool inside = SDL_PointInRect(&p, &box_rect_);
         if (inside) {
             if (!editing_) {
                 editing_ = true;
-                SDL_StartTextInput();
+                SDL_StartTextInput(SDL_GetKeyboardFocus());
             }
             caret_pos_ = text_.size();
         } else if (editing_) {
             editing_ = false;
-            SDL_StopTextInput();
+            SDL_StopTextInput(SDL_GetKeyboardFocus());
         }
     } else if (editing_ && e.type == SDL_EVENT_TEXT_INPUT) {
         text_.insert(caret_pos_, e.text.text);
@@ -521,7 +521,7 @@ bool DMTextBox::handle_event(const SDL_Event& e) {
                 changed = true;
             }
         } else if (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER) {
-            editing_ = false; SDL_StopTextInput();
+            editing_ = false; SDL_StopTextInput(SDL_GetKeyboardFocus());
         } else if (e.key.key == SDLK_DELETE) {
             if (caret_pos_ < text_.size()) {
                 text_.erase(caret_pos_, 1);
@@ -601,7 +601,7 @@ void DMTextBox::render(SDL_Renderer* r) const {
             auto lines = wrap_lines(f, prefix, max_width);
             int caret_x = box_rect_.x + kTextboxHorizontalPadding;
             int caret_y = box_rect_.y + kTextboxHorizontalPadding;
-            int caret_height = TTF_FontHeight(f);
+            int caret_height = TTF_GetFontHeight(f);
             const int gap = DMSpacing::small_gap();
             if (!lines.empty()) {
             for (size_t i = 0; i < lines.size(); ++i) {
@@ -610,13 +610,13 @@ void DMTextBox::render(SDL_Renderer* r) const {
                 if (!line.empty()) {
                     ttf_util::GetStringSize(f, line, &w, &h);
                 } else {
-                    w = 0; h = TTF_FontHeight(f);
+                    w = 0; h = TTF_GetFontHeight(f);
                 }
                 if (i + 1 < lines.size()) {
                     caret_y += h + gap;
                     } else {
                         caret_x += w;
-                        caret_height = (h > 0) ? h : TTF_FontHeight(f);
+                        caret_height = (h > 0) ? h : TTF_GetFontHeight(f);
                     }
                 }
             }
@@ -699,7 +699,7 @@ int DMTextBox::compute_text_height(TTF_Font* f, int width) const {
     }
     auto lines = wrap_lines(f, text_, std::max(1, width));
     if (lines.empty()) {
-        return TTF_FontHeight(f);
+        return TTF_GetFontHeight(f);
     }
     const int gap = DMSpacing::small_gap();
     int total = 0;
@@ -713,7 +713,7 @@ int DMTextBox::compute_text_height(TTF_Font* f, int width) const {
             }
         }
         if (line_height <= 0) {
-            line_height = TTF_FontHeight(f);
+            line_height = TTF_GetFontHeight(f);
         }
         total += line_height;
         if (i + 1 < lines.size()) {
@@ -729,7 +729,7 @@ int DMTextBox::compute_box_height(int width) const {
     int content_width = std::max(1, width - 2 * kTextboxHorizontalPadding);
     int text_height = compute_text_height(f, content_width);
     if (text_height <= 0) {
-        text_height = f ? TTF_FontHeight(f) : st.label.font_size;
+        text_height = f ? TTF_GetFontHeight(f) : st.label.font_size;
     }
     int padded_height = text_height + 2 * kTextboxHorizontalPadding;
     return std::max(DMTextBox::height(), padded_height);
@@ -1003,14 +1003,12 @@ bool DMNumericStepper::handle_event(const SDL_Event& e) {
             return false;
         }
         int delta = e.wheel.integer_y;
-        if (e.wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
+        if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
             delta = -delta;
         }
-#if SDL_VERSION_ATLEAST(2,0,18)
         if (delta == 0) {
-            delta = static_cast<int>(std::round(e.wheel.preciseY));
+            delta = static_cast<int>(std::round(e.wheel.y));
         }
-#endif
     if (delta == 0) {
         return false;
     }
@@ -1321,12 +1319,12 @@ bool DMSlider::handle_event(const SDL_Event& e) {
     if (e.type == SDL_EVENT_KEY_DOWN && focused_) {
         switch (e.key.key) {
         case SDLK_LEFT:
-        case SDLK_a: {
+        case SDLK_A: {
             apply_interaction_value(display_value() - 1);
             return true;
         }
         case SDLK_RIGHT:
-        case SDLK_d: {
+        case SDLK_D: {
             apply_interaction_value(display_value() + 1);
             return true;
         }
@@ -1452,14 +1450,12 @@ bool DMSlider::handle_event(const SDL_Event& e) {
             knob_hovered_ = false;
         }
         int delta = e.wheel.integer_y;
-        if (e.wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
+        if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
             delta = -delta;
         }
-#if SDL_VERSION_ATLEAST(2,0,18)
         if (delta == 0) {
-            delta = static_cast<int>(std::round(e.wheel.preciseY));
+            delta = static_cast<int>(std::round(e.wheel.y));
         }
-#endif
         if (delta == 0) {
             return false;
         }
@@ -2059,14 +2055,12 @@ bool DMRangeSlider::handle_event(const SDL_Event& e) {
             update_hover(mouse);
         }
         int delta = e.wheel.integer_y;
-        if (e.wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
+        if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
             delta = -delta;
         }
-#if SDL_VERSION_ATLEAST(2,0,18)
         if (delta == 0) {
-            delta = static_cast<int>(std::round(e.wheel.preciseY));
+            delta = static_cast<int>(std::round(e.wheel.y));
         }
-#endif
         if (delta == 0) {
             return false;
         }
@@ -2350,7 +2344,7 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
     if (e.type == SDL_EVENT_KEY_DOWN && focused_) {
         switch (e.key.key) {
         case SDLK_UP:
-        case SDLK_w: {
+        case SDLK_W: {
             if (!has_pending_index_) {
                 pending_index_ = index_;
                 has_pending_index_ = true;
@@ -2364,7 +2358,7 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
             return true;
         }
         case SDLK_DOWN:
-        case SDLK_s: {
+        case SDLK_S: {
             if (!has_pending_index_) {
                 pending_index_ = index_;
                 has_pending_index_ = true;
@@ -2494,7 +2488,7 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
             has_pending_index_ = true;
         }
         int raw_delta = e.wheel.integer_y;
-        if (e.wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
+        if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
             raw_delta = -raw_delta;
         }
         const int delta = -raw_delta;

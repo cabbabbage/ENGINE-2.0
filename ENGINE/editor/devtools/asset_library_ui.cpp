@@ -2047,11 +2047,11 @@ bool AssetLibraryUI::handle_delete_modal_event(const SDL_Event& e) {
         return consumed;
     }
     if (e.type == SDL_EVENT_KEY_DOWN) {
-        if (e.key.key == SDLK_RETURN || e.key.key == SDLK_y || e.key.key == SDLK_SPACE) {
+        if (e.key.key == SDLK_RETURN || e.key.key == SDLK_Y || e.key.key == SDLK_SPACE) {
             confirm_delete_request();
             return true;
         }
-        if (e.key.key == SDLK_ESCAPE || e.key.key == SDLK_n) {
+        if (e.key.key == SDLK_ESCAPE || e.key.key == SDLK_N) {
             cancel_delete_request();
             return true;
         }

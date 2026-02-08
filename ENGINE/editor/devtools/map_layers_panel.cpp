@@ -136,7 +136,7 @@ public:
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
             case SDL_EVENT_MOUSE_BUTTON_UP: {
                 SDL_Point p = event_point_from_event(e);
-                if (SDL_PointInRect(&p, &rect_) == SDL_FALSE) {
+                if (!SDL_PointInRect(&p, &rect_)) {
                     if (e.type == SDL_EVENT_MOUSE_MOTION) {
                         owner_->clear_hover();
                     }
@@ -149,9 +149,9 @@ public:
                 int hit_index = -1;
                 int delete_hit_index = -1;
                 for (const auto& row : owner_->layer_rows_) {
-                    if (SDL_PointInRect(&p, &row.rect) == SDL_TRUE) {
+                    if (SDL_PointInRect(&p, &row.rect)) {
                         hit_index = row.index;
-                        if (SDL_PointInRect(&p, &row.delete_button_rect) == SDL_TRUE) {
+                        if (SDL_PointInRect(&p, &row.delete_button_rect)) {
                             delete_hit_index = row.index;
                         }
                         break;

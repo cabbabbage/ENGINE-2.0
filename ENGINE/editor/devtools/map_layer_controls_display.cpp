@@ -375,7 +375,7 @@ bool MapLayerControlsDisplay::handle_event(const SDL_Event& e) {
 
     auto update_candidate_hover = [this](SDL_Point pointer) {
         for (auto& candidate : candidates_) {
-            candidate.hovered = SDL_PointInRect(&pointer, &candidate.background_rect) == SDL_TRUE;
+            candidate.hovered = SDL_PointInRect(&pointer, &candidate.background_rect);
         }
 };
 
@@ -391,7 +391,7 @@ bool MapLayerControlsDisplay::handle_event(const SDL_Event& e) {
                     candidate.slider_active = false;
                     continue;
                 }
-                if (SDL_PointInRect(&pointer, &candidate.range_slider->rect()) != SDL_TRUE) {
+                if (!SDL_PointInRect(&pointer, &candidate.range_slider->rect())) {
                     candidate.slider_active = false;
                 }
             }

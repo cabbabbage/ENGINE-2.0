@@ -293,10 +293,10 @@ bool MapRoomsDisplay::handle_event(const SDL_Event& e) {
             bool hovered = false;
             bool delete_hovered = false;
             for (const auto& row : rooms_) {
-                if (SDL_PointInRect(&p, &row.rect) == SDL_TRUE) {
+                if (SDL_PointInRect(&p, &row.rect)) {
                     hovered = true;
                     set_hovered_room(row.key);
-                    if (SDL_PointInRect(&p, &row.delete_rect) == SDL_TRUE) {
+                    if (SDL_PointInRect(&p, &row.delete_rect)) {
                         hovered_delete_room_ = row.key;
                         delete_hovered = true;
                         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {

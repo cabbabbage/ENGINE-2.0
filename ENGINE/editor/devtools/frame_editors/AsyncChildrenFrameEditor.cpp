@@ -27,9 +27,9 @@ SDL_Point round_point(const SDL_FPoint& pt) {
 constexpr float kFrameInterval = 1.0f / static_cast<float>(kBaseAnimationFps);
 
 int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
-    float precise = wheel.preciseY;
-    int delta = wheel.y;
-    if (wheel.direction == SDL_EVENT_MOUSE_WHEEL_FLIPPED) {
+    float precise = wheel.y;
+    int delta = wheel.integer_y;
+    if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
         delta = -delta;
         precise = -precise;
     }
@@ -175,9 +175,9 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
 
     SDL_Point mouse_pos = {0, 0};
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        mouse_pos = {e.button.x, e.button.y};
+        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
     } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        mouse_pos = {e.motion.x, e.motion.y};
+        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
     } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }

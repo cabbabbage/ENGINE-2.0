@@ -626,9 +626,13 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
             return true;
         }
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            pointer_pos = SDL_Point{e.motion.x, e.motion.y};
+            pointer_pos = SDL_Point{
+                static_cast<int>(std::lround(e.motion.x)),
+                static_cast<int>(std::lround(e.motion.y))};
         } else {
-            pointer_pos = SDL_Point{e.button.x, e.button.y};
+            pointer_pos = SDL_Point{
+                static_cast<int>(std::lround(e.button.x)),
+                static_cast<int>(std::lround(e.button.y))};
         }
     } else {
         if (wheel_event && pointer_blocked) {
@@ -637,7 +641,9 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{e.button.x, e.button.y};
+        SDL_Point p{
+            static_cast<int>(std::lround(e.button.x)),
+            static_cast<int>(std::lround(e.button.y))};
         const bool on_header_button = show_header_ && header_btn_ && SDL_PointInRect(&p, &header_rect_);
         const bool on_close = close_btn_ && SDL_PointInRect(&p, &close_rect_);
         const bool on_lock = lock_btn_ && SDL_PointInRect(&p, &lock_rect_);
@@ -663,7 +669,9 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
 
     if (show_header_ && dragging_) {
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            SDL_Point current{e.motion.x, e.motion.y};
+            SDL_Point current{
+                static_cast<int>(std::lround(e.motion.x)),
+                static_cast<int>(std::lround(e.motion.y))};
             if (!drag_exceeded_threshold_) {
                 int dx = current.x - drag_start_pointer_.x;
                 int dy = current.y - drag_start_pointer_.y;
@@ -694,7 +702,9 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
             }
             if (dragged_via_button && header_btn_) {
                 header_btn_->handle_event(e);
-                SDL_Point p{e.button.x, e.button.y};
+                SDL_Point p{
+                    static_cast<int>(std::lround(e.button.x)),
+                    static_cast<int>(std::lround(e.button.y))};
                 if (!drag_moved && SDL_PointInRect(&p, &header_rect_)) {
                     expanded_ = !expanded_;
                     update_header_button();

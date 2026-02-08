@@ -296,7 +296,7 @@ bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
         p.x = e.button.x;
         p.y = e.button.y;
     }
-    const bool inside = SDL_PointInRect(&p, &rect_) == SDL_TRUE;
+    const bool inside = SDL_PointInRect(&p, &rect_);
     if (!inside) {
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
             if (refresh_hovered_) {
@@ -308,7 +308,7 @@ bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
         return false;
     }
 
-    const bool over_refresh = SDL_PointInRect(&p, &refresh_button_rect_) == SDL_TRUE;
+    const bool over_refresh = SDL_PointInRect(&p, &refresh_button_rect_);
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
         if (refresh_hovered_ != over_refresh) {
             refresh_hovered_ = over_refresh;
@@ -672,7 +672,7 @@ int MapLayersPreviewWidget::hit_test_layer(int x, int y) const {
         return -1;
     }
     SDL_Point point{x, y};
-    if (SDL_PointInRect(&point, &preview_rect_) != SDL_TRUE) {
+    if (!SDL_PointInRect(&point, &preview_rect_)) {
         return -1;
     }
     double scale = preview_scale_;
@@ -713,7 +713,7 @@ std::string MapLayersPreviewWidget::hit_test_room(int x, int y) const {
         return {};
     }
     SDL_Point point{x, y};
-    if (SDL_PointInRect(&point, &preview_rect_) != SDL_TRUE) {
+    if (!SDL_PointInRect(&point, &preview_rect_)) {
         return {};
     }
     double scale = preview_scale_;

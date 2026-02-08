@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <functional>
@@ -69,3 +69,4 @@ class ScrollController {
 void draw_panel_background(SDL_Renderer* renderer, const SDL_Rect& bounds);
 
 }
+

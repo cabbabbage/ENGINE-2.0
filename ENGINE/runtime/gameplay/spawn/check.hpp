@@ -7,7 +7,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "assets/Asset.hpp"
 #include "assets/asset_info.hpp"

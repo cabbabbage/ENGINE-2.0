@@ -74,7 +74,7 @@ SDL_Surface* load_surface(const std::string& file_path) {
     }
     SDL_Surface* surface = IMG_Load(file_path.c_str());
     if (!surface) {
-        std::cerr << "Failed to load surface from " << file_path << ": " << IMG_GetError() << std::endl;
+        std::cerr << "Failed to load surface from " << file_path << ": " << SDL_GetError() << std::endl;
     }
     return surface;
 }

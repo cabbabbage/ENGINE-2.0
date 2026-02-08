@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <nlohmann/json_fwd.hpp>
 
@@ -177,3 +177,4 @@ private:
     std::function<void(SDL_Color)> map_color_sampling_apply_{};
     std::function<void()> map_color_sampling_cancel_{};
 };
+

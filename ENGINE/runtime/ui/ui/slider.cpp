@@ -1,4 +1,6 @@
 #include "slider.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 
@@ -130,7 +132,7 @@ bool Slider::handle_event(const SDL_Event& e) {
 
 	const SDL_Rect krect = knob_rect_for_value(value_);
 
-	if (e.type == SDL_MOUSEMOTION) {
+	if (e.type == SDL_EVENT_MOUSE_MOTION) {
 
 		SDL_Point p{ e.motion.x, e.motion.y };
 
@@ -146,7 +148,7 @@ bool Slider::handle_event(const SDL_Event& e) {
 
 	}
 
-	else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+	else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
 
 		SDL_Point p{ e.button.x, e.button.y };
 
@@ -164,7 +166,7 @@ bool Slider::handle_event(const SDL_Event& e) {
 
 	}
 
-	else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+	else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
 
 		if (dragging_) {
 
@@ -182,7 +184,7 @@ static void fill_rect(SDL_Renderer* r, const SDL_Rect& rc, SDL_Color c) {
 
 	SDL_SetRenderDrawColor(r, c.r, c.g, c.b, c.a);
 
-	SDL_RenderFillRect(r, &rc);
+	sdl_render::FillRect(r, &rc);
 
 }
 
@@ -190,7 +192,7 @@ static void stroke_rect(SDL_Renderer* r, const SDL_Rect& rc, SDL_Color c) {
 
 	SDL_SetRenderDrawColor(r, c.r, c.g, c.b, 255);
 
-	SDL_RenderDrawRect(r, &rc);
+	sdl_render::Rect(r, &rc);
 
 }
 
@@ -234,7 +236,7 @@ void Slider::draw_knob(SDL_Renderer* r, const SDL_Rect& krect, bool hovered) con
 
 	const int gx = krect.x + krect.w/2;
 
-	SDL_RenderDrawLine(r, gx, krect.y + 4, gx, krect.y + krect.h - 4);
+	SDL_RenderLine(r, gx, krect.y + 4, gx, krect.y + krect.h - 4);
 
 }
 
@@ -252,7 +254,7 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
         if (TTF_Font* font = labelStyle.open_font()) {
 
-            if (SDL_Surface* surf = TTF_RenderText_Blended(font, label_.c_str(), labelStyle.color)) {
+            if (SDL_Surface* surf = ttf_util::RenderTextBlended(font, label_, labelStyle.color)) {
 
                 label_top = rect_.y - surf->h - ui_spacing::kLabelGap;
 
@@ -262,13 +264,13 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
                     SDL_Rect dst{ rect_.x + ui_spacing::kLabelHorizontalInset, label_top, surf->w, surf->h };
 
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
 
                     SDL_DestroyTexture(tex);
 
                 }
 
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
 
             }
 
@@ -284,7 +286,7 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
         if (TTF_Font* font = valueStyle.open_font()) {
 
-            if (SDL_Surface* surf = TTF_RenderText_Blended(font, value_text.c_str(), valueStyle.color)) {
+            if (SDL_Surface* surf = ttf_util::RenderTextBlended(font, value_text, valueStyle.color)) {
 
                 int value_y = label_rendered ? label_top : rect_.y - surf->h - ui_spacing::kLabelGap;
 
@@ -298,13 +300,13 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
                     SDL_Rect dst{ value_x, value_y, surf->w, surf->h };
 
-                    SDL_RenderCopy(r, tex, nullptr, &dst);
+                    sdl_render::Texture(r, tex, nullptr, &dst);
 
                     SDL_DestroyTexture(tex);
 
                 }
 
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
 
             }
 
@@ -335,4 +337,7 @@ void Slider::render(SDL_Renderer* renderer) const {
 	draw_text(renderer);
 
 }
+
+
+
 

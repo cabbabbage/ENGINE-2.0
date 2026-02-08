@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <vector>
 #include <string>
 #include <memory>
@@ -149,3 +149,4 @@ private:
     std::vector<PendingDeleteInfo> bulk_delete_queue_;
     bool bulk_delete_mode_ = false;
 };
+

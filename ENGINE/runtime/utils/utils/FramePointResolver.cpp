@@ -25,8 +25,11 @@ float FramePointResolver::parent_height_px() const {
     int height_px = asset_->height();
     if (height_px <= 0) {
         if (SDL_Texture* tex = asset_->get_current_frame()) {
-            int w = 0;
-            if (SDL_QueryTexture(tex, nullptr, nullptr, &w, &height_px) != 0) {
+            float fw = 0.0f;
+            float fh = 0.0f;
+            if (SDL_GetTextureSize(tex, &fw, &fh)) {
+                height_px = static_cast<int>(std::lround(fh));
+            } else {
                 height_px = 0;
             }
         }

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <string>
 
 namespace dm {
@@ -127,3 +127,4 @@ struct DMSpacing {
 
   static int header_gap();
 };
+

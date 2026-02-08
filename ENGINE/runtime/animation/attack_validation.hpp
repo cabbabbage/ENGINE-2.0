@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "animation/attack.hpp"
 #include "animation/combat_geometry.hpp"

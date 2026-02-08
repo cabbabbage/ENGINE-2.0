@@ -133,7 +133,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
 
     // Check for textbox clicks to set axis
     bool pointer_clicked_textbox = false;
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mouse_pos = {e.button.x, e.button.y};
         const int padding = DMSpacing::small_gap();
         const int inner_w = effective_container.w - padding * 2;
@@ -203,15 +203,15 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
         consumed = true;
     }
 
-    if (!consumed && e.type == SDL_KEYDOWN &&
-        (e.key.keysym.sym == SDLK_UP || e.key.keysym.sym == SDLK_DOWN)) {
+    if (!consumed && e.type == SDL_EVENT_KEY_DOWN &&
+        (e.key.key == SDLK_UP || e.key.key == SDLK_DOWN)) {
         if (selection_ && selection_->has_target() && selected_point_index_ >= 0 && on_position_changed_) {
             if (!is_axis_enabled(selection_->axis) ||
                 axis_locked_values_[axis_to_index(selection_->axis)].has_value()) {
                 return consumed;
             }
             const float step = (grid_step_world_ > 0.0f) ? grid_step_world_ : 1.0f;
-            const float direction = (e.key.keysym.sym == SDLK_UP) ? 1.0f : -1.0f;
+            const float direction = (e.key.key == SDLK_UP) ? 1.0f : -1.0f;
             SDL_FPoint new_world = selection_->world_pos;
             float new_world_z = selection_->world_z;
             switch (selection_->axis) {
@@ -488,7 +488,7 @@ void Point3DEditor::render_axis_point(SDL_Renderer* renderer,
             for (float x = -outer_radius; x <= outer_radius; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq <= outer_radius * outer_radius) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -501,7 +501,7 @@ void Point3DEditor::render_axis_point(SDL_Renderer* renderer,
             for (float x = -border_outer; x <= border_outer; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -515,7 +515,7 @@ void Point3DEditor::render_axis_point(SDL_Renderer* renderer,
     for (float y = -center_radius; y <= center_radius; ++y) {
         for (float x = -center_radius; x <= center_radius; ++x) {
             if (x * x + y * y <= center_radius * center_radius) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
             }
         }
     }
@@ -556,7 +556,7 @@ void Point3DEditor::render_axis_point_with_depth(SDL_Renderer* renderer,
             for (float x = -outer_radius; x <= outer_radius; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq <= outer_radius * outer_radius) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -569,7 +569,7 @@ void Point3DEditor::render_axis_point_with_depth(SDL_Renderer* renderer,
             for (float x = -border_outer; x <= border_outer; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -586,7 +586,7 @@ void Point3DEditor::render_axis_point_with_depth(SDL_Renderer* renderer,
     for (float y = -fixed_center_radius; y <= fixed_center_radius; ++y) {
         for (float x = -fixed_center_radius; x <= fixed_center_radius; ++x) {
             if (x * x + y * y <= fixed_center_radius * fixed_center_radius) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
             }
         }
     }
@@ -658,7 +658,7 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
             for (float x = -outer_radius; x <= outer_radius; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq <= outer_radius * outer_radius) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -671,7 +671,7 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
             for (float x = -border_outer; x <= border_outer; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -687,7 +687,7 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
     for (float y = -fixed_center_radius; y <= fixed_center_radius; ++y) {
         for (float x = -fixed_center_radius; x <= fixed_center_radius; ++x) {
             if (x * x + y * y <= fixed_center_radius * fixed_center_radius) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
             }
         }
     }
@@ -755,10 +755,10 @@ void Point3DEditor::render_movement_arrows(SDL_Renderer* renderer,
         for (float offset = -line_width/2; offset <= line_width/2; offset += 0.5f) {
             if (std::fabs(x2 - x1) > std::fabs(y2 - y1)) {
                 // More horizontal - offset vertically
-                SDL_RenderDrawLineF(renderer, x1, y1 + offset, x2, y2 + offset);
+                SDL_RenderLine(renderer, x1, y1 + offset, x2, y2 + offset);
             } else {
                 // More vertical - offset horizontally
-                SDL_RenderDrawLineF(renderer, x1 + offset, y1, x2 + offset, y2);
+                SDL_RenderLine(renderer, x1 + offset, y1, x2 + offset, y2);
             }
         }
     };
@@ -770,15 +770,15 @@ void Point3DEditor::render_movement_arrows(SDL_Renderer* renderer,
             draw_thick_line(center.x - half_length, center.y, center.x + half_length, center.y);
 
             // Left arrow
-            SDL_RenderDrawLineF(renderer, center.x - half_length, center.y,
+            SDL_RenderLine(renderer, center.x - half_length, center.y,
                              center.x - half_length + arrow_size, center.y - arrow_size);
-            SDL_RenderDrawLineF(renderer, center.x - half_length, center.y,
+            SDL_RenderLine(renderer, center.x - half_length, center.y,
                              center.x - half_length + arrow_size, center.y + arrow_size);
 
             // Right arrow
-            SDL_RenderDrawLineF(renderer, center.x + half_length, center.y,
+            SDL_RenderLine(renderer, center.x + half_length, center.y,
                              center.x + half_length - arrow_size, center.y - arrow_size);
-            SDL_RenderDrawLineF(renderer, center.x + half_length, center.y,
+            SDL_RenderLine(renderer, center.x + half_length, center.y,
                              center.x + half_length - arrow_size, center.y + arrow_size);
             break;
         }
@@ -789,15 +789,15 @@ void Point3DEditor::render_movement_arrows(SDL_Renderer* renderer,
             draw_thick_line(center.x, center.y - half_length, center.x, center.y + half_length);
 
             // Up arrow
-            SDL_RenderDrawLineF(renderer, center.x, center.y - half_length,
+            SDL_RenderLine(renderer, center.x, center.y - half_length,
                              center.x - arrow_size, center.y - half_length + arrow_size);
-            SDL_RenderDrawLineF(renderer, center.x, center.y - half_length,
+            SDL_RenderLine(renderer, center.x, center.y - half_length,
                              center.x + arrow_size, center.y - half_length + arrow_size);
 
             // Down arrow
-            SDL_RenderDrawLineF(renderer, center.x, center.y + half_length,
+            SDL_RenderLine(renderer, center.x, center.y + half_length,
                              center.x - arrow_size, center.y + half_length - arrow_size);
-            SDL_RenderDrawLineF(renderer, center.x, center.y + half_length,
+            SDL_RenderLine(renderer, center.x, center.y + half_length,
                              center.x + arrow_size, center.y + half_length - arrow_size);
             break;
         }
@@ -807,7 +807,7 @@ void Point3DEditor::render_movement_arrows(SDL_Renderer* renderer,
 bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                                       const std::vector<SDL_FPoint>& point_screens,
                                       const std::vector<bool>& point_selectable) {
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point mouse_pos = {e.motion.x, e.motion.y};
         int new_hover = -1;
 
@@ -824,7 +824,7 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
         }
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point mouse_pos = {e.button.x, e.button.y};
         Uint32 current_time = SDL_GetTicks();
 
@@ -891,7 +891,7 @@ void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,
             for (float x = -outer_radius; x <= outer_radius; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq <= outer_radius * outer_radius) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -904,7 +904,7 @@ void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,
             for (float x = -border_outer; x <= border_outer; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq >= border_inner * border_inner && dist_sq <= border_outer * border_outer) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -920,7 +920,7 @@ void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,
             for (float x = -radius; x <= radius; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq <= radius * radius) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -933,7 +933,7 @@ void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,
             for (float x = -outline_outer; x <= outline_outer; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq >= outline_inner * outline_inner && dist_sq <= outline_outer * outline_outer) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -945,7 +945,7 @@ void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,
             for (float x = -radius; x <= radius; ++x) {
                 float dist_sq = x * x + y * y;
                 if (dist_sq <= radius * radius) {
-                    SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                    SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
                 }
             }
         }
@@ -956,7 +956,7 @@ void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,
     for (float y = -center_radius; y <= center_radius; ++y) {
         for (float x = -center_radius; x <= center_radius; ++x) {
             if (x * x + y * y <= center_radius * center_radius) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
             }
         }
     }
@@ -977,7 +977,7 @@ void Point3DEditor::render_non_selectable_point(SDL_Renderer* renderer,
         for (float x = -radius; x <= radius; ++x) {
             float dist_sq = x * x + y * y;
             if (dist_sq <= radius * radius) {
-                SDL_RenderDrawPointF(renderer, screen_pos.x + x, screen_pos.y + y);
+                SDL_RenderPoint(renderer, screen_pos.x + x, screen_pos.y + y);
             }
         }
     }
@@ -986,3 +986,4 @@ void Point3DEditor::render_non_selectable_point(SDL_Renderer* renderer,
 }
 
 }
+

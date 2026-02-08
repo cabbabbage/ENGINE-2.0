@@ -6,7 +6,7 @@
 #include <string_view>
 #include <utility>
 #include <vector>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 #include "animation_child_data.hpp"
 #include "animation_frame.hpp"
@@ -17,7 +17,6 @@
 inline constexpr int kBaseAnimationFps = 24;
 
 class AssetInfo;
-struct Mix_Chunk;
 
 class Animation {
 
@@ -57,7 +56,11 @@ public:
         std::string path;
         int volume = 100;
         bool effects = false;
-        std::shared_ptr<Mix_Chunk> chunk;
+        struct AudioBuffer {
+            SDL_AudioSpec spec{};
+            std::vector<Uint8> samples;
+        };
+        std::shared_ptr<AudioBuffer> buffer;
 };
 
     Animation();
@@ -69,7 +72,6 @@ public:
     void freeze();
     bool is_frozen() const;
     bool has_audio() const;
-    Mix_Chunk* audio_chunk() const;
     const AudioClip* audio_data() const;
     void clear_texture_cache();
     void adopt_prebuilt_frames(std::vector<FrameCache> caches, std::vector<float> variant_steps);

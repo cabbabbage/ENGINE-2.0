@@ -1,6 +1,6 @@
 #include "OnEndSelector.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <array>
@@ -250,4 +250,5 @@ int OnEndSelector::find_option_index(const std::string& value) const {
 }
 
 }
+
 

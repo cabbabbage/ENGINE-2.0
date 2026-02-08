@@ -1,4 +1,5 @@
 #include "room_selector_popup.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include "dm_styles.hpp"
 #include "draw_utils.hpp"
@@ -93,11 +94,11 @@ bool RoomSelectorPopup::handle_event(const SDL_Event& e) {
     if (!visible_) return false;
     ensure_geometry();
 
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION) {
-        SDL_Point p{ e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
-                     e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y };
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION) {
+        SDL_Point p{ e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.x : e.button.x,
+                     e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.y : e.button.y };
         if (!SDL_PointInRect(&p, &rect_)) {
-            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                 close();
             }
             return false;
@@ -106,23 +107,23 @@ bool RoomSelectorPopup::handle_event(const SDL_Event& e) {
 
     SDL_Point pointer{0, 0};
     const bool pointer_event =
-        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION);
+        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
     if (pointer_event) {
-        pointer.x = (e.type == SDL_MOUSEMOTION) ? e.motion.x : e.button.x;
-        pointer.y = (e.type == SDL_MOUSEMOTION) ? e.motion.y : e.button.y;
+        pointer.x = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.x : e.button.x;
+        pointer.y = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.y : e.button.y;
     }
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         pressed_index_ = -1;
         pressed_room_.clear();
     }
 
     bool used = false;
-    if (e.type == SDL_MOUSEWHEEL) {
+    if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         SDL_Point mouse_pos{0, 0};
-        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
         if (SDL_PointInRect(&mouse_pos, &content_clip_)) {
             const int step = DMButton::height() + DMSpacing::small_gap();
-            scroll_by(-e.wheel.y * step);
+            scroll_by(-e.wheel.integer_y * step);
             used = true;
         }
     }
@@ -135,8 +136,8 @@ bool RoomSelectorPopup::handle_event(const SDL_Event& e) {
         if (btn->handle_event(e)) {
             used = true;
         }
-        const bool pointer_inside_button = pointer_event ? SDL_PointInRect(&pointer, &btn->rect()) == SDL_TRUE : false;
-        if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT && pointer_inside_button) {
+        const bool pointer_inside_button = pointer_event ? SDL_PointInRect(&pointer, &btn->rect()) : false;
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT && pointer_inside_button) {
             pressed_index_ = static_cast<int>(i);
             if (i < rooms_.size()) {
                 pressed_room_ = rooms_[i];
@@ -144,7 +145,7 @@ bool RoomSelectorPopup::handle_event(const SDL_Event& e) {
                 pressed_room_.clear();
             }
             used = true;
-        } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             bool matches = (pressed_index_ == static_cast<int>(i));
             if (!matches && i < rooms_.size()) {
                 matches = (rooms_[i] == pressed_room_);
@@ -160,7 +161,7 @@ bool RoomSelectorPopup::handle_event(const SDL_Event& e) {
             }
         }
     }
-    if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         pressed_index_ = -1;
         pressed_room_.clear();
     }
@@ -179,23 +180,19 @@ void RoomSelectorPopup::render(SDL_Renderer* renderer) const {
     dm_draw::DrawRoundedOutline( renderer, rect_, DMStyles::CornerRadius(), 1, border);
 
     SDL_Rect prev_clip{};
-    SDL_RenderGetClipRect(renderer, &prev_clip);
-#if SDL_VERSION_ATLEAST(2,0,4)
-    const SDL_bool was_clipping = SDL_RenderIsClipEnabled(renderer);
-#else
-    const SDL_bool was_clipping = (prev_clip.w != 0 || prev_clip.h != 0) ? SDL_TRUE : SDL_FALSE;
-#endif
-    SDL_RenderSetClipRect(renderer, &content_clip_);
+    SDL_GetRenderClipRect(renderer, &prev_clip);
+    const bool was_clipping = SDL_RenderClipEnabled(renderer);
+    SDL_SetRenderClipRect(renderer, &content_clip_);
 
     layout_widgets();
     for (const auto& btn : buttons_) {
         if (btn) btn->render(renderer);
     }
 
-    if (was_clipping == SDL_TRUE) {
-        SDL_RenderSetClipRect(renderer, &prev_clip);
+    if (was_clipping) {
+        SDL_SetRenderClipRect(renderer, &prev_clip);
     } else {
-        SDL_RenderSetClipRect(renderer, nullptr);
+        SDL_SetRenderClipRect(renderer, nullptr);
     }
 }
 
@@ -293,4 +290,5 @@ void RoomSelectorPopup::position_from_anchor() const {
     rect_.x = anchor_rect_.x + anchor_rect_.w + DMSpacing::item_gap();
     rect_.y = anchor_rect_.y;
 }
+
 

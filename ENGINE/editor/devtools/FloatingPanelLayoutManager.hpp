@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <unordered_set>
 #include <vector>
@@ -54,4 +54,5 @@ private:
     bool applying_layout_ = false;
     std::unordered_set<const DockableCollapsible*> user_placed_{};
 };
+
 

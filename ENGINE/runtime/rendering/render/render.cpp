@@ -1,4 +1,5 @@
 #include "rendering/render/render.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <array>
@@ -16,7 +17,7 @@
 #include <utility>
 #include <vector>
 
-#include <SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 
 #include "assets/Asset.hpp"
 #include "assets/asset_library.hpp"
@@ -48,7 +49,7 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
     const auto& chunks = grid.active_chunks();
     if (chunks.empty()) return;
 
-    const SDL_Color white{255, 255, 255, 255};
+    const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
     int indices[6] = {0, 1, 2, 0, 2, 3};
 
     for (const world::Chunk* chunk : chunks) {
@@ -104,9 +105,13 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
             }
 
             int tex_w_int = 0, tex_h_int = 0;
-            if (SDL_QueryTexture(tile.texture, nullptr, nullptr, &tex_w_int, &tex_h_int) != 0) {
+            float tex_wf = 0.0f;
+            float tex_hf = 0.0f;
+            if (!SDL_GetTextureSize(tile.texture, &tex_wf, &tex_hf)) {
                 continue;
             }
+            tex_w_int = static_cast<int>(std::lround(tex_wf));
+            tex_h_int = static_cast<int>(std::lround(tex_hf));
             const float tex_w = static_cast<float>(tex_w_int);
             const float tex_h = static_cast<float>(tex_h_int);
             if (tex_w <= 0.0f || tex_h <= 0.0f) {
@@ -290,7 +295,14 @@ bool build_perspective_mesh(const RenderObject& obj,
 
     int atlas_w = 0;
     int atlas_h = 0;
-    if (SDL_QueryTexture(obj.texture, nullptr, nullptr, &atlas_w, &atlas_h) != 0 || atlas_w <= 0 || atlas_h <= 0) {
+    float atlas_wf = 0.0f;
+    float atlas_hf = 0.0f;
+    if (!SDL_GetTextureSize(obj.texture, &atlas_wf, &atlas_hf)) {
+        return false;
+    }
+    atlas_w = static_cast<int>(std::lround(atlas_wf));
+    atlas_h = static_cast<int>(std::lround(atlas_hf));
+    if (atlas_w <= 0 || atlas_h <= 0) {
         return false;
     }
 
@@ -403,7 +415,11 @@ bool build_perspective_mesh(const RenderObject& obj,
     mesh.vertices.reserve(4);
     mesh.indices.reserve(6);
 
-    const SDL_Color vertex_color{255, 255, 255, obj.color_mod.a};
+    const SDL_FColor vertex_color{
+        obj.color_mod.r / 255.0f,
+        obj.color_mod.g / 255.0f,
+        obj.color_mod.b / 255.0f,
+        obj.color_mod.a / 255.0f};
 
     SDL_Vertex vtx_tl{};
     vtx_tl.position = screen_tl;
@@ -571,7 +587,7 @@ void SceneRenderer::render() {
         assets_->dev_grid_overlay_callback_();
     }
 
-    const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
+    const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks());
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
     // Update fog system before rendering
@@ -672,7 +688,7 @@ void SceneRenderer::render() {
         vertices[1].position = SDL_FPoint{base_screen.x + half_width, adjusted_y - height};
         vertices[2].position = SDL_FPoint{base_screen.x + half_width, adjusted_y};
         vertices[3].position = SDL_FPoint{base_screen.x - half_width, adjusted_y};
-        const SDL_Color white{255, 255, 255, 255};
+        const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
         vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
         vertices[0].tex_coord = SDL_FPoint{u0, v0};
         vertices[1].tex_coord = SDL_FPoint{u1, v0};
@@ -785,10 +801,10 @@ void SceneRenderer::render() {
                             SDL_Point next{ cursor.x + frame.dx, cursor.y + frame.dy };
                             SDL_FPoint screen_cur  = cam.map_to_screen(cursor);
                             SDL_FPoint screen_next = cam.map_to_screen(next);
-                            SDL_RenderDrawLine(renderer_, static_cast<int>(std::lround(screen_cur.x)), static_cast<int>(std::lround(screen_cur.y)), static_cast<int>(std::lround(screen_next.x)), static_cast<int>(std::lround(screen_next.y)));
+                            SDL_RenderLine(renderer_, static_cast<int>(std::lround(screen_cur.x)), static_cast<int>(std::lround(screen_cur.y)), static_cast<int>(std::lround(screen_next.x)), static_cast<int>(std::lround(screen_next.y)));
                             SDL_Rect dot{
                                 static_cast<int>(std::lround(screen_next.x)) - 2, static_cast<int>(std::lround(screen_next.y)) - 2, 4, 4 };
-                            SDL_RenderFillRect(renderer_, &dot);
+                            sdl_render::FillRect(renderer_, &dot);
                             cursor = next;
                         }
                     }
@@ -809,7 +825,7 @@ void SceneRenderer::render() {
                             SDL_Point next{ cursor.x + frame.dx, cursor.y + frame.dy };
                             SDL_FPoint screen_cur = cam.map_to_screen(cursor);
                             SDL_FPoint screen_next = cam.map_to_screen(next);
-                            SDL_RenderDrawLine(renderer_, static_cast<int>(std::lround(screen_cur.x)), static_cast<int>(std::lround(screen_cur.y)), static_cast<int>(std::lround(screen_next.x)), static_cast<int>(std::lround(screen_next.y)));
+                            SDL_RenderLine(renderer_, static_cast<int>(std::lround(screen_cur.x)), static_cast<int>(std::lround(screen_cur.y)), static_cast<int>(std::lround(screen_next.x)), static_cast<int>(std::lround(screen_next.y)));
                             cursor = next;
                         }
                     }
@@ -834,7 +850,7 @@ void SceneRenderer::render() {
                         ring.push_back(cam.map_to_screen(pt));
                     }
                     for (std::size_t i = 1; i < ring.size(); ++i) {
-                        SDL_RenderDrawLine(renderer_, static_cast<int>(std::lround(ring[i - 1].x)), static_cast<int>(std::lround(ring[i - 1].y)), static_cast<int>(std::lround(ring[i].x)), static_cast<int>(std::lround(ring[i].y)));
+                        SDL_RenderLine(renderer_, static_cast<int>(std::lround(ring[i - 1].x)), static_cast<int>(std::lround(ring[i - 1].y)), static_cast<int>(std::lround(ring[i].x)), static_cast<int>(std::lround(ring[i].y)));
                     }
         }
     }
@@ -860,14 +876,25 @@ bool SceneRenderer::ensure_sky_texture() {
     SDL_Texture* tex = IMG_LoadTexture(renderer_, path_str.c_str());
     if (!tex) {
         vibble::log::warn(std::string{"[SceneRenderer] Failed to load sky texture '"} +
-                          path_str + "': " + IMG_GetError());
+                         path_str + "': " + SDL_GetError());
         sky_texture_failed_ = true;
         return false;
     }
 
     int tex_w = 0;
     int tex_h = 0;
-    if (SDL_QueryTexture(tex, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+    float tex_wf = 0.0f;
+    float tex_hf = 0.0f;
+    if (!SDL_GetTextureSize(tex, &tex_wf, &tex_hf)) {
+        vibble::log::warn(std::string{"[SceneRenderer] Invalid sky texture '"} +
+                          path_str + "': " + SDL_GetError());
+        SDL_DestroyTexture(tex);
+        sky_texture_failed_ = true;
+        return false;
+    }
+    tex_w = static_cast<int>(std::lround(tex_wf));
+    tex_h = static_cast<int>(std::lround(tex_hf));
+    if (tex_w <= 0 || tex_h <= 0) {
         vibble::log::warn(std::string{"[SceneRenderer] Invalid sky texture '"} +
                           path_str + "': " + SDL_GetError());
         SDL_DestroyTexture(tex);
@@ -945,7 +972,7 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
 
     SDL_SetTextureColorMod(sky_texture_, 255, 255, 255);
     SDL_SetTextureAlphaMod(sky_texture_, 255);
-    SDL_RenderCopyF(renderer_, sky_texture_, nullptr, &dst);
+    sdl_render::Texture(renderer_, sky_texture_, nullptr, &dst);
 }
 
 bool SceneRenderer::ensure_floor_gradient_texture() {
@@ -965,14 +992,25 @@ bool SceneRenderer::ensure_floor_gradient_texture() {
     SDL_Texture* tex = IMG_LoadTexture(renderer_, path_str.c_str());
     if (!tex) {
         vibble::log::warn(std::string{"[SceneRenderer] Failed to load floor gradient texture '"} +
-                          path_str + "': " + IMG_GetError());
+                         path_str + "': " + SDL_GetError());
         floor_gradient_failed_ = true;
         return false;
     }
 
     int tex_w = 0;
     int tex_h = 0;
-    if (SDL_QueryTexture(tex, nullptr, nullptr, &tex_w, &tex_h) != 0 || tex_w <= 0 || tex_h <= 0) {
+    float tex_wf = 0.0f;
+    float tex_hf = 0.0f;
+    if (!SDL_GetTextureSize(tex, &tex_wf, &tex_hf)) {
+        vibble::log::warn(std::string{"[SceneRenderer] Invalid floor gradient texture '"} +
+                          path_str + "': " + SDL_GetError());
+        SDL_DestroyTexture(tex);
+        floor_gradient_failed_ = true;
+        return false;
+    }
+    tex_w = static_cast<int>(std::lround(tex_wf));
+    tex_h = static_cast<int>(std::lround(tex_hf));
+    if (tex_w <= 0 || tex_h <= 0) {
         vibble::log::warn(std::string{"[SceneRenderer] Invalid floor gradient texture '"} +
                           path_str + "': " + SDL_GetError());
         SDL_DestroyTexture(tex);
@@ -1022,5 +1060,8 @@ void SceneRenderer::render_floor_gradient() {
 
     SDL_SetTextureColorMod(floor_gradient_texture_, 255, 255, 255);
     SDL_SetTextureAlphaMod(floor_gradient_texture_, 255);
-    SDL_RenderCopyF(renderer_, floor_gradient_texture_, nullptr, &dst);
+    sdl_render::Texture(renderer_, floor_gradient_texture_, nullptr, &dst);
 }
+
+
+

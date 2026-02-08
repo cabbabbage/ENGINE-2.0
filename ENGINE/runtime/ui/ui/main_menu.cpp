@@ -1,7 +1,9 @@
 #include "main_menu.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
-#include <SDL_image.h>
-#include <SDL_ttf.h>
+#include <SDL3_image/SDL_image.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <algorithm>
 #include <array>
 #include <utility>
@@ -27,9 +29,9 @@ MainMenu::MainMenu(SDL_Renderer* renderer,
   maps_json_(&maps)
 {
         if (TTF_WasInit() == 0 && TTF_Init() < 0) {
-                std::cerr << "TTF_Init failed: " << TTF_GetError() << "\n";
+                std::cerr << "TTF_Init failed: " << SDL_GetError() << "\n";
         }
-        animation_start_ticks_ = SDL_GetTicks64();
+        animation_start_ticks_ = SDL_GetTicks();
         try {
                 manifest_root_ = fs::absolute(fs::path(manifest::manifest_path()).parent_path());
         } catch (const std::exception& ex) {
@@ -126,8 +128,8 @@ void MainMenu::buildButtons() {
 }
 
 std::optional<MainMenu::Selection> MainMenu::handle_event(const SDL_Event& e) {
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_e &&
-            (e.key.keysym.mod & KMOD_CTRL)) {
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_E &&
+            (e.key.mod & SDL_KMOD_CTRL)) {
                 button_tweaker_.toggle();
                 return std::nullopt;
         }
@@ -202,12 +204,12 @@ SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {
         SDL_Texture* tex = IMG_LoadTexture(renderer_, abs_utf8_path.c_str());
         if (tex) return tex;
 
-        const std::string initial_error = IMG_GetError();
+        const std::string initial_error = SDL_GetError();
         std::cerr << "[MainMenu] IMG_LoadTexture failed: " << abs_utf8_path << " | " << initial_error << "\n";
 
         SDL_Surface* loaded = IMG_Load(abs_utf8_path.c_str());
         if (!loaded) {
-                std::cerr << "[MainMenu] Fallback IMG_Load failed: " << abs_utf8_path << " | " << IMG_GetError() << "\n";
+                std::cerr << "[MainMenu] Fallback IMG_Load failed: " << abs_utf8_path << " | " << SDL_GetError() << "\n";
                 return nullptr;
         }
 
@@ -225,22 +227,22 @@ SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {
                 const double scale = static_cast<double>(max_dim) / static_cast<double>(std::max(src_w, src_h));
                 target_w = std::max(1, static_cast<int>(std::round(static_cast<double>(src_w) * scale)));
                 target_h = std::max(1, static_cast<int>(std::round(static_cast<double>(src_h) * scale)));
-                SDL_Surface* scaled = SDL_CreateRGBSurfaceWithFormat(0, target_w, target_h, 32, SDL_PIXELFORMAT_ARGB8888);
+                SDL_Surface* scaled = SDL_CreateSurface(target_w, target_h, SDL_PIXELFORMAT_ARGB8888);
                 if (!scaled) {
                         std::cerr << "[MainMenu] Failed to allocate scaled surface ("
                                   << target_w << "x" << target_h << ") for " << abs_utf8_path
                                   << " | " << SDL_GetError() << "\n";
-                        SDL_FreeSurface(loaded);
+                        SDL_DestroySurface(loaded);
                         return nullptr;
                 }
-                if (SDL_BlitScaled(loaded, nullptr, scaled, nullptr) != 0) {
+                if (!SDL_BlitSurfaceScaled(loaded, nullptr, scaled, nullptr, SDL_SCALEMODE_LINEAR)) {
                         std::cerr << "[MainMenu] SDL_BlitScaled failed while downscaling "
                                   << abs_utf8_path << " | " << SDL_GetError() << "\n";
-                        SDL_FreeSurface(loaded);
-                        SDL_FreeSurface(scaled);
+                        SDL_DestroySurface(loaded);
+                        SDL_DestroySurface(scaled);
                         return nullptr;
                 }
-                SDL_FreeSurface(loaded);
+                SDL_DestroySurface(loaded);
                 to_upload = scaled;
         }
 
@@ -252,7 +254,7 @@ SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {
                 std::cerr << "[MainMenu] Loaded downscaled texture (" << to_upload->w << "x" << to_upload->h
                           << ") after renderer failure for " << abs_utf8_path << "\n";
         }
-        SDL_FreeSurface(to_upload);
+        SDL_DestroySurface(to_upload);
         return tex;
 }
 
@@ -347,7 +349,13 @@ std::filesystem::path MainMenu::firstImageIn(const fs::path& folder) const {
 SDL_Rect MainMenu::coverDst(SDL_Texture* tex) const {
 	if (!tex) return SDL_Rect{0,0,screen_w_,screen_h_};
 	int tw=0, th=0;
-	SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+	{
+		float twf = 0.0f, thf = 0.0f;
+		if (SDL_GetTextureSize(tex, &twf, &thf)) {
+			tw = static_cast<int>(std::lround(twf));
+			th = static_cast<int>(std::lround(thf));
+		}
+	}
 	if (tw<=0 || th<=0) return SDL_Rect{0,0,screen_w_,screen_h_};
 	const double ar = double(tw)/double(th);
 	int w = screen_w_;
@@ -362,7 +370,13 @@ SDL_Rect MainMenu::coverDst(SDL_Texture* tex) const {
 SDL_Rect MainMenu::fitCenter(SDL_Texture* tex, int max_w, int max_h, int cx, int cy) const {
 	if (!tex) return SDL_Rect{ cx - max_w/2, cy - max_h/2, max_w, max_h };
 	int tw=0, th=0;
-	SDL_QueryTexture(tex, nullptr, nullptr, &tw, &th);
+	{
+		float twf = 0.0f, thf = 0.0f;
+		if (SDL_GetTextureSize(tex, &twf, &thf)) {
+			tw = static_cast<int>(std::lround(twf));
+			th = static_cast<int>(std::lround(thf));
+		}
+	}
 	if (tw<=0 || th<=0) return SDL_Rect{ cx - max_w/2, cy - max_h/2, max_w, max_h };
 	const double ar = double(tw)/double(th);
 	int w = max_w;
@@ -379,7 +393,7 @@ SDL_Point MainMenu::measureText(const LabelStyle& style, const std::string& s) c
 	if (s.empty()) return sz;
 	TTF_Font* f = style.open_font();
 	if (!f) return sz;
-	TTF_SizeText(f, s.c_str(), &sz.x, &sz.y);
+	ttf_util::GetStringSize(f, s, &sz.x, &sz.y);
 	TTF_CloseFont(f);
 	return sz;
 }
@@ -396,8 +410,8 @@ void MainMenu::blitText(SDL_Renderer* r,
 	if (!f) return;
 	const SDL_Color coal = Styles::Coal();
 	const SDL_Color col  = override_col.a ? override_col : style.color;
-	SDL_Surface* surf_text = TTF_RenderText_Blended(f, s.c_str(), col);
-	SDL_Surface* surf_shadow = shadow ? TTF_RenderText_Blended(f, s.c_str(), coal) : nullptr;
+	SDL_Surface* surf_text = ttf_util::RenderTextBlended(f, s, col);
+	SDL_Surface* surf_shadow = shadow ? ttf_util::RenderTextBlended(f, s, coal) : nullptr;
 	if (surf_text) {
 		SDL_Texture* tex_text = SDL_CreateTextureFromSurface(r, surf_text);
 		if (surf_shadow) {
@@ -405,18 +419,18 @@ void MainMenu::blitText(SDL_Renderer* r,
 			if (tex_shadow) {
 					SDL_Rect dsts { x+2, y+2, surf_shadow->w, surf_shadow->h };
 					SDL_SetTextureAlphaMod(tex_shadow, 130);
-					SDL_RenderCopy(r, tex_shadow, nullptr, &dsts);
+					sdl_render::Texture(r, tex_shadow, nullptr, &dsts);
 					SDL_DestroyTexture(tex_shadow);
 			}
 		}
 		if (tex_text) {
 			SDL_Rect dst { x, y, surf_text->w, surf_text->h };
-			SDL_RenderCopy(r, tex_text, nullptr, &dst);
+			sdl_render::Texture(r, tex_text, nullptr, &dst);
 			SDL_DestroyTexture(tex_text);
 		}
 	}
-	if (surf_shadow) SDL_FreeSurface(surf_shadow);
-	if (surf_text)   SDL_FreeSurface(surf_text);
+	if (surf_shadow) SDL_DestroySurface(surf_shadow);
+	if (surf_text)   SDL_DestroySurface(surf_text);
 	TTF_CloseFont(f);
 }
 
@@ -455,12 +469,15 @@ void MainMenu::renderAnimatedBackground(SDL_Texture* tex) const {
         if (!tex) return;
 
         SDL_Rect dst = coverDst(tex);
-        SDL_RenderCopy(renderer_, tex, nullptr, &dst);
+        sdl_render::Texture(renderer_, tex, nullptr, &dst);
 }
 
 void MainMenu::drawVignette(Uint8 alpha) const {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, alpha);
         SDL_Rect v{0,0,screen_w_,screen_h_};
-        SDL_RenderFillRect(renderer_, &v);
+        sdl_render::FillRect(renderer_, &v);
 }
+
+
+

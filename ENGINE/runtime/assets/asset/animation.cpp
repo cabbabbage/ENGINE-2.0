@@ -1,4 +1,5 @@
 #include "animation.hpp"
+#include "utils/sdl_render_conversions.hpp"
 #include "assets/asset_info.hpp"
 #include "assets/asset_types.hpp"
 #include "assets/surface_utils.hpp"
@@ -7,8 +8,7 @@
 #include "rendering/render/scaling_logic.hpp"
 #include "utils/loading_status_notifier.hpp"
 #include "utils/log.hpp"
-#include <SDL_image.h>
-#include <SDL_mixer.h>
+#include <SDL3_image/SDL_image.h>
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -33,7 +33,7 @@ namespace {
 inline void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
 #if SDL_VERSION_ATLEAST(2, 0, 12)
     if (tex) {
-        SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_ScaleModeBest : SDL_ScaleModeNearest);
+        SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
     }
 #else
     (void)tex;
@@ -77,7 +77,7 @@ SDL_Texture* load_texture_from_path(SDL_Renderer* renderer,
         out_w = surf->w;
         out_h = surf->h;
     }
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     return tex;
 }
 
@@ -246,8 +246,8 @@ void Animation::clear_texture_cache() {
         }
     }
     frame_cache_.clear();
-    if (audio_clip.chunk) {
-        audio_clip.chunk.reset();
+    if (audio_clip.buffer) {
+        audio_clip.buffer.reset();
     }
 }
 
@@ -411,27 +411,36 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
         if (!tex) return;
 #if SDL_VERSION_ATLEAST(2, 0, 12)
         if (info.smooth_scaling) {
-            SDL_SetTextureScaleMode(tex, SDL_ScaleModeBest);
+            SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_LINEAR);
         } else {
-            SDL_SetTextureScaleMode(tex, SDL_ScaleModeNearest);
+            SDL_SetTextureScaleMode(tex, SDL_SCALEMODE_NEAREST);
         }
 #endif
 };
 
-    auto clone_texture = [&](SDL_Texture* src, int width_hint, int height_hint, SDL_RendererFlip flip_flags, int* out_w = nullptr, int* out_h = nullptr) -> SDL_Texture* {
+    auto clone_texture = [&](SDL_Texture* src, int width_hint, int height_hint, SDL_FlipMode flip_flags, int* out_w = nullptr, int* out_h = nullptr) -> SDL_Texture* {
         if (!src) return nullptr;
 
-        Uint32 fmt = SDL_PIXELFORMAT_RGBA8888;
+        SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA8888;
         int access = 0;
         int tex_w = width_hint;
         int tex_h = height_hint;
 
         const bool need_dims = tex_w <= 0 || tex_h <= 0;
-        if (SDL_QueryTexture(src, &fmt, &access, need_dims ? &tex_w : nullptr, need_dims ? &tex_h : nullptr) != 0 ||
-            tex_w <= 0 || tex_h <= 0) {
-            tex_w = std::max(1, tex_w);
-            tex_h = std::max(1, tex_h);
+        if (SDL_PropertiesID props = SDL_GetTextureProperties(src)) {
+            fmt    = static_cast<SDL_PixelFormat>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, fmt));
+            access = static_cast<int>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_ACCESS_NUMBER, access));
         }
+        if (need_dims) {
+            float fw = 0.0f;
+            float fh = 0.0f;
+            if (SDL_GetTextureSize(src, &fw, &fh)) {
+                tex_w = static_cast<int>(std::lround(fw));
+                tex_h = static_cast<int>(std::lround(fh));
+            }
+        }
+        tex_w = std::max(1, tex_w);
+        tex_h = std::max(1, tex_h);
 
         SDL_Texture* dst = SDL_CreateTexture(renderer, fmt, SDL_TEXTUREACCESS_TARGET, tex_w, tex_h);
         if (!dst) {
@@ -448,9 +457,9 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
 
         SDL_Rect rect{ 0, 0, tex_w, tex_h };
         if (flip_flags != SDL_FLIP_NONE) {
-            SDL_RenderCopyEx(renderer, src, nullptr, &rect, 0.0, nullptr, flip_flags);
+            sdl_render::TextureRotated(renderer, src, nullptr, &rect, 0.0, nullptr, flip_flags);
         } else {
-            SDL_RenderCopy(renderer, src, nullptr, &rect);
+            sdl_render::Texture(renderer, src, nullptr, &rect);
         }
 
         SDL_SetRenderTarget(renderer, prev_target);
@@ -474,12 +483,12 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
         return false;
     }
 
-    SDL_RendererFlip flip_flags = SDL_FLIP_NONE;
+    SDL_FlipMode flip_flags = SDL_FLIP_NONE;
     if (flip_horizontal) {
-        flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_HORIZONTAL);
+        flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
     }
     if (flip_vertical) {
-        flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_VERTICAL);
+        flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
     }
 
     frame_cache_.reserve(frame_count);
@@ -631,12 +640,10 @@ void Animation::freeze() { frozen = true; }
 
 bool Animation::is_frozen() const { return frozen || frames.size() <= 1; }
 
-bool Animation::has_audio() const { return static_cast<bool>(audio_clip.chunk); }
-
-Mix_Chunk* Animation::audio_chunk() const { return audio_clip.chunk.get(); }
+bool Animation::has_audio() const { return static_cast<bool>(audio_clip.buffer); }
 
 const Animation::AudioClip* Animation::audio_data() const {
-    if (!audio_clip.chunk) {
+    if (!audio_clip.buffer) {
         return nullptr;
     }
     return &audio_clip;

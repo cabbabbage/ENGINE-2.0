@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 namespace animation_editor {
 
@@ -40,3 +40,4 @@ private:
 };
 
 }
+

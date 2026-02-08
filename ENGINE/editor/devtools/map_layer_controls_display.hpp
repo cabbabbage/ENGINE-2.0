@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "SlidingWindowContainer.hpp"
 
@@ -118,4 +118,5 @@ private:
     mutable bool pending_slider_dirty_refresh_ = false;
     mutable const DMRangeSlider* active_slider_dirty_owner_ = nullptr;
 };
+
 

@@ -9,7 +9,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <nlohmann/json.hpp>
 
@@ -155,3 +155,4 @@ class SourceConfigPanel {
 };
 
 }
+

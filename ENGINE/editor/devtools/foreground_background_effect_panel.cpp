@@ -1,4 +1,5 @@
 #include "devtools/foreground_background_effect_panel.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include "assets/asset_info.hpp"
 #include "assets/animation.hpp"
@@ -10,7 +11,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/rebuild_queue.hpp"
 
-#include <SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 
 #include <algorithm>
 #include <cmath>
@@ -72,9 +73,9 @@ public:
         if (!renderer) return;
 
         SDL_SetRenderDrawColor(renderer, 18, 20, 26, 255);
-        SDL_RenderFillRect(renderer, &rect_);
+        sdl_render::FillRect(renderer, &rect_);
         SDL_SetRenderDrawColor(renderer, 38, 42, 52, 255);
-        SDL_RenderDrawRect(renderer, &rect_);
+        sdl_render::Rect(renderer, &rect_);
 
         if (processed_texture_) {
             const int padding = 8;
@@ -113,7 +114,7 @@ private:
         const int draw_h = static_cast<int>(std::round(static_cast<float>(tex_h) * scale));
         SDL_Rect dst{
             area.x + (area.w - draw_w) / 2, area.y + (area.h - draw_h) / 2, draw_w, draw_h };
-        SDL_RenderCopy(renderer, tex, nullptr, &dst);
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
     }
 
     SDL_Rect rect_{0,0,0,200};
@@ -135,11 +136,13 @@ bool query_texture_size(SDL_Texture* texture, int& width, int& height) {
     if (!texture) {
         return false;
     }
-    if (SDL_QueryTexture(texture, nullptr, nullptr, &width, &height) != 0) {
-        width = 0;
-        height = 0;
+    float wf = 0.0f;
+    float hf = 0.0f;
+    if (!SDL_GetTextureSize(texture, &wf, &hf)) {
         return false;
     }
+    width = static_cast<int>(std::lround(wf));
+    height = static_cast<int>(std::lround(hf));
     return width > 0 && height > 0;
 }
 
@@ -747,13 +750,13 @@ void ForegroundBackgroundEffectPanel::load_preview_texture(const std::string& im
     current_preview_texture_ = SDL_CreateTextureFromSurface(renderer, surface);
     if (!current_preview_texture_) {
         std::cerr << "[DepthCuePanel] Failed to create texture from surface\n";
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
         return;
     }
 
     current_preview_w_ = surface->w;
     current_preview_h_ = surface->h;
-    SDL_FreeSurface(surface);
+    SDL_DestroySurface(surface);
 
     std::cout << "[DepthCuePanel] Loaded preview texture: " << current_preview_w_ << "x" << current_preview_h_ << "\n";
 }
@@ -1091,3 +1094,6 @@ void ForegroundBackgroundEffectPanel::request_preview_rebuild() {
         preview_dirty_ = true;
     }
 }
+
+
+

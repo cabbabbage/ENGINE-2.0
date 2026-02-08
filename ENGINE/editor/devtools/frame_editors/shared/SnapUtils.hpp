@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -31,3 +31,4 @@ inline float snap_world_z_to_grid(float world_z, int resolution) {
 }
 
 }  // namespace devmode::frame_editors
+

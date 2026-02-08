@@ -1,6 +1,6 @@
 #include "gameplay/world/world_grid.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -602,6 +602,7 @@ void WorldGrid::bind_asset_to_point(Asset* a, GridPoint& point) {
         return;
     }
     a->pos_ = &point;
+    a->grid_resolution = point.resolution_layer();
     GridKey key{point.world_x(), point.world_y(), point.world_z(), point.resolution_layer()};
     asset_to_key_[a] = key;
     a->clear_grid_id();

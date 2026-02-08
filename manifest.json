@@ -224,9 +224,9 @@
           "camera_zoom_percent": 93,
           "curvyness": 2,
           "display_color": [
+            139,
+            36,
             242,
-            36,
-            36,
             255
           ],
           "edge_smoothness": 101,
@@ -400,8 +400,8 @@
                 }
               ],
               "display_name": "Vibble",
-              "dx": 1099,
-              "dy": 334,
+              "dx": -348,
+              "dy": 1348,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -411,7 +411,8 @@
               "origional_height": 6376,
               "origional_width": 6376,
               "position": "Exact",
-              "resolution": 5,
+              "priority": 5,
+              "resolution": 2,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-c341292a767e"
@@ -426,9 +427,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            138,
+            242,
             36,
-            242,
-            242,
             255
           ],
           "edge_smoothness": 2,

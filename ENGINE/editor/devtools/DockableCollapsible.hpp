@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -159,7 +159,7 @@ protected:
     bool drag_exceeded_threshold_ = false;
     SDL_Point drag_offset_{0,0};
     SDL_Point drag_start_pointer_{0,0};
-    mutable Uint32 pointer_block_until_ms_ = 0;
+    mutable Uint64 pointer_block_until_ms_ = 0;
     mutable int scroll_ = 0;
     mutable int max_scroll_ = 0;
     std::shared_ptr<AssetInfo> info_{};
@@ -212,3 +212,4 @@ protected:
     void apply_embedded_bounds(const SDL_Rect& bounds, int screen_w, int screen_h);
     void restore_snapshot(const EmbeddedSnapshot& snapshot);
 };
+

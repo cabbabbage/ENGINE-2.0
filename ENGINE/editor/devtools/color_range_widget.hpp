@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "widgets.hpp"
 #include "utils/ranged_color.hpp"
@@ -65,4 +65,5 @@ private:
     std::unique_ptr<Picker> picker_;
     bool reopen_picker_after_sample_ = false;
 };
+
 

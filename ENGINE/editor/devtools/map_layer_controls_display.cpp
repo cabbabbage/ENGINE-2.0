@@ -1,4 +1,5 @@
 #include "map_layer_controls_display.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -322,9 +323,9 @@ void MapLayerControlsDisplay::render(SDL_Renderer* renderer) const {
                 border = active_border;
             }
             SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-            SDL_RenderFillRect(renderer, &candidate.background_rect);
+            sdl_render::FillRect(renderer, &candidate.background_rect);
             SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-            SDL_RenderDrawRect(renderer, &candidate.background_rect);
+            sdl_render::Rect(renderer, &candidate.background_rect);
         }
 
         SDL_Point label_size = measure_label(candidate.display_label);
@@ -374,23 +375,23 @@ bool MapLayerControlsDisplay::handle_event(const SDL_Event& e) {
 
     auto update_candidate_hover = [this](SDL_Point pointer) {
         for (auto& candidate : candidates_) {
-            candidate.hovered = SDL_PointInRect(&pointer, &candidate.background_rect) == SDL_TRUE;
+            candidate.hovered = SDL_PointInRect(&pointer, &candidate.background_rect);
         }
 };
 
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point pointer{e.motion.x, e.motion.y};
         update_candidate_hover(pointer);
-    } else if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         SDL_Point pointer{e.button.x, e.button.y};
         update_candidate_hover(pointer);
-        if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             for (auto& candidate : candidates_) {
                 if (!candidate.range_slider) {
                     candidate.slider_active = false;
                     continue;
                 }
-                if (SDL_PointInRect(&pointer, &candidate.range_slider->rect()) != SDL_TRUE) {
+                if (!SDL_PointInRect(&pointer, &candidate.range_slider->rect())) {
                     candidate.slider_active = false;
                 }
             }
@@ -409,14 +410,14 @@ bool MapLayerControlsDisplay::handle_event(const SDL_Event& e) {
     }
 
     if (add_room_button_ && add_room_button_->handle_event(e)) {
-        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             open_room_selector();
         }
         return true;
     }
 
     if (new_room_button_ && new_room_button_->handle_event(e)) {
-        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             handle_create_room();
         }
         return true;
@@ -437,8 +438,8 @@ bool MapLayerControlsDisplay::handle_event(const SDL_Event& e) {
         bool slider_changed = false;
         if (candidate.range_slider) {
             slider_handled = candidate.range_slider->handle_event(e);
-            const bool mouse_down = e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT;
-            const bool mouse_up = e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT;
+            const bool mouse_down = e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT;
+            const bool mouse_up = e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT;
             if (mouse_down) {
                 if (slider_handled) {
                     candidate.slider_active = true;
@@ -462,7 +463,7 @@ bool MapLayerControlsDisplay::handle_event(const SDL_Event& e) {
             }
         }
         if (candidate.add_child_button && candidate.add_child_button->handle_event(e)) {
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 open_child_selector(candidate.candidate_index);
             }
             return true;
@@ -802,3 +803,6 @@ void MapLayerControlsDisplay::handle_create_room() {
     on_create_room_();
     mark_dirty();
 }
+
+
+

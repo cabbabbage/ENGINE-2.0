@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <cmath>
 
 namespace dm_draw {
@@ -40,3 +40,4 @@ void DrawRoundedOutline( SDL_Renderer* renderer, const SDL_Rect& rect, int corne
 void DrawRoundedFocusRing( SDL_Renderer* renderer, const SDL_Rect& rect, int corner_radius, int thickness, const SDL_Color& color);
 
 }
+

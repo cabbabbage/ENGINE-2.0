@@ -1,8 +1,9 @@
 #include "quick_task_popup.hpp"
+#include "utils/sdl_render_conversions.hpp"
 #include "devtools/widgets.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/font_cache.hpp"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <algorithm>
 
 QuickTaskPopup::QuickTaskPopup() = default;
@@ -43,7 +44,7 @@ void QuickTaskPopup::render(SDL_Renderer* renderer) {
     if (!is_open_) return;
 
     int screen_w, screen_h;
-    SDL_GetRendererOutputSize(renderer, &screen_w, &screen_h);
+    SDL_GetCurrentRenderOutputSize(renderer, &screen_w, &screen_h);
     SDL_Rect screen_rect = {0, 0, screen_w, screen_h};
 
     if (layout_dirty_ || popup_rect_.w == 0) {
@@ -52,12 +53,12 @@ void QuickTaskPopup::render(SDL_Renderer* renderer) {
     }
 
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 200);
-    SDL_RenderFillRect(renderer, &screen_rect);
+    sdl_render::FillRect(renderer, &screen_rect);
 
     SDL_SetRenderDrawColor(renderer, 40, 40, 45, 255);
-    SDL_RenderFillRect(renderer, &popup_rect_);
+    sdl_render::FillRect(renderer, &popup_rect_);
     SDL_SetRenderDrawColor(renderer, 80, 80, 100, 255);
-    SDL_RenderDrawRect(renderer, &popup_rect_);
+    sdl_render::Rect(renderer, &popup_rect_);
 
     if (assignee_dd_) assignee_dd_->render(renderer);
     if (assigner_dd_) assigner_dd_->render(renderer);
@@ -98,7 +99,7 @@ void QuickTaskPopup::render(SDL_Renderer* renderer) {
 bool QuickTaskPopup::handle_event(const SDL_Event& event) {
     if (!is_open_) return false;
 
-    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
         handle_escape();
         return true;
     }
@@ -108,7 +109,7 @@ bool QuickTaskPopup::handle_event(const SDL_Event& event) {
     if (assignee_dd_ && assignee_dd_->handle_event(event)) consumed = true;
     if (assigner_dd_ && assigner_dd_->handle_event(event)) consumed = true;
     if (description_box_ && description_box_->handle_event(event)) consumed = true;
-    if (add_button_ && add_button_->handle_event(event) && event.type == SDL_MOUSEBUTTONUP) {
+    if (add_button_ && add_button_->handle_event(event) && event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         consumed = true;
         add_new_task();
     }
@@ -116,7 +117,7 @@ bool QuickTaskPopup::handle_event(const SDL_Event& event) {
     for (size_t i = 0; i < dev_row_widgets_.size(); ++i) {
         auto& rw = dev_row_widgets_[i];
         if (i >= dev_tasks_.size()) break;
-        if (rw.delete_button && rw.delete_button->handle_event(event) && event.type == SDL_MOUSEBUTTONUP) {
+        if (rw.delete_button && rw.delete_button->handle_event(event) && event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
             delete_dev_task(i);
             consumed = true;
             break;
@@ -125,14 +126,14 @@ bool QuickTaskPopup::handle_event(const SDL_Event& event) {
     for (size_t i = 0; i < cline_row_widgets_.size(); ++i) {
         auto& rw = cline_row_widgets_[i];
         if (i >= cline_tasks_.size()) break;
-        if (rw.delete_button && rw.delete_button->handle_event(event) && event.type == SDL_MOUSEBUTTONUP) {
+        if (rw.delete_button && rw.delete_button->handle_event(event) && event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
             delete_cline_task(i);
             consumed = true;
             break;
         }
     }
 
-    if (event.type == SDL_MOUSEMOTION || event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEWHEEL) {
+    if (event.type == SDL_EVENT_MOUSE_MOTION || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP || event.type == SDL_EVENT_MOUSE_WHEEL) {
         return true;
     }
     return consumed;
@@ -279,3 +280,6 @@ void QuickTaskPopup::persist_all() {
     cline_file_.save(cline_tasks_);
     rebuild_ui();
 }
+
+
+

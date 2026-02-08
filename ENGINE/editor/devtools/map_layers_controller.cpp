@@ -6,14 +6,14 @@
 #include "devtools/dev_controls_persistence.hpp"
 #include "utils/display_color.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <iostream>
 #include <sstream>
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 
 #include <nlohmann/json.hpp>
 
@@ -761,3 +761,4 @@ void MapLayersController::ensure_spawn_room_data(const std::string& previous_nam
     spawn_entry["is_spawn"] = true;
     rooms_data[kSpawnRoomName] = std::move(spawn_entry);
 }
+

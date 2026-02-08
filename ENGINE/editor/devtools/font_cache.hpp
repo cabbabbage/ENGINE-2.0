@@ -1,7 +1,7 @@
 #pragma once
 
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include <mutex>
 #include <string>
@@ -53,4 +53,5 @@ SDL_Point MeasureLabelText(const DMLabelStyle& style, const std::string& text);
 bool DrawLabelText(SDL_Renderer* renderer, const std::string& text, int x, int y, const DMLabelStyle& style, SDL_Rect* out_rect = nullptr);
 
 bool DrawLabelText(SDL_Renderer* renderer, const std::string& text, const SDL_Rect& rect, const DMLabelStyle& style, SDL_Rect* out_rect = nullptr);
+
 

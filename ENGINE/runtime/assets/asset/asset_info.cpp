@@ -21,7 +21,7 @@
 #include <system_error>
 #include <utility>
 #include <unordered_set>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "devtools/core/manifest_store.hpp"
 #include "utils/grid.hpp"

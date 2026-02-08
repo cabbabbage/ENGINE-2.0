@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "DockableCollapsible.hpp"
 #include "devtools/float_slider_widget.hpp"
@@ -141,3 +141,4 @@ private:
 
     CloseCallback close_callback_;
 };
+

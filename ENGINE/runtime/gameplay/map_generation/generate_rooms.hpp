@@ -13,7 +13,7 @@
 #include <limits>
 #include <cmath>
 #include <algorithm>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
 #include "utils/map_grid_settings.hpp"

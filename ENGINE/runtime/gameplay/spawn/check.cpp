@@ -4,7 +4,7 @@
 #include <cmath>
 #include <iostream>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "assets/asset_types.hpp"
 #include "utils/grid.hpp"

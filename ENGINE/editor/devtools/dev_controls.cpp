@@ -1,6 +1,9 @@
 #include "dev_controls.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
+#include "utils/ttf_render_utils.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <fstream>
 #include <sstream>
 #include <array>
@@ -71,7 +74,7 @@
 #include <iostream>
 #include <random>
 #include <nlohmann/json.hpp>
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 using devmode::sdl::event_point;
 using devmode::sdl::is_pointer_event;
@@ -163,7 +166,7 @@ public:
         }
 
         SDL_Rect dst{x, y, it->second.size.x, it->second.size.y};
-        SDL_RenderCopy(renderer, it->second.texture, nullptr, &dst);
+        sdl_render::Texture(renderer, it->second.texture, nullptr, &dst);
     }
 
     void clear() {
@@ -185,7 +188,7 @@ private:
         if (!font) {
             return nullptr;
         }
-        SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), style.color);
+        SDL_Surface* surf = ttf_util::RenderTextBlended(font, text.c_str(), style.color);
         if (!surf) {
             return nullptr;
         }
@@ -195,7 +198,7 @@ private:
                 *out_size = SDL_Point{surf->w, surf->h};
             }
         }
-        SDL_FreeSurface(surf);
+        SDL_DestroySurface(surf);
         return texture;
     }
 
@@ -384,15 +387,15 @@ public:
 
     bool handle_event(const SDL_Event& e) {
         if (!visible_) return false;
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
             close();
             return true;
         }
-        if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION) {
-            SDL_Point p{ e.type == SDL_MOUSEMOTION ? e.motion.x : e.button.x,
-                         e.type == SDL_MOUSEMOTION ? e.motion.y : e.button.y };
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION) {
+            SDL_Point p{ e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.x : e.button.x,
+                         e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.y : e.button.y };
             if (!SDL_PointInRect(&p, &rect_)) {
-                if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                     close();
                 }
                 return false;
@@ -411,7 +414,7 @@ public:
             btn->set_rect(btn_rect);
             if (btn->handle_event(e)) {
                 used = true;
-                if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                     if (callback_) callback_(rooms_[i].second);
                     close();
                 }
@@ -1239,10 +1242,10 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     }
 
     const bool pointer_event = is_pointer_event(event);
-    const bool wheel_event = (event.type == SDL_MOUSEWHEEL);
+    const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_relevant = pointer_event || wheel_event;
     const bool keyboard_like_event =
-        (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP || event.type == SDL_TEXTINPUT);
+        (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP || event.type == SDL_EVENT_TEXT_INPUT);
     SDL_Point pointer{0, 0};
     if (pointer_relevant) {
         pointer = event_point(event);
@@ -1282,7 +1285,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
                 SDL_Point probe = pointer;
                 if (!pointer_event) {
                     if (!wheel_point_valid) {
-                        SDL_GetMouseState(&wheel_point.x, &wheel_point.y);
+                        sdl_mouse_util::GetMouseState(&wheel_point.x, &wheel_point.y);
                         wheel_point_valid = true;
                     }
                     probe = wheel_point;
@@ -1303,7 +1306,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         return;
     }
 
-    if (event.type == SDL_KEYDOWN && event.key.keysym.sym == SDLK_ESCAPE) {
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
         if (layers_panel_open && map_mode_ui_) {
             map_mode_ui_->toggle_layers_panel();
             if (input_) {
@@ -1381,17 +1384,17 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     bool pointer_event_inside_camera = false;
     if (camera_panel_ && camera_panel_->is_visible()) {
         switch (event.type) {
-        case SDL_MOUSEMOTION:
+        case SDL_EVENT_MOUSE_MOTION:
             pointer_event_inside_camera = camera_panel_->is_point_inside(event.motion.x, event.motion.y);
             break;
-        case SDL_MOUSEBUTTONDOWN:
-        case SDL_MOUSEBUTTONUP:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
             pointer_event_inside_camera = camera_panel_->is_point_inside(event.button.x, event.button.y);
             break;
-        case SDL_MOUSEWHEEL: {
+        case SDL_EVENT_MOUSE_WHEEL: {
             int mx = 0;
             int my = 0;
-            SDL_GetMouseState(&mx, &my);
+            sdl_mouse_util::GetMouseState(&mx, &my);
             pointer_event_inside_camera = camera_panel_->is_point_inside(mx, my);
             break;
         }
@@ -1402,17 +1405,17 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     bool pointer_event_inside_image_effect_panel = false;
     if (image_effect_panel_ && image_effect_panel_->is_visible()) {
         switch (event.type) {
-        case SDL_MOUSEMOTION:
+        case SDL_EVENT_MOUSE_MOTION:
             pointer_event_inside_image_effect_panel = image_effect_panel_->is_point_inside(event.motion.x, event.motion.y);
             break;
-        case SDL_MOUSEBUTTONDOWN:
-        case SDL_MOUSEBUTTONUP:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP:
             pointer_event_inside_image_effect_panel = image_effect_panel_->is_point_inside(event.button.x, event.button.y);
             break;
-        case SDL_MOUSEWHEEL: {
+        case SDL_EVENT_MOUSE_WHEEL: {
             int mx = 0;
             int my = 0;
-            SDL_GetMouseState(&mx, &my);
+            sdl_mouse_util::GetMouseState(&mx, &my);
             pointer_event_inside_image_effect_panel = image_effect_panel_->is_point_inside(mx, my);
             break;
         }
@@ -1586,7 +1589,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 const bool is_major = (static_cast<long long>(std::llround(line_value)) % (cell * major_interval) == 0);
                 SDL_Color c = is_major ? major : minor;
                 SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-                SDL_RenderDrawLines(renderer, polyline.data(), static_cast<int>(polyline.size()));
+                sdl_render::Lines(renderer, polyline.data(), static_cast<int>(polyline.size()));
             };
 
             auto update_horizon_for_polyline = [&](const std::vector<SDL_Point>& polyline) {
@@ -1646,7 +1649,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 SDL_GetRenderDrawBlendMode(renderer, &prev_mode2);
                 SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
                 SDL_SetRenderDrawColor(renderer, 255, 140, 0, 220);
-                SDL_RenderDrawLine(renderer, xi, 0, xi, screen_h_);
+                SDL_RenderLine(renderer, xi, 0, xi, screen_h_);
                 SDL_SetRenderDrawBlendMode(renderer, prev_mode2);
             }
 
@@ -1695,7 +1698,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                     SDL_Color c = major;
                     SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
                     const int yi = static_cast<int>(std::lround(hy));
-                    SDL_RenderDrawLine(renderer, 0, yi, screen_w_, yi);
+                    SDL_RenderLine(renderer, 0, yi, screen_w_, yi);
                 }
             }
 
@@ -1746,9 +1749,9 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 const int line_y = static_cast<int>(std::lround(clamped_y));
                 const SDL_Color cull_color{0, 255, 255, 220};
                 SDL_SetRenderDrawColor(renderer, cull_color.r, cull_color.g, cull_color.b, cull_color.a);
-                SDL_RenderDrawLine(renderer, 0, line_y, screen_w_, line_y);
+                SDL_RenderLine(renderer, 0, line_y, screen_w_, line_y);
                 const int marker_x = screen_w_ / 2;
-                SDL_RenderDrawLine(renderer, marker_x - 8, line_y, marker_x + 8, line_y);
+                SDL_RenderLine(renderer, marker_x - 8, line_y, marker_x + 8, line_y);
                 DMLabelStyle style = DMStyles::Label();
                 style.color = cull_color;
                 const int label_y = std::max(0, line_y - style.font_size - 2);
@@ -1804,7 +1807,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             const int yi = static_cast<int>(std::lround(y));
             SDL_Color actual_color = is_hover_or_drag ? SDL_Color{255, 255, 255, 220} : color;
             SDL_SetRenderDrawColor(renderer, actual_color.r, actual_color.g, actual_color.b, actual_color.a);
-            SDL_RenderDrawLine(renderer, 0, yi, screen_w_, yi);
+            SDL_RenderLine(renderer, 0, yi, screen_w_, yi);
 };
         auto draw_label = [&](float line_y, const SDL_Color& color, const std::string& text) {
             DMLabelStyle style = base_label;
@@ -1845,8 +1848,8 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         const int offset_start = -thickness / 2;
         const int offset_end   =  thickness / 2;
         for (int o = offset_start; o <= offset_end; ++o) {
-            SDL_RenderDrawLine(renderer, cx - arm, cy + o, cx + arm, cy + o);
-            SDL_RenderDrawLine(renderer, cx + o, cy - arm, cx + o, cy + arm);
+            SDL_RenderLine(renderer, cx - arm, cy + o, cx + arm, cy + o);
+            SDL_RenderLine(renderer, cx + o, cy - arm, cx + o, cy + arm);
         }
 
         SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
@@ -3375,7 +3378,7 @@ void DevControls::render_grid_overlay() {
                 const bool is_major = (static_cast<long long>(std::llround(line_value)) % (cell * major_interval) == 0);
                 SDL_Color c = is_major ? major : minor;
                 SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-                SDL_RenderDrawLines(renderer, polyline.data(), static_cast<int>(polyline.size()));
+                sdl_render::Lines(renderer, polyline.data(), static_cast<int>(polyline.size()));
             };
 
             auto update_horizon_for_polyline = [&](const std::vector<SDL_Point>& polyline) {
@@ -3435,7 +3438,7 @@ void DevControls::render_grid_overlay() {
                 SDL_GetRenderDrawBlendMode(renderer, &prev_mode2);
                 SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
                 SDL_SetRenderDrawColor(renderer, 255, 140, 0, 220);
-                SDL_RenderDrawLine(renderer, xi, 0, xi, screen_h_);
+                SDL_RenderLine(renderer, xi, 0, xi, screen_h_);
                 SDL_SetRenderDrawBlendMode(renderer, prev_mode2);
             }
 
@@ -3485,7 +3488,7 @@ void DevControls::render_grid_overlay() {
                     SDL_Color c = major;
                     SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
                     const int yi = static_cast<int>(std::lround(hy));
-                    SDL_RenderDrawLine(renderer, 0, yi, screen_w_, yi);
+                    SDL_RenderLine(renderer, 0, yi, screen_w_, yi);
                 }
             }
 
@@ -3503,3 +3506,7 @@ void DevControls::render_grid_overlay() {
         }
     }
 }
+
+
+
+

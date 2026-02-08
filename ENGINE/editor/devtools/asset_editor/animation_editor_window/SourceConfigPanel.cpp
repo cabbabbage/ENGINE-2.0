@@ -1,7 +1,8 @@
 #include "SourceConfigPanel.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
-#include <SDL.h>
-#include <SDL_log.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_log.h>
 
 #include <algorithm>
 #include <cctype>
@@ -188,7 +189,7 @@ void SourceConfigPanel::render(SDL_Renderer* renderer) const {
         indicator.y = indicator.y + indicator.h - 6;
         indicator.h = 6;
         SDL_SetRenderDrawColor(renderer, 0xc0, 0x9a, 0x2b, 255);
-        SDL_RenderFillRect(renderer, &indicator);
+        sdl_render::FillRect(renderer, &indicator);
     }
 }
 
@@ -205,7 +206,7 @@ bool SourceConfigPanel::handle_event(const SDL_Event& e) {
 
     if (!consumed && use_animation_reference_ && pick_animation_button_ && pick_animation_button_->handle_event(e)) {
         consumed = true;
-        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             import_from_animation();
         }
     }
@@ -215,7 +216,7 @@ bool SourceConfigPanel::handle_event(const SDL_Event& e) {
             auto& button = frame_buttons_[i];
             if (button && button->handle_event(e)) {
                 consumed = true;
-                if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                     switch (i) {
                         case 0:
                             import_from_gif();
@@ -1145,8 +1146,11 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
 
     if (max_width <= 0 || max_height <= 0) return;
 
-    int tex_w, tex_h;
-    SDL_QueryTexture(frame_texture, nullptr, nullptr, &tex_w, &tex_h);
+    float tex_wf = 0.0f;
+    float tex_hf = 0.0f;
+    SDL_GetTextureSize(frame_texture, &tex_wf, &tex_hf);
+    const int tex_w = static_cast<int>(std::lround(tex_wf));
+    const int tex_h = static_cast<int>(std::lround(tex_hf));
 
     if (tex_w <= 0 || tex_h <= 0) return;
 
@@ -1164,24 +1168,28 @@ void SourceConfigPanel::render_animation_preview(SDL_Renderer* renderer) const {
     SDL_Rect dst_rect{draw_x, draw_y, draw_w, draw_h};
 
     SDL_Rect prev_clip;
-    SDL_RenderGetClipRect(renderer, &prev_clip);
+    SDL_GetRenderClipRect(renderer, &prev_clip);
 
     bool had_clip = (prev_clip.w > 0 && prev_clip.h > 0 && prev_clip.x >= 0 && prev_clip.y >= 0);
 
     SDL_Rect clip_rect = {bounds_.x, bounds_.y, bounds_.w, bounds_.h};
-    SDL_RenderSetClipRect(renderer, &clip_rect);
+    SDL_SetRenderClipRect(renderer, &clip_rect);
 
-    SDL_RendererFlip flip_flags = SDL_FLIP_NONE;
-    if (flip_x) flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_HORIZONTAL);
-    if (flip_y) flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_VERTICAL);
+    SDL_FlipMode flip_flags = SDL_FLIP_NONE;
+    if (flip_x) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
+    if (flip_y) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
 
-    SDL_RenderCopyEx(renderer, frame_texture, nullptr, &dst_rect, 0.0, nullptr, flip_flags);
+    sdl_render::TextureRotated(renderer, frame_texture, nullptr, &dst_rect, 0.0, nullptr, flip_flags);
 
     if (had_clip) {
-        SDL_RenderSetClipRect(renderer, &prev_clip);
+        SDL_SetRenderClipRect(renderer, &prev_clip);
     } else {
-        SDL_RenderSetClipRect(renderer, nullptr);
+        SDL_SetRenderClipRect(renderer, nullptr);
     }
 }
 
 }
+
+
+
+

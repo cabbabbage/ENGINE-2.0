@@ -1,4 +1,7 @@
 #include "room_editor.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -58,9 +61,10 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <fstream>
-#include <SDL_log.h>
+#include <SDL3/SDL_log.h>
 
 namespace {
+constexpr double kPi = 3.14159265358979323846;
 constexpr int kSavedCameraHeightMinPx = 1;
 constexpr float kSavedCameraTiltMinDeg = 0.0f;
 constexpr float kSavedCameraTiltMaxDeg = 150.0f;
@@ -138,26 +142,31 @@ static bool is_visible_pixel_at(SDL_Renderer* renderer, SDL_Point screen_point) 
     Uint32 pixel = 0;
     SDL_Rect r{ screen_point.x, screen_point.y, 1, 1 };
 
-    Uint32 fmt = SDL_PIXELFORMAT_RGBA8888;
-#if SDL_MAJOR_VERSION >= 2
-    SDL_RendererInfo info{};
-    if (SDL_GetRendererInfo(renderer, &info) == 0 && info.num_texture_formats > 0) {
+    SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA8888;
 
-        fmt = info.texture_formats[0];
-    }
-#endif
-
-    if (SDL_RenderReadPixels(renderer, &r, fmt, &pixel, sizeof(pixel)) != 0) {
-
+    if (SDL_Surface* captured = SDL_RenderReadPixels(renderer, &r)) {
+        SDL_Surface* working = captured;
+        if (captured->format != fmt) {
+            working = SDL_ConvertSurface(captured, fmt);
+            SDL_DestroySurface(captured);
+            captured = nullptr;
+        }
+        if (working && working->pixels) {
+            pixel = *static_cast<const Uint32*>(working->pixels);
+            SDL_DestroySurface(working);
+        } else {
+            if (working) SDL_DestroySurface(working);
+            return true;
+        }
+    } else {
         return true;
     }
 
     Uint8 a = 255;
-    SDL_PixelFormat* pf = SDL_AllocFormat(fmt);
+    const SDL_PixelFormatDetails* pf = SDL_GetPixelFormatDetails(fmt);
     if (pf) {
         Uint8 r8, g8, b8;
-        SDL_GetRGBA(pixel, pf, &r8, &g8, &b8, &a);
-        SDL_FreeFormat(pf);
+        SDL_GetRGBA(pixel, pf, nullptr, &r8, &g8, &b8, &a);
     }
     return a > 0;
 }
@@ -645,7 +654,7 @@ std::string RoomEditor::strip_copy_suffix(const std::string& name) {
         return name.substr(0, pos);
     }
     const std::string prefix = "Copy ";
-    if (inside.rfind(prefix, 0) == 0) {
+    if (inside.rfind(prefix) == 0) {
         const bool digits = std::all_of(inside.begin() + prefix.size(), inside.end(), [](unsigned char ch) {
             return std::isdigit(ch) != 0;
         });
@@ -1090,19 +1099,19 @@ if (auto selected = library_ui_->consume_selection()) {
 bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     int mx = 0;
     int my = 0;
-    if (event.type == SDL_MOUSEMOTION) {
+    if (event.type == SDL_EVENT_MOUSE_MOTION) {
         mx = event.motion.x;
         my = event.motion.y;
-    } else if (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP) {
+    } else if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         mx = event.button.x;
         my = event.button.y;
-    } else if (event.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mx, &my);
+    } else if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mx, &my);
     }
 
     const bool pointer_event =
-        (event.type == SDL_MOUSEBUTTONDOWN || event.type == SDL_MOUSEBUTTONUP || event.type == SDL_MOUSEMOTION);
-    const bool wheel_event = (event.type == SDL_MOUSEWHEEL);
+        (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN || event.type == SDL_EVENT_MOUSE_BUTTON_UP || event.type == SDL_EVENT_MOUSE_MOTION);
+    const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_based = pointer_event || wheel_event;
 
     struct RouteResult {
@@ -1461,14 +1470,14 @@ void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
                                    ? SDL_Color{20, 20, 20, 255}
                                    : kLabelText;
 
-        SDL_Surface* text_surface = TTF_RenderUTF8_Blended(label_font_, name.c_str(), text_color);
+        SDL_Surface* text_surface = ttf_util::RenderTextBlended(label_font_, name.c_str(), text_color);
         if (!text_surface) {
             return;
         }
 
         SDL_Texture* new_texture = SDL_CreateTextureFromSurface(renderer, text_surface);
         if (!new_texture) {
-            SDL_FreeSurface(text_surface);
+            SDL_DestroySurface(text_surface);
             return;
         }
 
@@ -1481,7 +1490,7 @@ void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
         cache.last_color = base_color;
         cache.dirty = false;
 
-        SDL_FreeSurface(text_surface);
+        SDL_DestroySurface(text_surface);
     }
 
     if (!cache.texture || cache.text_size.x <= 0 || cache.text_size.y <= 0) {
@@ -1502,7 +1511,7 @@ void RoomEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoin
     dm_draw::DrawRoundedOutline( renderer, bg_rect, radius, 1, border_color);
 
     SDL_Rect dst{bg_rect.x + kLabelPadding, bg_rect.y + kLabelPadding, cache.text_size.x, cache.text_size.y};
-    SDL_RenderCopy(renderer, cache.texture, nullptr, &dst);
+    sdl_render::Texture(renderer, cache.texture, nullptr, &dst);
 }
 
 SDL_Rect RoomEditor::label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const {
@@ -1823,8 +1832,8 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 220);
             const int cross = 8;
-            SDL_RenderDrawLine(renderer, screen.x - cross, screen.y, screen.x + cross, screen.y);
-            SDL_RenderDrawLine(renderer, screen.x, screen.y - cross, screen.x, screen.y + cross);
+            SDL_RenderLine(renderer, screen.x - cross, screen.y, screen.x + cross, screen.y);
+            SDL_RenderLine(renderer, screen.x, screen.y - cross, screen.x, screen.y + cross);
         }
 
         if (is_shift_key_down()) {
@@ -1860,7 +1869,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
                         bounds.w + i * 2,
                         bounds.h + i * 2
 };
-                    SDL_RenderDrawRect(renderer, &r);
+                    sdl_render::Rect(renderer, &r);
                 }
             }
         }
@@ -1910,14 +1919,14 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             SDL_SetRenderDrawColor(renderer, accent.r, accent.g, accent.b, 210);
             const int segments = std::clamp(radius_px * 4, 64, 720);
             for (int i = 0; i < segments; ++i) {
-                double angle = (static_cast<double>(i) / static_cast<double>(segments)) * 2.0 * M_PI;
+                double angle = (static_cast<double>(i) / static_cast<double>(segments)) * 2.0 * kPi;
                 int px = screen_center.x + static_cast<int>(std::lround(std::cos(angle) * static_cast<double>(radius_px)));
                 int py = screen_center.y + static_cast<int>(std::lround(std::sin(angle) * static_cast<double>(radius_px)));
-                SDL_RenderDrawPoint(renderer, px, py);
+                SDL_RenderPoint(renderer, px, py);
             }
             const int cross = std::max(6, radius_px / 4);
-            SDL_RenderDrawLine(renderer, screen_center.x - cross, screen_center.y, screen_center.x + cross, screen_center.y);
-            SDL_RenderDrawLine(renderer, screen_center.x, screen_center.y - cross, screen_center.x, screen_center.y + cross);
+            SDL_RenderLine(renderer, screen_center.x - cross, screen_center.y, screen_center.x + cross, screen_center.y);
+            SDL_RenderLine(renderer, screen_center.x, screen_center.y - cross, screen_center.x, screen_center.y + cross);
         }
 
     }
@@ -2014,7 +2023,7 @@ void RoomEditor::open_asset_info_editor_for_asset(Asset* asset) {
     if (!asset || !asset->info) return;
     std::cout << "Opening AssetInfoUI for asset: " << asset->info->name << std::endl;
     clear_selection();
-    focus_camera_on_asset(asset, 0.8, 0);
+    focus_camera_on_asset(asset, 0.8);
     open_asset_info_editor(asset->info);
     if (info_ui_) info_ui_->set_target_asset(asset);
 }
@@ -2231,7 +2240,7 @@ void RoomEditor::focus_camera_on_room_center(bool reframe_height) {
     cam.set_focus_override(center);
 
     if (reframe_height) {
-        cam.animate_height_to_scale(cam.default_camera_height_for_room(current_room_), 0);
+        cam.animate_height_to_scale(cam.default_camera_height_for_room(current_room_));
     }
     mark_spatial_index_dirty();
 }
@@ -2845,7 +2854,12 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
     int fw = asset->cached_w;
     int fh = asset->cached_h;
     if ((fw == 0 || fh == 0) && tex) {
-        SDL_QueryTexture(tex, nullptr, nullptr, &fw, &fh);
+        float fwf = 0.0f;
+        float fhf = 0.0f;
+        if (SDL_GetTextureSize(tex, &fwf, &fhf)) {
+            fw = static_cast<int>(std::lround(fwf));
+            fh = static_cast<int>(std::lround(fhf));
+        }
         if (asset->cached_w == 0) asset->cached_w = fw;
         if (asset->cached_h == 0) asset->cached_h = fh;
     }
@@ -5645,7 +5659,7 @@ void RoomEditor::save_perimeter_json(nlohmann::json& entry, int dx, int dy, int 
     entry["origional_height"] = orig_h;
     entry["radius"] = radius;
     for (auto it = entry.begin(); it != entry.end(); ) {
-        if (it.key().rfind("sector_", 0) == 0) {
+        if (it.key().rfind("sector_") == 0) {
             it = entry.erase(it);
         } else {
             ++it;
@@ -5695,3 +5709,6 @@ bool RoomEditor::spawn_group_locked(const std::string& spawn_id) const {
     } catch (...) {}
     return false;
 }
+
+
+

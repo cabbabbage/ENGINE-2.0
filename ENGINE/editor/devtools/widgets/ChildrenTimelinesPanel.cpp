@@ -1,10 +1,12 @@
 #include "ChildrenTimelinesPanel.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 #include <utility>
 
-#include <SDL_log.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL_log.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include <nlohmann/json.hpp>
 
@@ -59,7 +61,7 @@ class ChildLabelWidget : public Widget {
         const auto& style = DMStyles::Label();
         TTF_Font* font = TTF_OpenFont(style.font_path.c_str(), style.font_size);
         if (!font) return;
-        SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text_.c_str(), style.color);
+        SDL_Surface* surface = ttf_util::RenderTextBlended(font, text_.c_str(), style.color);
         if (!surface) {
             TTF_CloseFont(font);
             return;
@@ -67,10 +69,10 @@ class ChildLabelWidget : public Widget {
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         if (texture) {
             SDL_Rect dst{rect_.x, rect_.y + (rect_.h - surface->h) / 2, surface->w, surface->h};
-            SDL_RenderCopy(renderer, texture, nullptr, &dst);
+            sdl_render::Texture(renderer, texture, nullptr, &dst);
             SDL_DestroyTexture(texture);
         }
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
         TTF_CloseFont(font);
     }
 
@@ -405,3 +407,6 @@ bool ChildrenTimelinesPanel::apply_mode_to_all_animations(const std::string& chi
 }
 
 }
+
+
+

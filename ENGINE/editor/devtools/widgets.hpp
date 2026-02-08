@@ -1,8 +1,9 @@
 #pragma once
 #define DM_WIDGETS_INCLUDED
 
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include "utils/sdl_render_conversions.hpp"
+#include <SDL3_ttf/SDL_ttf.h>
 #include <array>
 #include <memory>
 #include <optional>
@@ -430,7 +431,7 @@ public:
     bool handle_event(const SDL_Event& e) override {
         if (!b_) return false;
         bool used = b_->handle_event(e);
-        if (used && on_click_ && e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (used && on_click_ && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             on_click_();
         }
         return used;
@@ -676,7 +677,7 @@ public:
             SDL_Rect overlay_rect = rect();
             SDL_Color overlay{40, 40, 40, 140};
             SDL_SetRenderDrawColor(r, overlay.r, overlay.g, overlay.b, overlay.a);
-            SDL_RenderFillRect(r, &overlay_rect);
+            sdl_render::FillRect(r, &overlay_rect);
         }
     }
     void set_value(bool value) {
@@ -689,3 +690,6 @@ private:
     bool editable_ = true;
     SDL_Rect rect_cache_{0, 0, 0, 0};
 };
+
+
+

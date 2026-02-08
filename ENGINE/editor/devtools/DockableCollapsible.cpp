@@ -1,4 +1,6 @@
 #include "DockableCollapsible.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include "FloatingDockableManager.hpp"
 #include "FloatingPanelLayoutManager.hpp"
@@ -11,8 +13,8 @@
 #include <cmath>
 #include <string>
 #include <vector>
-#include <SDL_log.h>
-#include <SDL_timer.h>
+#include <SDL3/SDL_log.h>
+#include <SDL3/SDL_timer.h>
 
 #include "utils/input.hpp"
 
@@ -82,8 +84,8 @@ namespace {
         const float ry = static_cast<float>(arc_height);
 
         auto draw_thick_segment = [r](int x0, int y0, int x1, int y1) {
-            SDL_RenderDrawLine(r, x0, y0, x1, y1);
-            SDL_RenderDrawLine(r, x0, y0 + 1, x1, y1 + 1);
+            SDL_RenderLine(r, x0, y0, x1, y1);
+            SDL_RenderLine(r, x0, y0 + 1, x1, y1 + 1);
 };
 
         SDL_SetRenderDrawColor(r, stroke.r, stroke.g, stroke.b, stroke.a);
@@ -120,13 +122,13 @@ namespace {
         const int key_center_y = body.y + body.h / 2 - key_radius / 2;
         for (int dy = -key_radius; dy <= key_radius; ++dy) {
             const int span = static_cast<int>(std::sqrt(static_cast<double>(key_radius * key_radius - dy * dy)) + 0.5);
-            SDL_RenderDrawLine(r, key_center_x - span, key_center_y + dy, key_center_x + span, key_center_y + dy);
+            SDL_RenderLine(r, key_center_x - span, key_center_y + dy, key_center_x + span, key_center_y + dy);
         }
 
         SDL_Rect stem{ key_center_x - std::max(1, key_radius / 3),
                        key_center_y,
                        std::max(2, key_radius / 2), std::max(2, body.h / 3) };
-        SDL_RenderFillRect(r, &stem);
+        sdl_render::FillRect(r, &stem);
     }
 
     class LayoutTimingScope {
@@ -496,15 +498,15 @@ void DockableCollapsible::block_pointer_for(Uint32 ms) const {
         pointer_block_until_ms_ = 0;
         return;
     }
-    pointer_block_until_ms_ = SDL_GetTicks() + ms;
+    pointer_block_until_ms_ = SDL_GetTicks() + static_cast<Uint64>(ms);
 }
 
 bool DockableCollapsible::pointer_block_active() const {
     if (pointer_block_until_ms_ == 0) {
         return false;
     }
-    Uint32 now = SDL_GetTicks();
-    if (SDL_TICKS_PASSED(now, pointer_block_until_ms_)) {
+    const Uint64 now = SDL_GetTicks();
+    if (now >= pointer_block_until_ms_) {
         pointer_block_until_ms_ = 0;
         return false;
     }
@@ -614,8 +616,8 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
     if (!visible_ || !embedded_interaction_enabled_) return false;
 
     const bool pointer_event =
-        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION);
-    const bool wheel_event = (e.type == SDL_MOUSEWHEEL);
+        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
+    const bool wheel_event = (e.type == SDL_EVENT_MOUSE_WHEEL);
     const bool slider_capture_active = DMWidgetsSliderScrollCaptured();
     SDL_Point pointer_pos{0, 0};
     bool pointer_blocked = pointer_block_active();
@@ -623,10 +625,14 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
         if (pointer_blocked) {
             return true;
         }
-        if (e.type == SDL_MOUSEMOTION) {
-            pointer_pos = SDL_Point{e.motion.x, e.motion.y};
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
+            pointer_pos = SDL_Point{
+                static_cast<int>(std::lround(e.motion.x)),
+                static_cast<int>(std::lround(e.motion.y))};
         } else {
-            pointer_pos = SDL_Point{e.button.x, e.button.y};
+            pointer_pos = SDL_Point{
+                static_cast<int>(std::lround(e.button.x)),
+                static_cast<int>(std::lround(e.button.y))};
         }
     } else {
         if (wheel_event && pointer_blocked) {
@@ -634,8 +640,10 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{e.button.x, e.button.y};
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        SDL_Point p{
+            static_cast<int>(std::lround(e.button.x)),
+            static_cast<int>(std::lround(e.button.y))};
         const bool on_header_button = show_header_ && header_btn_ && SDL_PointInRect(&p, &header_rect_);
         const bool on_close = close_btn_ && SDL_PointInRect(&p, &close_rect_);
         const bool on_lock = lock_btn_ && SDL_PointInRect(&p, &lock_rect_);
@@ -660,8 +668,10 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
     }
 
     if (show_header_ && dragging_) {
-        if (e.type == SDL_MOUSEMOTION) {
-            SDL_Point current{e.motion.x, e.motion.y};
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
+            SDL_Point current{
+                static_cast<int>(std::lround(e.motion.x)),
+                static_cast<int>(std::lround(e.motion.y))};
             if (!drag_exceeded_threshold_) {
                 int dx = current.x - drag_start_pointer_.x;
                 int dy = current.y - drag_start_pointer_.y;
@@ -678,7 +688,7 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
             }
             return true;
         }
-        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             bool dragged_via_button = header_dragging_via_button_;
             bool drag_moved = drag_exceeded_threshold_;
             dragging_ = false;
@@ -692,7 +702,9 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
             }
             if (dragged_via_button && header_btn_) {
                 header_btn_->handle_event(e);
-                SDL_Point p{e.button.x, e.button.y};
+                SDL_Point p{
+                    static_cast<int>(std::lround(e.button.x)),
+                    static_cast<int>(std::lround(e.button.y))};
                 if (!drag_moved && SDL_PointInRect(&p, &header_rect_)) {
                     expanded_ = !expanded_;
                     update_header_button();
@@ -705,14 +717,14 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
     }
 
     if (lock_btn_ && lock_btn_->handle_event(e)) {
-        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             setLocked(!locked_);
         }
         return true;
     }
 
     if ((floatable_ || close_button_enabled_) && close_btn_ && close_btn_->handle_event(e)) {
-        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             set_visible(false);
         }
         return true;
@@ -720,7 +732,7 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
 
     if (header_btn_) {
         if (header_btn_->handle_event(e)) {
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 expanded_ = !expanded_;
                 update_header_button();
                 invalidate_layout();
@@ -732,7 +744,7 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
     if (locked_) {
         if (wheel_event) {
             SDL_Point wheel_point{0, 0};
-            SDL_GetMouseState(&wheel_point.x, &wheel_point.y);
+            sdl_mouse_util::GetMouseState(&wheel_point.x, &wheel_point.y);
             if (SDL_PointInRect(&wheel_point, &body_viewport_)) {
                 log_locked_mutation("handle_event.wheel");
                 return true;
@@ -745,12 +757,12 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
 
         if (pointer_event) {
             if (SDL_PointInRect(&pointer_pos, &body_viewport_)) {
-                if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION) {
+                if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION) {
                     log_locked_mutation("handle_event.pointer");
                     return true;
                 }
             }
-            if (SDL_PointInRect(&pointer_pos, &rect_) && e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            if (SDL_PointInRect(&pointer_pos, &rect_) && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                 return true;
             }
         }
@@ -759,7 +771,7 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
             return true;
         }
 
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE && floatable_) {
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && floatable_) {
             set_visible(false);
             return true;
         }
@@ -769,9 +781,9 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
 
     if (expanded_ && scroll_enabled_ && wheel_event && !slider_capture_active) {
         SDL_Point mouse_point{0, 0};
-        SDL_GetMouseState(&mouse_point.x, &mouse_point.y);
+        sdl_mouse_util::GetMouseState(&mouse_point.x, &mouse_point.y);
         if (SDL_PointInRect(&mouse_point, &body_viewport_)) {
-            scroll_ -= e.wheel.y * 40;
+            scroll_ -= e.wheel.integer_y * 40;
             scroll_ = std::max(0, std::min(max_scroll_, scroll_));
             invalidate_layout(true);
             return true;
@@ -802,7 +814,7 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
         return true;
     }
 
-    if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE && floatable_) {
+    if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && floatable_) {
         set_visible(false);
         return true;
     }
@@ -821,10 +833,10 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
         }
 
         switch (e.type) {
-            case SDL_MOUSEBUTTONDOWN:
-            case SDL_MOUSEBUTTONUP:
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
                 return true;
-            case SDL_MOUSEMOTION:
+            case SDL_EVENT_MOUSE_MOTION:
                 return true;
             default:
                 break;
@@ -871,13 +883,9 @@ void DockableCollapsible::render(SDL_Renderer* r) const {
     if (!expanded_) return;
 
     SDL_Rect prev_clip;
-    SDL_RenderGetClipRect(r, &prev_clip);
-#if SDL_VERSION_ATLEAST(2,0,4)
-    const SDL_bool was_clipping = SDL_RenderIsClipEnabled(r);
-#else
-    const SDL_bool was_clipping = (prev_clip.w != 0 || prev_clip.h != 0) ? SDL_TRUE : SDL_FALSE;
-#endif
-    SDL_RenderSetClipRect(r, &body_viewport_);
+    SDL_GetRenderClipRect(r, &prev_clip);
+    const bool was_clipping = SDL_RenderClipEnabled(r);
+    SDL_SetRenderClipRect(r, &body_viewport_);
 
     for (auto& row : rows_) {
         for (auto* w : row) {
@@ -890,10 +898,10 @@ void DockableCollapsible::render(SDL_Renderer* r) const {
         render_locked_children_overlay(r);
     }
 
-    if (was_clipping == SDL_TRUE) {
-        SDL_RenderSetClipRect(r, &prev_clip);
+    if (was_clipping) {
+        SDL_SetRenderClipRect(r, &prev_clip);
     } else {
-        SDL_RenderSetClipRect(r, nullptr);
+        SDL_SetRenderClipRect(r, nullptr);
     }
 }
 
@@ -911,15 +919,15 @@ void DockableCollapsible::render_locked_children_overlay(SDL_Renderer* r) const 
             }
             SDL_Rect widget_rect = w->rect();
             SDL_Rect clipped;
-            if (SDL_IntersectRect(&widget_rect, &body_viewport_, &clipped)) {
-                SDL_RenderFillRect(r, &clipped);
+            if (SDL_GetRectIntersection(&widget_rect, &body_viewport_, &clipped)) {
+                sdl_render::FillRect(r, &clipped);
             }
         }
     }
 
     SDL_Color content_overlay{20, 20, 20, 110};
     SDL_SetRenderDrawColor(r, content_overlay.r, content_overlay.g, content_overlay.b, content_overlay.a);
-    SDL_RenderFillRect(r, &body_viewport_);
+    sdl_render::FillRect(r, &body_viewport_);
 }
 
 void DockableCollapsible::layout() {
@@ -1400,3 +1408,6 @@ void DockableCollapsible::render_embedded(SDL_Renderer* renderer, const SDL_Rect
     rendering_embedded_ = previous_rendering_state;
     restore_snapshot(snapshot);
 }
+
+
+

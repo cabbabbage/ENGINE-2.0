@@ -1,8 +1,8 @@
 #ifndef DEV_MODE_UTILS_HPP
 #define DEV_MODE_UTILS_HPP
 
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <string>
 #include <unordered_map>
 
@@ -16,3 +16,4 @@ std::string trim_whitespace_copy(const std::string& value);
 }
 
 #endif
+

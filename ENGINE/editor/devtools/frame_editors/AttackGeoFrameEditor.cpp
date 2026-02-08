@@ -1,6 +1,7 @@
 #include "AttackGeoFrameEditor.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -48,8 +49,8 @@ int parse_int(const std::string& text, int fallback) {
 }
 
 int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
-    float precise = wheel.preciseY;
-    int delta = wheel.y;
+    float precise = wheel.y;
+    int delta = wheel.integer_y;
     if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
         delta = -delta;
         precise = -precise;
@@ -260,7 +261,7 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
     bool overlay_valid = false;
     if (point_3d_editor_) {
         // Use the cached container from Point3DEditor (set during render_overlays)
-        // This avoids issues with SDL_GetRendererOutputSize(nullptr, ...) failing
+        // This avoids issues with SDL_GetCurrentRenderOutputSize(nullptr, ...) failing
         overlay_rect = point_3d_editor_->get_cached_container();
         overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
         if (point_3d_editor_->handle_event(e, overlay_rect)) {
@@ -304,10 +305,10 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
     }
 
-    if (e.type == SDL_KEYDOWN) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
         // Arrow keys navigate between points within the frame
         // Use frame navigator buttons/textbox for frame navigation
-        if (e.key.keysym.sym == SDLK_LEFT) {
+        if (e.key.key == SDLK_LEFT) {
             // Navigate to previous point
             if (point_3d_editor_) {
                 int current_point = point_3d_editor_->get_selected_point_index();
@@ -339,7 +340,7 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
                 }
             }
             consumed = true;
-        } else if (e.key.keysym.sym == SDLK_RIGHT) {
+        } else if (e.key.key == SDLK_RIGHT) {
             // Navigate to next point
             if (point_3d_editor_) {
                 int current_point = point_3d_editor_->get_selected_point_index();
@@ -379,12 +380,12 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     SDL_Point mouse_pos = {0, 0};
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
-        mouse_pos = {e.button.x, e.button.y};
-    } else if (e.type == SDL_MOUSEMOTION) {
-        mouse_pos = {e.motion.x, e.motion.y};
-    } else if (e.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
+    } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
     if (!ui_contains_point(mouse_pos)) {
@@ -444,7 +445,7 @@ void AttackGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     // Render Point3DEditor overlays at the bottom
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
-        SDL_GetRendererOutputSize(renderer, &sw, &sh);
+        SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
         int height = point_3d_editor_->get_overlay_height(sw);
         SDL_Rect bottom_container{0, sh - height, sw, height};
         point_3d_editor_->render_overlays(renderer, bottom_container);
@@ -454,7 +455,7 @@ void AttackGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
 void AttackGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     if (!renderer) return;
     int sw = 0, sh = 0;
-    SDL_GetRendererOutputSize(renderer, &sw, &sh);
+    SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
     const int padding = DMSpacing::small_gap();
     const int width = 320;
     const int x = padding;
@@ -545,14 +546,14 @@ void AttackGeoFrameEditor::render_attack_geometry(SDL_Renderer* renderer) const 
             SDL_FPoint p{
                 u * u * start_screen.x + 2.0f * u * t * control_screen.x + t * t * end_screen.x,
                 u * u * start_screen.y + 2.0f * u * t * control_screen.y + t * t * end_screen.y};
-            SDL_RenderDrawLineF(renderer, prev.x, prev.y, p.x, p.y);
+            SDL_RenderLine(renderer, prev.x, prev.y, p.x, p.y);
             prev = p;
         }
 
         if (selected) {
             SDL_SetRenderDrawColor(renderer, 180, 180, 180, 180);
-            SDL_RenderDrawLineF(renderer, start_screen.x, start_screen.y, control_screen.x, control_screen.y);
-            SDL_RenderDrawLineF(renderer, control_screen.x, control_screen.y, end_screen.x, end_screen.y);
+            SDL_RenderLine(renderer, start_screen.x, start_screen.y, control_screen.x, control_screen.y);
+            SDL_RenderLine(renderer, control_screen.x, control_screen.y, end_screen.x, end_screen.y);
         }
 
         // Determine which point is currently selected
@@ -850,7 +851,9 @@ void AttackGeoFrameEditor::refresh_selection_state() {
 }
 
 bool AttackGeoFrameEditor::ui_contains_point(const SDL_Point& p) const {
-    return SDL_PointInRect(&p, &ui_rect_) == SDL_TRUE;
+    return SDL_PointInRect(&p, &ui_rect_);
 }
 
 }  // namespace devmode::frame_editors
+
+

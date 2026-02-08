@@ -1,10 +1,13 @@
 #pragma once
 
+#include <SDL3/SDL.h>
 #include <filesystem>
 #include <memory>
 #include <string>
+#include <vector>
 
-struct Mix_Chunk;
+struct SDL_AudioStream;
+struct SDL_AudioSpec;
 
 namespace animation_editor {
 
@@ -22,9 +25,8 @@ class AudioImporter {
 
   private:
     std::filesystem::path asset_root_;
-    mutable std::shared_ptr<::Mix_Chunk> preview_chunk_;
-    mutable int preview_channel_ = -1;
+    mutable SDL_AudioStream* preview_stream_ = nullptr;
+    mutable std::vector<Uint8> preview_buffer_;
 };
 
 }
-

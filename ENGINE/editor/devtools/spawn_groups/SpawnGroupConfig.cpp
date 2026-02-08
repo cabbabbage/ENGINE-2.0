@@ -1,4 +1,6 @@
-﻿#include "SpawnGroupConfig.hpp"
+#include "SpawnGroupConfig.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 #include <array>
@@ -46,7 +48,7 @@ public:
         if (!font) return base;
         int text_w = 0;
         int text_h = 0;
-        if (TTF_SizeUTF8(font, text_.c_str(), &text_w, &text_h) != 0) {
+        if (!ttf_util::GetStringSize(font, text_, &text_w, &text_h)) {
             TTF_CloseFont(font);
             return base;
         }
@@ -67,7 +69,7 @@ public:
         if (color_.a != 0) color = color_;
         TTF_Font* font = TTF_OpenFont(style.font_path.c_str(), style.font_size);
         if (!font) return;
-        SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text_.c_str(), color);
+        SDL_Surface* surface = ttf_util::RenderTextBlended(font, text_.c_str(), color);
         if (!surface) {
             TTF_CloseFont(font);
             return;
@@ -75,10 +77,10 @@ public:
         SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
         if (texture) {
             SDL_Rect dst{rect_.x, rect_.y, surface->w, surface->h};
-            SDL_RenderCopy(renderer, texture, nullptr, &dst);
+            sdl_render::Texture(renderer, texture, nullptr, &dst);
             SDL_DestroyTexture(texture);
         }
-        SDL_FreeSurface(surface);
+        SDL_DestroySurface(surface);
         TTF_CloseFont(font);
     }
 
@@ -143,7 +145,7 @@ public:
     bool handle_event(const SDL_Event& e) override {
         if (!button_ || !enabled_) return false;
         bool used = button_->handle_event(e);
-        if (used && on_click_ && e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (used && on_click_ && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             on_click_();
         }
         return used;
@@ -311,7 +313,7 @@ public:
             SDL_Rect r = rect();
             SDL_Color overlay{40, 40, 40, 140};
             SDL_SetRenderDrawColor(renderer, overlay.r, overlay.g, overlay.b, overlay.a);
-            SDL_RenderFillRect(renderer, &r);
+            sdl_render::FillRect(renderer, &r);
         }
     }
 
@@ -380,7 +382,7 @@ public:
             SDL_Rect r = rect();
             SDL_Color overlay{40, 40, 40, 140};
             SDL_SetRenderDrawColor(renderer, overlay.r, overlay.g, overlay.b, overlay.a);
-            SDL_RenderFillRect(renderer, &r);
+            sdl_render::FillRect(renderer, &r);
         }
     }
 
@@ -450,7 +452,7 @@ public:
             SDL_Rect r = rect();
             SDL_Color overlay{40, 40, 40, 140};
             SDL_SetRenderDrawColor(renderer, overlay.r, overlay.g, overlay.b, overlay.a);
-            SDL_RenderFillRect(renderer, &r);
+            sdl_render::FillRect(renderer, &r);
         }
     }
 
@@ -540,7 +542,7 @@ struct SpawnGroupConfig::Entry {
             }
         }
 
-        toggle_button_ = std::make_unique<DMButton>("â–¶", &DMStyles::ListButton(), 28, DMButton::height());
+        toggle_button_ = std::make_unique<DMButton>("▶", &DMStyles::ListButton(), 28, DMButton::height());
         toggle_widget_ = std::make_unique<ButtonWidget>(toggle_button_.get(), [this]() {
             expanded_state_ = !expanded_state_;
             if (expanded_state_) owner_->expand_group(spawn_id());
@@ -563,13 +565,13 @@ struct SpawnGroupConfig::Entry {
             });
         });
 
-        priority_up_button_ = std::make_unique<DMButton>(u8"↑", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
+        priority_up_button_ = std::make_unique<DMButton>(u8"?", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
         priority_up_widget_ = std::make_unique<PriorityButtonWidget>(priority_up_button_.get(), [this]() {
             if (!owner_) return;
             owner_->nudge_priority(*this, -1);
         });
 
-        priority_down_button_ = std::make_unique<DMButton>(u8"↓", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
+        priority_down_button_ = std::make_unique<DMButton>(u8"?", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
         priority_down_widget_ = std::make_unique<PriorityButtonWidget>(priority_down_button_.get(), [this]() {
             if (!owner_) return;
             owner_->nudge_priority(*this, 1);
@@ -1879,19 +1881,23 @@ void SpawnGroupConfig::update(const Input& input, int screen_w, int screen_h) {
 
 bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
     const bool pointer_event =
-        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION);
+        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
 
     if (drag_state_.active) {
         if (pointer_event) {
             SDL_Point pointer{0, 0};
-            if (e.type == SDL_MOUSEMOTION) {
-                pointer = SDL_Point{e.motion.x, e.motion.y};
+            if (e.type == SDL_EVENT_MOUSE_MOTION) {
+                pointer = SDL_Point{
+                    static_cast<int>(std::lround(e.motion.x)),
+                    static_cast<int>(std::lround(e.motion.y))};
             } else {
-                pointer = SDL_Point{e.button.x, e.button.y};
+                pointer = SDL_Point{
+                    static_cast<int>(std::lround(e.button.x)),
+                    static_cast<int>(std::lround(e.button.y))};
             }
             drag_state_.pointer_y = pointer.y;
             bool inside_panel = SDL_PointInRect(&pointer, &rect_);
-            if (e.type == SDL_MOUSEMOTION) {
+            if (e.type == SDL_EVENT_MOUSE_MOTION) {
                 if (!inside_panel) {
                     cancel_drag();
                 } else {
@@ -1900,7 +1906,7 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
                 process_pending_notifications();
                 return true;
             }
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 drag_state_.pointer_inside = SDL_PointInRect(&pointer, &body_viewport_);
                 if (!inside_panel || !drag_state_.pointer_inside) {
                     cancel_drag();
@@ -1910,17 +1916,17 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
                 process_pending_notifications();
                 return true;
             }
-            if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                 process_pending_notifications();
                 return true;
             }
         }
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
             cancel_drag();
             process_pending_notifications();
             return true;
         }
-        if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_LEAVE) {
+        if (e.type == SDL_EVENT_WINDOW_MOUSE_LEAVE) {
             cancel_drag();
             process_pending_notifications();
             return true;
@@ -1929,7 +1935,7 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
         return true;
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point pointer{e.button.x, e.button.y};
         for (size_t i = 0; i < entries_.size(); ++i) {
             if (!entries_[i]) continue;
@@ -1961,7 +1967,7 @@ void SpawnGroupConfig::render_content(SDL_Renderer* r) const {
     if (source.w > 0 && source.h > 0) {
         const SDL_Color& bg = DMStyles::PanelBG();
         SDL_SetRenderDrawColor(r, bg.r, bg.g, bg.b, bg.a);
-        SDL_RenderFillRect(r, &source);
+        sdl_render::FillRect(r, &source);
     }
     SDL_Rect placeholder = drag_state_.placeholder_rect;
     placeholder.x = body_viewport_.x;
@@ -1969,7 +1975,7 @@ void SpawnGroupConfig::render_content(SDL_Renderer* r) const {
     if (placeholder.w > 0 && placeholder.h > 0) {
         const SDL_Color& highlight = DMStyles::HighlightColor();
         SDL_SetRenderDrawColor(r, highlight.r, highlight.g, highlight.b, highlight.a);
-        SDL_RenderFillRect(r, &placeholder);
+        sdl_render::FillRect(r, &placeholder);
     }
 }
 
@@ -2522,3 +2528,6 @@ void SpawnGroupConfig::EntryController::set_quantity_hidden(bool hidden) {
     if (!entry_) return;
     entry_->set_quantity_hidden(hidden);
 }
+
+
+

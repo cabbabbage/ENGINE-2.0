@@ -1,4 +1,6 @@
 #include "ui/menu_ui.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include "ui/tinyfiledialogs.h"
 #include "asset_loader.hpp"
@@ -29,7 +31,7 @@ MenuUI::MenuUI(SDL_Renderer* renderer,
 {
         if (TTF_WasInit() == 0) {
                 if (TTF_Init() < 0) {
-                        std::cerr << "TTF_Init failed: " << TTF_GetError() << "\n";
+                        std::cerr << "TTF_Init failed: " << SDL_GetError() << "\n";
                 }
 	}
 	menu_active_ = false;
@@ -67,10 +69,10 @@ void MenuUI::game_loop() {
 		while (SDL_PollEvent(&e)) {
                         had_events = true;
                         const bool menu_was_active = menu_active_;
-			if (e.type == SDL_QUIT) {
+			if (e.type == SDL_EVENT_QUIT) {
 					quit = true;
 			}
-                        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE && e.key.repeat == 0) {
+                        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && e.key.repeat == 0) {
                                 bool esc_consumed = false;
                                 if (game_assets_) {
                                         if (game_assets_->is_asset_info_editor_open()) {
@@ -82,9 +84,9 @@ void MenuUI::game_loop() {
                                         toggleMenu();
                                 }
                         }
-                        if (e.type == SDL_KEYDOWN && e.key.repeat == 0) {
-                                const bool ctrl_down = (e.key.keysym.mod & KMOD_CTRL) != 0;
-                                if (ctrl_down && e.key.keysym.sym == SDLK_d) {
+                        if (e.type == SDL_EVENT_KEY_DOWN && e.key.repeat == 0) {
+                                const bool ctrl_down = (e.key.mod & SDL_KMOD_CTRL) != 0;
+                                if (ctrl_down && e.key.key == SDLK_D) {
                                         doToggleDevMode();
                                 }
                         }
@@ -179,7 +181,7 @@ void MenuUI::render() {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 100);
 	SDL_Rect bg{0, 0, screen_w_, screen_h_};
-	SDL_RenderFillRect(renderer_, &bg);
+	sdl_render::FillRect(renderer_, &bg);
 	drawVignette(110);
 	const std::string title = "PAUSE MENU";
 	SDL_Rect trect{ 0, 60, screen_w_, 60 };
@@ -221,7 +223,7 @@ SDL_Point MenuUI::measureText(const LabelStyle& style, const std::string& s) con
 	if (s.empty()) return sz;
 	TTF_Font* f = style.open_font();
 	if (!f) return sz;
-	TTF_SizeText(f, s.c_str(), &sz.x, &sz.y);
+	ttf_util::GetStringSize(f, s, &sz.x, &sz.y);
 	TTF_CloseFont(f);
 	return sz;
 }
@@ -238,8 +240,8 @@ void MenuUI::blitText(SDL_Renderer* r,
 	if (!f) return;
 	const SDL_Color coal = Styles::Coal();
 	const SDL_Color col  = override_col.a ? override_col : style.color;
-	SDL_Surface* surf_text = TTF_RenderText_Blended(f, s.c_str(), col);
-	SDL_Surface* surf_shadow = shadow ? TTF_RenderText_Blended(f, s.c_str(), coal) : nullptr;
+	SDL_Surface* surf_text = ttf_util::RenderTextBlended(f, s, col);
+	SDL_Surface* surf_shadow = shadow ? ttf_util::RenderTextBlended(f, s, coal) : nullptr;
 	if (surf_text) {
 		SDL_Texture* tex_text = SDL_CreateTextureFromSurface(r, surf_text);
 		if (surf_shadow) {
@@ -247,18 +249,18 @@ void MenuUI::blitText(SDL_Renderer* r,
 			if (tex_shadow) {
 					SDL_Rect dsts { x+2, y+2, surf_shadow->w, surf_shadow->h };
 					SDL_SetTextureAlphaMod(tex_shadow, 130);
-					SDL_RenderCopy(r, tex_shadow, nullptr, &dsts);
+					sdl_render::Texture(r, tex_shadow, nullptr, &dsts);
 					SDL_DestroyTexture(tex_shadow);
 			}
 		}
 		if (tex_text) {
 			SDL_Rect dst { x, y, surf_text->w, surf_text->h };
-			SDL_RenderCopy(r, tex_text, nullptr, &dst);
+			sdl_render::Texture(r, tex_text, nullptr, &dst);
 			SDL_DestroyTexture(tex_text);
 		}
 	}
-	if (surf_shadow) SDL_FreeSurface(surf_shadow);
-	if (surf_text)   SDL_FreeSurface(surf_text);
+	if (surf_shadow) SDL_DestroySurface(surf_shadow);
+	if (surf_text)   SDL_DestroySurface(surf_text);
 	TTF_CloseFont(f);
 }
 
@@ -279,7 +281,7 @@ void MenuUI::drawVignette(Uint8 alpha) const {
 	SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 	SDL_SetRenderDrawColor(renderer_, 0, 0, 0, alpha);
 	SDL_Rect v{0,0,screen_w_,screen_h_};
-	SDL_RenderFillRect(renderer_, &v);
+	sdl_render::FillRect(renderer_, &v);
 }
 
 void MenuUI::doExit() {
@@ -342,3 +344,6 @@ void MenuUI::doToggleDevMode() {
                 std::cout << "[MenuUI] Closing menu after mode switch\n";
         }
 }
+
+
+

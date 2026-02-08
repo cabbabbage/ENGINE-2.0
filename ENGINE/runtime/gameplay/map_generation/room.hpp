@@ -15,7 +15,7 @@
 #include <functional>
 #include <nlohmann/json.hpp>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 namespace devmode::core {
 class ManifestStore;

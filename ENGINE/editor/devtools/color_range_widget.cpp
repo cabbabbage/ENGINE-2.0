@@ -1,4 +1,5 @@
 #include "color_range_widget.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <array>
@@ -327,7 +328,7 @@ void DMColorRangeWidget::Picker::render(SDL_Renderer* r) const {
     SDL_Color bg = DMStyles::PanelBG();
     bg.a = 255;
     SDL_SetRenderDrawColor(r, bg.r, bg.g, bg.b, bg.a);
-    SDL_RenderFillRect(r, &rect_);
+    sdl_render::FillRect(r, &rect_);
 
     DockableCollapsible::render(r);
 }
@@ -359,13 +360,13 @@ int DMColorRangeWidget::height_for_width(int) const {
 }
 
 bool DMColorRangeWidget::handle_event(const SDL_Event& e) {
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
         if (e.button.button != SDL_BUTTON_LEFT) {
             return false;
         }
         SDL_Point p{e.button.x, e.button.y};
         if (SDL_PointInRect(&p, &swatch_rect_)) {
-            if (e.type == SDL_MOUSEBUTTONUP) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
                 open_picker();
             }
             return true;
@@ -520,3 +521,5 @@ void DMColorRangeWidget::apply_sampled_color(SDL_Color color) {
     ranged.a = make_channel(clamped.a);
     set_value(ranged);
 }
+
+

@@ -1,4 +1,6 @@
 #include "SlidingWindowContainer.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -224,10 +226,10 @@ bool SlidingWindowContainer::is_point_inside(int x, int y) const {
         effective_panel.y = scroll_start;
         effective_panel.h = panel_.h - (scroll_start - panel_.y);
         if (effective_panel.h < 0) effective_panel.h = 0;
-        return SDL_PointInRect(&p, &effective_panel) == SDL_TRUE;
+        return SDL_PointInRect(&p, &effective_panel);
     }
 
-    return SDL_PointInRect(&p, &panel_) == SDL_TRUE;
+    return SDL_PointInRect(&p, &panel_);
 }
 
 void SlidingWindowContainer::update(const Input& input, int screen_w, int screen_h) {
@@ -287,7 +289,7 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
     if (header_visible_ && header_nav_button_) {
         bool handled = header_nav_button_->handle_event(e);
         if (handled) {
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 if (header_nav_callback_) {
                     header_nav_callback_();
                 }
@@ -299,7 +301,7 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
     if (header_visible_ && close_button_enabled_ && close_button_) {
         bool handled = close_button_->handle_event(e);
         if (handled) {
-            if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+            if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                 close();
             }
             return true;
@@ -311,14 +313,14 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
     }
 
     bool pointer_event =
-        (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION);
-    bool wheel_event = (e.type == SDL_MOUSEWHEEL);
+        (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
+    bool wheel_event = (e.type == SDL_EVENT_MOUSE_WHEEL);
     bool slider_capture_active = DMWidgetsSliderScrollCaptured();
 
     SDL_Point pointer{0, 0};
     if (pointer_event) {
-        pointer.x = (e.type == SDL_MOUSEMOTION) ? e.motion.x : e.button.x;
-        pointer.y = (e.type == SDL_MOUSEMOTION) ? e.motion.y : e.button.y;
+        pointer.x = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.x : e.button.x;
+        pointer.y = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.y : e.button.y;
     }
 
     if (wheel_event && slider_capture_active) {
@@ -350,7 +352,7 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
     } else if (wheel_event) {
         int mx = 0;
         int my = 0;
-        SDL_GetMouseState(&mx, &my);
+        sdl_mouse_util::GetMouseState(&mx, &my);
         SDL_Point p{mx, my};
         pointer_inside = SDL_PointInRect(&p, &scroll_region_);
         pointer_inside_panel = SDL_PointInRect(&p, &panel_);
@@ -360,11 +362,11 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
     }
 
     if (wheel_event) {
-        update_scroll_from_delta(e.wheel.y * 40);
+        update_scroll_from_delta(e.wheel.integer_y * 40);
         return true;
     }
 
-    if (pointer_event && e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+    if (pointer_event && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         bool handled = false;
         if (scroll_dragging_) {
             scroll_dragging_ = false;
@@ -377,7 +379,7 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
         if (handled) return true;
     }
 
-    if (pointer_event && e.type == SDL_MOUSEMOTION) {
+    if (pointer_event && e.type == SDL_EVENT_MOUSE_MOTION) {
         if (scrollbar_dragging_ && max_scroll_ > 0) {
             int prev_scroll = scroll_;
             int thumb_h = scroll_thumb_rect_.h;
@@ -407,7 +409,7 @@ bool SlidingWindowContainer::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (pointer_event && e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (pointer_event && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         if (scrollbar_visible_ && max_scroll_ > 0 &&
             scroll_thumb_rect_.w > 0 && scroll_thumb_rect_.h > 0 &&
             scroll_track_rect_.w > 0 && scroll_track_rect_.h > 0) {
@@ -488,7 +490,7 @@ void SlidingWindowContainer::render(SDL_Renderer* renderer, int screen_w, int sc
             Uint8 alpha = static_cast<Uint8>(std::clamp(pulse_frames_ * 12, 0, 180));
             const SDL_Color accent = DMStyles::AccentButton().hover_bg;
             SDL_SetRenderDrawColor(renderer, accent.r, accent.g, accent.b, alpha);
-            SDL_RenderFillRect(renderer, &header_region);
+            sdl_render::FillRect(renderer, &header_region);
         }
 
         if (header_nav_button_) {
@@ -502,20 +504,16 @@ void SlidingWindowContainer::render(SDL_Renderer* renderer, int screen_w, int sc
     }
 
     SDL_Rect prev_clip;
-    SDL_RenderGetClipRect(renderer, &prev_clip);
-#if SDL_VERSION_ATLEAST(2,0,4)
-    const SDL_bool was_clipping = SDL_RenderIsClipEnabled(renderer);
-#else
-    const SDL_bool was_clipping = (prev_clip.w != 0 || prev_clip.h != 0) ? SDL_TRUE : SDL_FALSE;
-#endif
+    SDL_GetRenderClipRect(renderer, &prev_clip);
+    const bool was_clipping = SDL_RenderClipEnabled(renderer);
     SDL_Rect panel_clip = panel_;
-    SDL_RenderSetClipRect(renderer, &panel_clip);
+    SDL_SetRenderClipRect(renderer, &panel_clip);
 
     SDL_Rect content_clip = content_clip_rect_;
     if (content_clip_enabled_ && content_clip.w > 0 && content_clip.h > 0) {
         SDL_Rect intersection;
-        if (SDL_IntersectRect(&panel_clip, &content_clip, &intersection) == SDL_TRUE) {
-            SDL_RenderSetClipRect(renderer, &intersection);
+        if (SDL_GetRectIntersection(&panel_clip, &content_clip, &intersection)) {
+            SDL_SetRenderClipRect(renderer, &intersection);
         }
     }
 
@@ -523,7 +521,7 @@ void SlidingWindowContainer::render(SDL_Renderer* renderer, int screen_w, int sc
         render_function_(renderer);
     }
 
-    SDL_RenderSetClipRect(renderer, &panel_clip);
+    SDL_SetRenderClipRect(renderer, &panel_clip);
 
     if (scrollbar_visible_ && max_scroll_ > 0 && scroll_track_rect_.w > 0 && scroll_track_rect_.h > 0) {
         SDL_Rect track = scroll_track_rect_;
@@ -539,10 +537,10 @@ void SlidingWindowContainer::render(SDL_Renderer* renderer, int screen_w, int sc
         }
     }
 
-    if (was_clipping == SDL_TRUE) {
-        SDL_RenderSetClipRect(renderer, &prev_clip);
+    if (was_clipping) {
+        SDL_SetRenderClipRect(renderer, &prev_clip);
     } else {
-        SDL_RenderSetClipRect(renderer, nullptr);
+        SDL_SetRenderClipRect(renderer, nullptr);
     }
 }
 
@@ -802,3 +800,6 @@ void SlidingWindowContainer::update_editor_interaction_block_state() {
         editor_interaction_blocker_(should_block);
     }
 }
+
+
+

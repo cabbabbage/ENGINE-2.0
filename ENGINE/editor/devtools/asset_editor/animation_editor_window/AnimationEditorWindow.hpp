@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -182,3 +182,4 @@ class AnimationEditorWindow {
 };
 
 }
+

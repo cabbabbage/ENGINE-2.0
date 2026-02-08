@@ -1,6 +1,7 @@
 #include "MovementFrameEditor.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -223,7 +224,7 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
     // Handle Point3DEditor events
     if (point_3d_editor_) {
         // Use the cached container from Point3DEditor (set during render_overlays)
-        // This avoids issues with SDL_GetRendererOutputSize(nullptr, ...) failing
+        // This avoids issues with SDL_GetCurrentRenderOutputSize(nullptr, ...) failing
         overlay_rect = point_3d_editor_->get_cached_container();
         overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
         if (point_3d_editor_->handle_event(e, overlay_rect)) {
@@ -259,10 +260,10 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
     }
 
-    if (e.type == SDL_KEYDOWN) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
         // ONLY escape key - no arrow key navigation
         // Use frame navigator buttons/textbox for frame navigation
-        if (e.key.keysym.sym == SDLK_ESCAPE) {
+        if (e.key.key == SDLK_ESCAPE) {
             wants_close_ = true;
             consumed = true;
         }
@@ -274,12 +275,12 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
 
     // Handle mouse events for 3D point manipulation
     SDL_Point mouse_pos = {0, 0};
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
-        mouse_pos = {e.button.x, e.button.y};
-    } else if (e.type == SDL_MOUSEMOTION) {
-        mouse_pos = {e.motion.x, e.motion.y};
-    } else if (e.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
+    } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
     const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
@@ -326,7 +327,7 @@ void MovementFrameEditor::render_world(SDL_Renderer* renderer) const {
         }
         SDL_FPoint a = screen_points[i - 1];
         SDL_FPoint b = screen_points[i];
-        SDL_RenderDrawLine(renderer, static_cast<int>(std::lround(a.x)), static_cast<int>(std::lround(a.y)),
+        SDL_RenderLine(renderer, static_cast<int>(std::lround(a.x)), static_cast<int>(std::lround(a.y)),
                            static_cast<int>(std::lround(b.x)), static_cast<int>(std::lround(b.y)));
     }
 
@@ -359,7 +360,7 @@ void MovementFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     // Render Point3DEditor overlays at the bottom
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
-        SDL_GetRendererOutputSize(renderer, &sw, &sh);
+        SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
         int height = point_3d_editor_->get_overlay_height(sw);
         SDL_Rect bottom_container{0, sh - height, sw, height};
         point_3d_editor_->render_overlays(renderer, bottom_container);
@@ -370,7 +371,7 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     if (!renderer) return;
     int sw = 0;
     int sh = 0;
-    SDL_GetRendererOutputSize(renderer, &sw, &sh);
+    SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
     const int padding = DMSpacing::small_gap();
     const int width = 280;
     const int x = padding;
@@ -702,7 +703,9 @@ SDL_FPoint MovementFrameEditor::screen_to_world_relative(const SDL_Point& screen
 }
 
 bool MovementFrameEditor::ui_contains_point(const SDL_Point& pt) const {
-    return SDL_PointInRect(&pt, &ui_rect_) == SDL_TRUE;
+    return SDL_PointInRect(&pt, &ui_rect_);
 }
 
 }  // namespace devmode::frame_editors
+
+

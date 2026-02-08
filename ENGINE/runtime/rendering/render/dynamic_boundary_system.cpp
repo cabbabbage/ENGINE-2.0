@@ -484,11 +484,11 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 sprite.texture_w = frame_variant->width;
                 sprite.texture_h = frame_variant->height;
                 if (sprite.texture_w <= 0 || sprite.texture_h <= 0) {
-                    int texture_w = 0;
-                    int texture_h = 0;
-                    if (SDL_QueryTexture(texture, nullptr, nullptr, &texture_w, &texture_h) == 0) {
-                        sprite.texture_w = texture_w;
-                        sprite.texture_h = texture_h;
+                    float texture_w = 0.0f;
+                    float texture_h = 0.0f;
+                    if (SDL_GetTextureSize(texture, &texture_w, &texture_h)) {
+                        sprite.texture_w = static_cast<int>(std::lround(texture_w));
+                        sprite.texture_h = static_cast<int>(std::lround(texture_h));
                     }
                 }
                 if (sprite.texture_w <= 0 || sprite.texture_h <= 0) {
@@ -638,7 +638,12 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
                 }
                 BoundaryFrameVariant frame_variant;
                 frame_variant.texture = variant.base_texture;
-                SDL_QueryTexture(frame_variant.texture, nullptr, nullptr, &frame_variant.width, &frame_variant.height);
+                float wf = 0.0f;
+                float hf = 0.0f;
+                if (SDL_GetTextureSize(frame_variant.texture, &wf, &hf)) {
+                    frame_variant.width = static_cast<int>(std::lround(wf));
+                    frame_variant.height = static_cast<int>(std::lround(hf));
+                }
                 boundary_frame.variants.push_back(frame_variant);
                 has_texture = true;
             }
@@ -653,7 +658,12 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
         boundary_frame.duration_ms = kDefaultAnimationFrameMs;
         BoundaryFrameVariant frame_variant;
         frame_variant.texture = info->preview_texture;
-        SDL_QueryTexture(frame_variant.texture, nullptr, nullptr, &frame_variant.width, &frame_variant.height);
+        float wf = 0.0f;
+        float hf = 0.0f;
+        if (SDL_GetTextureSize(frame_variant.texture, &wf, &hf)) {
+            frame_variant.width = static_cast<int>(std::lround(wf));
+            frame_variant.height = static_cast<int>(std::lround(hf));
+        }
         boundary_frame.variants.push_back(frame_variant);
         candidate.frames.push_back(boundary_frame);
     }

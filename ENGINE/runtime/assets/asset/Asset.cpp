@@ -32,7 +32,7 @@
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
 static std::mt19937& asset_rng()
 {
@@ -874,9 +874,11 @@ void Asset::refresh_cached_dimensions() {
         if ((width <= 0 || height <= 0)) {
                 SDL_Texture* frame = get_current_variant_texture();
                 if (frame) {
-                        if (SDL_QueryTexture(frame, nullptr, nullptr, &width, &height) != 0) {
-                                width = 0;
-                                height = 0;
+                        float wf = 0.0f;
+                        float hf = 0.0f;
+                        if (SDL_GetTextureSize(frame, &wf, &hf)) {
+                                width = static_cast<int>(std::lround(wf));
+                                height = static_cast<int>(std::lround(hf));
                         }
                 }
         }
@@ -988,7 +990,8 @@ void Asset::move_to_world_position(int world_x, int world_y, int world_z) {
     if (!assets_) return;
 
     world::WorldGrid& grid = assets_->world_grid();
-    world::GridPoint& target = world::GridPoint::from_world(world_x, world_y, world_z, grid_resolution, grid);
+    const int resolved_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+    world::GridPoint& target = world::GridPoint::from_world(world_x, world_y, world_z, resolved_layer, grid);
 
     if (pos_) {
         grid.move_asset(this, *pos_, target);

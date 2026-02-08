@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
 #include "rendering/render/scaling_logic.hpp"

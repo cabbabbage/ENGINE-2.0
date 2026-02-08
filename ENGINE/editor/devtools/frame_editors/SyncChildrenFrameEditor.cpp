@@ -1,4 +1,5 @@
 #include "SyncChildrenFrameEditor.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -19,7 +20,7 @@
 #include "utils/FramePointResolver.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/composite_asset_renderer.hpp"
-#include <SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 
 namespace devmode::frame_editors {
 
@@ -401,7 +402,7 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     bool overlay_valid = false;
     if (point_3d_editor_) {
         // Use the cached container from Point3DEditor (set during render_overlays)
-        // This avoids issues with SDL_GetRendererOutputSize(nullptr, ...) failing
+        // This avoids issues with SDL_GetCurrentRenderOutputSize(nullptr, ...) failing
         overlay_rect = point_3d_editor_->get_cached_container();
         overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
         if (point_3d_editor_->handle_event(e, overlay_rect)) {
@@ -433,17 +434,17 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     SDL_Point mouse_pos = {0, 0};
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
-        mouse_pos = {e.button.x, e.button.y};
-    } else if (e.type == SDL_MOUSEMOTION) {
-        mouse_pos = {e.motion.x, e.motion.y};
-    } else if (e.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
+    } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
     const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
-    if (SDL_PointInRect(&mouse_pos, &back_rect_) == SDL_FALSE &&
-        SDL_PointInRect(&mouse_pos, &ui_rect_) == SDL_FALSE &&
+    if (!SDL_PointInRect(&mouse_pos, &back_rect_) &&
+        !SDL_PointInRect(&mouse_pos, &ui_rect_) &&
         !pointer_in_overlay) {
         const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
         SDL_Point anchor = asset_anchor_world();
@@ -470,9 +471,9 @@ bool SyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_KEYDOWN) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
         // No LEFT/RIGHT arrow keys - use frame navigator buttons only
-        if (e.key.keysym.sym == SDLK_TAB) {
+        if (e.key.key == SDLK_TAB) {
             selected_child_index_ = (selected_child_index_ + 1) % std::max(1, static_cast<int>(child_assets_.size()));
             if (selection_state_) {
                 selection_state_->child_index = selected_child_index_;
@@ -562,10 +563,10 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
             if (!is_visible_in_frame) {
                 SDL_SetRenderDrawColor(renderer, 255, 0, 0, 180);
                 constexpr int x_size = 12;
-                SDL_RenderDrawLine(renderer,
+                SDL_RenderLine(renderer,
                                  static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) - x_size,
                                  static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) + x_size);
-                SDL_RenderDrawLine(renderer,
+                SDL_RenderLine(renderer,
                                  static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) - x_size,
                                  static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) + x_size);
             }
@@ -575,10 +576,10 @@ void SyncChildrenFrameEditor::render_world(SDL_Renderer* renderer) const {
             if (!is_visible_in_frame) {
                 SDL_SetRenderDrawColor(renderer, 255, 0, 0, 120);
                 constexpr int x_size = 8;
-                SDL_RenderDrawLine(renderer,
+                SDL_RenderLine(renderer,
                                  static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) - x_size,
                                  static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) + x_size);
-                SDL_RenderDrawLine(renderer,
+                SDL_RenderLine(renderer,
                                  static_cast<int>(screen.x) + x_size, static_cast<int>(screen.y) - x_size,
                                  static_cast<int>(screen.x) - x_size, static_cast<int>(screen.y) + x_size);
             }
@@ -591,7 +592,7 @@ void SyncChildrenFrameEditor::render_overlays(SDL_Renderer* renderer) const {
 
     // Layout the UI elements
     int sw = 0, sh = 0;
-    SDL_GetRendererOutputSize(renderer, &sw, &sh);
+    SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
     const int padding = DMSpacing::small_gap();
     const int width = 280;
     const int x = padding;
@@ -646,7 +647,7 @@ void SyncChildrenFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     // Render Point3DEditor overlays at the bottom
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
-        SDL_GetRendererOutputSize(renderer, &sw, &sh);
+        SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
         int height = point_3d_editor_->get_overlay_height(sw);
         SDL_Rect bottom_container{0, sh - height, sw, height};
         point_3d_editor_->render_overlays(renderer, bottom_container);
@@ -1038,3 +1039,4 @@ void SyncChildrenFrameEditor::reset_current_frame() {
 }
 
 }  // namespace devmode::frame_editors
+

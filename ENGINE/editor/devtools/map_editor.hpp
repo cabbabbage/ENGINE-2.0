@@ -1,7 +1,7 @@
 #pragma once
 
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include <functional>
 #include <utility>
@@ -93,3 +93,4 @@ private:
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;
     mutable SDL_Rect active_label_bounds_{0,0,0,0};
 };
+

@@ -1,6 +1,8 @@
 #include "animation_cloner.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "assets/asset_info.hpp"
@@ -10,14 +12,14 @@ namespace {
 void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
     if (!tex) return;
 #if SDL_VERSION_ATLEAST(2, 0, 12)
-    SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_ScaleModeBest : SDL_ScaleModeNearest);
+    SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
 #endif
 }
 
 SDL_Texture* clone_texture(SDL_Texture* src,
                            int width_hint,
                            int height_hint,
-                           SDL_RendererFlip flip_flags,
+                           SDL_FlipMode flip_flags,
                            SDL_Renderer* renderer,
                            const AssetInfo& info,
                            int* out_w = nullptr,
@@ -26,17 +28,26 @@ SDL_Texture* clone_texture(SDL_Texture* src,
         return nullptr;
     }
 
-    Uint32 fmt = SDL_PIXELFORMAT_RGBA8888;
+    SDL_PixelFormat fmt = SDL_PIXELFORMAT_RGBA8888;
     int access = 0;
     int tex_w = width_hint;
     int tex_h = height_hint;
 
     const bool need_dims = tex_w <= 0 || tex_h <= 0;
-    if (SDL_QueryTexture(src, &fmt, &access, need_dims ? &tex_w : nullptr, need_dims ? &tex_h : nullptr) != 0 ||
-        tex_w <= 0 || tex_h <= 0) {
-        tex_w = std::max(1, tex_w);
-        tex_h = std::max(1, tex_h);
+    if (SDL_PropertiesID props = SDL_GetTextureProperties(src)) {
+        fmt    = static_cast<SDL_PixelFormat>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, fmt));
+        access = static_cast<int>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_ACCESS_NUMBER, access));
     }
+    if (need_dims) {
+        float fw = 0.0f;
+        float fh = 0.0f;
+        if (SDL_GetTextureSize(src, &fw, &fh)) {
+            tex_w = static_cast<int>(std::lround(fw));
+            tex_h = static_cast<int>(std::lround(fh));
+        }
+    }
+    tex_w = std::max(1, tex_w);
+    tex_h = std::max(1, tex_h);
 
     SDL_Texture* dst = SDL_CreateTexture(renderer, fmt, SDL_TEXTUREACCESS_TARGET, tex_w, tex_h);
     if (!dst) {
@@ -53,9 +64,9 @@ SDL_Texture* clone_texture(SDL_Texture* src,
 
     SDL_Rect rect{ 0, 0, tex_w, tex_h };
     if (flip_flags != SDL_FLIP_NONE) {
-        SDL_RenderCopyEx(renderer, src, nullptr, &rect, 0.0, nullptr, flip_flags);
+        sdl_render::TextureRotated(renderer, src, nullptr, &rect, 0.0, nullptr, flip_flags);
     } else {
-        SDL_RenderCopy(renderer, src, nullptr, &rect);
+        sdl_render::Texture(renderer, src, nullptr, &rect);
     }
 
     SDL_SetRenderTarget(renderer, prev_target);
@@ -102,9 +113,9 @@ bool AnimationCloner::Clone(const Animation& source,
         return opts.reverse_frames ? (frame_count - 1 - dst_idx) : dst_idx;
 };
 
-    SDL_RendererFlip flip_flags = SDL_FLIP_NONE;
-    if (opts.flip_horizontal) flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_HORIZONTAL);
-    if (opts.flip_vertical)   flip_flags = static_cast<SDL_RendererFlip>(flip_flags | SDL_FLIP_VERTICAL);
+    SDL_FlipMode flip_flags = SDL_FLIP_NONE;
+    if (opts.flip_horizontal) flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_HORIZONTAL);
+    if (opts.flip_vertical)   flip_flags = static_cast<SDL_FlipMode>(flip_flags | SDL_FLIP_VERTICAL);
 
     dest.frame_cache_.reserve(frame_count);
     for (std::size_t dst_idx = 0; dst_idx < frame_count; ++dst_idx) {
@@ -217,3 +228,6 @@ bool AnimationCloner::Clone(const Animation& source,
 
     return !dest.frame_cache_.empty();
 }
+
+
+

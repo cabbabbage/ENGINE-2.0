@@ -1,4 +1,5 @@
 #include "devtools/frame_editors/AsyncChildrenFrameEditor.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -26,8 +27,8 @@ SDL_Point round_point(const SDL_FPoint& pt) {
 constexpr float kFrameInterval = 1.0f / static_cast<float>(kBaseAnimationFps);
 
 int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
-    float precise = wheel.preciseY;
-    int delta = wheel.y;
+    float precise = wheel.y;
+    int delta = wheel.integer_y;
     if (wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
         delta = -delta;
         precise = -precise;
@@ -160,7 +161,7 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     bool overlay_valid = false;
     if (point_3d_editor_) {
         // Use the cached container from Point3DEditor (set during render_overlays)
-        // This avoids issues with SDL_GetRendererOutputSize(nullptr, ...) failing
+        // This avoids issues with SDL_GetCurrentRenderOutputSize(nullptr, ...) failing
         overlay_rect = point_3d_editor_->get_cached_container();
         overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
         if (point_3d_editor_->handle_event(e, overlay_rect)) {
@@ -173,12 +174,12 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     SDL_Point mouse_pos = {0, 0};
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
-        mouse_pos = {e.button.x, e.button.y};
-    } else if (e.type == SDL_MOUSEMOTION) {
-        mouse_pos = {e.motion.x, e.motion.y};
-    } else if (e.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
+    } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
@@ -209,8 +210,8 @@ bool AsyncChildrenFrameEditor::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_KEYDOWN) {
-        switch (e.key.keysym.sym) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
+        switch (e.key.key) {
             // No LEFT/RIGHT arrow keys - use frame navigator buttons only
             case SDLK_TAB:
                 selected_child_index_ = (selected_child_index_ + 1) %

@@ -1,6 +1,6 @@
-﻿#include "frame_editor_session.hpp"
+#include "frame_editor_session.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -296,3 +296,4 @@ void FrameEditorSession::restore_camera_state() {
 std::unique_ptr<devmode::frame_editors::FrameEditorBase> FrameEditorSession::create_editor(Mode mode) {
     return ::create_editor(mode);
 }
+

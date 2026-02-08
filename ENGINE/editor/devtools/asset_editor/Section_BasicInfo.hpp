@@ -215,7 +215,12 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
     int fw = target->cached_w;
     int fh = target->cached_h;
     if ((fw == 0 || fh == 0) && tex) {
-        SDL_QueryTexture(tex, nullptr, nullptr, &fw, &fh);
+        float fwf = 0.0f;
+        float fhf = 0.0f;
+        if (SDL_GetTextureSize(tex, &fwf, &fhf)) {
+            fw = static_cast<int>(std::lround(fwf));
+            fh = static_cast<int>(std::lround(fhf));
+        }
     }
     if (fw == 0 || fh == 0) {
         if (target->info) {

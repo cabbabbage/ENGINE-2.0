@@ -5,7 +5,7 @@
 #include <vector>
 #include <filesystem>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
 #include "animation.hpp"

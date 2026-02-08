@@ -1,6 +1,7 @@
 #include "HitGeoFrameEditor.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <array>
@@ -37,6 +38,8 @@ float parse_float(const std::string& text, float fallback) {
         return fallback;
     }
 }
+
+constexpr float kPi = 3.14159265358979323846f;
 
 float dist_sq(const SDL_FPoint& a, const SDL_FPoint& b) {
     const float dx = a.x - b.x;
@@ -203,7 +206,7 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
     bool overlay_valid = false;
     if (point_3d_editor_) {
         // Use the cached container from Point3DEditor (set during render_overlays)
-        // This avoids issues with SDL_GetRendererOutputSize(nullptr, ...) failing
+        // This avoids issues with SDL_GetCurrentRenderOutputSize(nullptr, ...) failing
         overlay_rect = point_3d_editor_->get_cached_container();
         overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
         if (point_3d_editor_->handle_event(e, overlay_rect)) {
@@ -257,12 +260,12 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
     }
 
     SDL_Point mouse_pos = {0, 0};
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP) {
-        mouse_pos = {e.button.x, e.button.y};
-    } else if (e.type == SDL_MOUSEMOTION) {
-        mouse_pos = {e.motion.x, e.motion.y};
-    } else if (e.type == SDL_MOUSEWHEEL) {
-        SDL_GetMouseState(&mouse_pos.x, &mouse_pos.y);
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
+    } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
     }
 
     const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
@@ -328,7 +331,7 @@ void HitGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     // Render Point3DEditor overlays at the bottom
     if (point_3d_editor_) {
         int sw = 0, sh = 0;
-        SDL_GetRendererOutputSize(renderer, &sw, &sh);
+        SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
         int height = point_3d_editor_->get_overlay_height(sw);
         SDL_Rect bottom_container{0, sh - height, sw, height};
         point_3d_editor_->render_overlays(renderer, bottom_container);
@@ -338,7 +341,7 @@ void HitGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
 void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     if (!renderer) return;
     int sw = 0, sh = 0;
-    SDL_GetRendererOutputSize(renderer, &sw, &sh);
+    SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
     const int padding = DMSpacing::small_gap();
     const int width = 320;
     const int x = padding;
@@ -544,8 +547,8 @@ bool HitGeoFrameEditor::build_hitbox_visual(const animation_update::FrameHitGeom
     if (scale <= 0.0001f) return false;
 
     FramePointResolver resolver(context_.target);
-    const float cos_r = std::cos(box.rotation_degrees * static_cast<float>(M_PI) / 180.0f);
-    const float sin_r = std::sin(box.rotation_degrees * static_cast<float>(M_PI) / 180.0f);
+    const float cos_r = std::cos(box.rotation_degrees * kPi / 180.0f);
+    const float sin_r = std::sin(box.rotation_degrees * kPi / 180.0f);
     auto rotate_vec = [&](SDL_FPoint v) -> SDL_FPoint {
         return SDL_FPoint{v.x * cos_r - v.y * sin_r, v.x * sin_r + v.y * cos_r};
     };
@@ -604,7 +607,7 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
         for (int i = 0; i < 4; ++i) {
             verts[i].position.x = corners[i].x;
             verts[i].position.y = corners[i].y;
-            verts[i].color = fill;
+            verts[i].color = SDL_FColor{fill.r / 255.0f, fill.g / 255.0f, fill.b / 255.0f, fill.a / 255.0f};
             verts[i].tex_coord = SDL_FPoint{0.0f, 0.0f};
         }
         SDL_RenderGeometry(renderer, nullptr, verts, 4, indices, 6);
@@ -612,7 +615,7 @@ void HitGeoFrameEditor::render_hit_geometry(SDL_Renderer* renderer) const {
         for (int i = 0; i < 4; ++i) {
             const SDL_FPoint& a = corners[i];
             const SDL_FPoint& b = corners[(i + 1) % 4];
-            SDL_RenderDrawLineF(renderer, a.x, a.y, b.x, b.y);
+            SDL_RenderLine(renderer, a.x, a.y, b.x, b.y);
         }
     }
 
@@ -735,8 +738,10 @@ void HitGeoFrameEditor::refresh_selection_state() {
 }
 
 bool HitGeoFrameEditor::ui_contains_point(const SDL_Point& pt) const {
-    return SDL_PointInRect(&pt, &ui_rect_) == SDL_TRUE;
+    return SDL_PointInRect(&pt, &ui_rect_);
 }
 
 
 }  // namespace devmode::frame_editors
+
+

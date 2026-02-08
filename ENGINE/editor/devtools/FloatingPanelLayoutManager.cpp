@@ -73,7 +73,7 @@ std::vector<Interval> compute_free_intervals(const SDL_Rect& usable, const std::
     for (const SDL_Rect& rect : obstacles) {
         SDL_Rect candidate = clamp_rect_to_view(rect);
         SDL_Rect clipped;
-        if (SDL_IntersectRect(&usable_bounds, &candidate, &clipped) != SDL_TRUE) {
+        if (!SDL_GetRectIntersection(&usable_bounds, &candidate, &clipped)) {
             continue;
         }
         if (!has_area(clipped)) {

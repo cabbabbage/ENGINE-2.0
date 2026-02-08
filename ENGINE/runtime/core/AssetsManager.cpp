@@ -1,4 +1,5 @@
 #include "AssetsManager.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include "utils/ranged_color.hpp"
 #include "assets/initialize_assets.hpp"
@@ -43,8 +44,8 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <array>
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 namespace {
 
@@ -1752,7 +1753,7 @@ void Assets::render_overlays(SDL_Renderer* renderer) {
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
         SDL_SetRenderDrawColor(renderer, 255, 0, 0, 160);
         for (const SDL_Rect& r : culled_debug_rects_) {
-            SDL_RenderDrawRect(renderer, &r);
+            sdl_render::Rect(renderer, &r);
         }
         SDL_SetRenderDrawBlendMode(renderer, prev_mode);
     }
@@ -1778,7 +1779,7 @@ void Assets::render_overlays(SDL_Renderer* renderer) {
                 if (draw_rect.w <= 0 || draw_rect.h <= 0) {
                     continue;
                 }
-                SDL_RenderDrawRect(renderer, &draw_rect);
+                sdl_render::Rect(renderer, &draw_rect);
             }
             SDL_SetRenderDrawBlendMode(renderer, previous_mode);
         }
@@ -2311,3 +2312,6 @@ bool Assets::has_pending_dev_work(bool include_animation_plans) const {
     }
     return false;
 }
+
+
+

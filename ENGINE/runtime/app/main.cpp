@@ -19,10 +19,10 @@
 #include "utils/loading_status_notifier.hpp"
 #include "utils/rebuild_queue.hpp"
 #include "gameplay/world/world_grid.hpp"
-#include <SDL.h>
-#include <SDL_image.h>
-#include <SDL_mixer.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL_main.h>
+#include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
+#include <SDL3_ttf/SDL_ttf.h>
 #include <chrono>
 #include <ctime>
 #include <filesystem>
@@ -326,7 +326,7 @@ void MainApp::game_loop() {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
 
                 while (SDL_PollEvent(&e)) {
-                        if (e.type == SDL_QUIT) {
+                        if (e.type == SDL_EVENT_QUIT) {
                                 quit = true;
                         }
                         if (input_) {
@@ -736,7 +736,7 @@ void run(SDL_Window* window,
 
         while (choosing) {
             while (SDL_PollEvent(&e)) {
-                if (e.type == SDL_QUIT) {
+                if (e.type == SDL_EVENT_QUIT) {
                     quit_requested = true;
                     choosing = false;
                     break;
@@ -837,71 +837,93 @@ int main(int argc, char* argv[]) {
                 vibble::log::info("[Main] No queued asset rebuilds detected.");
         }
 
-        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
+        const SDL_InitFlags init_flags =
+                static_cast<SDL_InitFlags>(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
+        if (!SDL_Init(init_flags)) {
                 vibble::log::error(std::string("SDL_Init failed: ") + SDL_GetError());
                 return 1;
         }
 
-        if (SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "best") != SDL_TRUE) {
-                if (SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "2") != SDL_TRUE) {
-                        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "1");
+        if (!TTF_Init()) {
+                vibble::log::error(std::string("TTF_Init failed: ") + SDL_GetError());
+                SDL_Quit();
+                return 1;
+        }
+
+        int window_width = 1280;
+        int window_height = 720;
+        const SDL_DisplayID primary_display = SDL_GetPrimaryDisplay();
+        if (primary_display != 0) {
+                if (const SDL_DisplayMode* desktop_mode = SDL_GetDesktopDisplayMode(primary_display)) {
+                        window_width = desktop_mode->w;
+                        window_height = desktop_mode->h;
                 }
         }
-        vibble::log::info("[Main] Requested high quality texture filtering.");
 
-        if (Mix_OpenAudio(44100, MIX_DEFAULT_FORMAT, 2, 2048) < 0) {
-                vibble::log::error(std::string("Mix_OpenAudio failed: ") + Mix_GetError());
+        SDL_PropertiesID window_props = SDL_CreateProperties();
+        if (!window_props ||
+            !SDL_SetStringProperty(window_props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "Game Window") ||
+            !SDL_SetNumberProperty(window_props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, window_width) ||
+            !SDL_SetNumberProperty(window_props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, window_height) ||
+            !SDL_SetBooleanProperty(window_props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, true)) {
+                vibble::log::error(std::string("SDL_CreateWindow properties failed: ") + SDL_GetError());
+                if (window_props) SDL_DestroyProperties(window_props);
+                TTF_Quit();
                 SDL_Quit();
                 return 1;
         }
 
-        if (TTF_Init() < 0) {
-                vibble::log::error(std::string("TTF_Init failed: ") + TTF_GetError());
-                SDL_Quit();
-                return 1;
-        }
-
-        if (!(IMG_Init(IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_TIF | IMG_INIT_WEBP) &
-              (IMG_INIT_PNG | IMG_INIT_JPG | IMG_INIT_TIF | IMG_INIT_WEBP))) {
-                vibble::log::error(std::string("IMG_Init failed: ") + IMG_GetError());
-                SDL_Quit();
-                return 1;
-        }
-
-        SDL_Window* window = SDL_CreateWindow( "Game Window", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP);
+        SDL_Window* window = SDL_CreateWindowWithProperties(window_props);
+        SDL_DestroyProperties(window_props);
         if (!window) {
-                vibble::log::error(std::string("SDL_CreateWindow failed: ") + SDL_GetError());
-                IMG_Quit();
+                vibble::log::error(std::string("SDL_CreateWindowWithProperties failed: ") + SDL_GetError());
                 TTF_Quit();
                 SDL_Quit();
                 return 1;
         }
 
-        SDL_Renderer* renderer =
-                SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-        if (!renderer) {
-                vibble::log::error(std::string("SDL_CreateRenderer failed: ") + SDL_GetError());
+        SDL_PropertiesID renderer_props = SDL_CreateProperties();
+        if (!renderer_props ||
+            !SDL_SetPointerProperty(renderer_props, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, window) ||
+            !SDL_SetNumberProperty(renderer_props, SDL_PROP_RENDERER_CREATE_PRESENT_VSYNC_NUMBER, 1)) {
+                vibble::log::error(std::string("SDL_CreateRenderer properties failed: ") + SDL_GetError());
+                if (renderer_props) SDL_DestroyProperties(renderer_props);
                 SDL_DestroyWindow(window);
-                IMG_Quit();
                 TTF_Quit();
                 SDL_Quit();
                 return 1;
         }
 
-        SDL_RendererInfo info;
-        SDL_GetRendererInfo(renderer, &info);
-        vibble::log::info(std::string("[Main] Renderer: ") + (info.name ? info.name : "Unknown"));
+        SDL_Renderer* renderer = SDL_CreateRendererWithProperties(renderer_props);
+        SDL_DestroyProperties(renderer_props);
+        if (!renderer) {
+                vibble::log::error(std::string("SDL_CreateRendererWithProperties failed: ") + SDL_GetError());
+                SDL_DestroyWindow(window);
+                TTF_Quit();
+                SDL_Quit();
+                return 1;
+        }
+        if (!SDL_SetDefaultTextureScaleMode(renderer, SDL_SCALEMODE_LINEAR)) {
+                vibble::log::warn(std::string("[Main] Failed to set linear texture scale mode: ") + SDL_GetError());
+        } else {
+                vibble::log::info("[Main] Using linear texture scale mode for textures.");
+        }
 
-        int screen_width = 0;
-        int screen_height = 0;
-        SDL_GetRendererOutputSize(renderer, &screen_width, &screen_height);
+        const char* renderer_name = SDL_GetRendererName(renderer);
+        vibble::log::info(std::string("[Main] Renderer: ") + (renderer_name ? renderer_name : "Unknown"));
+
+        int screen_width = window_width;
+        int screen_height = window_height;
+        if (!SDL_GetCurrentRenderOutputSize(renderer, &screen_width, &screen_height)) {
+                vibble::log::warn(std::string("[Main] Unable to query renderer output size: ") + SDL_GetError());
+                SDL_GetWindowSizeInPixels(window, &screen_width, &screen_height);
+        }
         vibble::log::info(std::string("[Main] Screen resolution: ") + std::to_string(screen_width) + "x" + std::to_string(screen_height));
 
         run(window, renderer, screen_width, screen_height, rebuild_cache);
 
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
-        IMG_Quit();
         TTF_Quit();
         SDL_Quit();
         vibble::log::info("[Main] Game exited cleanly.");

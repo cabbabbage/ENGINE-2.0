@@ -3,7 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <random>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "spawn_context.hpp"
 #include "check.hpp"
@@ -26,9 +26,9 @@ void PerimeterSpawner::spawn(const SpawnInfo& item, const Area* area, SpawnConte
     RelativeRoomPosition relative(item.exact_offset, item.exact_origin_w, item.exact_origin_h);
     SDL_Point circle_center = relative.resolve(room_center, curr_w, curr_h);
 
-    std::uniform_real_distribution<double> phase_dist(0.0, 2.0 * M_PI);
+    std::uniform_real_distribution<double> phase_dist(0.0, 2.0 * SDL_PI_D);
     const double start = phase_dist(ctx.rng());
-    const double step  = (item.quantity > 0) ? (2.0 * M_PI / static_cast<double>(item.quantity)) : 0.0;
+    const double step  = (item.quantity > 0) ? (2.0 * SDL_PI_D / static_cast<double>(item.quantity)) : 0.0;
 
     for (int i = 0; i < item.quantity; ++i) {
         const double angle = start + step * static_cast<double>(i);

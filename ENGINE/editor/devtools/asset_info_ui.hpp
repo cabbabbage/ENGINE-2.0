@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <functional>
 #include <memory>
 #include <string>
@@ -169,3 +169,4 @@ class AssetInfoUI {
     SDL_Cursor* color_sampling_prev_cursor_ = nullptr;
     SDL_Cursor* color_sampling_cursor_handle_ = nullptr;
 };
+

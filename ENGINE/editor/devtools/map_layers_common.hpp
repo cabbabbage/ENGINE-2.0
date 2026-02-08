@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <nlohmann/json.hpp>
 #include "utils/display_color.hpp"
@@ -89,3 +89,4 @@ inline double map_radius_from_map_info(const nlohmann::json&) {
 }
 
 }
+

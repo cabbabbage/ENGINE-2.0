@@ -1,5 +1,7 @@
 #include "PreviewViewport.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
+#include <cmath>
 #include <utility>
 
 PreviewViewport::PreviewViewport(SDL_Renderer* renderer) : renderer_(renderer) {}
@@ -31,7 +33,7 @@ bool PreviewViewport::begin() {
         return false;
     }
     previous_target_ = SDL_GetRenderTarget(renderer_);
-    if (SDL_SetRenderTarget(renderer_, target_) != 0) {
+    if (!SDL_SetRenderTarget(renderer_, target_)) {
         previous_target_ = nullptr;
         return false;
     }
@@ -75,7 +77,7 @@ bool PreviewViewport::present(const SDL_Rect& dst, SDL_Texture* texture, const S
         SDL_SetTextureBlendMode(target, desired);
     }
 
-    bool success = (SDL_RenderCopy(renderer_, target, src, &dst) == 0);
+    bool success = sdl_render::Texture(renderer_, target, src, &dst);
 
     if (desired != saved_mode) {
         SDL_SetTextureBlendMode(target, saved_mode);
@@ -121,16 +123,22 @@ void PreviewViewport::refreshTextureInfo() const {
 
     if (target_) {
         Uint32 format = 0;
-        int    access = 0;
-        int    w      = 0;
-        int    h      = 0;
-        if (SDL_QueryTexture(target_, &format, &access, &w, &h) == 0) {
-            cached_width_  = w;
-            cached_height_ = h;
+        if (SDL_PropertiesID props = SDL_GetTextureProperties(target_)) {
+            format = static_cast<Uint32>(SDL_GetNumberProperty(props, SDL_PROP_TEXTURE_FORMAT_NUMBER, 0));
+        }
+
+        float w = 0.0f;
+        float h = 0.0f;
+        if (SDL_GetTextureSize(target_, &w, &h)) {
+            cached_width_  = static_cast<int>(std::lround(w));
+            cached_height_ = static_cast<int>(std::lround(h));
             cached_format_ = format;
         }
     }
 
     texture_info_valid_ = true;
 }
+
+
+
 

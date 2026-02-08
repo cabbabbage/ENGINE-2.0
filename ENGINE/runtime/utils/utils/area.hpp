@@ -4,7 +4,7 @@
 #include <string>
 #include <tuple>
 #include <optional>
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "utils/grid.hpp"
 

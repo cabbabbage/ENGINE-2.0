@@ -1,4 +1,6 @@
 #include "map_editor.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include "assets/Asset.hpp"
 #include "core/AssetsManager.hpp"
@@ -397,7 +399,7 @@ void MapEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint
                                ? SDL_Color{20, 20, 20, 255}
                                : kLabelText;
 
-    SDL_Surface* text_surface = TTF_RenderUTF8_Blended(label_font_, name.c_str(), text_color);
+    SDL_Surface* text_surface = ttf_util::RenderTextBlended(label_font_, name.c_str(), text_color);
     if (!text_surface) return;
 
     SDL_Rect bg_rect = label_background_rect(text_surface, desired_center);
@@ -416,10 +418,10 @@ void MapEditor::render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint
     SDL_Texture* text_tex = SDL_CreateTextureFromSurface(renderer, text_surface);
     if (text_tex) {
         SDL_Rect dst{bg_rect.x + kLabelPadding, bg_rect.y + kLabelPadding, text_surface->w, text_surface->h};
-        SDL_RenderCopy(renderer, text_tex, nullptr, &dst);
+        sdl_render::Texture(renderer, text_tex, nullptr, &dst);
         SDL_DestroyTexture(text_tex);
     }
-    SDL_FreeSurface(text_surface);
+    SDL_DestroySurface(text_surface);
 }
 
 SDL_Rect MapEditor::label_background_rect(const SDL_Surface* surface, SDL_FPoint desired_center) const {
@@ -739,3 +741,6 @@ SDL_Rect MapEditor::effective_label_bounds() const {
     }
     return area;
 }
+
+
+

@@ -165,9 +165,9 @@ void FrameNavigator::notify_frame_changed() {
 }
 
 bool FrameNavigator::handle_keyboard_navigation(const SDL_Event& e) {
-    if (e.type != SDL_KEYDOWN) return false;
+    if (e.type != SDL_EVENT_KEY_DOWN) return false;
 
-    switch (e.key.keysym.sym) {
+    switch (e.key.key) {
         case SDLK_LEFT:
             if (current_frame_ > 0) {
                 set_current_frame(current_frame_ - 1);

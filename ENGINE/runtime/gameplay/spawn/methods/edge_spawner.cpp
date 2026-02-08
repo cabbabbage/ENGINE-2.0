@@ -5,7 +5,7 @@
 #include <random>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include "spawn_context.hpp"
 #include "spawn_info.hpp"

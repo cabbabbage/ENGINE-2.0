@@ -1,4 +1,6 @@
 #include "map_layers_preview_widget.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -12,7 +14,7 @@
 #include <utility>
 
 #include <nlohmann/json.hpp>
-#include <SDL_ttf.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include "dm_styles.hpp"
 #include "draw_utils.hpp"
@@ -85,7 +87,7 @@ void draw_text(SDL_Renderer* renderer, const std::string& text, int x, int y, co
     if (!font) {
         return;
     }
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), style.color);
+    SDL_Surface* surf = ttf_util::RenderTextBlended(font, text.c_str(), style.color);
     if (!surf) {
         TTF_CloseFont(font);
         return;
@@ -93,10 +95,10 @@ void draw_text(SDL_Renderer* renderer, const std::string& text, int x, int y, co
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (tex) {
         SDL_Rect dst{x, y, surf->w, surf->h};
-        SDL_RenderCopy(renderer, tex, nullptr, &dst);
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     TTF_CloseFont(font);
 }
 
@@ -116,7 +118,7 @@ void draw_circle(SDL_Renderer* renderer, int cx, int cy, int radius, SDL_Color c
             double angle = step * static_cast<double>(i);
             int x = cx + static_cast<int>(std::lround(std::cos(angle) * r));
             int y = cy + static_cast<int>(std::lround(std::sin(angle) * r));
-            SDL_RenderDrawLine(renderer, prev_x, prev_y, x, y);
+            SDL_RenderLine(renderer, prev_x, prev_y, x, y);
             prev_x = x;
             prev_y = y;
         }
@@ -131,7 +133,7 @@ void fill_circle(SDL_Renderer* renderer, int cx, int cy, int radius, SDL_Color c
     SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
     for (int y = -radius; y <= radius; ++y) {
         int dx = static_cast<int>(std::sqrt(static_cast<double>(radius * radius - y * y)));
-        SDL_RenderDrawLine(renderer, cx - dx, cy + y, cx + dx, cy + y);
+        SDL_RenderLine(renderer, cx - dx, cy + y, cx + dx, cy + y);
     }
 }
 
@@ -149,12 +151,12 @@ void fill_ring(SDL_Renderer* renderer, int cx, int cy, int inner_radius, int out
     for (int y = -outer_radius; y <= outer_radius; ++y) {
         int outer_dx = static_cast<int>(std::sqrt(static_cast<double>(outer_radius * outer_radius - y * y)));
         if (inner_radius == 0 || std::abs(y) > inner_radius) {
-            SDL_RenderDrawLine(renderer, cx - outer_dx, cy + y, cx + outer_dx, cy + y);
+            SDL_RenderLine(renderer, cx - outer_dx, cy + y, cx + outer_dx, cy + y);
             continue;
         }
         int inner_dx = static_cast<int>(std::sqrt(static_cast<double>(inner_radius * inner_radius - y * y)));
-        SDL_RenderDrawLine(renderer, cx - outer_dx, cy + y, cx - inner_dx, cy + y);
-        SDL_RenderDrawLine(renderer, cx + inner_dx, cy + y, cx + outer_dx, cy + y);
+        SDL_RenderLine(renderer, cx - outer_dx, cy + y, cx - inner_dx, cy + y);
+        SDL_RenderLine(renderer, cx + inner_dx, cy + y, cx + outer_dx, cy + y);
     }
 }
 }
@@ -282,21 +284,21 @@ int MapLayersPreviewWidget::height_for_width(int w) const {
 
 bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
     ensure_latest_visuals();
-    const bool pointer_event = (e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP);
+    const bool pointer_event = (e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP);
     if (!pointer_event) {
         return false;
     }
     SDL_Point p{0, 0};
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         p.x = e.motion.x;
         p.y = e.motion.y;
     } else {
         p.x = e.button.x;
         p.y = e.button.y;
     }
-    const bool inside = SDL_PointInRect(&p, &rect_) == SDL_TRUE;
+    const bool inside = SDL_PointInRect(&p, &rect_);
     if (!inside) {
-        if (e.type == SDL_MOUSEMOTION) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
             if (refresh_hovered_) {
                 refresh_hovered_ = false;
                 request_geometry_update();
@@ -306,8 +308,8 @@ bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
         return false;
     }
 
-    const bool over_refresh = SDL_PointInRect(&p, &refresh_button_rect_) == SDL_TRUE;
-    if (e.type == SDL_MOUSEMOTION) {
+    const bool over_refresh = SDL_PointInRect(&p, &refresh_button_rect_);
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         if (refresh_hovered_ != over_refresh) {
             refresh_hovered_ = over_refresh;
             request_geometry_update();
@@ -315,11 +317,11 @@ bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
     }
 
     if (over_refresh) {
-        if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             regenerate_preview();
             return true;
         }
-        if (e.type == SDL_MOUSEMOTION) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
             clear_hover_state();
             return true;
         }
@@ -327,11 +329,11 @@ bool MapLayersPreviewWidget::handle_event(const SDL_Event& e) {
 
     const int layer_hit = hit_test_layer(p.x, p.y);
     const std::string room_hit = hit_test_room(p.x, p.y);
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         update_hover_state(layer_hit, room_hit);
         return (layer_hit >= 0 || !room_hit.empty());
     }
-    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         handle_preview_click(layer_hit, room_hit);
         return true;
     }
@@ -670,7 +672,7 @@ int MapLayersPreviewWidget::hit_test_layer(int x, int y) const {
         return -1;
     }
     SDL_Point point{x, y};
-    if (SDL_PointInRect(&point, &preview_rect_) != SDL_TRUE) {
+    if (!SDL_PointInRect(&point, &preview_rect_)) {
         return -1;
     }
     double scale = preview_scale_;
@@ -711,7 +713,7 @@ std::string MapLayersPreviewWidget::hit_test_room(int x, int y) const {
         return {};
     }
     SDL_Point point{x, y};
-    if (SDL_PointInRect(&point, &preview_rect_) != SDL_TRUE) {
+    if (!SDL_PointInRect(&point, &preview_rect_)) {
         return {};
     }
     double scale = preview_scale_;
@@ -767,7 +769,7 @@ void MapLayersPreviewWidget::render_preview(SDL_Renderer* renderer) const {
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
     const SDL_Color bg = DMStyles::PanelBG();
     SDL_SetRenderDrawColor(renderer, bg.r, bg.g, bg.b, bg.a);
-    SDL_RenderFillRect(renderer, &rect);
+    sdl_render::FillRect(renderer, &rect);
 
     const SDL_Color border = DMStyles::Border();
     dm_draw::DrawRoundedOutline(renderer, rect, DMStyles::CornerRadius(), 1, border);
@@ -957,7 +959,7 @@ void MapLayersPreviewWidget::render_refresh_button(SDL_Renderer* renderer) const
     int text_w = 0;
     int text_h = icon_style.font_size;
     if (TTF_Font* font = icon_style.open_font()) {
-        if (TTF_SizeUTF8(font, refresh_icon.c_str(), &text_w, &text_h) != 0) {
+        if (!ttf_util::GetStringSize(font, refresh_icon, &text_w, &text_h)) {
             text_w = 0;
             text_h = icon_style.font_size;
         }
@@ -978,7 +980,7 @@ void MapLayersPreviewWidget::render_room_legend(SDL_Renderer* renderer) const {
     SDL_Color legend_bg = lighten(panel_bg, 0.06f);
     legend_bg.a = panel_bg.a;
     SDL_SetRenderDrawColor(renderer, legend_bg.r, legend_bg.g, legend_bg.b, legend_bg.a);
-    SDL_RenderFillRect(renderer, &legend);
+    sdl_render::FillRect(renderer, &legend);
 
     const SDL_Color border_color = DMStyles::Border();
     dm_draw::DrawRoundedOutline(renderer, legend, DMStyles::CornerRadius(), 1, border_color);
@@ -1009,9 +1011,9 @@ void MapLayersPreviewWidget::render_room_legend(SDL_Renderer* renderer) const {
         }
         fill.a = hovered ? 220 : 180;
         SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-        SDL_RenderFillRect(renderer, &swatch);
+        sdl_render::FillRect(renderer, &swatch);
         SDL_SetRenderDrawColor(renderer, border_color.r, border_color.g, border_color.b, border_color.a);
-        SDL_RenderDrawRect(renderer, &swatch);
+        sdl_render::Rect(renderer, &swatch);
 
         DMLabelStyle label_style = base_label;
         if (hovered) {
@@ -1025,3 +1027,6 @@ void MapLayersPreviewWidget::render_room_legend(SDL_Renderer* renderer) const {
         }
     }
 }
+
+
+

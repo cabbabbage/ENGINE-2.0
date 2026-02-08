@@ -1,4 +1,6 @@
 #include "button.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 #include "button_settings.hpp"
 
 #include <algorithm>
@@ -12,7 +14,7 @@
 #include <vector>
 #include <limits>
 
-#include <SDL_image.h>
+#include <SDL3_image/SDL_image.h>
 
 #include "core/manifest/manifest_loader.hpp"
 
@@ -58,7 +60,7 @@ inline Float3 lerp(const Float3& a, const Float3& b, float t) {
         a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t };
 }
 
-struct SurfaceDeleter { void operator()(SDL_Surface* s) const { if (s) SDL_FreeSurface(s); } };
+struct SurfaceDeleter { void operator()(SDL_Surface* s) const { if (s) SDL_DestroySurface(s); } };
 using SurfacePtr = std::unique_ptr<SDL_Surface, SurfaceDeleter>;
 
 inline SurfacePtr make_surface_ptr(SDL_Surface* surface) {
@@ -82,8 +84,8 @@ inline SDL_Color unpack(Uint32 px) {
 #endif
     return c;
 }
-inline Uint32 pack(SDL_PixelFormat* fmt, const SDL_Color& c) {
-    return SDL_MapRGBA(fmt, c.r, c.g, c.b, c.a);
+inline Uint32 pack(const SDL_PixelFormatDetails* fmt, const SDL_Palette* palette, const SDL_Color& c) {
+    return fmt ? SDL_MapRGBA(fmt, palette, c.r, c.g, c.b, c.a) : 0;
 }
 inline float luminance(const SDL_Color& c) {
     return (0.2126f * c.r + 0.7152f * c.g + 0.0722f * c.b) / 255.0f;
@@ -127,17 +129,17 @@ OverlayImage load_overlay_image(const fs::path& path) {
 
     SurfacePtr surface = make_surface_ptr(IMG_Load(path.u8string().c_str()));
     if (!surface) {
-        SDL_Log("GlassButton: failed to load overlay '%s': %s", path.u8string().c_str(), IMG_GetError());
+        SDL_Log("GlassButton: failed to load overlay '%s': %s", path.u8string().c_str(), SDL_GetError());
         return img;
     }
 
-    SurfacePtr converted = make_surface_ptr(SDL_ConvertSurfaceFormat(surface.get(), SDL_PIXELFORMAT_RGBA32, 0));
+    SurfacePtr converted = make_surface_ptr(SDL_ConvertSurface(surface.get(), SDL_PIXELFORMAT_RGBA32));
     if (!converted) {
         SDL_Log("GlassButton: failed to convert overlay '%s' to RGBA32: %s", path.u8string().c_str(), SDL_GetError());
         return img;
     }
 
-    if (SDL_LockSurface(converted.get()) != 0) {
+    if (!SDL_LockSurface(converted.get())) {
         SDL_Log("GlassButton: failed to lock overlay '%s': %s", path.u8string().c_str(), SDL_GetError());
         return img;
     }
@@ -309,7 +311,7 @@ inline SDL_Rect adjusted_for_state(SDL_Rect r, bool hovered, bool pressed) {
 
 inline SDL_Rect clamp_to_view(SDL_Renderer* r, SDL_Rect rect) {
     SDL_Rect vp{0,0,0,0};
-    if (r) SDL_RenderGetViewport(r, &vp);
+    if (r) SDL_GetRenderViewport(r, &vp);
     int x1 = std::max(rect.x, vp.x);
     int y1 = std::max(rect.y, vp.y);
     int x2 = std::min(rect.x + rect.w, vp.x + vp.w);
@@ -319,13 +321,23 @@ inline SDL_Rect clamp_to_view(SDL_Renderer* r, SDL_Rect rect) {
 
 SurfacePtr capture(SDL_Renderer* renderer, const SDL_Rect& rect) {
     if (rect.w <= 0 || rect.h <= 0) return {};
-    SurfacePtr s = make_surface_ptr(SDL_CreateRGBSurfaceWithFormat(0, rect.w, rect.h, 32, SDL_PIXELFORMAT_RGBA32));
-    if (!s) return {};
-    if (SDL_RenderReadPixels(renderer, &rect, s->format->format, s->pixels, s->pitch) != 0) {
+    SDL_Surface* captured = SDL_RenderReadPixels(renderer, &rect);
+    if (!captured) {
         SDL_Log("GlassButton: SDL_RenderReadPixels failed: %s", SDL_GetError());
         return {};
     }
-    return s;
+
+    SDL_Surface* working = captured;
+    if (captured->format != SDL_PIXELFORMAT_RGBA32) {
+        working = SDL_ConvertSurface(captured, SDL_PIXELFORMAT_RGBA32);
+        SDL_DestroySurface(captured);
+        if (!working) {
+            SDL_Log("GlassButton: SDL_ConvertSurface failed: %s", SDL_GetError());
+            return {};
+        }
+    }
+
+    return make_surface_ptr(working);
 }
 
 static inline uint32_t wang_hash(uint32_t x) {
@@ -434,13 +446,13 @@ const std::string& Button::text() const { return label_; }
 
 bool Button::handle_event(const SDL_Event& e) {
     bool clicked = false;
-    if (e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p{ e.motion.x, e.motion.y };
         hovered_ = SDL_PointInRect(&p, &rect_);
-    } else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         if (SDL_PointInRect(&p, &rect_)) pressed_ = true;
-    } else if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p{ e.button.x, e.button.y };
         const bool inside = SDL_PointInRect(&p, &rect_);
         if (pressed_ && inside) clicked = true;
@@ -462,14 +474,14 @@ void Button::render(SDL_Renderer* renderer) const {
 
     TTF_Font* f = style_->label.open_font();
     if (f) {
-        int tw=0, th=0; TTF_SizeText(f, label_.c_str(), &tw, &th);
-        SDL_Surface* s = TTF_RenderText_Blended(f, label_.c_str(), chosen);
+        int tw=0, th=0; ttf_util::GetStringSize(f, label_, &tw, &th);
+        SDL_Surface* s = ttf_util::RenderTextBlended(f, label_, chosen);
         if (s) {
             SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
             SDL_Rect dst{ rect_.x + (rect_.w - tw)/2, rect_.y + (rect_.h - th)/2, tw, th };
-            SDL_RenderCopy(renderer, t, nullptr, &dst);
+            sdl_render::Texture(renderer, t, nullptr, &dst);
             SDL_DestroyTexture(t);
-            SDL_FreeSurface(s);
+            SDL_DestroySurface(s);
         }
         TTF_CloseFont(f);
     }
@@ -483,9 +495,9 @@ int  Button::height() { return 64; }
 void Button::draw_deco(SDL_Renderer* r, const SDL_Rect& b, bool hovered) const {
     SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
     SDL_SetRenderDrawColor(r, 20,20,20, hovered ? 120 : 96);
-    SDL_RenderFillRect(r, &b);
+    sdl_render::FillRect(r, &b);
     SDL_SetRenderDrawColor(r, 255,255,255, 36);
-    SDL_RenderDrawRect(r, &b);
+    sdl_render::Rect(r, &b);
 }
 
 const GlassButtonStyle& Button::default_glass_style() {
@@ -528,15 +540,20 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
     SurfacePtr bg = capture(renderer, cap);
     if (!bg) return;
 
-    SurfacePtr comp = make_surface_ptr(SDL_CreateRGBSurfaceWithFormat(0, r.w, r.h, 32, SDL_PIXELFORMAT_RGBA32));
+    SurfacePtr comp = make_surface_ptr(SDL_CreateSurface(r.w, r.h, SDL_PIXELFORMAT_RGBA32));
     if (!comp) return;
 
-    if (SDL_LockSurface(comp.get()) != 0) return;
+    if (!SDL_LockSurface(comp.get())) return;
+    const SDL_PixelFormatDetails* fmt = SDL_GetPixelFormatDetails(comp->format);
+    SDL_Palette* comp_palette = SDL_GetSurfacePalette(comp.get());
+    if (!fmt) {
+        SDL_UnlockSurface(comp.get());
+        return;
+    }
     Uint32* dst = static_cast<Uint32*>(comp->pixels);
-    SDL_PixelFormat* fmt = comp->format;
     const int dpitch = comp->pitch / 4;
 
-    if (SDL_LockSurface(bg.get()) != 0) {
+    if (!SDL_LockSurface(bg.get())) {
         SDL_UnlockSurface(comp.get());
         return;
     }
@@ -752,7 +769,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
             Lacc += luminance(final_col);
             ++Lcount;
 
-            dst[y * dpitch + x] = pack(fmt, out);
+            dst[y * dpitch + x] = pack(fmt, comp_palette, out);
         }
     }
 
@@ -769,7 +786,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
     SDL_Texture* tex = to_texture(renderer, comp.get());
     if (!tex) return;
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    SDL_RenderCopy(renderer, tex, nullptr, &r);
+    sdl_render::Texture(renderer, tex, nullptr, &r);
     SDL_DestroyTexture(tex);
 }
 
@@ -780,7 +797,7 @@ void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const
 
     SDL_Rect rr = adjusted_for_state(rect, hovered_, pressed_);
     int tw=0, th=0;
-    TTF_SizeText(font, label_.c_str(), &tw, &th);
+    ttf_util::GetStringSize(font, label_, &tw, &th);
     const int x = rr.x + (rr.w - tw)/2;
     const int y = rr.y + (rr.h - th)/2;
 
@@ -796,8 +813,8 @@ void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const
         text.b = clamp8(static_cast<int>(text.b * 0.95f));
     }
 
-    SDL_Surface* s_text   = TTF_RenderText_Blended(font, label_.c_str(), text);
-    SDL_Surface* s_stroke = stroke.a ? TTF_RenderText_Blended(font, label_.c_str(), stroke) : nullptr;
+    SDL_Surface* s_text   = ttf_util::RenderTextBlended(font, label_, text);
+    SDL_Surface* s_stroke = stroke.a ? ttf_util::RenderTextBlended(font, label_, stroke) : nullptr;
 
     SDL_Texture* t_text   = s_text   ? SDL_CreateTextureFromSurface(renderer, s_text)   : nullptr;
     SDL_Texture* t_stroke = s_stroke ? SDL_CreateTextureFromSurface(renderer, s_stroke) : nullptr;
@@ -809,18 +826,21 @@ void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const
         }};
         for (auto o : offs) {
             SDL_Rect d{ x + o.x, y + o.y, s_stroke->w, s_stroke->h };
-            SDL_RenderCopy(renderer, t_stroke, nullptr, &d);
+            sdl_render::Texture(renderer, t_stroke, nullptr, &d);
         }
     }
     if (t_text) {
         SDL_SetTextureBlendMode(t_text, SDL_BLENDMODE_BLEND);
         SDL_Rect d{ x, y, s_text->w, s_text->h };
-        SDL_RenderCopy(renderer, t_text, nullptr, &d);
+        sdl_render::Texture(renderer, t_text, nullptr, &d);
     }
 
     if (t_text) SDL_DestroyTexture(t_text);
     if (t_stroke) SDL_DestroyTexture(t_stroke);
-    if (s_text) SDL_FreeSurface(s_text);
-    if (s_stroke) SDL_FreeSurface(s_stroke);
+    if (s_text) SDL_DestroySurface(s_text);
+    if (s_stroke) SDL_DestroySurface(s_stroke);
     TTF_CloseFont(font);
 }
+
+
+

@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
 
 class Input;
@@ -101,3 +101,4 @@ class BoundarySpawnGroupModal {
     std::function<void(const std::string&, const std::string&)> on_open_area_{};
     std::function<void()> on_close_{};
 };
+

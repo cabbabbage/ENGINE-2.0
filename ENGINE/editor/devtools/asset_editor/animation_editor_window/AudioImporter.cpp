@@ -1,7 +1,7 @@
 #include "AudioImporter.hpp"
 
-#include <SDL_log.h>
-#include <SDL_mixer.h>
+#include <SDL3/SDL_log.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cctype>
@@ -121,35 +121,56 @@ void AudioImporter::play_preview(const std::filesystem::path& audio_path) {
         return;
     }
 
-    Mix_Chunk* raw = Mix_LoadWAV(absolute.string().c_str());
-    if (!raw) {
-        SDL_Log("AudioImporter: failed to load preview '%s': %s", absolute.string().c_str(), Mix_GetError());
+    SDL_AudioSpec src_spec{};
+    Uint8* src_data = nullptr;
+    Uint32 src_len = 0;
+    if (!SDL_LoadWAV(absolute.string().c_str(), &src_spec, &src_data, &src_len)) {
+        SDL_Log("AudioImporter: failed to load preview '%s': %s", absolute.string().c_str(), SDL_GetError());
         return;
     }
 
-    preview_chunk_.reset(raw, Mix_FreeChunk);
-    preview_channel_ = Mix_PlayChannel(-1, preview_chunk_.get(), 0);
-    if (preview_channel_ < 0) {
-        SDL_Log("AudioImporter: failed to play preview: %s", Mix_GetError());
-        preview_chunk_.reset();
+    SDL_AudioSpec dst_spec{SDL_AUDIO_F32, 2, 44100};
+    Uint8* dst_data = nullptr;
+    int dst_len = 0;
+    if (!SDL_ConvertAudioSamples(&src_spec, src_data, static_cast<int>(src_len), &dst_spec, &dst_data, &dst_len)) {
+        SDL_Log("AudioImporter: failed to convert preview '%s': %s", absolute.string().c_str(), SDL_GetError());
+        SDL_free(src_data);
+        return;
+    }
+    SDL_free(src_data);
+
+    preview_stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &dst_spec, nullptr, nullptr);
+    if (!preview_stream_) {
+        SDL_Log("AudioImporter: failed to open audio device: %s", SDL_GetError());
+        SDL_free(dst_data);
+        return;
+    }
+    SDL_ResumeAudioDevice(SDL_GetAudioStreamDevice(preview_stream_));
+
+    preview_buffer_.assign(dst_data, dst_data + dst_len);
+    SDL_free(dst_data);
+    if (!SDL_PutAudioStreamData(preview_stream_, preview_buffer_.data(), dst_len)) {
+        SDL_Log("AudioImporter: failed to play preview: %s", SDL_GetError());
+        stop_preview();
+        return;
     }
 }
 
 void AudioImporter::stop_preview() {
-    if (preview_channel_ >= 0) {
-        Mix_HaltChannel(preview_channel_);
-        preview_channel_ = -1;
+    if (preview_stream_) {
+        SDL_ClearAudioStream(preview_stream_);
+        SDL_DestroyAudioStream(preview_stream_);
+        preview_stream_ = nullptr;
     }
-    preview_chunk_.reset();
+    preview_buffer_.clear();
 }
 
 bool AudioImporter::is_previewing() const {
-    if (preview_channel_ < 0) {
+    if (!preview_stream_) {
         return false;
     }
-    if (Mix_Playing(preview_channel_) == 0) {
-        preview_channel_ = -1;
-        preview_chunk_.reset();
+    if (SDL_GetAudioStreamAvailable(preview_stream_) <= 0) {
+        const_cast<AudioImporter*>(this)->stop_preview();
         return false;
     }
     return true;
@@ -163,4 +184,3 @@ std::filesystem::path AudioImporter::resolve_asset_path(const std::filesystem::p
 }
 
 }
-

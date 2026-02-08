@@ -10,7 +10,7 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 
 
 ## Overview
-- SDL2-based 2D engine; content lives in external JSON-driven files for maps, assets, lighting, and animations.
+- SDL3-based 2D engine; content lives in external JSON-driven files for maps, assets, lighting, and animations.
 - Manifest-driven loading keeps game data out of the executable so asset changes do not require recompiles.
 - Dev Mode ships in-engine for editing rooms, lighting, assets, and spawns with immediate write-through to content files.
 - Asset tools regenerate animation and lighting caches from manifest flags to keep generated art in sync.

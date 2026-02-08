@@ -53,7 +53,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                   bool apply_scale = true,
                                   double angle = 0.0,
                                   std::optional<SDL_Point> center = std::nullopt,
-                                  SDL_RendererFlip flip = SDL_FLIP_NONE,
+                                  SDL_FlipMode flip = SDL_FLIP_NONE,
                                   std::optional<SDL_Point> texture_size = std::nullopt,
                                   float world_z_offset = 0.0f,
                                   std::optional<SDL_Rect> src_rect = std::nullopt) {
@@ -127,7 +127,12 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
     if (base_tex) {
         int texture_w = 0;
         int texture_h = 0;
-        SDL_QueryTexture(base_tex, nullptr, nullptr, &texture_w, &texture_h);
+        float texture_wf = 0.0f;
+        float texture_hf = 0.0f;
+        if (SDL_GetTextureSize(base_tex, &texture_wf, &texture_hf)) {
+            texture_w = static_cast<int>(std::lround(texture_wf));
+            texture_h = static_cast<int>(std::lround(texture_hf));
+        }
 
         SDL_Rect src_rect{0, 0, texture_w, texture_h};
         bool has_src_rect = false;
@@ -158,7 +163,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             final_w,
             final_h
         };
-        SDL_RendererFlip base_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+        SDL_FlipMode base_flip = asset->flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
         const Uint8 asset_alpha = static_cast<Uint8>(std::lround(std::clamp(asset->smoothed_alpha(), 0.0f, 1.0f) * 255.0f));
         add_render_object(base_tex,
                           dest_rect,
@@ -179,7 +184,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             const WarpedScreenGrid& cam = assets_->getView();
             if (const auto* gp = cam.grid_point_for_asset(asset)) {
                 int screen_width = 0, screen_height = 0;
-                SDL_GetRendererOutputSize(renderer_, &screen_width, &screen_height);
+                SDL_GetCurrentRenderOutputSize(renderer_, &screen_width, &screen_height);
                 const float center_y = static_cast<float>(screen_height) * 0.5f;
                 vertical_distance_from_center = std::abs(gp->screen.y - center_y);
                 is_above_center = gp->screen.y < center_y;
@@ -208,7 +213,12 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             if (overlay_alpha > 0) {
                 int overlay_tex_w = 0;
                 int overlay_tex_h = 0;
-                SDL_QueryTexture(overlay_texture, nullptr, nullptr, &overlay_tex_w, &overlay_tex_h);
+                float overlay_tex_wf = 0.0f;
+                float overlay_tex_hf = 0.0f;
+                if (SDL_GetTextureSize(overlay_texture, &overlay_tex_wf, &overlay_tex_hf)) {
+                    overlay_tex_w = static_cast<int>(std::lround(overlay_tex_wf));
+                    overlay_tex_h = static_cast<int>(std::lround(overlay_tex_hf));
+                }
                 overlay_tex_w = std::max(1, overlay_tex_w);
                 overlay_tex_h = std::max(1, overlay_tex_h);
                 add_render_object(overlay_texture,
@@ -251,3 +261,4 @@ void CompositeAssetRenderer::calculate_local_bounds(Asset* asset) {
 
     asset->composite_bounds_local_ = bounds;
 }
+

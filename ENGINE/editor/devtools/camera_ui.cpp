@@ -1,7 +1,8 @@
 #include "camera_ui.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
-#include <SDL.h>
-#include <SDL_image.h>
+#include <SDL3/SDL.h>
+#include <SDL3_image/SDL_image.h>
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -136,11 +137,11 @@ public:
         SDL_Color accent = DMStyles::AccentButton().bg;
         SDL_Color background{ accent.r, accent.g, accent.b, static_cast<Uint8>(220) };
         SDL_SetRenderDrawColor(renderer, background.r, background.g, background.b, background.a);
-        SDL_RenderFillRect(renderer, &rect_);
+        sdl_render::FillRect(renderer, &rect_);
 
         SDL_Color border = DMStyles::AccentButton().border;
         SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-        SDL_RenderDrawRect(renderer, &rect_);
+        sdl_render::Rect(renderer, &rect_);
 
         const int pad = padding();
         SDL_Rect content{ rect_.x + pad, rect_.y + pad, rect_.w - 2 * pad, rect_.h - 2 * pad };
@@ -242,7 +243,7 @@ public:
     bool handle_event(const SDL_Event& e) override {
         if (!button_) return false;
         bool used = button_->handle_event(e);
-        if (used && e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (used && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             set_expanded(!expanded_);
             if (on_toggle_) {
                 on_toggle_(expanded_);
@@ -667,3 +668,7 @@ void CameraUIPanel::apply_settings_if_needed() {
 
     assets_->on_camera_settings_changed();
 }
+
+
+
+

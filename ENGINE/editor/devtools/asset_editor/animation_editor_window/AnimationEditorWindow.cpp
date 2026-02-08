@@ -1,7 +1,10 @@
 #include "AnimationEditorWindow.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/sdl_mouse_utils.hpp"
+#include "utils/ttf_render_utils.hpp"
 
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include <algorithm>
 #include <array>
@@ -169,7 +172,7 @@ void render_label(SDL_Renderer* renderer, const std::string& text, int x, int y)
     TTF_Font* font = style.open_font();
     if (!font) return;
 
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), style.color);
+    SDL_Surface* surf = ttf_util::RenderTextBlended(font, text.c_str(), style.color);
     if (!surf) {
         TTF_CloseFont(font);
         return;
@@ -178,10 +181,10 @@ void render_label(SDL_Renderer* renderer, const std::string& text, int x, int y)
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (tex) {
         SDL_Rect dst{x, y, surf->w, surf->h};
-        SDL_RenderCopy(renderer, tex, nullptr, &dst);
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
         SDL_DestroyTexture(tex);
     }
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     TTF_CloseFont(font);
 }
 
@@ -895,7 +898,7 @@ void AnimationEditorWindow::update(const Input& input, int screen_w, int screen_
     if (!visible_) return;
 
     int mouse_x, mouse_y;
-    SDL_GetMouseState(&mouse_x, &mouse_y);
+    sdl_mouse_util::GetMouseState(&mouse_x, &mouse_y);
     if (mouse_x >= bounds_.x && mouse_x < bounds_.x + bounds_.w &&
         mouse_y >= bounds_.y && mouse_y < bounds_.y + bounds_.h) {
         auto& mutable_input = const_cast<Input&>(input);
@@ -966,7 +969,7 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
             return true;
         }
 
-        if (e.type == SDL_MOUSEBUTTONDOWN) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
             SDL_Point p{e.button.x, e.button.y};
             SDL_Rect menu_bounds = list_context_menu_->bounds();
             if (!SDL_PointInRect(&p, &menu_bounds)) {
@@ -974,18 +977,18 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
             }
         }
 
-        if (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE) {
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
             list_context_menu_->close();
             return true;
         }
     }
 
     if (inspector_panel_ && selected_animation_id_) {
-        if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP ||
-            e.type == SDL_MOUSEMOTION || e.type == SDL_MOUSEWHEEL) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP ||
+            e.type == SDL_EVENT_MOUSE_MOTION || e.type == SDL_EVENT_MOUSE_WHEEL) {
             int mx = 0, my = 0;
-            if (e.type == SDL_MOUSEMOTION) { mx = e.motion.x; my = e.motion.y; }
-            else if (e.type == SDL_MOUSEWHEEL) { SDL_GetMouseState(&mx, &my); }
+            if (e.type == SDL_EVENT_MOUSE_MOTION) { mx = e.motion.x; my = e.motion.y; }
+            else if (e.type == SDL_EVENT_MOUSE_WHEEL) { sdl_mouse_util::GetMouseState(&mx, &my); }
             else { mx = e.button.x; my = e.button.y; }
             SDL_Point mp{mx, my};
             if (SDL_PointInRect(&mp, &inspector_rect_)) {
@@ -1008,19 +1011,19 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         return true;
     }
 
-    if (e.type == SDL_KEYDOWN) {
-        if (e.key.keysym.sym == SDLK_ESCAPE) {
+    if (e.type == SDL_EVENT_KEY_DOWN) {
+        if (e.key.key == SDLK_ESCAPE) {
             set_visible(false);
             return true;
         }
     }
 
-    if (e.type == SDL_MOUSEBUTTONDOWN || e.type == SDL_MOUSEBUTTONUP || e.type == SDL_MOUSEMOTION) {
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point p;
-        if (e.type == SDL_MOUSEMOTION) { p.x = e.motion.x; p.y = e.motion.y; }
+        if (e.type == SDL_EVENT_MOUSE_MOTION) { p.x = e.motion.x; p.y = e.motion.y; }
         else { p.x = e.button.x; p.y = e.button.y; }
 
-        if (list_context_menu_ && e.type == SDL_MOUSEBUTTONDOWN) {
+        if (list_context_menu_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
             list_context_menu_->close();
         }
 
@@ -1032,10 +1035,10 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (e.type == SDL_MOUSEWHEEL) {
+    if (e.type == SDL_EVENT_MOUSE_WHEEL) {
         int mx = 0;
         int my = 0;
-        SDL_GetMouseState(&mx, &my);
+        sdl_mouse_util::GetMouseState(&mx, &my);
         SDL_Point p{mx, my};
 
         if (inspector_panel_ && selected_animation_id_ && SDL_PointInRect(&p, &inspector_rect_)) {
@@ -1270,7 +1273,7 @@ void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) 
         inspector_background_cache_ &&
         inspector_background_cache_rect_.w == inspector_rect_.w &&
         inspector_background_cache_rect_.h == inspector_rect_.h) {
-        SDL_RenderCopy(renderer, inspector_background_cache_, nullptr, &inspector_rect_);
+        sdl_render::Texture(renderer, inspector_background_cache_, nullptr, &inspector_rect_);
         return;
     }
 
@@ -1279,7 +1282,7 @@ void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) 
         inspector_background_cache_ = nullptr;
     }
 
-    SDL_Texture* cache = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, inspector_rect_.w, inspector_rect_.h);
+    SDL_Texture* cache = SDL_CreateTexture(renderer, static_cast<SDL_PixelFormat>(SDL_PIXELFORMAT_RGBA8888), SDL_TEXTUREACCESS_TARGET, inspector_rect_.w, inspector_rect_.h);
     if (!cache) {
         return;
     }
@@ -1291,7 +1294,7 @@ void AnimationEditorWindow::render_inspector_background(SDL_Renderer* renderer) 
     inspector_background_cache_ = cache;
     inspector_background_cache_rect_ = SDL_Rect{inspector_rect_.x, inspector_rect_.y, inspector_rect_.w, inspector_rect_.h};
     inspector_background_dirty_ = false;
-    SDL_RenderCopy(renderer, cache, nullptr, &inspector_rect_);
+    sdl_render::Texture(renderer, cache, nullptr, &inspector_rect_);
 }
 
 bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
@@ -1301,7 +1304,7 @@ bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
         bool activated = button->handle_event(e);
         if (!activated) return;
 
-        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             callback();
         }
         consumed = true;
@@ -2721,3 +2724,7 @@ std::optional<std::filesystem::path> AnimationEditorWindow::pick_audio_file() co
 }
 
 }
+
+
+
+

@@ -1,7 +1,9 @@
 #include "core/popup_manager.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
-#include <SDL.h>
-#include <SDL_ttf.h>
+#include <SDL3/SDL.h>
+#include <SDL3_ttf/SDL_ttf.h>
 
 #include <algorithm>
 #include <cmath>
@@ -16,7 +18,7 @@ namespace {
 struct SDLSurfaceDeleter {
     void operator()(SDL_Surface* surface) const {
         if (surface) {
-            SDL_FreeSurface(surface);
+            SDL_DestroySurface(surface);
         }
     }
 };
@@ -164,7 +166,7 @@ void PopupManager::render(SDL_Renderer* renderer, int screen_w, int screen_h, Ui
                                      DMStyles::ShadowIntensity());
 
             SDL_SetTextureBlendMode(toast_.texture.get(), SDL_BLENDMODE_BLEND);
-            SDL_RenderCopy(renderer, toast_.texture.get(), nullptr, &dest);
+            sdl_render::Texture(renderer, toast_.texture.get(), nullptr, &dest);
         }
     }
 
@@ -206,7 +208,7 @@ void PopupManager::render(SDL_Renderer* renderer, int screen_w, int screen_h, Ui
 
                 SDL_SetTextureBlendMode(indicator_.texture.get(), SDL_BLENDMODE_BLEND);
                 SDL_SetTextureAlphaMod(indicator_.texture.get(), alpha_byte);
-                SDL_RenderCopy(renderer, indicator_.texture.get(), nullptr, &dest);
+                sdl_render::Texture(renderer, indicator_.texture.get(), nullptr, &dest);
             }
         }
     }
@@ -233,7 +235,7 @@ void PopupManager::rebuild_toast_texture(SDL_Renderer* renderer) {
     }
 
     std::unique_ptr<SDL_Surface, SDLSurfaceDeleter> surface(
-        TTF_RenderUTF8_Blended(font, toast_.message.c_str(), toast_style_.color));
+        ttf_util::RenderTextBlended(font, toast_.message.c_str(), toast_style_.color));
     if (!surface) {
         toast_.dirty = false;
         toast_.visible = false;
@@ -274,7 +276,7 @@ void PopupManager::rebuild_indicator_texture(SDL_Renderer* renderer) {
     }
 
     std::unique_ptr<SDL_Surface, SDLSurfaceDeleter> surface(
-        TTF_RenderUTF8_Blended(font, indicator_.label_text.c_str(), indicator_style_.color));
+        ttf_util::RenderTextBlended(font, indicator_.label_text.c_str(), indicator_style_.color));
     if (!surface) {
         indicator_.dirty = false;
         indicator_.showing = false;
@@ -321,3 +323,6 @@ float PopupManager::compute_indicator_alpha(Uint32 now) const {
 bool PopupManager::has_active_content() const {
     return toast_.visible || indicator_.showing;
 }
+
+
+

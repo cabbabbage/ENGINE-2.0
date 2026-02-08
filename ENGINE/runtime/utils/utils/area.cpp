@@ -1,4 +1,5 @@
 #include "area.hpp"
+#include "utils/sdl_render_conversions.hpp"
 #include "cache_manager.hpp"
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -10,9 +11,6 @@
 #include <filesystem>
 #include <sstream>
 #include <optional>
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
 
 static std::mt19937 rng{std::random_device{}()};
 
@@ -154,7 +152,7 @@ void Area::generate_circle(SDL_Point center, int radius, int edge_smoothness, in
 	points.clear();
 	points.reserve(count);
 	for (int i = 0; i < count; ++i) {
-		double theta = 2 * M_PI * i / count;
+		double theta = 2 * SDL_PI_D * i / count;
 		double rx = radius * dist(rng), ry = radius * dist(rng);
 		double x = center.x + rx * std::cos(theta);
 		double y = center.y + ry * std::sin(theta);
@@ -310,7 +308,7 @@ void Area::create_area_texture(SDL_Renderer* renderer) {
 	auto [minx, miny, maxx, maxy] = get_bounds();
 	int w = maxx - minx + 1;
 	int h = maxy - miny + 1;
-	SDL_Texture* target = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA8888, SDL_TEXTUREACCESS_TARGET, w, h);
+	SDL_Texture* target = SDL_CreateTexture(renderer, static_cast<SDL_PixelFormat>(SDL_PIXELFORMAT_RGBA8888), SDL_TEXTUREACCESS_TARGET, w, h);
 	if (!target) return;
 	SDL_Texture* prev_target = SDL_GetRenderTarget(renderer);
 	SDL_SetRenderTarget(renderer, target);
@@ -325,7 +323,7 @@ void Area::create_area_texture(SDL_Renderer* renderer) {
         }
         if (!line_points.empty()) {
                 line_points.push_back(line_points.front());
-                SDL_RenderDrawLines(renderer, line_points.data(), static_cast<int>(line_points.size()));
+                sdl_render::Lines(renderer, line_points.data(), static_cast<int>(line_points.size()));
         }
 	SDL_SetRenderTarget(renderer, prev_target);
 	texture_ = target;
@@ -397,4 +395,7 @@ void Area::set_resolution(int r) {
                 update_geometry_data();
         }
 }
+
+
+
 

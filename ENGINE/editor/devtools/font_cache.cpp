@@ -1,4 +1,6 @@
 #include "font_cache.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include "dm_styles.hpp"
 
@@ -57,7 +59,7 @@ SDL_Point DMFontCache::measure_text(const std::string& path, int size, const std
     }
     int w = 0;
     int h = 0;
-    if (TTF_SizeUTF8(font, text.c_str(), &w, &h) != 0) {
+    if (!ttf_util::GetStringSize(font, text, &w, &h)) {
         return kZeroPoint;
     }
     return SDL_Point{w, h};
@@ -85,22 +87,22 @@ bool DMFontCache::draw_text(SDL_Renderer* renderer,
     if (!font) {
         return false;
     }
-    SDL_Surface* surf = TTF_RenderUTF8_Blended(font, text.c_str(), color);
+    SDL_Surface* surf = ttf_util::RenderTextBlended(font, text.c_str(), color);
     if (!surf) {
         return false;
     }
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
     if (!tex) {
-        SDL_FreeSurface(surf);
+        SDL_DestroySurface(surf);
         return false;
     }
     SDL_Rect dst{x, y, surf->w, surf->h};
-    SDL_RenderCopy(renderer, tex, nullptr, &dst);
+    sdl_render::Texture(renderer, tex, nullptr, &dst);
     SDL_DestroyTexture(tex);
     if (out_rect) {
         *out_rect = dst;
     }
-    SDL_FreeSurface(surf);
+    SDL_DestroySurface(surf);
     return true;
 }
 
@@ -148,4 +150,7 @@ bool DrawLabelText(SDL_Renderer* renderer,
     }
     return result;
 }
+
+
+
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <optional>
 
 class WarpedScreenGrid;
@@ -32,3 +32,4 @@ private:
     SDL_Point tilt_start_mouse_screen_{0, 0};
     float tilt_start_degrees_ = 0.0f;
 };
+

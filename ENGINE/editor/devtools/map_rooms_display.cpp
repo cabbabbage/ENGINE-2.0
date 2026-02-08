@@ -1,4 +1,5 @@
 #include "map_rooms_display.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
 #include <utility>
@@ -211,9 +212,9 @@ void MapRoomsDisplay::render(SDL_Renderer* renderer) const {
             fill = hover_fill;
         }
         SDL_SetRenderDrawColor(renderer, fill.r, fill.g, fill.b, fill.a);
-        SDL_RenderFillRect(renderer, &row.rect);
+        sdl_render::FillRect(renderer, &row.rect);
         SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
-        SDL_RenderDrawRect(renderer, &row.rect);
+        sdl_render::Rect(renderer, &row.rect);
 
         const int padding = DMSpacing::small_gap();
         const int base_swatch = std::max(12, row.rect.h - padding * 2);
@@ -231,10 +232,10 @@ void MapRoomsDisplay::render(SDL_Renderer* renderer) const {
                 swatch_color.a = 255;
             }
             SDL_SetRenderDrawColor(renderer, swatch_color.r, swatch_color.g, swatch_color.b, swatch_color.a);
-            SDL_RenderFillRect(renderer, &swatch);
+            sdl_render::FillRect(renderer, &swatch);
             SDL_Color swatch_outline = DMStyles::Border();
             SDL_SetRenderDrawColor(renderer, swatch_outline.r, swatch_outline.g, swatch_outline.b, swatch_outline.a);
-            SDL_RenderDrawRect(renderer, &swatch);
+            sdl_render::Rect(renderer, &swatch);
             text_x = swatch.x + swatch.w + padding;
         }
 
@@ -256,22 +257,22 @@ void MapRoomsDisplay::render(SDL_Renderer* renderer) const {
             delete_fill = delete_style.hover_bg;
         }
         SDL_SetRenderDrawColor(renderer, delete_fill.r, delete_fill.g, delete_fill.b, delete_fill.a);
-        SDL_RenderFillRect(renderer, &row.delete_rect);
+        sdl_render::FillRect(renderer, &row.delete_rect);
         SDL_SetRenderDrawColor(renderer, delete_style.border.r, delete_style.border.g, delete_style.border.b, delete_style.border.a);
-        SDL_RenderDrawRect(renderer, &row.delete_rect);
+        sdl_render::Rect(renderer, &row.delete_rect);
 
         SDL_Color glyph = delete_style.text;
         SDL_SetRenderDrawColor(renderer, glyph.r, glyph.g, glyph.b, glyph.a);
         const int inset = std::max(2, row.delete_rect.w / 4);
-        SDL_RenderDrawLine(renderer, row.delete_rect.x + inset, row.delete_rect.y + inset, row.delete_rect.x + row.delete_rect.w - inset, row.delete_rect.y + row.delete_rect.h - inset);
-        SDL_RenderDrawLine(renderer, row.delete_rect.x + inset, row.delete_rect.y + row.delete_rect.h - inset, row.delete_rect.x + row.delete_rect.w - inset, row.delete_rect.y + inset);
+        SDL_RenderLine(renderer, row.delete_rect.x + inset, row.delete_rect.y + inset, row.delete_rect.x + row.delete_rect.w - inset, row.delete_rect.y + row.delete_rect.h - inset);
+        SDL_RenderLine(renderer, row.delete_rect.x + inset, row.delete_rect.y + row.delete_rect.h - inset, row.delete_rect.x + row.delete_rect.w - inset, row.delete_rect.y + inset);
     }
 }
 
 bool MapRoomsDisplay::handle_event(const SDL_Event& e) {
     if (create_room_button_) {
         const bool button_used = create_room_button_->handle_event(e);
-        if (button_used && e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+        if (button_used && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
             create_room_entry();
         }
         if (button_used) {
@@ -284,30 +285,30 @@ bool MapRoomsDisplay::handle_event(const SDL_Event& e) {
     }
 
     switch (e.type) {
-        case SDL_MOUSEMOTION:
-        case SDL_MOUSEBUTTONDOWN:
-        case SDL_MOUSEBUTTONUP: {
+        case SDL_EVENT_MOUSE_MOTION:
+        case SDL_EVENT_MOUSE_BUTTON_DOWN:
+        case SDL_EVENT_MOUSE_BUTTON_UP: {
             SDL_Point p = event_point_from_event(e);
             bool consumed = false;
             bool hovered = false;
             bool delete_hovered = false;
             for (const auto& row : rooms_) {
-                if (SDL_PointInRect(&p, &row.rect) == SDL_TRUE) {
+                if (SDL_PointInRect(&p, &row.rect)) {
                     hovered = true;
                     set_hovered_room(row.key);
-                    if (SDL_PointInRect(&p, &row.delete_rect) == SDL_TRUE) {
+                    if (SDL_PointInRect(&p, &row.delete_rect)) {
                         hovered_delete_room_ = row.key;
                         delete_hovered = true;
-                        if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                        if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                             delete_room_entry(row.key);
                             return true;
                         }
-                        if (e.type == SDL_MOUSEBUTTONUP && e.button.button == SDL_BUTTON_LEFT) {
+                        if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
                             return true;
                         }
                         break;
                     }
-                    if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+                    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                         if (on_select_room_) {
                             on_select_room_(row.key);
                         }
@@ -319,7 +320,7 @@ bool MapRoomsDisplay::handle_event(const SDL_Event& e) {
             if (!delete_hovered) {
                 hovered_delete_room_.clear();
             }
-            if (!hovered && e.type == SDL_MOUSEMOTION) {
+            if (!hovered && e.type == SDL_EVENT_MOUSE_MOTION) {
                 clear_hover();
             }
             return consumed;
@@ -479,4 +480,7 @@ void MapRoomsDisplay::delete_room_entry(const std::string& key) {
         on_rooms_changed_();
     }
 }
+
+
+
 

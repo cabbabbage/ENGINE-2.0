@@ -1,4 +1,5 @@
 #include "other_settings_and_controls.hpp"
+#include "utils/sdl_render_conversions.hpp"
 
 #include "assets/Asset.hpp"
 #include "assets/asset_types.hpp"
@@ -476,7 +477,7 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
     const SDL_Color header_bg = DMStyles::PanelHeader();
     if (header_rect_.w > 0 && header_rect_.h > 0) {
         SDL_SetRenderDrawColor(renderer, header_bg.r, header_bg.g, header_bg.b, 240);
-        SDL_RenderFillRect(renderer, &header_rect_);
+        sdl_render::FillRect(renderer, &header_rect_);
     }
 
     if (filter_toggle_button_) {
@@ -496,7 +497,7 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
     if (filters_rect_.w > 0 && filters_rect_.h > 0) {
         const SDL_Color content_bg = DMStyles::PanelBG();
         SDL_SetRenderDrawColor(renderer, content_bg.r, content_bg.g, content_bg.b, 220);
-        SDL_RenderFillRect(renderer, &filters_rect_);
+        sdl_render::FillRect(renderer, &filters_rect_);
     }
 
     for (const auto& entry : entries_) {
@@ -526,7 +527,7 @@ bool OtherSettingsAndControls::handle_event(const SDL_Event& event) {
         }
         if (entry.button->handle_event(event)) {
             used = true;
-            if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT) {
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
                 set_active_mode(entry.config.id, true);
             }
         }
@@ -538,7 +539,7 @@ bool OtherSettingsAndControls::handle_event(const SDL_Event& event) {
 
     if (filter_toggle_button_ && filter_toggle_button_->handle_event(event)) {
         used = true;
-        if (event.type == SDL_MOUSEBUTTONUP && event.button.button == SDL_BUTTON_LEFT) {
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
             set_filters_expanded(!filters_expanded_);
             ensure_layout();
         }
@@ -1148,3 +1149,5 @@ void OtherSettingsAndControls::persist_filters_expanded() const {
     persistent_filters_expanded_flag() = filters_expanded_;
     devmode::ui_settings::save_bool(kSettingsFiltersExpandedKey, filters_expanded_);
 }
+
+

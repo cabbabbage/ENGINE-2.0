@@ -4,7 +4,7 @@
 #include "animation/child_attachment_controller.hpp"
 #include "asset/animation.hpp"
 #include "asset/animation_frame.hpp"
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <vector>
 
 TEST_CASE("Hidden child attachments restart from frame zero when revealed") {

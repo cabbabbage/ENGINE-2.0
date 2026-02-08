@@ -1,6 +1,7 @@
 #include "EditorUIPrimitives.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cmath>
@@ -46,24 +47,23 @@ SDL_Rect ScrollController::apply(const SDL_Rect& rect) const {
 }
 
 bool ScrollController::handle_wheel(const SDL_Event& e) {
-    if (e.type != SDL_MOUSEWHEEL) {
+    if (e.type != SDL_EVENT_MOUSE_WHEEL) {
         return false;
     }
     int mx = 0;
     int my = 0;
-    SDL_GetMouseState(&mx, &my);
+    sdl_mouse_util::GetMouseState(&mx, &my);
     SDL_Point mouse{mx, my};
     if (!SDL_PointInRect(&mouse, &bounds_)) {
         return false;
     }
 
-    int delta = e.wheel.y;
+    int delta = e.wheel.integer_y;
     if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
         delta = -delta;
     }
-#if SDL_VERSION_ATLEAST(2, 0, 18)
     if (delta == 0) {
-        float precise = e.wheel.preciseY;
+        float precise = e.wheel.y;
         if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
             precise = -precise;
         }
@@ -72,7 +72,6 @@ bool ScrollController::handle_wheel(const SDL_Event& e) {
             delta = precise > 0.0f ? 1 : -1;
         }
     }
-#endif
     return apply_wheel_delta(delta);
 }
 
@@ -101,3 +100,4 @@ void draw_panel_background(SDL_Renderer* renderer, const SDL_Rect& bounds) {
 }
 
 }
+

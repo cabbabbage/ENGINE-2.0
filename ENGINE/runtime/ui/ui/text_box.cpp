@@ -1,4 +1,6 @@
 #include "text_box.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 #include <algorithm>
 #include <cstring>
 #include <limits>
@@ -42,14 +44,14 @@ bool TextBox::set_editing(bool e) {
         bool changed = false;
         if (e) {
                 editing_ = true;
-                SDL_StartTextInput();
+                SDL_StartTextInput(SDL_GetKeyboardFocus());
                 caret_pos_ = std::min(caret_pos_, text_.size());
                 edit_origin_ = text_;
                 edit_dirty_ = false;
                 update_caret_column();
         }
         else {
-                SDL_StopTextInput();
+                SDL_StopTextInput(SDL_GetKeyboardFocus());
                 editing_ = false;
                 if (edit_dirty_ && edit_origin_ != text_) changed = true;
                 edit_dirty_ = false;
@@ -59,7 +61,7 @@ bool TextBox::set_editing(bool e) {
 
 bool TextBox::handle_event(const SDL_Event& e) {
         bool changed = false;
-        if (e.type == SDL_MOUSEMOTION) {
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
                 SDL_Point p{ e.motion.x, e.motion.y };
                 bool inside = SDL_PointInRect(&p, &rect_);
                 hovered_ = inside;
@@ -68,7 +70,7 @@ bool TextBox::handle_event(const SDL_Event& e) {
                         if (blur_changed) changed = true;
                 }
         }
-        else if (e.type == SDL_MOUSEBUTTONDOWN && e.button.button == SDL_BUTTON_LEFT) {
+        else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                 SDL_Point p{ e.button.x, e.button.y };
                 bool inside = SDL_PointInRect(&p, &rect_);
                 hovered_ = inside;
@@ -79,7 +81,7 @@ bool TextBox::handle_event(const SDL_Event& e) {
                         update_caret_column();
                 }
         }
-        else if (editing_ && e.type == SDL_TEXTINPUT) {
+        else if (editing_ && e.type == SDL_EVENT_TEXT_INPUT) {
                 text_.insert(caret_pos_, e.text.text);
                 caret_pos_ += std::strlen(e.text.text);
                 edit_dirty_ = true;
@@ -87,8 +89,8 @@ bool TextBox::handle_event(const SDL_Event& e) {
                 recompute_height();
                 update_caret_column();
         }
-        else if (editing_ && e.type == SDL_KEYDOWN) {
-                if (e.key.keysym.sym == SDLK_BACKSPACE) {
+        else if (editing_ && e.type == SDL_EVENT_KEY_DOWN) {
+                if (e.key.key == SDLK_BACKSPACE) {
                         if (caret_pos_ > 0 && !text_.empty()) {
                                 size_t erase_pos = caret_pos_ - 1;
                                 text_.erase(erase_pos, 1);
@@ -99,7 +101,7 @@ bool TextBox::handle_event(const SDL_Event& e) {
                                 update_caret_column();
                         }
                 }
-                else if (e.key.keysym.sym == SDLK_RETURN || e.key.keysym.sym == SDLK_KP_ENTER) {
+                else if (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER) {
                         text_.insert(caret_pos_, "\n");
                         ++caret_pos_;
                         edit_dirty_ = true;
@@ -107,7 +109,7 @@ bool TextBox::handle_event(const SDL_Event& e) {
                         recompute_height();
                         update_caret_column();
                 }
-                else if (e.key.keysym.sym == SDLK_DELETE) {
+                else if (e.key.key == SDLK_DELETE) {
                         if (caret_pos_ < text_.size()) {
                                 text_.erase(caret_pos_, 1);
                                 edit_dirty_ = true;
@@ -116,15 +118,15 @@ bool TextBox::handle_event(const SDL_Event& e) {
                                 update_caret_column();
                         }
                 }
-                else if (e.key.keysym.sym == SDLK_LEFT) {
+                else if (e.key.key == SDLK_LEFT) {
                         if (caret_pos_ > 0) --caret_pos_;
                         update_caret_column();
                 }
-                else if (e.key.keysym.sym == SDLK_RIGHT) {
+                else if (e.key.key == SDLK_RIGHT) {
                         if (caret_pos_ < text_.size()) ++caret_pos_;
                         update_caret_column();
                 }
-                else if (e.key.keysym.sym == SDLK_UP) {
+                else if (e.key.key == SDLK_UP) {
                         auto lines = line_info();
                         if (lines.size() > 1) {
                                 size_t pos = std::min(caret_pos_, text_.size());
@@ -138,7 +140,7 @@ bool TextBox::handle_event(const SDL_Event& e) {
                                 }
                         }
                 }
-                else if (e.key.keysym.sym == SDLK_DOWN) {
+                else if (e.key.key == SDLK_DOWN) {
                         auto lines = line_info();
                         if (lines.size() > 1) {
                                 size_t pos = std::min(caret_pos_, text_.size());
@@ -152,7 +154,7 @@ bool TextBox::handle_event(const SDL_Event& e) {
                                 }
                         }
                 }
-                else if (e.key.keysym.sym == SDLK_HOME) {
+                else if (e.key.key == SDLK_HOME) {
                         auto lines = line_info();
                         if (!lines.empty()) {
                                 size_t pos = std::min(caret_pos_, text_.size());
@@ -161,7 +163,7 @@ bool TextBox::handle_event(const SDL_Event& e) {
                         }
                         update_caret_column();
                 }
-                else if (e.key.keysym.sym == SDLK_END) {
+                else if (e.key.key == SDLK_END) {
                         auto lines = line_info();
                         if (!lines.empty()) {
                                 size_t pos = std::min(caret_pos_, text_.size());
@@ -179,15 +181,15 @@ void TextBox::draw_text(SDL_Renderer* r, const std::string& s, int x, int y, SDL
         const TextStyle style{ TextStyles::SmallMain().font_path, TextStyles::SmallMain().font_size, col };
         TTF_Font* f = style.open_font();
         if (!f) return;
-        SDL_Surface* surf = TTF_RenderText_Blended(f, s.c_str(), style.color);
+        SDL_Surface* surf = ttf_util::RenderTextBlended(f, s, style.color);
         if (surf) {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
                 if (tex) {
                         SDL_Rect dst{ x, y, surf->w, surf->h };
-                        SDL_RenderCopy(r, tex, nullptr, &dst);
+                        sdl_render::Texture(r, tex, nullptr, &dst);
                         SDL_DestroyTexture(tex);
                 }
-                SDL_FreeSurface(surf);
+                SDL_DestroySurface(surf);
         }
         TTF_CloseFont(f);
 }
@@ -201,12 +203,12 @@ void TextBox::render(SDL_Renderer* r) const {
         SDL_Rect box{ rect_.x, rect_.y, rect_.w, rect_.h };
         SDL_Color bg = Styles::Slate(); bg.a = 160;
         SDL_SetRenderDrawColor(r, bg.r, bg.g, bg.b, bg.a);
-        SDL_RenderFillRect(r, &box);
+        sdl_render::FillRect(r, &box);
         SDL_Color border_on  = Styles::Gold();
         SDL_Color border_off = Styles::GoldDim();
         SDL_Color frame = (hovered_ || editing_) ? border_on : border_off;
         SDL_SetRenderDrawColor(r, frame.r, frame.g, frame.b, 255);
-        SDL_RenderDrawRect(r, &box);
+        sdl_render::Rect(r, &box);
         SDL_Color textCol = Styles::Ivory();
         auto lines = line_info();
         int line_height = font_height();
@@ -244,14 +246,16 @@ void TextBox::render_caret(SDL_Renderer* r, int line_height) const {
                 const auto& line = lines[line_index];
                 prefix = text_.substr(line.start, std::min(column, line.length));
         }
-        if (!prefix.empty()) TTF_SizeUTF8(f, prefix.c_str(), &w, &h);
-        else { TTF_SizeUTF8(f, " ", &w, &h); w = 0; }
-        int font_height = TTF_FontHeight(f);
+        if (!prefix.empty()) {
+                ttf_util::GetStringSize(f, prefix, &w, &h);
+        }
+        else { ttf_util::GetStringSize(f, " ", &w, &h); w = 0; }
+        int font_height = TTF_GetFontHeight(f);
         if (line_height <= 0) line_height = font_height;
         int text_y = rect_.y + kVerticalPadding + static_cast<int>(line_index) * line_height;
         int caret_x = rect_.x + kHorizontalPadding + w;
         SDL_SetRenderDrawColor(r, style.color.r, style.color.g, style.color.b, style.color.a);
-        SDL_RenderDrawLine(r, caret_x, text_y, caret_x, text_y + font_height);
+        SDL_RenderLine(r, caret_x, text_y, caret_x, text_y + font_height);
         TTF_CloseFont(f);
 }
 
@@ -260,7 +264,7 @@ size_t TextBox::caret_index_from_point(int mouse_x, int mouse_y) const {
         TTF_Font* f = style.open_font();
         if (!f) return std::min(caret_pos_, text_.size());
         auto lines = line_info();
-        int line_height = TTF_FontHeight(f);
+        int line_height = TTF_GetFontHeight(f);
         if (line_height <= 0) line_height = font_height();
         int relative_y = mouse_y - (rect_.y + kVerticalPadding);
         size_t line_index = 0;
@@ -279,7 +283,9 @@ size_t TextBox::caret_index_from_point(int mouse_x, int mouse_y) const {
         for (size_t i = 0; i <= line_text.size(); ++i) {
                 std::string prefix = line_text.substr(0, i);
                 int w = 0, h = 0;
-                if (!prefix.empty()) TTF_SizeUTF8(f, prefix.c_str(), &w, &h);
+                if (!prefix.empty()) {
+                        ttf_util::GetStringSize(f, prefix, &w, &h);
+                }
                 else { w = 0; h = line_height; }
                 int diff = std::abs(w - relative);
                 if (diff < best_diff) { best_diff = diff; best_index = line.start + i; }
@@ -301,7 +307,7 @@ int TextBox::font_height() const {
         const TextStyle style{ TextStyles::SmallMain().font_path, TextStyles::SmallMain().font_size, Styles::Ivory() };
         TTF_Font* f = style.open_font();
         if (!f) return TextStyles::SmallMain().font_size;
-        int h = TTF_FontHeight(f);
+        int h = TTF_GetFontHeight(f);
         TTF_CloseFont(f);
         if (h <= 0) h = TextStyles::SmallMain().font_size;
         return h;
@@ -353,3 +359,6 @@ size_t TextBox::line_index_from_position(size_t pos, const std::vector<LineInfo>
         }
         return lines.size() - 1;
 }
+
+
+

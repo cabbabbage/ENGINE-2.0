@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include <SDL.h>
+#include <SDL3/SDL.h>
 #include <nlohmann/json_fwd.hpp>
 
 #include "DockableCollapsible.hpp"
@@ -53,4 +53,5 @@ private:
     std::function<void(const std::string&)> on_select_room_{};
     std::function<void()> on_show_room_list_{};
 };
+
 

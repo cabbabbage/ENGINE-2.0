@@ -587,7 +587,7 @@ void SceneRenderer::render() {
         assets_->dev_grid_overlay_callback_();
     }
 
-    const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks64());
+    const float flicker_time_seconds = ticks_to_seconds(SDL_GetTicks());
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
     // Update fog system before rendering

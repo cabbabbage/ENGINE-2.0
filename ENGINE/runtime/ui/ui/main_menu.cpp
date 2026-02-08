@@ -31,7 +31,7 @@ MainMenu::MainMenu(SDL_Renderer* renderer,
         if (TTF_WasInit() == 0 && TTF_Init() < 0) {
                 std::cerr << "TTF_Init failed: " << SDL_GetError() << "\n";
         }
-        animation_start_ticks_ = SDL_GetTicks64();
+        animation_start_ticks_ = SDL_GetTicks();
         try {
                 manifest_root_ = fs::absolute(fs::path(manifest::manifest_path()).parent_path());
         } catch (const std::exception& ex) {
@@ -128,7 +128,7 @@ void MainMenu::buildButtons() {
 }
 
 std::optional<MainMenu::Selection> MainMenu::handle_event(const SDL_Event& e) {
-        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_e &&
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_E &&
             (e.key.mod & SDL_KMOD_CTRL)) {
                 button_tweaker_.toggle();
                 return std::nullopt;

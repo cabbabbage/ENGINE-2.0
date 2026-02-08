@@ -248,7 +248,7 @@ void GlassButtonTweaker::update_layout(int screen_w, int screen_h) {
 
 void GlassButtonTweaker::update_status(const std::string& text) {
     status_text_ = text;
-    status_expire_ticks_ = SDL_GetTicks64() + kStatusTimeoutMs;
+    status_expire_ticks_ = SDL_GetTicks() + kStatusTimeoutMs;
 }
 
 bool GlassButtonTweaker::is_point_inside(const SDL_Point& point, const SDL_Rect& rect) const {
@@ -503,7 +503,7 @@ bool GlassButtonTweaker::handle_event(const SDL_Event& e, int screen_w, int scre
             // Clicking the value box starts text editing (for numeric/color), or toggles bool.
             if (point_in_rect(p, hit.valueRect)) {
                 // Double click toggles bool quickly.
-                uint64_t now = SDL_GetTicks64();
+                uint64_t now = SDL_GetTicks();
                 bool is_double = (st.last_click_index == i) && (now - st.last_click_ticks < 350);
                 st.last_click_ticks = now;
                 st.last_click_index = i;
@@ -717,7 +717,7 @@ void GlassButtonTweaker::render(SDL_Renderer* renderer, int screen_w, int screen
         std::string valueText = format_field_value(style, field);
         if (st.editing_text && st.edit_index == idx) {
             valueText = st.edit_buffer;
-            if ((SDL_GetTicks64() / 350) % 2 == 0) valueText += "|";
+            if ((SDL_GetTicks() / 350) % 2 == 0) valueText += "|";
         }
 
         // Boolean shows as checkbox-ish.
@@ -739,7 +739,7 @@ void GlassButtonTweaker::render(SDL_Renderer* renderer, int screen_w, int screen
 
     // Status
     if (!status_text_.empty()) {
-        if (SDL_GetTicks64() >= status_expire_ticks_) {
+        if (SDL_GetTicks() >= status_expire_ticks_) {
             status_text_.clear();
         } else {
             int tw = 0, th = 0;

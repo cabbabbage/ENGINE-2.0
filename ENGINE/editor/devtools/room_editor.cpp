@@ -64,6 +64,7 @@
 #include <SDL3/SDL_log.h>
 
 namespace {
+constexpr double kPi = 3.14159265358979323846;
 constexpr int kSavedCameraHeightMinPx = 1;
 constexpr float kSavedCameraTiltMinDeg = 0.0f;
 constexpr float kSavedCameraTiltMaxDeg = 150.0f;
@@ -1918,7 +1919,7 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             SDL_SetRenderDrawColor(renderer, accent.r, accent.g, accent.b, 210);
             const int segments = std::clamp(radius_px * 4, 64, 720);
             for (int i = 0; i < segments; ++i) {
-                double angle = (static_cast<double>(i) / static_cast<double>(segments)) * 2.0 * M_PI;
+                double angle = (static_cast<double>(i) / static_cast<double>(segments)) * 2.0 * kPi;
                 int px = screen_center.x + static_cast<int>(std::lround(std::cos(angle) * static_cast<double>(radius_px)));
                 int py = screen_center.y + static_cast<int>(std::lround(std::sin(angle) * static_cast<double>(radius_px)));
                 SDL_RenderPoint(renderer, px, py);

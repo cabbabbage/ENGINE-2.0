@@ -250,7 +250,7 @@ void TextBox::render_caret(SDL_Renderer* r, int line_height) const {
                 ttf_util::GetStringSize(f, prefix, &w, &h);
         }
         else { ttf_util::GetStringSize(f, " ", &w, &h); w = 0; }
-        int font_height = TTF_FontHeight(f);
+        int font_height = TTF_GetFontHeight(f);
         if (line_height <= 0) line_height = font_height;
         int text_y = rect_.y + kVerticalPadding + static_cast<int>(line_index) * line_height;
         int caret_x = rect_.x + kHorizontalPadding + w;
@@ -264,7 +264,7 @@ size_t TextBox::caret_index_from_point(int mouse_x, int mouse_y) const {
         TTF_Font* f = style.open_font();
         if (!f) return std::min(caret_pos_, text_.size());
         auto lines = line_info();
-        int line_height = TTF_FontHeight(f);
+        int line_height = TTF_GetFontHeight(f);
         if (line_height <= 0) line_height = font_height();
         int relative_y = mouse_y - (rect_.y + kVerticalPadding);
         size_t line_index = 0;
@@ -307,7 +307,7 @@ int TextBox::font_height() const {
         const TextStyle style{ TextStyles::SmallMain().font_path, TextStyles::SmallMain().font_size, Styles::Ivory() };
         TTF_Font* f = style.open_font();
         if (!f) return TextStyles::SmallMain().font_size;
-        int h = TTF_FontHeight(f);
+        int h = TTF_GetFontHeight(f);
         TTF_CloseFont(f);
         if (h <= 0) h = TextStyles::SmallMain().font_size;
         return h;

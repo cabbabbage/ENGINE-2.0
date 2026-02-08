@@ -990,7 +990,8 @@ void Asset::move_to_world_position(int world_x, int world_y, int world_z) {
     if (!assets_) return;
 
     world::WorldGrid& grid = assets_->world_grid();
-    world::GridPoint& target = world::GridPoint::from_world(world_x, world_y, world_z, grid_resolution, grid);
+    const int resolved_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+    world::GridPoint& target = world::GridPoint::from_world(world_x, world_y, world_z, resolved_layer, grid);
 
     if (pos_) {
         grid.move_asset(this, *pos_, target);

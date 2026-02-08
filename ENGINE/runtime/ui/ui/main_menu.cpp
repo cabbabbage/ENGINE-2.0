@@ -29,7 +29,7 @@ MainMenu::MainMenu(SDL_Renderer* renderer,
   maps_json_(&maps)
 {
         if (TTF_WasInit() == 0 && TTF_Init() < 0) {
-                std::cerr << "TTF_Init failed: " << TTF_GetError() << "\n";
+                std::cerr << "TTF_Init failed: " << SDL_GetError() << "\n";
         }
         animation_start_ticks_ = SDL_GetTicks64();
         try {
@@ -204,12 +204,12 @@ SDL_Texture* MainMenu::loadTexture(const std::string& abs_utf8_path) {
         SDL_Texture* tex = IMG_LoadTexture(renderer_, abs_utf8_path.c_str());
         if (tex) return tex;
 
-        const std::string initial_error = IMG_GetError();
+        const std::string initial_error = SDL_GetError();
         std::cerr << "[MainMenu] IMG_LoadTexture failed: " << abs_utf8_path << " | " << initial_error << "\n";
 
         SDL_Surface* loaded = IMG_Load(abs_utf8_path.c_str());
         if (!loaded) {
-                std::cerr << "[MainMenu] Fallback IMG_Load failed: " << abs_utf8_path << " | " << IMG_GetError() << "\n";
+                std::cerr << "[MainMenu] Fallback IMG_Load failed: " << abs_utf8_path << " | " << SDL_GetError() << "\n";
                 return nullptr;
         }
 
@@ -410,8 +410,8 @@ void MainMenu::blitText(SDL_Renderer* r,
 	if (!f) return;
 	const SDL_Color coal = Styles::Coal();
 	const SDL_Color col  = override_col.a ? override_col : style.color;
-	SDL_Surface* surf_text = TTF_RenderText_Blended(f, s.c_str(), col);
-	SDL_Surface* surf_shadow = shadow ? TTF_RenderText_Blended(f, s.c_str(), coal) : nullptr;
+	SDL_Surface* surf_text = ttf_util::RenderTextBlended(f, s, col);
+	SDL_Surface* surf_shadow = shadow ? ttf_util::RenderTextBlended(f, s, coal) : nullptr;
 	if (surf_text) {
 		SDL_Texture* tex_text = SDL_CreateTextureFromSurface(r, surf_text);
 		if (surf_shadow) {

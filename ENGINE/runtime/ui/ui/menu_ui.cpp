@@ -31,7 +31,7 @@ MenuUI::MenuUI(SDL_Renderer* renderer,
 {
         if (TTF_WasInit() == 0) {
                 if (TTF_Init() < 0) {
-                        std::cerr << "TTF_Init failed: " << TTF_GetError() << "\n";
+                        std::cerr << "TTF_Init failed: " << SDL_GetError() << "\n";
                 }
 	}
 	menu_active_ = false;
@@ -86,7 +86,7 @@ void MenuUI::game_loop() {
                         }
                         if (e.type == SDL_EVENT_KEY_DOWN && e.key.repeat == 0) {
                                 const bool ctrl_down = (e.key.mod & SDL_KMOD_CTRL) != 0;
-                                if (ctrl_down && e.key.key == SDLK_d) {
+                                if (ctrl_down && e.key.key == SDLK_D) {
                                         doToggleDevMode();
                                 }
                         }
@@ -240,8 +240,8 @@ void MenuUI::blitText(SDL_Renderer* r,
 	if (!f) return;
 	const SDL_Color coal = Styles::Coal();
 	const SDL_Color col  = override_col.a ? override_col : style.color;
-	SDL_Surface* surf_text = TTF_RenderText_Blended(f, s.c_str(), col);
-	SDL_Surface* surf_shadow = shadow ? TTF_RenderText_Blended(f, s.c_str(), coal) : nullptr;
+	SDL_Surface* surf_text = ttf_util::RenderTextBlended(f, s, col);
+	SDL_Surface* surf_shadow = shadow ? ttf_util::RenderTextBlended(f, s, coal) : nullptr;
 	if (surf_text) {
 		SDL_Texture* tex_text = SDL_CreateTextureFromSurface(r, surf_text);
 		if (surf_shadow) {

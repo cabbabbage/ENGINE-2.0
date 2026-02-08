@@ -181,7 +181,7 @@ void TextBox::draw_text(SDL_Renderer* r, const std::string& s, int x, int y, SDL
         const TextStyle style{ TextStyles::SmallMain().font_path, TextStyles::SmallMain().font_size, col };
         TTF_Font* f = style.open_font();
         if (!f) return;
-        SDL_Surface* surf = TTF_RenderText_Blended(f, s.c_str(), style.color);
+        SDL_Surface* surf = ttf_util::RenderTextBlended(f, s, style.color);
         if (surf) {
                 SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
                 if (tex) {

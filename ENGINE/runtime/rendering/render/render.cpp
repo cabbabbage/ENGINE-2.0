@@ -49,7 +49,7 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
     const auto& chunks = grid.active_chunks();
     if (chunks.empty()) return;
 
-    const SDL_Color white{255, 255, 255, 255};
+    const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
     int indices[6] = {0, 1, 2, 0, 2, 3};
 
     for (const world::Chunk* chunk : chunks) {
@@ -415,7 +415,11 @@ bool build_perspective_mesh(const RenderObject& obj,
     mesh.vertices.reserve(4);
     mesh.indices.reserve(6);
 
-    const SDL_Color vertex_color{255, 255, 255, obj.color_mod.a};
+    const SDL_FColor vertex_color{
+        obj.color_mod.r / 255.0f,
+        obj.color_mod.g / 255.0f,
+        obj.color_mod.b / 255.0f,
+        obj.color_mod.a / 255.0f};
 
     SDL_Vertex vtx_tl{};
     vtx_tl.position = screen_tl;
@@ -684,7 +688,7 @@ void SceneRenderer::render() {
         vertices[1].position = SDL_FPoint{base_screen.x + half_width, adjusted_y - height};
         vertices[2].position = SDL_FPoint{base_screen.x + half_width, adjusted_y};
         vertices[3].position = SDL_FPoint{base_screen.x - half_width, adjusted_y};
-        const SDL_Color white{255, 255, 255, 255};
+        const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
         vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
         vertices[0].tex_coord = SDL_FPoint{u0, v0};
         vertices[1].tex_coord = SDL_FPoint{u1, v0};
@@ -872,7 +876,7 @@ bool SceneRenderer::ensure_sky_texture() {
     SDL_Texture* tex = IMG_LoadTexture(renderer_, path_str.c_str());
     if (!tex) {
         vibble::log::warn(std::string{"[SceneRenderer] Failed to load sky texture '"} +
-                          path_str + "': " + IMG_GetError());
+                         path_str + "': " + SDL_GetError());
         sky_texture_failed_ = true;
         return false;
     }
@@ -988,7 +992,7 @@ bool SceneRenderer::ensure_floor_gradient_texture() {
     SDL_Texture* tex = IMG_LoadTexture(renderer_, path_str.c_str());
     if (!tex) {
         vibble::log::warn(std::string{"[SceneRenderer] Failed to load floor gradient texture '"} +
-                          path_str + "': " + IMG_GetError());
+                         path_str + "': " + SDL_GetError());
         floor_gradient_failed_ = true;
         return false;
     }

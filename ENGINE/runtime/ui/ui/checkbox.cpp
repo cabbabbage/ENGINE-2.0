@@ -1,5 +1,6 @@
 #include "checkbox.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 #include "utils/text_style.hpp"
 #include "ui/styles.hpp"
 Checkbox::Checkbox(const std::string& label, bool value)
@@ -37,7 +38,7 @@ void Checkbox::render(SDL_Renderer* r) const {
 	if (!label_.empty()) {
 		TTF_Font* f = ls.open_font();
 		if (f) {
-			SDL_Surface* surf = TTF_RenderText_Blended(f, label_.c_str(), ls.color);
+			SDL_Surface* surf = ttf_util::RenderTextBlended(f, label_, ls.color);
 			if (surf) {
 					SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
 					if (tex) {

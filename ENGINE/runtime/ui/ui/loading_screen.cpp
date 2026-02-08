@@ -83,7 +83,7 @@ std::string LoadingScreen::pick_random_message_from_csv(const fs::path& csv_path
 }
 
 void LoadingScreen::draw_text(TTF_Font* font, const std::string& txt, int x, int y, SDL_Color col) {
-	SDL_Surface* surf = TTF_RenderText_Blended(font, txt.c_str(), col);
+	SDL_Surface* surf = ttf_util::RenderTextBlended(font, txt, col);
 	if (!surf) return;
 	SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer_, surf);
 	int tw = surf->w, th = surf->h;
@@ -124,7 +124,7 @@ void LoadingScreen::render_justified_text(TTF_Font* font, const std::string& tex
 		int gaps=l.size()-1; int x=rect.x;
 		if(gaps<=0){x=rect.x+(rect.w-words_total_w)/2;}
 		for(size_t i=0;i<l.size();++i){
-			SDL_Surface* surf=TTF_RenderText_Blended(font,l[i].c_str(),col);
+			SDL_Surface* surf=ttf_util::RenderTextBlended(font,l[i],col);
 			if(!surf)continue; SDL_Texture* tex=SDL_CreateTextureFromSurface(renderer_,surf);
 			int tw=surf->w,th=surf->h; SDL_DestroySurface(surf);
 			if(!tex)continue; SDL_Rect dst{x,line_y,tw,th}; sdl_render::Texture(renderer_,tex,nullptr,&dst); SDL_DestroyTexture(tex);

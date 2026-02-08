@@ -129,7 +129,7 @@ OverlayImage load_overlay_image(const fs::path& path) {
 
     SurfacePtr surface = make_surface_ptr(IMG_Load(path.u8string().c_str()));
     if (!surface) {
-        SDL_Log("GlassButton: failed to load overlay '%s': %s", path.u8string().c_str(), IMG_GetError());
+        SDL_Log("GlassButton: failed to load overlay '%s': %s", path.u8string().c_str(), SDL_GetError());
         return img;
     }
 
@@ -311,7 +311,7 @@ inline SDL_Rect adjusted_for_state(SDL_Rect r, bool hovered, bool pressed) {
 
 inline SDL_Rect clamp_to_view(SDL_Renderer* r, SDL_Rect rect) {
     SDL_Rect vp{0,0,0,0};
-    if (r) SDL_RenderGetViewport(r, &vp);
+    if (r) SDL_GetRenderViewport(r, &vp);
     int x1 = std::max(rect.x, vp.x);
     int y1 = std::max(rect.y, vp.y);
     int x2 = std::min(rect.x + rect.w, vp.x + vp.w);
@@ -475,7 +475,7 @@ void Button::render(SDL_Renderer* renderer) const {
     TTF_Font* f = style_->label.open_font();
     if (f) {
         int tw=0, th=0; ttf_util::GetStringSize(f, label_, &tw, &th);
-        SDL_Surface* s = TTF_RenderText_Blended(f, label_.c_str(), chosen);
+        SDL_Surface* s = ttf_util::RenderTextBlended(f, label_, chosen);
         if (s) {
             SDL_Texture* t = SDL_CreateTextureFromSurface(renderer, s);
             SDL_Rect dst{ rect_.x + (rect_.w - tw)/2, rect_.y + (rect_.h - th)/2, tw, th };
@@ -545,7 +545,7 @@ void Button::draw_glass(SDL_Renderer* renderer, const SDL_Rect& rect) const {
 
     if (!SDL_LockSurface(comp.get())) return;
     const SDL_PixelFormatDetails* fmt = SDL_GetPixelFormatDetails(comp->format);
-    const SDL_Palette* comp_palette = comp->palette;
+    SDL_Palette* comp_palette = SDL_GetSurfacePalette(comp.get());
     if (!fmt) {
         SDL_UnlockSurface(comp.get());
         return;
@@ -813,8 +813,8 @@ void Button::draw_glass_text(SDL_Renderer* renderer, const SDL_Rect& rect) const
         text.b = clamp8(static_cast<int>(text.b * 0.95f));
     }
 
-    SDL_Surface* s_text   = TTF_RenderText_Blended(font, label_.c_str(), text);
-    SDL_Surface* s_stroke = stroke.a ? TTF_RenderText_Blended(font, label_.c_str(), stroke) : nullptr;
+    SDL_Surface* s_text   = ttf_util::RenderTextBlended(font, label_, text);
+    SDL_Surface* s_stroke = stroke.a ? ttf_util::RenderTextBlended(font, label_, stroke) : nullptr;
 
     SDL_Texture* t_text   = s_text   ? SDL_CreateTextureFromSurface(renderer, s_text)   : nullptr;
     SDL_Texture* t_stroke = s_stroke ? SDL_CreateTextureFromSurface(renderer, s_stroke) : nullptr;

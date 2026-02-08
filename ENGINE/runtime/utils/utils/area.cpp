@@ -11,9 +11,6 @@
 #include <filesystem>
 #include <sstream>
 #include <optional>
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
 
 static std::mt19937 rng{std::random_device{}()};
 
@@ -155,7 +152,7 @@ void Area::generate_circle(SDL_Point center, int radius, int edge_smoothness, in
 	points.clear();
 	points.reserve(count);
 	for (int i = 0; i < count; ++i) {
-		double theta = 2 * M_PI * i / count;
+		double theta = 2 * SDL_PI_D * i / count;
 		double rx = radius * dist(rng), ry = radius * dist(rng);
 		double x = center.x + rx * std::cos(theta);
 		double y = center.y + ry * std::sin(theta);

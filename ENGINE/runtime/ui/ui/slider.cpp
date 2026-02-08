@@ -1,5 +1,6 @@
 #include "slider.hpp"
 #include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
 
@@ -253,7 +254,7 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
         if (TTF_Font* font = labelStyle.open_font()) {
 
-            if (SDL_Surface* surf = TTF_RenderText_Blended(font, label_.c_str(), labelStyle.color)) {
+            if (SDL_Surface* surf = ttf_util::RenderTextBlended(font, label_, labelStyle.color)) {
 
                 label_top = rect_.y - surf->h - ui_spacing::kLabelGap;
 
@@ -285,7 +286,7 @@ void Slider::draw_text(SDL_Renderer* r) const {
 
         if (TTF_Font* font = valueStyle.open_font()) {
 
-            if (SDL_Surface* surf = TTF_RenderText_Blended(font, value_text.c_str(), valueStyle.color)) {
+            if (SDL_Surface* surf = ttf_util::RenderTextBlended(font, value_text, valueStyle.color)) {
 
                 int value_y = label_rendered ? label_top : rect_.y - surf->h - ui_spacing::kLabelGap;
 

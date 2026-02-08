@@ -177,7 +177,7 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
         all_rooms.push_back(std::move(root));
         std::cout << "[GenerateRooms] Root room created successfully\n";
         std::vector<Room*> current_parents = { all_rooms[0].get() };
-        std::vector<Sector> current_sectors = { { current_parents[0], 0.0f, 2 * M_PI } };
+        std::vector<Sector> current_sectors = { { current_parents[0], 0.0f, static_cast<float>(kTau) } };
         auto append_sectors_from_angles = [](const std::vector<Room*>& rooms,
                                              const std::vector<double>& angles,
                                              std::vector<Sector>& out) {

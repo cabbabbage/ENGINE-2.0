@@ -87,6 +87,19 @@ endif()
 
 # ------------------------------------------
 # Dependencies (prefer vcpkg; with glad fallback)
+
+# Prefer the cached vcpkg_installed folder so find_package can locate SDL3, even
+# if the toolchain integration has not injected the prefix path yet.
+set(_VCPKG_CUSTOM_PREFIX_DIRS
+    "${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows/share"
+    "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/share"
+    "${CMAKE_SOURCE_DIR}/vcpkg/installed/x64-windows/share"
+)
+foreach(_prefix IN LISTS _VCPKG_CUSTOM_PREFIX_DIRS)
+    if(IS_DIRECTORY "${_prefix}" AND NOT "${_prefix}" STREQUAL "")
+        list(APPEND CMAKE_PREFIX_PATH "${_prefix}")
+    endif()
+endforeach()
 # ------------------------------------------
 find_package(nlohmann_json CONFIG QUIET)
 if(NOT nlohmann_json_FOUND)

@@ -18,20 +18,22 @@ class AssetLoader;
 class Input;
 class LoadingScreen;
 class AssetLibrary;
+class EngineRenderer;
 
 class MainApp {
 
         public:
-    MainApp(MapDescriptor map, SDL_Renderer* renderer, int screen_w, int screen_h, LoadingScreen* loading_screen = nullptr, AssetLibrary* asset_library = nullptr);
+    MainApp(MapDescriptor map, EngineRenderer* renderer, int screen_w, int screen_h, LoadingScreen* loading_screen = nullptr, AssetLibrary* asset_library = nullptr);
     virtual ~MainApp();
     virtual void init();
     virtual void game_loop();
     virtual void setup();
+    SDL_Renderer* raw_renderer() const;
 	protected:
 	protected:
     MapDescriptor map_descriptor_;
     std::string   map_path_;
-    SDL_Renderer* renderer_   = nullptr;
+    EngineRenderer* renderer_   = nullptr;
     int           screen_w_   = 0;
     int           screen_h_   = 0;
     std::unique_ptr<AssetLoader> loader_;
@@ -44,4 +46,4 @@ class MainApp {
     AssetLibrary*  asset_library_    = nullptr;
 };
 
-void run(SDL_Window* window, SDL_Renderer* renderer, int screen_w, int screen_h, bool rebuild_cache);
+void run(SDL_Window* window, EngineRenderer& renderer, int screen_w, int screen_h, bool rebuild_cache);

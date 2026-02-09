@@ -1,4 +1,5 @@
 #include "map_layer_controls_display.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
@@ -380,10 +381,10 @@ bool MapLayerControlsDisplay::handle_event(const SDL_Event& e) {
 };
 
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point pointer{e.motion.x, e.motion.y};
+        SDL_Point pointer = sdl_mouse_util::MotionPoint(e.motion);
         update_candidate_hover(pointer);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        SDL_Point pointer{e.button.x, e.button.y};
+        SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);
         update_candidate_hover(pointer);
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
             for (auto& candidate : candidates_) {

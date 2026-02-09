@@ -93,6 +93,14 @@ void DevFooterBar::set_title_visible(bool visible) {
     layout();
 }
 
+void DevFooterBar::set_settings_controls_visible(bool visible) {
+    if (settings_controls_visible_ == visible) {
+        return;
+    }
+    settings_controls_visible_ = visible;
+    layout();
+}
+
 void DevFooterBar::set_buttons(std::vector<Button> buttons) {
     buttons_ = std::move(buttons);
     for (auto& btn : buttons_) {
@@ -195,34 +203,36 @@ bool DevFooterBar::handle_event(const SDL_Event& e) {
 
     bool used = false;
 
-    if (depth_effects_checkbox_ && depth_effects_checkbox_->handle_event(e)) {
-        used = true;
-        if (on_depth_effects_toggle_) {
-            on_depth_effects_toggle_(depth_effects_checkbox_->value());
+    if (settings_controls_visible_) {
+        if (depth_effects_checkbox_ && depth_effects_checkbox_->handle_event(e)) {
+            used = true;
+            if (on_depth_effects_toggle_) {
+                on_depth_effects_toggle_(depth_effects_checkbox_->value());
+            }
         }
-    }
 
-    if (movement_debug_checkbox_ && movement_debug_checkbox_->handle_event(e)) {
-        used = true;
-        movement_debug_enabled_ = movement_debug_checkbox_->value();
-        if (on_movement_debug_toggle_) {
-            on_movement_debug_toggle_(movement_debug_enabled_);
+        if (movement_debug_checkbox_ && movement_debug_checkbox_->handle_event(e)) {
+            used = true;
+            movement_debug_enabled_ = movement_debug_checkbox_->value();
+            if (on_movement_debug_toggle_) {
+                on_movement_debug_toggle_(movement_debug_enabled_);
+            }
         }
-    }
 
-    if (grid_checkbox_ && grid_checkbox_->handle_event(e)) {
-        used = true;
-        grid_overlay_enabled_ = grid_checkbox_->value();
-        if (on_grid_overlay_toggle_) {
-            on_grid_overlay_toggle_(grid_overlay_enabled_);
+        if (grid_checkbox_ && grid_checkbox_->handle_event(e)) {
+            used = true;
+            grid_overlay_enabled_ = grid_checkbox_->value();
+            if (on_grid_overlay_toggle_) {
+                on_grid_overlay_toggle_(grid_overlay_enabled_);
+            }
         }
-    }
 
-    if (grid_stepper_ && grid_stepper_->handle_event(e)) {
-        used = true;
-        grid_resolution_ = grid_stepper_->value();
-        if (on_grid_resolution_change_) {
-            on_grid_resolution_change_(grid_resolution_, true);
+        if (grid_stepper_ && grid_stepper_->handle_event(e)) {
+            used = true;
+            grid_resolution_ = grid_stepper_->value();
+            if (on_grid_resolution_change_) {
+                on_grid_resolution_change_(grid_resolution_, true);
+            }
         }
     }
 
@@ -274,7 +284,7 @@ void DevFooterBar::render(SDL_Renderer* renderer) const {
     SDL_SetRenderDrawColor(renderer, highlight.r, highlight.g, highlight.b, highlight.a);
     SDL_RenderLine(renderer, rect_.x, rect_.y, rect_.x + rect_.w - 1, rect_.y);
 
-    const bool draw_separator = (grid_checkbox_ && grid_stepper_) && (title_bounds_.w > 0 || !buttons_.empty());
+    const bool draw_separator = settings_controls_visible_ && (grid_checkbox_ && grid_stepper_) && (title_bounds_.w > 0 || !buttons_.empty());
     if (draw_separator) {
         SDL_Color separator = DMStyles::Border();
         separator.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(separator.a * 0.8f), 0, 255));
@@ -283,19 +293,21 @@ void DevFooterBar::render(SDL_Renderer* renderer) const {
         SDL_RenderLine(renderer, separator_x, rect_.y + kFooterVerticalPadding, separator_x, rect_.y + rect_.h - kFooterVerticalPadding);
     }
 
-    if (depth_effects_checkbox_) {
-        depth_effects_checkbox_->render(renderer);
-    }
+    if (settings_controls_visible_) {
+        if (depth_effects_checkbox_) {
+            depth_effects_checkbox_->render(renderer);
+        }
 
-    if (movement_debug_checkbox_) {
-        movement_debug_checkbox_->render(renderer);
-    }
+        if (movement_debug_checkbox_) {
+            movement_debug_checkbox_->render(renderer);
+        }
 
-    if (grid_checkbox_) {
-        grid_checkbox_->render(renderer);
-    }
-    if (grid_stepper_) {
-        grid_stepper_->render(renderer);
+        if (grid_checkbox_) {
+            grid_checkbox_->render(renderer);
+        }
+        if (grid_stepper_) {
+            grid_stepper_->render(renderer);
+        }
     }
 
     if (title_bounds_.w > 0 && !title_.empty()) {
@@ -357,7 +369,7 @@ void DevFooterBar::layout_title_region() {
     }
 
     int x = rect_.x + kFooterHorizontalPadding;
-    if (grid_checkbox_ && grid_stepper_) {
+    if (settings_controls_visible_ && grid_checkbox_ && grid_stepper_) {
         x = std::max(x, grid_controls_right_ + kFooterGroupGap);
     }
 
@@ -372,7 +384,7 @@ void DevFooterBar::layout_title_region() {
 
 void DevFooterBar::layout_buttons() {
     int button_start = rect_.x + kFooterHorizontalPadding;
-    if (grid_checkbox_ && grid_stepper_) {
+    if (settings_controls_visible_ && grid_checkbox_ && grid_stepper_) {
         button_start = std::max(button_start, grid_controls_right_ + kFooterGroupGap);
     }
     if (title_bounds_.w > 0) {
@@ -511,6 +523,13 @@ void DevFooterBar::set_movement_debug_callback(std::function<void(bool)> cb) {
 
 void DevFooterBar::layout_grid_controls() {
     grid_controls_right_ = rect_.x + kFooterHorizontalPadding;
+    if (!settings_controls_visible_) {
+        if (depth_effects_checkbox_) depth_effects_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (movement_debug_checkbox_) movement_debug_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (grid_checkbox_) grid_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+        if (grid_stepper_) grid_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
+        return;
+    }
     if (!depth_effects_checkbox_ || !movement_debug_checkbox_ || !grid_checkbox_ || !grid_stepper_) {
         return;
     }

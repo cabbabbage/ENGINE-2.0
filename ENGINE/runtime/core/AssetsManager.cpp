@@ -380,6 +380,43 @@ void Assets::reload_camera_settings() {
     log_camera_fog_state("startup-normal");
 }
 
+void Assets::force_camera_view_refresh() {
+    // Ensure camera/grid state is rebuilt on startup without requiring a Dev Mode toggle
+    Room* detected_room = finder_ ? finder_->getCurrentRoom() : nullptr;
+    Room* active_room = detected_room;
+    const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
+    if (dev_controls_enabled) {
+        active_room = dev_controls_->resolve_current_room(detected_room);
+    }
+    current_room_ = active_room;
+
+    mark_camera_dirty();
+    camera_view_dirty_ = true;
+    grid_dirty_ = true;
+
+    camera_.update_camera_height(current_room_, finder_, player, true, last_frame_dt_seconds_, dev_mode);
+
+    const SDL_Point center_px = camera_.get_screen_center();
+    const world::GridPoint center_point = world::GridPoint::make_virtual(
+        center_px.x,
+        center_px.y,
+        0,
+        world_grid_.max_resolution_layers());
+    const double current_scale = camera_.get_scale();
+    const double current_pitch = camera_.current_pitch_radians();
+
+    // Allow initial rebuild even if frame_id_ == last_active_rebuild_frame_id_
+    if (last_active_rebuild_frame_id_ == frame_id_) {
+        last_active_rebuild_frame_id_ = static_cast<std::uint32_t>(~frame_id_);
+    }
+
+    rebuild_world_grid_and_active_assets(center_point, current_scale, current_pitch);
+    pending_initial_rebuild_ = false;
+    active_assets_dirty_.store(false, std::memory_order_release);
+    last_active_rebuild_frame_id_ = frame_id_;
+    needs_filtered_active_refresh_ = true;
+}
+
 int Assets::saved_render_quality_percent() const {
     return 100;
 }

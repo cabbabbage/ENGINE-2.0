@@ -1,4 +1,5 @@
 #include "MovementSummaryWidget.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 
@@ -369,7 +370,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
     };
     switch (e.type) {
         case SDL_EVENT_MOUSE_MOTION: {
-            SDL_Point p{e.motion.x, e.motion.y};
+            SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
             if (derived_from_animation_) {
                 button_hovered_ = SDL_PointInRect(&p, &button_rect_) != 0;
                 return button_hovered_;
@@ -385,7 +386,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             if (e.button.button != SDL_BUTTON_LEFT) {
                 return false;
             }
-            SDL_Point p{e.button.x, e.button.y};
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (derived_from_animation_) {
                 if (SDL_PointInRect(&p, &button_rect_)) {
                     button_pressed_ = true;
@@ -405,7 +406,7 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             if (e.button.button != SDL_BUTTON_LEFT) {
                 return false;
             }
-            SDL_Point p{e.button.x, e.button.y};
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (derived_from_animation_) {
                 bool inside = SDL_PointInRect(&p, &button_rect_) != 0;
                 bool was_pressed = button_pressed_;

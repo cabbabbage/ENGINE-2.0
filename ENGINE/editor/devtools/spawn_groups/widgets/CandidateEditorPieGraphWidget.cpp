@@ -1,4 +1,5 @@
 #include "CandidateEditorPieGraphWidget.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 
@@ -76,7 +77,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         bool should_close = false;
 
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-            SDL_Point point{e.button.x, e.button.y};
+            SDL_Point point = sdl_mouse_util::ButtonPoint(e.button);
             if (!search_assets_->is_point_inside(point.x, point.y)) {
                 should_close = true;
             }
@@ -150,7 +151,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             total = 1.0;
         }
 
-        SDL_Point point{e.motion.x, e.motion.y};
+        SDL_Point point = sdl_mouse_util::MotionPoint(e.motion);
         int new_hover = -1;
         if (SDL_PointInRect(&point, &rect_)) {
             new_hover = hit_test_candidate(layout, point, total);
@@ -174,7 +175,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             total = 1.0;
         }
 
-        SDL_Point point{e.button.x, e.button.y};
+        SDL_Point point = sdl_mouse_util::ButtonPoint(e.button);
         int target_index = -1;
         if (SDL_PointInRect(&point, &rect_)) {
             target_index = hit_test_candidate(layout, point, total);

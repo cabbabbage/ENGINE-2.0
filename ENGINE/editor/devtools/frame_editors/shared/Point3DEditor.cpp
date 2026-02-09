@@ -1,4 +1,5 @@
 #include "Point3DEditor.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -134,7 +135,7 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
     // Check for textbox clicks to set axis
     bool pointer_clicked_textbox = false;
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point mouse_pos = {e.button.x, e.button.y};
+        SDL_Point mouse_pos = sdl_mouse_util::ButtonPoint(e.button);
         const int padding = DMSpacing::small_gap();
         const int inner_w = effective_container.w - padding * 2;
         const int third_w = (inner_w - DMSpacing::small_gap() * 2) / 3;
@@ -808,7 +809,7 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                                       const std::vector<SDL_FPoint>& point_screens,
                                       const std::vector<bool>& point_selectable) {
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point mouse_pos = {e.motion.x, e.motion.y};
+        SDL_Point mouse_pos = sdl_mouse_util::MotionPoint(e.motion);
         int new_hover = -1;
 
         for (std::size_t i = 0; i < point_screens.size(); ++i) {
@@ -825,7 +826,7 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point mouse_pos = {e.button.x, e.button.y};
+        SDL_Point mouse_pos = sdl_mouse_util::ButtonPoint(e.button);
         Uint32 current_time = SDL_GetTicks();
 
         for (std::size_t i = 0; i < point_screens.size(); ++i) {

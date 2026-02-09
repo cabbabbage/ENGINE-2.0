@@ -182,8 +182,8 @@ bool AssetToolkit::saveImage(const ImageData& image, const std::string& path) {
         }
 
         // Write PNG header
-        const char png_header[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
-        file.write(png_header, 8);
+        const uint8_t png_header[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+        file.write(reinterpret_cast<const char*>(png_header), 8);
 
         // For now, write a simple dummy PNG structure
         // In a real implementation, this would be proper PNG encoding

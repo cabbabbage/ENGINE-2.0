@@ -1,4 +1,5 @@
 #include "SpawnGroupConfig.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 
@@ -1936,7 +1937,7 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point pointer{e.button.x, e.button.y};
+        SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);
         for (size_t i = 0; i < entries_.size(); ++i) {
             if (!entries_[i]) continue;
             if (entries_[i]->can_begin_drag_at(pointer)) {

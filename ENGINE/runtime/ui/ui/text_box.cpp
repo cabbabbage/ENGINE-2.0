@@ -1,4 +1,5 @@
 #include "text_box.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 #include <algorithm>
@@ -62,7 +63,7 @@ bool TextBox::set_editing(bool e) {
 bool TextBox::handle_event(const SDL_Event& e) {
         bool changed = false;
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-                SDL_Point p{ e.motion.x, e.motion.y };
+                SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
                 bool inside = SDL_PointInRect(&p, &rect_);
                 hovered_ = inside;
                 if (editing_ && !inside) {
@@ -71,7 +72,7 @@ bool TextBox::handle_event(const SDL_Event& e) {
                 }
         }
         else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-                SDL_Point p{ e.button.x, e.button.y };
+                SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
                 bool inside = SDL_PointInRect(&p, &rect_);
                 hovered_ = inside;
                 bool blur_changed = set_editing(inside);

@@ -518,7 +518,6 @@ void AssetInfoUI::clear_info() {
         }
     }
     if (children_panel_) {
-        children_panel_->close_overlay();
         children_panel_->set_document(nullptr);
         children_panel_->refresh();
     }
@@ -554,7 +553,6 @@ void AssetInfoUI::close() {
     }
     if (animation_editor_window_) animation_editor_window_->set_visible(false);
     if (asset_selector_) asset_selector_->close();
-    if (children_panel_) children_panel_->close_overlay();
     if (assets_ && forcing_high_quality_rendering_) {
 
         forcing_high_quality_rendering_ = false;
@@ -703,26 +701,6 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (children_panel_ && children_panel_->overlay_visible()) {
-        if (children_panel_->handle_overlay_event(e)) return true;
-        if (pointer_event) {
-            if (children_panel_->overlay_contains_point(pointer.x, pointer.y)) {
-                return true;
-            }
-            if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-                children_panel_->close_overlay();
-                return true;
-            }
-        } else if (wheel_event) {
-            int mx = 0;
-            int my = 0;
-            sdl_mouse_util::GetMouseState(&mx, &my);
-            if (children_panel_->overlay_contains_point(mx, my)) {
-                return true;
-            }
-        }
-    }
-
     if (!visible_) return false;
 
     if (showing_delete_popup_) {
@@ -824,10 +802,6 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
         asset_selector_->layout_with_parent(parent);
     }
 
-    if (children_panel_ && children_panel_->overlay_visible()) {
-        children_panel_->update_overlays(input);
-    }
-
     container_.update(input, screen_w, screen_h);
 
     layout_widgets(screen_w, screen_h);
@@ -853,10 +827,6 @@ void AssetInfoUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
 
     if (asset_selector_ && asset_selector_->visible())
         asset_selector_->render(r);
-
-    if (children_panel_) {
-        children_panel_->render_overlays(r);
-    }
 
     DMDropdown::render_active_options(r);
 
@@ -1253,7 +1223,7 @@ bool AssetInfoUI::handle_section_focus_event(const SDL_Event& e) {
     if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT) {
         return false;
     }
-    SDL_Point pointer{e.button.x, e.button.y};
+    SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);
     DockableCollapsible* target = section_at_point(pointer);
     if (!target) {
         return false;

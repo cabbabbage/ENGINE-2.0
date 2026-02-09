@@ -609,7 +609,7 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
     }
 
     if (scrollbar_visible_ && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{e.button.x, e.button.y};
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         if (SDL_PointInRect(&p, &scrollbar_track_)) {
             const int track_range = std::max(0, scrollbar_track_.h - scrollbar_thumb_.h);
             int relative = std::clamp(p.y - scrollbar_track_.y - scrollbar_thumb_.h / 2, 0, track_range);
@@ -623,7 +623,7 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{e.button.x, e.button.y};
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         FocusTarget clicked = FocusTarget::kNone;
         if (name_box_ && SDL_PointInRect(&p, &name_box_->rect())) {
             clicked = FocusTarget::kName;

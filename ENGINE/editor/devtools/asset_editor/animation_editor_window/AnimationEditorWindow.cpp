@@ -970,7 +970,7 @@ bool AnimationEditorWindow::handle_event(const SDL_Event& e) {
         }
 
         if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            SDL_Point p{e.button.x, e.button.y};
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             SDL_Rect menu_bounds = list_context_menu_->bounds();
             if (!SDL_PointInRect(&p, &menu_bounds)) {
                 list_context_menu_->close();

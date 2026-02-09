@@ -1,4 +1,5 @@
 #include "asset_library_ui.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include <algorithm>
 #include <unordered_map>
@@ -380,18 +381,18 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
     bool handle_event(const SDL_Event& e) override {
         if (multi_select_enabled) {
             if (e.type == SDL_EVENT_MOUSE_MOTION) {
-                SDL_Point p{ e.motion.x, e.motion.y };
+                SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
                 hovered = SDL_PointInRect(&p, &rect_);
                 delete_hovered = SDL_PointInRect(&p, &delete_rect_);
             } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-                SDL_Point p{ e.button.x, e.button.y };
+                SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
                 if (SDL_PointInRect(&p, &rect_)) {
                     multi_select_pressed = true;
                     return true;
                 }
                 return false;
             } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-                SDL_Point p{ e.button.x, e.button.y };
+                SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
                 bool inside = SDL_PointInRect(&p, &rect_);
                 bool was_pressed = multi_select_pressed;
                 multi_select_pressed = false;
@@ -407,11 +408,11 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
         }
 
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            SDL_Point p{ e.motion.x, e.motion.y };
+            SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
             hovered = SDL_PointInRect(&p, &rect_);
             delete_hovered = SDL_PointInRect(&p, &delete_rect_);
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (!SDL_PointInRect(&p, &rect_)) {
                 return false;
             }
@@ -431,7 +432,7 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
                 return true;
             }
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (e.button.button == SDL_BUTTON_LEFT) {
                 bool inside_delete = SDL_PointInRect(&p, &delete_rect_);
                 bool inside_tile = SDL_PointInRect(&p, &rect_);
@@ -637,11 +638,11 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
 
     bool handle_event(const SDL_Event& e) override {
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            SDL_Point p{ e.motion.x, e.motion.y };
+            SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
             hovered = SDL_PointInRect(&p, &rect_);
             delete_hovered = SDL_PointInRect(&p, &delete_rect_);
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (SDL_PointInRect(&p, &delete_rect_)) {
                 delete_pressed = true;
                 return true;
@@ -651,7 +652,7 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                 return true;
             }
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             bool inside_delete = SDL_PointInRect(&p, &delete_rect_);
             bool was_delete = delete_pressed;
             delete_pressed = false;
@@ -861,16 +862,16 @@ struct AssetLibraryUI::RoomAreaTileWidget : public Widget {
 
     bool handle_event(const SDL_Event& e) override {
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            SDL_Point p{ e.motion.x, e.motion.y };
+            SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
             hovered = SDL_PointInRect(&p, &rect_);
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (e.button.button == SDL_BUTTON_LEFT && SDL_PointInRect(&p, &rect_)) {
                 pressed = true;
                 return true;
             }
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (e.button.button == SDL_BUTTON_LEFT) {
                 bool was = pressed;
                 pressed = false;
@@ -1989,14 +1990,14 @@ bool AssetLibraryUI::handle_delete_modal_event(const SDL_Event& e) {
         return false;
     }
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
         delete_yes_hovered_ = SDL_PointInRect(&p, &delete_yes_rect_);
         delete_no_hovered_ = SDL_PointInRect(&p, &delete_no_rect_);
         delete_skip_hovered_ = SDL_PointInRect(&p, &delete_skip_rect_);
         return SDL_PointInRect(&p, &delete_modal_rect_);
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         if (SDL_PointInRect(&p, &delete_yes_rect_)) {
             delete_yes_pressed_ = true;
             return true;
@@ -2015,7 +2016,7 @@ bool AssetLibraryUI::handle_delete_modal_event(const SDL_Event& e) {
         return false;
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         const bool inside_yes = SDL_PointInRect(&p, &delete_yes_rect_);
         const bool inside_no = SDL_PointInRect(&p, &delete_no_rect_);
         const bool inside_skip = SDL_PointInRect(&p, &delete_skip_rect_);

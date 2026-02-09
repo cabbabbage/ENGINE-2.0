@@ -1,4 +1,5 @@
 #include "glass_button_tweaker.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 
@@ -432,7 +433,7 @@ bool GlassButtonTweaker::handle_event(const SDL_Event& e, int screen_w, int scre
     // Keep track of which row mouse is over for nicer UX.
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
         st.mouse_over_index = -1;
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
         if (point_in_rect(p, panel_rect_)) {
             for (int i = 0; i < static_cast<int>(fields_.size()); ++i) {
                 int y = panel_rect_.y + kPanelPadding + i * kLineHeight;
@@ -467,7 +468,7 @@ bool GlassButtonTweaker::handle_event(const SDL_Event& e, int screen_w, int scre
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
 
         if (!point_in_rect(p, panel_rect_)) return false;
 

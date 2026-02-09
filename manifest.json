@@ -1,5 +1,4 @@
 {
-  "version": 1,
   "assets": {},
   "image_effects": {
     "background": {
@@ -256,19 +255,19 @@
                 }
               ],
               "display_name": "Bartender",
-              "dx": 185,
-              "dy": -165,
+              "dx": -700,
+              "dy": 264,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3056,
-              "origional_width": 3216,
+              "origional_height": 6376,
+              "origional_width": 6376,
               "position": "Exact",
               "priority": 0,
-              "resolution": 6,
+              "resolution": 2,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-847e3df0906f"
@@ -343,8 +342,8 @@
                 }
               ],
               "display_name": "barrel",
-              "dx": 386,
-              "dy": 1223,
+              "dx": -508,
+              "dy": -668,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -355,7 +354,7 @@
               "origional_width": 6376,
               "position": "Exact",
               "priority": 3,
-              "resolution": 5,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-37d6c4ad7c3a"
@@ -468,5 +467,6 @@
         }
       }
     }
-  }
+  },
+  "version": 1
 }

@@ -117,6 +117,7 @@ public:
     void on_camera_settings_changed();
     void reload_camera_settings();
     void apply_camera_runtime_settings();
+    void force_camera_view_refresh();
     void set_depth_effects_enabled(bool enabled);
     bool depth_effects_enabled() const { return depth_effects_enabled_; }
     void set_movement_debug_enabled(bool enabled);

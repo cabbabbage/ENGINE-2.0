@@ -1,4 +1,5 @@
 #include "color_range_widget.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
@@ -364,7 +365,7 @@ bool DMColorRangeWidget::handle_event(const SDL_Event& e) {
         if (e.button.button != SDL_BUTTON_LEFT) {
             return false;
         }
-        SDL_Point p{e.button.x, e.button.y};
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         if (SDL_PointInRect(&p, &swatch_rect_)) {
             if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
                 open_picker();

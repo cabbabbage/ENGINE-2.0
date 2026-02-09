@@ -721,9 +721,10 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
                          bool dev_mode)
 {
     invalidate_camera_cache();
-    // In normal mode (non-dev), center the player on the warped screen grid.
-    // In dev mode, don't center automatically - allow manual camera control.
-    lock_anchor_to_screen_center_ = !dev_mode;
+    // Keep the anchor unlocked in both modes so the projection math stays consistent.
+    // Locking it to the screen center was pulling the virtual camera back in normal mode,
+    // which over-reduced perspective scale for certain assets (barrel, spider).
+    lock_anchor_to_screen_center_ = false;
 
     CameraParams cur_params;
     CameraParams neigh_params;

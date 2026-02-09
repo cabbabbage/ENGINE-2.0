@@ -244,7 +244,7 @@ private:
     double aspect_ = 1.0;
 
     bool render_areas_enabled_ = false;
-    bool lock_anchor_to_screen_center_ = false; // dev-mode option to pin anchor to screen center
+    bool lock_anchor_to_screen_center_ = false; // kept unlocked to avoid skewing perspective scale
     RealismSettings settings_{};
 
     CameraController camera_;

@@ -440,6 +440,16 @@ AssetLibrary::all() const {
 	return info_by_name_;
 }
 
+std::vector<std::string> AssetLibrary::names() const {
+        std::vector<std::string> result;
+        result.reserve(info_by_name_.size());
+        for (const auto& [name, _] : info_by_name_) {
+                result.push_back(name);
+        }
+        std::sort(result.begin(), result.end());
+        return result;
+}
+
 void AssetLibrary::loadAllAnimations(SDL_Renderer* renderer) {
     if (!renderer) {
         return;

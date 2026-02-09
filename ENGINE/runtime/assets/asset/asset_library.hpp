@@ -14,6 +14,7 @@ class AssetLibrary {
     void add_asset(const std::string& name, const nlohmann::json& metadata);
     std::shared_ptr<AssetInfo> get(const std::string& name) const;
     const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>& all() const;
+    std::vector<std::string> names() const;
     void loadAllAnimations(SDL_Renderer* renderer);
     void ensureAllAnimationsLoaded(SDL_Renderer* renderer);
     void loadAnimationsFor(SDL_Renderer* renderer, const std::unordered_set<std::string>& names);

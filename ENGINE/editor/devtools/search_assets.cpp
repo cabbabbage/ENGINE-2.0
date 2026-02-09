@@ -7,6 +7,7 @@
 #include "draw_utils.hpp"
 #include "tag_utils.hpp"
 #include "utils/input.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 #include "dev_mode_utils.hpp"
@@ -64,16 +65,16 @@ public:
     bool handle_event(const SDL_Event& e) override {
         if (!owner_) return false;
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            SDL_Point p{ e.motion.x, e.motion.y };
+            SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
             hovered_ = SDL_PointInRect(&p, &rect_);
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (SDL_PointInRect(&p, &rect_)) {
                 pressed_ = true;
                 return true;
             }
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             bool inside = SDL_PointInRect(&p, &rect_);
             bool was_pressed = pressed_;
             pressed_ = false;
@@ -448,7 +449,7 @@ std::string SearchAssets::to_lower(std::string s) {
 
 void SearchAssets::open(Callback cb) {
     cb_ = std::move(cb);
-    if (all_.empty()) load_assets();
+    load_assets();  // Always reload assets when opening to ensure we have the latest from manifest store
     if (embedded_) {
         if (panel_) {
             panel_->set_visible(true);
@@ -532,6 +533,35 @@ void SearchAssets::set_asset_filter(AssetFilter filter) {
 void SearchAssets::load_assets() {
     all_.clear();
     preview_cache_.clear();
+
+    // Primary source: the AssetLibrary contains all loaded game assets.
+    // The manifest store's "assets" section is empty at runtime (assets live in cache bundles),
+    // so we must read from the library directly.
+    if (assets_) {
+        const auto& lib_assets = assets_->library().all();
+        all_.reserve(lib_assets.size());
+        for (const auto& [lib_name, info] : lib_assets) {
+            if (!info) {
+                continue;
+            }
+            Asset asset;
+            asset.name = info->name.empty() ? lib_name : info->name;
+            asset.manifest_name = lib_name;
+            asset.tags = info->tags;
+            asset.payload = nullptr;
+            asset.has_child_tag = false;
+            for (const auto& tag : info->tags) {
+                if (normalize_tag_value(tag) == "child") {
+                    asset.has_child_tag = true;
+                    break;
+                }
+            }
+            all_.push_back(std::move(asset));
+        }
+        return;
+    }
+
+    // Fallback: read from manifest store if no Assets pointer is available.
     if (!manifest_store_) {
         return;
     }
@@ -779,7 +809,11 @@ void SearchAssets::set_assets(Assets* assets) {
         return;
     }
     assets_ = assets;
+    all_.clear();
+    results_.clear();
     preview_cache_.clear();
+    tag_data_version_ = 0;
+    load_assets();
     if (panel_ && panel_->is_visible()) {
         filter_assets();
     }

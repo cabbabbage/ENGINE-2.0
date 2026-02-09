@@ -1,4 +1,5 @@
 #include "slider.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 
@@ -134,7 +135,7 @@ bool Slider::handle_event(const SDL_Event& e) {
 
 	if (e.type == SDL_EVENT_MOUSE_MOTION) {
 
-		SDL_Point p{ e.motion.x, e.motion.y };
+		SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
 
 		knob_hovered_ = SDL_PointInRect(&p, &krect);
 
@@ -150,7 +151,7 @@ bool Slider::handle_event(const SDL_Event& e) {
 
 	else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
 
-		SDL_Point p{ e.button.x, e.button.y };
+		SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
 
 		const SDL_Rect tr = track_rect();
 

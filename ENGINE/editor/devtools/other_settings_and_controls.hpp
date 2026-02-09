@@ -29,6 +29,14 @@ public:
         bool active = false;
 };
 
+    struct DevModeSettings {
+        bool show_grid = false;
+        bool snap_to_grid = true;
+        bool movement_debug = false;
+        bool depth_effects = true;
+        int overlay_resolution = 0;
+};
+
     OtherSettingsAndControls();
     ~OtherSettingsAndControls();
 
@@ -45,6 +53,17 @@ public:
     void set_active_mode(const std::string& id, bool trigger_callback = false);
     void set_filters_expanded(bool expanded);
     bool filters_expanded() const { return filters_expanded_; }
+    void set_dev_mode_settings(const DevModeSettings& settings);
+    void set_dev_mode_settings_callbacks(std::function<void(bool)> on_show_grid,
+                                         std::function<void(int)> on_overlay_resolution_change,
+                                         std::function<void(bool)> on_snap_to_grid,
+                                         std::function<void(bool)> on_movement_debug,
+                                         std::function<void(bool)> on_depth_effects);
+    void set_show_grid_enabled(bool enabled);
+    void set_overlay_resolution_value(int resolution);
+    void set_snap_to_grid_enabled(bool enabled);
+    void set_movement_debug_enabled(bool enabled);
+    void set_depth_effects_enabled(bool enabled);
 
     void set_header_suppressed(bool suppressed) { header_suppressed_ = suppressed; }
     bool header_suppressed() const { return header_suppressed_; }
@@ -102,6 +121,8 @@ private:
     void load_persisted_state();
     void persist_state();
     void persist_filters_expanded() const;
+    void ensure_dev_settings_controls();
+    void layout_dev_settings();
     FilterState& mutable_state();
     const FilterState& state() const;
     void notify_state_changed();
@@ -138,6 +159,9 @@ private:
     SDL_Rect layout_bounds_{0, 0, 0, 0};
     SDL_Rect mode_bar_rect_{0, 0, 0, 0};
     SDL_Rect header_rect_{0, 0, 0, 0};
+    SDL_Rect settings_rect_{0, 0, 0, 0};
+    SDL_Rect settings_heading_rect_{0, 0, 0, 0};
+    SDL_Rect filters_heading_rect_{0, 0, 0, 0};
     SDL_Rect filters_rect_{0, 0, 0, 0};
     bool layout_dirty_ = true;
     std::unordered_set<std::string> map_spawn_ids_;
@@ -159,8 +183,18 @@ private:
     ExtraRenderer extra_renderer_{};
     ExtraEventHandler extra_event_handler_{};
     std::unique_ptr<DMNumericStepper> grid_resolution_stepper_;
+    std::unique_ptr<DMCheckbox> overlay_grid_checkbox_;
+    std::unique_ptr<DMNumericStepper> overlay_grid_stepper_;
+    std::unique_ptr<DMCheckbox> snap_to_grid_checkbox_;
+    std::unique_ptr<DMCheckbox> movement_debug_checkbox_;
+    std::unique_ptr<DMCheckbox> depth_effects_checkbox_;
+    DevModeSettings dev_mode_settings_{};
+    std::function<void(bool)> on_show_grid_toggle_;
+    std::function<void(int)> on_overlay_resolution_change_;
+    std::function<void(bool)> on_snap_to_grid_toggle_;
+    std::function<void(bool)> on_movement_debug_toggle_;
+    std::function<void(bool)> on_depth_effects_toggle_;
     std::function<void(int)> on_grid_resolution_changed_;
     int grid_resolution_min_ = 0;
     int grid_resolution_max_ = 0;
 };
-

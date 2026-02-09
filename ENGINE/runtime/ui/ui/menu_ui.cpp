@@ -21,7 +21,7 @@
 
 namespace fs = std::filesystem;
 
-MenuUI::MenuUI(SDL_Renderer* renderer,
+MenuUI::MenuUI(EngineRenderer* renderer,
                int screen_w,
                int screen_h,
                MapDescriptor map,
@@ -30,7 +30,7 @@ MenuUI::MenuUI(SDL_Renderer* renderer,
 : MainApp(std::move(map), renderer, screen_w, screen_h, loading_screen, asset_library)
 {
         if (TTF_WasInit() == 0) {
-                if (TTF_Init() < 0) {
+                if (!TTF_Init()) {
                         std::cerr << "TTF_Init failed: " << SDL_GetError() << "\n";
                 }
 	}
@@ -55,6 +55,12 @@ void MenuUI::game_loop() {
         constexpr double TARGET_FRAME_SECONDS = 1.0 / TARGET_FPS;
         const double perf_frequency = static_cast<double>(SDL_GetPerformanceFrequency());
         const double target_counts  = TARGET_FRAME_SECONDS * perf_frequency;
+
+        SDL_Renderer* renderer = raw_renderer();
+        if (!renderer) {
+                std::cerr << "[MenuUI] Renderer unavailable; exiting game loop.\n";
+                return;
+        }
 
 	bool quit = false;
 	SDL_Event e;
@@ -138,7 +144,7 @@ void MenuUI::game_loop() {
                 }
 
                 if (!dev_idle) {
-                        SDL_RenderPresent(renderer_);
+                        SDL_RenderPresent(renderer);
                 }
 
                 if (input_) input_->update();
@@ -203,16 +209,20 @@ void MenuUI::handle_event(const SDL_Event& e) {
 }
 
 void MenuUI::render() {
-        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer_, 0, 0, 0, 100);
+        SDL_Renderer* renderer = raw_renderer();
+        if (!renderer) {
+                return;
+        }
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(renderer, 0, 0, 0, 100);
 	SDL_Rect bg{0, 0, screen_w_, screen_h_};
-	sdl_render::FillRect(renderer_, &bg);
+	sdl_render::FillRect(renderer, &bg);
 	drawVignette(110);
 	const std::string title = "PAUSE MENU";
 	SDL_Rect trect{ 0, 60, screen_w_, 60 };
-	blitTextCentered(renderer_, Styles::LabelTitle(), title, trect, true, SDL_Color{0,0,0,0});
+	blitTextCentered(renderer, Styles::LabelTitle(), title, trect, true, SDL_Color{0,0,0,0});
 	for (auto& mb : buttons_) {
-		mb.button.render(renderer_);
+		mb.button.render(renderer);
 	}
 }
 
@@ -304,10 +314,14 @@ void MenuUI::blitTextCentered(SDL_Renderer* r,
 }
 
 void MenuUI::drawVignette(Uint8 alpha) const {
-	SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
-	SDL_SetRenderDrawColor(renderer_, 0, 0, 0, alpha);
+	SDL_Renderer* renderer = raw_renderer();
+	if (!renderer) {
+		return;
+	}
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, alpha);
 	SDL_Rect v{0,0,screen_w_,screen_h_};
-	sdl_render::FillRect(renderer_, &v);
+	sdl_render::FillRect(renderer, &v);
 }
 
 void MenuUI::doExit() {
@@ -318,12 +332,17 @@ void MenuUI::doExit() {
 void MenuUI::doRestart() {
         std::cout << "[MenuUI] Restarting...\n";
         if (game_assets_)      { delete game_assets_; game_assets_ = nullptr; }
+        SDL_Renderer* renderer = raw_renderer();
+        if (!renderer) {
+                std::cerr << "[MenuUI] Cannot restart without a renderer.\n";
+                return;
+        }
         try {
                 if (loader_) {
                     nlohmann::json manifest_copy = loader_->map_manifest();
                     std::string content_root = loader_->content_root();
                     std::string map_id = loader_->map_identifier();
-                    loader_ = std::make_unique<AssetLoader>(map_id, manifest_copy, renderer_, content_root, nullptr, asset_library_);
+                    loader_ = std::make_unique<AssetLoader>(map_id, manifest_copy, renderer, content_root, nullptr, asset_library_);
                 }
                 world::WorldGrid world_grid{};
                 loader_->createAssets(world_grid);
@@ -338,15 +357,21 @@ void MenuUI::doRestart() {
                 if (!restart_library) {
                         throw std::runtime_error("Asset library unavailable during restart.");
                 }
-                game_assets_ = new Assets(*restart_library, player_ptr, loader_->getRooms(), screen_w_, screen_h_, start_px, start_py, static_cast<int>(loader_->getMapRadius() * 1.2), renderer_, loader_->map_identifier(), loader_->map_manifest(), loader_->content_root(), std::move(world_grid));
+                game_assets_ = new Assets(*restart_library, player_ptr, loader_->getRooms(), screen_w_, screen_h_, start_px, start_py, static_cast<int>(loader_->getMapRadius() * 1.2), renderer, loader_->map_identifier(), loader_->map_manifest(), loader_->content_root(), std::move(world_grid));
                 if (!input_) input_ = new Input();
                 game_assets_->set_input(input_);
+                if (game_assets_) {
+                        game_assets_->reload_camera_settings();
+                }
                 if (!player_ptr) {
                         dev_mode_ = true;
                         std::cout << "[MenuUI] No player asset found. Launching in Dev Mode.\n";
                 }
                 if (game_assets_) {
                         game_assets_->set_dev_mode(dev_mode_);
+                        // Apply camera settings AFTER dev_mode is set to ensure correct initialization
+                        game_assets_->apply_camera_runtime_settings();
+                        game_assets_->force_camera_view_refresh();
                 }
         } catch (const std::exception& ex) {
                 std::cerr << "[MenuUI] Restart failed: " << ex.what() << "\n";

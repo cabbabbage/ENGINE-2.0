@@ -441,10 +441,12 @@ Assets::~Assets() {
     grid_registration_buffer_.clear();
 
     // Persist current asset state to bundle caches on teardown (dev mode exit).
-    PrimaryAssetCache cache(renderer());
-    for (const auto& entry : library_.all()) {
-        if (entry.second) {
-            cache.save_current(*entry.second);
+    if (dev_mode) {
+        PrimaryAssetCache cache(renderer());
+        for (const auto& entry : library_.all()) {
+            if (entry.second) {
+                cache.save_current(*entry.second);
+            }
         }
     }
 
@@ -735,9 +737,7 @@ void Assets::update(const Input& input)
     dx = dy = 0;
 
     // Pause runtime asset updates while in Dev Mode unless a frame editor session requires them.
-    const bool runtime_updates_enabled =
-        !dev_mode ||
-        (dev_controls_ && dev_controls_->is_frame_editor_session_active());
+    const bool runtime_updates_enabled = should_run_runtime_updates();
 
     int start_px = player ? player->world_x() : 0;
     int start_py = player ? player->world_y() : 0;
@@ -2318,6 +2318,16 @@ bool Assets::has_pending_dev_work(bool include_animation_plans) const {
     // Check all active non-player assets for in-flight movement plans
     for (const Asset* a : non_player_update_buffer_) {
         if (a && a->anim_runtime_ && a->anim_runtime_->has_active_plan()) return true;
+    }
+    return false;
+}
+
+bool Assets::should_run_runtime_updates() const {
+    if (!dev_mode) {
+        return true;
+    }
+    if (dev_controls_ && dev_controls_->is_frame_editor_session_active()) {
+        return true;
     }
     return false;
 }

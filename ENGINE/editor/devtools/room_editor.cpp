@@ -2498,13 +2498,20 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
     if (assets_) {
         const bool now_panning = camera_controls_.is_panning();
-        if (now_panning && !camera_pan_active_notified_) {
-            camera_pan_active_notified_ = true;
-            assets_->notify_camera_activity(true);
-        } else if (!now_panning && camera_pan_active_notified_) {
+        if (now_panning) {
+            if (!camera_pan_active_notified_) {
+                camera_pan_active_notified_ = true;
+                assets_->notify_camera_activity(true);
+            }
+        } else if (camera_pan_active_notified_) {
             camera_pan_active_notified_ = false;
+            camera_pan_just_finished_ = true;
             assets_->notify_camera_activity(false);
         }
+    }
+
+    if (camera_pan_just_finished_ && input_) {
+        input_->clearClickBuffer();
     }
 
     const SDL_FPoint world_f = cam.screen_to_map(screen_pt);
@@ -2656,9 +2663,11 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     }
 
     const bool any_left_activity = left_pressed_this_frame || left_released_this_frame || left_down;
-    if (!dragging_ && !suppress_next_left_click_ && !any_left_activity) {
+    if (!dragging_ && !suppress_next_left_click_ && !any_left_activity && !camera_pan_just_finished_) {
         handle_click(input);
     }
+
+    camera_pan_just_finished_ = false;
 
     prev_left_down = left_down;
 }

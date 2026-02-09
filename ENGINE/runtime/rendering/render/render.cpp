@@ -83,24 +83,57 @@ void GeometryBatcher::flush() {
     // Static quad indices pattern (0,1,2, 0,2,3)
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
-    for (auto& [key, batch] : batches_) {
-        if (batch.quads.empty()) {
-            continue;
+    // Collect all quads with their texture/blend mode into a flat list
+    struct QuadWithTexture {
+        QuadData quad;
+        SDL_Texture* texture;
+        SDL_BlendMode blend_mode;
+    };
+    std::vector<QuadWithTexture> all_quads;
+
+    // Reserve space for all quads across all batches
+    size_t total_quad_count = 0;
+    for (const auto& [key, batch] : batches_) {
+        total_quad_count += batch.quads.size();
+    }
+    all_quads.reserve(total_quad_count);
+
+    // Collect all quads
+    for (const auto& [key, batch] : batches_) {
+        for (const auto& quad : batch.quads) {
+            all_quads.push_back({quad, batch.texture, batch.blend_mode});
+        }
+    }
+
+    // Sort all quads globally by depth (highest depth = furthest = rendered first)
+    std::sort(all_quads.begin(), all_quads.end(),
+              [](const QuadWithTexture& a, const QuadWithTexture& b) {
+                  return a.quad.depth > b.quad.depth;
+              });
+
+    // Now render in depth order, batching consecutive quads with same texture+blend
+    size_t i = 0;
+    while (i < all_quads.size()) {
+        SDL_Texture* current_texture = all_quads[i].texture;
+        SDL_BlendMode current_blend = all_quads[i].blend_mode;
+
+        // Find run of consecutive quads with same texture+blend
+        size_t run_end = i;
+        while (run_end < all_quads.size() &&
+               all_quads[run_end].texture == current_texture &&
+               all_quads[run_end].blend_mode == current_blend) {
+            ++run_end;
         }
 
-        // Sort quads by depth (highest depth = furthest = rendered first)
-        std::sort(batch.quads.begin(), batch.quads.end(),
-                  [](const QuadData& a, const QuadData& b) {
-                      return a.depth > b.depth;
-                  });
-
-        // Build vertex and index buffers
+        // Build vertex and index buffers for this run
         vertex_buffer_.clear();
         index_buffer_.clear();
-        vertex_buffer_.reserve(batch.quads.size() * 4);
-        index_buffer_.reserve(batch.quads.size() * 6);
+        const size_t run_length = run_end - i;
+        vertex_buffer_.reserve(run_length * 4);
+        index_buffer_.reserve(run_length * 6);
 
-        for (const auto& quad : batch.quads) {
+        for (size_t j = i; j < run_end; ++j) {
+            const auto& quad = all_quads[j].quad;
             const int base_index = static_cast<int>(vertex_buffer_.size());
 
             vertex_buffer_.push_back(quad.vertices[0]);
@@ -116,10 +149,10 @@ void GeometryBatcher::flush() {
             index_buffer_.push_back(base_index + kQuadIndices[5]);
         }
 
-        // Single draw call for entire batch
-        SDL_SetTextureBlendMode(batch.texture, batch.blend_mode);
+        // Draw this run
+        SDL_SetTextureBlendMode(current_texture, current_blend);
         SDL_RenderGeometry(renderer_,
-                           batch.texture,
+                           current_texture,
                            vertex_buffer_.data(),
                            static_cast<int>(vertex_buffer_.size()),
                            index_buffer_.data(),
@@ -127,6 +160,8 @@ void GeometryBatcher::flush() {
 
         ++draw_call_count_;
         total_vertices_ += vertex_buffer_.size();
+
+        i = run_end;
     }
 }
 
@@ -749,6 +784,7 @@ void SceneRenderer::render() {
 
     // Update fog system before rendering
     const bool should_render_fog = assets_->fog_visible();
+    const bool runtime_updates_enabled = assets_->should_run_runtime_updates();
     if (dynamic_fog_system_ && should_render_fog) {
         dynamic_fog_system_->update(cam, grid);
     }
@@ -757,7 +793,8 @@ void SceneRenderer::render() {
     const bool boundary_assets_visible = assets_->boundary_assets_visible();
     const bool should_render_boundaries =
         boundary_assets_visible && dynamic_boundary_system_ && dynamic_boundary_system_->is_initialized();
-    const float boundary_delta_ms = static_cast<float>(assets_->frame_delta_seconds() * 1000.0);
+    const float boundary_delta_ms =
+        runtime_updates_enabled ? static_cast<float>(assets_->frame_delta_seconds() * 1000.0) : 0.0f;
     if (should_render_boundaries) {
         dynamic_boundary_system_->update(cam, grid, assets_, boundary_delta_ms);
     }

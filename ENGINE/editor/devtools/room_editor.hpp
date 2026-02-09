@@ -404,6 +404,7 @@ private:
     double height_scale_factor_ = 1.1;
     DevCameraControls camera_controls_;
     bool camera_pan_active_notified_ = false;
+    bool camera_pan_just_finished_ = false;
     bool camera_settings_drag_active_notified_ = false;
     struct CameraLockState {
         bool valid = false;

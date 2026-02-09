@@ -861,18 +861,6 @@ void Asset::clear_render_caches() {
     }
 }
 
-bool Asset::is_mesh_dirty() const {
-    return mesh_dirty_;
-}
-
-void Asset::mark_mesh_dirty() {
-    mesh_dirty_ = true;
-}
-
-void Asset::clear_mesh_dirty() {
-    mesh_dirty_ = false;
-}
-
 void Asset::invalidate_downscale_cache() {
         last_scaled_texture_      = nullptr;
         last_scaled_source_       = nullptr;

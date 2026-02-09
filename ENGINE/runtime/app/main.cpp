@@ -73,7 +73,7 @@ MainApp::MainApp(MapDescriptor map,
 
 MainApp::~MainApp() {
         // Persist current asset state to primary bundles before tearing down.
-        if (asset_library_) {
+        if (asset_library_ && game_assets_ && game_assets_->is_dev_mode()) {
                 PrimaryAssetCache cache(nullptr);
                 for (const auto& entry : asset_library_->all()) {
                         if (entry.second) {
@@ -294,6 +294,9 @@ void MainApp::setup() {
 
                 input_ = new Input();
                 game_assets_->set_input(input_);
+                if (game_assets_) {
+                        game_assets_->apply_camera_runtime_settings();
+                }
                 if (!player_ptr) {
                         dev_mode_ = true;
                         vibble::log::warn("[MainApp] No player asset found. Launching in Dev Mode.");

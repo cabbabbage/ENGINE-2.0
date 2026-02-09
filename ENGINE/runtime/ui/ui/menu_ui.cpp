@@ -107,14 +107,15 @@ void MenuUI::game_loop() {
                     && !menu_active_
                     && game_assets_ && input_
                     && !game_assets_->should_step_dev_frame(*input_);
+                const bool should_update = !menu_active_ && !dev_idle && game_assets_ && input_;
 
-                if (!dev_idle && game_assets_ && input_) {
+                if (should_update) {
                         game_assets_->update(*input_);
-                } else if (dev_idle && game_assets_) {
+                } else if (!menu_active_ && dev_idle && game_assets_) {
                         game_assets_->touch_last_frame_counter();
                 }
 
-                if (!dev_idle && game_assets_) {
+                if (!menu_active_ && !dev_idle && game_assets_) {
                         static bool opened_asset_info_once = false;
                         if (!opened_asset_info_once) {
                                 const auto& active = game_assets_->getActive();
@@ -128,8 +129,9 @@ void MenuUI::game_loop() {
                 if (menu_active_) {
                         render();
                         switch (consumeAction()) {
-                                case MenuAction::EXIT:     doExit();    quit = true; break;
-                                case MenuAction::RESTART:  doRestart();               break;
+                                case MenuAction::EXIT:     doExit();    closeMenu(); quit = true; break;
+                                case MenuAction::RESTART:  doRestart(); closeMenu(); break;
+                                case MenuAction::QUIT:     doQuit();    closeMenu(); quit = true; break;
                                 case MenuAction::SETTINGS: doSettings();             break;
                                 default: break;
                         }
@@ -162,10 +164,33 @@ void MenuUI::game_loop() {
 }
 
 void MenuUI::toggleMenu() {
-        menu_active_ = !menu_active_;
+        if (menu_active_) {
+                closeMenu();
+        } else {
+                openMenu();
+        }
         std::cout << "[MenuUI] ESC -> menu_active=" << (menu_active_ ? "true" : "false") << "\n";
+}
+
+void MenuUI::openMenu() {
+        exitDevModeForPause();
+        menu_active_ = true;
         if (menu_active_) Button::refresh_glass_overlay();
         if (game_assets_) game_assets_->set_render_suppressed(menu_active_);
+}
+
+void MenuUI::closeMenu() {
+        if (!menu_active_) return;
+        menu_active_ = false;
+        if (game_assets_) game_assets_->set_render_suppressed(menu_active_);
+}
+
+void MenuUI::exitDevModeForPause() {
+        if (!dev_mode_) return;
+        dev_mode_ = false;
+        if (game_assets_) game_assets_->set_dev_mode(dev_mode_);
+        std::cout << "[MenuUI] Dev Mode disabled for pause menu\n";
+        rebuildButtons();
 }
 
 void MenuUI::handle_event(const SDL_Event& e) {
@@ -215,6 +240,7 @@ void MenuUI::rebuildButtons() {
 };
         addButton("End Run",            MenuAction::EXIT, true);
         addButton("Restart Run",        MenuAction::RESTART);
+        addButton("Quit Game",          MenuAction::QUIT, true);
         addButton("Settings",           MenuAction::SETTINGS);
 }
 
@@ -330,6 +356,10 @@ void MenuUI::doRestart() {
 
 void MenuUI::doSettings() {
 	std::cout << "[MenuUI] Settings opened\n";
+}
+
+void MenuUI::doQuit() {
+	std::cout << "[MenuUI] Quit Game -> exiting application\n";
 }
 
 void MenuUI::doToggleDevMode() {

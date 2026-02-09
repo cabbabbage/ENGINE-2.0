@@ -737,6 +737,27 @@ void run(SDL_Window* window,
         bool should_show_loading_screen = false;
         SDL_Event e;
         bool choosing = true;
+        if (const char* auto_map = std::getenv("ENGINE_AUTOSTART_MAP")) {
+            std::string target = auto_map;
+            if (target.empty()) {
+                target = "test";
+            }
+            if (manifest_data.maps.contains(target) && manifest_data.maps[target].is_object()) {
+                chosen_map = MapDescriptor{target, manifest_data.maps[target]};
+                vibble::log::info(std::string("[Main] ENGINE_AUTOSTART_MAP=") + target + " -> auto-selecting map.");
+                choosing = false;
+                should_show_loading_screen = true;
+            } else if (!manifest_data.maps.empty()) {
+                auto first = manifest_data.maps.begin();
+                chosen_map = MapDescriptor{first.key(), first.value()};
+                vibble::log::info(std::string("[Main] ENGINE_AUTOSTART_MAP requested unknown map '") +
+                                  target + "'. Falling back to first map '" + first.key() + "'.");
+                choosing = false;
+                should_show_loading_screen = true;
+            } else {
+                vibble::log::warn("[Main] ENGINE_AUTOSTART_MAP set but manifest has no maps.");
+            }
+        }
 
         while (choosing) {
             while (SDL_PollEvent(&e)) {

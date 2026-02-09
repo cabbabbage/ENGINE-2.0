@@ -745,12 +745,8 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         cur_params.height_px = cur->camera_height_px;
         cur_params.tilt_deg = cur->camera_tilt_deg;
         cur_params.zoom_percent = cur->camera_zoom_percent;
-        vibble::log::info(std::string("[Camera] Room camera params: height=") +
-                         std::to_string(cur_params.height_px) +
-                         " tilt=" + std::to_string(cur_params.tilt_deg) +
-                         " zoom=" + std::to_string(cur_params.zoom_percent) +
-                         "% refresh=" + (refresh_requested ? "YES" : "NO") +
-                         " dev_mode=" + (dev_mode ? "YES" : "NO"));
+
+
     }
     Room* neigh = nullptr;
     if (finder) {

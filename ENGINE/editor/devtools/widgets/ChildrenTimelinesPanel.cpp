@@ -16,7 +16,6 @@
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/search_assets.hpp"
-#include "devtools/tag_utils.hpp"
 #include "devtools/widgets.hpp"
 #include "utils/input.hpp"
 
@@ -42,36 +41,7 @@ bool is_valid_selection(const std::string& selection) {
 }
 
 bool is_valid_child_asset(const nlohmann::json& entry) {
-    if (!entry.is_object()) {
-        return false;
-    }
-
-    // Must have animations to be a valid child
-    auto anim_it = entry.find("animations");
-    if (anim_it == entry.end() || !anim_it->is_object() || anim_it->empty()) {
-        return false;
-    }
-
-    // Exclude assets tagged with #notchild
-    auto tags_it = entry.find("tags");
-    if (tags_it != entry.end() && tags_it->is_array()) {
-        for (const auto& tag : *tags_it) {
-            if (tag.is_string()) {
-                std::string tag_str = tag.get<std::string>();
-                // Normalize tag (remove # prefix if present and convert to lowercase)
-                std::string normalized = tag_utils::normalize(tag_str);
-                if (!normalized.empty() && normalized[0] == '#') {
-                    normalized.erase(normalized.begin());
-                }
-
-                if (normalized == "notchild") {
-                    return false;
-                }
-            }
-        }
-    }
-
-    return true;
+    return entry.is_object();
 }
 
 class ChildLabelWidget : public Widget {
@@ -442,6 +412,4 @@ bool ChildrenTimelinesPanel::apply_mode_to_all_animations(const std::string& chi
 }
 
 }
-
-
 

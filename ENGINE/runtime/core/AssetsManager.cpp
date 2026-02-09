@@ -376,6 +376,10 @@ void Assets::reload_camera_settings() {
     load_camera_settings_from_json();
     mark_camera_dirty();  // CRITICAL: Mark camera dirty to trigger refresh on first frame
     camera_view_dirty_ = true;
+    if (finder_) {
+        current_room_ = finder_->getCurrentRoom();
+        camera_.update_camera_height(current_room_, finder_, player, true, 0.0f, dev_mode);
+    }
     vibble::log::info("[Assets] Camera settings reloaded and marked dirty for refresh");
     log_camera_fog_state("startup-normal");
 }

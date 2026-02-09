@@ -837,6 +837,8 @@ void RoomEditor::set_current_room(Room* room) {
 }
 
 void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
+    vibble::log::info(std::string("[RoomEditor] Dev Mode ") + (enabled ? "ENABLED" : "DISABLED") +
+                     " (preserve_camera=" + (preserve_camera_state ? "true" : "false") + ")");
     enabled_ = enabled;
     if (!assets_) return;
     if (!enabled_) {
@@ -848,6 +850,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
 
     WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
     if (enabled_) {
+        vibble::log::info("[RoomEditor] Dev Mode enabled: clearing camera overrides");
         if (cam && !preserve_camera_state) {
             cam->set_manual_height_override(false);
             cam->set_manual_zoom_override(false);
@@ -860,6 +863,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
         }
         configure_shared_panel();
     } else {
+        vibble::log::info("[RoomEditor] Dev Mode disabled: clearing camera overrides and focus");
         if (cam && !preserve_camera_state) {
             cam->set_manual_height_override(false);
             cam->set_manual_zoom_override(false);
@@ -2506,6 +2510,10 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         } else if (camera_pan_active_notified_) {
             camera_pan_active_notified_ = false;
             camera_pan_just_finished_ = true;
+            suppress_left_click_frames_ = 2;
+            if (input_) {
+                input_->consumeMouseButton(Input::LEFT);
+            }
             assets_->notify_camera_activity(false);
         }
     }
@@ -2663,10 +2671,14 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     }
 
     const bool any_left_activity = left_pressed_this_frame || left_released_this_frame || left_down;
-    if (!dragging_ && !suppress_next_left_click_ && !any_left_activity && !camera_pan_just_finished_) {
+    const bool suppress_click_now = suppress_left_click_frames_ > 0 || camera_pan_just_finished_;
+    if (!dragging_ && !suppress_next_left_click_ && !any_left_activity && !suppress_click_now) {
         handle_click(input);
     }
 
+    if (suppress_left_click_frames_ > 0) {
+        --suppress_left_click_frames_;
+    }
     camera_pan_just_finished_ = false;
 
     prev_left_down = left_down;
@@ -3319,6 +3331,7 @@ void RoomEditor::handle_click(const Input& input) {
         input.isScancodeDown(SDL_SCANCODE_LALT) || input.isScancodeDown(SDL_SCANCODE_RALT); 
     const bool shift_modifier = 
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT); 
+    Asset* clicked_asset = hovered_asset_;
     if (alt_modifier && shift_modifier && hovered_asset_) { 
         const std::string spawn_id = hovered_asset_->spawn_id; 
         if (!spawn_id.empty() && delete_spawn_group_internal(spawn_id)) { 
@@ -3333,6 +3346,7 @@ void RoomEditor::handle_click(const Input& input) {
             selected_assets_.clear();
             if (!highlighted_assets_.empty()) highlight_changed = true;
             highlighted_assets_.clear();
+            map_assets_panel_requested_by_shift_click_ = shift_modifier && clicked_asset;
             sync_spawn_group_panel_with_selection();
             return;
         }
@@ -3366,12 +3380,14 @@ void RoomEditor::handle_click(const Input& input) {
                 }
             }
         }
+        map_assets_panel_requested_by_shift_click_ = shift_modifier && clicked_asset;
         sync_spawn_group_panel_with_selection();
     } else {
         if (!selected_assets_.empty()) selection_changed = true;
         selected_assets_.clear();
         if (!highlighted_assets_.empty()) highlight_changed = true;
         highlighted_assets_.clear();
+        map_assets_panel_requested_by_shift_click_ = shift_modifier && clicked_asset;
         sync_spawn_group_panel_with_selection();
 
         const bool asset_info_open2 = (active_modal_ == ActiveModal::AssetInfo);
@@ -4986,6 +5002,8 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
 
     const bool map_assets_entry = owner_matches_section("map_assets_data");
     const bool boundary_entry   = owner_matches_section("map_boundary_data");
+    const bool should_open_map_assets_panel = map_assets_entry && map_assets_panel_requested_by_shift_click_;
+    map_assets_panel_requested_by_shift_click_ = false;
 
     auto close_spawn_group_panel = [&]() {
         if (spawn_group_panel_) {
@@ -5017,7 +5035,7 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         close_spawn_group_panel();
         clear_active_spawn_group_target();
         close_room_config_preserving_selection();
-        if (open_map_assets_panel_callback_) {
+        if (should_open_map_assets_panel && open_map_assets_panel_callback_) {
             open_map_assets_panel_callback_();
         }
         return;

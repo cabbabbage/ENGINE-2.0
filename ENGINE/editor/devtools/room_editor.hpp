@@ -405,6 +405,8 @@ private:
     DevCameraControls camera_controls_;
     bool camera_pan_active_notified_ = false;
     bool camera_pan_just_finished_ = false;
+    int suppress_left_click_frames_ = 0;
+    bool map_assets_panel_requested_by_shift_click_ = false;
     bool camera_settings_drag_active_notified_ = false;
     struct CameraLockState {
         bool valid = false;

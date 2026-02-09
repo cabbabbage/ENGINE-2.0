@@ -295,6 +295,7 @@ void MainApp::setup() {
                 input_ = new Input();
                 game_assets_->set_input(input_);
                 if (game_assets_) {
+                        game_assets_->reload_camera_settings();
                         game_assets_->apply_camera_runtime_settings();
                 }
                 if (!player_ptr) {

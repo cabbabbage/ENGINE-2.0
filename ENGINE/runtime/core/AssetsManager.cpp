@@ -369,7 +369,10 @@ void Assets::mark_camera_dirty() {
 }
 
 void Assets::reload_camera_settings() {
+    vibble::log::info("[Assets] Reloading camera settings from manifest");
     load_camera_settings_from_json();
+    mark_camera_dirty();  // CRITICAL: Mark camera dirty to trigger refresh on first frame
+    vibble::log::info("[Assets] Camera settings reloaded and marked dirty for refresh");
 }
 
 int Assets::saved_render_quality_percent() const {

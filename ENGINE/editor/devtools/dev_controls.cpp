@@ -735,6 +735,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
 DevControls::~DevControls() {
     restore_filter_hidden_assets();
     manifest_store_.flush();
+    devmode::ui_settings::flush_if_dirty();
     AssetInfo::set_manifest_store_provider({});
     simple_label_cache().clear();
 }
@@ -3372,6 +3373,11 @@ bool DevControls::persist_map_info_to_disk() {
     const bool map_saved = devmode::persist_map_manifest_entry( manifest_store_, map_id, assets_->map_info_json(), std::cerr);
     if (map_saved) {
         manifest_store_.flush();
+        if (assets_) {
+            assets_->show_dev_notice("Map manifest saved", 1200);
+        }
+    } else if (assets_) {
+        assets_->show_dev_notice("Failed to save map manifest", 2000);
     }
     return map_saved;
 }

@@ -206,6 +206,29 @@ std::vector<std::filesystem::path> split_paths(const std::string& raw) {
 
 std::string default_audio_subdir() { return "audio"; }
 
+std::string manifest_key_fallback(const AssetInfo& info) {
+    if (!info.name.empty()) {
+        return info.name;
+    }
+    try {
+        std::filesystem::path dir = info.asset_dir_path();
+        if (dir.has_filename()) {
+            std::string stem = dir.filename().string();
+            if (!stem.empty()) {
+                return stem;
+            }
+        }
+        if (!dir.empty()) {
+            std::string normalized = dir.lexically_normal().generic_string();
+            if (!normalized.empty()) {
+                return normalized;
+            }
+        }
+    } catch (...) {
+    }
+    return {};
+}
+
 bool looks_like_numbered_png(const std::filesystem::path& path) {
     std::string ext = path.extension().string();
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
@@ -504,20 +527,34 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     bool seed_transaction_with_recovery = false;
 
     nlohmann::json info_snapshot = build_info_snapshot();
+    auto attach_manifest_transaction = [&](const std::string& key, bool log_creation) {
+        if (!manifest_store_ || key.empty()) {
+            return;
+        }
+        manifest_asset_key_ = key;
+        manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
+        if (manifest_transaction_) {
+            using_manifest_store_ = true;
+            persist_callback = [this](const nlohmann::json& payload) { return this->persist_manifest_payload(payload); };
+            if (log_creation) {
+                std::cerr << "[AnimationEditor] Created manifest entry for '" << info->name << "' as '" << manifest_asset_key_ << "'\n";
+            }
+        } else {
+            std::cerr << "[AnimationEditor] Failed to open manifest transaction for '" << manifest_asset_key_ << "'\n";
+            manifest_asset_key_.clear();
+            manifest_transaction_ = {};
+        }
+    };
 
     if (manifest_store_) {
         if (auto key = resolve_manifest_key(*info)) {
-            manifest_asset_key_ = *key;
-            manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
-            if (manifest_transaction_) {
-                using_manifest_store_ = true;
-                persist_callback = [this](const nlohmann::json& payload) { return this->persist_manifest_payload(payload); };
-            } else {
-                std::cerr << "[AnimationEditor] Failed to open manifest transaction for '" << manifest_asset_key_ << "'\n";
-                manifest_asset_key_.clear();
-            }
+            attach_manifest_transaction(*key, false);
         } else {
             std::cerr << "[AnimationEditor] Unable to resolve manifest key for '" << info->name << "'\n";
+            const std::string fallback_key = manifest_key_fallback(*info);
+            if (!fallback_key.empty()) {
+                attach_manifest_transaction(fallback_key, true);
+            }
         }
     } else {
         std::cerr << "[AnimationEditor] Manifest store unavailable; animations will not persist for '" << info->name << "'\n";
@@ -1813,27 +1850,47 @@ void AnimationEditorWindow::reload_document() {
         using_manifest_store_ = false;
     } else {
         close_manifest_transaction();
-        if (auto key = resolve_manifest_key(*info_ptr)) {
-            manifest_asset_key_ = *key;
+        auto attach_manifest_transaction = [&](const std::string& key, bool log_creation) -> bool {
+            if (!manifest_store_ || key.empty()) {
+                return false;
+            }
+            manifest_asset_key_ = key;
             manifest_transaction_ = manifest_store_->begin_asset_transaction(manifest_asset_key_, true);
-            if (manifest_transaction_) {
-                using_manifest_store_ = true;
-                nlohmann::json snapshot = manifest_transaction_.data();
-                snapshot_was_empty = !has_animation_entries(snapshot);
-                document_->load_from_manifest(snapshot,
-                                              asset_root_path_,
-                                              [this](const nlohmann::json& payload) {
-                                                  return this->persist_manifest_payload(payload);
-                                              });
-            } else {
+            if (!manifest_transaction_) {
                 std::cerr << "[AnimationEditor] Failed to reopen manifest transaction for '"
                           << manifest_asset_key_ << "'\n";
                 manifest_asset_key_.clear();
-                document_->load_from_manifest(nlohmann::json::object(), asset_root_path_, {});
-                using_manifest_store_ = false;
+                manifest_transaction_ = {};
+                return false;
             }
+            if (log_creation) {
+                std::cerr << "[AnimationEditor] Created manifest entry for '" << info_ptr->name
+                          << "' as '" << manifest_asset_key_ << "' during reload\n";
+            }
+            using_manifest_store_ = true;
+            return true;
+        };
+
+        bool attached = false;
+        if (auto key = resolve_manifest_key(*info_ptr)) {
+            attached = attach_manifest_transaction(*key, false);
         } else {
             std::cerr << "[AnimationEditor] Unable to resolve manifest key during reload\n";
+            const std::string fallback_key = manifest_key_fallback(*info_ptr);
+            if (!fallback_key.empty()) {
+                attached = attach_manifest_transaction(fallback_key, true);
+            }
+        }
+
+        if (attached) {
+            nlohmann::json snapshot = manifest_transaction_.data();
+            snapshot_was_empty = !has_animation_entries(snapshot);
+            document_->load_from_manifest(snapshot,
+                                          asset_root_path_,
+                                          [this](const nlohmann::json& payload) {
+                                              return this->persist_manifest_payload(payload);
+                                          });
+        } else {
             document_->load_from_manifest(nlohmann::json::object(), asset_root_path_, {});
             using_manifest_store_ = false;
         }

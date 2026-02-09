@@ -170,7 +170,7 @@ Assets::Assets(AssetLibrary& library,
     }
 
     hydrate_map_info_sections();
-    depth_effects_enabled_ = false;
+    depth_effects_enabled_ = true;
 
     vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
     InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_y, map_radius);
@@ -2410,4 +2410,3 @@ bool Assets::should_run_runtime_updates() const {
     }
     return false;
 }
-

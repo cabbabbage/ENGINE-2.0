@@ -27,9 +27,30 @@
 
 namespace {
 
-const SDL_Color kTileBG  = dm::rgba(24, 36, 56, 210);
-const SDL_Color kTileHL  = dm::rgba(59, 130, 246, 110);
-const SDL_Color kTileBd  = DMStyles::Border();
+struct TileStyle {
+    SDL_Color background{};
+    SDL_Color hover_overlay{};
+    SDL_Color outline{};
+    SDL_Color placeholder{};
+    int padding = 0;
+    int badge_height = 0;
+    int corner_radius = 0;
+    int bevel_depth = 0;
+};
+
+const TileStyle& tile_style() {
+    static TileStyle style{
+        dm_draw::DarkenColor(DMStyles::PanelBG(), 0.08f),
+        dm_draw::LightenColor(DMStyles::HighlightColor(), 0.18f),
+        DMStyles::Border(),
+        DMStyles::CheckboxBaseFill(),
+        std::max(10, DMSpacing::item_gap()),
+        18,
+        DMStyles::CornerRadius(),
+        DMStyles::BevelDepth(),
+    };
+    return style;
+}
 
 std::string normalize_tag_value(std::string_view raw_value) {
     std::string normalized = tag_utils::normalize(raw_value);
@@ -87,15 +108,16 @@ public:
     }
 
     void render(SDL_Renderer* r) const override {
+        const TileStyle& palette = tile_style();
         if (!r) return;
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(r, kTileBG.r, kTileBG.g, kTileBG.b, kTileBG.a);
+        SDL_SetRenderDrawColor(r, palette.background.r, palette.background.g, palette.background.b, palette.background.a);
         sdl_render::FillRect(r, &rect_);
 
-        const int pad = 10;
-        const int badge_h = result_.recommended ? 18 : 0;
-        const int corner_radius = DMStyles::CornerRadius();
-        const int bevel_depth = DMStyles::BevelDepth();
+        const int pad = palette.padding;
+        const int badge_h = result_.recommended ? palette.badge_height : 0;
+        const int corner_radius = palette.corner_radius;
+        const int bevel_depth = palette.bevel_depth;
         const SDL_Color& highlight = DMStyles::HighlightColor();
         const SDL_Color& shadow = DMStyles::ShadowColor();
 
@@ -163,23 +185,21 @@ public:
                                    label_rect.y + label_rect.h + pad,
                                    std::max(0, rect_.w - 2 * pad),
                                    std::max(0, rect_.h - (label_rect.h + 3 * pad + badge_h)) };
-            SDL_Color placeholder = DMStyles::CheckboxBaseFill();
-            SDL_SetRenderDrawColor(r, placeholder.r, placeholder.g, placeholder.b, placeholder.a);
+            SDL_SetRenderDrawColor(r, palette.placeholder.r, palette.placeholder.g, palette.placeholder.b, palette.placeholder.a);
             sdl_render::FillRect(r, &preview_rect);
-            SDL_Color outline = DMStyles::Border();
-            SDL_SetRenderDrawColor(r, outline.r, outline.g, outline.b, outline.a);
+            SDL_SetRenderDrawColor(r, palette.outline.r, palette.outline.g, palette.outline.b, palette.outline.a);
             sdl_render::Rect(r, &preview_rect);
         }
 
         if (hovered_) {
             SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_ADD);
-            SDL_SetRenderDrawColor(r, kTileHL.r, kTileHL.g, kTileHL.b, kTileHL.a);
+            SDL_SetRenderDrawColor(r, palette.hover_overlay.r, palette.hover_overlay.g, palette.hover_overlay.b, palette.hover_overlay.a);
             sdl_render::FillRect(r, &rect_);
         }
 
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         int radius = std::min(corner_radius, std::min(rect_.w, rect_.h) / 2);
-        dm_draw::DrawRoundedOutline(r, rect_, radius, 1, kTileBd);
+        dm_draw::DrawRoundedOutline(r, rect_, radius, 1, palette.outline);
 
         const DMLabelStyle& label_style = DMStyles::Label();
         TTF_Font* label_font = devmode::utils::load_font(label_style.font_size > 0 ? label_style.font_size : 16);

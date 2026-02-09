@@ -224,9 +224,9 @@
           "camera_zoom_percent": 93,
           "curvyness": 2,
           "display_color": [
-            139,
-            36,
             242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -255,8 +255,8 @@
                 }
               ],
               "display_name": "Bartender",
-              "dx": -700,
-              "dy": 264,
+              "dx": -44,
+              "dy": 164,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -267,7 +267,7 @@
               "origional_width": 6376,
               "position": "Exact",
               "priority": 0,
-              "resolution": 2,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-847e3df0906f"
@@ -427,9 +427,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            138,
-            242,
             36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 2,

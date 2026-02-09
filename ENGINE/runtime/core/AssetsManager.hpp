@@ -258,7 +258,7 @@ private:
 
     bool suppress_dev_renderer_ = false;
     bool force_high_quality_rendering_ = false;
-    bool depth_effects_enabled_ = false;
+    bool depth_effects_enabled_ = true;
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
     bool asset_boundary_box_display_enabled_ = false;

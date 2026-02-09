@@ -9,6 +9,7 @@
 #include <mutex>
 #include <sstream>
 #include <string>
+#include <optional>
 #include <utility>
 #include <system_error>
 #include <thread>
@@ -147,6 +148,36 @@ bool write_file(const std::filesystem::path& path,
 #endif
 }
 
+std::optional<DigestEntry> read_existing_digest(const std::filesystem::path& path) {
+    std::error_code ec;
+    if (!std::filesystem::exists(path, ec) || ec) {
+        return std::nullopt;
+    }
+
+    DigestEntry entry;
+    entry.mtime = std::filesystem::last_write_time(path, ec);
+    if (ec) {
+        return std::nullopt;
+    }
+
+    std::ifstream in(path, std::ios::binary);
+    if (!in.is_open()) {
+        return std::nullopt;
+    }
+    std::string contents((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    entry.hash = std::hash<std::string>{}(contents);
+    try {
+        entry.data = nlohmann::json::parse(contents);
+        if (!entry.data.is_object()) {
+            entry.data = nlohmann::json::object();
+        }
+    } catch (...) {
+        entry.data = nlohmann::json::object();
+    }
+    entry.valid = true;
+    return entry;
+}
+
 }
 
 struct DevJsonStore::Impl {
@@ -229,6 +260,16 @@ struct DevJsonStore::Impl {
         }
         std::ostringstream errors;
         std::string payload = data.dump(indent);
+        const std::size_t payload_hash = std::hash<std::string>{}(payload);
+
+        if (auto disk = read_existing_digest(path)) {
+            if (disk->valid && disk->hash == payload_hash && disk->data == data) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                digest_cache_[path] = *disk;
+                return;
+            }
+        }
+
         if (!write_file(path, payload, errors)) {
             log_error(errors.str());
             return;
@@ -240,7 +281,7 @@ struct DevJsonStore::Impl {
         }
         {
             std::lock_guard<std::mutex> lock(mutex_);
-            digest_cache_[path] = DigestEntry{mtime, std::hash<std::string>{}(payload), data, true};
+            digest_cache_[path] = DigestEntry{mtime, payload_hash, data, true};
         }
 #else
         const auto now = std::chrono::steady_clock::now();
@@ -264,6 +305,51 @@ struct DevJsonStore::Impl {
         pending.serialized = data.dump(indent);
         pending.hash = std::hash<std::string>{}(pending.serialized);
         pending.deadline = now + kDefaultDebounce;
+
+        bool should_probe_disk = false;
+        std::filesystem::file_time_type cached_mtime{};
+        bool have_cached_mtime = false;
+
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto cache_it = digest_cache_.find(path);
+            if (cache_it != digest_cache_.end() && cache_it->second.valid) {
+                if (cache_it->second.hash == pending.hash && cache_it->second.data == data) {
+                    return;
+                }
+                cached_mtime = cache_it->second.mtime;
+                have_cached_mtime = true;
+            } else {
+                should_probe_disk = true;
+            }
+
+            auto pending_it = pending_writes_.find(path);
+            if (pending_it != pending_writes_.end() && pending_it->second.hash == pending.hash && pending_it->second.data == data) {
+                pending_it->second.deadline = pending.deadline;
+                cv_.notify_one();
+                return;
+            }
+        }
+
+        if (!should_probe_disk) {
+            std::error_code mtime_error;
+            auto disk_mtime = std::filesystem::last_write_time(path, mtime_error);
+            if (!mtime_error) {
+                if (!have_cached_mtime || disk_mtime != cached_mtime) {
+                    should_probe_disk = true;
+                }
+            }
+        }
+
+        if (should_probe_disk) {
+            if (auto disk = read_existing_digest(path)) {
+                if (disk->valid && disk->hash == pending.hash && disk->data == data) {
+                    std::lock_guard<std::mutex> lock(mutex_);
+                    digest_cache_[path] = *disk;
+                    return;
+                }
+            }
+        }
 
         {
             std::lock_guard<std::mutex> lock(mutex_);

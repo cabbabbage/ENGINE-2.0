@@ -30,13 +30,10 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
-#include <cctype>
 #include <unordered_map>
 #include <unordered_set>
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
-#include <cstdlib>
-#include <sstream>
 static std::mt19937& asset_rng()
 {
         static std::mt19937 rng{ std::random_device{}() };
@@ -76,86 +73,6 @@ static std::vector<std::string> collect_animation_child_names(const AssetInfo& i
 
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
 std::mutex Asset::s_flip_overrides_mutex_{};
-namespace {
-    bool scale_debug_env_enabled() {
-        static const bool enabled = []() {
-            const char* env = std::getenv("ENGINE_SCALE_DEBUG");
-            if (!env) return false;
-            std::string val(env);
-            for (char& ch : val) ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
-            return val == "1" || val == "true" || val == "yes" || val == "on";
-        }();
-        return enabled;
-    }
-
-    const std::unordered_set<std::string>& scale_debug_targets() {
-        static const std::unordered_set<std::string> targets = []() {
-            std::unordered_set<std::string> parsed;
-            if (const char* env = std::getenv("ENGINE_SCALE_DEBUG_ASSETS")) {
-                std::string list(env);
-                std::stringstream ss(list);
-                std::string item;
-                while (std::getline(ss, item, ',')) {
-                    while (!item.empty() && std::isspace(static_cast<unsigned char>(item.front()))) item.erase(item.begin());
-                    while (!item.empty() && std::isspace(static_cast<unsigned char>(item.back()))) item.pop_back();
-                    if (!item.empty()) parsed.insert(item);
-                }
-            }
-            if (parsed.empty()) {
-                return std::unordered_set<std::string>{"barrel", "spider", "Bartender"};
-            }
-            return parsed;
-        }();
-        return targets;
-    }
-
-    struct ScaleDebugSnapshot {
-        bool dev_mode = false;
-        int variant_index = -1;
-        float current_scale = 0.0f;
-        float perspective_scale = 0.0f;
-        float camera_scale = 0.0f;
-        float remainder = 0.0f;
-        float base_scale = 0.0f;
-        float desired_variant = 0.0f;
-        float gp_scale = 0.0f;
-        SDL_Point world_pos{0, 0};
-    };
-
-    bool should_log_scale_debug(const Asset* asset, const ScaleDebugSnapshot& snap) {
-        struct Stored {
-            ScaleDebugSnapshot snapshot;
-        };
-        static std::unordered_map<const Asset*, Stored> cache;
-        auto it = cache.find(asset);
-        auto significant_change = [](float a, float b) {
-            const float diff = std::fabs(a - b);
-            const float scale = std::max({1.0f, std::fabs(a), std::fabs(b)});
-            return diff / scale > 0.02f;
-        };
-        if (it == cache.end()) {
-            cache[asset] = Stored{snap};
-            return true;
-        }
-        const ScaleDebugSnapshot& prev = it->second.snapshot;
-        const bool changed =
-            prev.dev_mode != snap.dev_mode ||
-            prev.variant_index != snap.variant_index ||
-            significant_change(prev.current_scale, snap.current_scale) ||
-            significant_change(prev.perspective_scale, snap.perspective_scale) ||
-            significant_change(prev.camera_scale, snap.camera_scale) ||
-            significant_change(prev.remainder, snap.remainder) ||
-            significant_change(prev.base_scale, snap.base_scale) ||
-            significant_change(prev.desired_variant, snap.desired_variant) ||
-            significant_change(static_cast<float>(prev.world_pos.x), static_cast<float>(snap.world_pos.x)) ||
-            significant_change(static_cast<float>(prev.world_pos.y), static_cast<float>(snap.world_pos.y));
-        if (changed) {
-            it->second.snapshot = snap;
-            return true;
-        }
-        return false;
-    }
-}
 
 Asset::Asset(std::shared_ptr<AssetInfo> info_,
              const Area& spawn_area,
@@ -508,45 +425,6 @@ void Asset::update_scale_values() {
     last_scale_usage_.remainder_scale = current_remaining_scale_adjustment;
     last_scale_usage_.variant_index = current_variant_index;
 
-    if (scale_debug_env_enabled() && info && scale_debug_targets().find(info->name) != scale_debug_targets().end()) {
-        const bool dev_mode = assets_ && assets_->is_dev_mode();
-        const SDL_Point world_pos{
-            pos_ ? pos_->world_x() : initial_world_pos_.x,
-            pos_ ? pos_->world_y() : initial_world_pos_.y
-        };
-        ScaleDebugSnapshot snap;
-        snap.dev_mode = dev_mode;
-        snap.variant_index = current_variant_index;
-        snap.current_scale = current_scale;
-        snap.perspective_scale = perspective_scale;
-        snap.camera_scale = camera_scale;
-        snap.remainder = current_remaining_scale_adjustment;
-        snap.base_scale = base_scale;
-        snap.desired_variant = desired_variant_scale;
-        snap.gp_scale = pos_ ? pos_->perspective_scale : 0.0f;
-        snap.world_pos = world_pos;
-
-        if (should_log_scale_debug(this, snap)) {
-            std::ostringstream oss;
-            oss.setf(std::ios::fixed, std::ios::floatfield);
-            oss.precision(4);
-            oss << "[ScaleDebug] asset=" << info->name
-                << " mode=" << (dev_mode ? "DEV" : "NORMAL")
-                << " world=(" << world_pos.x << "," << world_pos.y << ")"
-                << " base=" << base_scale
-                << " perspective=" << perspective_scale
-                << " perspective_source=" << perspective_source
-                << " gp_scale=" << snap.gp_scale
-                << " camera_scale=" << camera_scale
-                << " current_scale=" << current_scale
-                << " desired_variant=" << desired_variant_scale
-                << " variant_scale=" << current_nearest_variant_scale
-                << " variant_idx=" << current_variant_index
-                << " remainder=" << current_remaining_scale_adjustment
-                << " last_tex_scale=" << last_scale_usage_.texture_scale;
-            vibble::log::info(oss.str());
-        }
-    }
     mark_mesh_dirty();
 }
 

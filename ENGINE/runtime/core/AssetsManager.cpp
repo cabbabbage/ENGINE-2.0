@@ -734,21 +734,25 @@ void Assets::update(const Input& input)
 
     dx = dy = 0;
 
+    // Pause runtime asset updates while in Dev Mode unless a frame editor session requires them.
+    const bool runtime_updates_enabled =
+        !dev_mode ||
+        (dev_controls_ && dev_controls_->is_frame_editor_session_active());
+
     int start_px = player ? player->world_x() : 0;
     int start_py = player ? player->world_y() : 0;
 
     if (player) {
         player->active = true;
-        if (dev_mode) {
+        if (runtime_updates_enabled) {
+
+            player->update();
+        } else {
 
             if (player->info) {
                 player->update_scale_values();
             }
-            // In dev mode, do NOT advance animation frames — keep things frozen/paused
             player->request_child_timeline_creation_if_needed();
-        } else {
-
-            player->update();
         }
     }
 
@@ -770,7 +774,7 @@ void Assets::update(const Input& input)
         last_player_pos_valid_ = true;
 
         player_moved = moved_during_update || moved_since_last_frame;
-        if (!dev_mode && moved_during_update) {
+        if (runtime_updates_enabled && moved_during_update) {
             log_asset_movement(player,
                                world::GridPoint::make_virtual(start_px, start_py, player->world_z(), player->grid_resolution),
                                current_player_pos);
@@ -789,14 +793,7 @@ void Assets::update(const Input& input)
                                                                        asset->grid_resolution);
         asset->active = true;
 
-        if (dev_mode) {
-
-            if (asset->info) {
-                asset->update_scale_values();
-            }
-            // In dev mode, do NOT advance animation frames — keep things frozen/paused
-            asset->request_child_timeline_creation_if_needed();
-        } else {
+        if (runtime_updates_enabled) {
 
             asset->update();
             if (previous_pos.world_x() != asset->world_x() || previous_pos.world_y() != asset->world_y()) {
@@ -807,21 +804,33 @@ void Assets::update(const Input& input)
                                                                   asset->world_z(),
                                                                   asset->grid_resolution));
             }
+        } else {
+
+            if (asset->info) {
+                asset->update_scale_values();
+            }
+            asset->request_child_timeline_creation_if_needed();
         }
     }
 
-    if (!movement_commands_buffer_.empty()) {
-        for (const GridMovementCommand& cmd : movement_commands_buffer_) {
-            if (!cmd.asset) continue;
-            world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
-            cmd.asset->cache_grid_residency(cmd.current);
-        }
-        movement_commands_buffer_.clear();
+    if (runtime_updates_enabled) {
+        if (!movement_commands_buffer_.empty()) {
+            for (const GridMovementCommand& cmd : movement_commands_buffer_) {
+                if (!cmd.asset) continue;
+                world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
+                cmd.asset->cache_grid_residency(cmd.current);
+            }
+            movement_commands_buffer_.clear();
 
+            moving_assets_for_grid_.clear();
+            grid_registration_buffer_.clear();
+            touch_dev_active_state_version();
+            mark_grid_dirty();
+        }
+    } else {
+        movement_commands_buffer_.clear();
         moving_assets_for_grid_.clear();
         grid_registration_buffer_.clear();
-        touch_dev_active_state_version();
-        mark_grid_dirty();
     }
 
     const bool height_animation_active = false;

@@ -419,6 +419,7 @@ void Asset::update_scale_values() {
     last_scale_usage_.texture_scale = current_nearest_variant_scale;
     last_scale_usage_.remainder_scale = current_remaining_scale_adjustment;
     last_scale_usage_.variant_index = current_variant_index;
+    mark_mesh_dirty();
 }
 
 SDL_Texture* Asset::get_current_variant_texture() const {
@@ -854,6 +855,22 @@ void Asset::deactivate() {
 }
 
 void Asset::clear_render_caches() {
+    mesh_dirty_ = true;
+    for (auto& obj : render_package) {
+        obj.mesh_dirty = true;
+    }
+}
+
+bool Asset::is_mesh_dirty() const {
+    return mesh_dirty_;
+}
+
+void Asset::mark_mesh_dirty() {
+    mesh_dirty_ = true;
+}
+
+void Asset::clear_mesh_dirty() {
+    mesh_dirty_ = false;
 }
 
 void Asset::invalidate_downscale_cache() {
@@ -899,6 +916,7 @@ void Asset::on_scale_factor_changed() {
         refresh_cached_dimensions();
 
         mark_composite_dirty();
+        mark_mesh_dirty();
 
         if (assets_) {
                 assets_->queue_asset_dimension_update(this);

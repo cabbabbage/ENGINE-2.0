@@ -55,6 +55,12 @@ struct RenderObject {
     float world_z_offset = 0.0f;
     bool has_src_rect = false;
     SDL_Rect src_rect{0, 0, 0, 0};
+    std::vector<SDL_Vertex> cached_vertices;
+    std::vector<int> cached_indices;
+    SDL_FPoint cached_position{0.0f, 0.0f};
+    float cached_scale = 0.0f;
+    std::uint64_t cached_camera_state_version = 0;
+    bool mesh_dirty = true;
 };
 
 using RenderCompositePackage = std::vector<RenderObject>;
@@ -227,6 +233,9 @@ class Asset {
     const SDL_Rect& composite_rect() const { return composite_rect_; }
     void set_composite_rect(const SDL_Rect& r) { composite_rect_ = r; }
     float        composite_scale() const { return composite_scale_; }
+    bool is_mesh_dirty() const { return mesh_dirty_; }
+    void mark_mesh_dirty() { mesh_dirty_ = true; }
+    void clear_mesh_dirty() { mesh_dirty_ = false; }
 
 
     float smoothed_translation_x() const;
@@ -356,6 +365,7 @@ private:
     SDL_Rect     composite_rect_    = {0, 0, 0, 0};
     float        composite_scale_   = 1.0f;
     float        world_z_offset_    = 0.0f;
+    bool         mesh_dirty_        = true;
 
 
 };

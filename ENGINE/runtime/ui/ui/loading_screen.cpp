@@ -173,13 +173,10 @@ void LoadingScreen::draw_frame() {
                                 current_texture_ = nullptr;
                                 current_texture_path_.clear();
                         }
-                        SDL_Surface* surf = IMG_Load(selected_image_path_.string().c_str());
-                        if (surf) {
-                                current_texture_ = SDL_CreateTextureFromSurface(renderer_, surf);
-                                SDL_DestroySurface(surf);
-                                if (current_texture_) {
-                                        current_texture_path_ = selected_image_path_;
-                                }
+                        SDL_Texture* tex = IMG_LoadTexture(renderer_, selected_image_path_.string().c_str());
+                        if (tex) {
+                                current_texture_ = tex;
+                                current_texture_path_ = selected_image_path_;
                         }
                 }
         } else if (current_texture_) {

@@ -29,7 +29,12 @@ constexpr float kMaxRandomJitter = 500.0f;
 DynamicFogSystem::DynamicFogSystem() = default;
 
 DynamicFogSystem::~DynamicFogSystem() {
-    // Textures are owned by SDL/renderer and will be cleaned up separately
+    for (auto& entry : fog_textures_) {
+        if (entry.texture) {
+            SDL_DestroyTexture(entry.texture);
+            entry.texture = nullptr;
+        }
+    }
     fog_textures_.clear();
     fog_assignments_.clear();
     active_fog_sprites_.clear();
@@ -64,23 +69,29 @@ bool DynamicFogSystem::initialize(SDL_Renderer* renderer) {
             continue;
         }
 
-        SDL_Surface* surface = IMG_Load(filename.generic_string().c_str());
-        if (!surface) {
+        SDL_Texture* texture = IMG_LoadTexture(renderer_, filename.generic_string().c_str());
+        if (!texture) {
             vibble::log::warn("[DynamicFogSystem] Failed to load fog texture: " + filename.generic_string());
             continue;
         }
 
-        const int surf_w = surface->w;
-        const int surf_h = surface->h;
-        SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer_, surface);
-        SDL_DestroySurface(surface);
-
-        if (!texture) {
-            vibble::log::warn("[DynamicFogSystem] Failed to create SDL_Texture for: " + filename.generic_string());
+        float tex_wf = 0.0f;
+        float tex_hf = 0.0f;
+        if (!SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+            vibble::log::warn("[DynamicFogSystem] Failed to query size for fog texture: " + filename.generic_string());
+            SDL_DestroyTexture(texture);
             continue;
         }
 
-        fog_textures_.push_back(FogTexture{texture, surf_w, surf_h});
+        const int tex_w = static_cast<int>(std::lround(tex_wf));
+        const int tex_h = static_cast<int>(std::lround(tex_hf));
+        if (tex_w <= 0 || tex_h <= 0) {
+            vibble::log::warn("[DynamicFogSystem] Invalid dimensions for fog texture: " + filename.generic_string());
+            SDL_DestroyTexture(texture);
+            continue;
+        }
+
+        fog_textures_.push_back(FogTexture{texture, tex_w, tex_h});
         ++loaded_count;
     }
 

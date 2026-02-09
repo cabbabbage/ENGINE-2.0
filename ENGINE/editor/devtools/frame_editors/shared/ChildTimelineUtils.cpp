@@ -137,6 +137,7 @@ nlohmann::json build_child_timelines_payload(
     const std::vector<float>& async_start_times,
     const std::vector<bool>& async_has_start) {
 
+    (void)async_has_start;  // Reserved for compatibility; async timelines now default to auto-start.
     nlohmann::json normalized = nlohmann::json::array();
     if (child_assets.empty()) {
         return normalized;
@@ -194,11 +195,12 @@ nlohmann::json build_child_timelines_payload(
             }
             entry["frames"] = std::move(frames);
         } else {
-            int start_frame = 0;
             float start_time = 0.0f;
-            bool has_start = (child_idx < async_has_start.size()) ? async_has_start[child_idx] : false;
-            if (has_start && child_idx < async_start_times.size()) {
+            if (child_idx < async_start_times.size()) {
                 start_time = async_start_times[child_idx];
+            }
+            if (start_time < 0.0f) {
+                start_time = 0.0f;
             }
             if (child_idx < async_timelines_by_child.size()) {
                 nlohmann::json frames = nlohmann::json::array();
@@ -221,24 +223,22 @@ nlohmann::json build_child_timelines_payload(
                 entry["frames"] = nlohmann::json::array();
                 entry["frames"].push_back(child_frame_to_json(fallback));
             }
-            if (has_start) {
-                if (start_frame <= 0 && start_time > 0.0f) {
-                    start_frame = static_cast<int>(std::lround(start_time * static_cast<float>(kBaseAnimationFps)));
-                } else if (start_frame < 0) {
-                    start_frame = 0;
-                }
-                if (start_time <= 0.0f && start_frame > 0) {
-                    start_time = static_cast<float>(start_frame) / static_cast<float>(kBaseAnimationFps);
-                }
-                entry["start_frame"] = start_frame;
-                entry["start_time"] = start_time;
-                if (!entry.contains("auto_start")) {
-                    entry["auto_start"] = true;
-                }
-                if (!entry.contains("autostart")) {
-                    entry["autostart"] = entry.value("auto_start", true);
-                }
+
+            // Async timelines should always emit start metadata; default to immediate start when none is provided.
+            int start_frame = 0;
+            if (start_time > 0.0f) {
+                start_frame = static_cast<int>(std::lround(start_time * static_cast<float>(kBaseAnimationFps)));
             }
+            if (start_frame < 0) {
+                start_frame = 0;
+            }
+            if (start_time <= 0.0f && start_frame > 0) {
+                start_time = static_cast<float>(start_frame) / static_cast<float>(kBaseAnimationFps);
+            }
+            entry["start_frame"] = start_frame;
+            entry["start_time"] = start_time;
+            entry["auto_start"] = true;
+            entry["autostart"] = true;
         }
         normalized.push_back(std::move(entry));
     }

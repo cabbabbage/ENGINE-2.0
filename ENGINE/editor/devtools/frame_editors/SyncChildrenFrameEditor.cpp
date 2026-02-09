@@ -116,16 +116,29 @@ AsyncStartData extract_async_start_data(const nlohmann::json& payload,
         }
         float start_time = 0.0f;
         int start_frame = 0;
+        bool has_start_metadata = false;
         if (entry.contains("start_time")) {
             start_time = read_float_field(entry["start_time"], 0.0f);
+            has_start_metadata = true;
         }
         if (entry.contains("start_frame")) {
             start_frame = read_int_field(entry["start_frame"], 0);
+            has_start_metadata = true;
+        } else if (entry.contains("start")) {
+            start_frame = read_int_field(entry["start"], 0);
+            has_start_metadata = true;
+        }
+        if (!has_start_metadata && entry.value("auto_start", entry.value("autostart", false))) {
+            has_start_metadata = true;
+            start_time = 0.0f;
         }
         if (start_time <= 0.0f && start_frame > 0) {
             start_time = static_cast<float>(start_frame) / static_cast<float>(kBaseAnimationFps);
         }
-        if (start_time > 0.0f) {
+        if (start_time < 0.0f) {
+            start_time = 0.0f;
+        }
+        if (has_start_metadata) {
             data.start_times[static_cast<std::size_t>(idx)] = start_time;
             data.has_start[static_cast<std::size_t>(idx)] = true;
         }

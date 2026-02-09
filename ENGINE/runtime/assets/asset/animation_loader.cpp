@@ -1149,6 +1149,15 @@ bool AnimationLoader::load_child_timelines_from_json(const nlohmann::json& anim_
                         if (timeline.has_start_time && !timeline.auto_start) {
                                 timeline.auto_start = true;
                         }
+                        if (timeline.mode == AnimationChildMode::Async &&
+                            !timeline.has_start_time &&
+                            timeline.start_frame <= 0 &&
+                            timeline.start_time <= 0.0f) {
+                                timeline.auto_start = true;
+                                timeline.has_start_time = true;
+                                timeline.start_frame = 0;
+                                timeline.start_time = 0.0f;
+                        }
                         const auto frames_it = entry.find("frames");
                         if (frames_it != entry.end()) {
                                 if (!frames_it->is_array()) {

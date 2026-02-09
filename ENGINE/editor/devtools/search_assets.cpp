@@ -4,15 +4,229 @@
 #include "FloatingPanelLayoutManager.hpp"
 #include "widgets.hpp"
 #include "dm_styles.hpp"
+#include "draw_utils.hpp"
 #include "tag_utils.hpp"
 #include "utils/input.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
+#include "dev_mode_utils.hpp"
+#include "assets/asset_library.hpp"
+#include "assets/asset/asset_info.hpp"
+#include "core/AssetsManager.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include <SDL3_ttf/SDL_ttf.h>
 #include <nlohmann/json.hpp>
 #include <set>
 #include <unordered_set>
 #include <cctype>
 #include <algorithm>
 #include <vector>
+#include <cmath>
+#include <string_view>
+
+namespace {
+
+const SDL_Color kTileBG  = dm::rgba(24, 36, 56, 210);
+const SDL_Color kTileHL  = dm::rgba(59, 130, 246, 110);
+const SDL_Color kTileBd  = DMStyles::Border();
+
+std::string normalize_tag_value(std::string_view raw_value) {
+    std::string normalized = tag_utils::normalize(raw_value);
+    if (!normalized.empty() && normalized.front() == '#') {
+        normalized.erase(normalized.begin());
+    }
+    return normalized;
+}
+
+void texture_size(SDL_Texture* tex, int& out_w, int& out_h) {
+    float wf = 0.0f;
+    float hf = 0.0f;
+    if (tex && SDL_GetTextureSize(tex, &wf, &hf)) {
+        out_w = static_cast<int>(std::lround(wf));
+        out_h = static_cast<int>(std::lround(hf));
+    } else {
+        out_w = 0;
+        out_h = 0;
+    }
+}
+
+}  // namespace
+
+class SearchAssets::ResultTileWidget : public Widget {
+public:
+    ResultTileWidget(SearchAssets* owner, const SearchAssets::Result& result)
+        : owner_(owner), result_(result) {}
+
+    void set_rect(const SDL_Rect& r) override { rect_ = r; }
+    const SDL_Rect& rect() const override { return rect_; }
+    int height_for_width(int) const override { return 200; }
+
+    bool handle_event(const SDL_Event& e) override {
+        if (!owner_) return false;
+        if (e.type == SDL_EVENT_MOUSE_MOTION) {
+            SDL_Point p{ e.motion.x, e.motion.y };
+            hovered_ = SDL_PointInRect(&p, &rect_);
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+            SDL_Point p{ e.button.x, e.button.y };
+            if (SDL_PointInRect(&p, &rect_)) {
+                pressed_ = true;
+                return true;
+            }
+        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+            SDL_Point p{ e.button.x, e.button.y };
+            bool inside = SDL_PointInRect(&p, &rect_);
+            bool was_pressed = pressed_;
+            pressed_ = false;
+            if (inside && was_pressed) {
+                owner_->activate_result(result_);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void render(SDL_Renderer* r) const override {
+        if (!r) return;
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, kTileBG.r, kTileBG.g, kTileBG.b, kTileBG.a);
+        sdl_render::FillRect(r, &rect_);
+
+        const int pad = 10;
+        const int badge_h = result_.recommended ? 18 : 0;
+        const int corner_radius = DMStyles::CornerRadius();
+        const int bevel_depth = DMStyles::BevelDepth();
+        const SDL_Color& highlight = DMStyles::HighlightColor();
+        const SDL_Color& shadow = DMStyles::ShadowColor();
+
+        if (result_.recommended) {
+            SDL_Rect badge_rect{ rect_.x + pad, rect_.y + pad, 64, badge_h };
+            const DMButtonStyle& badge_style = DMStyles::AccentButton();
+            dm_draw::DrawBeveledRect(r, badge_rect, corner_radius, bevel_depth, badge_style.bg, highlight, shadow, false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+            dm_draw::DrawRoundedOutline(r, badge_rect, std::min(corner_radius, badge_rect.h / 2), 1, badge_style.border);
+            TTF_Font* badge_font = devmode::utils::load_font(std::max(12, badge_style.label.font_size - 2));
+            if (badge_font) {
+                const char* text = "#child";
+                SDL_Surface* surf = ttf_util::RenderTextBlended(badge_font, text, badge_style.text);
+                if (surf) {
+                    SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
+                    SDL_DestroySurface(surf);
+                    if (tex) {
+                        int tw = 0;
+                        int th = 0;
+                        texture_size(tex, tw, th);
+                        SDL_Rect dst{ badge_rect.x + (badge_rect.w - tw) / 2,
+                                      badge_rect.y + (badge_rect.h - th) / 2,
+                                      tw,
+                                      th };
+                        sdl_render::Texture(r, tex, nullptr, &dst);
+                        SDL_DestroyTexture(tex);
+                    }
+                }
+            }
+        }
+
+        SDL_Rect label_rect{ rect_.x + pad,
+                             rect_.y + pad + badge_h,
+                             std::max(0, rect_.w - 2 * pad),
+                             22 };
+
+        SDL_Texture* preview = owner_ ? owner_->preview_texture_for(result_) : nullptr;
+        if (preview) {
+            int tw = 0;
+            int th = 0;
+            texture_size(preview, tw, th);
+            if (tw > 0 && th > 0) {
+                int preview_top = label_rect.y + label_rect.h + pad;
+                int preview_bottom = rect_.y + rect_.h - pad;
+                SDL_Rect preview_rect{ rect_.x + pad,
+                                       preview_top,
+                                       std::max(0, rect_.w - 2 * pad),
+                                       std::max(0, preview_bottom - preview_top) };
+                float scale = 0.0f;
+                if (preview_rect.w > 0 && preview_rect.h > 0) {
+                    scale = std::min(preview_rect.w / static_cast<float>(tw),
+                                     preview_rect.h / static_cast<float>(th));
+                }
+                if (scale > 0.0f) {
+                    int dw = static_cast<int>(std::lround(tw * scale));
+                    int dh = static_cast<int>(std::lround(th * scale));
+                    SDL_Rect dst{ preview_rect.x + (preview_rect.w - dw) / 2,
+                                  preview_rect.y + (preview_rect.h - dh) / 2,
+                                  dw,
+                                  dh };
+                    sdl_render::Texture(r, preview, nullptr, &dst);
+                }
+            }
+        } else {
+            SDL_Rect preview_rect{ rect_.x + pad,
+                                   label_rect.y + label_rect.h + pad,
+                                   std::max(0, rect_.w - 2 * pad),
+                                   std::max(0, rect_.h - (label_rect.h + 3 * pad + badge_h)) };
+            SDL_Color placeholder = DMStyles::CheckboxBaseFill();
+            SDL_SetRenderDrawColor(r, placeholder.r, placeholder.g, placeholder.b, placeholder.a);
+            sdl_render::FillRect(r, &preview_rect);
+            SDL_Color outline = DMStyles::Border();
+            SDL_SetRenderDrawColor(r, outline.r, outline.g, outline.b, outline.a);
+            sdl_render::Rect(r, &preview_rect);
+        }
+
+        if (hovered_) {
+            SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_ADD);
+            SDL_SetRenderDrawColor(r, kTileHL.r, kTileHL.g, kTileHL.b, kTileHL.a);
+            sdl_render::FillRect(r, &rect_);
+        }
+
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        int radius = std::min(corner_radius, std::min(rect_.w, rect_.h) / 2);
+        dm_draw::DrawRoundedOutline(r, rect_, radius, 1, kTileBd);
+
+        const DMLabelStyle& label_style = DMStyles::Label();
+        TTF_Font* label_font = devmode::utils::load_font(label_style.font_size > 0 ? label_style.font_size : 16);
+        if (label_font && label_rect.w > 0) {
+            std::string render_label = result_.label.empty() ? "(Unnamed)" : result_.label;
+            int tw = 0;
+            int th = 0;
+            const std::string ellipsis = "...";
+            if (ttf_util::GetStringSize(label_font, render_label, &tw, &th) && tw > label_rect.w) {
+                std::string base = render_label;
+                while (!base.empty()) {
+                    base.pop_back();
+                    std::string candidate = base + ellipsis;
+                    if (ttf_util::GetStringSize(label_font, candidate, &tw, &th) && tw <= label_rect.w) {
+                        render_label = std::move(candidate);
+                        break;
+                    }
+                }
+                if (base.empty()) {
+                    render_label = ellipsis;
+                }
+            }
+            SDL_Surface* surf = ttf_util::RenderTextBlended(label_font, render_label.c_str(), label_style.color);
+            if (surf) {
+                SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
+                SDL_DestroySurface(surf);
+                if (tex) {
+                    int dw = 0;
+                    int dh = 0;
+                    texture_size(tex, dw, dh);
+                    SDL_Rect dst{ label_rect.x,
+                                  label_rect.y + std::max(0, (label_rect.h - dh) / 2),
+                                  std::min(dw, label_rect.w),
+                                  dh };
+                    sdl_render::Texture(r, tex, nullptr, &dst);
+                    SDL_DestroyTexture(tex);
+                }
+            }
+        }
+    }
+
+private:
+    SearchAssets* owner_ = nullptr;
+    SearchAssets::Result result_;
+    SDL_Rect rect_{0, 0, 0, 0};
+    bool hovered_ = false;
+    bool pressed_ = false;
+};
 
 SearchAssets::SearchAssets(devmode::core::ManifestStore* manifest_store)
     : manifest_store_(manifest_store) {
@@ -26,11 +240,14 @@ SearchAssets::SearchAssets(devmode::core::ManifestStore* manifest_store)
     panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
     panel_->set_close_button_enabled(true);
     panel_->set_scroll_enabled(true);
+    panel_->set_row_gap(DMSpacing::small_gap());
+    panel_->set_col_gap(16);
+    panel_->set_floating_content_width(520);
     panel_->reset_scroll();
     query_ = std::make_unique<DMTextBox>("Search", "");
     query_widget_ = std::make_unique<TextBoxWidget>(query_.get());
     panel_->set_rows({ { query_widget_.get() } });
-    panel_->set_cell_width(260);
+    panel_->set_cell_width(220);
     last_known_position_ = panel_->position();
     pending_position_ = last_known_position_;
     has_pending_position_ = true;
@@ -75,7 +292,10 @@ void SearchAssets::apply_position(int x, int y) {
         panel_->set_close_button_enabled(true);
         panel_->set_scroll_enabled(true);
         panel_->reset_scroll();
-        panel_->set_cell_width(260);
+        panel_->set_row_gap(DMSpacing::small_gap());
+        panel_->set_col_gap(16);
+        panel_->set_cell_width(220);
+        panel_->set_floating_content_width(520);
         if (!query_) {
             query_ = std::make_unique<DMTextBox>("Search", "");
             query_widget_ = std::make_unique<TextBoxWidget>(query_.get());
@@ -311,6 +531,7 @@ void SearchAssets::set_asset_filter(AssetFilter filter) {
 
 void SearchAssets::load_assets() {
     all_.clear();
+    preview_cache_.clear();
     if (!manifest_store_) {
         return;
     }
@@ -328,10 +549,15 @@ void SearchAssets::load_assets() {
         if (asset.name.empty()) {
             asset.name = asset_view.name;
         }
+        asset.manifest_name = asset_view.name;
         if (data.contains("tags") && data["tags"].is_array()) {
             for (const auto& tag : data["tags"]) {
                 if (tag.is_string()) {
-                    asset.tags.push_back(tag.get<std::string>());
+                    std::string tag_value = tag.get<std::string>();
+                    asset.tags.push_back(tag_value);
+                    if (normalize_tag_value(tag_value) == "child") {
+                        asset.has_child_tag = true;
+                    }
                 }
             }
         }
@@ -351,31 +577,49 @@ void SearchAssets::filter_assets() {
     results_.clear();
     std::unordered_set<std::string> seen_labels;
     std::set<std::string> tagset;
+    std::vector<Result> asset_results;
+
+    auto matches_query = [&](const std::string& candidate) -> bool {
+        if (q.empty()) return true;
+        return candidate.find(q) != std::string::npos;
+    };
+
     for (const auto& a : all_) {
         std::string ln = to_lower(a.name);
-        if (q.empty() || ln.find(q) != std::string::npos) {
-            Result res;
-            res.label = a.name;
-            res.value = a.name;
-            res.is_tag = false;
-            if (seen_labels.insert(res.label).second) {
-                results_.push_back(std::move(res));
+        bool matches = matches_query(ln);
+        if (!matches) {
+            for (const auto& t : a.tags) {
+                if (matches_query(to_lower(t))) {
+                    matches = true;
+                    break;
+                }
             }
         }
-        for (const auto& t : a.tags) {
-            std::string lt = to_lower(t);
-            if (lt.find(q) != std::string::npos) tagset.insert(t);
+        if (!matches) {
+            continue;
         }
-    }
-    for (const auto& t : tagset) {
         Result res;
-        res.label = std::string("#") + t;
-        res.value = t;
-        res.is_tag = true;
+        res.label = a.name;
+        res.value = a.name;
+        res.manifest_name = a.manifest_name;
+        res.tags = a.tags;
+        res.is_tag = false;
+        res.recommended = a.has_child_tag;
         if (seen_labels.insert(res.label).second) {
-            results_.push_back(std::move(res));
+            asset_results.push_back(std::move(res));
+        }
+        for (const auto& t : a.tags) {
+            if (matches_query(to_lower(t))) {
+                tagset.insert(t);
+            }
         }
     }
+
+    std::sort(asset_results.begin(), asset_results.end(), [](const Result& a, const Result& b) {
+        if (a.recommended != b.recommended) return a.recommended && !b.recommended;
+        return to_lower(a.label) < to_lower(b.label);
+    });
+
     if (extra_results_provider_) {
         try {
             auto extras = extra_results_provider_();
@@ -394,45 +638,76 @@ void SearchAssets::filter_assets() {
                 if (!seen_labels.insert(extra.label).second) {
                     continue;
                 }
-                results_.push_back(std::move(extra));
+                asset_results.push_back(std::move(extra));
             }
         } catch (...) {
         }
     }
-    if (buttons_.size() < results_.size()) {
-        size_t start = buttons_.size();
-        buttons_.reserve(results_.size());
-        button_widgets_.reserve(results_.size());
-        for (size_t i = start; i < results_.size(); ++i) {
-            auto b = std::make_unique<DMButton>("", &DMStyles::ListButton(), 200, DMButton::height());
-            auto bw = std::make_unique<ButtonWidget>(b.get());
-            buttons_.push_back(std::move(b));
-            button_widgets_.push_back(std::move(bw));
+
+    results_.reserve(asset_results.size() + tagset.size());
+    for (auto& res : asset_results) {
+        results_.push_back(std::move(res));
+    }
+    for (const auto& t : tagset) {
+        Result res;
+        res.label = std::string("#") + t;
+        res.value = t;
+        res.is_tag = true;
+        if (seen_labels.insert(res.label).second) {
+            results_.push_back(std::move(res));
         }
     }
-    for (size_t i = 0; i < results_.size(); ++i) {
-        const auto& r = results_[i];
-        buttons_[i]->set_text(r.label);
-        button_widgets_[i]->set_on_click([this, value = r.value, is_tag = r.is_tag]() {
-            std::string v = value;
-            if (is_tag) v = "#" + v;
-            if (cb_) cb_(v);
-            close();
-        });
-    }
-    bool row_count_changed = !rows_initialized_ || last_result_row_count_ != results_.size();
-    if (row_count_changed) {
-        DockableCollapsible::Rows rows;
-        rows.push_back({ query_widget_.get() });
-        for (size_t i = 0; i < results_.size(); ++i) {
-            rows.push_back({ button_widgets_[i].get() });
-        }
-        panel_->set_rows(rows);
-        last_result_row_count_ = results_.size();
-        rows_initialized_ = true;
-    }
+
+    rebuild_tiles();
+    rebuild_rows();
+
     Input dummy;
-    panel_->update(dummy, screen_w_, screen_h_);
+    if (embedded_) {
+        int w = embedded_rect_.w > 0 ? embedded_rect_.w : screen_w_;
+        int h = embedded_rect_.h > 0 ? embedded_rect_.h : screen_h_;
+        panel_->update(dummy, w, h);
+    } else {
+        panel_->update(dummy, screen_w_, screen_h_);
+    }
+}
+
+void SearchAssets::rebuild_tiles() {
+    tiles_.clear();
+    tiles_.reserve(results_.size());
+    for (const auto& res : results_) {
+        tiles_.push_back(std::make_unique<ResultTileWidget>(this, res));
+    }
+}
+
+void SearchAssets::rebuild_rows() {
+    if (!panel_) return;
+    DockableCollapsible::Rows rows;
+    if (query_widget_) {
+        rows.push_back({ query_widget_.get() });
+    }
+    constexpr std::size_t kPerRow = 2;
+    DockableCollapsible::Row current;
+    current.reserve(kPerRow);
+    for (auto& tile : tiles_) {
+        current.push_back(tile.get());
+        if (current.size() == kPerRow) {
+            rows.push_back(current);
+            current.clear();
+        }
+    }
+    if (!current.empty()) {
+        rows.push_back(current);
+    }
+    panel_->set_rows(rows);
+}
+
+void SearchAssets::activate_result(const Result& result) {
+    std::string v = result.value;
+    if (result.is_tag && (v.empty() || v.front() != '#')) {
+        v.insert(v.begin(), '#');
+    }
+    if (cb_) cb_(v);
+    close();
 }
 
 bool SearchAssets::handle_event(const SDL_Event& e) {
@@ -494,8 +769,20 @@ void SearchAssets::set_manifest_store(devmode::core::ManifestStore* manifest_sto
     }
     all_.clear();
     results_.clear();
+    preview_cache_.clear();
     tag_data_version_ = 0;
     load_assets();
+}
+
+void SearchAssets::set_assets(Assets* assets) {
+    if (assets == assets_) {
+        return;
+    }
+    assets_ = assets;
+    preview_cache_.clear();
+    if (panel_ && panel_->is_visible()) {
+        filter_assets();
+    }
 }
 
 void SearchAssets::set_query_for_testing(const std::string& value) {
@@ -514,8 +801,65 @@ std::vector<std::pair<std::string, bool>> SearchAssets::results_for_testing() co
     return out;
 }
 
+SDL_Texture* SearchAssets::default_frame_texture(const AssetInfo& info) const {
+    auto find_frame = [](const AssetInfo& inf, const std::string& key) -> SDL_Texture* {
+        if (key.empty()) return nullptr;
+        auto it = inf.animations.find(key);
+        if (it != inf.animations.end() && !it->second.frames.empty()) {
+            auto& frame = it->second.frames.front();
+            if (frame && !frame->variants.empty()) {
+                return frame->variants[0].base_texture;
+            }
+        }
+        return nullptr;
+    };
+
+    if (SDL_Texture* tex = find_frame(info, "default")) {
+        return tex;
+    }
+    if (SDL_Texture* tex = find_frame(info, info.start_animation)) {
+        return tex;
+    }
+    if (SDL_Texture* tex = find_frame(info, "start")) {
+        return tex;
+    }
+    for (const auto& kv : info.animations) {
+        if (!kv.second.frames.empty() && !kv.second.frames.front()->variants.empty()) {
+            return kv.second.frames.front()->variants[0].base_texture;
+        }
+    }
+    return nullptr;
+}
+
+SDL_Texture* SearchAssets::preview_texture_for(const Result& result) const {
+    if (result.is_tag || !assets_) {
+        return nullptr;
+    }
+    const std::string key = !result.manifest_name.empty() ? result.manifest_name : result.value;
+    auto it = preview_cache_.find(key);
+    if (it != preview_cache_.end()) {
+        return it->second;
+    }
+
+    SDL_Texture* tex = nullptr;
+    AssetLibrary& lib = assets_->library();
+    auto info = lib.get(key);
+    if (!info && key != result.value) {
+        info = lib.get(result.value);
+    }
+    if (info) {
+        if (SDL_Renderer* renderer = assets_->renderer()) {
+            std::unordered_set<std::string> names{key};
+            lib.loadAnimationsFor(renderer, names);
+        }
+        tex = default_frame_texture(*info);
+    }
+    preview_cache_[key] = tex;
+    return tex;
+}
+
 FloatingPanelLayoutManager::PanelInfo SearchAssets::build_panel_info(bool force_layout) const {
-    constexpr int kFallbackWidth = DockableCollapsible::kDefaultFloatingContentWidth;
+    constexpr int kFallbackWidth = 520;
     constexpr int kFallbackHeight = 400;
     return build_panel_info_for_panel(panel_.get(), kFallbackWidth, kFallbackHeight, force_layout);
 }

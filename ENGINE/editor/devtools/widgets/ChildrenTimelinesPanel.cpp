@@ -3,6 +3,7 @@
 #include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <utility>
 
 #include <SDL3/SDL_log.h>
@@ -15,6 +16,7 @@
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/search_assets.hpp"
+#include "devtools/tag_utils.hpp"
 #include "devtools/widgets.hpp"
 #include "utils/input.hpp"
 
@@ -39,12 +41,37 @@ bool is_valid_selection(const std::string& selection) {
     return !selection.empty() && selection.front() != '#';
 }
 
-bool manifest_entry_has_animations(const nlohmann::json& entry) {
+bool is_valid_child_asset(const nlohmann::json& entry) {
     if (!entry.is_object()) {
         return false;
     }
-    auto it = entry.find("animations");
-    return it != entry.end() && it->is_object() && !it->empty();
+
+    // Must have animations to be a valid child
+    auto anim_it = entry.find("animations");
+    if (anim_it == entry.end() || !anim_it->is_object() || anim_it->empty()) {
+        return false;
+    }
+
+    // Exclude assets tagged with #notchild
+    auto tags_it = entry.find("tags");
+    if (tags_it != entry.end() && tags_it->is_array()) {
+        for (const auto& tag : *tags_it) {
+            if (tag.is_string()) {
+                std::string tag_str = tag.get<std::string>();
+                // Normalize tag (remove # prefix if present and convert to lowercase)
+                std::string normalized = tag_utils::normalize(tag_str);
+                if (!normalized.empty() && normalized[0] == '#') {
+                    normalized.erase(normalized.begin());
+                }
+
+                if (normalized == "notchild") {
+                    return false;
+                }
+            }
+        }
+    }
+
+    return true;
 }
 
 class ChildLabelWidget : public Widget {
@@ -111,6 +138,13 @@ void ChildrenTimelinesPanel::set_manifest_store(devmode::core::ManifestStore* ma
     }
     last_signature_.clear();
     sync_from_document();
+}
+
+void ChildrenTimelinesPanel::set_assets(Assets* assets) {
+    assets_ = assets;
+    if (asset_picker_) {
+        asset_picker_->set_assets(assets_);
+    }
 }
 
 void ChildrenTimelinesPanel::set_status_callback(std::function<void(const std::string&, int)> callback) {
@@ -251,7 +285,8 @@ void ChildrenTimelinesPanel::ensure_asset_picker() {
         return;
     }
     asset_picker_ = std::make_unique<SearchAssets>(manifest_store_);
-    asset_picker_->set_asset_filter(manifest_entry_has_animations);
+    asset_picker_->set_assets(assets_);
+    asset_picker_->set_asset_filter(is_valid_child_asset);
     asset_picker_->set_floating_stack_key("children_timelines_panel");
 }
 

@@ -3,7 +3,6 @@
 #include "assets/asset_info.hpp"
 #include "assets/asset_types.hpp"
 #include "assets/surface_utils.hpp"
-#include "utils/cache_manager.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/scaling_logic.hpp"
 #include "utils/loading_status_notifier.hpp"
@@ -31,14 +30,10 @@ namespace fs = std::filesystem;
 namespace {
 
 inline void apply_scale_mode(SDL_Texture* tex, const AssetInfo& info) {
-#if SDL_VERSION_ATLEAST(2, 0, 12)
-    if (tex) {
-        SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
+    if (!tex) {
+        return;
     }
-#else
-    (void)tex;
-    (void)info;
-#endif
+    SDL_SetTextureScaleMode(tex, info.smooth_scaling ? SDL_SCALEMODE_LINEAR : SDL_SCALEMODE_NEAREST);
 }
 
 struct VariantLayerPaths {
@@ -67,17 +62,29 @@ SDL_Texture* load_texture_from_path(SDL_Renderer* renderer,
                                     int& out_h) {
     out_w = 0;
     out_h = 0;
-    SDL_Texture* tex = nullptr;
-    SDL_Surface* surf = CacheManager::load_surface(path.generic_string());
-    if (!surf) {
+    if (!renderer) {
         return nullptr;
     }
-    tex = CacheManager::surface_to_texture(renderer, surf);
-    if (tex) {
-        out_w = surf->w;
-        out_h = surf->h;
+
+    SDL_Texture* tex = IMG_LoadTexture(renderer, path.generic_string().c_str());
+    if (!tex) {
+        return nullptr;
     }
-    SDL_DestroySurface(surf);
+
+    float wf = 0.0f;
+    float hf = 0.0f;
+    if (!SDL_GetTextureSize(tex, &wf, &hf)) {
+        SDL_DestroyTexture(tex);
+        return nullptr;
+    }
+
+    out_w = static_cast<int>(std::lround(wf));
+    out_h = static_cast<int>(std::lround(hf));
+    if (out_w <= 0 || out_h <= 0) {
+        SDL_DestroyTexture(tex);
+        return nullptr;
+    }
+
     return tex;
 }
 

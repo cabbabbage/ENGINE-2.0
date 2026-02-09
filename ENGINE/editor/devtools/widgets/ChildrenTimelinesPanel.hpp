@@ -15,6 +15,7 @@ class DMButton;
 class DMCheckbox;
 class Input;
 class SearchAssets;
+class Assets;
 
 namespace devmode::core {
 class ManifestStore;
@@ -32,6 +33,7 @@ class ChildrenTimelinesPanel : public DockableCollapsible {
     void set_manifest_store(devmode::core::ManifestStore* manifest_store);
     void set_status_callback(std::function<void(const std::string&, int)> callback);
     void set_on_children_changed(std::function<void(const std::vector<std::string>&)> callback);
+    void set_assets(Assets* assets);
 
     void refresh();
     void update();
@@ -64,6 +66,7 @@ class ChildrenTimelinesPanel : public DockableCollapsible {
   private:
     std::shared_ptr<AnimationDocument> document_;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
     std::unique_ptr<SearchAssets> asset_picker_;
     std::function<void(const std::string&, int)> status_callback_;
     std::function<void(const std::vector<std::string>&)> on_children_changed_;

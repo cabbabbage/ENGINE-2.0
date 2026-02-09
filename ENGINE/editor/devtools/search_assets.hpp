@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <nlohmann/json_fwd.hpp>
+#include <unordered_map>
 
 #include "FloatingPanelLayoutManager.hpp"
 
@@ -16,17 +17,22 @@ class ManifestStore;
 
 class DockableCollapsible;
 class DMTextBox;
-class DMButton;
 class TextBoxWidget;
-class ButtonWidget;
 class Input;
+class Assets;
+class AssetInfo;
 
 class SearchAssets {
+    class ResultTileWidget;
+    friend class ResultTileWidget;
 public:
     struct Result {
         std::string label;
         std::string value;
         bool is_tag = false;
+        std::string manifest_name;
+        std::vector<std::string> tags;
+        bool recommended = false;
 };
 
     using ExtraResultsProvider = std::function<std::vector<Result>()>;
@@ -51,14 +57,26 @@ public:
     void render(SDL_Renderer* r) const;
     bool is_point_inside(int x, int y) const;
     void set_manifest_store(devmode::core::ManifestStore* manifest_store);
+    void set_assets(Assets* assets);
     void set_query_for_testing(const std::string& value);
     std::vector<std::pair<std::string, bool>> results_for_testing() const;
     void set_extra_results_provider(ExtraResultsProvider provider);
     void set_asset_filter(AssetFilter filter);
 private:
-    struct Asset { std::string name; std::vector<std::string> tags; const nlohmann::json* payload = nullptr; };
+    struct Asset {
+        std::string name;
+        std::string manifest_name;
+        std::vector<std::string> tags;
+        const nlohmann::json* payload = nullptr;
+        bool has_child_tag = false;
+};
     void load_assets();
     void filter_assets();
+    void rebuild_rows();
+    void rebuild_tiles();
+    void activate_result(const Result& result);
+    SDL_Texture* preview_texture_for(const Result& result) const;
+    SDL_Texture* default_frame_texture(const AssetInfo& info) const;
     static std::string to_lower(std::string s);
     void apply_position(int x, int y);
     void ensure_visible_position(const FloatingPanelLayoutManager::SlidingParentInfo* parent = nullptr);
@@ -66,17 +84,16 @@ private:
     std::unique_ptr<DockableCollapsible> panel_;
     std::unique_ptr<DMTextBox> query_;
     std::unique_ptr<TextBoxWidget> query_widget_;
-    std::vector<std::unique_ptr<DMButton>> buttons_;
-    std::vector<std::unique_ptr<ButtonWidget>> button_widgets_;
+    std::vector<std::unique_ptr<ResultTileWidget>> tiles_;
     Callback cb_;
     std::vector<Asset> all_;
     std::vector<Result> results_;
     std::string last_query_;
     std::uint64_t tag_data_version_ = 0;
-    size_t last_result_row_count_ = 0;
-    bool rows_initialized_ = false;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     std::unique_ptr<devmode::core::ManifestStore> owned_manifest_store_;
+    Assets* assets_ = nullptr;
+    mutable std::unordered_map<std::string, SDL_Texture*> preview_cache_;
     int screen_w_ = 1920;
     int screen_h_ = 1080;
     SDL_Point last_known_position_{64, 64};

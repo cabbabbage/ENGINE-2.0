@@ -364,11 +364,11 @@ void AsyncChildrenFrameEditor::populate_child_data() {
         const std::size_t idx = child_idx;
         if (idx >= child_assets_.size()) continue;
         child_modes_[idx] = descriptor.mode;
-            if (descriptor.mode == AnimationChildMode::Async) {
-                auto& timeline = async_frames_by_child_[idx];
-                timeline.clear();
-                for (const auto& frame : descriptor.frames) {
-                    child_timelines::ChildFrameSample sample{};
+        if (descriptor.mode == AnimationChildMode::Async) {
+            auto& timeline = async_frames_by_child_[idx];
+            timeline.clear();
+            for (const auto& frame : descriptor.frames) {
+                child_timelines::ChildFrameSample sample{};
                 sample.child_index = frame.child_index;
                 sample.dx = frame.offset.px;
                 sample.dy = frame.offset.py;
@@ -386,6 +386,10 @@ void AsyncChildrenFrameEditor::populate_child_data() {
                     derived_start = static_cast<float>(descriptor.start_frame) * kFrameInterval;
                 }
                 async_start_times_[idx] = derived_start;
+            } else {
+                async_has_start_[idx] = true;
+                async_start_frames_[idx] = 0;
+                async_start_times_[idx] = 0.0f;
             }
             if (timeline.empty()) {
                 child_timelines::ChildFrameSample fallback{};
@@ -628,11 +632,7 @@ int AsyncChildrenFrameEditor::mapped_child_frame_index(int child_index) const {
     if (child_modes_[child_index] != AnimationChildMode::Async) {
         return selected_parent_frame_index_;
     }
-    if (child_index >= static_cast<int>(async_has_start_.size()) ||
-        !async_has_start_[static_cast<std::size_t>(child_index)]) {
-        return -1;
-    }
-    const float start_time = start_time_for_child(child_index);
+    const float start_time = std::max(0.0f, start_time_for_child(child_index));
     const float parent_time = static_cast<float>(selected_parent_frame_index_) * kFrameInterval;
     const float elapsed = parent_time - start_time;
     if (elapsed < 0.0f) {
@@ -669,6 +669,9 @@ float AsyncChildrenFrameEditor::start_time_for_child(int child_index) const {
     if (start_time <= 0.0f && child_index < static_cast<int>(async_start_frames_.size()) &&
         async_start_frames_[static_cast<std::size_t>(child_index)] > 0) {
         start_time = static_cast<float>(async_start_frames_[static_cast<std::size_t>(child_index)]) * kFrameInterval;
+    }
+    if (start_time < 0.0f) {
+        start_time = 0.0f;
     }
     return start_time;
 }

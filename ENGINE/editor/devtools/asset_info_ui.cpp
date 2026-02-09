@@ -411,6 +411,12 @@ void AssetInfoUI::set_assets(Assets* a) {
     }
     assets_ = a;
     set_manifest_store(assets_ ? assets_->manifest_store() : nullptr);
+    if (children_panel_) {
+        children_panel_->set_assets(assets_);
+    }
+    if (asset_selector_) {
+        asset_selector_->set_assets(assets_);
+    }
     if (animation_editor_window_) {
         animation_editor_window_->set_assets(assets_);
     }

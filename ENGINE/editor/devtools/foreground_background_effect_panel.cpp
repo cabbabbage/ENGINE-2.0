@@ -741,22 +741,23 @@ void ForegroundBackgroundEffectPanel::load_preview_texture(const std::string& im
         return;
     }
 
-    SDL_Surface* surface = IMG_Load(image_path.c_str());
-    if (!surface) {
+    SDL_Texture* texture = IMG_LoadTexture(renderer, image_path.c_str());
+    if (!texture) {
         std::cerr << "[DepthCuePanel] Failed to load image from: " << image_path << "\n";
         return;
     }
 
-    current_preview_texture_ = SDL_CreateTextureFromSurface(renderer, surface);
-    if (!current_preview_texture_) {
-        std::cerr << "[DepthCuePanel] Failed to create texture from surface\n";
-        SDL_DestroySurface(surface);
+    float tex_wf = 0.0f;
+    float tex_hf = 0.0f;
+    if (!SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+        std::cerr << "[DepthCuePanel] Failed to query preview texture size\n";
+        SDL_DestroyTexture(texture);
         return;
     }
 
-    current_preview_w_ = surface->w;
-    current_preview_h_ = surface->h;
-    SDL_DestroySurface(surface);
+    current_preview_texture_ = texture;
+    current_preview_w_ = static_cast<int>(std::lround(tex_wf));
+    current_preview_h_ = static_cast<int>(std::lround(tex_hf));
 
     std::cout << "[DepthCuePanel] Loaded preview texture: " << current_preview_w_ << "x" << current_preview_h_ << "\n";
 }

@@ -194,6 +194,7 @@ std::optional<nlohmann::json> build_child_timeline_entry(int child_index,
     entry["mode"] = mode;
     const bool has_start_frame_field = source.contains("start_frame") || source.contains("start");
     const bool has_start_time_field = source.contains("start_time");
+    const bool is_async_mode = (mode == "async");
     int start_frame = 0;
     float start_time = 0.0f;
     if (has_start_frame_field) {
@@ -216,13 +217,17 @@ std::optional<nlohmann::json> build_child_timeline_entry(int child_index,
         entry["start_time"] = start_time;
     }
     const bool has_auto_start = source.contains("auto_start") || source.contains("autostart");
-    if (has_auto_start || mode == "static") {
-        const bool auto_start = parse_bool_field(
-            source,
-            "auto_start",
-            parse_bool_field(source, "autostart", mode == "static"));
+    const bool auto_start = parse_bool_field(
+        source,
+        "auto_start",
+        parse_bool_field(source, "autostart", (mode == "static") || is_async_mode));
+    if (has_auto_start || mode == "static" || is_async_mode) {
         entry["auto_start"] = auto_start;
         entry["autostart"] = auto_start;
+    }
+    if (is_async_mode && !has_start_frame_field && !has_start_time_field) {
+        entry["start_frame"] = start_frame;
+        entry["start_time"] = start_time;
     }
     const auto frames_it = source.find("frames");
     if (frames_it != source.end()) {

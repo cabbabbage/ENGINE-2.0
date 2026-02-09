@@ -229,6 +229,7 @@ private:
     int  effective_render_quality_percent() const;
     void sync_dev_controls_current_room(Room* room, bool force_refresh = false);
     void reset_dev_controls_current_room_cache();
+    void log_camera_fog_state(const char* label) const;
 
     friend class SceneRenderer;
     friend class Asset;

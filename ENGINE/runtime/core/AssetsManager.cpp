@@ -351,6 +351,7 @@ void Assets::load_camera_settings_from_json() {
     }
     camera_.apply_camera_settings(map_info_json_["camera_settings"]);
     apply_camera_runtime_settings();
+    camera_view_dirty_ = true;
 }
 
 void Assets::write_camera_settings_to_json() {
@@ -362,6 +363,8 @@ void Assets::write_camera_settings_to_json() {
 
 void Assets::on_camera_settings_changed() {
     apply_camera_runtime_settings();
+    mark_camera_dirty();
+    camera_view_dirty_ = true;
 }
 
 void Assets::mark_camera_dirty() {
@@ -372,7 +375,9 @@ void Assets::reload_camera_settings() {
     vibble::log::info("[Assets] Reloading camera settings from manifest");
     load_camera_settings_from_json();
     mark_camera_dirty();  // CRITICAL: Mark camera dirty to trigger refresh on first frame
+    camera_view_dirty_ = true;
     vibble::log::info("[Assets] Camera settings reloaded and marked dirty for refresh");
+    log_camera_fog_state("startup-normal");
 }
 
 int Assets::saved_render_quality_percent() const {
@@ -396,6 +401,39 @@ void Assets::apply_camera_runtime_settings() {
 
     }
 
+}
+
+void Assets::log_camera_fog_state(const char* label) const {
+    if (!label) {
+        return;
+    }
+
+    const Room* room = current_room_;
+    const auto& settings = camera_.realism_settings();
+    const double camera_height = camera_.current_camera_height();
+    const float pitch_deg = camera_.current_pitch_degrees();
+    const auto& controller_state = camera_.camera_state();
+    const SDL_Point center = camera_.get_screen_center();
+
+    vibble::log::info(std::string("[CameraDebug] ") + label +
+        " dev_mode=" + (dev_mode ? "YES" : "NO") +
+        " room=" + (room ? room->room_name : std::string("none")) +
+        " room_height_px=" + std::to_string(room ? room->camera_height_px : 0) +
+        " room_tilt_deg=" + std::to_string(room ? room->camera_tilt_deg : 0.0f) +
+        " room_zoom_percent=" + std::to_string(room ? room->camera_zoom_percent : 0) +
+        " base_height_px=" + std::to_string(settings.base_height_px) +
+        " min_visible_screen_ratio=" + std::to_string(settings.min_visible_screen_ratio) +
+        " meters_per_100_world_px=" + std::to_string(settings.meters_per_100_world_px) +
+        " extra_cull_margin=" + std::to_string(settings.extra_cull_margin) +
+        " near_camera_max_perspective_scale=" + std::to_string(settings.near_camera_max_perspective_scale) +
+        " offscreen_fade_amount_px=" + std::to_string(settings.offscreen_fade_amount_px) +
+        " view_height_world=" + std::to_string(camera_.view_height_world()) +
+        " camera_height=" + std::to_string(camera_height) +
+        " pitch_deg=" + std::to_string(pitch_deg) +
+        " zoom_percent=" + std::to_string(controller_state.params.zoom_percent) +
+        " scale=" + std::to_string(camera_.get_scale()) +
+        " screen_center=(" + std::to_string(center.x) + "," + std::to_string(center.y) + ")"
+    );
 }
 
 void Assets::set_depth_effects_enabled(bool enabled) {
@@ -1265,6 +1303,7 @@ void Assets::set_dev_mode(bool mode) {
     }
 
     apply_camera_runtime_settings();
+    log_camera_fog_state(dev_mode ? "dev-mode-enabled" : "dev-mode-disabled");
 }
 
 void Assets::set_force_high_quality_rendering(bool enable) {
@@ -2334,6 +2373,4 @@ bool Assets::should_run_runtime_updates() const {
     }
     return false;
 }
-
-
 

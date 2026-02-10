@@ -8,6 +8,7 @@
 #include <unordered_set>
 #include <optional>
 #include <cstdint>
+#include <functional>
 
 class Input;
 class AssetInfo;
@@ -26,6 +27,12 @@ class ManifestStore;
 
 class AssetLibraryUI {
 public:
+    struct PickerModeOptions {
+        bool enabled = false;
+        std::string title = "Asset Picker";
+        std::function<void(const std::shared_ptr<AssetInfo>&)> on_selected;
+    };
+
     AssetLibraryUI();
     ~AssetLibraryUI();
 
@@ -46,6 +53,8 @@ public:
     bool handle_event(const SDL_Event& e);
 
     std::shared_ptr<AssetInfo> consume_selection();
+    void set_picker_mode(PickerModeOptions options);
+    bool in_picker_mode() const;
     struct AreaRef {
         std::string room_name;
         std::string area_name;
@@ -148,5 +157,6 @@ private:
     bool skip_delete_confirmation_in_session_ = false;
     std::vector<PendingDeleteInfo> bulk_delete_queue_;
     bool bulk_delete_mode_ = false;
-};
 
+    PickerModeOptions picker_mode_{};
+};

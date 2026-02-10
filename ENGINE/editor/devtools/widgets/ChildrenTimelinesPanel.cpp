@@ -17,6 +17,8 @@
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/widgets.hpp"
+#include "devtools/asset_library_ui.hpp"
+#include "utils/input.hpp"
 #include "devtools/animation_runtime_refresh.hpp"
 
 namespace animation_editor {
@@ -80,11 +82,8 @@ ChildrenTimelinesPanel::ChildrenTimelinesPanel()
     : DockableCollapsible("Children & Timelines", true , kDefaultPanelWidth, kDefaultPanelHeight) {
     set_show_header(true);
 
-    toggle_assets_button_ = std::make_unique<DMButton>("Add Child Asset", &enabled_button_style(), kDefaultPanelWidth, DMButton::height());
-    toggle_assets_widget_ = std::make_unique<ButtonWidget>(toggle_assets_button_.get(), [this]() { this->toggle_asset_list(); });
-    search_box_ = std::make_unique<DMTextBox>("Find child asset", "");
-    search_widget_ = std::make_unique<TextBoxWidget>(search_box_.get(), true);
-    asset_status_widget_ = std::make_unique<ChildLabelWidget>("Assets will appear here when loaded.", true);
+    toggle_assets_button_ = std::make_unique<DMButton>("Find Asset", &enabled_button_style(), kDefaultPanelWidth, DMButton::height());
+    toggle_assets_widget_ = std::make_unique<ButtonWidget>(toggle_assets_button_.get(), [this]() { this->open_asset_picker(); });
     children_header_widget_ = std::make_unique<ChildLabelWidget>("Children", true);
 
     set_expanded(false);  // collapsed by default
@@ -96,6 +95,7 @@ void ChildrenTimelinesPanel::set_document(std::shared_ptr<AnimationDocument> doc
         return;
     }
     document_ = std::move(document);
+    close_asset_picker();
     last_signature_.clear();
     sync_from_document();
 }
@@ -105,6 +105,9 @@ void ChildrenTimelinesPanel::set_manifest_store(devmode::core::ManifestStore* ma
         return;
     }
     manifest_store_ = manifest_store;
+    if (!manifest_store_) {
+        close_asset_picker();
+    }
     last_signature_.clear();
     sync_from_document();
 }
@@ -114,9 +117,7 @@ void ChildrenTimelinesPanel::set_assets(Assets* assets) {
         return;
     }
     assets_ = assets;
-    asset_list_dirty_ = true;
-    asset_buttons_dirty_ = true;
-    last_asset_count_ = 0;
+    close_asset_picker();
 }
 
 void ChildrenTimelinesPanel::set_status_callback(std::function<void(const std::string&, int)> callback) {
@@ -128,19 +129,32 @@ void ChildrenTimelinesPanel::set_on_children_changed(std::function<void(const st
 }
 
 void ChildrenTimelinesPanel::refresh() {
-    asset_buttons_dirty_ = true;
     sync_from_document();
-    sync_asset_list();
 }
 
-void ChildrenTimelinesPanel::update() {
+void ChildrenTimelinesPanel::update(const Input& input, int screen_w, int screen_h) {
+    picker_screen_w_ = screen_w;
+    picker_screen_h_ = screen_h;
     sync_from_document();
-    sync_asset_list();
+    if (asset_picker_ui_ && asset_picker_ui_->is_visible() && assets_ && manifest_store_) {
+        sync_asset_picker_geometry();
+        asset_picker_ui_->update(input, screen_w, screen_h, assets_->library(), *assets_, *manifest_store_);
+    }
 }
 
 bool ChildrenTimelinesPanel::handle_event(const SDL_Event& e) {
     if (!is_visible()) {
         return false;
+    }
+
+    if (asset_picker_ui_ && asset_picker_ui_->is_visible()) {
+        if (asset_picker_ui_->handle_event(e)) {
+            return true;
+        }
+        if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
+            close_asset_picker();
+            return true;
+        }
     }
     std::vector<bool> previous_async;
     previous_async.reserve(child_rows_.size());
@@ -162,6 +176,13 @@ bool ChildrenTimelinesPanel::handle_event(const SDL_Event& e) {
     return consumed;
 }
 
+void ChildrenTimelinesPanel::render(SDL_Renderer* renderer) const {
+    DockableCollapsible::render(renderer);
+    if (asset_picker_ui_ && asset_picker_ui_->is_visible()) {
+        asset_picker_ui_->render(renderer, picker_screen_w_, picker_screen_h_);
+    }
+}
+
 void ChildrenTimelinesPanel::set_work_area_bounds(const SDL_Rect& bounds) {
     set_work_area(bounds);
 }
@@ -170,17 +191,6 @@ void ChildrenTimelinesPanel::rebuild_rows() {
     Rows rows;
     if (toggle_assets_widget_) {
         rows.push_back({ toggle_assets_widget_.get() });
-    }
-    if (assets_expanded_) {
-        if (search_widget_) {
-            rows.push_back({ search_widget_.get() });
-        }
-        if (asset_status_widget_) {
-            rows.push_back({ asset_status_widget_.get() });
-        }
-        for (auto& widget : asset_widgets_) {
-            rows.push_back({ widget.get() });
-        }
     }
     if (children_header_widget_) {
         rows.push_back({ children_header_widget_.get() });
@@ -198,105 +208,66 @@ void ChildrenTimelinesPanel::rebuild_rows() {
     // Keep current expanded state; caller controls.
 }
 
-void ChildrenTimelinesPanel::sync_asset_list() {
-    refresh_available_assets();
-
-    std::string query = search_box_ ? search_box_->value() : std::string{};
-    std::transform(query.begin(), query.end(), query.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (query != last_filter_query_) {
-        last_filter_query_ = std::move(query);
-        asset_buttons_dirty_ = true;
-    }
-
-    if (assets_expanded_ && asset_buttons_dirty_) {
-        refresh_filtered_assets();
-        rebuild_asset_buttons();
-        rebuild_rows();
-    }
-}
-
-void ChildrenTimelinesPanel::refresh_available_assets() {
-    const std::vector<std::string> names = assets_ ? assets_->library().names() : std::vector<std::string>{};
-    if (names.size() != last_asset_count_) {
-        asset_list_dirty_ = true;
-    }
-    if (!asset_list_dirty_ && names == all_asset_names_) {
+void ChildrenTimelinesPanel::open_asset_picker() {
+    if (!assets_ || !manifest_store_) {
+        if (status_callback_) {
+            status_callback_("Asset picker unavailable.", 180);
+        }
         return;
     }
 
-    if (names != all_asset_names_) {
-        all_asset_names_ = names;
-        asset_buttons_dirty_ = true;
+    if (!asset_picker_ui_) {
+        asset_picker_ui_ = std::make_unique<AssetLibraryUI>();
     }
 
-    last_asset_count_ = all_asset_names_.size();
-    asset_list_dirty_ = false;
-}
-
-void ChildrenTimelinesPanel::refresh_filtered_assets() {
-    filtered_asset_names_.clear();
-    if (!all_asset_names_.empty()) {
-        filtered_asset_names_.reserve(all_asset_names_.size());
-        for (const auto& name : all_asset_names_) {
-            std::string lowered = name;
-            std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            if (last_filter_query_.empty() || lowered.find(last_filter_query_) != std::string::npos) {
-                filtered_asset_names_.push_back(name);
-            }
+    AssetLibraryUI::PickerModeOptions options;
+    options.enabled = true;
+    options.title = "Find Child Asset";
+    options.on_selected = [this](const std::shared_ptr<AssetInfo>& info) {
+        if (!info) {
+            return;
         }
-    }
-
-    std::string status;
-    if (!assets_) {
-        status = "Assets not loaded.";
-    } else if (all_asset_names_.empty()) {
-        status = "No assets available.";
-    } else if (filtered_asset_names_.empty()) {
-        status = "No assets match the search.";
-    } else {
-        status = "Assets (" + std::to_string(filtered_asset_names_.size()) + "/" + std::to_string(all_asset_names_.size()) + ")";
-    }
-    asset_status_widget_ = std::make_unique<ChildLabelWidget>(status, true);
-}
-
-void ChildrenTimelinesPanel::rebuild_asset_buttons() {
-    asset_buttons_.clear();
-    asset_widgets_.clear();
-
-    for (const auto& name : filtered_asset_names_) {
-        auto btn = std::make_unique<DMButton>(name, &enabled_button_style(), kDefaultPanelWidth, DMButton::height());
-        const bool already_child = is_existing_child(name);
-        if (already_child) {
-            btn->set_style(&disabled_button_style());
+        if (is_existing_child(info->name)) {
+            if (status_callback_) status_callback_("Child already exists.", 180);
+            return;
         }
-        auto widget = std::make_unique<ButtonWidget>(btn.get(), [this, name]() {
-            if (is_existing_child(name)) {
-                if (status_callback_) status_callback_("Child already exists.", 180);
-                return;
-            }
-            this->add_child(name);
-        });
-        asset_buttons_.push_back(std::move(btn));
-        asset_widgets_.push_back(std::move(widget));
-    }
+        add_child(info->name);
+    };
+    asset_picker_ui_->set_picker_mode(std::move(options));
 
-    asset_buttons_dirty_ = false;
+    sync_asset_picker_geometry();
+    asset_picker_ui_->open();
 }
+
+void ChildrenTimelinesPanel::close_asset_picker() {
+    if (asset_picker_ui_) {
+        asset_picker_ui_->close();
+        asset_picker_ui_->set_picker_mode({});
+    }
+}
+
+void ChildrenTimelinesPanel::sync_asset_picker_geometry() {
+    if (!asset_picker_ui_) {
+        return;
+    }
+    const SDL_Rect panel_rect = rect();
+    int picker_x = panel_rect.x + panel_rect.w + DMSpacing::panel_padding();
+    int picker_y = panel_rect.y;
+    const int min_margin = DMSpacing::panel_padding();
+    if (picker_screen_w_ > 0) {
+        const int max_x = std::max(min_margin, picker_screen_w_ - 420);
+        picker_x = std::clamp(picker_x, min_margin, max_x);
+    }
+    if (picker_screen_h_ > 0) {
+        const int max_y = std::max(min_margin, picker_screen_h_ - 260);
+        picker_y = std::clamp(picker_y, min_margin, max_y);
+    }
+    asset_picker_ui_->set_position(picker_x, picker_y);
+}
+
 
 bool ChildrenTimelinesPanel::is_existing_child(const std::string& name) const {
     return std::any_of(child_rows_.begin(), child_rows_.end(), [&](const ChildRow& row) { return row.name == name; });
-}
-
-void ChildrenTimelinesPanel::toggle_asset_list() {
-    assets_expanded_ = !assets_expanded_;
-    if (toggle_assets_button_) {
-        toggle_assets_button_->set_text(assets_expanded_ ? "Hide Asset Picker" : "Add Child Asset");
-    }
-    if (assets_expanded_) {
-        asset_buttons_dirty_ = true;
-        sync_asset_list();
-    }
-    rebuild_rows();
 }
 
 std::string ChildrenTimelinesPanel::document_asset_name() const {
@@ -345,7 +316,6 @@ void ChildrenTimelinesPanel::sync_from_document() {
 
     if (!document_) {
         children_header_widget_ = std::make_unique<ChildLabelWidget>("Children (0)", true);
-        asset_buttons_dirty_ = true;
         rebuild_rows();
         return;
     }
@@ -368,7 +338,6 @@ void ChildrenTimelinesPanel::sync_from_document() {
         child_rows_.push_back(std::move(row));
     }
 
-    asset_buttons_dirty_ = true;
     rebuild_rows();
 }
 
@@ -402,6 +371,7 @@ void ChildrenTimelinesPanel::add_child(const std::string& asset_name) {
         return;
     }
     children.push_back(asset_name);
+    close_asset_picker();
     document_->replace_animation_children(children);
     try {
         document_->save_to_file();

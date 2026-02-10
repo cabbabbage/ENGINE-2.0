@@ -15,6 +15,8 @@ class DMButton;
 class DMTextBox;
 class DMCheckbox;
 class Assets;
+class AssetLibraryUI;
+class Input;
 
 namespace devmode::core {
 class ManifestStore;
@@ -35,10 +37,10 @@ class ChildrenTimelinesPanel : public DockableCollapsible {
     void set_assets(Assets* assets);
 
     void refresh();
-    void update();
+    void update(const Input& input, int screen_w, int screen_h);
 
     bool handle_event(const SDL_Event& e) override;
-    void render(SDL_Renderer* renderer) const override { DockableCollapsible::render(renderer); }
+    void render(SDL_Renderer* renderer) const override;
 
     void set_work_area_bounds(const SDL_Rect& bounds);
 
@@ -46,12 +48,10 @@ class ChildrenTimelinesPanel : public DockableCollapsible {
     void rebuild_rows();
     void sync_from_document();
     void sync_child_rows();
-    void sync_asset_list();
-    void refresh_available_assets();
-    void refresh_filtered_assets();
-    void rebuild_asset_buttons();
+    void open_asset_picker();
+    void close_asset_picker();
+    void sync_asset_picker_geometry();
     bool is_existing_child(const std::string& name) const;
-    void toggle_asset_list();
     void refresh_runtime();
     std::string document_asset_name() const;
     void add_child(const std::string& asset_name);
@@ -78,19 +78,10 @@ class ChildrenTimelinesPanel : public DockableCollapsible {
 };
 
     std::vector<ChildRow> child_rows_;
-    std::unique_ptr<DMTextBox> search_box_;
-    std::unique_ptr<TextBoxWidget> search_widget_;
-    std::unique_ptr<Widget> asset_status_widget_;
     std::unique_ptr<Widget> children_header_widget_;
-    std::vector<std::string> all_asset_names_;
-    std::vector<std::string> filtered_asset_names_;
-    std::vector<std::unique_ptr<DMButton>> asset_buttons_;
-    std::vector<std::unique_ptr<ButtonWidget>> asset_widgets_;
-    std::string last_filter_query_;
-    std::size_t last_asset_count_ = 0;
-    bool asset_list_dirty_ = true;
-    bool asset_buttons_dirty_ = true;
-    bool assets_expanded_ = false;
+    std::unique_ptr<AssetLibraryUI> asset_picker_ui_;
+    int picker_screen_w_ = 0;
+    int picker_screen_h_ = 0;
     std::unique_ptr<DMButton> toggle_assets_button_;
     std::unique_ptr<ButtonWidget> toggle_assets_widget_;
 

@@ -791,6 +791,10 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
 
     if (!visible_) return;
 
+    if (children_panel_) {
+        children_panel_->update(input, screen_w, screen_h);
+    }
+
     if (info_ && asset_selector_ && asset_selector_->visible()) {
         asset_selector_->update(input);
         const SDL_Rect& panel = container_.panel_rect();

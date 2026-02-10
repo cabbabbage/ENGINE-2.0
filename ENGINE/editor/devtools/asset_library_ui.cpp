@@ -963,9 +963,44 @@ void AssetLibraryUI::toggle() {
 
 bool AssetLibraryUI::is_visible() const { return floating_ && floating_->is_visible(); }
 
+
+void AssetLibraryUI::set_picker_mode(PickerModeOptions options) {
+    picker_mode_ = std::move(options);
+    if (floating_) {
+        if (picker_mode_.enabled) {
+            const std::string title = picker_mode_.title.empty() ? std::string("Asset Picker") : picker_mode_.title;
+            floating_->set_title(title);
+        } else {
+            floating_->set_title("Asset Library");
+        }
+    }
+    if (picker_mode_.enabled) {
+        multi_select_mode_ = false;
+        multi_select_selection_.clear();
+        clear_search_error();
+        if (search_box_) {
+            search_box_->stop_editing();
+            search_box_->set_value("");
+        }
+        search_query_.clear();
+        filter_dirty_ = true;
+        mark_rows_dirty();
+    }
+}
+
+bool AssetLibraryUI::in_picker_mode() const {
+    return picker_mode_.enabled;
+}
+
 void AssetLibraryUI::open() {
     if (!floating_) floating_ = std::make_unique<DockableCollapsible>("Asset Library", true, 10, 10);
     if (floating_) {
+        if (picker_mode_.enabled) {
+            const std::string title = picker_mode_.title.empty() ? std::string("Asset Picker") : picker_mode_.title;
+            floating_->set_title(title);
+        } else {
+            floating_->set_title("Asset Library");
+        }
         floating_->set_visible(true);
         floating_->set_expanded(true);
 
@@ -1028,11 +1063,11 @@ void AssetLibraryUI::rebuild_rows_impl() {
     if (!floating_) return;
     std::vector<DockableCollapsible::Row> rows;
     if (search_widget_) rows.push_back({ search_widget_.get() });
-    if (multi_select_button_widget_) rows.push_back({ multi_select_button_widget_.get() });
-    if (delete_all_button_widget_ && multi_select_mode_ && !multi_select_selection_.empty()) {
+    if (!picker_mode_.enabled && multi_select_button_widget_) rows.push_back({ multi_select_button_widget_.get() });
+    if (!picker_mode_.enabled && delete_all_button_widget_ && multi_select_mode_ && !multi_select_selection_.empty()) {
         rows.push_back({ delete_all_button_widget_.get() });
     }
-    if (add_button_widget_) rows.push_back({ add_button_widget_.get() });
+    if (!picker_mode_.enabled && add_button_widget_) rows.push_back({ add_button_widget_.get() });
 
     DockableCollapsible::Row current_row;
     current_row.reserve(2);
@@ -1063,6 +1098,9 @@ void AssetLibraryUI::ensure_rows_layout() {
 }
 
 void AssetLibraryUI::toggle_multi_select_mode() {
+    if (picker_mode_.enabled) {
+        return;
+    }
     multi_select_mode_ = !multi_select_mode_;
     if (!multi_select_mode_) {
         multi_select_selection_.clear();
@@ -1514,28 +1552,37 @@ void AssetLibraryUI::refresh_tiles(Assets& assets) {
             [this](const std::shared_ptr<AssetInfo>& info){
                 if (info) {
                     pending_selection_ = info;
+                    if (picker_mode_.enabled && picker_mode_.on_selected) {
+                        picker_mode_.on_selected(info);
+                    }
                 }
                 close();
             },
             [this, assets_ptr](const std::shared_ptr<AssetInfo>& info){
+                if (picker_mode_.enabled) {
+                    return;
+                }
                 if (info && assets_ptr) {
                     assets_ptr->open_asset_info_editor(info);
                 }
                 close();
             },
             [this](const std::shared_ptr<AssetInfo>& info){
-                request_delete(info);
+                if (!picker_mode_.enabled) {
+                    request_delete(info);
+                }
             },
             [this](const std::shared_ptr<AssetInfo>& info, bool selected){
                 handle_multi_select_selection(info, selected);
             },
-            multi_select_mode_,
+            !picker_mode_.enabled && multi_select_mode_,
             is_selected
         ));
     }
 
-    for (const auto& tag : tag_items_) {
-        if (!matches_tag_query(tag, search_query_)) continue;
+    if (!picker_mode_.enabled) {
+        for (const auto& tag : tag_items_) {
+            if (!matches_tag_query(tag, search_query_)) continue;
         int count = count_assets_for_tag(tag);
         tiles_.push_back(std::make_unique<HashtagTileWidget>(
             this,
@@ -1554,9 +1601,10 @@ void AssetLibraryUI::refresh_tiles(Assets& assets) {
                 delete_hashtag(tag_value);
             }
         ));
+        }
     }
 
-    if (assets_owner_) {
+    if (!picker_mode_.enabled && assets_owner_) {
         std::vector<std::pair<std::string, std::string>> area_refs;
         for (Room* room : assets_owner_->rooms()) {
             if (!room) continue;
@@ -1717,7 +1765,7 @@ void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer
 }
 
 void AssetLibraryUI::request_delete(const std::shared_ptr<AssetInfo>& info) {
-    if (!info) {
+    if (picker_mode_.enabled || !info) {
         return;
     }
     PendingDeleteInfo pending;
@@ -1791,7 +1839,7 @@ void AssetLibraryUI::update_delete_modal_geometry(int screen_w, int screen_h) {
 }
 
 void AssetLibraryUI::handle_create_button_pressed() {
-    if (!search_box_) {
+    if (picker_mode_.enabled || !search_box_) {
         return;
     }
     std::string raw_value = search_box_->value();

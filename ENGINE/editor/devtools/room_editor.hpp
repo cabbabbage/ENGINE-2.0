@@ -319,10 +319,11 @@ private:
     bool mouse_controls_enabled_last_frame_ = false;
 
     enum class SelectionFilter {
-        Normal,      // Normal assets only (not map, not boundary, not tiled)
-        Tiled,       // Tiled assets only
-        MapWide,     // Map-wide assets only
-        Boundary     // Boundary assets only
+        Normal,          // Normal assets only (not map, not boundary, not tiled, not child timelines)
+        Tiled,           // Tiled assets only
+        MapWide,         // Map-wide assets only
+        Boundary,        // Boundary assets only
+        ChildTimeline    // Child timeline assets only
     };
     SelectionFilter selection_filter_ = SelectionFilter::Normal;
     bool shift_was_down_last_frame_ = false;

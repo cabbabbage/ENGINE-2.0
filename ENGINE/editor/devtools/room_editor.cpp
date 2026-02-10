@@ -5789,9 +5789,18 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
     // Check if asset is a tiled asset
     const bool is_tiled_asset = asset->info && asset->info->tillable;
 
+    // Check if asset is a child timeline asset
+    const bool is_child_timeline_asset =
+        (asset->child_timeline_index() >= 0) || asset->is_child_timeline_asset();
+
+    // Only allow child timeline assets when explicitly requested
+    if (selection_filter_ != SelectionFilter::ChildTimeline && is_child_timeline_asset) {
+        return false;
+    }
+
     switch (selection_filter_) {
         case SelectionFilter::Normal:
-            // Normal assets: not map, not boundary, not tiled
+            // Normal assets: not map, not boundary, not tiled, not child timeline
             return !is_map_asset && !is_boundary_asset && !is_tiled_asset;
 
         case SelectionFilter::Tiled:
@@ -5805,6 +5814,10 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
         case SelectionFilter::Boundary:
             // Boundary assets only
             return is_boundary_asset;
+
+        case SelectionFilter::ChildTimeline:
+            // Child timeline assets only
+            return is_child_timeline_asset;
 
         default:
             return true;
@@ -5826,6 +5839,11 @@ void RoomEditor::cycle_selection_filter() {
             show_notice("Selecting boundary assets");
             break;
         case SelectionFilter::Boundary:
+            selection_filter_ = SelectionFilter::ChildTimeline;
+            show_notice("Selecting child timeline assets");
+            break;
+        case SelectionFilter::ChildTimeline:
+        default:
             selection_filter_ = SelectionFilter::Normal;
             show_notice("Selecting normal assets");
             break;

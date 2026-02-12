@@ -199,10 +199,6 @@ Asset* WorldGrid::create_asset_at_point(Asset* a, int world_z, int resolution_la
     return register_asset(std::unique_ptr<Asset>(a), world_z, resolution_layer);
 }
 
-Asset* WorldGrid::move_asset_to_point(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos) {
-    return move_asset(a, old_pos, new_pos);
-}
-
 Asset* WorldGrid::remove_asset(Asset* a) {
     if (!a) {
         return nullptr;
@@ -352,14 +348,6 @@ GridPoint& WorldGrid::ensure_child(GridPoint& parent, GridPoint::ChildDirection 
         parent.set_branch_bit_for_child(&child);
     }
     return child;
-}
-
-GridKey WorldGrid::grid_key_from_legacy(GridPoint grid_index, int world_z, int layer) const {
-    const int resolution_layer = (layer >= 0) ? layer : default_resolution_layer();
-    const int spacing = grid_spacing_for_layer(resolution_layer);
-    const int wx = origin_.world_x() + grid_index.world_x() * spacing;
-    const int wy = origin_.world_y() + grid_index.world_y() * spacing;
-    return GridKey{wx, wy, world_z, resolution_layer};
 }
 
 GridPoint* WorldGrid::find_grid_point(const GridKey& key) {

@@ -1,14 +1,6 @@
 #pragma once
 
 #include <SDL3/SDL.h>
-#include "PointPercentage.hpp"
-
-struct AnimationChildFrameData {
-    int   child_index     = -1;
-    vibble::PointPercentage offset;
-    float degree          = 0.0f;
-    bool  visible         = true;
-};
 
 class FrameVariant {
 public:

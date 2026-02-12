@@ -504,7 +504,6 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
                         nlohmann::json spawn_spec;
                         spawn_spec["name"]               = spawn_name;
                         spawn_spec["max_instances"]      = 1;
-                        spawn_spec["required_children"]  = nlohmann::json::array();
                         rooms_arr.push_back(std::move(spawn_spec));
 
                         nlohmann::json inferred_layer;
@@ -567,16 +566,6 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
                                                 rs.name          = room_entry.value("name", "unnamed");
                                                 rs.max_instances = room_entry.value("max_instances", 1);
 
-                                                auto required_it = room_entry.find("required_children");
-                                                if (required_it != room_entry.end() && required_it->is_array()) {
-                                                        for (const auto& child : *required_it) {
-                                                                if (child.is_string()) {
-                                                                        rs.required_children.push_back(child.get<std::string>());
-                                                                } else {
-                                                                        vibble::log::warn(std::string("[AssetLoader] Room '") + rs.name + "' has non-string entry in 'required_children'; skipping.");
-                                                                }
-                                                        }
-                                                }
 
                                                 spec.rooms.push_back(std::move(rs));
                                         }

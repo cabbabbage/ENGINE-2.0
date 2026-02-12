@@ -40,8 +40,6 @@ class ManifestStore;
 
 enum class FrameEditorLaunchMode {
     Movement,
-    SyncChildren,
-    AsyncChildren,
     AttackGeometry,
     HitGeometry
 };
@@ -117,6 +115,7 @@ public:
     void on_camera_settings_changed();
     void reload_camera_settings();
     void apply_camera_runtime_settings();
+    void force_camera_view_refresh();
     void set_depth_effects_enabled(bool enabled);
     bool depth_effects_enabled() const { return depth_effects_enabled_; }
     void set_movement_debug_enabled(bool enabled);
@@ -193,6 +192,7 @@ public:
 
     std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset) const;
 
+    bool should_run_runtime_updates() const;
     bool is_dev_mode() const { return dev_mode; }
 
 
@@ -200,8 +200,6 @@ public:
     Asset* player = nullptr;
 
     Asset* spawn_asset(const std::string& name, SDL_Point world_pos);
-    void request_child_timeline_creation(Asset* parent);
-    Asset* find_child_timeline_asset(const Asset* parent, int slot_index) const;
 
     void rebuild_from_grid_state();
 
@@ -228,6 +226,7 @@ private:
     int  effective_render_quality_percent() const;
     void sync_dev_controls_current_room(Room* room, bool force_refresh = false);
     void reset_dev_controls_current_room_cache();
+    void log_camera_fog_state(const char* label) const;
 
     friend class SceneRenderer;
     friend class Asset;
@@ -255,7 +254,7 @@ private:
 
     bool suppress_dev_renderer_ = false;
     bool force_high_quality_rendering_ = false;
-    bool depth_effects_enabled_ = false;
+    bool depth_effects_enabled_ = true;
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
     bool asset_boundary_box_display_enabled_ = false;

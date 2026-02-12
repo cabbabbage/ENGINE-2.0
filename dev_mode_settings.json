@@ -5,7 +5,7 @@
             "filters_expanded": false,
             "fog": false,
             "initialized": true,
-            "map_assets": false,
+            "map_assets": true,
             "methods": {
                 "center": true,
                 "childrandom": false,
@@ -28,10 +28,10 @@
             }
         },
         "grid": {
-            "cell_size_px": 9.0,
+            "cell_size_px": 81.0,
             "overlay": {
-                "enabled": true,
-                "r": 2.0
+                "enabled": false,
+                "r": 4.0
             },
             "snap": {
                 "enabled": true
@@ -47,7 +47,7 @@
         "camera": {
             "background_texture_max_opacity": 255.0,
             "depthcue_enabled": true,
-            "extra_cull_margin": 150.0,
+            "extra_cull_margin": 1300.0,
             "foreground_texture_max_opacity": 255.0,
             "meters_per_100_world_px": 0.9999999403953552,
             "min_visible_screen_ratio": 0.003000000026077032,

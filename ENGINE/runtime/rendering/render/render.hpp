@@ -4,11 +4,13 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "rendering/render/composite_asset_renderer.hpp"
 #include "rendering/render/scaling_logic.hpp"
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
+#include "rendering/render/TextureLoadQueue.hpp"
 #include <SDL3/SDL.h>
 
 #include <nlohmann/json.hpp>
@@ -18,6 +20,67 @@ class WarpedScreenGrid;
 class AssetLibrary;
 namespace world { class WorldGrid; }
 
+// Geometry batching system for reducing draw calls
+class GeometryBatcher {
+public:
+    explicit GeometryBatcher(SDL_Renderer* renderer);
+
+    // Add a quad to the batch with depth for sorting
+    void addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4], const int indices[6],
+                 SDL_BlendMode blend_mode, double depth);
+
+    // Flush all batches to the renderer
+    void flush();
+
+    // Clear all batches (call at start of frame)
+    void clear();
+
+    // Get statistics for profiling
+    size_t getBatchCount() const;
+    size_t getDrawCallCount() const { return draw_call_count_; }
+    size_t getTotalVertices() const { return total_vertices_; }
+
+private:
+    struct QuadData {
+        SDL_Vertex vertices[4];
+        double depth;
+    };
+
+    struct BatchKey {
+        SDL_Texture* texture;
+        SDL_BlendMode blend_mode;
+
+        bool operator==(const BatchKey& other) const {
+            return texture == other.texture && blend_mode == other.blend_mode;
+        }
+    };
+
+    struct BatchKeyHash {
+        size_t operator()(const BatchKey& key) const {
+            return reinterpret_cast<size_t>(key.texture) ^ static_cast<size_t>(key.blend_mode);
+        }
+    };
+
+    struct Batch {
+        SDL_Texture* texture = nullptr;
+        SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
+        std::vector<QuadData> quads;
+
+        void reserve(size_t count) {
+            quads.reserve(count);
+        }
+    };
+
+    SDL_Renderer* renderer_;
+    std::unordered_map<BatchKey, Batch, BatchKeyHash> batches_;
+    size_t draw_call_count_ = 0;
+    size_t total_vertices_ = 0;
+
+    // Reusable buffers to avoid allocations
+    std::vector<SDL_Vertex> vertex_buffer_;
+    std::vector<int> index_buffer_;
+};
+
 class GridTileRenderer {
 public:
     explicit GridTileRenderer(Assets* assets) : assets_(assets) {}
@@ -25,6 +88,8 @@ public:
     void render(SDL_Renderer* renderer);
 
     void render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid);
+
+    void render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid, GeometryBatcher* batcher);
 
 private:
     Assets* assets_ = nullptr;
@@ -52,6 +117,7 @@ public:
 
     void render();
     SDL_Renderer* get_renderer() const;
+    texture_loading::TextureLoadQueue* get_texture_load_queue() const;
 
     void set_movement_debug_enabled(bool enabled);
     bool movement_debug_enabled() const { return debug_auto_paths_; }
@@ -80,6 +146,8 @@ private:
     int            screen_height_;
 
     std::unique_ptr<GridTileRenderer> tile_renderer_;
+    std::unique_ptr<GeometryBatcher> geometry_batcher_;
+    std::unique_ptr<texture_loading::TextureLoadQueue> texture_load_queue_;
 
     bool           debugging = false;
     bool           low_quality_rendering_ = false;

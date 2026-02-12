@@ -1,6 +1,5 @@
 //TODO we need to implement a public height() that should return the current height in screen pixles of our asset
 //we need to add a public method to return the current grid point of the asset
-//TODO remove unessesary data for animation child attachment
 #ifndef ASSET_HPP
 #define ASSET_HPP
 
@@ -55,6 +54,12 @@ struct RenderObject {
     float world_z_offset = 0.0f;
     bool has_src_rect = false;
     SDL_Rect src_rect{0, 0, 0, 0};
+    std::vector<SDL_Vertex> cached_vertices;
+    std::vector<int> cached_indices;
+    SDL_FPoint cached_position{0.0f, 0.0f};
+    float cached_scale = 0.0f;
+    std::uint64_t cached_camera_state_version = 0;
+    bool mesh_dirty = true;
 };
 
 using RenderCompositePackage = std::vector<RenderObject>;
@@ -83,30 +88,6 @@ class Asset {
         }
 };
 
-
-    struct AnimationChildAttachment {
-        int child_index = -1;
-        std::string asset_name;
-        std::shared_ptr<AssetInfo> info;
-        const Animation* animation = nullptr;
-        const AnimationFrame* current_frame = nullptr;
-        float frame_progress = 0.0f;
-
-
-        float rotation_degrees = 0.0f;
-        bool visible = false;
-        int cached_w = 0;
-        int cached_h = 0;
-        bool was_visible = false;
-        int last_parent_frame_index = -1;
-        const AnimationChildData* timeline = nullptr;
-        AnimationChildMode timeline_mode = AnimationChildMode::Static;
-        bool timeline_active = false;
-        int timeline_frame_cursor = 0;
-        float timeline_frame_progress = 0.0f;
-        SDL_Point world_pos = {0, 0};
-        float world_z = 0.0f;
-};
 
     Area get_area(const std::string& name) const;
     Asset(std::shared_ptr<AssetInfo> info,
@@ -151,15 +132,7 @@ class Asset {
     bool is_current_animation_locked_in_progress() const;
     bool is_current_animation_last_frame() const;
     bool is_current_animation_looping() const;
-    const std::vector<AnimationChildAttachment>& animation_children() const;
-    std::vector<AnimationChildAttachment>& animation_children();
-    bool start_child_async(const std::string& name);
-    bool stop_child_async(const std::string& name);
-    void stop_all_child_async();
     const AnimationFrame* current_animation_frame() const { return current_frame; }
-    void request_child_timeline_creation_if_needed();
-    bool is_child_timeline_asset() const { return is_child_timeline_asset_; }
-    int child_timeline_index() const { return child_timeline_index_; }
 
     struct ScaleUsageStats {
         float requested_scale = 1.0f;
@@ -227,6 +200,9 @@ class Asset {
     const SDL_Rect& composite_rect() const { return composite_rect_; }
     void set_composite_rect(const SDL_Rect& r) { composite_rect_ = r; }
     float        composite_scale() const { return composite_scale_; }
+    bool is_mesh_dirty() const { return mesh_dirty_; }
+    void mark_mesh_dirty() { mesh_dirty_ = true; }
+    void clear_mesh_dirty() { mesh_dirty_ = false; }
 
 
     float smoothed_translation_x() const;
@@ -346,19 +322,14 @@ private:
     std::uint64_t grid_id_ = 0;
     bool has_cached_grid_residency_ = false;
     world::GridKey cached_grid_residency_{0, 0, 0, 0};
-    std::vector<AnimationChildAttachment> animation_children_;
-    bool child_creation_requested_ = false;
-    bool is_child_timeline_asset_ = false;
-    int child_timeline_index_ = -1;
-
     SDL_Texture* composite_texture_ = nullptr;
     bool         composite_dirty_   = true;
     SDL_Rect     composite_rect_    = {0, 0, 0, 0};
     float        composite_scale_   = 1.0f;
     float        world_z_offset_    = 0.0f;
+    bool         mesh_dirty_        = true;
 
 
 };
 
 #endif
-

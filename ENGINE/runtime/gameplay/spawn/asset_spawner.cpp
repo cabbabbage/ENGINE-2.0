@@ -153,16 +153,6 @@ std::vector<std::unique_ptr<Asset>> AssetSpawner::spawn_boundary_from_json(const
         return extract_all_assets();
 }
 
-void AssetSpawner::spawn_children(const Area& spawn_area,
-                                  const std::unordered_map<std::string, Area>& area_lookup,
-                                  AssetSpawnPlanner* planner) {
-        if (!planner) {
-                std::cerr << "[AssetSpawner] Child planner is null — skipping.\n";
-                return;
-        }
-        run_child_spawning(planner, spawn_area, area_lookup);
-}
-
 std::vector<std::unique_ptr<Asset>> AssetSpawner::extract_all_assets() {
 	return std::move(all_);
 }
@@ -211,9 +201,6 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
         PerimeterSpawner perimeter;
         EdgeSpawner edge;
         PercentSpawner percent;
-        struct ZoneSpawnRecord { Asset* asset = nullptr; const Area* region = nullptr; bool adjust = false; };
-    std::vector<ZoneSpawnRecord> zone_spawns;
-    zone_spawns.reserve(16);
 
     for (auto& queue_item : spawn_queue_) {
                 if (!queue_item.has_candidates()) continue;
@@ -327,10 +314,6 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                                         batch_ctx.checker().register_asset(result, enforce_spacing, track_spacing);
                                         batch_occupancy.set_occupied(vertex, true);
 
-                                        if (candidate.info && candidate.info->type == std::string("zone_asset")) {
-                                                const Area* region_area = batch_ctx.clip_area() ? batch_ctx.clip_area() : &area;
-                                                zone_spawns.push_back(ZoneSpawnRecord{ result, region_area, queue_item.adjust_geometry_to_room });
-                                        }
                                         placed = true;
                                         break;
                                 }
@@ -357,66 +340,9 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
 
                 if (!ctx.all_assets().empty()) {
                         Asset* last = ctx.all_assets().back().get();
-                        if (last && last->info && last->info->type == std::string("zone_asset")) {
-                                const Area* region_area = ctx.clip_area() ? ctx.clip_area() : &area;
-                                zone_spawns.push_back(ZoneSpawnRecord{ last, region_area, queue_item.adjust_geometry_to_room });
-                        }
                 }
         }
         checker_.reset_session();
-
-        if (!zone_spawns.empty()) {
-                for (const auto& rec : zone_spawns) {
-                        if (!rec.asset || !rec.asset->info) continue;
-                        auto info = rec.asset->info;
-
-                        Area zone_world = rec.asset->get_area("zone");
-                        if (zone_world.get_points().size() < 3) {
-                                continue;
-                        }
-                        const Area* region_area = rec.region ? rec.region : &area;
-
-                        if (rec.adjust && region_area) {
-                                auto b = region_area->get_bounds();
-                                const int region_w = std::max(1, std::get<2>(b) - std::get<0>(b));
-                                const int region_h = std::max(1, std::get<3>(b) - std::get<1>(b));
-                                const int origin_w = std::max(1, info->original_canvas_width);
-                                const int origin_h = std::max(1, info->original_canvas_height);
-                                const double sx = static_cast<double>(region_w) / static_cast<double>(origin_w);
-                                const double sy = static_cast<double>(region_h) / static_cast<double>(origin_h);
-                                std::vector<SDL_Point> adjusted;
-                                adjusted.reserve(zone_world.get_points().size());
-                                const SDL_Point anchor = rec.asset->world_point();
-                                for (const auto& p : zone_world.get_points()) {
-                                        const int dx = p.x - anchor.x;
-                                        const int dy = p.y - anchor.y;
-                                        const int nx = anchor.x + static_cast<int>(std::llround(static_cast<double>(dx) * sx));
-                                        const int ny = anchor.y + static_cast<int>(std::llround(static_cast<double>(dy) * sy));
-                                        adjusted.push_back(SDL_Point{nx, ny});
-                                }
-                                Area adjusted_world(zone_world.get_name(), adjusted, zone_world.resolution());
-                                adjusted_world.set_type(zone_world.get_type());
-                                zone_world = std::move(adjusted_world);
-                        }
-
-                        std::unordered_map<std::string, Area> area_lookup;
-                        for (const auto& named : info->areas) {
-                                if (!named.area) continue;
-                                try {
-                                        Area world_area = rec.asset->get_area(named.name);
-                                        if (world_area.get_points().size() >= 3) {
-                                                area_lookup.insert_or_assign(named.name, std::move(world_area));
-                                        }
-                                } catch (...) {
-                                }
-                        }
-
-                        std::vector<nlohmann::json> sources;
-                        sources.push_back(info->spawn_groups_payload());
-                        AssetSpawnPlanner planner2(sources, zone_world, *asset_library_);
-                        spawn_children(zone_world, area_lookup, &planner2);
-                }
-        }
 }
 
 void AssetSpawner::run_edge_spawning(const Area& area) {
@@ -518,90 +444,3 @@ void AssetSpawner::run_edge_spawning(const Area& area) {
         }
 }
 
-void AssetSpawner::run_child_spawning(AssetSpawnPlanner* planner,
-                                      const Area& default_area,
-                                      const std::unordered_map<std::string, Area>& area_lookup) {
-        asset_info_library_ = asset_library_->all();
-        spawn_queue_ = planner->get_spawn_queue();
-        auto spacing_names = collect_spacing_asset_names(spawn_queue_);
-
-        vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-        const int resolution = std::max(0, map_grid_settings_.grid_resolution);
-        checker_.begin_session(grid_service, resolution);
-        ExactSpawner exact;
-        CenterSpawner center;
-        RandomSpawner random;
-        PerimeterSpawner perimeter;
-        EdgeSpawner edge;
-        PercentSpawner percent;
-
-        struct AreaOccupancy {
-                const Area* area = nullptr;
-                std::unique_ptr<vibble::grid::Occupancy> occupancy;
-};
-
-        std::vector<AreaOccupancy> occupancy_cache;
-        occupancy_cache.reserve(area_lookup.size() + 1);
-
-        auto get_or_create_occupancy = [&](const Area* area) -> vibble::grid::Occupancy* {
-                if (!area) {
-                        return nullptr;
-                }
-                auto it = std::find_if(occupancy_cache.begin(),
-                                       occupancy_cache.end(),
-                                       [&](const AreaOccupancy& entry) { return entry.area == area; });
-                if (it == occupancy_cache.end()) {
-                        AreaOccupancy entry;
-                        entry.area = area;
-                        entry.occupancy = std::make_unique<vibble::grid::Occupancy>(*area, resolution, grid_service, true);
-                        occupancy_cache.push_back(std::move(entry));
-                        return occupancy_cache.back().occupancy.get();
-                }
-                return it->occupancy.get();
-};
-
-        for (auto& queue_item : spawn_queue_) {
-                if (!queue_item.has_candidates()) continue;
-
-                const Area* target_area = &default_area;
-                if (!queue_item.link_area_name.empty()) {
-                        auto it = area_lookup.find(queue_item.link_area_name);
-                        if (it != area_lookup.end()) {
-                                target_area = &it->second;
-                        }
-                }
-                if (!target_area) {
-                        continue;
-                }
-
-                vibble::grid::Occupancy* occupancy = get_or_create_occupancy(target_area);
-                if (!occupancy) {
-                        continue;
-                }
-
-                SpawnContext ctx(rng_, checker_, exclusion_zones, asset_info_library_, all_, asset_library_, grid_service, occupancy);
-                ctx.set_spacing_filter(&spacing_names);
-                ctx.set_map_grid_settings(map_grid_settings_);
-                ctx.set_spawn_resolution(resolution);
-                ctx.set_trail_areas({});
-                ctx.set_clip_area(target_area);
-                ctx.set_checks_enabled(false);
-                ctx.set_allow_partial_clip_overlap(true);
-
-                const std::string& pos = queue_item.position;
-                if (pos == "Exact" || pos == "Exact Position") {
-                        exact.spawn(queue_item, target_area, ctx);
-                } else if (pos == "Center") {
-                        center.spawn(queue_item, target_area, ctx);
-                } else if (pos == "Perimeter") {
-                        perimeter.spawn(queue_item, target_area, ctx);
-                } else if (pos == "Edge") {
-                        edge.spawn(queue_item, target_area, ctx);
-                } else if (pos == "Percent") {
-                        percent.spawn(queue_item, target_area, ctx);
-                } else {
-                        random.spawn(queue_item, target_area, ctx);
-                }
-        }
-        checker_.reset_session();
-}

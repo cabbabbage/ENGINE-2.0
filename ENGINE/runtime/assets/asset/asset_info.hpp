@@ -18,21 +18,6 @@ namespace devmode::core {
 class ManifestStore;
 }
 
-struct ChildInfo {
-    std::string area_name;
-    bool placed_on_top_parent = false;
-    nlohmann::json spawn_group;
-};
-
-struct AsyncChildDefinition {
-    std::string name;
-    std::string asset;
-    std::string animation;
-    std::vector<AnimationChildFrameData> frames;
-
-    bool valid() const { return !name.empty() && !asset.empty() && !frames.empty(); }
-};
-
 struct MappingOption {
 	std::string animation;
 	float percent;
@@ -49,7 +34,6 @@ class AssetInfo {
 
         public:
     SDL_Texture* preview_texture = nullptr;
-    using ChildInfo = ::ChildInfo;
     AssetInfo(const std::string &asset_folder_name);
     AssetInfo(const std::string &asset_folder_name, const nlohmann::json& metadata);
     static std::shared_ptr<AssetInfo> from_manifest_entry(const std::string& asset_folder_name, const nlohmann::json& metadata);
@@ -74,9 +58,6 @@ class AssetInfo {
     std::vector<std::string> tags;
     std::vector<std::string> anti_tags;
 
-    std::vector<std::string> animation_children;
-
-    std::vector<AsyncChildDefinition> async_children;
     bool moving_asset = false;
     std::vector<float>  scale_variants;
     struct NamedArea {
@@ -99,12 +80,10 @@ class AssetInfo {
 
         std::string attachment_subtype;
         bool        attachment_is_on_top = false;
-        nlohmann::json attachment_child_candidates = nlohmann::json::array();
 };
     std::vector<NamedArea> areas;
     std::map<std::string, Animation> animations;
     std::map<std::string, Mapping> mappings;
-    std::vector<ChildInfo> asset_children;
     std::string custom_controller_key;
 
 	public:
@@ -125,18 +104,12 @@ class AssetInfo {
     void set_anti_tags(const std::vector<std::string> &t);
     void add_anti_tag(const std::string &tag);
     void remove_anti_tag(const std::string &tag);
-    void set_animation_children(const std::vector<std::string>& children);
-    void append_animation_child(const std::string& child);
-    void remove_animation_child_at(std::size_t index);
-    void set_async_children(const std::vector<AsyncChildDefinition>& children);
     void set_passable(bool v);
     void set_tillable(bool v);
     Area* find_area(const std::string& name);
     void upsert_area_from_editor(const class Area& area, std::optional<NamedArea::RenderFrame> frame = std::nullopt);
     std::string pick_next_animation(const std::string& mapping_id) const;
     int NeighborSearchRadius = 500;
-
-    void set_children(const std::vector<ChildInfo>& asset_children);
 
     void set_spawn_groups_payload(const nlohmann::json& groups);
     nlohmann::json spawn_groups_payload() const;
@@ -180,7 +153,6 @@ class AssetInfo {
     void load_base_properties(const nlohmann::json &data);
     void load_animations(const nlohmann::json& data);
     void load_areas(const nlohmann::json &data);
-    void load_children(const nlohmann::json &data);
     nlohmann::json anims_json_;
     std::string dir_path_;
     nlohmann::json info_json_;
@@ -192,7 +164,6 @@ class AssetInfo {
     std::unordered_set<std::string> anti_tag_lookup_;
     friend class AnimationLoader;
     friend class PrimaryAssetCache;
-    friend class ChildLoader;
 #if defined(ASSET_INFO_ENABLE_TEST_ACCESS)
     friend struct AssetInfoTestAccess;
 #endif

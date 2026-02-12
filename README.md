@@ -18,12 +18,11 @@ The script installs build tools (Git, MSVC build tools, CMake, Ninja, vcpkg), fe
 ## Project Layout
 - `ENGINE/runtime/`: Runtime source for assets, controllers, rendering, UI, and shared utilities.
 - `ENGINE/editor/devtools/`: In-engine editors for assets, maps, lighting, and spawn tooling.
-- `ENGINE/tooling/asset_pipeline/`: Offline pipelines (asset toolkit, cache manager, effect parsers) that feed the runtime cache.
 - `resources/`: Source art, icons, loading screens, fog textures, and other media consumed at runtime.
-- `cache/`: Generated texture/cache exports produced by the asset pipeline and tooling.
+- `cache/`: Generated texture/cache exports produced by cache tooling.
 - `MAPS/`: Map layouts, rooms, and spawn data referenced by the manifest.
 - `content/`: Runtime content packs (e.g., `content/test`, `content/forrest`).
-- `engine/tools/`: C++ cache utilities like `asset_tool_cli`, `set_rebuild_cli`, and `apply_effects_cli`.
+- `ENGINE/tools/`: C++ cache utilities like `asset_tool_cli`, `set_rebuild_cli`, and `apply_effects_cli`.
 - `TESTS/`: Unit tests for core systems.
 - `vcpkg/`, `external/`: Dependency management and bundled libs.
 

@@ -95,8 +95,9 @@ bool RoomSelectorPopup::handle_event(const SDL_Event& e) {
     ensure_geometry();
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.x : e.button.x,
-                     e.type == SDL_EVENT_MOUSE_MOTION ? e.motion.y : e.button.y };
+        SDL_Point p = (e.type == SDL_EVENT_MOUSE_MOTION)
+                          ? sdl_mouse_util::MotionPoint(e.motion)
+                          : sdl_mouse_util::ButtonPoint(e.button);
         if (!SDL_PointInRect(&p, &rect_)) {
             if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
                 close();
@@ -109,8 +110,9 @@ bool RoomSelectorPopup::handle_event(const SDL_Event& e) {
     const bool pointer_event =
         (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
     if (pointer_event) {
-        pointer.x = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.x : e.button.x;
-        pointer.y = (e.type == SDL_EVENT_MOUSE_MOTION) ? e.motion.y : e.button.y;
+        pointer = (e.type == SDL_EVENT_MOUSE_MOTION)
+                      ? sdl_mouse_util::MotionPoint(e.motion)
+                      : sdl_mouse_util::ButtonPoint(e.button);
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         pressed_index_ = -1;

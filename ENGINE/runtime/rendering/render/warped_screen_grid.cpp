@@ -721,9 +721,10 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
                          bool dev_mode)
 {
     invalidate_camera_cache();
-    // In normal mode (non-dev), center the player on the warped screen grid.
-    // In dev mode, don't center automatically - allow manual camera control.
-    lock_anchor_to_screen_center_ = !dev_mode;
+    // Keep the anchor unlocked in both modes so the projection math stays consistent.
+    // Locking it to the screen center was pulling the virtual camera back in normal mode,
+    // which over-reduced perspective scale for certain assets (barrel, spider).
+    lock_anchor_to_screen_center_ = false;
 
     CameraParams cur_params;
     CameraParams neigh_params;
@@ -732,9 +733,11 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
 
     if (!dev_mode) {
         if (camera_.manual_height_override()) {
+            vibble::log::info("[Camera] Clearing manual_height_override in normal mode");
             camera_.set_manual_height_override(false);
         }
         if (camera_.manual_zoom_override()) {
+            vibble::log::info("[Camera] Clearing manual_zoom_override in normal mode");
             camera_.set_manual_zoom_override(false);
         }
     }
@@ -743,6 +746,8 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         cur_params.height_px = cur->camera_height_px;
         cur_params.tilt_deg = cur->camera_tilt_deg;
         cur_params.zoom_percent = cur->camera_zoom_percent;
+
+
     }
     Room* neigh = nullptr;
     if (finder) {

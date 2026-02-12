@@ -13,14 +13,15 @@
 
 class MenuUI : public MainApp {
 
-	public:
+    public:
     enum class MenuAction {
     NONE = 0,
     EXIT,
     RESTART,
-    SETTINGS
+    SETTINGS,
+    QUIT
 };
-    MenuUI(SDL_Renderer* renderer, int screen_w, int screen_h, MapDescriptor map, LoadingScreen* loading_screen = nullptr, AssetLibrary* asset_library = nullptr);
+    MenuUI(EngineRenderer* renderer, int screen_w, int screen_h, MapDescriptor map, LoadingScreen* loading_screen = nullptr, AssetLibrary* asset_library = nullptr);
     ~MenuUI();
     void init();
     bool wants_return_to_main_menu() const;
@@ -28,6 +29,9 @@ class MenuUI : public MainApp {
 	private:
     void game_loop();
     void toggleMenu();
+    void openMenu();
+    void closeMenu();
+    void exitDevModeForPause();
     void handle_event(const SDL_Event& e);
     void render();
     MenuAction consumeAction();
@@ -45,6 +49,7 @@ class MenuUI : public MainApp {
     void doExit();
     void doRestart();
     void doSettings();
+    void doQuit();
     void doToggleDevMode();
 
 	private:

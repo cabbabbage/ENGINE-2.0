@@ -221,7 +221,6 @@ std::vector<SDL_FPoint> AttackValidation::hitbox_polygon(const FrameHitGeometry:
 std::optional<Attack> AttackValidation::compute_attack_if_hit(
     const CombatantSnapshot& attacker,
     const CombatantSnapshot& target,
-    const std::vector<ChildAttachmentSnapshot>& child_frames,
     std::size_t path_segments) {
 
     if (!attacker.frame || !target.frame) {
@@ -258,15 +257,9 @@ std::optional<Attack> AttackValidation::compute_attack_if_hit(
     };
 
     std::vector<Source> sources;
-    sources.reserve(1 + child_frames.size());
+    sources.reserve(1);
     if (!attacker.frame->attack_geometry.vectors.empty()) {
         sources.push_back({ attacker.frame, attacker.transform });
-    }
-    for (const auto& child : child_frames) {
-        if (!child.frame || child.frame->attack_geometry.vectors.empty()) {
-            continue;
-        }
-        sources.push_back({ child.frame, child.transform });
     }
     if (sources.empty()) {
         return std::nullopt;

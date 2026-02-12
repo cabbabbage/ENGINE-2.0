@@ -7,6 +7,7 @@
 #include "draw_utils.hpp"
 #include "tag_utils.hpp"
 #include "utils/input.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 #include "dev_mode_utils.hpp"
@@ -26,9 +27,30 @@
 
 namespace {
 
-const SDL_Color kTileBG  = dm::rgba(24, 36, 56, 210);
-const SDL_Color kTileHL  = dm::rgba(59, 130, 246, 110);
-const SDL_Color kTileBd  = DMStyles::Border();
+struct TileStyle {
+    SDL_Color background{};
+    SDL_Color hover_overlay{};
+    SDL_Color outline{};
+    SDL_Color placeholder{};
+    int padding = 0;
+    int badge_height = 0;
+    int corner_radius = 0;
+    int bevel_depth = 0;
+};
+
+const TileStyle& tile_style() {
+    static TileStyle style{
+        dm_draw::DarkenColor(DMStyles::PanelBG(), 0.08f),
+        dm_draw::LightenColor(DMStyles::HighlightColor(), 0.18f),
+        DMStyles::Border(),
+        DMStyles::CheckboxBaseFill(),
+        std::max(10, DMSpacing::item_gap()),
+        18,
+        DMStyles::CornerRadius(),
+        DMStyles::BevelDepth(),
+    };
+    return style;
+}
 
 std::string normalize_tag_value(std::string_view raw_value) {
     std::string normalized = tag_utils::normalize(raw_value);
@@ -64,16 +86,16 @@ public:
     bool handle_event(const SDL_Event& e) override {
         if (!owner_) return false;
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            SDL_Point p{ e.motion.x, e.motion.y };
+            SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
             hovered_ = SDL_PointInRect(&p, &rect_);
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (SDL_PointInRect(&p, &rect_)) {
                 pressed_ = true;
                 return true;
             }
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             bool inside = SDL_PointInRect(&p, &rect_);
             bool was_pressed = pressed_;
             pressed_ = false;
@@ -86,44 +108,18 @@ public:
     }
 
     void render(SDL_Renderer* r) const override {
+        const TileStyle& palette = tile_style();
         if (!r) return;
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(r, kTileBG.r, kTileBG.g, kTileBG.b, kTileBG.a);
+        SDL_SetRenderDrawColor(r, palette.background.r, palette.background.g, palette.background.b, palette.background.a);
         sdl_render::FillRect(r, &rect_);
 
-        const int pad = 10;
-        const int badge_h = result_.recommended ? 18 : 0;
-        const int corner_radius = DMStyles::CornerRadius();
-        const int bevel_depth = DMStyles::BevelDepth();
+        const int pad = palette.padding;
+        const int badge_h = 0;
+        const int corner_radius = palette.corner_radius;
+        const int bevel_depth = palette.bevel_depth;
         const SDL_Color& highlight = DMStyles::HighlightColor();
         const SDL_Color& shadow = DMStyles::ShadowColor();
-
-        if (result_.recommended) {
-            SDL_Rect badge_rect{ rect_.x + pad, rect_.y + pad, 64, badge_h };
-            const DMButtonStyle& badge_style = DMStyles::AccentButton();
-            dm_draw::DrawBeveledRect(r, badge_rect, corner_radius, bevel_depth, badge_style.bg, highlight, shadow, false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-            dm_draw::DrawRoundedOutline(r, badge_rect, std::min(corner_radius, badge_rect.h / 2), 1, badge_style.border);
-            TTF_Font* badge_font = devmode::utils::load_font(std::max(12, badge_style.label.font_size - 2));
-            if (badge_font) {
-                const char* text = "#child";
-                SDL_Surface* surf = ttf_util::RenderTextBlended(badge_font, text, badge_style.text);
-                if (surf) {
-                    SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-                    SDL_DestroySurface(surf);
-                    if (tex) {
-                        int tw = 0;
-                        int th = 0;
-                        texture_size(tex, tw, th);
-                        SDL_Rect dst{ badge_rect.x + (badge_rect.w - tw) / 2,
-                                      badge_rect.y + (badge_rect.h - th) / 2,
-                                      tw,
-                                      th };
-                        sdl_render::Texture(r, tex, nullptr, &dst);
-                        SDL_DestroyTexture(tex);
-                    }
-                }
-            }
-        }
 
         SDL_Rect label_rect{ rect_.x + pad,
                              rect_.y + pad + badge_h,
@@ -162,23 +158,21 @@ public:
                                    label_rect.y + label_rect.h + pad,
                                    std::max(0, rect_.w - 2 * pad),
                                    std::max(0, rect_.h - (label_rect.h + 3 * pad + badge_h)) };
-            SDL_Color placeholder = DMStyles::CheckboxBaseFill();
-            SDL_SetRenderDrawColor(r, placeholder.r, placeholder.g, placeholder.b, placeholder.a);
+            SDL_SetRenderDrawColor(r, palette.placeholder.r, palette.placeholder.g, palette.placeholder.b, palette.placeholder.a);
             sdl_render::FillRect(r, &preview_rect);
-            SDL_Color outline = DMStyles::Border();
-            SDL_SetRenderDrawColor(r, outline.r, outline.g, outline.b, outline.a);
+            SDL_SetRenderDrawColor(r, palette.outline.r, palette.outline.g, palette.outline.b, palette.outline.a);
             sdl_render::Rect(r, &preview_rect);
         }
 
         if (hovered_) {
             SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_ADD);
-            SDL_SetRenderDrawColor(r, kTileHL.r, kTileHL.g, kTileHL.b, kTileHL.a);
+            SDL_SetRenderDrawColor(r, palette.hover_overlay.r, palette.hover_overlay.g, palette.hover_overlay.b, palette.hover_overlay.a);
             sdl_render::FillRect(r, &rect_);
         }
 
         SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
         int radius = std::min(corner_radius, std::min(rect_.w, rect_.h) / 2);
-        dm_draw::DrawRoundedOutline(r, rect_, radius, 1, kTileBd);
+        dm_draw::DrawRoundedOutline(r, rect_, radius, 1, palette.outline);
 
         const DMLabelStyle& label_style = DMStyles::Label();
         TTF_Font* label_font = devmode::utils::load_font(label_style.font_size > 0 ? label_style.font_size : 16);
@@ -448,7 +442,7 @@ std::string SearchAssets::to_lower(std::string s) {
 
 void SearchAssets::open(Callback cb) {
     cb_ = std::move(cb);
-    if (all_.empty()) load_assets();
+    load_assets();  // Always reload assets when opening to ensure we have the latest from manifest store
     if (embedded_) {
         if (panel_) {
             panel_->set_visible(true);
@@ -532,6 +526,28 @@ void SearchAssets::set_asset_filter(AssetFilter filter) {
 void SearchAssets::load_assets() {
     all_.clear();
     preview_cache_.clear();
+
+    // Primary source: the AssetLibrary contains all loaded game assets.
+    // The manifest store's "assets" section is empty at runtime (assets live in cache bundles),
+    // so we must read from the library directly.
+    if (assets_) {
+        const auto& lib_assets = assets_->library().all();
+        all_.reserve(lib_assets.size());
+        for (const auto& [lib_name, info] : lib_assets) {
+            if (!info) {
+                continue;
+            }
+            Asset asset;
+            asset.name = info->name.empty() ? lib_name : info->name;
+            asset.manifest_name = lib_name;
+            asset.tags = info->tags;
+            asset.payload = nullptr;
+            all_.push_back(std::move(asset));
+        }
+        return;
+    }
+
+    // Fallback: read from manifest store if no Assets pointer is available.
     if (!manifest_store_) {
         return;
     }
@@ -555,9 +571,6 @@ void SearchAssets::load_assets() {
                 if (tag.is_string()) {
                     std::string tag_value = tag.get<std::string>();
                     asset.tags.push_back(tag_value);
-                    if (normalize_tag_value(tag_value) == "child") {
-                        asset.has_child_tag = true;
-                    }
                 }
             }
         }
@@ -604,7 +617,6 @@ void SearchAssets::filter_assets() {
         res.manifest_name = a.manifest_name;
         res.tags = a.tags;
         res.is_tag = false;
-        res.recommended = a.has_child_tag;
         if (seen_labels.insert(res.label).second) {
             asset_results.push_back(std::move(res));
         }
@@ -616,7 +628,6 @@ void SearchAssets::filter_assets() {
     }
 
     std::sort(asset_results.begin(), asset_results.end(), [](const Result& a, const Result& b) {
-        if (a.recommended != b.recommended) return a.recommended && !b.recommended;
         return to_lower(a.label) < to_lower(b.label);
     });
 
@@ -779,7 +790,11 @@ void SearchAssets::set_assets(Assets* assets) {
         return;
     }
     assets_ = assets;
+    all_.clear();
+    results_.clear();
     preview_cache_.clear();
+    tag_data_version_ = 0;
+    load_assets();
     if (panel_ && panel_->is_visible()) {
         filter_assets();
     }

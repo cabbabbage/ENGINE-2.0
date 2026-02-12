@@ -1,4 +1,5 @@
 #include "asset_library_ui.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include <algorithm>
 #include <unordered_map>
@@ -271,66 +272,6 @@ namespace {
         return changed;
     }
 
-    bool remove_asset_from_animation_children(nlohmann::json& asset_json, const std::string& asset_name) {
-        if (!asset_json.is_object()) {
-            return false;
-        }
-
-        auto children_it = asset_json.find("animation_children");
-        if (children_it == asset_json.end() || !children_it->is_array()) {
-            return false;
-        }
-        std::vector<int> removed_indices;
-        auto& children = *children_it;
-        for (int idx = 0; idx < static_cast<int>(children.size()); ++idx) {
-            if (children[idx].is_string() && children[idx].get<std::string>() == asset_name) {
-                removed_indices.push_back(idx);
-            }
-        }
-        if (removed_indices.empty()) {
-            return false;
-        }
-        std::sort(removed_indices.begin(), removed_indices.end());
-        removed_indices.erase(std::unique(removed_indices.begin(), removed_indices.end()), removed_indices.end());
-        for (auto it = removed_indices.rbegin(); it != removed_indices.rend(); ++it) {
-            children.erase(children.begin() + *it);
-        }
-        if (children.empty()) {
-            asset_json.erase(children_it);
-        }
-
-        auto animations_it = asset_json.find("animations");
-        if (animations_it != asset_json.end() && animations_it->is_object()) {
-            for (auto anim_it = animations_it->begin(); anim_it != animations_it->end(); ++anim_it) {
-                if (!anim_it.value().is_object()) continue;
-                auto& anim_json = anim_it.value();
-                auto anim_children_it = anim_json.find("children");
-                if (anim_children_it != anim_json.end() && anim_children_it->is_array()) {
-                    auto& child_arr = *anim_children_it;
-                    for (auto it = removed_indices.rbegin(); it != removed_indices.rend(); ++it) {
-                        if (*it >= 0 && *it < static_cast<int>(child_arr.size())) {
-                            child_arr.erase(child_arr.begin() + *it);
-                        }
-                    }
-                    if (child_arr.empty()) {
-                        anim_json.erase(anim_children_it);
-                    }
-                }
-                auto movement_it = anim_json.find("movement");
-                if (movement_it != anim_json.end()) {
-                    adjust_movement_entries(*movement_it, removed_indices);
-                }
-                auto paths_it = anim_json.find("movement_paths");
-                if (paths_it != anim_json.end() && paths_it->is_array()) {
-                    for (auto& path : *paths_it) {
-                        adjust_movement_entries(path, removed_indices);
-                    }
-                }
-            }
-        }
-        return true;
-    }
-
 }
 
 struct AssetLibraryUI::AssetTileWidget : public Widget {
@@ -380,18 +321,18 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
     bool handle_event(const SDL_Event& e) override {
         if (multi_select_enabled) {
             if (e.type == SDL_EVENT_MOUSE_MOTION) {
-                SDL_Point p{ e.motion.x, e.motion.y };
+                SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
                 hovered = SDL_PointInRect(&p, &rect_);
                 delete_hovered = SDL_PointInRect(&p, &delete_rect_);
             } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-                SDL_Point p{ e.button.x, e.button.y };
+                SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
                 if (SDL_PointInRect(&p, &rect_)) {
                     multi_select_pressed = true;
                     return true;
                 }
                 return false;
             } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-                SDL_Point p{ e.button.x, e.button.y };
+                SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
                 bool inside = SDL_PointInRect(&p, &rect_);
                 bool was_pressed = multi_select_pressed;
                 multi_select_pressed = false;
@@ -407,11 +348,11 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
         }
 
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            SDL_Point p{ e.motion.x, e.motion.y };
+            SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
             hovered = SDL_PointInRect(&p, &rect_);
             delete_hovered = SDL_PointInRect(&p, &delete_rect_);
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (!SDL_PointInRect(&p, &rect_)) {
                 return false;
             }
@@ -431,7 +372,7 @@ struct AssetLibraryUI::AssetTileWidget : public Widget {
                 return true;
             }
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (e.button.button == SDL_BUTTON_LEFT) {
                 bool inside_delete = SDL_PointInRect(&p, &delete_rect_);
                 bool inside_tile = SDL_PointInRect(&p, &rect_);
@@ -637,11 +578,11 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
 
     bool handle_event(const SDL_Event& e) override {
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            SDL_Point p{ e.motion.x, e.motion.y };
+            SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
             hovered = SDL_PointInRect(&p, &rect_);
             delete_hovered = SDL_PointInRect(&p, &delete_rect_);
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (SDL_PointInRect(&p, &delete_rect_)) {
                 delete_pressed = true;
                 return true;
@@ -651,7 +592,7 @@ struct AssetLibraryUI::HashtagTileWidget : public Widget {
                 return true;
             }
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             bool inside_delete = SDL_PointInRect(&p, &delete_rect_);
             bool was_delete = delete_pressed;
             delete_pressed = false;
@@ -861,16 +802,16 @@ struct AssetLibraryUI::RoomAreaTileWidget : public Widget {
 
     bool handle_event(const SDL_Event& e) override {
         if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            SDL_Point p{ e.motion.x, e.motion.y };
+            SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
             hovered = SDL_PointInRect(&p, &rect_);
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (e.button.button == SDL_BUTTON_LEFT && SDL_PointInRect(&p, &rect_)) {
                 pressed = true;
                 return true;
             }
         } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            SDL_Point p{ e.button.x, e.button.y };
+            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
             if (e.button.button == SDL_BUTTON_LEFT) {
                 bool was = pressed;
                 pressed = false;
@@ -962,9 +903,44 @@ void AssetLibraryUI::toggle() {
 
 bool AssetLibraryUI::is_visible() const { return floating_ && floating_->is_visible(); }
 
+
+void AssetLibraryUI::set_picker_mode(PickerModeOptions options) {
+    picker_mode_ = std::move(options);
+    if (floating_) {
+        if (picker_mode_.enabled) {
+            const std::string title = picker_mode_.title.empty() ? std::string("Asset Picker") : picker_mode_.title;
+            floating_->set_title(title);
+        } else {
+            floating_->set_title("Asset Library");
+        }
+    }
+    if (picker_mode_.enabled) {
+        multi_select_mode_ = false;
+        multi_select_selection_.clear();
+        clear_search_error();
+        if (search_box_) {
+            search_box_->stop_editing();
+            search_box_->set_value("");
+        }
+        search_query_.clear();
+        filter_dirty_ = true;
+        mark_rows_dirty();
+    }
+}
+
+bool AssetLibraryUI::in_picker_mode() const {
+    return picker_mode_.enabled;
+}
+
 void AssetLibraryUI::open() {
     if (!floating_) floating_ = std::make_unique<DockableCollapsible>("Asset Library", true, 10, 10);
     if (floating_) {
+        if (picker_mode_.enabled) {
+            const std::string title = picker_mode_.title.empty() ? std::string("Asset Picker") : picker_mode_.title;
+            floating_->set_title(title);
+        } else {
+            floating_->set_title("Asset Library");
+        }
         floating_->set_visible(true);
         floating_->set_expanded(true);
 
@@ -980,7 +956,7 @@ void AssetLibraryUI::close() {
 }
 
 bool AssetLibraryUI::is_input_blocking() const {
-    return (floating_ && floating_->is_expanded()) || showing_delete_popup_;
+    return ((floating_ && floating_->is_visible() && floating_->is_expanded()) || showing_delete_popup_);
 }
 
 bool AssetLibraryUI::is_locked() const {
@@ -1027,11 +1003,11 @@ void AssetLibraryUI::rebuild_rows_impl() {
     if (!floating_) return;
     std::vector<DockableCollapsible::Row> rows;
     if (search_widget_) rows.push_back({ search_widget_.get() });
-    if (multi_select_button_widget_) rows.push_back({ multi_select_button_widget_.get() });
-    if (delete_all_button_widget_ && multi_select_mode_ && !multi_select_selection_.empty()) {
+    if (!picker_mode_.enabled && multi_select_button_widget_) rows.push_back({ multi_select_button_widget_.get() });
+    if (!picker_mode_.enabled && delete_all_button_widget_ && multi_select_mode_ && !multi_select_selection_.empty()) {
         rows.push_back({ delete_all_button_widget_.get() });
     }
-    if (add_button_widget_) rows.push_back({ add_button_widget_.get() });
+    if (!picker_mode_.enabled && add_button_widget_) rows.push_back({ add_button_widget_.get() });
 
     DockableCollapsible::Row current_row;
     current_row.reserve(2);
@@ -1062,6 +1038,9 @@ void AssetLibraryUI::ensure_rows_layout() {
 }
 
 void AssetLibraryUI::toggle_multi_select_mode() {
+    if (picker_mode_.enabled) {
+        return;
+    }
     multi_select_mode_ = !multi_select_mode_;
     if (!multi_select_mode_) {
         multi_select_selection_.clear();
@@ -1513,28 +1492,37 @@ void AssetLibraryUI::refresh_tiles(Assets& assets) {
             [this](const std::shared_ptr<AssetInfo>& info){
                 if (info) {
                     pending_selection_ = info;
+                    if (picker_mode_.enabled && picker_mode_.on_selected) {
+                        picker_mode_.on_selected(info);
+                    }
                 }
                 close();
             },
             [this, assets_ptr](const std::shared_ptr<AssetInfo>& info){
+                if (picker_mode_.enabled) {
+                    return;
+                }
                 if (info && assets_ptr) {
                     assets_ptr->open_asset_info_editor(info);
                 }
                 close();
             },
             [this](const std::shared_ptr<AssetInfo>& info){
-                request_delete(info);
+                if (!picker_mode_.enabled) {
+                    request_delete(info);
+                }
             },
             [this](const std::shared_ptr<AssetInfo>& info, bool selected){
                 handle_multi_select_selection(info, selected);
             },
-            multi_select_mode_,
+            !picker_mode_.enabled && multi_select_mode_,
             is_selected
         ));
     }
 
-    for (const auto& tag : tag_items_) {
-        if (!matches_tag_query(tag, search_query_)) continue;
+    if (!picker_mode_.enabled) {
+        for (const auto& tag : tag_items_) {
+            if (!matches_tag_query(tag, search_query_)) continue;
         int count = count_assets_for_tag(tag);
         tiles_.push_back(std::make_unique<HashtagTileWidget>(
             this,
@@ -1553,9 +1541,10 @@ void AssetLibraryUI::refresh_tiles(Assets& assets) {
                 delete_hashtag(tag_value);
             }
         ));
+        }
     }
 
-    if (assets_owner_) {
+    if (!picker_mode_.enabled && assets_owner_) {
         std::vector<std::pair<std::string, std::string>> area_refs;
         for (Room* room : assets_owner_->rooms()) {
             if (!room) continue;
@@ -1663,7 +1652,6 @@ void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer
                         }
                         bool updated = false;
                         updated |= devmode::manifest_utils::remove_asset_from_spawn_groups(transaction.data(), asset_name);
-                        updated |= remove_asset_from_animation_children(transaction.data(), asset_name);
                         if (updated) {
                             if (!transaction.finalize()) {
                                 std::cerr << "[AssetLibraryUI] Failed to update manifest asset entry '"
@@ -1716,7 +1704,7 @@ void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer
 }
 
 void AssetLibraryUI::request_delete(const std::shared_ptr<AssetInfo>& info) {
-    if (!info) {
+    if (picker_mode_.enabled || !info) {
         return;
     }
     PendingDeleteInfo pending;
@@ -1790,7 +1778,7 @@ void AssetLibraryUI::update_delete_modal_geometry(int screen_w, int screen_h) {
 }
 
 void AssetLibraryUI::handle_create_button_pressed() {
-    if (!search_box_) {
+    if (picker_mode_.enabled || !search_box_) {
         return;
     }
     std::string raw_value = search_box_->value();
@@ -1989,14 +1977,14 @@ bool AssetLibraryUI::handle_delete_modal_event(const SDL_Event& e) {
         return false;
     }
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
         delete_yes_hovered_ = SDL_PointInRect(&p, &delete_yes_rect_);
         delete_no_hovered_ = SDL_PointInRect(&p, &delete_no_rect_);
         delete_skip_hovered_ = SDL_PointInRect(&p, &delete_skip_rect_);
         return SDL_PointInRect(&p, &delete_modal_rect_);
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         if (SDL_PointInRect(&p, &delete_yes_rect_)) {
             delete_yes_pressed_ = true;
             return true;
@@ -2015,7 +2003,7 @@ bool AssetLibraryUI::handle_delete_modal_event(const SDL_Event& e) {
         return false;
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         const bool inside_yes = SDL_PointInRect(&p, &delete_yes_rect_);
         const bool inside_no = SDL_PointInRect(&p, &delete_no_rect_);
         const bool inside_skip = SDL_PointInRect(&p, &delete_skip_rect_);
@@ -2149,6 +2137,14 @@ void AssetLibraryUI::update(const Input& input,
 
 void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
     if (!floating_) return;
+
+    const bool modal_overlay = picker_mode_.enabled && floating_->is_visible() && !showing_delete_popup_;
+    if (modal_overlay && r && screen_w > 0 && screen_h > 0) {
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, 0, 0, 0, 120);
+        SDL_Rect dim{ 0, 0, screen_w, screen_h };
+        sdl_render::FillRect(r, &dim);
+    }
     floating_->render(r);
 
     if (showing_delete_popup_) {
@@ -2268,6 +2264,8 @@ void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
 bool AssetLibraryUI::handle_event(const SDL_Event& e) {
     if (!floating_) return false;
 
+    const bool modal_picker = picker_mode_.enabled && floating_->is_visible();
+
     if (showing_delete_popup_) {
         if (handle_delete_modal_event(e)) {
             return true;
@@ -2300,6 +2298,24 @@ bool AssetLibraryUI::handle_event(const SDL_Event& e) {
         }
     }
 
+    if (!handled && modal_picker) {
+        switch (e.type) {
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EVENT_MOUSE_MOTION:
+            case SDL_EVENT_MOUSE_WHEEL:
+                return true;
+            case SDL_EVENT_KEY_DOWN:
+                if (e.key.key == SDLK_ESCAPE) {
+                    close();
+                    return true;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
     return handled;
 }
 
@@ -2312,6 +2328,9 @@ std::shared_ptr<AssetInfo> AssetLibraryUI::consume_selection() {
 bool AssetLibraryUI::is_input_blocking_at(int mx, int my) const {
     if (!floating_ || !floating_->is_visible() || !floating_->is_expanded())
         return false;
+    if (picker_mode_.enabled) {
+        return true;
+    }
     SDL_Point p{ mx, my };
     if (showing_delete_popup_) {
         if (delete_modal_rect_.w > 0 && delete_modal_rect_.h > 0) {

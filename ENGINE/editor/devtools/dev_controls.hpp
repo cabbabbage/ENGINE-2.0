@@ -165,6 +165,9 @@ private:
     void update_movement_debug_visibility();
     void apply_overlay_grid_resolution(int resolution, bool user_override, bool update_stepper, bool update_footer);
     void apply_grid_resolution_change(int resolution);
+    void nudge_overlay_grid_resolution(int delta);
+    void push_grid_resolution_toast(int resolution);
+    void render_grid_resolution_toast(SDL_Renderer* renderer);
     void restore_filter_hidden_assets() const;
     void mark_layout_dirty();
     void rebuild_layout_state();
@@ -185,6 +188,12 @@ private:
     struct LayoutCache {
         SDL_Rect usable_rect{0, 0, 0, 0};
         bool valid = false;
+    };
+
+    struct GridResolutionToast {
+        std::string text;
+        Uint64 start_ms = 0;
+        Uint64 duration_ms = 0;
     };
 
     int map_radius_or_default() const;
@@ -245,17 +254,9 @@ private:
       int  grid_overlay_resolution_r_ = 0;
       bool grid_overlay_resolution_user_override_ = false;
       int  grid_cell_size_px_ = 1;
+    std::optional<GridResolutionToast> grid_resolution_toast_;
     int  grid_resolution_r_ = -1;
     bool movement_debug_enabled_ = false;
-
-
-
-    std::unique_ptr<class DMNumericStepper> grid_resolution_stepper_;
-
-    std::unique_ptr<class DMCheckbox> grid_overlay_checkbox_;
-
-    SDL_Rect grid_stepper_rect_{0,0,0,0};
-    SDL_Rect grid_checkbox_rect_{0,0,0,0};
 
     std::unique_ptr<class FrameEditorSession> frame_editor_session_;
     bool frame_editor_prev_grid_overlay_ = false;

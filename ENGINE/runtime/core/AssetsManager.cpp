@@ -170,7 +170,7 @@ Assets::Assets(AssetLibrary& library,
     }
 
     hydrate_map_info_sections();
-    depth_effects_enabled_ = false;
+    depth_effects_enabled_ = true;
 
     vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
     InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_y, map_radius);
@@ -351,6 +351,7 @@ void Assets::load_camera_settings_from_json() {
     }
     camera_.apply_camera_settings(map_info_json_["camera_settings"]);
     apply_camera_runtime_settings();
+    camera_view_dirty_ = true;
 }
 
 void Assets::write_camera_settings_to_json() {
@@ -362,6 +363,8 @@ void Assets::write_camera_settings_to_json() {
 
 void Assets::on_camera_settings_changed() {
     apply_camera_runtime_settings();
+    mark_camera_dirty();
+    camera_view_dirty_ = true;
 }
 
 void Assets::mark_camera_dirty() {
@@ -369,7 +372,49 @@ void Assets::mark_camera_dirty() {
 }
 
 void Assets::reload_camera_settings() {
+    vibble::log::info("[Assets] Reloading camera settings from manifest");
     load_camera_settings_from_json();
+    mark_camera_dirty();  // CRITICAL: Mark camera dirty to trigger refresh on first frame
+    camera_view_dirty_ = true;
+    vibble::log::info("[Assets] Camera settings reloaded and marked dirty for refresh");
+    log_camera_fog_state("startup-normal");
+}
+
+void Assets::force_camera_view_refresh() {
+    // Ensure camera/grid state is rebuilt on startup without requiring a Dev Mode toggle
+    Room* detected_room = finder_ ? finder_->getCurrentRoom() : nullptr;
+    Room* active_room = detected_room;
+    const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
+    if (dev_controls_enabled) {
+        active_room = dev_controls_->resolve_current_room(detected_room);
+    }
+    current_room_ = active_room;
+
+    mark_camera_dirty();
+    camera_view_dirty_ = true;
+    grid_dirty_ = true;
+
+    camera_.update_camera_height(current_room_, finder_, player, true, last_frame_dt_seconds_, dev_mode);
+
+    const SDL_Point center_px = camera_.get_screen_center();
+    const world::GridPoint center_point = world::GridPoint::make_virtual(
+        center_px.x,
+        center_px.y,
+        0,
+        world_grid_.max_resolution_layers());
+    const double current_scale = camera_.get_scale();
+    const double current_pitch = camera_.current_pitch_radians();
+
+    // Allow initial rebuild even if frame_id_ == last_active_rebuild_frame_id_
+    if (last_active_rebuild_frame_id_ == frame_id_) {
+        last_active_rebuild_frame_id_ = static_cast<std::uint32_t>(~frame_id_);
+    }
+
+    rebuild_world_grid_and_active_assets(center_point, current_scale, current_pitch);
+    pending_initial_rebuild_ = false;
+    active_assets_dirty_.store(false, std::memory_order_release);
+    last_active_rebuild_frame_id_ = frame_id_;
+    needs_filtered_active_refresh_ = true;
 }
 
 int Assets::saved_render_quality_percent() const {
@@ -393,6 +438,39 @@ void Assets::apply_camera_runtime_settings() {
 
     }
 
+}
+
+void Assets::log_camera_fog_state(const char* label) const {
+    if (!label) {
+        return;
+    }
+
+    const Room* room = current_room_;
+    const auto& settings = camera_.realism_settings();
+    const double camera_height = camera_.current_camera_height();
+    const float pitch_deg = camera_.current_pitch_degrees();
+    const auto& controller_state = camera_.camera_state();
+    const SDL_Point center = camera_.get_screen_center();
+
+    vibble::log::info(std::string("[CameraDebug] ") + label +
+        " dev_mode=" + (dev_mode ? "YES" : "NO") +
+        " room=" + (room ? room->room_name : std::string("none")) +
+        " room_height_px=" + std::to_string(room ? room->camera_height_px : 0) +
+        " room_tilt_deg=" + std::to_string(room ? room->camera_tilt_deg : 0.0f) +
+        " room_zoom_percent=" + std::to_string(room ? room->camera_zoom_percent : 0) +
+        " base_height_px=" + std::to_string(settings.base_height_px) +
+        " min_visible_screen_ratio=" + std::to_string(settings.min_visible_screen_ratio) +
+        " meters_per_100_world_px=" + std::to_string(settings.meters_per_100_world_px) +
+        " extra_cull_margin=" + std::to_string(settings.extra_cull_margin) +
+        " near_camera_max_perspective_scale=" + std::to_string(settings.near_camera_max_perspective_scale) +
+        " offscreen_fade_amount_px=" + std::to_string(settings.offscreen_fade_amount_px) +
+        " view_height_world=" + std::to_string(camera_.view_height_world()) +
+        " camera_height=" + std::to_string(camera_height) +
+        " pitch_deg=" + std::to_string(pitch_deg) +
+        " zoom_percent=" + std::to_string(controller_state.params.zoom_percent) +
+        " scale=" + std::to_string(camera_.get_scale()) +
+        " screen_center=(" + std::to_string(center.x) + "," + std::to_string(center.y) + ")"
+    );
 }
 
 void Assets::set_depth_effects_enabled(bool enabled) {
@@ -441,10 +519,12 @@ Assets::~Assets() {
     grid_registration_buffer_.clear();
 
     // Persist current asset state to bundle caches on teardown (dev mode exit).
-    PrimaryAssetCache cache(renderer());
-    for (const auto& entry : library_.all()) {
-        if (entry.second) {
-            cache.save_current(*entry.second);
+    if (dev_mode) {
+        PrimaryAssetCache cache(renderer());
+        for (const auto& entry : library_.all()) {
+            if (entry.second) {
+                cache.save_current(*entry.second);
+            }
         }
     }
 
@@ -734,21 +814,22 @@ void Assets::update(const Input& input)
 
     dx = dy = 0;
 
+    // Pause runtime asset updates while in Dev Mode unless a frame editor session requires them.
+    const bool runtime_updates_enabled = should_run_runtime_updates();
+
     int start_px = player ? player->world_x() : 0;
     int start_py = player ? player->world_y() : 0;
 
     if (player) {
         player->active = true;
-        if (dev_mode) {
+        if (runtime_updates_enabled) {
+
+            player->update();
+        } else {
 
             if (player->info) {
                 player->update_scale_values();
             }
-            // In dev mode, do NOT advance animation frames — keep things frozen/paused
-            player->request_child_timeline_creation_if_needed();
-        } else {
-
-            player->update();
         }
     }
 
@@ -770,7 +851,7 @@ void Assets::update(const Input& input)
         last_player_pos_valid_ = true;
 
         player_moved = moved_during_update || moved_since_last_frame;
-        if (!dev_mode && moved_during_update) {
+        if (runtime_updates_enabled && moved_during_update) {
             log_asset_movement(player,
                                world::GridPoint::make_virtual(start_px, start_py, player->world_z(), player->grid_resolution),
                                current_player_pos);
@@ -789,14 +870,7 @@ void Assets::update(const Input& input)
                                                                        asset->grid_resolution);
         asset->active = true;
 
-        if (dev_mode) {
-
-            if (asset->info) {
-                asset->update_scale_values();
-            }
-            // In dev mode, do NOT advance animation frames — keep things frozen/paused
-            asset->request_child_timeline_creation_if_needed();
-        } else {
+        if (runtime_updates_enabled) {
 
             asset->update();
             if (previous_pos.world_x() != asset->world_x() || previous_pos.world_y() != asset->world_y()) {
@@ -807,21 +881,32 @@ void Assets::update(const Input& input)
                                                                   asset->world_z(),
                                                                   asset->grid_resolution));
             }
+        } else {
+
+            if (asset->info) {
+                asset->update_scale_values();
+            }
         }
     }
 
-    if (!movement_commands_buffer_.empty()) {
-        for (const GridMovementCommand& cmd : movement_commands_buffer_) {
-            if (!cmd.asset) continue;
-            world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
-            cmd.asset->cache_grid_residency(cmd.current);
-        }
-        movement_commands_buffer_.clear();
+    if (runtime_updates_enabled) {
+        if (!movement_commands_buffer_.empty()) {
+            for (const GridMovementCommand& cmd : movement_commands_buffer_) {
+                if (!cmd.asset) continue;
+                world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
+                cmd.asset->cache_grid_residency(cmd.current);
+            }
+            movement_commands_buffer_.clear();
 
+            moving_assets_for_grid_.clear();
+            grid_registration_buffer_.clear();
+            touch_dev_active_state_version();
+            mark_grid_dirty();
+        }
+    } else {
+        movement_commands_buffer_.clear();
         moving_assets_for_grid_.clear();
         grid_registration_buffer_.clear();
-        touch_dev_active_state_version();
-        mark_grid_dirty();
     }
 
     const bool height_animation_active = false;
@@ -891,45 +976,9 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         return;
     }
 
-    // Helper to compute parent depth for ordering within a grid point
-    auto compute_parent_depth = [](const Asset* asset) -> int {
-        int depth = 0;
-        const Asset* current = asset;
-        while (current && current->parent) {
-            ++depth;
-            current = current->parent;
-            if (depth > 1000) break; // Prevent infinite loops from circular references
-        }
-        return depth;
+    auto compute_depth_hint = [](const Asset* asset) -> int {
+        return asset ? asset->depth : 0;
     };
-
-    // Build lookup for child timeline assets keyed by their parent
-    std::unordered_map<Asset*, std::vector<Asset*>> child_lookup;
-    child_lookup.reserve(all.size());
-    for (Asset* asset : all) {
-        if (!asset || asset->dead) {
-            continue;
-        }
-        if (asset->child_timeline_index() < 0) {
-            continue;
-        }
-        Asset* parent_asset = asset->parent;
-        if (!parent_asset || parent_asset->dead) {
-            continue;
-        }
-        child_lookup[parent_asset].push_back(asset);
-    }
-    for (auto& kv : child_lookup) {
-        auto& children = kv.second;
-        std::stable_sort(children.begin(), children.end(),
-                         [](const Asset* a, const Asset* b) {
-                             if (!a || !b) return b != nullptr;
-                             if (a->child_timeline_index() != b->child_timeline_index()) {
-                                 return a->child_timeline_index() < b->child_timeline_index();
-                             }
-                             return a < b;
-                         });
-    }
 
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(active_traversal_.size());
@@ -956,12 +1005,12 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
 
         std::stable_sort(point_assets.begin(),
                          point_assets.end(),
-                         [&compute_parent_depth](const Asset* a, const Asset* b) {
+                         [&compute_depth_hint](const Asset* a, const Asset* b) {
                              if (!a || !b) return b != nullptr;
-                             const int depth_a = compute_parent_depth(a);
-                             const int depth_b = compute_parent_depth(b);
+                             const int depth_a = compute_depth_hint(a);
+                             const int depth_b = compute_depth_hint(b);
                              if (depth_a != depth_b) {
-                                 return depth_a < depth_b; // parents before children
+                                 return depth_a < depth_b;
                              }
                              return a < b;
                          });
@@ -976,21 +1025,6 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
                 non_player_update_buffer_.push_back(asset);
             }
 
-            // Append child timeline assets immediately after their parent (or player).
-            auto child_it = child_lookup.find(asset);
-            if (child_it == child_lookup.end() && asset == player) {
-                child_it = child_lookup.find(player);
-            }
-            if (child_it != child_lookup.end()) {
-                for (Asset* child : child_it->second) {
-                    if (!child || child->dead) {
-                        continue;
-                    }
-                    if (buffer_set.insert(child).second) {
-                        non_player_update_buffer_.push_back(child);
-                    }
-                }
-            }
         }
     }
 
@@ -1253,6 +1287,7 @@ void Assets::set_dev_mode(bool mode) {
     }
 
     apply_camera_runtime_settings();
+    log_camera_fog_state(dev_mode ? "dev-mode-enabled" : "dev-mode-disabled");
 }
 
 void Assets::set_force_high_quality_rendering(bool enable) {
@@ -1345,79 +1380,6 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     mark_non_player_update_buffer_dirty();
 
     return raw;
-}
-
-void Assets::request_child_timeline_creation(Asset* parent) {
-    if (!parent || parent->dead || !parent->active) {
-        return;
-    }
-    if (parent->animation_children_.empty()) {
-        return;
-    }
-
-    std::string owning_room = map_id_;
-    if (current_room_) {
-        owning_room = current_room_->room_name;
-    }
-    Area spawn_area(owning_room, 0);
-    bool created_any = false;
-
-    for (std::size_t i = 0; i < parent->animation_children_.size(); ++i) {
-        const auto& slot = parent->animation_children_[i];
-        if (slot.child_index < 0 || slot.asset_name.empty() || !slot.timeline) {
-            continue;
-        }
-        if (find_child_timeline_asset(parent, static_cast<int>(i))) {
-            continue;
-        }
-        std::shared_ptr<AssetInfo> info = slot.info ? slot.info : library_.get(slot.asset_name);
-        if (!info) {
-            continue;
-        }
-
-        int depth = parent->depth;
-        int grid_res = parent->grid_resolution;
-        auto uptr = std::make_unique<Asset>(info, spawn_area, parent->world_point(), depth, parent, std::string{}, std::string{"ChildTimeline"}, grid_res);
-        Asset* raw = uptr.get();
-        if (!raw) {
-            continue;
-        }
-        raw->set_assets(this);
-        raw->set_camera(&camera_);
-        raw->finalize_setup();
-        raw->child_timeline_index_ = static_cast<int>(i);
-
-        raw = world_grid_.create_asset_at_point(std::move(uptr));
-        if (!raw) {
-            continue;
-        }
-        all.push_back(raw);
-        queue_asset_dimension_update(raw);
-        created_any = true;
-    }
-
-    if (created_any) {
-        mark_grid_dirty();
-        mark_active_assets_dirty();
-        mark_non_player_update_buffer_dirty();
-        needs_filtered_active_refresh_ = true;
-        touch_dev_active_state_version();
-    }
-}
-
-Asset* Assets::find_child_timeline_asset(const Asset* parent, int slot_index) const {
-    if (!parent || slot_index < 0) {
-        return nullptr;
-    }
-    for (Asset* asset : all) {
-        if (!asset || asset->dead) {
-            continue;
-        }
-        if (asset->parent == parent && asset->child_timeline_index() == slot_index) {
-            return asset;
-        }
-    }
-    return nullptr;
 }
 
 void Assets::rebuild_from_grid_state() {
@@ -2227,7 +2189,6 @@ void Assets::rebuild_active_from_screen_grid() {
         if (!still_active && asset->last_active_frame_id == previous_active_frame_id) {
             active_changed = true;
             asset->active = false;
-            asset->child_creation_requested_ = false;
         }
     }
 
@@ -2313,5 +2274,12 @@ bool Assets::has_pending_dev_work(bool include_animation_plans) const {
     return false;
 }
 
-
-
+bool Assets::should_run_runtime_updates() const {
+    if (!dev_mode) {
+        return true;
+    }
+    if (dev_controls_ && dev_controls_->is_frame_editor_session_active()) {
+        return true;
+    }
+    return false;
+}

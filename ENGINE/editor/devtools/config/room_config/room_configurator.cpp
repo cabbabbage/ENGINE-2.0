@@ -8,6 +8,7 @@
 #include "tag_editor_widget.hpp"
 #include "tag_utils.hpp"
 #include "utils/input.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "widgets.hpp"
 #include "font_cache.hpp"
@@ -1043,7 +1044,7 @@ bool RoomConfigurator::handle_panel_focus_event(const SDL_Event& e) {
     if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT) {
         return false;
     }
-    SDL_Point pointer{e.button.x, e.button.y};
+    SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);
     DockableCollapsible* target = panel_at_point(pointer);
     if (!target || target == focused_panel_) {
         return false;

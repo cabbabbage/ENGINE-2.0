@@ -68,7 +68,6 @@ private:
         std::string manifest_name;
         std::vector<std::string> tags;
         const nlohmann::json* payload = nullptr;
-        bool has_child_tag = false;
 };
     void load_assets();
     void filter_assets();

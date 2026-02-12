@@ -354,13 +354,13 @@ bool DMButton::handle_event(const SDL_Event& e) {
         return true;
     }
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
         hovered_ = SDL_PointInRect(&p, &rect_);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         if (SDL_PointInRect(&p, &rect_)) { pressed_ = true; return true; }
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         bool inside = SDL_PointInRect(&p, &rect_);
         bool was = pressed_;
         pressed_ = false;
@@ -789,10 +789,10 @@ bool DMCheckbox::handle_event(const SDL_Event& e) {
         return true;
     }
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
         hovered_ = SDL_PointInRect(&p, &rect_);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         if (SDL_PointInRect(&p, &rect_)) { value_ = !value_; return true; }
     }
     return false;
@@ -962,10 +962,10 @@ bool DMNumericStepper::handle_event(const SDL_Event& e) {
         return true;
     }
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
         update_hover(p);
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         update_hover(p);
         if (hovered_dec_) {
             pressed_dec_ = true;
@@ -976,7 +976,7 @@ bool DMNumericStepper::handle_event(const SDL_Event& e) {
             return true;
         }
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         update_hover(p);
         bool used = false;
         bool had_dec = pressed_dec_;
@@ -1388,7 +1388,7 @@ bool DMSlider::handle_event(const SDL_Event& e) {
 };
 
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
         update_hover(p);
         if (!dragging_ && focused_ && !hovered_) {
             set_focus(false);
@@ -1398,7 +1398,7 @@ bool DMSlider::handle_event(const SDL_Event& e) {
             return true;
         }
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         bool inside = update_hover(p);
         if (inside) {
             bool was_focused = focused_;
@@ -1428,7 +1428,7 @@ bool DMSlider::handle_event(const SDL_Event& e) {
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         bool was_dragging = dragging_;
         dragging_ = false;
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         update_hover(p);
         if (!SDL_PointInRect(&p, &rect_) && focused_) {
             set_focus(false);
@@ -1942,7 +1942,7 @@ bool DMRangeSlider::handle_event(const SDL_Event& e) {
 };
 
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
         update_hover(p);
         bool dragging = false;
         if (dragging_min_) {
@@ -1957,7 +1957,7 @@ bool DMRangeSlider::handle_event(const SDL_Event& e) {
             return true;
         }
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         bool inside = update_hover(p);
         bool focus_changed = false;
         if (inside) {
@@ -2035,7 +2035,7 @@ bool DMRangeSlider::handle_event(const SDL_Event& e) {
         bool was_dragging = dragging_min_ || dragging_max_;
         dragging_min_ = false;
         dragging_max_ = false;
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         update_hover(p);
         if (!SDL_PointInRect(&p, &rect_) && focused_) {
             set_focus(false);
@@ -2385,7 +2385,7 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
         }
     }
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        SDL_Point p{ e.motion.x, e.motion.y };
+        SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
         const bool inside_box = SDL_PointInRect(&p, &box_rect_);
         hovered_ = inside_box;
 
@@ -2441,7 +2441,7 @@ bool DMDropdown::handle_event(const SDL_Event& e) {
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point p{ e.button.x, e.button.y };
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         const bool inside = SDL_PointInRect(&p, &box_rect_);
         if (inside) {
             if (focused_ && active_ == this) {

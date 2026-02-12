@@ -1,6 +1,2571 @@
 {
-  "version": 1,
-  "assets": {},
+  "assets": {
+    "Bartender": {
+      "animations": {
+        "back": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 10,
+          "source": {
+            "kind": "folder",
+            "path": "back"
+          }
+        },
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 6,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        },
+        "forward": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 6,
+          "source": {
+            "kind": "folder",
+            "path": "forward"
+          }
+        },
+        "right": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "path": "right"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Bartender",
+      "asset_name": "Bartender",
+      "start": "default"
+    },
+    "Bush_1": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "frames": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/Bush_1",
+      "asset_name": "Bush_1",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "Candle": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Candle",
+      "asset_name": "Candle",
+      "start": "default"
+    },
+    "Carrie": {
+      "animations": {
+        "back": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 10,
+          "source": {
+            "kind": "folder",
+            "path": "back"
+          }
+        },
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        },
+        "forward": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 6,
+          "source": {
+            "kind": "folder",
+            "path": "forward"
+          }
+        },
+        "right": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "path": "right"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Carrie",
+      "asset_name": "Carrie",
+      "start": "default"
+    },
+    "Casino": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Casino",
+      "asset_name": "Casino",
+      "start": "default"
+    },
+    "Davey": {
+      "animations": {
+        "back": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "path": "back"
+          }
+        },
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 24,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        },
+        "forward": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "path": "forward"
+          }
+        },
+        "right": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "path": "right"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Davey",
+      "asset_name": "Davey",
+      "start": "default"
+    },
+    "Fountain": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Fountain",
+      "asset_name": "Fountain",
+      "start": "default"
+    },
+    "Frog": {
+      "animations": {
+        "Default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "Default"
+          }
+        },
+        "Move Forward": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 6,
+          "source": {
+            "kind": "folder",
+            "path": "Move Forward"
+          }
+        },
+        "Move Left": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "path": "Move Left"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Frog",
+      "asset_name": "Frog",
+      "start": "Default"
+    },
+    "Gary": {
+      "animation_children": [],
+      "animations": {
+        "back": {
+          "attack_geometry": [
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            }
+          ],
+          "frames": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ],
+          "hit_geometry": [
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            }
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              -7
+            ],
+            [
+              0,
+              -7
+            ],
+            [
+              0,
+              -7
+            ],
+            [
+              0,
+              -7
+            ],
+            [
+              0,
+              -7
+            ],
+            [
+              0,
+              -7
+            ],
+            [
+              0,
+              -7
+            ],
+            [
+              0,
+              -7
+            ],
+            [
+              0,
+              -7
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": -63
+          },
+          "number_of_frames": 10,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "back"
+          }
+        },
+        "default": {
+          "attack_geometry": [
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            }
+          ],
+          "frames": [
+            {}
+          ],
+          "hit_geometry": [
+            {
+              "explosion": null,
+              "melee": {
+                "center_x": -1.1640625,
+                "center_y": 127.775390625,
+                "half_height": 89.521484375,
+                "half_width": 40.0,
+                "rotation": 0.0,
+                "type": "melee"
+              },
+              "projectile": null
+            }
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0,
+              false
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        },
+        "forward": {
+          "frames": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              2
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              0,
+              2
+            ],
+            [
+              0,
+              2
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 10
+          },
+          "number_of_frames": 6,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "forward"
+          }
+        },
+        "left": {
+          "derived_modifiers": {
+            "flipMovementX": true,
+            "flipMovementY": false,
+            "flipX": true,
+            "flipY": false,
+            "reverse": false
+          },
+          "frames": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ],
+          "loop": true,
+          "movement": [
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ],
+            [
+              -2,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": -22,
+            "dy": 0
+          },
+          "number_of_frames": 12,
+          "source": {
+            "kind": "animation",
+            "name": "right",
+            "path": ""
+          }
+        },
+        "right": {
+          "attack_geometry": [
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            }
+          ],
+          "frames": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ],
+          "hit_geometry": [
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            }
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ],
+            [
+              2,
+              0,
+              false
+            ]
+          ],
+          "movement_total": {
+            "dx": 22,
+            "dy": 0
+          },
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "right"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/Gary",
+      "asset_name": "Gary",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "can_invert": false,
+      "custom_controller_key": "Gary_controller",
+      "has_shading": false,
+      "lighting_info": [],
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "Grass_1": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Grass_1",
+      "asset_name": "Grass_1",
+      "neighbor_search_distance": 500,
+      "size_settings": {
+        "scale_percentage": 5.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false
+    },
+    "Grass_2": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 12,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Grass_2",
+      "asset_name": "Grass_2",
+      "neighbor_search_distance": 500,
+      "size_settings": {
+        "scale_percentage": 5.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false
+    },
+    "Pub": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Pub",
+      "asset_name": "Pub",
+      "start": "default"
+    },
+    "Town_Hall": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Town_Hall",
+      "asset_name": "Town_Hall",
+      "start": "default"
+    },
+    "Tree_1": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 24,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Tree_1",
+      "asset_name": "Tree_1",
+      "start": "default"
+    },
+    "Tree_2": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Tree_2",
+      "asset_name": "Tree_2",
+      "start": "default"
+    },
+    "Tree_3": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Tree_3",
+      "asset_name": "Tree_3",
+      "start": "default"
+    },
+    "Vibble": {
+      "animation_children": [
+        "Vibble_eyes",
+        "Vibble_attack_1"
+      ],
+      "animations": {
+        "attack": {
+          "frames": [
+            {}
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "attack"
+          }
+        },
+        "backward": {
+          "attack_geometry": [
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            }
+          ],
+          "derived_modifiers": {
+            "flipMovementX": false,
+            "flipMovementY": false,
+            "flipX": true,
+            "flipY": false,
+            "reverse": false
+          },
+          "frames": [
+            {}
+          ],
+          "hit_geometry": [
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            }
+          ],
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "animation",
+            "name": "forward",
+            "path": ""
+          }
+        },
+        "default": {
+          "attack_geometry": [
+            {
+              "vectors": []
+            }
+          ],
+          "frames": [
+            {}
+          ],
+          "hit_geometry": [
+            {
+              "boxes": []
+            }
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0,
+              false
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        },
+        "forward": {
+          "attack_geometry": [
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            },
+            {
+              "explosion": [],
+              "melee": [],
+              "projectile": []
+            }
+          ],
+          "frames": [
+            {}
+          ],
+          "hit_geometry": [
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            },
+            {
+              "explosion": null,
+              "melee": null,
+              "projectile": null
+            }
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0,
+              false
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "forward"
+          }
+        },
+        "left": {
+          "attack_geometry": [
+            {
+              "vectors": [
+                {
+                  "control_x": -508.1666564941406,
+                  "control_y": 0.0,
+                  "control_z": 412.74835205078125,
+                  "damage": 0,
+                  "end_x": 0.0,
+                  "end_y": 0.0,
+                  "end_z": 0.0,
+                  "start_x": -448.3371276855469,
+                  "start_y": 0.0,
+                  "start_z": 1441.63525390625
+                }
+              ]
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            }
+          ],
+          "frames": [
+            {}
+          ],
+          "hit_geometry": [
+            {
+              "boxes": [
+                {
+                  "center_x": -14.073272705078125,
+                  "center_y": 0.0,
+                  "center_z": 1230.8443603515625,
+                  "half_height": 702.7274780273438,
+                  "half_width": 287.5209655761719,
+                  "rotation": -178.48147583007812
+                }
+              ]
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            }
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0,
+              false
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "left"
+          }
+        },
+        "right": {
+          "derived_modifiers": {
+            "flipMovementX": true,
+            "flipMovementY": false,
+            "flipX": true,
+            "flipY": false,
+            "reverse": false
+          },
+          "frames": [
+            {}
+          ],
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "animation",
+            "name": "left",
+            "path": ""
+          }
+        }
+      },
+      "asset_directory": "resources/assets/Vibble",
+      "asset_name": "Vibble",
+      "asset_type": "player",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "Vibble_attack_1": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "attack_geometry": [
+            {
+              "vectors": [
+                {
+                  "control_x": 63.7109375,
+                  "control_y": 0.0,
+                  "control_z": 400.51513671875,
+                  "damage": 5,
+                  "end_x": 121.0,
+                  "end_y": 0.0,
+                  "end_z": 151.0,
+                  "start_x": 53.42578125,
+                  "start_y": 0.0,
+                  "start_z": 594.45458984375
+                }
+              ]
+            },
+            {
+              "vectors": [
+                {
+                  "control_x": 180.04443359375,
+                  "control_y": 0.0,
+                  "control_z": 378.88037109375,
+                  "damage": 5,
+                  "end_x": 96.87744140625,
+                  "end_y": 0.0,
+                  "end_z": 64.18994140625,
+                  "start_x": 244.6083984375,
+                  "start_y": 0.0,
+                  "start_z": 479.5732421875
+                }
+              ]
+            },
+            {
+              "vectors": [
+                {
+                  "control_x": 302.0,
+                  "control_y": 0.0,
+                  "control_z": 218.0,
+                  "damage": 5,
+                  "end_x": 121.0,
+                  "end_y": 0.0,
+                  "end_z": 151.0,
+                  "start_x": 503.0,
+                  "start_y": 0.0,
+                  "start_z": 118.0
+                }
+              ]
+            },
+            {
+              "vectors": [
+                {
+                  "control_x": -175.6904296875,
+                  "control_y": 0.0,
+                  "control_z": 375.8388671875,
+                  "damage": 5,
+                  "end_x": 72.06689453125,
+                  "end_y": 0.0,
+                  "end_z": 247.9072265625,
+                  "start_x": -323.462890625,
+                  "start_y": 0.0,
+                  "start_z": 351.935546875
+                }
+              ]
+            },
+            {
+              "vectors": [
+                {
+                  "control_x": -325.84033203125,
+                  "control_y": 0.0,
+                  "control_z": 303.54541015625,
+                  "damage": 5,
+                  "end_x": -507.11669921875,
+                  "end_y": 0.0,
+                  "end_z": 271.22216796875,
+                  "start_x": -216.3349609375,
+                  "start_y": 0.0,
+                  "start_z": 73.88037109375
+                }
+              ]
+            },
+            {
+              "vectors": [
+                {
+                  "control_x": -251.06982421875,
+                  "control_y": 0.0,
+                  "control_z": 292.60888671875,
+                  "damage": 5,
+                  "end_x": -347.90869140625,
+                  "end_y": 0.0,
+                  "end_z": 432.50537109375,
+                  "start_x": -201.2509765625,
+                  "start_y": 0.0,
+                  "start_z": 69.98583984375
+                }
+              ]
+            }
+          ],
+          "frames": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ],
+          "hit_geometry": [
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            }
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/Vibble_attack_1",
+      "asset_name": "Vibble_attack_1",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "lighting_info": [],
+      "neighbor_search_distance": 500,
+      "shading_opacity_multiplier": 1.0,
+      "shading_parallax_amount": 0.0,
+      "shading_screen_brightness_multiplier": 1.0,
+      "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+      },
+      "size_settings": {
+        "scale_percentage": 30.0
+      },
+      "spawn_groups": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false
+    },
+    "Vibble_eyes": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "frames": [
+            {}
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/Vibble_eyes",
+      "asset_name": "Vibble_eyes",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "barrel": {
+      "animation_children": [],
+      "animations": {
+        "damaged": {
+          "frames": [
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {},
+            {}
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 17,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "damaged"
+          }
+        },
+        "default": {
+          "attack_geometry": [
+            {
+              "vectors": []
+            }
+          ],
+          "frames": [
+            {}
+          ],
+          "hit_geometry": [
+            {
+              "boxes": [
+                {
+                  "center_x": 231.9780731201172,
+                  "center_y": 0.0,
+                  "center_z": 5163.4951171875,
+                  "half_height": 1570.3231201171875,
+                  "half_width": 5179.4228515625,
+                  "rotation": -93.25064086914062
+                }
+              ]
+            }
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/barrel",
+      "asset_name": "barrel",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "can_invert": true,
+      "lighting_info": [],
+      "neighbor_search_distance": 500,
+      "shading_opacity_multiplier": 1.0,
+      "shading_parallax_amount": 0.0,
+      "shading_screen_brightness_multiplier": 1.0,
+      "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+      },
+      "size_settings": {
+        "scale_percentage": 16.0
+      },
+      "spawn_groups": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false
+    },
+    "bone": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/bone",
+      "asset_name": "bone",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "bone_2": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/bone_2",
+      "asset_name": "bone_2",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "book_1": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/book_1",
+      "asset_name": "book_1",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "book_2": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/book_2",
+      "asset_name": "book_2",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "book_pile": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/book_pile",
+      "asset_name": "book_pile",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "book_pile_2": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/book_pile_2",
+      "asset_name": "book_pile_2",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "bottle": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/bottle",
+      "asset_name": "bottle",
+      "start": "default"
+    },
+    "box": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/box",
+      "asset_name": "box",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "car": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "frames": [
+            {}
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/car",
+      "asset_name": "car",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "church": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/church",
+      "asset_name": "church",
+      "start": "default"
+    },
+    "flower_red": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/flower_red",
+      "asset_name": "flower_red",
+      "start": "default"
+    },
+    "grass_3": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/grass_3",
+      "asset_name": "grass_3",
+      "start": "default"
+    },
+    "grass_4": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/grass_4",
+      "asset_name": "grass_4",
+      "start": "default"
+    },
+    "grave_1": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/grave_1",
+      "asset_name": "grave_1",
+      "start": "default"
+    },
+    "grave_2": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/grave_2",
+      "asset_name": "grave_2",
+      "start": "default"
+    },
+    "lantern": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/lantern",
+      "asset_name": "lantern",
+      "start": "default"
+    },
+    "latern_left": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/latern_left",
+      "asset_name": "latern_left",
+      "start": "default"
+    },
+    "shop_1": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "frames": [
+            {}
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/shop_1",
+      "asset_name": "shop_1",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "shop_2": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/shop_2",
+      "asset_name": "shop_2",
+      "start": "default"
+    },
+    "skull_1": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/skull_1",
+      "asset_name": "skull_1",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "skull_pile": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/skull_pile",
+      "asset_name": "skull_pile",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "smith": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "frames": [
+            {}
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/smith",
+      "asset_name": "smith",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    },
+    "spider": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "frames": [
+            {}
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        },
+        "down": {
+          "derived_modifiers": {
+            "flipMovementX": false,
+            "flipMovementY": true,
+            "flipX": false,
+            "flipY": false,
+            "reverse": false
+          },
+          "frames": [
+            {}
+          ],
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "animation",
+            "name": "up",
+            "path": ""
+          }
+        },
+        "left": {
+          "attack_geometry": [
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            },
+            {
+              "vectors": []
+            }
+          ],
+          "frames": [
+            {}
+          ],
+          "hit_geometry": [
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            },
+            {
+              "boxes": []
+            }
+          ],
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ],
+            [
+              -90,
+              0
+            ],
+            [
+              -90,
+              0
+            ],
+            [
+              -90,
+              0
+            ],
+            [
+              -90,
+              0
+            ],
+            [
+              -90,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": -450,
+            "dy": 0
+          },
+          "number_of_frames": 6,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "left"
+          }
+        },
+        "right": {
+          "derived_modifiers": {
+            "flipMovementX": true,
+            "flipMovementY": false,
+            "flipX": true,
+            "flipY": false,
+            "reverse": false
+          },
+          "frames": [
+            {}
+          ],
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "animation",
+            "name": "left",
+            "path": ""
+          }
+        },
+        "up": {
+          "derived_modifiers": {
+            "flipMovementX": false,
+            "flipMovementY": false,
+            "flipX": true,
+            "flipY": false,
+            "reverse": false
+          },
+          "frames": [
+            {}
+          ],
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "animation",
+            "name": "left",
+            "path": ""
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/spider",
+      "asset_name": "spider",
+      "asset_type": "enemy",
+      "cache_atlas": true,
+      "lighting_info": [],
+      "neighbor_search_distance": 500,
+      "shading_opacity_multiplier": 1.0,
+      "shading_parallax_amount": 0.0,
+      "shading_screen_brightness_multiplier": 1.0,
+      "shadow_mask_settings": {
+        "alpha_multiplier": 1.0,
+        "blur_scale": 1.0,
+        "expansion_ratio": 0.800000011920929,
+        "falloff_exponent": 1.0499999523162842,
+        "falloff_start": 0.0
+      },
+      "spawn_groups": [],
+      "start": "default",
+      "tags": [],
+      "tillable": false
+    },
+    "tex": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/tex",
+      "asset_name": "tex",
+      "start": "default"
+    },
+    "top_hat": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/top_hat",
+      "asset_name": "top_hat",
+      "start": "default"
+    },
+    "trail": {
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/trail",
+      "asset_name": "trail",
+      "start": "default"
+    },
+    "yellow_flower": {
+      "animation_children": [],
+      "animations": {
+        "default": {
+          "locked": false,
+          "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0
+          },
+          "number_of_frames": 1,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "asset_directory": "resources/assets/yellow_flower",
+      "asset_name": "yellow_flower",
+      "asset_type": "object",
+      "cache_atlas": true,
+      "start": "default"
+    }
+  },
   "image_effects": {
     "background": {
       "blur": 1.950000004768376,
@@ -218,11 +2783,11 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 2000,
+          "camera_height_px": 2529,
           "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 45.0,
+          "camera_tilt_deg": 75.0,
           "camera_y_distance_px": 891,
-          "camera_zoom_percent": 93,
+          "camera_zoom_percent": 3,
           "curvyness": 2,
           "display_color": [
             139,
@@ -256,19 +2821,19 @@
                 }
               ],
               "display_name": "Bartender",
-              "dx": 185,
-              "dy": -165,
+              "dx": -44,
+              "dy": 164,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3056,
-              "origional_width": 3216,
+              "origional_height": 6376,
+              "origional_width": 6376,
               "position": "Exact",
               "priority": 0,
-              "resolution": 6,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-847e3df0906f"
@@ -343,8 +2908,8 @@
                 }
               ],
               "display_name": "barrel",
-              "dx": 386,
-              "dy": 1223,
+              "dx": -508,
+              "dy": -668,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -355,7 +2920,7 @@
               "origional_width": 6376,
               "position": "Exact",
               "priority": 3,
-              "resolution": 5,
+              "resolution": 4,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-37d6c4ad7c3a"
@@ -468,5 +3033,6 @@
         }
       }
     }
-  }
+  },
+  "version": 1
 }

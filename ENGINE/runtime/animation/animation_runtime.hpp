@@ -52,8 +52,6 @@ public:
     void reset_plan_progress();
     void set_debug_enabled(bool enabled);
 
-    bool run_child_animation(const std::string& name);
-
     bool has_active_plan() const;
 
 private:
@@ -67,17 +65,7 @@ private:
     bool       attempt_unstick(SDL_Point from, SDL_Point to, const std::vector<const Asset*>& blockers);
     bool       adjust_next_checkpoint(const std::vector<const Asset*>& blockers);
     bool       replan_to_destination();
-    void       update_child_attachments(Animation& anim, float dt);
-    void       ensure_child_slots(Animation& anim);
-    void       advance_child_frames(float dt);
-    void       apply_child_frame_data(Animation& anim, const AnimationFrame* frame, float dt);
-    void       advance_child_timelines(float dt);
-    void       destroy_child_assets();
-    void       handle_async_requests(const std::vector<std::string>& requests);
-    Asset::AnimationChildAttachment* find_child_slot(const std::string& name);
-    void       restart_child_timeline(Asset::AnimationChildAttachment& slot);
     float      parent_world_z() const;
-    float      compute_attachment_scale() const;
 
     void       apply_pending_move();
 
@@ -102,7 +90,6 @@ private:
     bool debug_enabled_ = false;
     bool just_applied_controller_move_ = false;
     int  suppress_root_motion_frames_ = 0;
-    std::vector<AnimationChildFrameData> child_frame_buffer_{};
 
     bool suppress_root_motion_active() const { return suppress_root_motion_frames_ > 0; }
 };

@@ -289,9 +289,11 @@ bool ManifestStore::apply_edit(const std::string& name, const nlohmann::json& pa
     ensure_loaded();
     ensure_asset_container();
 
-    // Asset entries are no longer persisted to manifest.json; keep any edits in-memory only.
     manifest_cache_["assets"][name] = payload;
-    dirty_ = false;
+    dirty_ = true;
+    if (submit_) {
+        submit_(manifest_path_, manifest_cache_, indent_);
+    }
     return true;
 }
 

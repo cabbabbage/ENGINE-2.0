@@ -3,6 +3,7 @@
 #include "devtools/core/dev_json_store.hpp"
 
 #include <filesystem>
+#include <cmath>
 #include <mutex>
 #include <string>
 #include <utility>
@@ -123,7 +124,11 @@ void save_bool(std::string_view key, bool value) {
         }
         node = &next;
     }
-    (*node)[parts.back()] = value;
+    nlohmann::json& slot = (*node)[parts.back()];
+    if (slot.is_boolean() && slot.get<bool>() == value) {
+        return;
+    }
+    slot = value;
     settings_dirty_flag() = true;
     devmode::core::DevJsonStore::instance().submit(settings_path(), settings_cache(), 4);
 }
@@ -192,9 +197,25 @@ void save_number(std::string_view key, double value) {
         }
         node = &next;
     }
-    (*node)[parts.back()] = value;
+    nlohmann::json& slot = (*node)[parts.back()];
+    if (slot.is_number_float() || slot.is_number_integer()) {
+        double existing = slot.get<double>();
+        if (std::abs(existing - value) < 1e-9) {
+            return;
+        }
+    }
+    slot = value;
     settings_dirty_flag() = true;
     devmode::core::DevJsonStore::instance().submit(settings_path(), settings_cache(), 4);
+}
+
+void flush_if_dirty() {
+    std::lock_guard<std::mutex> lock(settings_mutex());
+    if (!settings_dirty_flag()) {
+        return;
+    }
+    devmode::core::DevJsonStore::instance().flush_all();
+    settings_dirty_flag() = false;
 }
 
 }

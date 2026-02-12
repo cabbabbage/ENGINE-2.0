@@ -1,4 +1,5 @@
 #include "checkbox.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 #include "utils/text_style.hpp"
@@ -19,11 +20,11 @@ bool Checkbox::value() const { return value_; }
 bool Checkbox::handle_event(const SDL_Event& e) {
 	bool toggled = false;
 	if (e.type == SDL_EVENT_MOUSE_MOTION) {
-		SDL_Point p{ e.motion.x, e.motion.y };
+		SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
 		hovered_ = SDL_PointInRect(&p, &rect_);
 	}
 	else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-		SDL_Point p{ e.button.x, e.button.y };
+		SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
 		if (SDL_PointInRect(&p, &rect_)) {
 			value_ = !value_;
 			toggled = true;

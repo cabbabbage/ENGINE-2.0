@@ -54,10 +54,6 @@ file(GLOB_RECURSE ENGINE_SRC CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.c
     ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.hpp
     ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.h
-    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.cpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.c
-    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.hpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.h
 )
 
 list(REMOVE_DUPLICATES ENGINE_SRC)
@@ -87,6 +83,19 @@ endif()
 
 # ------------------------------------------
 # Dependencies (prefer vcpkg; with glad fallback)
+
+# Prefer the cached vcpkg_installed folder so find_package can locate SDL3, even
+# if the toolchain integration has not injected the prefix path yet.
+set(_VCPKG_CUSTOM_PREFIX_DIRS
+    "${CMAKE_SOURCE_DIR}/vcpkg_installed/x64-windows/share"
+    "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-windows/share"
+    "${CMAKE_SOURCE_DIR}/vcpkg/installed/x64-windows/share"
+)
+foreach(_prefix IN LISTS _VCPKG_CUSTOM_PREFIX_DIRS)
+    if(IS_DIRECTORY "${_prefix}" AND NOT "${_prefix}" STREQUAL "")
+        list(APPEND CMAKE_PREFIX_PATH "${_prefix}")
+    endif()
+endforeach()
 # ------------------------------------------
 find_package(nlohmann_json CONFIG QUIET)
 if(NOT nlohmann_json_FOUND)
@@ -191,7 +200,6 @@ target_include_directories(engine
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
           ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
-          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
   )
 
 target_compile_definitions(engine PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
@@ -246,16 +254,11 @@ add_executable(engine_tests
     ${TESTS_SOURCE_DIR}/test_dev_json_store.cpp
     ${TESTS_SOURCE_DIR}/test_manifest_loader.cpp
     ${TESTS_SOURCE_DIR}/test_scene_renderer_prereqs.cpp
-    ${TESTS_SOURCE_DIR}/test_animation_child_visibility.cpp
-    ${TESTS_SOURCE_DIR}/test_animation_child_runtime.cpp
-    ${TESTS_SOURCE_DIR}/test_animation_child_clone.cpp
-    ${TESTS_SOURCE_DIR}/test_frame_editor_async_payload.cpp
     ${TESTS_SOURCE_DIR}/test_attack_validation.cpp
     ${TESTS_SOURCE_DIR}/frame_editor_session_test_helpers.cpp
     ENGINE/runtime/assets/asset/animation.cpp
     ENGINE/runtime/assets/asset/surface_utils.cpp
     ENGINE/runtime/assets/asset/animation_cloner.cpp
-    ENGINE/runtime/animation/child_attachment_controller.cpp
     ENGINE/runtime/animation/attack_validation.cpp
     ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
     ENGINE/editor/devtools/dm_styles.cpp
@@ -280,7 +283,6 @@ target_include_directories(engine_tests
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/assets
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
-          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
           ${CMAKE_SOURCE_DIR}/external
   )
 
@@ -339,7 +341,6 @@ target_include_directories(engine_world_tests
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
-          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
           ${CMAKE_SOURCE_DIR}/external
 )
 

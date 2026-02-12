@@ -323,7 +323,16 @@ void AssetLibrary::load_all_from_resources() {
         }
 
         manifest.assets = raw_assets;
-        // Asset metadata is persisted in cache bundles; do not write assets back to manifest.json.
+        if (manifest_dirty) {
+                try {
+                        manifest.raw["assets"] = raw_assets;
+                        manifest::save_manifest(manifest);
+                } catch (const std::exception& ex) {
+                        vibble::log::warn(std::string("[AssetLibrary] Failed to persist manifest assets: ") + ex.what());
+                } catch (...) {
+                        vibble::log::warn("[AssetLibrary] Failed to persist manifest assets due to unknown error");
+                }
+        }
 
         int loaded = 0;
         int failed = 0;
@@ -438,6 +447,16 @@ std::shared_ptr<AssetInfo> AssetLibrary::get(const std::string& name) const {
 const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>&
 AssetLibrary::all() const {
 	return info_by_name_;
+}
+
+std::vector<std::string> AssetLibrary::names() const {
+        std::vector<std::string> result;
+        result.reserve(info_by_name_.size());
+        for (const auto& [name, _] : info_by_name_) {
+                result.push_back(name);
+        }
+        std::sort(result.begin(), result.end());
+        return result;
 }
 
 void AssetLibrary::loadAllAnimations(SDL_Renderer* renderer) {

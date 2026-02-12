@@ -71,8 +71,6 @@ Asset* SpawnContext::spawnAssetInternal(const std::string& name,
         } else if (raw) {
                 raw->set_tiling_info(std::nullopt);
         }
-        // NOTE: Child assets are now spawned transiently when parent activates,
-        // not during initial spawn. See Asset::spawn_children_if_needed()
         return raw;
 }
 

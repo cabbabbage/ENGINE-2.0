@@ -3,7 +3,7 @@
 [Overview]
 Ensure frame data changes are immediately persisted to JSON files when edited in any frame editor mode.
 
-This implementation adds a dedicated immediate save mechanism to the AnimationDocument class that bypasses the dirty flag system, ensuring that critical frame data changes made in frame editors (Movement, SyncChildren, AsyncChildren, AttackGeometry, HitGeometry) are immediately written to disk without waiting for explicit save actions or editor session termination.
+This implementation adds a dedicated immediate save mechanism to the AnimationDocument class that bypasses the dirty flag system, ensuring that critical frame data changes made in frame editors (Movement, SyncChildren, AttackGeometry, HitGeometry) are immediately written to disk without waiting for explicit save actions or editor session termination.
 
 [Types]
 Add immediate save method signatures and error handling types.
@@ -32,7 +32,6 @@ Modify core document and transaction classes, then update all frame editors to u
 - `ENGINE/editor/devtools/frame_editors/shared/ManifestTransaction.hpp` - Add immediate persist support
 - `ENGINE/editor/devtools/frame_editors/MovementFrameEditor.cpp` - Use immediate save for movement frame changes
 - `ENGINE/editor/devtools/frame_editors/SyncChildrenFrameEditor.cpp` - Use immediate save for sync child timeline changes
-- `ENGINE/editor/devtools/frame_editors/AsyncChildrenFrameEditor.cpp` - Use immediate save for async child timeline changes
 - `ENGINE/editor/devtools/frame_editors/AttackGeoFrameEditor.cpp` - Use immediate save for attack geometry changes
 - `ENGINE/editor/devtools/frame_editors/HitGeoFrameEditor.cpp` - Use immediate save for hit geometry changes
 
@@ -50,7 +49,6 @@ Add immediate save functionality and modify frame editors to use it.
 **Modified Functions**:
 - `MovementFrameEditor::persist_changes()` - Modify to use immediate save instead of regular commit
 - `SyncChildrenFrameEditor::ensure_manifest_transaction()` - Configure transaction for immediate persist
-- `AsyncChildrenFrameEditor::persist_changes()` - Use immediate save for async child changes
 - `AttackGeoFrameEditor::persist_changes()` - Use immediate save for attack geometry changes
 - `HitGeoFrameEditor::persist_changes()` - Use immediate save for hit geometry changes
 - `ManifestTransaction::commit()` - Add logic to call immediate save when flagged
@@ -66,7 +64,6 @@ Extend existing classes with immediate save capabilities.
 - `ManifestTransaction` - Add immediate persist flag and logic
 - `MovementFrameEditor` - Use immediate save for frame changes
 - `SyncChildrenFrameEditor` - Use immediate save for child timeline changes
-- `AsyncChildrenFrameEditor` - Use immediate save for async child changes
 - `AttackGeoFrameEditor` - Use immediate save for attack geometry changes
 - `HitGeoFrameEditor` - Use immediate save for hit geometry changes
 
@@ -84,14 +81,12 @@ Comprehensive testing strategy for immediate save functionality.
 **Test Requirements**:
 - Verify movement frame changes save immediately to JSON
 - Confirm sync child timeline changes persist immediately
-- Test async child timeline immediate saving
 - Validate attack geometry changes save immediately
 - Ensure hit geometry changes persist immediately
 - Test error handling for failed saves
 - Verify existing functionality remains unchanged
 
 **Test Files to Update**:
-- `TESTS/test_frame_editor_async_payload.cpp` - Add immediate save tests
 - Create new test file for immediate save functionality
 
 [Implementation Order]
@@ -101,9 +96,8 @@ Sequential implementation steps to ensure clean integration.
 2. Extend ManifestTransaction with immediate persist support
 3. Update MovementFrameEditor to use immediate saving
 4. Update SyncChildrenFrameEditor to use immediate saving
-5. Update AsyncChildrenFrameEditor to use immediate saving
-6. Update AttackGeoFrameEditor to use immediate saving
-7. Update HitGeoFrameEditor to use immediate saving
-8. Add comprehensive error handling
-9. Create and run tests to verify functionality
-10. Perform manual testing of all frame editor modes
+5. Update AttackGeoFrameEditor to use immediate saving
+6. Update HitGeoFrameEditor to use immediate saving
+7. Add comprehensive error handling
+8. Create and run tests to verify functionality
+9. Perform manual testing of all frame editor modes

@@ -10,6 +10,7 @@
 #include "assets/asset_types.hpp"
 #include "assets/asset_library.hpp"
 #include "rendering/render/render.hpp"
+#include "rendering/render/engine_renderer.hpp"
 #include "AssetsManager.hpp"
 #include "input.hpp"
 #include "core/manifest/manifest_loader.hpp"
@@ -58,7 +59,7 @@ extern "C" {
 #endif
 
 MainApp::MainApp(MapDescriptor map,
-                 SDL_Renderer* renderer,
+                 EngineRenderer* renderer,
                  int screen_w,
                  int screen_h,
                  LoadingScreen* loading_screen,
@@ -73,7 +74,7 @@ MainApp::MainApp(MapDescriptor map,
 
 MainApp::~MainApp() {
         // Persist current asset state to primary bundles before tearing down.
-        if (asset_library_) {
+        if (asset_library_ && game_assets_ && game_assets_->is_dev_mode()) {
                 PrimaryAssetCache cache(nullptr);
                 for (const auto& entry : asset_library_->all()) {
                         if (entry.second) {
@@ -87,6 +88,10 @@ MainApp::~MainApp() {
         delete input_;
 }
 
+SDL_Renderer* MainApp::raw_renderer() const {
+        return renderer_ ? renderer_->raw() : nullptr;
+}
+
 void MainApp::init() {
         setup();
         vibble::log::info("[MainApp] Loading pipeline complete. Entering main loop...");
@@ -95,6 +100,8 @@ void MainApp::init() {
 
 void MainApp::setup() {
         std::srand(static_cast<unsigned int>(std::time(nullptr)));
+
+        SDL_Renderer* renderer = raw_renderer();
 
         try {
 
@@ -120,13 +127,13 @@ void MainApp::setup() {
                 }
 
                 std::unique_ptr<loading_status::ScopedNotifier> scoped_loading_notifier;
-                if (loading_screen_ && renderer_) {
+                if (loading_screen_ && renderer) {
                         scoped_loading_notifier = std::make_unique<loading_status::ScopedNotifier>(
-                                [this](const std::string& status) {
+                                [this, renderer](const std::string& status) {
                                         try {
                                                 loading_screen_->set_status(status);
                                                 loading_screen_->draw_frame();
-                                                SDL_RenderPresent(renderer_);
+                                                SDL_RenderPresent(renderer);
                                         } catch (...) {
 
                                         }
@@ -138,7 +145,7 @@ void MainApp::setup() {
 
                         loading_screen_->set_status("Preparing...");
                         loading_screen_->draw_frame();
-                        SDL_RenderPresent(renderer_);
+                        SDL_RenderPresent(renderer);
                         SDL_Event ev;
                         while (SDL_PollEvent(&ev)) {}
                 }
@@ -240,7 +247,7 @@ void MainApp::setup() {
 
                 vibble::log::info("[MainApp] Constructing AssetLoader...");
                 auto loader_begin = std::chrono::steady_clock::now();
-                loader_ = std::make_unique<AssetLoader>( map_identifier, map_manifest_json, renderer_, content_root, nullptr, asset_library_);
+                loader_ = std::make_unique<AssetLoader>( map_identifier, map_manifest_json, renderer, content_root, nullptr, asset_library_);
                 auto loader_end = std::chrono::steady_clock::now();
                 vibble::log::info( std::string("[MainApp] AssetLoader constructed in ") + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>( loader_end - loader_begin) .count()) + "ms");
 
@@ -280,7 +287,7 @@ void MainApp::setup() {
                 }
 
                 vibble::log::info("[MainApp] Creating Assets object...");
-                game_assets_ = new Assets( *active_library, player_ptr, loader_->getRooms(), screen_w_, screen_h_, start_px, start_py, static_cast<int>(loader_->getMapRadius() * 1.2), renderer_, loader_->map_identifier(), loader_->map_manifest(), loader_->content_root(), std::move(world_grid));
+                game_assets_ = new Assets( *active_library, player_ptr, loader_->getRooms(), screen_w_, screen_h_, start_px, start_py, static_cast<int>(loader_->getMapRadius() * 1.2), renderer, loader_->map_identifier(), loader_->map_manifest(), loader_->content_root(), std::move(world_grid));
                 vibble::log::info("[MainApp] Assets object created successfully.");
 
                 const double spawn_seconds =
@@ -294,12 +301,18 @@ void MainApp::setup() {
 
                 input_ = new Input();
                 game_assets_->set_input(input_);
+                if (game_assets_) {
+                        game_assets_->reload_camera_settings();
+                }
                 if (!player_ptr) {
                         dev_mode_ = true;
                         vibble::log::warn("[MainApp] No player asset found. Launching in Dev Mode.");
                 }
                 if (game_assets_) {
                         game_assets_->set_dev_mode(dev_mode_);
+                        // Apply camera settings AFTER dev_mode is set to ensure correct initialization
+                        game_assets_->apply_camera_runtime_settings();
+                        game_assets_->force_camera_view_refresh();
                 }
                 AudioEngine::instance().update();
         } catch (const std::exception& e) {
@@ -484,7 +497,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     spawn_spec["name"] = "spawn";
     spawn_spec["min_instances"] = 1;
     spawn_spec["max_instances"] = 1;
-    spawn_spec["required_children"] = nlohmann::json::array();
     layer["rooms"] = nlohmann::json::array({spawn_spec});
     map_info["map_layers"] = nlohmann::json::array({layer});
 
@@ -688,11 +700,13 @@ std::optional<MapDescriptor> create_new_map_interactively() {
 }
 
 void run(SDL_Window* window,
-         SDL_Renderer* renderer,
+         EngineRenderer& engine_renderer,
          int screen_w,
          int screen_h,
          bool rebuild_cache) {
     (void)window;
+
+    SDL_Renderer* renderer = engine_renderer.raw();
 
     if (renderer) {
         SDL_SetRenderTarget(renderer, nullptr);
@@ -733,7 +747,6 @@ void run(SDL_Window* window,
         bool should_show_loading_screen = false;
         SDL_Event e;
         bool choosing = true;
-
         while (choosing) {
             while (SDL_PollEvent(&e)) {
                 if (e.type == SDL_EVENT_QUIT) {
@@ -802,7 +815,7 @@ void run(SDL_Window* window,
             vibble::log::info("[Main] Shared asset library refreshed.");
         }
 
-        MenuUI app(renderer, screen_w, screen_h, std::move(selected_map), &loading_screen, shared_asset_library.get());
+        MenuUI app(&engine_renderer, screen_w, screen_h, std::move(selected_map), &loading_screen, shared_asset_library.get());
         app.init();
         if (app.wants_return_to_main_menu()) {
             continue;
@@ -882,35 +895,36 @@ int main(int argc, char* argv[]) {
                 return 1;
         }
 
-        SDL_PropertiesID renderer_props = SDL_CreateProperties();
-        if (!renderer_props ||
-            !SDL_SetPointerProperty(renderer_props, SDL_PROP_RENDERER_CREATE_WINDOW_POINTER, window) ||
-            !SDL_SetNumberProperty(renderer_props, SDL_PROP_RENDERER_CREATE_PRESENT_VSYNC_NUMBER, 1)) {
-                vibble::log::error(std::string("SDL_CreateRenderer properties failed: ") + SDL_GetError());
-                if (renderer_props) SDL_DestroyProperties(renderer_props);
+        std::unique_ptr<EngineRenderer> engine_renderer = EngineRenderer::Create(window, true);
+        if (!engine_renderer) {
+                vibble::log::error("[Main] Failed to initialize renderer after all fallbacks.");
                 SDL_DestroyWindow(window);
                 TTF_Quit();
                 SDL_Quit();
                 return 1;
         }
 
-        SDL_Renderer* renderer = SDL_CreateRendererWithProperties(renderer_props);
-        SDL_DestroyProperties(renderer_props);
+        SDL_Renderer* renderer = engine_renderer->raw();
         if (!renderer) {
-                vibble::log::error(std::string("SDL_CreateRendererWithProperties failed: ") + SDL_GetError());
+                vibble::log::error("[Main] EngineRenderer returned null SDL_Renderer.");
+                engine_renderer.reset();
                 SDL_DestroyWindow(window);
                 TTF_Quit();
                 SDL_Quit();
                 return 1;
         }
-        if (!SDL_SetDefaultTextureScaleMode(renderer, SDL_SCALEMODE_LINEAR)) {
-                vibble::log::warn(std::string("[Main] Failed to set linear texture scale mode: ") + SDL_GetError());
-        } else {
-                vibble::log::info("[Main] Using linear texture scale mode for textures.");
-        }
 
-        const char* renderer_name = SDL_GetRendererName(renderer);
-        vibble::log::info(std::string("[Main] Renderer: ") + (renderer_name ? renderer_name : "Unknown"));
+        switch (engine_renderer->quality_tier()) {
+        case RenderQualityTier::GPU:
+                vibble::log::info("[Main] Render quality tier: GPU (full effects).");
+                break;
+        case RenderQualityTier::Accelerated:
+                vibble::log::info("[Main] Render quality tier: Accelerated (reduced effects).");
+                break;
+        case RenderQualityTier::Software:
+                vibble::log::info("[Main] Render quality tier: Software (minimal effects).");
+                break;
+        }
 
         int screen_width = window_width;
         int screen_height = window_height;
@@ -920,9 +934,9 @@ int main(int argc, char* argv[]) {
         }
         vibble::log::info(std::string("[Main] Screen resolution: ") + std::to_string(screen_width) + "x" + std::to_string(screen_height));
 
-        run(window, renderer, screen_width, screen_height, rebuild_cache);
+        run(window, *engine_renderer, screen_width, screen_height, rebuild_cache);
 
-        SDL_DestroyRenderer(renderer);
+        engine_renderer.reset();
         SDL_DestroyWindow(window);
         TTF_Quit();
         SDL_Quit();

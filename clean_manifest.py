@@ -6,7 +6,7 @@ Deprecated fields identified from codebase analysis:
 - Animation level: crop_frames, flipped_source, inherit_source_movement,
                    reverse_source, rnd_start, speed_multiplier, on_end
 - Frame level: needs_rebuild, children (legacy child payloads)
-- Asset level: animation_children, async_children (legacy child formats)
+- Asset level: async_children (legacy child format)
 - Movement entries: embedded legacy child arrays ("children")
 """
 
@@ -37,10 +37,7 @@ DEPRECATED_FRAME_FIELDS = {
     'children',  # Legacy per-frame child payloads
 }
 
-DEPRECATED_ASSET_FIELDS = {
-    'animation_children',
-    'async_children',
-}
+DEPRECATED_ASSET_FIELDS = {'async_children'}
 
 
 def _is_legacy_child_list(value: Any) -> bool:

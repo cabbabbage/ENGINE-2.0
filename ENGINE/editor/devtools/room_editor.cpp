@@ -363,6 +363,12 @@ void RoomEditor::copy_selected_spawn_group() {
     }
     spawn_group_clipboard_->base_display_name = std::move(base);
     spawn_group_clipboard_->paste_count = 0;
+
+    if (!display_name.empty()) {
+        show_notice(std::string("Copied spawn group \"") + display_name + "\"");
+    } else {
+        show_notice("Copied spawn group to clipboard");
+    }
 }
 
 void RoomEditor::paste_spawn_group_from_clipboard() {
@@ -424,6 +430,12 @@ void RoomEditor::paste_spawn_group_from_clipboard() {
 
     active_spawn_group_id_ = new_id;
     select_spawn_group_assets(new_id);
+
+    if (!display_name.empty()) {
+        show_notice(std::string("Pasted spawn group \"") + display_name + "\"");
+    } else {
+        show_notice("Pasted spawn group");
+    }
 }
 
 std::optional<std::string> RoomEditor::selected_spawn_group_id() const {
@@ -750,6 +762,14 @@ void RoomEditor::set_shared_footer_bar(DevFooterBar* footer) {
     update_spawn_group_config_anchor();
 }
 
+void RoomEditor::set_snap_to_grid_enabled(bool enabled) {
+    if (snap_to_grid_enabled_ == enabled) {
+        return;
+    }
+    snap_to_grid_enabled_ = enabled;
+    refresh_cursor_snap();
+}
+
 void RoomEditor::set_header_visibility_callback(std::function<void(bool)> cb) {
     header_visibility_callback_ = std::move(cb);
     if (header_visibility_callback_) {
@@ -837,6 +857,8 @@ void RoomEditor::set_current_room(Room* room) {
 }
 
 void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
+    vibble::log::info(std::string("[RoomEditor] Dev Mode ") + (enabled ? "ENABLED" : "DISABLED") +
+                     " (preserve_camera=" + (preserve_camera_state ? "true" : "false") + ")");
     enabled_ = enabled;
     if (!assets_) return;
     if (!enabled_) {
@@ -848,6 +870,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
 
     WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
     if (enabled_) {
+        vibble::log::info("[RoomEditor] Dev Mode enabled: clearing camera overrides");
         if (cam && !preserve_camera_state) {
             cam->set_manual_height_override(false);
             cam->set_manual_zoom_override(false);
@@ -860,6 +883,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
         }
         configure_shared_panel();
     } else {
+        vibble::log::info("[RoomEditor] Dev Mode disabled: clearing camera overrides and focus");
         if (cam && !preserve_camera_state) {
             cam->set_manual_height_override(false);
             cam->set_manual_zoom_override(false);
@@ -1836,41 +1860,21 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             SDL_RenderLine(renderer, screen.x, screen.y - cross, screen.x, screen.y + cross);
         }
 
-        if (is_shift_key_down()) {
-            auto fetch_bounds = [&](Asset* asset, SDL_Rect& out_rect) -> bool {
-                if (!asset) return false;
-
-                auto it = asset_bounds_cache_.find(asset);
-                if (it != asset_bounds_cache_.end()) {
-                    out_rect = it->second.bounds;
-                    return true;
-                }
-
-                int screen_y = 0;
-                return compute_asset_screen_bounds(cam, asset, out_rect, screen_y);
-};
-
+        if (is_shift_key_down() && !highlighted_assets_.empty()) {
             ensure_spatial_index(cam);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            const int outline_thickness = 2;
+            const int outline_offset = 3;  // Thicker outline for better visibility
+
+            // Render highlight masks for all highlighted assets
             for (Asset* asset : highlighted_assets_) {
                 if (!asset_belongs_to_room(asset)) continue;
-                SDL_Rect bounds{};
-                if (!fetch_bounds(asset, bounds)) {
-                    continue;
-                }
+
                 const bool is_selected = std::find(selected_assets_.begin(), selected_assets_.end(), asset) != selected_assets_.end();
-                SDL_Color color = is_selected ? DMStyles::AccentButton().hover_bg : DMStyles::HighlightColor();
-                SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 210);
-                for (int i = 0; i < outline_thickness; ++i) {
-                    SDL_Rect r{
-                        bounds.x - i,
-                        bounds.y - i,
-                        bounds.w + i * 2,
-                        bounds.h + i * 2
-};
-                    sdl_render::Rect(renderer, &r);
-                }
+
+                // Use orange for selected, vivid teal for hovered
+                SDL_Color color = is_selected ? SDL_Color{255, 165, 0, 255} : SDL_Color{60, 220, 255, 255};
+
+                render_asset_outline(renderer, asset, cam, color, outline_offset);
             }
         }
     }
@@ -2461,6 +2465,16 @@ bool RoomEditor::any_blocking_panel_visible() const {
 void RoomEditor::handle_mouse_input(const Input& input) {
     if (!input_) return;
 
+    const bool shift_down =
+        input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+    const bool space_down = input.isScancodeDown(SDL_SCANCODE_SPACE);
+    const bool shift_space_down = shift_down && space_down;
+    const bool shift_down_just_pressed = shift_down && !shift_was_down_last_frame_;
+    const bool shift_space_just_pressed = shift_space_down && !shift_space_was_down_last_frame_;
+
+    shift_was_down_last_frame_ = shift_down;
+    shift_space_was_down_last_frame_ = shift_space_down;
+
     if (handle_camera_settings_mouse_controls(input)) {
         return;
     }
@@ -2480,12 +2494,17 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const bool left_down                = input_->isDown(Input::LEFT);
     const bool left_pressed_this_frame  = input_->wasPressed(Input::LEFT);
     const bool left_released_this_frame = input_->wasReleased(Input::LEFT);
-    const bool shift_down =
-        input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
 
     Asset* hit_before_pan = hit_test_asset(screen_pt, nullptr);
     const bool pointer_blocks_pan = dragging_ ||
                                     (shift_down && hit_before_pan && !hit_before_pan->spawn_id.empty() && (left_down || left_pressed_this_frame));
+
+    if (shift_down_just_pressed) {
+        reset_selection_filter();
+    }
+    if (shift_space_just_pressed) {
+        cycle_selection_filter();
+    }
 
     if (!camera_settings_lock_active_) {
         camera_controls_.handle_input(cam, input, pointer_blocks_pan);
@@ -2498,13 +2517,24 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
     if (assets_) {
         const bool now_panning = camera_controls_.is_panning();
-        if (now_panning && !camera_pan_active_notified_) {
-            camera_pan_active_notified_ = true;
-            assets_->notify_camera_activity(true);
-        } else if (!now_panning && camera_pan_active_notified_) {
+        if (now_panning) {
+            if (!camera_pan_active_notified_) {
+                camera_pan_active_notified_ = true;
+                assets_->notify_camera_activity(true);
+            }
+        } else if (camera_pan_active_notified_) {
             camera_pan_active_notified_ = false;
+            camera_pan_just_finished_ = true;
+            suppress_left_click_frames_ = 2;
+            if (input_) {
+                input_->consumeMouseButton(Input::LEFT);
+            }
             assets_->notify_camera_activity(false);
         }
+    }
+
+    if (camera_pan_just_finished_ && input_) {
+        input_->clearClickBuffer();
     }
 
     const SDL_FPoint world_f = cam.screen_to_map(screen_pt);
@@ -2513,8 +2543,10 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     last_raw_mouse_world_ = world_pt;
     has_last_raw_mouse_world_ = true;
 
-    cursor_snap_resolution_ = current_grid_resolution();
-    snapped_cursor_world_ = snap_world_point_to_overlay_grid(world_pt, cursor_snap_resolution_);
+    cursor_snap_resolution_ = snap_to_grid_enabled_ ? current_grid_resolution() : 0;
+    snapped_cursor_world_ = snap_to_grid_enabled_
+        ? snap_world_point_to_overlay_grid(world_pt, cursor_snap_resolution_)
+        : world_pt;
 
     Asset* hit = hit_test_asset(screen_pt, nullptr);
 
@@ -2656,9 +2688,15 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     }
 
     const bool any_left_activity = left_pressed_this_frame || left_released_this_frame || left_down;
-    if (!dragging_ && !suppress_next_left_click_ && !any_left_activity) {
+    const bool suppress_click_now = suppress_left_click_frames_ > 0 || camera_pan_just_finished_;
+    if (!dragging_ && !suppress_next_left_click_ && !any_left_activity && !suppress_click_now) {
         handle_click(input);
     }
+
+    if (suppress_left_click_frames_ > 0) {
+        --suppress_left_click_frames_;
+    }
+    camera_pan_just_finished_ = false;
 
     prev_left_down = left_down;
 }
@@ -2686,6 +2724,9 @@ Asset* RoomEditor::hit_test_asset(SDL_Point screen_point, SDL_Renderer* ) const 
                                       int screen_y) {
             if (!asset) return;
             if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) {
+                return;
+            }
+            if (!asset_matches_selection_filter(asset)) {
                 return;
             }
             if (!SDL_PointInRect(&screen_point, &rect)) {
@@ -3087,6 +3128,9 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
         if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) {
             return;
         }
+        if (!asset_matches_selection_filter(asset)) {
+            return;
+        }
         if (!SDL_PointInRect(&screen_point, &rect)) {
             return;
         }
@@ -3109,6 +3153,9 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
     for (Asset* asset : *active_assets_) {
         if (!asset) continue;
         if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) {
+            continue;
+        }
+        if (!asset_matches_selection_filter(asset)) {
             continue;
         }
 
@@ -3310,6 +3357,7 @@ void RoomEditor::handle_click(const Input& input) {
         input.isScancodeDown(SDL_SCANCODE_LALT) || input.isScancodeDown(SDL_SCANCODE_RALT); 
     const bool shift_modifier = 
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT); 
+    Asset* clicked_asset = hovered_asset_;
     if (alt_modifier && shift_modifier && hovered_asset_) { 
         const std::string spawn_id = hovered_asset_->spawn_id; 
         if (!spawn_id.empty() && delete_spawn_group_internal(spawn_id)) { 
@@ -3324,6 +3372,7 @@ void RoomEditor::handle_click(const Input& input) {
             selected_assets_.clear();
             if (!highlighted_assets_.empty()) highlight_changed = true;
             highlighted_assets_.clear();
+            map_assets_panel_requested_by_shift_click_ = shift_modifier && clicked_asset;
             sync_spawn_group_panel_with_selection();
             return;
         }
@@ -3357,12 +3406,14 @@ void RoomEditor::handle_click(const Input& input) {
                 }
             }
         }
+        map_assets_panel_requested_by_shift_click_ = shift_modifier && clicked_asset;
         sync_spawn_group_panel_with_selection();
     } else {
         if (!selected_assets_.empty()) selection_changed = true;
         selected_assets_.clear();
         if (!highlighted_assets_.empty()) highlight_changed = true;
         highlighted_assets_.clear();
+        map_assets_panel_requested_by_shift_click_ = shift_modifier && clicked_asset;
         sync_spawn_group_panel_with_selection();
 
         const bool asset_info_open2 = (active_modal_ == ActiveModal::AssetInfo);
@@ -3461,7 +3512,9 @@ void RoomEditor::begin_area_drag_session(const std::string& area_name, const SDL
     area_drag_start_world_ = world_mouse;
     MapGridSettings map_settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     map_settings.clamp();
-    area_drag_resolution_ = vibble::grid::clamp_resolution(map_settings.grid_resolution);
+    area_drag_resolution_ = snap_to_grid_enabled_
+        ? vibble::grid::clamp_resolution(map_settings.grid_resolution)
+        : 0;
 
     ensure_area_anchor_spawn_entry(current_room_, area_drag_name_);
 }
@@ -3479,7 +3532,10 @@ void RoomEditor::finalize_area_drag_session() {
     }
 
     vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-    SDL_Point snapped = grid_service.snap_to_vertex(area_drag_last_world_, area_drag_resolution_);
+    SDL_Point snapped = area_drag_last_world_;
+    if (snap_to_grid_enabled_ && area_drag_resolution_ > 0) {
+        snapped = grid_service.snap_to_vertex(area_drag_last_world_, area_drag_resolution_);
+    }
 
     SDL_Point center{0, 0};
     if (current_room_->room_area) {
@@ -3574,13 +3630,15 @@ void RoomEditor::update_highlighted_assets() {
         asset->set_selected(false);
     }
 
+    const bool allow_highlight = is_shift_key_down();
+
     for (Asset* asset : highlighted_assets_) {
         if (!asset) continue;
         if (std::find(selected_assets_.begin(), selected_assets_.end(), asset) != selected_assets_.end()) {
             asset->set_selected(true);
             asset->set_highlighted(false);
         } else {
-            asset->set_highlighted(true);
+            asset->set_highlighted(allow_highlight);
             asset->set_selected(false);
         }
     }
@@ -3646,7 +3704,12 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         if (library_ui_ && library_ui_->is_locked()) {
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Asset library is locked; shortcut ignored.");
         } else {
+            const bool was_open = is_asset_library_open();
             toggle_asset_library();
+            const bool now_open = is_asset_library_open();
+            if (was_open != now_open) {
+                show_notice(now_open ? "Opened asset library" : "Closed asset library");
+            }
         }
     }
 
@@ -3683,7 +3746,7 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         }
 
         assets_->mark_camera_dirty();
-        assets_->show_dev_notice("Saved camera defaults for this room.", 2000);
+        assets_->show_dev_notice("Saved camera defaults for room: " + current_room_->room_name, 2000);
         return;
     }
 }
@@ -3935,15 +3998,19 @@ void RoomEditor::handle_delete_shortcut(const Input& input) {
         spawn_ids.push_back(*active_spawn_group_id_);
     }
 
-    bool deleted_any = false;
+    int deleted_count = 0;
     for (const std::string& id : spawn_ids) {
         if (delete_spawn_group_internal(id)) {
-            deleted_any = true;
+            ++deleted_count;
         }
     }
 
-    if (deleted_any) {
+    if (deleted_count > 0) {
         clear_selection();
+        const std::string message = (deleted_count == 1)
+            ? std::string("Deleted 1 spawn group")
+            : std::string("Deleted ") + std::to_string(deleted_count) + " spawn groups";
+        show_notice(message);
     }
 }
 
@@ -3986,11 +4053,14 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
     MapGridSettings map_settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     map_settings.clamp();
 
-    int desired_resolution = cursor_snap_resolution_ > 0 ? cursor_snap_resolution_ : map_settings.grid_resolution;
+    int desired_resolution = 0;
+    if (snap_to_grid_enabled_) {
+        desired_resolution = cursor_snap_resolution_ > 0 ? cursor_snap_resolution_ : map_settings.grid_resolution;
+    }
     drag_resolution_ = vibble::grid::clamp_resolution(desired_resolution);
     SpawnEntryResolution resolved_entry = drag_spawn_id_.empty() ? SpawnEntryResolution{} : locate_spawn_entry(drag_spawn_id_);
     nlohmann::json* spawn_entry = resolved_entry.entry;
-    if (spawn_entry && drag_mode_ != DragMode::Exact) {
+    if (snap_to_grid_enabled_ && spawn_entry && drag_mode_ != DragMode::Exact) {
         drag_resolution_ = vibble::grid::clamp_resolution(spawn_entry->value("resolution", drag_resolution_));
     }
 
@@ -4017,13 +4087,16 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
 
     if (shared_footer_bar_) {
         if (editing_spawn_config) {
-
-            drag_resolution_ = vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution());
+            drag_resolution_ = snap_to_grid_enabled_
+                ? vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution())
+                : 0;
             overlay_resolution_before_drag_.reset();
         } else {
 
             overlay_resolution_before_drag_ = shared_footer_bar_->grid_resolution();
-            shared_footer_bar_->set_grid_resolution(vibble::grid::clamp_resolution(drag_resolution_));
+            if (snap_to_grid_enabled_) {
+                shared_footer_bar_->set_grid_resolution(vibble::grid::clamp_resolution(drag_resolution_));
+            }
         }
     } else {
         overlay_resolution_before_drag_.reset();
@@ -4185,7 +4258,9 @@ void RoomEditor::update_drag_session(const SDL_Point& world_mouse) {
         if (anchor_asset) {
 
             vibble::grid::Grid& grid_service = vibble::grid::global_grid();
-            SDL_Point snapped_pointer = grid_service.snap_to_vertex(world_mouse, drag_resolution_);
+            SDL_Point snapped_pointer = (snap_to_grid_enabled_ && drag_resolution_ > 0)
+                ? grid_service.snap_to_vertex(world_mouse, drag_resolution_)
+                : world_mouse;
             delta.x = snapped_pointer.x - anchor_asset->world_x();
             delta.y = snapped_pointer.y - anchor_asset->world_y();
         }
@@ -4482,6 +4557,9 @@ void RoomEditor::update_spawn_json_during_drag() {
 bool RoomEditor::snap_dragged_assets_to_grid() {
     if (drag_states_.empty()) return false;
     const int resolution = vibble::grid::clamp_resolution(drag_resolution_);
+    if (!snap_to_grid_enabled_ || resolution <= 0) {
+        return false;
+    }
     vibble::grid::Grid& grid_service = vibble::grid::global_grid();
     bool changed = false;
 
@@ -4741,6 +4819,9 @@ std::pair<int, int> RoomEditor::get_room_dimensions() const {
 }
 
 int RoomEditor::current_grid_resolution() const {
+    if (!snap_to_grid_enabled_) {
+        return 0;
+    }
     if (shared_footer_bar_) {
         return vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution());
     }
@@ -4751,6 +4832,11 @@ int RoomEditor::current_grid_resolution() const {
 
 void RoomEditor::refresh_cursor_snap() {
     if (!has_last_raw_mouse_world_) {
+        return;
+    }
+    if (!snap_to_grid_enabled_) {
+        cursor_snap_resolution_ = 0;
+        snapped_cursor_world_ = last_raw_mouse_world_;
         return;
     }
     cursor_snap_resolution_ = current_grid_resolution();
@@ -4977,6 +5063,8 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
 
     const bool map_assets_entry = owner_matches_section("map_assets_data");
     const bool boundary_entry   = owner_matches_section("map_boundary_data");
+    const bool should_open_map_assets_panel = map_assets_entry && map_assets_panel_requested_by_shift_click_;
+    map_assets_panel_requested_by_shift_click_ = false;
 
     auto close_spawn_group_panel = [&]() {
         if (spawn_group_panel_) {
@@ -5008,7 +5096,7 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         close_spawn_group_panel();
         clear_active_spawn_group_target();
         close_room_config_preserving_selection();
-        if (open_map_assets_panel_callback_) {
+        if (should_open_map_assets_panel && open_map_assets_panel_callback_) {
             open_map_assets_panel_callback_();
         }
         return;
@@ -5398,39 +5486,11 @@ void RoomEditor::regenerate_current_room() {
     save_current_room_assets_json();
 }
 
-Asset* RoomEditor::find_asset_spawn_owner(const std::string& spawn_id) const {
-    if (spawn_id.empty() || !assets_) {
-        return nullptr;
-    }
-
-    // In the new model, children are independent assets with a parent pointer
-    // Search through active assets to find the one with this spawn_id and return its parent
-    const auto& active_assets_view = assets_->getActive();
-    for (Asset* asset : active_assets_view) {
-        if (!asset || asset->dead) {
-            continue;
-        }
-        if (asset->spawn_id == spawn_id && asset->parent) {
-            return asset->parent;
-        }
-    }
-    return nullptr;
-}
-
-void RoomEditor::respawn_asset_child_spawn_group(Asset* , const nlohmann::json& ) {
-
-}
-
 void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
     if (!assets_ || !current_room_ || !current_room_->room_area) return;
     if (!entry.is_object()) return;
     std::string spawn_id = entry.value("spawn_id", std::string{});
     if (spawn_id.empty()) return;
-
-    if (Asset* owner = find_asset_spawn_owner(spawn_id)) {
-        respawn_asset_child_spawn_group(owner, entry);
-        return;
-    }
 
     std::vector<Asset*> to_remove;
     for (Asset* asset : assets_->all) {
@@ -5710,5 +5770,204 @@ bool RoomEditor::spawn_group_locked(const std::string& spawn_id) const {
     return false;
 }
 
+bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
+    if (!asset) return false;
 
+    // Check if asset is a map asset
+    const bool is_map_asset = !asset->spawn_id.empty() && !is_room_spawn_id(asset->spawn_id);
 
+    // Check if asset is a boundary asset
+    const bool is_boundary_asset = asset->info && asset->info->type == asset_types::boundary;
+
+    // Check if asset is a tiled asset
+    const bool is_tiled_asset = asset->info && asset->info->tillable;
+
+    switch (selection_filter_) {
+        case SelectionFilter::Normal:
+            // Normal assets: not map, not boundary, not tiled
+            return !is_map_asset && !is_boundary_asset && !is_tiled_asset;
+
+        case SelectionFilter::Tiled:
+            // Tiled assets only
+            return is_tiled_asset;
+
+        case SelectionFilter::MapWide:
+            // Map-wide assets only
+            return is_map_asset;
+
+        case SelectionFilter::Boundary:
+            // Boundary assets only
+            return is_boundary_asset;
+
+        default:
+            return true;
+    }
+}
+
+void RoomEditor::cycle_selection_filter() {
+    switch (selection_filter_) {
+        case SelectionFilter::Normal:
+            selection_filter_ = SelectionFilter::Tiled;
+            show_notice("Selecting tiled assets");
+            break;
+        case SelectionFilter::Tiled:
+            selection_filter_ = SelectionFilter::MapWide;
+            show_notice("Selecting map-wide assets");
+            break;
+        case SelectionFilter::MapWide:
+            selection_filter_ = SelectionFilter::Boundary;
+            show_notice("Selecting boundary assets");
+            break;
+        case SelectionFilter::Boundary:
+            selection_filter_ = SelectionFilter::Normal;
+            show_notice("Selecting normal assets");
+            break;
+        default:
+            selection_filter_ = SelectionFilter::Normal;
+            show_notice("Selecting normal assets");
+            break;
+    }
+
+    // Clear hover and selection since filter changed
+    hovered_asset_ = nullptr;
+    hover_miss_frames_ = 3;
+    mark_highlight_dirty();
+}
+
+void RoomEditor::reset_selection_filter() {
+    const bool changed = (selection_filter_ != SelectionFilter::Normal);
+    selection_filter_ = SelectionFilter::Normal;
+    show_notice("Selecting normal assets");
+
+    if (changed) {
+        // Clear hover and selection since filter changed
+        hovered_asset_ = nullptr;
+        hover_miss_frames_ = 3;
+        mark_highlight_dirty();
+    }
+}
+
+void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, const WarpedScreenGrid& cam, const SDL_Color& color, int outline_offset_px) const {
+    if (!asset || !renderer) {
+        return;
+    }
+
+    (void)outline_offset_px;
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    SDL_Color overlay_color = color;
+    const int base_alpha = (overlay_color.a == 0) ? 255 : overlay_color.a;
+    const int target_alpha = static_cast<int>(std::lround(static_cast<float>(base_alpha) * 0.8f));
+    overlay_color.a = static_cast<Uint8>(std::clamp(target_alpha, 0, 255));
+
+    auto project_render_object_rect = [&](const RenderObject& obj, SDL_FRect& out_rect) -> bool {
+        if (obj.screen_rect.w <= 0 || obj.screen_rect.h <= 0) {
+            return false;
+        }
+
+        SDL_FPoint base_screen{};
+        SDL_FPoint world_point{
+            static_cast<float>(obj.screen_rect.x),
+            static_cast<float>(obj.screen_rect.y)
+        };
+        if (!cam.project_world_point(world_point, obj.world_z_offset, base_screen)) {
+            return false;
+        }
+        if (!std::isfinite(base_screen.x) || !std::isfinite(base_screen.y)) {
+            return false;
+        }
+
+        const float half_width = static_cast<float>(obj.screen_rect.w) * 0.5f;
+        const float height = static_cast<float>(obj.screen_rect.h);
+        if (!std::isfinite(half_width) || !std::isfinite(height)) {
+            return false;
+        }
+
+        out_rect = SDL_FRect{
+            base_screen.x - half_width,
+            base_screen.y - height,
+            static_cast<float>(obj.screen_rect.w),
+            static_cast<float>(obj.screen_rect.h)
+        };
+        return out_rect.w > 0.0f && out_rect.h > 0.0f &&
+               std::isfinite(out_rect.x) && std::isfinite(out_rect.y);
+    };
+
+    auto render_mask = [&](SDL_Texture* texture, const SDL_FRect& dst_rect, const RenderObject* src_obj) -> bool {
+        if (!texture) {
+            return false;
+        }
+
+        SDL_FRect src_rect{};
+        const SDL_FRect* src_ptr = nullptr;
+        if (src_obj && src_obj->has_src_rect) {
+            src_rect = SDL_FRect{
+                static_cast<float>(src_obj->src_rect.x),
+                static_cast<float>(src_obj->src_rect.y),
+                static_cast<float>(src_obj->src_rect.w),
+                static_cast<float>(src_obj->src_rect.h)
+            };
+            src_ptr = &src_rect;
+        }
+
+        Uint8 prev_r = 255, prev_g = 255, prev_b = 255, prev_a = 255;
+        SDL_BlendMode prev_blend = SDL_BLENDMODE_BLEND;
+        SDL_GetTextureColorMod(texture, &prev_r, &prev_g, &prev_b);
+        SDL_GetTextureAlphaMod(texture, &prev_a);
+        SDL_GetTextureBlendMode(texture, &prev_blend);
+
+        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureColorMod(texture, overlay_color.r, overlay_color.g, overlay_color.b);
+        SDL_SetTextureAlphaMod(texture, overlay_color.a);
+
+        const bool ok = SDL_RenderTexture(renderer, texture, src_ptr, &dst_rect) == 0;
+
+        SDL_SetTextureColorMod(texture, prev_r, prev_g, prev_b);
+        SDL_SetTextureAlphaMod(texture, prev_a);
+        SDL_SetTextureBlendMode(texture, prev_blend);
+
+        return ok;
+    };
+
+    bool drew_mask = false;
+
+    for (const auto& obj : asset->render_package) {
+        SDL_FRect rect{};
+        if (!project_render_object_rect(obj, rect)) {
+            continue;
+        }
+        if (render_mask(obj.texture, rect, &obj)) {
+            drew_mask = true;
+        }
+    }
+
+    if (!drew_mask) {
+        SDL_Rect cached_bounds{0, 0, 0, 0};
+        bool have_bounds = false;
+
+        auto cache_it = asset_bounds_cache_.find(asset);
+        if (cache_it != asset_bounds_cache_.end()) {
+            cached_bounds = cache_it->second.bounds;
+            have_bounds = cached_bounds.w > 0 && cached_bounds.h > 0;
+        }
+
+        int screen_y = 0;
+        if (!have_bounds) {
+            have_bounds = compute_asset_screen_bounds(cam, asset, cached_bounds, screen_y);
+        }
+
+        if (have_bounds) {
+            SDL_FRect cached_rect{
+                static_cast<float>(cached_bounds.x),
+                static_cast<float>(cached_bounds.y),
+                static_cast<float>(cached_bounds.w),
+                static_cast<float>(cached_bounds.h)
+            };
+
+            if (SDL_Texture* tex = asset->get_current_frame()) {
+                render_mask(tex, cached_rect, nullptr);
+            }
+        }
+    }
+}

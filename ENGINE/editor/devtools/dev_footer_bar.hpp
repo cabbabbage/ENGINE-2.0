@@ -33,6 +33,8 @@ public:
     void set_title(const std::string& title);
     void set_title_visible(bool visible);
     bool title_visible() const { return show_title_; }
+    void set_settings_controls_visible(bool visible);
+    bool settings_controls_visible() const { return settings_controls_visible_; }
 
     void set_bounds(int width, int height);
     void set_height(int height);
@@ -83,6 +85,7 @@ private:
     int height_ = 0;
     bool visible_ = true;
     bool show_title_ = true;
+    bool settings_controls_visible_ = true;
     bool input_enabled_ = true;
 
     SDL_Rect rect_{0, 0, 0, 0};

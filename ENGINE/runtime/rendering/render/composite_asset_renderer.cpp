@@ -235,6 +235,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
         }
     }
 
+    asset->mark_mesh_dirty();
     asset->clear_composite_dirty();
     calculate_local_bounds(asset);
 }

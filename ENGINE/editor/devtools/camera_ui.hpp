@@ -68,6 +68,8 @@ private:
     std::unique_ptr<FloatSliderWidget> min_render_size_slider_;
     std::unique_ptr<FloatSliderWidget> cull_margin_slider_;
     std::unique_ptr<FloatSliderWidget> meters_slider_;
+    std::unique_ptr<FloatSliderWidget> perspective_cap_slider_;
+    std::unique_ptr<FloatSliderWidget> offscreen_fade_slider_;
 
     std::unique_ptr<DMButton> image_effect_button_;
     std::unique_ptr<ButtonWidget> image_effect_widget_;

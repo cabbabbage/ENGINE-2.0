@@ -54,6 +54,7 @@ public:
     void set_current_room(Room* room);
     void set_room_config_visible(bool visible);
     void set_shared_footer_bar(DevFooterBar* footer);
+    void set_snap_to_grid_enabled(bool enabled);
     void set_header_visibility_callback(std::function<void(bool)> cb);
     void set_map_assets_panel_callback(std::function<void()> cb);
     void set_boundary_assets_panel_callback(std::function<void()> cb);
@@ -273,17 +274,20 @@ private:
     static std::string strip_copy_suffix(const std::string& name);
     std::string next_clipboard_display_name();
     void show_notice(const std::string& message) const;
-    class Asset* find_asset_spawn_owner(const std::string& spawn_id) const;
-    void respawn_asset_child_spawn_group(class Asset* owner, const nlohmann::json& entry);
     static bool asset_info_contains_spawn_group(const class AssetInfo* info, const std::string& spawn_id);
     void mark_highlight_dirty();
     bool spawn_group_locked(const std::string& spawn_id) const;
+    bool asset_matches_selection_filter(const Asset* asset) const;
+    void cycle_selection_filter();
+    void reset_selection_filter();
 
     struct AssetSpatialEntry {
         SDL_Rect bounds{0, 0, 0, 0};
         int screen_y = std::numeric_limits<int>::min();
         std::vector<int64_t> cells;
 };
+
+    void render_asset_outline(SDL_Renderer* renderer, Asset* asset, const WarpedScreenGrid& cam, const SDL_Color& color, int outline_offset_px) const;
 
     void mark_spatial_index_dirty() const;
     bool ensure_spatial_index(const WarpedScreenGrid& cam) const;
@@ -312,6 +316,16 @@ private:
     bool enabled_ = false;
     bool mouse_controls_enabled_last_frame_ = false;
 
+    enum class SelectionFilter {
+        Normal,          // Normal assets only (not map, not boundary, not tiled)
+        Tiled,           // Tiled assets only
+        MapWide,         // Map-wide assets only
+        Boundary,        // Boundary assets only
+    };
+    SelectionFilter selection_filter_ = SelectionFilter::Normal;
+    bool shift_was_down_last_frame_ = false;
+    bool shift_space_was_down_last_frame_ = false;
+
     std::unique_ptr<AssetLibraryUI> library_ui_;
     std::unique_ptr<AssetInfoUI> info_ui_;
 
@@ -335,6 +349,7 @@ private:
     std::vector<Asset*> highlighted_assets_;
     bool highlight_dirty_ = true;
 
+    bool snap_to_grid_enabled_ = true;
     SDL_Point snapped_cursor_world_{0, 0};
     int cursor_snap_resolution_ = 0;
     SDL_Point last_raw_mouse_world_{0, 0};
@@ -404,6 +419,9 @@ private:
     double height_scale_factor_ = 1.1;
     DevCameraControls camera_controls_;
     bool camera_pan_active_notified_ = false;
+    bool camera_pan_just_finished_ = false;
+    int suppress_left_click_frames_ = 0;
+    bool map_assets_panel_requested_by_shift_click_ = false;
     bool camera_settings_drag_active_notified_ = false;
     struct CameraLockState {
         bool valid = false;

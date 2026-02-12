@@ -38,12 +38,161 @@ namespace {
 bool enforce_trapezoid(std::array<SDL_FPoint, 4>& points);
 }
 
+// ============================================================================
+// GeometryBatcher Implementation
+// ============================================================================
+
+GeometryBatcher::GeometryBatcher(SDL_Renderer* renderer)
+    : renderer_(renderer) {
+    // Pre-allocate for estimated 10,000 quads (40,000 vertices, 60,000 indices)
+    vertex_buffer_.reserve(40000);
+    index_buffer_.reserve(60000);
+}
+
+void GeometryBatcher::addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4],
+                               const int indices[6], SDL_BlendMode blend_mode, double depth) {
+    if (!texture) return;
+
+    BatchKey key{texture, blend_mode};
+    Batch& batch = batches_[key];
+
+    if (batch.texture == nullptr) {
+        batch.texture = texture;
+        batch.blend_mode = blend_mode;
+        batch.reserve(1000);  // Reserve space for ~1000 quads per texture
+    }
+
+    QuadData quad;
+    quad.vertices[0] = vertices[0];
+    quad.vertices[1] = vertices[1];
+    quad.vertices[2] = vertices[2];
+    quad.vertices[3] = vertices[3];
+    quad.depth = depth;
+
+    batch.quads.push_back(quad);
+}
+
+void GeometryBatcher::flush() {
+    if (batches_.empty()) {
+        return;
+    }
+
+    draw_call_count_ = 0;
+    total_vertices_ = 0;
+
+    // Static quad indices pattern (0,1,2, 0,2,3)
+    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
+
+    // Collect all quads with their texture/blend mode into a flat list
+    struct QuadWithTexture {
+        QuadData quad;
+        SDL_Texture* texture;
+        SDL_BlendMode blend_mode;
+    };
+    std::vector<QuadWithTexture> all_quads;
+
+    // Reserve space for all quads across all batches
+    size_t total_quad_count = 0;
+    for (const auto& [key, batch] : batches_) {
+        total_quad_count += batch.quads.size();
+    }
+    all_quads.reserve(total_quad_count);
+
+    // Collect all quads
+    for (const auto& [key, batch] : batches_) {
+        for (const auto& quad : batch.quads) {
+            all_quads.push_back({quad, batch.texture, batch.blend_mode});
+        }
+    }
+
+    // Sort all quads globally by depth (highest depth = furthest = rendered first)
+    std::sort(all_quads.begin(), all_quads.end(),
+              [](const QuadWithTexture& a, const QuadWithTexture& b) {
+                  return a.quad.depth > b.quad.depth;
+              });
+
+    // Now render in depth order, batching consecutive quads with same texture+blend
+    size_t i = 0;
+    while (i < all_quads.size()) {
+        SDL_Texture* current_texture = all_quads[i].texture;
+        SDL_BlendMode current_blend = all_quads[i].blend_mode;
+
+        // Find run of consecutive quads with same texture+blend
+        size_t run_end = i;
+        while (run_end < all_quads.size() &&
+               all_quads[run_end].texture == current_texture &&
+               all_quads[run_end].blend_mode == current_blend) {
+            ++run_end;
+        }
+
+        // Build vertex and index buffers for this run
+        vertex_buffer_.clear();
+        index_buffer_.clear();
+        const size_t run_length = run_end - i;
+        vertex_buffer_.reserve(run_length * 4);
+        index_buffer_.reserve(run_length * 6);
+
+        for (size_t j = i; j < run_end; ++j) {
+            const auto& quad = all_quads[j].quad;
+            const int base_index = static_cast<int>(vertex_buffer_.size());
+
+            vertex_buffer_.push_back(quad.vertices[0]);
+            vertex_buffer_.push_back(quad.vertices[1]);
+            vertex_buffer_.push_back(quad.vertices[2]);
+            vertex_buffer_.push_back(quad.vertices[3]);
+
+            index_buffer_.push_back(base_index + kQuadIndices[0]);
+            index_buffer_.push_back(base_index + kQuadIndices[1]);
+            index_buffer_.push_back(base_index + kQuadIndices[2]);
+            index_buffer_.push_back(base_index + kQuadIndices[3]);
+            index_buffer_.push_back(base_index + kQuadIndices[4]);
+            index_buffer_.push_back(base_index + kQuadIndices[5]);
+        }
+
+        // Draw this run
+        SDL_SetTextureBlendMode(current_texture, current_blend);
+        SDL_RenderGeometry(renderer_,
+                           current_texture,
+                           vertex_buffer_.data(),
+                           static_cast<int>(vertex_buffer_.size()),
+                           index_buffer_.data(),
+                           static_cast<int>(index_buffer_.size()));
+
+        ++draw_call_count_;
+        total_vertices_ += vertex_buffer_.size();
+
+        i = run_end;
+    }
+}
+
+void GeometryBatcher::clear() {
+    for (auto& [key, batch] : batches_) {
+        batch.quads.clear();
+    }
+    draw_call_count_ = 0;
+    total_vertices_ = 0;
+}
+
+size_t GeometryBatcher::getBatchCount() const {
+    size_t count = 0;
+    for (const auto& [key, batch] : batches_) {
+        if (!batch.quads.empty()) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 void GridTileRenderer::render(SDL_Renderer* renderer) {
     if (!renderer || !assets_) return;
-    render(renderer, assets_->getView(), assets_->world_grid());
+    render(renderer, assets_->getView(), assets_->world_grid(), nullptr);
 }
 
 void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid) {
+    render(renderer, cam, grid, nullptr);
+}
+
+void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid, GeometryBatcher* batcher) {
     if (!renderer) return;
 
     const auto& chunks = grid.active_chunks();
@@ -136,7 +285,13 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
             vertices[2].tex_coord = SDL_FPoint{ tx1, ty1 };
             vertices[3].tex_coord = SDL_FPoint{ tx0, ty1 };
 
-            SDL_RenderGeometry(renderer, tile.texture, vertices, 4, indices, 6);
+            if (batcher) {
+                // Use depth from tile's world position (floor tiles are at lowest depth)
+                const double depth = cam.anchor_world_y() - static_cast<double>(tile.world_rect.y + tile.world_rect.h);
+                batcher->addQuad(tile.texture, vertices, indices, SDL_BLENDMODE_BLEND, depth);
+            } else {
+                SDL_RenderGeometry(renderer, tile.texture, vertices, 4, indices, 6);
+            }
         }
     }
 }
@@ -263,7 +418,7 @@ bool project_world_point(const WarpedScreenGrid& cam,
     return std::isfinite(out.x) && std::isfinite(out.y);
 }
 
-bool build_perspective_mesh(const RenderObject& obj,
+bool build_perspective_mesh(RenderObject& obj,
                             const WarpedScreenGrid& cam,
                             float perspective_scale,
                             WarpedMesh& mesh) {
@@ -277,6 +432,7 @@ bool build_perspective_mesh(const RenderObject& obj,
     }
     const float world_x = static_cast<float>(rect.x);
     const float world_y = static_cast<float>(rect.y);
+    const SDL_FPoint current_position{world_x, world_y};
 
     // Render package dimensions already include the per-grid-point perspective scale;
     // strip it off so the projection step is the sole place that applies perspective.
@@ -284,6 +440,20 @@ bool build_perspective_mesh(const RenderObject& obj,
         (std::isfinite(perspective_scale) && perspective_scale > 0.0f)
             ? perspective_scale
             : 1.0f;
+    const float current_scale = safe_perspective;
+    const std::uint64_t current_camera_version = cam.camera_state_version();
+    constexpr float kScaleMatchEpsilon = 1e-4f;
+    if (!obj.mesh_dirty &&
+        obj.cached_vertices.size() == 4 &&
+        obj.cached_indices.size() == 6 &&
+        std::fabs(obj.cached_scale - current_scale) < kScaleMatchEpsilon &&
+        obj.cached_position.x == current_position.x &&
+        obj.cached_position.y == current_position.y &&
+        obj.cached_camera_state_version == current_camera_version) {
+        mesh.vertices = obj.cached_vertices;
+        mesh.indices = obj.cached_indices;
+        return true;
+    }
     const float world_width = static_cast<float>(rect.w) / safe_perspective;
     const float world_height = static_cast<float>(rect.h) / safe_perspective;
     const float half_width = world_width * 0.5f;
@@ -447,6 +617,12 @@ bool build_perspective_mesh(const RenderObject& obj,
     mesh.vertices.push_back(vtx_bl);
 
     mesh.indices = {0, 1, 2, 0, 2, 3};
+    obj.cached_vertices = mesh.vertices;
+    obj.cached_indices = mesh.indices;
+    obj.cached_position = current_position;
+    obj.cached_scale = current_scale;
+    obj.cached_camera_state_version = current_camera_version;
+    obj.mesh_dirty = false;
 
     return true;
 }
@@ -491,6 +667,8 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   screen_width_(screen_width),
   screen_height_(screen_height),
   tile_renderer_(std::make_unique<GridTileRenderer>(assets)),
+  geometry_batcher_(std::make_unique<GeometryBatcher>(renderer)),
+  texture_load_queue_(std::make_unique<texture_loading::TextureLoadQueue>(renderer)),
   sky_texture_path_(std::filesystem::path("resources") / "misc_content" / "sky.png"),
   floor_gradient_path_(std::filesystem::path("resources") / "misc_content" / "floor_gradient.png"),
   composite_renderer_(renderer, assets),
@@ -543,6 +721,10 @@ SDL_Renderer* SceneRenderer::get_renderer() const {
     return renderer_;
 }
 
+texture_loading::TextureLoadQueue* SceneRenderer::get_texture_load_queue() const {
+    return texture_load_queue_.get();
+}
+
 void SceneRenderer::set_movement_debug_enabled(bool enabled) {
     debug_auto_paths_ = enabled;
 }
@@ -564,6 +746,16 @@ void SceneRenderer::render() {
 
     ++frame_counter_;
 
+    // Process async texture loads (max 5 per frame to limit main thread impact)
+    if (texture_load_queue_) {
+        texture_load_queue_->processCompletedLoads(5);
+    }
+
+    // Clear geometry batcher for new frame
+    if (geometry_batcher_) {
+        geometry_batcher_->clear();
+    }
+
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
 
@@ -579,8 +771,8 @@ void SceneRenderer::render() {
     const bool depth_effects_enabled = assets_->depth_effects_enabled();
     render_sky_layer(cam, depth_effects_enabled);
 
-    if (tile_renderer_) {
-        tile_renderer_->render(renderer_, cam, grid);
+    if (tile_renderer_ && geometry_batcher_) {
+        tile_renderer_->render(renderer_, cam, grid, geometry_batcher_.get());
     }
 
     if (assets_->dev_grid_overlay_callback_) {
@@ -592,6 +784,7 @@ void SceneRenderer::render() {
 
     // Update fog system before rendering
     const bool should_render_fog = assets_->fog_visible();
+    const bool runtime_updates_enabled = assets_->should_run_runtime_updates();
     if (dynamic_fog_system_ && should_render_fog) {
         dynamic_fog_system_->update(cam, grid);
     }
@@ -600,7 +793,8 @@ void SceneRenderer::render() {
     const bool boundary_assets_visible = assets_->boundary_assets_visible();
     const bool should_render_boundaries =
         boundary_assets_visible && dynamic_boundary_system_ && dynamic_boundary_system_->is_initialized();
-    const float boundary_delta_ms = static_cast<float>(assets_->frame_delta_seconds() * 1000.0);
+    const float boundary_delta_ms =
+        runtime_updates_enabled ? static_cast<float>(assets_->frame_delta_seconds() * 1000.0) : 0.0f;
     if (should_render_boundaries) {
         dynamic_boundary_system_->update(cam, grid, assets_, boundary_delta_ms);
     }
@@ -658,7 +852,7 @@ void SceneRenderer::render() {
     // world_width / world_height are the pre-scaled world-space dimensions to project.
     auto render_ground_sprite = [&](SDL_Texture* texture, float world_x, float world_y,
                                     float world_z, float world_width, float world_height,
-                                    int tex_w, int tex_h, float vert_offset, float cull_margin) {
+                                    int tex_w, int tex_h, float vert_offset, float cull_margin, double depth) {
         if (!texture || tex_w <= 0 || tex_h <= 0 || world_width <= 0.0f || world_height <= 0.0f) {
             return;
         }
@@ -695,10 +889,17 @@ void SceneRenderer::render() {
         vertices[2].tex_coord = SDL_FPoint{u1, v1};
         vertices[3].tex_coord = SDL_FPoint{u0, v1};
 
-        SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureColorMod(texture, 255, 255, 255);
-        SDL_SetTextureAlphaMod(texture, 255);
-        SDL_RenderGeometry(renderer_, texture, vertices, 4, kQuadIndices, 6);
+        if (geometry_batcher_) {
+            SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+            SDL_SetTextureColorMod(texture, 255, 255, 255);
+            SDL_SetTextureAlphaMod(texture, 255);
+            geometry_batcher_->addQuad(texture, vertices, kQuadIndices, SDL_BLENDMODE_BLEND, depth);
+        } else {
+            SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+            SDL_SetTextureColorMod(texture, 255, 255, 255);
+            SDL_SetTextureAlphaMod(texture, 255);
+            SDL_RenderGeometry(renderer_, texture, vertices, 4, kQuadIndices, 6);
+        }
     };
 
     while (next_asset || fog_index < fog_sprites.size() || boundary_index < boundary_sprites.size()) {
@@ -728,7 +929,14 @@ void SceneRenderer::render() {
                 return color;
             };
 
-            for (const RenderObject& obj : candidate.asset->render_package) {
+            const bool asset_mesh_dirty = candidate.asset->is_mesh_dirty();
+            if (asset_mesh_dirty) {
+                candidate.asset->clear_mesh_dirty();
+            }
+            for (RenderObject& obj : candidate.asset->render_package) {
+                if (asset_mesh_dirty) {
+                    obj.mesh_dirty = true;
+                }
                 WarpedMesh mesh{};
                 const float perspective_scale = candidate.grid_point
                     ? std::max(0.0001f, candidate.grid_point->perspective_scale)
@@ -742,12 +950,19 @@ void SceneRenderer::render() {
                 SDL_SetTextureColorMod(obj.texture, color_mod.r, color_mod.g, color_mod.b);
                 SDL_SetTextureAlphaMod(obj.texture, color_mod.a);
 
-                SDL_RenderGeometry(renderer_,
-                                   obj.texture,
-                                   mesh.vertices.data(),
-                                   static_cast<int>(mesh.vertices.size()),
-                                   mesh.indices.data(),
-                                   static_cast<int>(mesh.indices.size()));
+                if (geometry_batcher_ && mesh.vertices.size() == 4 && mesh.indices.size() == 6) {
+                    // Use batcher for simple quads
+                    geometry_batcher_->addQuad(obj.texture, mesh.vertices.data(), mesh.indices.data(),
+                                               obj.blend_mode, candidate.depth);
+                } else {
+                    // Fall back to immediate rendering for complex meshes or if batcher unavailable
+                    SDL_RenderGeometry(renderer_,
+                                       obj.texture,
+                                       mesh.vertices.data(),
+                                       static_cast<int>(mesh.vertices.size()),
+                                       mesh.indices.data(),
+                                       static_cast<int>(mesh.indices.size()));
+                }
             }
 
             next_asset = advance_asset_candidate();
@@ -755,18 +970,25 @@ void SceneRenderer::render() {
             const auto& bs = boundary_sprites[boundary_index];
             render_ground_sprite(bs.texture, bs.world_pos.x, bs.world_pos.y, static_cast<float>(bs.world_z),
                                  bs.world_width, bs.world_height,
-                                 bs.texture_w, bs.texture_h, boundary_vertical_offset, boundary_cull_margin);
+                                 bs.texture_w, bs.texture_h, boundary_vertical_offset, boundary_cull_margin,
+                                 boundary_depth);
             ++boundary_index;
         } else if (fog_index < fog_sprites.size()) {
             const auto& fs = fog_sprites[fog_index];
             render_ground_sprite(fs.texture, fs.world_pos.x, fs.world_pos.y, static_cast<float>(fs.world_z),
                                  static_cast<float>(fs.texture_w) * fog_size_scale * fs.scale,
                                  static_cast<float>(fs.texture_h) * fog_size_scale * fs.scale,
-                                 fs.texture_w, fs.texture_h, fog_vertical_offset, fog_cull_margin);
+                                 fs.texture_w, fs.texture_h, fog_vertical_offset, fog_cull_margin,
+                                 fog_depth);
             ++fog_index;
         } else {
             break;
         }
+    }
+
+    // Flush all batched geometry
+    if (geometry_batcher_) {
+        geometry_batcher_->flush();
     }
 
     if (debug_auto_paths_ && movement_debug_visible_) {
@@ -926,19 +1148,29 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
         return;
     }
 
-    constexpr double kHalfFovY = 3.14159265358979323846 / 4.0;
-    const double pitch_rad = cam.current_pitch_radians();
-    const double tan_pitch = std::tan(pitch_rad);
-    const double tan_half_fov_y = std::tan(kHalfFovY);
-    const double horizon_ndc = (std::isfinite(tan_pitch) && std::isfinite(tan_half_fov_y) && tan_half_fov_y != 0.0)
-        ? (tan_pitch / tan_half_fov_y)
-        : 0.0;
-    const double horizon_y =
-        static_cast<double>(screen_height_) * 0.5 - horizon_ndc * static_cast<double>(screen_height_) * 0.5;
+    const auto floor_params = cam.compute_floor_depth_params();
+    double horizon_y = std::numeric_limits<double>::quiet_NaN();
+    if (floor_params.enabled && std::isfinite(floor_params.horizon_screen_y)) {
+        // Match the same clamped horizon used for floor warping and depth effects.
+        horizon_y = floor_params.horizon_screen_y;
+    } else {
+        constexpr double kHalfFovY = 3.14159265358979323846 / 4.0;
+        const double pitch_rad = cam.current_pitch_radians();
+        const double tan_pitch = std::tan(pitch_rad);
+        const double tan_half_fov_y = std::tan(kHalfFovY);
+        const double horizon_ndc = (std::isfinite(tan_pitch) && std::isfinite(tan_half_fov_y) && tan_half_fov_y != 0.0)
+            ? (tan_pitch / tan_half_fov_y)
+            : 0.0;
+        horizon_y = static_cast<double>(screen_height_) * 0.5 - horizon_ndc * static_cast<double>(screen_height_) * 0.5;
+    }
+
     if (!std::isfinite(horizon_y)) {
         return;
     }
-    if (horizon_y < 0.0 || horizon_y > static_cast<double>(screen_height_)) {
+
+    const float sky_visible_height =
+        std::clamp(static_cast<float>(horizon_y), 0.0f, static_cast<float>(screen_height_));
+    if (sky_visible_height <= 0.0f) {
         return;
     }
 
@@ -952,11 +1184,6 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
         return;
     }
 
-    const float sky_visible_height =
-        std::clamp(static_cast<float>(horizon_y), 0.0f, static_cast<float>(screen_height_));
-    if (sky_visible_height <= 0.0f) {
-        return;
-    }
     const float scale_x = static_cast<float>(screen_width_) / tex_w;
     const float scale_y = sky_visible_height / tex_h;
     const float scale   = std::max(scale_x, scale_y);

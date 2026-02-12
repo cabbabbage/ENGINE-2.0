@@ -29,7 +29,6 @@ class SearchAssets;
 class Section_SpawnGroups;
 namespace animation_editor {
 class AnimationEditorWindow;
-class ChildrenTimelinesPanel;
 class AnimationDocument;
 }
 
@@ -73,7 +72,6 @@ class AssetInfoUI {
     void notify_spawn_group_removed(const std::string& spawn_id);
     void sync_target_spacing_settings();
     void sync_target_tags();
-    void sync_animation_children();
     void sync_target_basic_render_settings(bool type_changed);
 
     void begin_color_sampling(const utils::color::RangedColor& current, std::function<void(SDL_Color)> on_sample, std::function<void()> on_cancel);
@@ -98,7 +96,6 @@ class AssetInfoUI {
     void clear_section_focus();
     DockableCollapsible* section_at_point(SDL_Point p) const;
     bool handle_section_focus_event(const SDL_Event& e);
-    void on_animation_children_changed(const std::vector<std::string>& names);
     std::shared_ptr<animation_editor::AnimationDocument> animation_document() const;
 
   private:
@@ -126,7 +123,6 @@ class AssetInfoUI {
     bool prev_camera_parallax_enabled_ = false;
     std::unique_ptr<SearchAssets> asset_selector_;
     std::unique_ptr<animation_editor::AnimationEditorWindow> animation_editor_window_;
-    animation_editor::ChildrenTimelinesPanel* children_panel_ = nullptr;
     bool pending_animation_editor_open_ = false;
     bool forcing_high_quality_rendering_ = false;
     devmode::core::ManifestStore* manifest_store_ = nullptr;

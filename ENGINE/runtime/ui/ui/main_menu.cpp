@@ -28,7 +28,7 @@ MainMenu::MainMenu(SDL_Renderer* renderer,
   screen_h_(screen_h),
   maps_json_(&maps)
 {
-        if (TTF_WasInit() == 0 && TTF_Init() < 0) {
+        if (TTF_WasInit() == 0 && !TTF_Init()) {
                 std::cerr << "TTF_Init failed: " << SDL_GetError() << "\n";
         }
         animation_start_ticks_ = SDL_GetTicks();
@@ -161,7 +161,7 @@ void MainMenu::render() {
                 SDL_RenderClear(renderer_);
         }
 	drawVignette(120);
-	const std::string title = "DEPARTED AFFAIRS & CO.";
+	const std::string title = "Dr. Vibble's Vile Ventues";
 	SDL_Rect trect{ 0, 60, screen_w_, 80 };
 	blitTextCentered(renderer_, Styles::LabelTitle(), title, trect, true, SDL_Color{0,0,0,0});
 	for (auto& entry : buttons_) {

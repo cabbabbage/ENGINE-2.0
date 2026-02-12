@@ -885,10 +885,11 @@ void Asset::apply_anchor_follow_target() {
 
         SDL_Point target_px = resolved->world_px;
         const int target_z = resolved->grid_point ? resolved->grid_point->world_z() : source->world_z();
+        const int target_layer = resolved->grid_point
+            ? resolved->grid_point->resolution_layer()
+            : (pos_ ? pos_->resolution_layer() : grid_resolution);
 
-        if (!pos_ && resolved->grid_point) {
-                grid_resolution = resolved->grid_point->resolution_layer();
-        }
+        grid_resolution = target_layer;
 
         last_follow_world_ = target_px;
         last_follow_world_z_ = target_z;
@@ -902,8 +903,17 @@ void Asset::apply_anchor_follow_target() {
         const bool unchanged = follow_initialized_ &&
                                world_x() == target_px.x &&
                                world_y() == target_px.y &&
-                               world_z() == target_z;
+                               world_z() == target_z &&
+                               (!pos_ || pos_->resolution_layer() == target_layer);
         if (unchanged) {
+                return;
+        }
+
+        if (assets_ && pos_ && pos_->resolution_layer() != target_layer) {
+                world::WorldGrid& grid = assets_->world_grid();
+                world::GridPoint& target = world::GridPoint::from_world(target_px.x, target_px.y, target_z, target_layer, grid);
+                grid.move_asset(this, *pos_, target);
+                mark_anchors_dirty();
                 return;
         }
 

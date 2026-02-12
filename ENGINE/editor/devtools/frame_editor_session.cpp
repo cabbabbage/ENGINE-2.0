@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <optional>
 #include <utility>
 
 #include "core/AssetsManager.hpp"
@@ -11,6 +13,7 @@
 #include "devtools/frame_editors/FrameEditorBase.hpp"
 #include "devtools/frame_editors/HitGeoFrameEditor.hpp"
 #include "devtools/frame_editors/MovementFrameEditor.hpp"
+#include "devtools/frame_editors/AnchorFrameEditor.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
 #include "utils/input.hpp"
@@ -23,6 +26,7 @@ FrameEditorSession::Mode mode_for_launch(FrameEditorLaunchMode launch_mode) {
         case FrameEditorLaunchMode::Movement: return FrameEditorSession::Mode::Movement;
         case FrameEditorLaunchMode::AttackGeometry: return FrameEditorSession::Mode::AttackGeometry;
         case FrameEditorLaunchMode::HitGeometry: return FrameEditorSession::Mode::HitGeometry;
+        case FrameEditorLaunchMode::AnchorPoints: return FrameEditorSession::Mode::AnchorPoints;
     }
     return FrameEditorSession::Mode::Movement;
 }
@@ -32,6 +36,7 @@ FrameEditorLaunchMode launch_mode_for_mode(FrameEditorSession::Mode mode) {
         case FrameEditorSession::Mode::Movement: return FrameEditorLaunchMode::Movement;
         case FrameEditorSession::Mode::AttackGeometry: return FrameEditorLaunchMode::AttackGeometry;
         case FrameEditorSession::Mode::HitGeometry: return FrameEditorLaunchMode::HitGeometry;
+        case FrameEditorSession::Mode::AnchorPoints: return FrameEditorLaunchMode::AnchorPoints;
     }
     return FrameEditorLaunchMode::Movement;
 }
@@ -44,6 +49,8 @@ std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(FrameEdit
             return std::make_unique<devmode::frame_editors::AttackGeoFrameEditor>();
         case FrameEditorSession::Mode::HitGeometry:
             return std::make_unique<devmode::frame_editors::HitGeoFrameEditor>();
+        case FrameEditorSession::Mode::AnchorPoints:
+            return std::make_unique<devmode::frame_editors::AnchorFrameEditor>();
     }
     return nullptr;
 }
@@ -231,8 +238,157 @@ void FrameEditorSession::create_and_begin_editor() {
 
     active_editor_ = create_editor(mode_);
     if (active_editor_) {
+        if (mode_ == Mode::AnchorPoints) {
+            frame_camera_for_anchor_mode();
+        }
         active_editor_->begin(editor_context_);
     }
+}
+
+void FrameEditorSession::frame_camera_for_anchor_mode() {
+    if (!assets_ || !target_) {
+        return;
+    }
+
+    WarpedScreenGrid& cam = assets_->getView();
+    SDL_Renderer* renderer = assets_->renderer();
+    int screen_w = 0;
+    int screen_h = 0;
+    if (renderer) {
+        SDL_GetCurrentRenderOutputSize(renderer, &screen_w, &screen_h);
+    }
+    if (screen_h <= 0) {
+        return;
+    }
+    (void)screen_w;
+
+    int fw = target_->cached_w;
+    int fh = target_->cached_h;
+    if (fw <= 0 || fh <= 0) {
+        if (SDL_Texture* tex = target_->get_current_frame()) {
+            float wf = 0.0f;
+            float hf = 0.0f;
+            if (SDL_GetTextureSize(tex, &wf, &hf)) {
+                fw = static_cast<int>(std::lround(wf));
+                fh = static_cast<int>(std::lround(hf));
+            }
+        }
+    }
+    if ((fw <= 0 || fh <= 0) && target_->info) {
+        fw = target_->info->original_canvas_width;
+        fh = target_->info->original_canvas_height;
+    }
+    if (fw <= 0 || fh <= 0) {
+        return;
+    }
+
+    float base_scale = 1.0f;
+    if (target_->info && std::isfinite(target_->info->scale_factor) && target_->info->scale_factor > 0.0f) {
+        base_scale = target_->info->scale_factor;
+    }
+    if (!(base_scale > 0.0f)) {
+        base_scale = 1.0f;
+    }
+    const float scaled_fw = static_cast<float>(fw) * base_scale;
+    if (!(scaled_fw > 0.0f)) {
+        return;
+    }
+
+    const SDL_Point focus = target_->world_point();
+    cam.set_manual_height_override(true);
+    cam.set_manual_zoom_override(true);
+    cam.set_zoom_percent(0.0);
+    cam.set_focus_override(focus);
+    cam.set_screen_center(focus);
+
+    constexpr float kAnchorTiltDeg = 55.0f;
+    cam.set_tilt_override(kAnchorTiltDeg);
+
+    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
+    const double tilt_rad = static_cast<double>(kAnchorTiltDeg) * kDegToRad;
+    // Equal top/bottom margins when anchored at the asset require sprite height ~= cot(tilt) of the screen height.
+    const double target_height_ratio = std::clamp(1.0 / std::tan(tilt_rad), 0.05, 0.95);
+    const double target_height_px = static_cast<double>(screen_h) * target_height_ratio;
+
+    const double starting_scale = cam.get_scale();
+    auto sprite_height_for_scale = [&](double scale) -> std::optional<double> {
+        cam.set_scale(scale);
+        const auto effects = cam.compute_render_effects(
+            focus, 0.0f, 0.0f, WarpedScreenGrid::RenderSmoothingKey{}, target_->world_z());
+        if (effects.distance_scale <= 0.0f || effects.vertical_scale <= 0.0f) {
+            return std::nullopt;
+        }
+        const double h_px = static_cast<double>(scaled_fw) *
+                            static_cast<double>(effects.distance_scale) *
+                            static_cast<double>(effects.vertical_scale);
+        if (!std::isfinite(h_px)) {
+            return std::nullopt;
+        }
+        return h_px;
+    };
+
+    constexpr double kMinScale = 1.0;
+    constexpr double kMaxScale = 50000.0;
+    auto low_height_opt = sprite_height_for_scale(kMinScale);
+    auto high_height_opt = sprite_height_for_scale(kMaxScale);
+
+    double best_scale = starting_scale;
+    double best_diff = std::numeric_limits<double>::infinity();
+
+    auto consider = [&](double scale, const std::optional<double>& height_opt) {
+        if (!height_opt.has_value()) {
+            return;
+        }
+        const double diff = std::abs(*height_opt - target_height_px);
+        if (diff < best_diff) {
+            best_diff = diff;
+            best_scale = scale;
+        }
+    };
+
+    consider(best_scale, sprite_height_for_scale(best_scale));
+    consider(kMinScale, low_height_opt);
+    consider(kMaxScale, high_height_opt);
+
+    if (!low_height_opt.has_value() || !high_height_opt.has_value()) {
+        cam.set_scale(best_scale);
+        cam.set_focus_override(focus);
+        cam.set_screen_center(focus);
+        return;
+    }
+
+    if (*low_height_opt < target_height_px && *high_height_opt < target_height_px) {
+        cam.set_scale(kMinScale);
+        cam.set_focus_override(focus);
+        cam.set_screen_center(focus);
+        return;
+    }
+    if (*low_height_opt > target_height_px && *high_height_opt > target_height_px) {
+        cam.set_scale(kMaxScale);
+        cam.set_focus_override(focus);
+        cam.set_screen_center(focus);
+        return;
+    }
+
+    double lo = kMinScale;
+    double hi = kMaxScale;
+    for (int i = 0; i < 26; ++i) {
+        const double mid = 0.5 * (lo + hi);
+        auto h_opt = sprite_height_for_scale(mid);
+        consider(mid, h_opt);
+        if (!h_opt.has_value()) {
+            break;
+        }
+        if (*h_opt > target_height_px) {
+            lo = mid;  // Sprite too large -> move camera farther.
+        } else {
+            hi = mid;  // Sprite too small -> move camera closer.
+        }
+    }
+
+    cam.set_scale(best_scale);
+    cam.set_focus_override(focus);
+    cam.set_screen_center(focus);
 }
 
 void FrameEditorSession::destroy_editor(bool persist_changes) {

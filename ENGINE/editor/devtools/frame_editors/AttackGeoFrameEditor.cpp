@@ -195,6 +195,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
             persist_changes();
         });
     }
+    dirty_ = false;
     wants_close_ = false;
     selected_index_ = 0;
     selected_attack_vector_index_ = -1;
@@ -211,8 +212,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     }
 
     manifest_txn_.begin(context_);
-    manifest_txn_.set_immediate_persist(true);
-    manifest_txn_.set_deferred_persist(false);
+    manifest_txn_.set_immediate_persist(false);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -242,6 +242,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
 
 void AttackGeoFrameEditor::end() {
     frames_.clear();
+    dirty_ = false;
     if (selection_state_) {
         selection_state_->reset();
         selection_state_ = nullptr;
@@ -287,6 +288,7 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
             delete_current_attack_vector();
         } else {
             ensure_attack_vector_for_type(current_attack_type());
+            persist_changes();
         }
         refresh_attack_form();
         consumed = true;
@@ -643,11 +645,13 @@ void AttackGeoFrameEditor::persist_changes() {
 }
 
 void AttackGeoFrameEditor::persist_pending_changes() {
-    if (!manifest_txn_.active()) {
+    if (!manifest_txn_.active() || !dirty_) {
         return;
     }
-    manifest_txn_.commit(true);
-    invalidate_preview();
+    if (manifest_txn_.commit(true)) {
+        dirty_ = false;
+        invalidate_preview();
+    }
 }
 
 float AttackGeoFrameEditor::base_world_z() const {
@@ -730,10 +734,7 @@ void AttackGeoFrameEditor::delete_current_attack_vector() {
 }
 
 void AttackGeoFrameEditor::apply_live_changes() {
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit(false);
-    }
-    invalidate_preview();
+    dirty_ = true;
 }
 
 void AttackGeoFrameEditor::invalidate_preview() const {

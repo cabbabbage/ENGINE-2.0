@@ -137,6 +137,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             persist_changes();
         });
     }
+    dirty_ = false;
     wants_close_ = false;
     selected_index_ = 0;
     selected_hitbox_type_index_ = 1;
@@ -152,8 +153,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     }
 
     manifest_txn_.begin(context_);
-    manifest_txn_.set_immediate_persist(true);
-    manifest_txn_.set_deferred_persist(false);
+    manifest_txn_.set_immediate_persist(false);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -185,6 +185,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
 
 void HitGeoFrameEditor::end() {
     frames_.clear();
+    dirty_ = false;
     if (selection_state_) {
         selection_state_->reset();
         selection_state_ = nullptr;
@@ -240,6 +241,7 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
             delete_hit_box_for_type(type);
         } else {
             ensure_hit_box_for_type(type);
+            persist_changes();
         }
         refresh_hitbox_form();
         consumed = true;
@@ -433,11 +435,13 @@ void HitGeoFrameEditor::persist_changes() {
 }
 
 void HitGeoFrameEditor::persist_pending_changes() {
-    if (!manifest_txn_.active()) {
+    if (!manifest_txn_.active() || !dirty_) {
         return;
     }
-    manifest_txn_.commit(true);
-    invalidate_preview();
+    if (manifest_txn_.commit(true)) {
+        dirty_ = false;
+        invalidate_preview();
+    }
 }
 
 float HitGeoFrameEditor::base_world_z() const {
@@ -461,10 +465,7 @@ void HitGeoFrameEditor::apply_hit_to_all_frames() {
 }
 
 void HitGeoFrameEditor::apply_live_changes() {
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit(false);
-    }
-    invalidate_preview();
+    dirty_ = true;
 }
 
 void HitGeoFrameEditor::invalidate_preview() const {

@@ -62,6 +62,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         // Movement mode uses raw delta Z values (like dx/dy), not percentages
         point_3d_editor_->set_z_display_mode(ZDisplayMode::RawDelta);
     }
+    dirty_ = false;
     wants_close_ = false;
     selected_index_ = 0;
     frames_.clear();
@@ -82,8 +83,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     refresh_selection_state();
 
     manifest_txn_.begin(context_);
-    manifest_txn_.set_immediate_persist(true);
-    manifest_txn_.set_deferred_persist(false);
+    manifest_txn_.set_immediate_persist(false);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -204,6 +204,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
 
 void MovementFrameEditor::end() {
     wants_close_ = false;
+    dirty_ = false;
     frames_.clear();
     rel_positions_.clear();
     rel_positions_z_.clear();
@@ -591,11 +592,13 @@ void MovementFrameEditor::persist_changes() {
 }
 
 void MovementFrameEditor::persist_pending_changes() {
-    if (!manifest_txn_.active()) {
+    if (!manifest_txn_.active() || !dirty_) {
         return;
     }
-    manifest_txn_.commit(true);
-    invalidate_preview();
+    if (manifest_txn_.commit(true)) {
+        dirty_ = false;
+        invalidate_preview();
+    }
 }
 
 void MovementFrameEditor::apply_to_all_frames() {
@@ -613,10 +616,7 @@ void MovementFrameEditor::apply_to_all_frames() {
 }
 
 void MovementFrameEditor::apply_live_changes() {
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit(false);
-    }
-    invalidate_preview();
+    dirty_ = true;
 }
 
 void MovementFrameEditor::invalidate_preview() const {

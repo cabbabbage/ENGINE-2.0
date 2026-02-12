@@ -35,7 +35,9 @@ animation_update::CombatantSnapshot snapshot_from_asset(const Asset& asset) {
 }
 
 VibbleController::VibbleController(Asset* player)
-    : player_(player) {}
+    : player_(player) {
+    spawn_eyes_follower();
+}
 
 int VibbleController::get_dx() const { return dx_; }
 int VibbleController::get_dy() const { return dy_; }
@@ -138,6 +140,9 @@ float VibbleController::frame_dt() const {
 void VibbleController::update(const Input& input) {
     using namespace std::chrono;
     auto now = steady_clock::now();
+
+    // Ensure the follower exists and stays attached; no respawns after creation.
+    spawn_eyes_follower();
 
     if(isDashing && now >= dashEndTime) {
         isDashing = false;
@@ -257,4 +262,20 @@ void VibbleController::process_pending_attacks(Asset& self) {
 
     // Process any attacks that were sent to self
     self.process_pending_attacks();
+}
+
+void VibbleController::spawn_eyes_follower() {
+    if (eyes_follower_ || !player_) {
+        return;
+    }
+
+    Assets* assets = player_->get_assets();
+    if (!assets) {
+        return;
+    }
+
+    eyes_follower_ = assets->spawn_asset_attached("Vibble_eyes", player_, "eyes");
+    if (eyes_follower_) {
+        player_->mark_anchors_dirty();
+    }
 }

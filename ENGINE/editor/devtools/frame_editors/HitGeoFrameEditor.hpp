@@ -63,6 +63,7 @@ private:
     std::vector<MovementFrame> frames_;
     int selected_index_ = 0;
     int selected_hitbox_type_index_ = 1;
+    bool dirty_ = false;
 
     std::unique_ptr<DMDropdown> dd_hitbox_type_;
     std::unique_ptr<DMButton> btn_back_;

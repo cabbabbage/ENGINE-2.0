@@ -128,6 +128,7 @@ public:
                                     std::function<void(const std::string&)> on_host_closed);
     void end_frame_editor_session();
     bool is_frame_editor_session_active() const;
+    const Asset* frame_editor_target() const;
 
 private:
     bool can_use_room_editor_ui() const;

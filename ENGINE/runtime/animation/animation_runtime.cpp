@@ -295,6 +295,7 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     }
     if (advanced_any) {
         self_->mark_composite_dirty();
+        self_->mark_anchors_dirty();
     }
     return true;
 }
@@ -331,6 +332,7 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     self_->frame_progress    = 0.0f;
     active_paths_[self_->current_animation] = path_index;
     self_->mark_composite_dirty();
+    self_->mark_anchors_dirty();
 }
 
 bool AnimationRuntime::should_defer_for_non_locked(bool override_non_locked) const {

@@ -1347,6 +1347,65 @@ void Assets::mark_active_assets_dirty() {
     needs_filtered_active_refresh_ = true;
 }
 
+Asset* Assets::spawn_asset_attached(const std::string& name,
+                                    Asset* anchor_owner,
+                                    const std::string& anchor_name) {
+
+    if (!anchor_owner || anchor_name.empty()) {
+        return nullptr;
+    }
+
+    std::shared_ptr<AssetInfo> info = library_.get(name);
+    if (!info) {
+        return nullptr;
+    }
+
+    std::string owning_room = map_id_;
+    if (current_room_) {
+        owning_room = current_room_->room_name;
+    }
+
+    auto resolved_anchor = anchor_owner->anchor_state(anchor_name);
+    SDL_Point spawn_pos = resolved_anchor ? resolved_anchor->world_px : anchor_owner->world_point();
+    const int spawn_z = (resolved_anchor && resolved_anchor->grid_point)
+        ? resolved_anchor->grid_point->world_z()
+        : anchor_owner->world_z();
+    const int resolved_layer = (resolved_anchor && resolved_anchor->grid_point)
+        ? resolved_anchor->grid_point->resolution_layer()
+        : anchor_owner->grid_resolution;
+
+    Area spawn_area(owning_room,  0);
+
+    int depth = 0;
+    Asset::AnchorFollowTarget follow_cfg{ anchor_owner, anchor_name };
+    auto uptr = std::make_unique<Asset>(info,
+                                        spawn_area,
+                                        spawn_pos,
+                                        depth,
+                                        nullptr,
+                                        std::string{},
+                                        std::string{},
+                                        resolved_layer,
+                                        follow_cfg);
+    Asset* raw = uptr.get();
+    if (!raw) {
+        return nullptr;
+    }
+    raw->set_assets(this);
+    raw->set_camera(&camera_);
+    raw->finalize_setup();
+
+    raw = world_grid_.create_asset_at_point(std::move(uptr), spawn_z, resolved_layer);
+    all.push_back(raw);
+
+    queue_asset_dimension_update(raw);
+    mark_grid_dirty();
+    mark_active_assets_dirty();
+    mark_non_player_update_buffer_dirty();
+
+    return raw;
+}
+
 Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
 
     std::shared_ptr<AssetInfo> info = library_.get(name);
@@ -2280,6 +2339,22 @@ bool Assets::should_run_runtime_updates() const {
     }
     if (dev_controls_ && dev_controls_->is_frame_editor_session_active()) {
         return true;
+    }
+    return false;
+}
+
+bool Assets::should_advance_animation_for(const Asset* asset) const {
+    if (!asset) {
+        return false;
+    }
+    if (!dev_mode) {
+        return true;
+    }
+    if (dev_controls_ && dev_controls_->is_frame_editor_session_active()) {
+        const Asset* target = dev_controls_->frame_editor_target();
+        if (target && target == asset) {
+            return true;
+        }
     }
     return false;
 }

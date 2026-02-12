@@ -192,6 +192,19 @@ bool AnimationCloner::Clone(const Animation& source,
             }
 
             if (src_frame) {
+                dst_frame.anchor_points.clear();
+                dst_frame.anchor_points.reserve(src_frame->anchor_points.size());
+                for (auto anchor : src_frame->anchor_points) {
+                    if (opts.flip_horizontal) {
+                        anchor.px = -anchor.px;
+                        anchor.rotation_deg = -anchor.rotation_deg;
+                    }
+                    if (opts.flip_vertical) {
+                        anchor.py = -anchor.py;
+                    }
+                    dst_frame.anchor_points.push_back(anchor);
+                }
+                dst_frame.rebuild_anchor_lookup();
                 dst_frame.hit_geometry = src_frame->hit_geometry;
                 dst_frame.attack_geometry = src_frame->attack_geometry;
             }

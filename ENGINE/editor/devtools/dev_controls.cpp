@@ -2046,6 +2046,13 @@ bool DevControls::is_frame_editor_session_active() const {
     return frame_editor_session_ && frame_editor_session_->is_active();
 }
 
+const Asset* DevControls::frame_editor_target() const {
+    if (!frame_editor_session_ || !frame_editor_session_->is_active()) {
+        return nullptr;
+    }
+    return frame_editor_session_->target_asset();
+}
+
 void DevControls::toggle_asset_library() {
     if (!can_use_room_editor_ui()) return;
     room_editor_->toggle_asset_library();

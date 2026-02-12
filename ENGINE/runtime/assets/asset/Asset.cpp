@@ -32,6 +32,7 @@
 #include <unordered_set>
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
+#include "utils/AnchorPointResolver.hpp"
 static std::mt19937& asset_rng()
 {
         static std::mt19937 rng{ std::random_device{}() };
@@ -54,7 +55,8 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
              Asset* parent_,
              const std::string& spawn_id_,
              const std::string& spawn_method_,
-             int grid_resolution_)
+             int grid_resolution_,
+             std::optional<AnchorFollowTarget> anchor_follow)
 : parent(parent_)
 , info(std::move(info_))
 , current_animation()
@@ -67,6 +69,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , spawn_id(spawn_id_)
 , spawn_method(spawn_method_)
 , owning_room_name_(spawn_area.get_name())
+, follow_anchor_(std::move(anchor_follow))
 {
 	set_flip();
 
@@ -173,6 +176,10 @@ Asset::Asset(const Asset& o)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
     , composite_scale_(o.composite_scale_)
+    , follow_anchor_(o.follow_anchor_)
+    , last_follow_world_(o.last_follow_world_)
+    , last_follow_world_z_(o.last_follow_world_z_)
+    , follow_initialized_(o.follow_initialized_)
 {
 
         clear_render_caches();
@@ -241,6 +248,12 @@ Asset& Asset::operator=(const Asset& o) {
         composite_dirty_          = true;
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
+        follow_anchor_            = o.follow_anchor_;
+        last_follow_world_        = o.last_follow_world_;
+        last_follow_world_z_      = o.last_follow_world_z_;
+        follow_initialized_       = o.follow_initialized_;
+        anchor_handles_.clear();
+        anchor_lookup_.clear();
         return *this;
 }
 
@@ -378,6 +391,7 @@ void Asset::update_scale_values() {
     last_scale_usage_.remainder_scale = current_remaining_scale_adjustment;
     last_scale_usage_.variant_index = current_variant_index;
 
+    mark_anchors_dirty();
     mark_mesh_dirty();
 }
 
@@ -415,6 +429,7 @@ void Asset::set_current_animation(const std::string& name)
 		anim.change(current_frame, static_frame);
 		frame_progress = 0.0f;
 		refresh_cached_dimensions();
+                mark_anchors_dirty();
 	}
 }
 
@@ -422,9 +437,11 @@ void Asset::update() {
     if (!info) return;
 
 
-    const int previous_x = pos_ ? pos_->world_x() : 0;
-    const int previous_y = pos_ ? pos_->world_y() : 0;
-    const int previous_z = pos_ ? pos_->world_z() : 0;
+    const int previous_x = world_x();
+    const int previous_y = world_y();
+    const int previous_z = world_z();
+
+    apply_anchor_follow_target();
 
     if (controller_) {
         if (assets_) {
@@ -435,10 +452,16 @@ void Asset::update() {
         controller_->process_pending_attacks(*this);
     }
 
-    const int current_x = pos_ ? pos_->world_x() : 0;
-    const int current_y = pos_ ? pos_->world_y() : 0;
-    const int current_z = pos_ ? pos_->world_z() : 0;
+    apply_anchor_follow_target();
+
+    const int current_x = world_x();
+    const int current_y = world_y();
+    const int current_z = world_z();
     const bool moved = (current_x != previous_x || current_y != previous_y || current_z != previous_z);
+
+    if (moved) {
+        mark_anchors_dirty();
+    }
 
     update_scale_values();
 
@@ -478,7 +501,9 @@ void Asset::update() {
         }
     }
 
-    if (!dead && anim_runtime_) {
+    const bool can_advance_animation = !assets_ || assets_->should_advance_animation_for(this);
+
+    if (!dead && anim_runtime_ && can_advance_animation) {
         anim_runtime_->update();
     }
 
@@ -764,6 +789,18 @@ void Asset::refresh_cached_dimensions() {
         cached_h = (height > 0) ? height : 0;
 }
 
+float Asset::runtime_height_px() const {
+        const float base_height = static_cast<float>(height());
+        if (!(base_height > 0.0f)) {
+                return 0.0f;
+        }
+        float remainder = last_scale_usage_.remainder_scale;
+        if (!std::isfinite(remainder) || remainder <= 0.0f) {
+                remainder = 1.0f;
+        }
+        return base_height * remainder;
+}
+
 void Asset::on_scale_factor_changed() {
 
         last_scale_usage_ = {};
@@ -772,6 +809,7 @@ void Asset::on_scale_factor_changed() {
 
         mark_composite_dirty();
         mark_mesh_dirty();
+        mark_anchors_dirty();
 
         if (assets_) {
                 assets_->queue_asset_dimension_update(this);
@@ -812,6 +850,114 @@ std::vector<animation_update::Attack> Asset::process_pending_attacks() {
         std::vector<animation_update::Attack> attacks;
         attacks.swap(pending_attacks_);
         return attacks;
+}
+
+void Asset::mark_anchors_dirty() {
+        for (auto& handle : anchor_handles_) {
+                handle.dirty = true;
+        }
+}
+
+void Asset::set_anchor_follow_target(std::optional<AnchorFollowTarget> follow) {
+        follow_anchor_ = std::move(follow);
+        follow_initialized_ = false;
+        last_follow_world_ = SDL_Point{0, 0};
+        last_follow_world_z_ = 0;
+        if (follow_anchor_) {
+                apply_anchor_follow_target();
+        }
+}
+
+void Asset::apply_anchor_follow_target() {
+        if (!follow_anchor_ || !follow_anchor_->valid()) {
+                return;
+        }
+        AnchorFollowTarget& follow = *follow_anchor_;
+        Asset* source = follow.source;
+        if (!source) {
+                return;
+        }
+
+        auto resolved = source->anchor_state(follow.anchor_name);
+        if (!resolved.has_value()) {
+                return;
+        }
+
+        SDL_Point target_px = resolved->world_px;
+        const int target_z = resolved->grid_point ? resolved->grid_point->world_z() : source->world_z();
+
+        if (!pos_ && resolved->grid_point) {
+                grid_resolution = resolved->grid_point->resolution_layer();
+        }
+
+        last_follow_world_ = target_px;
+        last_follow_world_z_ = target_z;
+        follow_initialized_ = true;
+
+        if (!assets_) {
+                initial_world_pos_ = target_px;
+                return;
+        }
+
+        const bool unchanged = follow_initialized_ &&
+                               world_x() == target_px.x &&
+                               world_y() == target_px.y &&
+                               world_z() == target_z;
+        if (unchanged) {
+                return;
+        }
+
+        move_to_world_position(target_px.x, target_px.y, target_z);
+}
+
+Asset::AnchorHandle& Asset::get_anchor_point(const std::string& name) {
+        auto it = anchor_lookup_.find(name);
+        if (it != anchor_lookup_.end() && it->second < anchor_handles_.size()) {
+                return anchor_handles_[it->second];
+        }
+
+        AnchorHandle handle;
+        handle.name  = name;
+        handle.owner = this;
+        anchor_handles_.push_back(std::move(handle));
+        anchor_lookup_[name] = anchor_handles_.size() - 1;
+        return anchor_handles_.back();
+}
+
+std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name) {
+        AnchorHandle& handle = get_anchor_point(name);
+        if (handle.dirty) {
+                handle.update();
+        }
+        ResolvedAnchor resolved{};
+        resolved.world_px    = handle.world_px;
+        resolved.grid_point  = handle.grid;
+        resolved.rotation_deg = handle.rotation;
+        resolved.missing     = handle.missing;
+        return resolved;
+}
+
+void Asset::AnchorHandle::update() {
+        if (!owner) {
+                dirty = false;
+                return;
+        }
+        const AnimationFrame* frame = owner->current_frame;
+        const DisplacedAssetAnchorPoint* anchor = (frame ? frame->find_anchor(name) : nullptr);
+
+        DisplacedAssetAnchorPoint base_anchor;
+        base_anchor.name = name;
+        const DisplacedAssetAnchorPoint* target_anchor = anchor ? anchor : &base_anchor;
+
+        const ResolvedAnchor resolved = anchor_points::resolve_anchor_point(*owner, *target_anchor);
+
+        grid       = resolved.grid_point;
+        world_px   = resolved.world_px;
+        rotation   = resolved.rotation_deg;
+        missing    = (anchor == nullptr);
+        last_frame_index = frame ? frame->frame_index : -1;
+        last_anim  = owner->current_animation;
+        dirty      = false;
 }
 
 
@@ -874,6 +1020,8 @@ void Asset::move_to_world_position(int world_x, int world_y, int world_z) {
         world::GridPoint virtual_start = world::GridPoint::make_virtual(start_x, start_y, world_z, grid_resolution);
         grid.move_asset(this, virtual_start, target);
     }
+
+    mark_anchors_dirty();
 }
 
 void Asset::set_world_z(int world_z) {

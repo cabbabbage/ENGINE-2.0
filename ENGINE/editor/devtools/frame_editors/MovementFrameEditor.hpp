@@ -59,6 +59,7 @@ private:
     std::vector<SDL_FPoint> rel_positions_;
     std::vector<float> rel_positions_z_;
     int selected_index_ = 0;
+    bool dirty_ = false;
     bool wants_close_ = false;
 
     mutable SDL_Rect ui_rect_{0, 0, 0, 0};

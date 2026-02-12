@@ -1,6 +1,7 @@
 #include "animation_loader.hpp"
 #include "animation.hpp"
 #include "animation_cloner.hpp"
+#include "anchor_point.hpp"
 #include "assets/asset_info.hpp"
 #include "assets/asset_types.hpp"
 #include "assets/surface_utils.hpp"
@@ -209,6 +210,86 @@ int read_int(const nlohmann::json& value, int fallback = 0) {
                 } catch (...) {}
         }
         return fallback;
+}
+
+DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node, bool& valid) {
+        DisplacedAssetAnchorPoint anchor{};
+        valid = false;
+        if (!node.is_object()) {
+                return anchor;
+        }
+        anchor.name = node.value("name", std::string{});
+        anchor.px = read_float(node.value("px", 0.0f));
+        anchor.py = read_float(node.value("py", 0.0f));
+        anchor.pz = std::clamp(read_float(node.value("pz", 0.0f)), 0.0f, 1.0f);
+        anchor.rotation_deg = read_float(node.value("rotation", node.value("rotation_deg", 0.0f)));
+        if (anchor.is_valid()) {
+                valid = true;
+        }
+        return anchor;
+}
+
+std::vector<std::vector<DisplacedAssetAnchorPoint>> parse_anchor_frames(const nlohmann::json& anchor_json,
+                                                                        std::size_t           frame_count) {
+        std::vector<std::vector<DisplacedAssetAnchorPoint>> anchors(frame_count);
+        if (!anchor_json.is_array()) {
+                return anchors;
+        }
+        const std::size_t limit = std::min<std::size_t>(frame_count, anchor_json.size());
+        for (std::size_t idx = 0; idx < limit; ++idx) {
+                const auto& entry = anchor_json[idx];
+                if (!entry.is_array()) continue;
+                std::unordered_set<std::string> names;
+                for (const auto& node : entry) {
+                        bool ok = false;
+                        auto anchor = read_anchor_point(node, ok);
+                        if (!ok) continue;
+                        if (names.insert(anchor.name).second) {
+                                anchors[idx].push_back(anchor);
+                        }
+                }
+        }
+        if (anchors.size() < frame_count) {
+                anchors.resize(frame_count);
+        }
+        return anchors;
+}
+
+std::vector<std::vector<DisplacedAssetAnchorPoint>> collect_anchor_frames_from_animation(const Animation& anim,
+                                                                                        std::size_t       frame_count) {
+        std::vector<std::vector<DisplacedAssetAnchorPoint>> anchors(frame_count);
+        if (anim.movement_path_count() == 0) {
+                return anchors;
+        }
+        const auto& path = anim.movement_path(0);
+        const std::size_t limit = std::min(frame_count, path.size());
+        for (std::size_t i = 0; i < limit; ++i) {
+                anchors[i] = path[i].anchor_points;
+        }
+        return anchors;
+}
+
+void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>& anchors,
+                             bool                                                 reverse_frames,
+                             bool                                                 flip_x,
+                             bool                                                 flip_y) {
+        if (anchors.empty()) {
+                return;
+        }
+        if (reverse_frames) {
+                std::reverse(anchors.begin(), anchors.end());
+        }
+        for (auto& frame : anchors) {
+                for (auto& anchor : frame) {
+                        if (flip_x) {
+                                anchor.px = -anchor.px;
+                                anchor.rotation_deg = -anchor.rotation_deg;
+                        }
+                        if (flip_y) {
+                                anchor.py = -anchor.py;
+                        }
+                }
+        }
 }
 
 void append_hit_box(animation_update::FrameHitGeometry& geometry,
@@ -452,6 +533,7 @@ void AnimationLoader::load(Animation& animation,
                 }
 };
         const double safe_scale = sanitize_scale_factor(scale_factor);
+        const Animation* source_animation_ptr = nullptr;
         animation.clear_texture_cache();
         animation.variant_steps_ = info.scale_variants;
         (void)root_cache;
@@ -485,6 +567,7 @@ void AnimationLoader::load(Animation& animation,
         if (animation.source.kind == "animation" && !animation.source.name.empty()) {
                 auto it = info.animations.find(animation.source.name);
                 if (it != info.animations.end()) {
+                        source_animation_ptr = &it->second;
                         const Animation& src_anim = it->second;
                         if (!src_anim.variant_steps_.empty()) {
                                 animation.variant_steps_ = src_anim.variant_steps_;
@@ -531,6 +614,11 @@ void AnimationLoader::load(Animation& animation,
         animation.movement_paths_.clear();
         animation.audio_clip = Animation::AudioClip{};
         bool movement_specified = false;
+        nlohmann::json anchor_points_json = nlohmann::json::array();
+        const bool has_anchor_points_json = anim_json.contains("anchor_points") && anim_json["anchor_points"].is_array();
+        if (has_anchor_points_json) {
+                anchor_points_json = anim_json["anchor_points"];
+        }
         nlohmann::json hit_geometry_json = nlohmann::json::array();
         if (anim_json.contains("hit_geometry") && anim_json["hit_geometry"].is_array()) {
                 hit_geometry_json = anim_json["hit_geometry"];
@@ -753,6 +841,19 @@ void AnimationLoader::load(Animation& animation,
                 }
         }
         const std::size_t frame_count = animation.frame_cache_.size();
+        std::vector<std::vector<DisplacedAssetAnchorPoint>> anchor_frames;
+        if (has_anchor_points_json) {
+                anchor_frames = parse_anchor_frames(anchor_points_json, frame_count);
+        } else if (source_animation_ptr) {
+                anchor_frames = collect_anchor_frames_from_animation(*source_animation_ptr, frame_count);
+                apply_anchor_transforms(anchor_frames,
+                                        animation.reverse_source,
+                                        animation.flipped_source,
+                                        animation.flip_vertical_source);
+        }
+        if (anchor_frames.size() < frame_count) {
+                anchor_frames.resize(frame_count);
+        }
         if (animation.movement_paths_.empty()) {
                 animation.movement_paths_.emplace_back();
         }
@@ -788,6 +889,12 @@ void AnimationLoader::load(Animation& animation,
                                 variant.uses_atlas = (v < cache.uses_atlas.size()) ? cache.uses_atlas[v] : false;
                                 f.variants.push_back(variant);
                             }
+                        }
+
+                        if (i < anchor_frames.size()) {
+                                f.set_anchor_points(anchor_frames[i]);
+                        } else {
+                                f.set_anchor_points({});
                         }
 
                         if (f.dx != 0 || f.dy != 0 || f.dz != 0) {

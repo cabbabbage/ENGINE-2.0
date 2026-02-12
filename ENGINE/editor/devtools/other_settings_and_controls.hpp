@@ -3,6 +3,7 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -17,6 +18,7 @@ class Asset;
 class DMCheckbox;
 class DMNumericStepper;
 class Room;
+class Assets;
 
 class OtherSettingsAndControls {
 public:
@@ -84,6 +86,7 @@ public:
     void set_extra_panel_height(int height) { extra_panel_height_ = std::max(0, height); layout_dirty_ = true; }
     void set_extra_panel_renderer(ExtraRenderer renderer) { extra_renderer_ = std::move(renderer); }
     void set_extra_panel_event_handler(ExtraEventHandler handler) { extra_event_handler_ = std::move(handler); }
+    void set_assets_context(Assets* assets) { assets_context_ = assets; }
 
     void reset();
 
@@ -140,6 +143,9 @@ private:
     void clear_checkbox_rects();
     void layout_mode_buttons();
     void layout_filter_checkboxes();
+    void layout_stats_panel();
+    void maybe_refresh_stats(SDL_Renderer* renderer);
+    void render_stats(SDL_Renderer* renderer) const;
 
     static FilterState& persistent_state();
     static bool& persistent_state_initialized_flag();
@@ -161,8 +167,17 @@ private:
     SDL_Rect header_rect_{0, 0, 0, 0};
     SDL_Rect settings_rect_{0, 0, 0, 0};
     SDL_Rect settings_heading_rect_{0, 0, 0, 0};
+    SDL_Rect grid_section_label_rect_{0, 0, 0, 0};
+    SDL_Rect debug_section_label_rect_{0, 0, 0, 0};
+    SDL_Rect overlay_section_label_rect_{0, 0, 0, 0};
     SDL_Rect filters_heading_rect_{0, 0, 0, 0};
+    SDL_Rect primary_filters_heading_rect_{0, 0, 0, 0};
+    SDL_Rect advanced_filters_heading_rect_{0, 0, 0, 0};
+    SDL_Rect grid_resolution_label_rect_{0, 0, 0, 0};
     SDL_Rect filters_rect_{0, 0, 0, 0};
+    SDL_Rect stats_rect_{0, 0, 0, 0};
+    SDL_Rect stats_heading_rect_{0, 0, 0, 0};
+    std::array<SDL_Rect, 4> stats_line_rects_{};
     bool layout_dirty_ = true;
     std::unordered_set<std::string> map_spawn_ids_;
     std::unordered_set<std::string> room_spawn_ids_;
@@ -197,4 +212,22 @@ private:
     std::function<void(int)> on_grid_resolution_changed_;
     int grid_resolution_min_ = 0;
     int grid_resolution_max_ = 0;
+    Assets* assets_context_ = nullptr;
+    struct RuntimeStats {
+        double cpu_usage_percent = 0.0;
+        double fps = 0.0;
+        double ram_used_gb = 0.0;
+        double ram_total_gb = 0.0;
+        Uint64 last_sample_ms = 0;
+        std::array<std::string, 4> lines{};
+        std::string cpu_name;
+        std::string gpu_name;
+    };
+    RuntimeStats stats_{};
+    Uint64 stats_refresh_ms_ = 7000;
+    Uint64 last_cpu_sample_ms_ = 0;
+#ifdef _WIN32
+    unsigned long long last_cpu_kernel_time_ = 0;
+    unsigned long long last_cpu_user_time_ = 0;
+#endif
 };

@@ -35,21 +35,8 @@ public:
     }
 
 
-    // Derived-only caches populated from Animation::child_timelines();
-    // never serialized directly from JSON or other legacy frame data.
-    std::vector<AnimationChildFrameData> children;
-    // Derived-only trigger markers rebuilt from child timelines.
-    std::vector<int> child_start_events;
     animation_update::FrameHitGeometry hit_geometry;
     animation_update::FrameAttackGeometry attack_geometry;
-
-    const std::vector<AnimationChildFrameData>& get_children() const {
-        return children;
-    }
-
-    const std::vector<int>& get_child_start_events() const {
-        return child_start_events;
-    }
 
     const animation_update::FrameHitGeometry& get_hit_geometry() const {
         return hit_geometry;

@@ -2,7 +2,6 @@
     "animation_children": [],
     "animations": {
         "default": {
-            "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [
@@ -35,7 +34,6 @@
             "speed_multiplier": 1.0
         },
         "down": {
-            "child_timelines": [],
             "crop_frames": false,
             "derived_modifiers": {
                 "flipMovementX": false,
@@ -84,7 +82,6 @@
                     "vectors": []
                 }
             ],
-            "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [
@@ -157,7 +154,6 @@
             "speed_multiplier": 1.0
         },
         "right": {
-            "child_timelines": [],
             "crop_frames": false,
             "derived_modifiers": {
                 "flipMovementX": true,
@@ -186,7 +182,6 @@
             "speed_multiplier": 1.0
         },
         "up": {
-            "child_timelines": [],
             "crop_frames": false,
             "derived_modifiers": {
                 "flipMovementX": false,

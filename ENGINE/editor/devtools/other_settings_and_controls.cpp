@@ -3,6 +3,7 @@
 
 #include "assets/Asset.hpp"
 #include "assets/asset_types.hpp"
+#include "core/AssetsManager.hpp"
 #include "devtools/dev_ui_settings.hpp"
 #include "devtools/dm_icons.hpp"
 #include "devtools/dm_styles.hpp"
@@ -13,10 +14,19 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
+#include <cstdint>
+#include <iomanip>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
+
+#ifdef _WIN32
+#include <intrin.h>
+#include <windows.h>
+#endif
 
 namespace {
 constexpr int kToggleButtonMinWidth = 36;
@@ -24,6 +34,14 @@ constexpr int kPanelOutlineThickness = 1;
 constexpr int kSectionHeaderSpacing = 4;
 constexpr const char* kDevSettingsTitle = "Dev Mode Settings";
 constexpr const char* kFiltersTitle = "Asset Filters";
+constexpr const char* kGridSectionTitle = "Grid Overlay & Snapping";
+constexpr const char* kDebugSectionTitle = "Debug & Effects";
+constexpr const char* kOverlaySectionTitle = "Overlay Resolution";
+constexpr const char* kPrimaryFiltersTitle = "Visibility Filters";
+constexpr const char* kAdvancedFiltersTitle = "Asset & Spawn Filters";
+constexpr const char* kGridResolutionTitle = "Tile Resolution";
+constexpr const char* kStatsTitle = "Runtime Stats";
+constexpr Uint64 kStatsRefreshMs = 7000;
 
 constexpr const char* kSettingsInitializedKey = "dev.asset_filter.initialized";
 constexpr const char* kSettingsMapAssetsKey = "dev.asset_filter.map_assets";
@@ -57,6 +75,113 @@ std::string make_method_setting_key(const std::string& method) {
     std::string key = kSettingsMethodPrefix;
     key += canonicalize_method_string(method);
     return key;
+}
+
+double bytes_to_gb(std::uint64_t bytes) {
+    constexpr double kGb = 1024.0 * 1024.0 * 1024.0;
+    return bytes <= 0 ? 0.0 : static_cast<double>(bytes) / kGb;
+}
+
+std::string format_number(double value, int precision = 1) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(precision) << value;
+    return oss.str();
+}
+
+std::string format_percent(double value) {
+    return format_number(value, 1) + "%";
+}
+
+std::string format_fps(double fps) {
+    if (fps <= 0.01) {
+        return std::string("N/A");
+    }
+    std::ostringstream oss;
+    if (fps >= 100.0) {
+        oss << std::fixed << std::setprecision(0) << fps;
+    } else {
+        oss << std::fixed << std::setprecision(1) << fps;
+    }
+    return oss.str();
+}
+
+std::string format_ram_line(double used_gb, double total_gb) {
+    if (used_gb <= 0.0 || total_gb <= 0.0) {
+        return std::string("RAM: N/A");
+    }
+    std::ostringstream oss;
+    oss << "RAM: " << format_number(used_gb, 1) << " / " << format_number(total_gb, 1) << " GB";
+    return oss.str();
+}
+
+#ifdef _WIN32
+unsigned long long filetime_to_ull(const FILETIME& ft) {
+    return (static_cast<unsigned long long>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+}
+
+std::string cpu_brand_string() {
+    int cpu_info[4] = {0};
+    __cpuid(cpu_info, 0x80000000);
+    unsigned int n_ex_ids = static_cast<unsigned int>(cpu_info[0]);
+    if (n_ex_ids < 0x80000004) {
+        return {};
+    }
+    char brand[49] = {};
+    __cpuid(cpu_info, 0x80000002);
+    std::memcpy(brand, cpu_info, sizeof(cpu_info));
+    __cpuid(cpu_info, 0x80000003);
+    std::memcpy(brand + 16, cpu_info, sizeof(cpu_info));
+    __cpuid(cpu_info, 0x80000004);
+    std::memcpy(brand + 32, cpu_info, sizeof(cpu_info));
+    brand[48] = '\0';
+    std::string result(brand);
+    // Collapse duplicate spaces for a cleaner label.
+    std::string cleaned;
+    cleaned.reserve(result.size());
+    bool prev_space = false;
+    for (char ch : result) {
+        if (std::isspace(static_cast<unsigned char>(ch))) {
+            if (!prev_space) {
+                cleaned.push_back(' ');
+            }
+            prev_space = true;
+        } else {
+            cleaned.push_back(ch);
+            prev_space = false;
+        }
+    }
+    while (!cleaned.empty() && std::isspace(static_cast<unsigned char>(cleaned.back()))) {
+        cleaned.pop_back();
+    }
+    while (!cleaned.empty() && std::isspace(static_cast<unsigned char>(cleaned.front()))) {
+        cleaned.erase(cleaned.begin());
+    }
+    return cleaned;
+}
+#endif
+
+std::string fallback_cpu_label() {
+#ifdef _WIN32
+    const std::string brand = cpu_brand_string();
+    if (!brand.empty()) {
+        return brand;
+    }
+#endif
+    std::ostringstream oss;
+    oss << SDL_GetCPUCount() << "-core CPU";
+    return oss.str();
+}
+
+std::string renderer_description(SDL_Renderer* renderer) {
+    SDL_RendererInfo info{};
+    if (renderer && SDL_GetRendererInfo(renderer, &info) == 0 && info.name) {
+        return std::string(info.name);
+    }
+    const char* driver = SDL_GetCurrentVideoDriver();
+    if (driver) {
+        return std::string(driver);
+    }
+    return {};
 }
 
 }
@@ -364,6 +489,11 @@ void OtherSettingsAndControls::set_filters_expanded(bool expanded) {
     update_filter_toggle_label();
     persist_filters_expanded();
     layout_dirty_ = true;
+    if (!filters_expanded_) {
+        stats_.last_sample_ms = 0;
+        last_cpu_sample_ms_ = 0;
+        stats_.lines = {};
+    }
 }
 
 void OtherSettingsAndControls::set_dev_mode_settings(const DevModeSettings& settings) {
@@ -539,6 +669,7 @@ void OtherSettingsAndControls::rebuild_layout() {
 
     filters_rect_ = SDL_Rect{0, current_y, available_width, 0};
     layout_filter_checkboxes();
+    layout_stats_panel();
 
     extra_panel_rect_ = SDL_Rect{0,0,0,0};
     if (extra_panel_height_ > 0) {
@@ -599,6 +730,16 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
         DrawLabelText(renderer, kDevSettingsTitle, settings_heading_rect_.x, settings_heading_rect_.y, DMStyles::Label());
     }
 
+    if (grid_section_label_rect_.w > 0 && grid_section_label_rect_.h > 0) {
+        DrawLabelText(renderer, kGridSectionTitle, grid_section_label_rect_.x, grid_section_label_rect_.y, DMStyles::Label());
+    }
+    if (debug_section_label_rect_.w > 0 && debug_section_label_rect_.h > 0) {
+        DrawLabelText(renderer, kDebugSectionTitle, debug_section_label_rect_.x, debug_section_label_rect_.y, DMStyles::Label());
+    }
+    if (overlay_section_label_rect_.w > 0 && overlay_section_label_rect_.h > 0) {
+        DrawLabelText(renderer, kOverlaySectionTitle, overlay_section_label_rect_.x, overlay_section_label_rect_.y, DMStyles::Label());
+    }
+
     if (overlay_grid_checkbox_) {
         overlay_grid_checkbox_->render(renderer);
     }
@@ -628,6 +769,16 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
         DrawLabelText(renderer, kFiltersTitle, filters_heading_rect_.x, filters_heading_rect_.y, DMStyles::Label());
     }
 
+    if (primary_filters_heading_rect_.w > 0 && primary_filters_heading_rect_.h > 0) {
+        DrawLabelText(renderer, kPrimaryFiltersTitle, primary_filters_heading_rect_.x, primary_filters_heading_rect_.y, DMStyles::Label());
+    }
+    if (advanced_filters_heading_rect_.w > 0 && advanced_filters_heading_rect_.h > 0) {
+        DrawLabelText(renderer, kAdvancedFiltersTitle, advanced_filters_heading_rect_.x, advanced_filters_heading_rect_.y, DMStyles::Label());
+    }
+    if (grid_resolution_label_rect_.w > 0 && grid_resolution_label_rect_.h > 0) {
+        DrawLabelText(renderer, kGridResolutionTitle, grid_resolution_label_rect_.x, grid_resolution_label_rect_.y, DMStyles::Label());
+    }
+
     for (const auto& entry : entries_) {
         if (entry.checkbox) {
             entry.checkbox->render(renderer);
@@ -637,6 +788,8 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
     if (grid_resolution_stepper_) {
         grid_resolution_stepper_->render(renderer);
     }
+
+    render_stats(renderer);
 
     if (extra_panel_rect_.w > 0 && extra_panel_rect_.h > 0 && extra_renderer_) {
         extra_renderer_(renderer, extra_panel_rect_);
@@ -938,6 +1091,17 @@ void OtherSettingsAndControls::clear_checkbox_rects() {
     if (depth_effects_checkbox_) {
         depth_effects_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
+    grid_section_label_rect_ = SDL_Rect{0, 0, 0, 0};
+    debug_section_label_rect_ = SDL_Rect{0, 0, 0, 0};
+    overlay_section_label_rect_ = SDL_Rect{0, 0, 0, 0};
+    primary_filters_heading_rect_ = SDL_Rect{0, 0, 0, 0};
+    advanced_filters_heading_rect_ = SDL_Rect{0, 0, 0, 0};
+    grid_resolution_label_rect_ = SDL_Rect{0, 0, 0, 0};
+    stats_rect_ = SDL_Rect{0, 0, 0, 0};
+    stats_heading_rect_ = SDL_Rect{0, 0, 0, 0};
+    for (auto& rect : stats_line_rects_) {
+        rect = SDL_Rect{0, 0, 0, 0};
+    }
 }
 
 void OtherSettingsAndControls::layout_mode_buttons() {
@@ -1025,6 +1189,9 @@ void OtherSettingsAndControls::layout_mode_buttons() {
 void OtherSettingsAndControls::layout_dev_settings() {
     settings_rect_.h = 0;
     settings_heading_rect_ = SDL_Rect{0, 0, 0, 0};
+    grid_section_label_rect_ = SDL_Rect{0, 0, 0, 0};
+    debug_section_label_rect_ = SDL_Rect{0, 0, 0, 0};
+    overlay_section_label_rect_ = SDL_Rect{0, 0, 0, 0};
     ensure_dev_settings_controls();
     if (settings_rect_.w <= 0 || settings_rect_.h < 0) {
         return;
@@ -1052,6 +1219,9 @@ void OtherSettingsAndControls::layout_dev_settings() {
     const int left_x = settings_rect_.x + margin_x;
     const int right_x = left_x + col_width + col_gap;
 
+    grid_section_label_rect_ = SDL_Rect{left_x, y, content_width, heading_style.font_size};
+    y += grid_section_label_rect_.h + row_gap / 2;
+
     if (overlay_grid_checkbox_) {
         overlay_grid_checkbox_->set_rect(SDL_Rect{left_x, y, col_width, checkbox_height});
     }
@@ -1060,6 +1230,9 @@ void OtherSettingsAndControls::layout_dev_settings() {
     }
     y += checkbox_height + row_gap;
 
+    debug_section_label_rect_ = SDL_Rect{left_x, y, content_width, heading_style.font_size};
+    y += debug_section_label_rect_.h + row_gap / 2;
+
     if (movement_debug_checkbox_) {
         movement_debug_checkbox_->set_rect(SDL_Rect{left_x, y, col_width, checkbox_height});
     }
@@ -1067,6 +1240,9 @@ void OtherSettingsAndControls::layout_dev_settings() {
         depth_effects_checkbox_->set_rect(SDL_Rect{right_x, y, col_width, checkbox_height});
     }
     y += checkbox_height + row_gap;
+
+    overlay_section_label_rect_ = SDL_Rect{left_x, y, content_width, heading_style.font_size};
+    y += overlay_section_label_rect_.h + row_gap / 2;
 
     if (overlay_grid_stepper_) {
         const int stepper_height = overlay_grid_stepper_->preferred_height(content_width);
@@ -1088,6 +1264,9 @@ void OtherSettingsAndControls::layout_filter_checkboxes() {
             entry.checkbox->set_rect(SDL_Rect{0, 0, 0, 0});
         }
     }
+    primary_filters_heading_rect_ = SDL_Rect{0, 0, 0, 0};
+    advanced_filters_heading_rect_ = SDL_Rect{0, 0, 0, 0};
+    grid_resolution_label_rect_ = SDL_Rect{0, 0, 0, 0};
     if (grid_resolution_stepper_) {
         grid_resolution_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
@@ -1169,6 +1348,7 @@ void OtherSettingsAndControls::layout_filter_checkboxes() {
 
     const bool has_primary = rows_have_content(primary_rows);
     const bool has_advanced = rows_have_content(advanced_rows);
+    const bool has_grid_stepper = static_cast<bool>(grid_resolution_stepper_);
     if (!has_primary && !has_advanced) {
         return;
     }
@@ -1176,6 +1356,7 @@ void OtherSettingsAndControls::layout_filter_checkboxes() {
     // `y` already points past the heading
     const int left_limit = filters_rect_.x + margin_x;
     const int right_limit = filters_rect_.x + filters_rect_.w - margin_x;
+    const DMLabelStyle& subheading_style = DMStyles::Label();
 
     auto layout_rows = [&](const std::vector<std::vector<FilterEntry*>>& rows) {
         for (size_t row_idx = 0; row_idx < rows.size(); ++row_idx) {
@@ -1220,21 +1401,28 @@ void OtherSettingsAndControls::layout_filter_checkboxes() {
 
     bool section_emitted = false;
     if (has_primary) {
+        primary_filters_heading_rect_ = SDL_Rect{filters_rect_.x + margin_x, y, available_width, subheading_style.font_size};
+        y += primary_filters_heading_rect_.h + row_gap / 2;
         layout_rows(primary_rows);
         section_emitted = true;
+        if (has_advanced || has_grid_stepper) {
+            y += section_gap;
+        }
     }
 
     if (has_advanced) {
-        if (section_emitted) {
+        advanced_filters_heading_rect_ = SDL_Rect{filters_rect_.x + margin_x, y, available_width, subheading_style.font_size};
+        y += advanced_filters_heading_rect_.h + row_gap / 2;
+        layout_rows(advanced_rows);
+        section_emitted = true;
+        if (has_grid_stepper) {
             y += section_gap;
         }
-        layout_rows(advanced_rows);
     }
 
     if (grid_resolution_stepper_) {
-        if (section_emitted) {
-            y += section_gap;
-        }
+        grid_resolution_label_rect_ = SDL_Rect{filters_rect_.x + margin_x, y, available_width, subheading_style.font_size};
+        y += grid_resolution_label_rect_.h + row_gap / 2;
         const int stepper_width = std::max(0, filters_rect_.w - margin_x * 2);
         if (stepper_width > 0) {
             const int stepper_height = grid_resolution_stepper_->preferred_height(stepper_width);
@@ -1249,6 +1437,151 @@ void OtherSettingsAndControls::layout_filter_checkboxes() {
 
     y += margin_y;
     filters_rect_.h = y - filters_rect_.y;
+}
+
+void OtherSettingsAndControls::layout_stats_panel() {
+    stats_rect_ = SDL_Rect{0, 0, 0, 0};
+    stats_heading_rect_ = SDL_Rect{0, 0, 0, 0};
+    for (auto& rect : stats_line_rects_) {
+        rect = SDL_Rect{0, 0, 0, 0};
+    }
+    if (!filters_expanded_ || filters_rect_.w <= 0) {
+        return;
+    }
+
+    const int margin_x = DMSpacing::item_gap();
+    const int margin_y = DMSpacing::item_gap();
+    const int row_gap = DMSpacing::small_gap();
+    const int content_width = std::max(0, filters_rect_.w - margin_x * 2);
+    if (content_width <= 0) {
+        return;
+    }
+
+    int y = filters_rect_.y + filters_rect_.h + DMSpacing::section_gap();
+    stats_rect_ = SDL_Rect{filters_rect_.x, y, filters_rect_.w, 0};
+    y += margin_y;
+
+    const DMLabelStyle& heading_style = DMStyles::Label();
+    stats_heading_rect_ = SDL_Rect{stats_rect_.x + margin_x, y, content_width, heading_style.font_size};
+    y += stats_heading_rect_.h + row_gap;
+
+    const int line_height = heading_style.font_size;
+    for (auto& rect : stats_line_rects_) {
+        rect = SDL_Rect{stats_rect_.x + margin_x, y, content_width, line_height};
+        y += line_height + row_gap;
+    }
+
+    y += margin_y;
+    stats_rect_.h = y - stats_rect_.y;
+    filters_rect_.h = (stats_rect_.y + stats_rect_.h) - filters_rect_.y;
+}
+
+void OtherSettingsAndControls::maybe_refresh_stats(SDL_Renderer* renderer) {
+    if (!filters_expanded_) {
+        return;
+    }
+    const Uint64 now = SDL_GetTicks();
+    const Uint64 interval = std::max<Uint64>(stats_refresh_ms_, kStatsRefreshMs);
+    if (stats_.last_sample_ms != 0 && now - stats_.last_sample_ms < interval) {
+        return;
+    }
+    stats_.last_sample_ms = now;
+
+    if (stats_.cpu_name.empty()) {
+        stats_.cpu_name = fallback_cpu_label();
+    }
+    const std::string gpu_label = renderer_description(renderer);
+    if (!gpu_label.empty()) {
+        stats_.gpu_name = gpu_label;
+    } else if (stats_.gpu_name.empty()) {
+        stats_.gpu_name = std::string("Unknown Renderer");
+    }
+
+    stats_.fps = 0.0;
+    if (assets_context_) {
+        const double dt = static_cast<double>(assets_context_->frame_delta_seconds());
+        if (dt > 0.0001) {
+            stats_.fps = 1.0 / dt;
+        }
+    }
+
+#ifdef _WIN32
+    FILETIME ft_creation{}, ft_exit{}, ft_kernel{}, ft_user{};
+    if (GetProcessTimes(GetCurrentProcess(), &ft_creation, &ft_exit, &ft_kernel, &ft_user)) {
+        const unsigned long long kernel = filetime_to_ull(ft_kernel);
+        const unsigned long long user = filetime_to_ull(ft_user);
+        if (last_cpu_sample_ms_ > 0 && now > last_cpu_sample_ms_) {
+            const double elapsed_sec = static_cast<double>(now - last_cpu_sample_ms_) / 1000.0;
+            if (elapsed_sec > 0.0) {
+                const unsigned long long kernel_diff = kernel - last_cpu_kernel_time_;
+                const unsigned long long user_diff = user - last_cpu_user_time_;
+                SYSTEM_INFO sys_info{};
+                GetSystemInfo(&sys_info);
+                const double cpu_time = static_cast<double>(kernel_diff + user_diff) / 10000000.0;
+                const double cores = std::max<DWORD>(1, sys_info.dwNumberOfProcessors);
+                stats_.cpu_usage_percent = std::clamp((cpu_time / (elapsed_sec * cores)) * 100.0, 0.0, 100.0);
+            }
+        }
+        last_cpu_kernel_time_ = kernel;
+        last_cpu_user_time_ = user;
+        last_cpu_sample_ms_ = now;
+    }
+
+    MEMORYSTATUSEX status{};
+    status.dwLength = sizeof(status);
+    if (GlobalMemoryStatusEx(&status)) {
+        const std::uint64_t used_bytes = status.ullTotalPhys - status.ullAvailPhys;
+        stats_.ram_total_gb = bytes_to_gb(status.ullTotalPhys);
+        stats_.ram_used_gb = bytes_to_gb(used_bytes);
+    } else {
+        stats_.ram_total_gb = 0.0;
+        stats_.ram_used_gb = 0.0;
+    }
+#else
+    stats_.cpu_usage_percent = 0.0;
+    stats_.ram_total_gb = 0.0;
+    stats_.ram_used_gb = 0.0;
+#endif
+
+    stats_.lines[0] = std::string("GPU: ") + (stats_.gpu_name.empty() ? std::string("Unknown") : stats_.gpu_name);
+    std::ostringstream cpu_line;
+    cpu_line << "CPU: " << (stats_.cpu_name.empty() ? std::string("Unknown") : stats_.cpu_name);
+    if (stats_.cpu_usage_percent > 0.0) {
+        cpu_line << " (" << format_percent(stats_.cpu_usage_percent) << ")";
+    }
+    stats_.lines[1] = cpu_line.str();
+    stats_.lines[2] = format_ram_line(stats_.ram_used_gb, stats_.ram_total_gb);
+    stats_.lines[3] = std::string("FPS: ") + format_fps(stats_.fps);
+}
+
+void OtherSettingsAndControls::render_stats(SDL_Renderer* renderer) const {
+    if (stats_rect_.w <= 0 || stats_rect_.h <= 0) {
+        return;
+    }
+    auto* self = const_cast<OtherSettingsAndControls*>(this);
+    self->maybe_refresh_stats(renderer);
+
+    const SDL_Color content_bg = DMStyles::PanelBG();
+    SDL_SetRenderDrawColor(renderer, content_bg.r, content_bg.g, content_bg.b, 210);
+    sdl_render::FillRect(renderer, &stats_rect_);
+
+    const int margin_x = DMSpacing::item_gap();
+    const int left = stats_rect_.x + margin_x;
+    const int right = stats_rect_.x + stats_rect_.w - margin_x;
+    const SDL_Color border = DMStyles::Border();
+    SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, 160);
+    SDL_RenderLine(renderer, left, stats_rect_.y, right, stats_rect_.y);
+
+    const DMLabelStyle& style = DMStyles::Label();
+    if (stats_heading_rect_.w > 0 && stats_heading_rect_.h > 0) {
+        DrawLabelText(renderer, kStatsTitle, stats_heading_rect_.x, stats_heading_rect_.y, style);
+    }
+    for (size_t i = 0; i < stats_.lines.size() && i < stats_line_rects_.size(); ++i) {
+        if (stats_line_rects_[i].w <= 0 || stats_.lines[i].empty()) {
+            continue;
+        }
+        DrawLabelText(renderer, stats_.lines[i], stats_line_rects_[i].x, stats_line_rects_[i].y, style);
+    }
 }
 
 bool OtherSettingsAndControls::type_filter_enabled(const std::string& type) const {

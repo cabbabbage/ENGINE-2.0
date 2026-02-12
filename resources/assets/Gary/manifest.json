@@ -54,7 +54,6 @@
                     "projectile": []
                 }
             ],
-            "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [
@@ -209,7 +208,6 @@
                     "projectile": []
                 }
             ],
-            "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [
@@ -257,7 +255,6 @@
             "speed_multiplier": 1.0
         },
         "forward": {
-            "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [
@@ -325,7 +322,6 @@
             "speed_multiplier": 1.0
         },
         "left": {
-            "child_timelines": [],
             "crop_frames": false,
             "derived_modifiers": {
                 "flipMovementX": true,
@@ -503,7 +499,6 @@
                     "projectile": []
                 }
             ],
-            "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [

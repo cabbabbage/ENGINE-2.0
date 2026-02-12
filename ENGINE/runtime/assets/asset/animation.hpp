@@ -8,7 +8,6 @@
 #include <vector>
 #include <SDL3/SDL.h>
 #include <nlohmann/json.hpp>
-#include "animation_child_data.hpp"
 #include "animation_frame.hpp"
 #include "rendering/render/render.hpp"
 #include "animation_frame_variant.hpp"
@@ -114,23 +113,11 @@ public:
     std::size_t clamp_path_index(std::size_t index) const;
     std::size_t variant_count() const { return variant_steps_.size(); }
     const std::vector<float>& variant_steps() const { return variant_steps_; }
-    const std::vector<std::string>& child_assets() const { return child_asset_names_; }
-    std::vector<std::string>& child_assets() { return child_asset_names_; }
-    bool has_child_assets() const { return !child_asset_names_.empty(); }
-    const std::vector<AnimationChildData>& child_timelines() const { return child_data_; }
-    std::vector<AnimationChildData>& child_timelines() { return child_data_; }
-    const AnimationChildData* find_child_timeline(std::string_view child_name) const;
-    AnimationChildData* find_child_timeline(std::string_view child_name);
-    void rebuild_frames_from_child_timelines();
-    void refresh_child_start_events() { rebuild_child_start_events_from_timelines(); }
 private:
     std::vector<FrameCache> frame_cache_;
     AudioClip audio_clip;
     std::vector<std::vector<AnimationFrame>> movement_paths_;
     std::vector<float> variant_steps_;
-    std::vector<std::string> child_asset_names_;
-    std::vector<AnimationChildData> child_data_;
-    void rebuild_child_start_events_from_timelines();
     void bind_textures_to_frame(AnimationFrame& frame) const;
     void refresh_frame_texture_bindings();
 };

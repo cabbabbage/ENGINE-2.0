@@ -99,8 +99,6 @@ bool AnimationCloner::Clone(const Animation& source,
     dest.total_dx         = source.total_dx;
     dest.total_dy         = source.total_dy;
     dest.total_dz         = source.total_dz;
-    dest.child_asset_names_ = source.child_asset_names_;
-    dest.child_data_      = source.child_data_;
     dest.audio_clip       = source.audio_clip;
 
     const std::size_t frame_count   = source.frame_cache_.size();
@@ -203,9 +201,6 @@ bool AnimationCloner::Clone(const Animation& source,
             }
         }
     }
-
-    dest.rebuild_frames_from_child_timelines();
-    dest.refresh_child_start_events();
 
     dest.total_dx = 0;
     dest.total_dy = 0;

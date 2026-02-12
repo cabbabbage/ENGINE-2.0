@@ -2,7 +2,6 @@
     "animation_children": [],
     "animations": {
         "damaged": {
-            "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [
@@ -152,7 +151,6 @@
                     "vectors": []
                 }
             ],
-            "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
             "frames": [

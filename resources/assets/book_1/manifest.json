@@ -2,7 +2,6 @@
     "animation_children": [],
     "animations": {
         "default": {
-            "child_timelines": [],
             "crop_frames": false,
             "flipped_source": false,
             "inherit_source_movement": false,

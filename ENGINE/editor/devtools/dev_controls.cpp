@@ -637,6 +637,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         trail_suite_->set_screen_dimensions(screen_w_, screen_h_);
     }
     other_settings_.initialize();
+    other_settings_.set_assets_context(assets_);
     other_settings_.set_state_changed_callback([this]() { refresh_active_asset_filters(); });
 
     other_settings_.set_enabled(enabled_);

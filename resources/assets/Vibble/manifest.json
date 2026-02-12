@@ -5,38 +5,6 @@
     ],
     "animations": {
         "attack": {
-            "child_timelines": [
-                {
-                    "animation": "",
-                    "asset": "Vibble_eyes",
-                    "child": 0,
-                    "child_index": 0,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": false,
-                            "px": 0,
-                            "py": 0,
-                            "pz": 0
-                        }
-                    ]
-                },
-                {
-                    "animation": "",
-                    "asset": "Vibble_attack_1",
-                    "child": 1,
-                    "child_index": 1,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": false,
-                            "px": 0,
-                            "py": 0,
-                            "pz": 0
-                        }
-                    ]
-                }
-            ],
             "children": [
                 "Vibble_eyes",
                 "Vibble_attack_1"
@@ -131,38 +99,6 @@
                     "explosion": [],
                     "melee": [],
                     "projectile": []
-                }
-            ],
-            "child_timelines": [
-                {
-                    "animation": "",
-                    "asset": "Vibble_eyes",
-                    "child": 0,
-                    "child_index": 0,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": false,
-                            "px": 0,
-                            "py": 0,
-                            "pz": 0
-                        }
-                    ]
-                },
-                {
-                    "animation": "",
-                    "asset": "Vibble_attack_1",
-                    "child": 1,
-                    "child_index": 1,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": false,
-                            "px": 0,
-                            "py": 0,
-                            "pz": 0
-                        }
-                    ]
                 }
             ],
             "children": [
@@ -272,38 +208,6 @@
                     "vectors": []
                 }
             ],
-            "child_timelines": [
-                {
-                    "animation": "",
-                    "asset": "Vibble_eyes",
-                    "child": 0,
-                    "child_index": 0,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": true,
-                            "px": -8,
-                            "py": -144,
-                            "pz": -72
-                        }
-                    ]
-                },
-                {
-                    "animation": "",
-                    "asset": "Vibble_attack_1",
-                    "child": 1,
-                    "child_index": 1,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": false,
-                            "px": 0,
-                            "py": 0,
-                            "pz": 0
-                        }
-                    ]
-                }
-            ],
             "children": [
                 "Vibble_eyes",
                 "Vibble_attack_1"
@@ -404,38 +308,6 @@
                     "explosion": [],
                     "melee": [],
                     "projectile": []
-                }
-            ],
-            "child_timelines": [
-                {
-                    "animation": "",
-                    "asset": "Vibble_eyes",
-                    "child": 0,
-                    "child_index": 0,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": true,
-                            "px": 0,
-                            "py": 0,
-                            "pz": -88
-                        }
-                    ]
-                },
-                {
-                    "animation": "",
-                    "asset": "Vibble_attack_1",
-                    "child": 1,
-                    "child_index": 1,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": false,
-                            "px": 0,
-                            "py": 0,
-                            "pz": 0
-                        }
-                    ]
                 }
             ],
             "children": [
@@ -574,38 +446,6 @@
                     "vectors": []
                 }
             ],
-            "child_timelines": [
-                {
-                    "animation": "",
-                    "asset": "Vibble_eyes",
-                    "child": 0,
-                    "child_index": 0,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": true,
-                            "px": 0,
-                            "py": 144,
-                            "pz": -96
-                        }
-                    ]
-                },
-                {
-                    "animation": "",
-                    "asset": "Vibble_attack_1",
-                    "child": 1,
-                    "child_index": 1,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": false,
-                            "px": 0,
-                            "py": 0,
-                            "pz": 0
-                        }
-                    ]
-                }
-            ],
             "children": [
                 "Vibble_eyes",
                 "Vibble_attack_1"
@@ -696,38 +536,6 @@
             "speed_multiplier": 1.0
         },
         "right": {
-            "child_timelines": [
-                {
-                    "animation": "",
-                    "asset": "Vibble_eyes",
-                    "child": 0,
-                    "child_index": 0,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": false,
-                            "px": 0,
-                            "py": 0,
-                            "pz": 0
-                        }
-                    ]
-                },
-                {
-                    "animation": "",
-                    "asset": "Vibble_attack_1",
-                    "child": 1,
-                    "child_index": 1,
-                    "frames": [
-                        {
-                            "degree": 0.0,
-                            "visible": false,
-                            "px": 0,
-                            "py": 0,
-                            "pz": 0
-                        }
-                    ]
-                }
-            ],
             "children": [
                 "Vibble_eyes",
                 "Vibble_attack_1"
@@ -766,4 +574,3 @@
     "start": "default",
     "cache_atlas": true
 }
-

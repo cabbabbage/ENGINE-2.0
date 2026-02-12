@@ -44,31 +44,6 @@ static std::mutex& asset_rng_mutex()
         return mutex;
 }
 
-static std::vector<std::string> collect_animation_child_names(const AssetInfo& info) {
-        std::vector<std::string> names;
-        std::unordered_set<std::string> seen;
-        auto add = [&](const std::string& name) {
-                if (name.empty()) {
-                        return;
-                }
-                if (seen.insert(name).second) {
-                        names.push_back(name);
-                }
-};
-
-        for (const auto& name : info.animation_children) {
-                add(name);
-        }
-
-        for (const auto& entry : info.animations) {
-                for (const auto& child_name : entry.second.child_assets()) {
-                        add(child_name);
-                }
-        }
-
-        return names;
-}
-
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
 std::mutex Asset::s_flip_overrides_mutex_{};
 
@@ -198,10 +173,6 @@ Asset::Asset(const Asset& o)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
     , composite_scale_(o.composite_scale_)
-    , animation_children_(o.animation_children_)
-    , child_creation_requested_(o.child_creation_requested_)
-    , is_child_timeline_asset_(o.is_child_timeline_asset_)
-    , child_timeline_index_(o.child_timeline_index_)
 {
 
         clear_render_caches();
@@ -211,9 +182,6 @@ Asset::Asset(const Asset& o)
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
         finalized_                = o.finalized_;
-        for (auto& slot : animation_children_) {
-                slot.timeline = nullptr;
-        }
 }
 
 Asset& Asset::operator=(const Asset& o) {
@@ -273,13 +241,6 @@ Asset& Asset::operator=(const Asset& o) {
         composite_dirty_          = true;
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
-        animation_children_       = o.animation_children_;
-        child_creation_requested_ = o.child_creation_requested_;
-        is_child_timeline_asset_ = o.is_child_timeline_asset_;
-        child_timeline_index_ = o.child_timeline_index_;
-        for (auto& slot : animation_children_) {
-                slot.timeline = nullptr;
-        }
         return *this;
 }
 
@@ -537,39 +498,6 @@ void Asset::update() {
 }
 
 std::string Asset::get_current_animation() const { return current_animation; }
-
-const std::vector<Asset::AnimationChildAttachment>& Asset::animation_children() const {
-    return animation_children_;
-}
-
-std::vector<Asset::AnimationChildAttachment>& Asset::animation_children() {
-    return animation_children_;
-}
-
-void Asset::request_child_timeline_creation_if_needed() {
-    if (!assets_ || parent || dead || !active) {
-        return;
-    }
-    if (child_creation_requested_) {
-        return;
-    }
-    const bool has_child_slots = std::any_of(animation_children_.begin(),
-                                             animation_children_.end(),
-                                             [](const AnimationChildAttachment& slot) {
-                                                 return slot.child_index >= 0 && slot.timeline;
-                                             });
-    if (!has_child_slots) {
-        return;
-    }
-    child_creation_requested_ = true;
-    assets_->request_child_timeline_creation(this);
-}
-
-
-
-void Asset::stop_all_child_async() {
-}
-
 bool Asset::is_current_animation_locked_in_progress() const {
         if (!info || !current_frame) return false;
         if (info->type == asset_types::player) return false;
@@ -795,7 +723,6 @@ void Asset::deactivate() {
         hidden = true;
         clear_render_caches();
         visibility_stamp = 0;
-        child_creation_requested_ = false;
         if (assets_) {
                 assets_->mark_active_assets_dirty();
         }

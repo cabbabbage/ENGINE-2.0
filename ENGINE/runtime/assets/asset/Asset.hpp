@@ -90,13 +90,6 @@ class Asset {
 };
 
 
-    struct AnimationChildAttachment {
-        int child_index = -1;
-        std::string asset_name;
-        std::shared_ptr<AssetInfo> info;
-        const AnimationChildData* timeline = nullptr;
-};
-
     Area get_area(const std::string& name) const;
     Asset(std::shared_ptr<AssetInfo> info,
           const Area& spawn_area,
@@ -140,12 +133,7 @@ class Asset {
     bool is_current_animation_locked_in_progress() const;
     bool is_current_animation_last_frame() const;
     bool is_current_animation_looping() const;
-    const std::vector<AnimationChildAttachment>& animation_children() const;
-    std::vector<AnimationChildAttachment>& animation_children();
     const AnimationFrame* current_animation_frame() const { return current_frame; }
-    void request_child_timeline_creation_if_needed();
-    bool is_child_timeline_asset() const { return is_child_timeline_asset_; }
-    int child_timeline_index() const { return child_timeline_index_; }
 
     struct ScaleUsageStats {
         float requested_scale = 1.0f;
@@ -335,11 +323,6 @@ private:
     std::uint64_t grid_id_ = 0;
     bool has_cached_grid_residency_ = false;
     world::GridKey cached_grid_residency_{0, 0, 0, 0};
-    std::vector<AnimationChildAttachment> animation_children_;
-    bool child_creation_requested_ = false;
-    bool is_child_timeline_asset_ = false;
-    int child_timeline_index_ = -1;
-
     SDL_Texture* composite_texture_ = nullptr;
     bool         composite_dirty_   = true;
     SDL_Rect     composite_rect_    = {0, 0, 0, 0};
@@ -351,4 +334,3 @@ private:
 };
 
 #endif
-

@@ -258,94 +258,6 @@ void Animation::clear_texture_cache() {
     }
 }
 
-const AnimationChildData* Animation::find_child_timeline(std::string_view child_name) const {
-    if (child_name.empty()) {
-        return nullptr;
-    }
-    const auto it = std::find_if(child_data_.begin(), child_data_.end(), [&](const AnimationChildData& entry) {
-        return entry.asset_name == child_name;
-    });
-    return (it == child_data_.end()) ? nullptr : &(*it);
-}
-
-AnimationChildData* Animation::find_child_timeline(std::string_view child_name) {
-    if (child_name.empty()) {
-        return nullptr;
-    }
-    const auto it = std::find_if(child_data_.begin(), child_data_.end(), [&](const AnimationChildData& entry) {
-        return entry.asset_name == child_name;
-    });
-    return (it == child_data_.end()) ? nullptr : &(*it);
-}
-
-void Animation::rebuild_frames_from_child_timelines() {
-    // Populate AnimationFrame::children from Animation::child_data_ timelines.
-    // Derived-only cache: child_timelines is the single source of truth.
-
-    if (child_data_.empty() || frames.empty()) {
-        return;
-    }
-
-    // For each frame, clear existing children and rebuild from timelines
-    for (std::size_t frame_idx = 0; frame_idx < frames.size(); ++frame_idx) {
-        AnimationFrame* frame = frames[frame_idx];
-        if (!frame) {
-            continue;
-        }
-
-        frame->children.clear();
-
-        // For each child timeline, get the frame data for this frame index
-        for (std::size_t child_idx = 0; child_idx < child_data_.size(); ++child_idx) {
-            const AnimationChildData& timeline = child_data_[child_idx];
-            if (frame_idx >= timeline.frames.size()) {
-                continue;
-            }
-            const AnimationChildFrameData& sample = timeline.frames[frame_idx];
-            frame->children.push_back(sample);
-        }
-    }
-}
-
-void Animation::rebuild_child_start_events_from_timelines() {
-    for (AnimationFrame* frame : frames) {
-        if (frame) {
-            frame->child_start_events.clear();
-        }
-    }
-    if (child_data_.empty() || frames.empty()) {
-        return;
-    }
-
-    for (std::size_t child_idx = 0; child_idx < child_data_.size(); ++child_idx) {
-        const AnimationChildData& descriptor = child_data_[child_idx];
-        if (descriptor.frames.empty()) {
-            continue;
-        }
-
-        const auto first_visible = std::find_if(descriptor.frames.begin(), descriptor.frames.end(), [](const AnimationChildFrameData& entry) {
-            return entry.visible;
-        });
-        if (first_visible == descriptor.frames.end()) {
-            continue;
-        }
-
-        const std::size_t frame_index = static_cast<std::size_t>(std::distance(descriptor.frames.begin(), first_visible));
-        if (frame_index >= frames.size()) {
-            continue;
-        }
-        AnimationFrame* target_frame = frames[frame_index];
-        if (!target_frame) {
-            continue;
-        }
-        auto& starts = target_frame->child_start_events;
-        const int child_slot = static_cast<int>(child_idx);
-        if (std::find(starts.begin(), starts.end(), child_slot) == starts.end()) {
-            starts.push_back(child_slot);
-        }
-    }
-}
-
 void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches,
                                       std::vector<float> variant_steps) {
     clear_texture_cache();
@@ -398,8 +310,6 @@ void Animation::adopt_prebuilt_frames(std::vector<FrameCache> caches,
             frames.push_back(&frame);
     }
 
-    rebuild_frames_from_child_timelines();
-    rebuild_child_start_events_from_timelines();
 }
 
 bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool flip_vertical, bool reverse_frames, SDL_Renderer* renderer, AssetInfo& info) {
@@ -473,8 +383,7 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     variant_steps_ = source.variant_steps_;
     locked = source.locked;
     inherit_source_movement = source.inherit_source_movement;
-    child_asset_names_ = source.child_asset_names_;
-    child_data_ = source.child_data_;
+    // Child asset timelines are not cloned; child support has been removed.
 
     const std::size_t frame_count = source.frame_cache_.size();
     const std::size_t variant_count = variant_steps_.size();
@@ -537,8 +446,6 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
         std::reverse(frame_cache_.begin(), frame_cache_.end());
     }
 
-    rebuild_frames_from_child_timelines();
-    rebuild_child_start_events_from_timelines();
     return !frame_cache_.empty();
 }
 

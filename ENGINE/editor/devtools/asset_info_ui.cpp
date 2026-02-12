@@ -668,6 +668,10 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
         }
     }
 
+    if (children_panel_ && children_panel_->handle_asset_picker_event(e)) {
+        return true;
+    }
+
     const bool pointer_event =
         (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
     const bool wheel_event = (e.type == SDL_EVENT_MOUSE_WHEEL);
@@ -1523,6 +1527,12 @@ bool AssetInfoUI::is_point_inside(int x, int y) const {
     if (animation_editor_window_ && animation_editor_window_->is_visible()) {
         if (animation_editor_rect_.w > 0 && animation_editor_rect_.h > 0 &&
             SDL_PointInRect(&p, &animation_editor_rect_)) {
+            return true;
+        }
+    }
+
+    if (children_panel_ && children_panel_->is_asset_picker_visible()) {
+        if (children_panel_->asset_picker_blocks_point(x, y)) {
             return true;
         }
     }

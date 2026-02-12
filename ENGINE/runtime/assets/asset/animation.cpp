@@ -298,18 +298,11 @@ void Animation::rebuild_frames_from_child_timelines() {
         // For each child timeline, get the frame data for this frame index
         for (std::size_t child_idx = 0; child_idx < child_data_.size(); ++child_idx) {
             const AnimationChildData& timeline = child_data_[child_idx];
-
-            // Skip async children - they don't use per-frame data
-            if (timeline.mode == AnimationChildMode::Async) {
+            if (frame_idx >= timeline.frames.size()) {
                 continue;
             }
-
-            // For static children, get the frame sample at this index
-            if (timeline.is_static() && frame_idx < timeline.frames.size()) {
-                const AnimationChildFrameData& sample = timeline.frames[frame_idx];
-                // Add the sample to the frame's children vector
-                frame->children.push_back(sample);
-            }
+            const AnimationChildFrameData& sample = timeline.frames[frame_idx];
+            frame->children.push_back(sample);
         }
     }
 }
@@ -326,7 +319,7 @@ void Animation::rebuild_child_start_events_from_timelines() {
 
     for (std::size_t child_idx = 0; child_idx < child_data_.size(); ++child_idx) {
         const AnimationChildData& descriptor = child_data_[child_idx];
-        if (!descriptor.is_static() || descriptor.frames.empty()) {
+        if (descriptor.frames.empty()) {
             continue;
         }
 

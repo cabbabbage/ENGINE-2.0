@@ -7,13 +7,11 @@
 #include <string>
 #include <vector>
 
-#include "assets/animation_child_data.hpp"
 #include "devtools/DockableCollapsible.hpp"
 
 class ButtonWidget;
 class DMButton;
 class DMTextBox;
-class DMCheckbox;
 class Assets;
 class AssetLibraryUI;
 class Input;
@@ -41,6 +39,9 @@ class ChildrenTimelinesPanel : public DockableCollapsible {
 
     bool handle_event(const SDL_Event& e) override;
     void render(SDL_Renderer* renderer) const override;
+    bool is_asset_picker_visible() const;
+    bool asset_picker_blocks_point(int x, int y) const;
+    bool handle_asset_picker_event(const SDL_Event& e);
 
     void set_work_area_bounds(const SDL_Rect& bounds);
 
@@ -56,10 +57,7 @@ class ChildrenTimelinesPanel : public DockableCollapsible {
     std::string document_asset_name() const;
     void add_child(const std::string& asset_name);
     void remove_child(const std::string& child_name);
-    void apply_child_mode(const std::string& child_name, AnimationChildMode mode);
     std::string current_signature() const;
-    AnimationChildMode child_mode(const std::string& animation_id, const std::string& child_name) const;
-    bool apply_mode_to_all_animations(const std::string& child_name, AnimationChildMode mode);
 
   private:
     std::shared_ptr<AnimationDocument> document_;
@@ -71,8 +69,6 @@ class ChildrenTimelinesPanel : public DockableCollapsible {
     struct ChildRow {
         std::string name;
         std::unique_ptr<Widget> label_widget;
-        std::unique_ptr<DMCheckbox> async_checkbox;
-        std::unique_ptr<Widget> async_widget;
         std::unique_ptr<DMButton> delete_button;
         std::unique_ptr<Widget> delete_widget;
 };

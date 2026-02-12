@@ -203,7 +203,6 @@
     "asset_directory": "resources/assets/barrel",
     "asset_name": "barrel",
     "asset_type": "object",
-    "async_children": [],
     "can_invert": true,
     "lighting_info": [],
     "neighbor_search_distance": 500,

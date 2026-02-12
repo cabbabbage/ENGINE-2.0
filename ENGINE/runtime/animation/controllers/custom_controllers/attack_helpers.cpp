@@ -52,26 +52,8 @@ void send_attack_if_hit(Asset* self, Asset* target) {
     // Create attacker snapshot
     CombatantSnapshot attacker_snapshot = snapshot_from_asset(*self);
 
-    // Create child snapshots
+    // Child snapshots are omitted in the simplified sync-child flow.
     std::vector<ChildAttachmentSnapshot> child_snapshots;
-    for (const auto& child : self->animation_children()) {
-        if (child.current_frame && child.visible) {
-            ChildAttachmentSnapshot child_snap;
-            child_snap.asset_id = child.asset_name;
-            child_snap.asset_name = child.asset_name;
-            child_snap.frame = child.current_frame;
-
-            // Create geometry context for child
-            GeometryContext child_context{};
-            child_context.anchor = {child.world_pos.x, child.world_pos.y};
-            child_context.scale = 1.0f; // Children use world scale
-            child_context.flipped = self->flipped;
-            child_context.plane = CombatPlane::XY;
-
-            child_snap.transform = child_context;
-            child_snapshots.push_back(child_snap);
-        }
-    }
 
     // Create target snapshot
     CombatantSnapshot target_snapshot = snapshot_from_asset(*target);

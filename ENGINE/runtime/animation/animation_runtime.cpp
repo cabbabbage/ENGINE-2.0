@@ -18,14 +18,13 @@
 #include "movement_plan_executor.hpp"
 #include "path_sanitizer.hpp"
 #include "get_best_path.hpp"
-#include "animation/child_attachment_math.hpp"
 #include "utils/area.hpp"
 #include "utils/grid.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include <iostream>
 #include "animation_update.hpp"
-#include "animation/child_attachment_controller.hpp"
 #include "utils/transform_smoothing.hpp"
+#include "utils/FramePointResolver.hpp"
 
 namespace {
 template <typename Fn>
@@ -111,25 +110,6 @@ float AnimationRuntime::parent_world_z() const {
     return 0.0f;
 }
 
-float AnimationRuntime::compute_attachment_scale() const {
-    float perspective_scale = 1.0f;
-    if (assets_owner_ && self_ && self_->info) {
-        const WarpedScreenGrid& cam = assets_owner_->getView();
-        if (const auto* gp = cam.grid_point_for_asset(self_)) {
-            perspective_scale = std::max(0.0001f, gp->perspective_scale);
-        }
-    }
-    float remainder = self_->current_remaining_scale_adjustment;
-    if (!std::isfinite(remainder) || remainder <= 0.0f) {
-        remainder = 1.0f;
-    }
-    float scale = remainder / std::max(0.0001f, perspective_scale);
-    if (!std::isfinite(scale) || scale <= 0.0f) {
-        scale = 1.0f;
-    }
-    return scale;
-}
-
 void AnimationRuntime::set_debug_enabled(bool enabled) {
     debug_enabled_ = enabled;
 }
@@ -137,11 +117,6 @@ void AnimationRuntime::set_debug_enabled(bool enabled) {
 void AnimationRuntime::update() {
     if (!self_ || !self_->info || !planner_iface_) {
         return;
-    }
-
-    const std::vector<std::string> async_requests = planner_iface_->consume_async_requests();
-    if (!async_requests.empty()) {
-        handle_async_requests(async_requests);
     }
 
     float dt = 1.0f / 60.0f;
@@ -412,11 +387,10 @@ void AnimationRuntime::update_child_attachments(Animation& anim, float dt) {
         return;
     }
     ensure_child_slots(anim);
+    self_->request_child_timeline_creation_if_needed();
     if (self_->animation_children_.empty()) {
         return;
     }
-    advance_child_frames(dt);
-    advance_child_timelines(dt);
     apply_child_frame_data(anim, self_->current_frame, dt);
 }
 
@@ -426,334 +400,112 @@ void AnimationRuntime::ensure_child_slots(Animation& anim) {
     }
     auto& slots = self_->animation_children_;
     const auto& timelines = anim.child_timelines();
-    std::vector<std::string> requested;
-    requested.reserve(timelines.empty() ? anim.child_assets().size() : timelines.size());
-    if (!timelines.empty()) {
+    const auto& child_assets = anim.child_assets();
+
+    std::vector<std::string> requested = child_assets;
+    if (requested.empty() && !timelines.empty()) {
+        requested.reserve(timelines.size());
         for (const auto& timeline : timelines) {
             requested.push_back(timeline.asset_name);
         }
-    } else {
-        requested = anim.child_assets();
+    }
+
+    std::unordered_map<std::string, const AnimationChildData*> timeline_by_asset;
+    timeline_by_asset.reserve(timelines.size());
+    for (const auto& timeline : timelines) {
+        if (!timeline.asset_name.empty() && !timeline_by_asset.count(timeline.asset_name)) {
+            timeline_by_asset.emplace(timeline.asset_name, &timeline);
+        }
     }
 
     AssetLibrary* library = assets_owner_ ? &assets_owner_->library() : nullptr;
 
-    if (requested.empty()) {
-        for (auto& slot : slots) {
-            slot.child_index = -1;
-            slot.visible = false;
-            slot.was_visible = false;
-            slot.last_parent_frame_index = -1;
-        }
-        return;
-    }
-
-    std::unordered_map<std::string, std::size_t> index_by_name;
-    index_by_name.reserve(slots.size() + requested.size());
-    for (std::size_t i = 0; i < slots.size(); ++i) {
-        if (slots[i].asset_name.empty()) {
-            continue;
-        }
-        if (index_by_name.find(slots[i].asset_name) == index_by_name.end()) {
-            index_by_name[slots[i].asset_name] = i;
-        }
-    }
-
-    for (const auto& name : requested) {
-        if (index_by_name.find(name) != index_by_name.end()) {
-            continue;
-        }
-        slots.emplace_back();
-        auto& slot = slots.back();
-        slot.child_index = -1;
-        slot.asset_name = name;
-        slot.visible = false;
-        slot.was_visible = false;
-        slot.last_parent_frame_index = -1;
-        index_by_name[name] = slots.size() - 1;
-    }
-
+    std::vector<Asset::AnimationChildAttachment> rebuilt;
+    rebuilt.resize(requested.size());
     for (std::size_t i = 0; i < requested.size(); ++i) {
-        const std::string& desired = requested[i];
-        std::size_t current_idx = index_by_name[desired];
-        if (current_idx != i) {
-            std::swap(slots[i], slots[current_idx]);
-            if (!slots[current_idx].asset_name.empty()) {
-                index_by_name[slots[current_idx].asset_name] = current_idx;
-            }
-            index_by_name[desired] = i;
-        }
-        auto& slot = slots[i];
-        const AnimationChildData* bound_timeline = (i < timelines.size()) ? &timelines[i] : nullptr;
-        const bool binding_changed = slot.child_index != static_cast<int>(i) || slot.asset_name != desired || slot.timeline != bound_timeline;
+        auto& slot = rebuilt[i];
         slot.child_index = static_cast<int>(i);
-        slot.asset_name = desired;
-        slot.timeline = bound_timeline;
-        slot.timeline_mode = slot.timeline ? slot.timeline->mode : AnimationChildMode::Static;
-        if (binding_changed) {
-            slot.frame_progress = 0.0f;
-            slot.cached_w = 0;
-            slot.cached_h = 0;
-            slot.was_visible = false;
-            slot.visible = false;
-            slot.last_parent_frame_index = -1;
-            slot.timeline_active = false;
-            slot.timeline_frame_cursor = 0;
-            slot.timeline_frame_progress = 0.0f;
-        }
+        slot.asset_name = requested[i];
+        auto it = timeline_by_asset.find(slot.asset_name);
+        slot.timeline = (it != timeline_by_asset.end()) ? it->second : nullptr;
         if (!slot.info && library && !slot.asset_name.empty()) {
             slot.info = library->get(slot.asset_name);
-            if (!slot.info) {
-                vibble::log::warn("[AnimationRuntime] Child asset '" + slot.asset_name + "' not found in library");
-            }
-        }
-        if (!slot.animation && slot.info) {
-            if (!slot.info->animations.empty()) {
-                auto child_anim_it =
-                    slot.info->animations.find(animation_update::detail::kDefaultAnimation);
-                if (child_anim_it == slot.info->animations.end()) {
-                    child_anim_it = slot.info->animations.begin();
-                }
-                if (child_anim_it != slot.info->animations.end()) {
-                    slot.animation = &child_anim_it->second;
-                    slot.current_frame = nullptr;
-                    slot.frame_progress = 0.0f;
-                    slot.cached_w = 0;
-                    slot.cached_h = 0;
-                    slot.was_visible = false;
-                    slot.last_parent_frame_index = -1;
-                }
-            } else {
-                vibble::log::warn("[AnimationRuntime] Child asset '" + slot.asset_name + "' has no animations");
-            }
-        }
-        if (slot.animation && !slot.current_frame) {
-            animation_update::child_attachments::restart(slot);
-        }
-        if (slot.current_frame) {
-            animation_update::child_attachments::update_dimensions(slot);
         }
     }
 
-    for (std::size_t i = requested.size(); i < slots.size(); ++i) {
-        auto& slot = slots[i];
-        slot.child_index = -1;
-        slot.visible = false;
-        slot.was_visible = false;
-        slot.last_parent_frame_index = -1;
-        slot.timeline = nullptr;
-        slot.timeline_active = false;
-        slot.timeline_frame_cursor = 0;
-        slot.timeline_frame_progress = 0.0f;
-    }
+    slots = std::move(rebuilt);
 }
 
-void AnimationRuntime::advance_child_frames(float dt) {
-    if (!self_ || self_->animation_children_.empty()) {
+void AnimationRuntime::apply_child_frame_data(Animation& /*anim*/, const AnimationFrame* frame, float /*dt*/) {
+    if (!self_ || !assets_owner_ || self_->animation_children_.empty()) {
         return;
     }
-    std::vector<const AnimationFrame*> previous_frames;
-    previous_frames.reserve(self_->animation_children_.size());
-    for (const auto& slot : self_->animation_children_) {
-        previous_frames.push_back(slot.current_frame);
-    }
 
-    animation_update::child_attachments::ParentState parent_state;
-    SDL_Point render_pos{ static_cast<int>(std::lround(self_->smoothed_translation_x())),
-                          static_cast<int>(std::lround(self_->smoothed_translation_y())) };
-    parent_state.position = render_pos;
-    parent_state.base_position = animation_update::detail::bottom_middle_for(*self_, render_pos);
-    parent_state.scale = compute_attachment_scale();
-    parent_state.flipped = self_->flipped;
-    parent_state.world_z = parent_world_z();
-    parent_state.height = static_cast<float>(self_->cached_h);
-    parent_state.animation_id = self_->current_animation;
-    animation_update::child_attachments::advance_frames(self_->animation_children_, parent_state, dt);
-
-    bool any_changed = false;
-    for (std::size_t i = 0; i < self_->animation_children_.size(); ++i) {
-        if (self_->animation_children_[i].current_frame != previous_frames[i]) {
-            any_changed = true;
-            break;
-        }
-    }
-    if (any_changed) {
-        self_->mark_composite_dirty();
-    }
-}
-
-void AnimationRuntime::advance_child_timelines(float dt) {
-    if (!self_) {
-        return;
-    }
-    const float interval = 1.0f / static_cast<float>(kBaseAnimationFps);
-    const float step = (dt > 0.0f) ? dt : (1.0f / 60.0f);
-    for (auto& slot : self_->animation_children_) {
-        if (!slot.timeline || slot.timeline_mode != AnimationChildMode::Async || !slot.timeline_active) {
-            continue;
-        }
-        if (slot.timeline->frames.empty()) {
-            slot.timeline_active = false;
-            slot.timeline_frame_cursor = 0;
-            slot.timeline_frame_progress = 0.0f;
-            slot.was_visible = false;
-            continue;
-        }
-        slot.timeline_frame_progress += step;
-        while (slot.timeline_frame_progress >= interval) {
-            slot.timeline_frame_progress -= interval;
-            if (slot.timeline_frame_cursor + 1 < static_cast<int>(slot.timeline->frames.size())) {
-                ++slot.timeline_frame_cursor;
-            } else {
-                slot.timeline_active = false;
-                break;
-            }
-        }
-        if (!slot.timeline_active) {
-            slot.timeline_frame_cursor = std::max(0, static_cast<int>(slot.timeline->frames.size()) - 1);
-            slot.timeline_frame_progress = 0.0f;
-            slot.was_visible = false;
-        }
-    }
-}
-
-void AnimationRuntime::apply_child_frame_data(Animation& anim, const AnimationFrame* frame, float dt) {
-    (void)anim;
-    (void)dt;
-    if (!self_ || self_->animation_children_.empty()) {
-        return;
-    }
-    std::vector<bool> prev_visible;
-    std::vector<float> prev_rotation;
-    std::vector<SDL_Point> prev_world;
-    prev_visible.reserve(self_->animation_children_.size());
-    prev_rotation.reserve(self_->animation_children_.size());
-    prev_world.reserve(self_->animation_children_.size());
-    for (const auto& slot : self_->animation_children_) {
-        prev_visible.push_back(slot.visible);
-        prev_rotation.push_back(slot.rotation_degrees);
-        prev_world.push_back(slot.world_pos);
-    }
-
-    std::vector<bool> parent_looped_flags(self_->animation_children_.size(), false);
-
-    animation_update::child_attachments::ParentState parent_state;
-    SDL_Point render_pos{ static_cast<int>(std::lround(self_->smoothed_translation_x())),
-                          static_cast<int>(std::lround(self_->smoothed_translation_y())) };
-    parent_state.position = render_pos;
-    parent_state.base_position = animation_update::detail::bottom_middle_for(*self_, render_pos);
-    parent_state.scale = compute_attachment_scale();
-    parent_state.flipped = self_->flipped;
-    parent_state.world_z = parent_world_z();
-    parent_state.height = static_cast<float>(self_->cached_h);
-    parent_state.animation_id = self_->current_animation;
     const int parent_frame_index = frame ? frame->frame_index : -1;
-    const float parent_frame_interval = 1.0f / static_cast<float>(kBaseAnimationFps);
-    float parent_time = (parent_frame_index >= 0)
-                            ? static_cast<float>(parent_frame_index) * parent_frame_interval
-                            : 0.0f;
-    if (self_) {
-        parent_time += std::max(0.0f, self_->frame_progress);
-    }
-
-    for (std::size_t i = 0; i < self_->animation_children_.size(); ++i) {
-        auto& slot = self_->animation_children_[i];
-        const bool parent_looped = parent_frame_index != -1 &&
-                                   slot.last_parent_frame_index != -1 &&
-                                   parent_frame_index < slot.last_parent_frame_index;
-        if (parent_looped) {
-            slot.timeline_active = (slot.timeline_mode == AnimationChildMode::Async) ? slot.timeline_active : false;
-            slot.timeline_frame_cursor = 0;
-            slot.timeline_frame_progress = 0.0f;
-            slot.was_visible = false;
+    devmode::frame_editors::FramePointResolver resolver(self_);
+    const SDL_Point anchor = resolver.anchor_world();
+    const float parent_height = std::max(0.0f, resolver.parent_height_px());
+    const float base_world_z = resolver.base_world_z();
+    float attachment_scale = 1.0f;
+    if (assets_owner_) {
+        const WarpedScreenGrid& cam = assets_owner_->getView();
+        if (const auto* gp = cam.grid_point_for_asset(self_)) {
+            const float perspective = std::max(0.0001f, gp->perspective_scale);
+            float remainder = self_->current_remaining_scale_adjustment;
+            if (!(remainder > 0.0f)) {
+                remainder = 1.0f;
+            }
+            attachment_scale = remainder / perspective;
+            if (!(attachment_scale > 0.0f)) {
+                attachment_scale = 1.0f;
+            }
         }
-        parent_looped_flags[i] = parent_looped;
-        slot.last_parent_frame_index = parent_frame_index;
     }
 
-    child_frame_buffer_.clear();
-    child_frame_buffer_.reserve(self_->animation_children_.size());
-
-    for (std::size_t i = 0; i < self_->animation_children_.size(); ++i) {
-        auto& slot = self_->animation_children_[i];
+    for (const auto& slot : self_->animation_children_) {
         if (!slot.timeline || slot.child_index < 0) {
             continue;
         }
+        Asset* child_asset = assets_owner_->find_child_timeline_asset(self_, slot.child_index);
+        if (!child_asset) {
+            continue;
+        }
+
         const auto& frames = slot.timeline->frames;
         if (frames.empty()) {
+            child_asset->set_hidden(true);
             continue;
         }
 
-        AnimationChildFrameData sample{};
-        bool should_emit = false;
-        if (slot.timeline_mode == AnimationChildMode::Static) {
-            if (parent_frame_index < 0) {
-                slot.timeline_active = false;
-                continue;
-            }
-            const bool parent_looped = parent_looped_flags[i];
-            if (parent_frame_index == 0 && (!slot.timeline_active || parent_looped)) {
-                restart_child_timeline(slot);
-            } else if (!slot.timeline_active) {
-                slot.timeline_active = true;
-            }
-            const std::size_t sample_idx = std::min(frames.size() - 1, static_cast<std::size_t>(std::max(0, parent_frame_index)));
-            sample = frames[sample_idx];
-            should_emit = true;
-        } else {
-            const bool uses_start_time = slot.timeline && (slot.timeline->has_start_time || slot.timeline->start_frame > 0 || slot.timeline->auto_start);
-            if (uses_start_time) {
-                float start_time = slot.timeline ? slot.timeline->start_time : 0.0f;
-                if (start_time <= 0.0f && slot.timeline && slot.timeline->start_frame > 0) {
-                    start_time = static_cast<float>(slot.timeline->start_frame) / static_cast<float>(kBaseAnimationFps);
-                }
-                const float elapsed = parent_time - start_time;
-                if (elapsed >= 0.0f) {
-                    const float child_frame_f = elapsed * static_cast<float>(kBaseAnimationFps);
-                    const int child_frame_idx = static_cast<int>(std::floor(child_frame_f + 1e-4f));
-                    if (child_frame_idx < static_cast<int>(frames.size())) {
-                        slot.timeline_active = true;
-                        slot.timeline_frame_cursor = child_frame_idx;
-                        slot.timeline_frame_progress = child_frame_f - static_cast<float>(child_frame_idx);
-                    } else {
-                        slot.timeline_active = false;
-                        slot.timeline_frame_cursor = std::max(0, static_cast<int>(frames.size()) - 1);
-                        slot.timeline_frame_progress = 0.0f;
-                    }
-                } else {
-                    slot.timeline_active = false;
-                    slot.timeline_frame_cursor = 0;
-                    slot.timeline_frame_progress = 0.0f;
-                }
-            }
-            if (!slot.timeline_active) {
-                continue;
-            }
-            const std::size_t sample_idx = std::min(frames.size() - 1, static_cast<std::size_t>(std::max(0, slot.timeline_frame_cursor)));
-            sample = frames[sample_idx];
-            should_emit = true;
-        }
-
-        if (!should_emit) {
+        if (parent_frame_index < 0) {
+            child_asset->set_hidden(true);
             continue;
         }
-        sample.child_index = slot.child_index;
-        child_frame_buffer_.push_back(sample);
-    }
 
-    animation_update::child_attachments::apply_frame_data(self_->animation_children_, parent_state, frame, &child_frame_buffer_);
-
-    bool any_changed = false;
-    for (std::size_t i = 0; i < self_->animation_children_.size(); ++i) {
-        const auto& slot = self_->animation_children_[i];
-        const bool changed = (prev_visible[i] != slot.visible) || (std::abs(prev_rotation[i] - slot.rotation_degrees) > 0.001f) || (prev_world[i].x != slot.world_pos.x) || (prev_world[i].y != slot.world_pos.y);
-        if (changed) {
-            any_changed = true;
-            break;
+        std::size_t sample_idx = 0;
+        if (parent_frame_index >= 0) {
+            sample_idx = std::min(frames.size() - 1, static_cast<std::size_t>(parent_frame_index));
         }
-    }
-    if (any_changed) {
-        self_->mark_composite_dirty();
+        const AnimationChildFrameData& sample = frames[sample_idx];
+        if (!sample.visible) {
+            child_asset->set_hidden(true);
+            continue;
+        }
+
+        const float offset_scale = parent_height;
+        float offset_x = sample.offset.px * offset_scale * attachment_scale;
+        if (self_->flipped) {
+            offset_x = -offset_x;
+        }
+        const float offset_y = sample.offset.py * offset_scale * attachment_scale;
+        const float world_x = static_cast<float>(anchor.x) + offset_x;
+        const float world_y = static_cast<float>(anchor.y) + offset_y;
+        const float world_z = base_world_z + sample.offset.pz * offset_scale;
+
+        child_asset->set_hidden(false);
+        child_asset->move_to_world_position(static_cast<int>(std::lround(world_x)),
+                                            static_cast<int>(std::lround(world_y)),
+                                            static_cast<int>(std::lround(world_z)));
     }
 }
 
@@ -762,68 +514,27 @@ void AnimationRuntime::destroy_child_assets() {
         return;
     }
 
+    if (assets_owner_) {
+        for (const auto& slot : self_->animation_children_) {
+            if (slot.child_index < 0) {
+                continue;
+            }
+            if (Asset* child_asset = assets_owner_->find_child_timeline_asset(self_, slot.child_index)) {
+                child_asset->Delete();
+            }
+        }
+    }
+
     auto park_slot = [](Asset::AnimationChildAttachment& slot) {
         slot.child_index = -1;
-        slot.visible = false;
-        slot.was_visible = false;
-        slot.frame_progress = 0.0f;
-        slot.last_parent_frame_index = -1;
-        slot.timeline_active = false;
-        slot.timeline_frame_cursor = 0;
-        slot.timeline_frame_progress = 0.0f;
-        if (slot.animation) {
-            slot.current_frame = slot.animation->get_first_frame();
-        } else {
-            slot.current_frame = nullptr;
-        }
+        slot.timeline = nullptr;
 };
 
     for (auto& slot : self_->animation_children_) {
         park_slot(slot);
     }
-}
-
-bool AnimationRuntime::run_child_animation(const std::string& name) {
-    if (!self_ || name.empty()) {
-        return false;
-    }
-    Asset::AnimationChildAttachment* slot = find_child_slot(name);
-    if (!slot || !slot->timeline || slot->timeline_mode != AnimationChildMode::Async) {
-        return false;
-    }
-    restart_child_timeline(*slot);
-    self_->mark_composite_dirty();
-    return true;
-}
-
-void AnimationRuntime::handle_async_requests(const std::vector<std::string>& requests) {
-    if (!self_ || requests.empty()) {
-        return;
-    }
-    for (const auto& name : requests) {
-        run_child_animation(name);
-    }
-}
-
-Asset::AnimationChildAttachment* AnimationRuntime::find_child_slot(const std::string& name) {
-    if (!self_) {
-        return nullptr;
-    }
-    auto& slots = self_->animation_children_;
-    auto it = std::find_if(slots.begin(), slots.end(), [&](Asset::AnimationChildAttachment& slot) {
-        return slot.asset_name == name;
-    });
-    if (it == slots.end()) {
-        return nullptr;
-    }
-    return &(*it);
-}
-
-void AnimationRuntime::restart_child_timeline(Asset::AnimationChildAttachment& slot) {
-    slot.timeline_active = true;
-    slot.timeline_frame_cursor = 0;
-    slot.timeline_frame_progress = 0.0f;
-    slot.was_visible = false;
+    self_->animation_children_.clear();
+    self_->child_creation_requested_ = false;
 }
 
 world::GridPoint AnimationRuntime::bottom_middle(const world::GridPoint& pos) const {

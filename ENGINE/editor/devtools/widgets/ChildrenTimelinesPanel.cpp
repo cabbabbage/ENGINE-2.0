@@ -10,7 +10,6 @@
 #include <SDL3/SDL_log.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
-#include "assets/animation_child_data.hpp"
 #include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "core/AssetsManager.hpp"
 #include "assets/asset/asset_info.hpp"
@@ -148,7 +147,7 @@ bool ChildrenTimelinesPanel::handle_event(const SDL_Event& e) {
     }
 
     if (asset_picker_ui_ && asset_picker_ui_->is_visible()) {
-        if (asset_picker_ui_->handle_event(e)) {
+        if (handle_asset_picker_event(e)) {
             return true;
         }
         if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
@@ -156,24 +155,8 @@ bool ChildrenTimelinesPanel::handle_event(const SDL_Event& e) {
             return true;
         }
     }
-    std::vector<bool> previous_async;
-    previous_async.reserve(child_rows_.size());
-    for (const auto& row : child_rows_) {
-        previous_async.push_back(row.async_checkbox ? row.async_checkbox->value() : false);
-    }
 
-    bool consumed = DockableCollapsible::handle_event(e);
-
-    for (std::size_t i = 0; i < child_rows_.size(); ++i) {
-        const auto& row = child_rows_[i];
-        const bool next = row.async_checkbox ? row.async_checkbox->value() : false;
-        if (i < previous_async.size() && next != previous_async[i]) {
-            apply_child_mode(row.name, next ? AnimationChildMode::Async : AnimationChildMode::Static);
-            consumed = true;
-        }
-    }
-
-    return consumed;
+    return DockableCollapsible::handle_event(e);
 }
 
 void ChildrenTimelinesPanel::render(SDL_Renderer* renderer) const {
@@ -181,6 +164,38 @@ void ChildrenTimelinesPanel::render(SDL_Renderer* renderer) const {
     if (asset_picker_ui_ && asset_picker_ui_->is_visible()) {
         asset_picker_ui_->render(renderer, picker_screen_w_, picker_screen_h_);
     }
+}
+
+bool ChildrenTimelinesPanel::is_asset_picker_visible() const {
+    return asset_picker_ui_ && asset_picker_ui_->is_visible();
+}
+
+bool ChildrenTimelinesPanel::asset_picker_blocks_point(int x, int y) const {
+    if (!asset_picker_ui_ || !asset_picker_ui_->is_visible()) {
+        return false;
+    }
+    return asset_picker_ui_->is_input_blocking_at(x, y);
+}
+
+bool ChildrenTimelinesPanel::handle_asset_picker_event(const SDL_Event& e) {
+    if (!asset_picker_ui_ || !asset_picker_ui_->is_visible()) {
+        return false;
+    }
+    if (asset_picker_ui_->handle_event(e)) {
+        return true;
+    }
+    if (asset_picker_ui_->in_picker_mode()) {
+        switch (e.type) {
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EVENT_MOUSE_MOTION:
+            case SDL_EVENT_MOUSE_WHEEL:
+                return true;
+            default:
+                break;
+        }
+    }
+    return false;
 }
 
 void ChildrenTimelinesPanel::set_work_area_bounds(const SDL_Rect& bounds) {
@@ -199,7 +214,6 @@ void ChildrenTimelinesPanel::rebuild_rows() {
     for (auto& row : child_rows_) {
         Row child_row;
         if (row.label_widget) child_row.push_back(row.label_widget.get());
-        if (row.async_widget) child_row.push_back(row.async_widget.get());
         if (row.delete_widget) child_row.push_back(row.delete_widget.get());
         rows.push_back(std::move(child_row));
     }
@@ -320,8 +334,6 @@ void ChildrenTimelinesPanel::sync_from_document() {
         return;
     }
 
-    const auto animation_ids = document_->animation_ids();
-    const std::string animation_id = animation_ids.empty() ? std::string{} : animation_ids.front();
     const auto children = document_->animation_children();
     children_header_widget_ = std::make_unique<ChildLabelWidget>(
         std::string("Children (") + std::to_string(children.size()) + ")", true);
@@ -330,9 +342,6 @@ void ChildrenTimelinesPanel::sync_from_document() {
         ChildRow row;
         row.name = child;
         row.label_widget = std::make_unique<ChildLabelWidget>(child);
-        const AnimationChildMode mode = animation_id.empty() ? AnimationChildMode::Static : child_mode(animation_id, child);
-        row.async_checkbox = std::make_unique<DMCheckbox>("Async", mode == AnimationChildMode::Async);
-        row.async_widget = std::make_unique<CheckboxWidget>(row.async_checkbox.get());
         row.delete_button = std::make_unique<DMButton>("x", &delete_button_style(), 36, DMButton::height());
         row.delete_widget = std::make_unique<ButtonWidget>(row.delete_button.get(), [this, child]() { this->remove_child(child); });
         child_rows_.push_back(std::move(row));
@@ -342,22 +351,6 @@ void ChildrenTimelinesPanel::sync_from_document() {
 }
 
 void ChildrenTimelinesPanel::sync_child_rows() {
-    if (!document_) {
-        return;
-    }
-
-    const auto animation_ids = document_->animation_ids();
-    if (animation_ids.empty()) {
-        return;
-    }
-
-    const std::string animation_id = animation_ids.front();
-    for (auto& row : child_rows_) {
-        const AnimationChildMode mode = child_mode(animation_id, row.name);
-        if (row.async_checkbox) {
-            row.async_checkbox->set_value(mode == AnimationChildMode::Async);
-        }
-    }
 }
 
 void ChildrenTimelinesPanel::add_child(const std::string& asset_name) {
@@ -419,27 +412,6 @@ void ChildrenTimelinesPanel::remove_child(const std::string& child_name) {
     }
 }
 
-void ChildrenTimelinesPanel::apply_child_mode(const std::string& child_name, AnimationChildMode mode) {
-    if (!document_) {
-        return;
-    }
-
-    const bool changed = apply_mode_to_all_animations(child_name, mode);
-    if (!changed) {
-        return;
-    }
-
-    try {
-        document_->save_to_file();
-    } catch (...) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[ChildrenTimelinesPanel] Failed to save animation document after child mode change.");
-    }
-
-    refresh_runtime();
-    last_signature_.clear();
-    sync_from_document();
-}
-
 std::string ChildrenTimelinesPanel::current_signature() const {
     if (!document_) {
         return std::string{};
@@ -453,22 +425,6 @@ std::string ChildrenTimelinesPanel::current_signature() const {
         }
     }
     return signature;
-}
-
-AnimationChildMode ChildrenTimelinesPanel::child_mode(const std::string& animation_id, const std::string& child_name) const {
-    auto settings = document_ ? document_->child_timeline_settings(animation_id, child_name) : AnimationDocument::ChildTimelineSettings{};
-    if (!settings.found) {
-        return AnimationChildMode::Static;
-    }
-    return settings.mode;
-}
-
-bool ChildrenTimelinesPanel::apply_mode_to_all_animations(const std::string& child_name, AnimationChildMode mode) {
-    if (!document_) {
-        return false;
-    }
-    const bool auto_start = (mode == AnimationChildMode::Static);
-    return document_->set_child_mode_for_all_animations(child_name, mode, auto_start);
 }
 
 }

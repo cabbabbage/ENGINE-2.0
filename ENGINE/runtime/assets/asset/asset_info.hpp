@@ -24,15 +24,6 @@ struct ChildInfo {
     nlohmann::json spawn_group;
 };
 
-struct AsyncChildDefinition {
-    std::string name;
-    std::string asset;
-    std::string animation;
-    std::vector<AnimationChildFrameData> frames;
-
-    bool valid() const { return !name.empty() && !asset.empty() && !frames.empty(); }
-};
-
 struct MappingOption {
 	std::string animation;
 	float percent;
@@ -76,7 +67,6 @@ class AssetInfo {
 
     std::vector<std::string> animation_children;
 
-    std::vector<AsyncChildDefinition> async_children;
     bool moving_asset = false;
     std::vector<float>  scale_variants;
     struct NamedArea {
@@ -128,7 +118,6 @@ class AssetInfo {
     void set_animation_children(const std::vector<std::string>& children);
     void append_animation_child(const std::string& child);
     void remove_animation_child_at(std::size_t index);
-    void set_async_children(const std::vector<AsyncChildDefinition>& children);
     void set_passable(bool v);
     void set_tillable(bool v);
     Area* find_area(const std::string& name);

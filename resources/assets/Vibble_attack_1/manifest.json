@@ -172,7 +172,6 @@
     "asset_directory": "resources/assets/Vibble_attack_1",
     "asset_name": "Vibble_attack_1",
     "asset_type": "object",
-    "async_children": [],
     "lighting_info": [],
     "neighbor_search_distance": 500,
     "shading_opacity_multiplier": 1.0,

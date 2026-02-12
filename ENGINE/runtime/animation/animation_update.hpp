@@ -84,8 +84,6 @@ public:
 
     void set_animation(const std::string& animation_id);
 
-    void run_async(const std::string& child_name);
-
     const Plan* current_plan() const { return &plan_; }
 
     void cancel_all_movement();
@@ -101,7 +99,6 @@ private:
 };
     MoveRequest consume_move_request();
     bool consume_input_event();
-    std::vector<std::string> consume_async_requests();
 
 private:
     friend class AnimationRuntime;
@@ -130,7 +127,6 @@ private:
     bool        input_event_ = false;
     bool        move_pending_ = false;
     MoveRequest pending_move_{};
-    std::vector<std::string> pending_async_requests_{};
     bool        debug_enabled_ = false;
 
     vibble::grid::Grid& grid() const;

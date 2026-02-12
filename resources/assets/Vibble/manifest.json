@@ -14,13 +14,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "dz": 0,
-                            "visible": false
+                            "visible": false,
+                            "px": 0,
+                            "py": 0,
+                            "pz": 0
                         }
-                    ],
-                    "mode": "static"
+                    ]
                 },
                 {
                     "animation": "",
@@ -30,13 +29,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "dz": 0,
-                            "visible": false
+                            "visible": false,
+                            "px": 0,
+                            "py": 0,
+                            "pz": 0
                         }
-                    ],
-                    "mode": "async"
+                    ]
                 }
             ],
             "children": [
@@ -144,13 +142,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "dz": 0,
-                            "visible": false
+                            "visible": false,
+                            "px": 0,
+                            "py": 0,
+                            "pz": 0
                         }
-                    ],
-                    "mode": "static"
+                    ]
                 },
                 {
                     "animation": "",
@@ -160,13 +157,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "dz": 0,
-                            "visible": false
+                            "visible": false,
+                            "px": 0,
+                            "py": 0,
+                            "pz": 0
                         }
-                    ],
-                    "mode": "async"
+                    ]
                 }
             ],
             "children": [
@@ -285,13 +281,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": -8,
-                            "dy": -144,
-                            "dz": -72,
-                            "visible": true
+                            "visible": true,
+                            "px": -8,
+                            "py": -144,
+                            "pz": -72
                         }
-                    ],
-                    "mode": "static"
+                    ]
                 },
                 {
                     "animation": "",
@@ -301,13 +296,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "dz": 0,
-                            "visible": false
+                            "visible": false,
+                            "px": 0,
+                            "py": 0,
+                            "pz": 0
                         }
-                    ],
-                    "mode": "async"
+                    ]
                 }
             ],
             "children": [
@@ -421,13 +415,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "dz": -88,
-                            "visible": true
+                            "visible": true,
+                            "px": 0,
+                            "py": 0,
+                            "pz": -88
                         }
-                    ],
-                    "mode": "static"
+                    ]
                 },
                 {
                     "animation": "",
@@ -437,13 +430,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "dz": 0,
-                            "visible": false
+                            "visible": false,
+                            "px": 0,
+                            "py": 0,
+                            "pz": 0
                         }
-                    ],
-                    "mode": "async"
+                    ]
                 }
             ],
             "children": [
@@ -591,13 +583,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 144,
-                            "dz": -96,
-                            "visible": true
+                            "visible": true,
+                            "px": 0,
+                            "py": 144,
+                            "pz": -96
                         }
-                    ],
-                    "mode": "static"
+                    ]
                 },
                 {
                     "animation": "",
@@ -607,13 +598,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "dz": 0,
-                            "visible": false
+                            "visible": false,
+                            "px": 0,
+                            "py": 0,
+                            "pz": 0
                         }
-                    ],
-                    "mode": "async"
+                    ]
                 }
             ],
             "children": [
@@ -715,13 +705,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "dz": 0,
-                            "visible": false
+                            "visible": false,
+                            "px": 0,
+                            "py": 0,
+                            "pz": 0
                         }
-                    ],
-                    "mode": "static"
+                    ]
                 },
                 {
                     "animation": "",
@@ -731,13 +720,12 @@
                     "frames": [
                         {
                             "degree": 0.0,
-                            "dx": 0,
-                            "dy": 0,
-                            "dz": 0,
-                            "visible": false
+                            "visible": false,
+                            "px": 0,
+                            "py": 0,
+                            "pz": 0
                         }
-                    ],
-                    "mode": "async"
+                    ]
                 }
             ],
             "children": [
@@ -778,3 +766,4 @@
     "start": "default",
     "cache_atlas": true
 }
+

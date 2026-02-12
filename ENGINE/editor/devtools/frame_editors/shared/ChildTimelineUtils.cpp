@@ -76,38 +76,25 @@ std::string to_lower(const std::string& value) {
 }
 
 nlohmann::json default_child_frame_json() {
-    return nlohmann::json{{"dx", 0}, {"dy", 0}, {"dz", 0.0}, {"degree", 0.0}, {"visible", false}};
+    return nlohmann::json{{"px", 0.0}, {"py", 0.0}, {"pz", 0.0}, {"degree", 0.0}, {"visible", false}};
 }
 
 }  // namespace
 
-bool timeline_entry_is_static(const nlohmann::json& entry) {
-    if (!entry.is_object()) {
-        return true;
-    }
-    if (entry.contains("mode") && entry["mode"].is_string()) {
-        const std::string lowered = to_lower(entry["mode"].get<std::string>());
-        if (lowered == "async" || lowered == "asynchronous") {
-            return false;
-        }
-    }
-    return true;
-}
-
 ChildFrameSample child_frame_from_json(const nlohmann::json& sample, int child_index) {
     ChildFrameSample child;
     child.child_index = child_index;
-    child.dx = 0.0f;
-    child.dy = 0.0f;
-    child.dz = 0.0f;
+    child.px = 0.0f;
+    child.py = 0.0f;
+    child.pz = 0.0f;
     child.degree = 0.0f;
     child.visible = false;
     child.has_data = false;
 
     if (sample.is_object()) {
-        if (sample.contains("px")) child.dx = read_float(sample["px"], 0.0f);
-        if (sample.contains("py")) child.dy = read_float(sample["py"], 0.0f);
-        if (sample.contains("pz")) child.dz = read_float(sample["pz"], 0.0f);
+        if (sample.contains("px")) child.px = read_float(sample["px"], 0.0f);
+        if (sample.contains("py")) child.py = read_float(sample["py"], 0.0f);
+        if (sample.contains("pz")) child.pz = read_float(sample["pz"], 0.0f);
         if (sample.contains("degree")) {
             child.degree = read_float(sample["degree"], 0.0f);
         }
@@ -120,9 +107,9 @@ ChildFrameSample child_frame_from_json(const nlohmann::json& sample, int child_i
 nlohmann::json child_frame_to_json(const ChildFrameSample& frame) {
     const bool has_sample = frame.has_data;
     nlohmann::json sample = nlohmann::json::object();
-    sample["px"] = has_sample ? static_cast<double>(frame.dx) : 0.0;
-    sample["py"] = has_sample ? static_cast<double>(frame.dy) : 0.0;
-    sample["pz"] = has_sample ? static_cast<double>(frame.dz) : 0.0;
+    sample["px"] = has_sample ? static_cast<double>(frame.px) : 0.0;
+    sample["py"] = has_sample ? static_cast<double>(frame.py) : 0.0;
+    sample["pz"] = has_sample ? static_cast<double>(frame.pz) : 0.0;
     sample["degree"] = has_sample ? static_cast<double>(frame.degree) : 0.0;
     sample["visible"] = has_sample ? frame.visible : false;
     return sample;
@@ -131,13 +118,7 @@ nlohmann::json child_frame_to_json(const ChildFrameSample& frame) {
 nlohmann::json build_child_timelines_payload(
     const nlohmann::json& existing_payload,
     const std::vector<std::vector<ChildFrameSample>>& static_frames_by_child,
-    const std::vector<std::string>& child_assets,
-    const std::vector<AnimationChildMode>& child_modes,
-    const std::vector<std::vector<ChildFrameSample>>& async_timelines_by_child,
-    const std::vector<float>& async_start_times,
-    const std::vector<bool>& async_has_start) {
-
-    (void)async_has_start;  // Reserved for compatibility; async timelines now default to auto-start.
+    const std::vector<std::string>& child_assets) {
     nlohmann::json normalized = nlohmann::json::array();
     if (child_assets.empty()) {
         return normalized;
@@ -176,70 +157,21 @@ nlohmann::json build_child_timelines_payload(
         entry["asset"] = asset_name;
         auto animation_override = animation_overrides.find(asset_name);
         entry["animation"] = (animation_override != animation_overrides.end()) ? animation_override->second : std::string{};
-        const bool is_static = (child_idx < child_modes.size()) ? child_modes[child_idx] != AnimationChildMode::Async : true;
-        entry["mode"] = is_static ? "static" : "async";
-        if (is_static) {
-            nlohmann::json frames = nlohmann::json::array();
-            const auto& timeline = (child_idx < static_frames_by_child.size()) ? static_frames_by_child[child_idx] : std::vector<ChildFrameSample>{};
-            frames.get_ref<nlohmann::json::array_t&>().reserve(std::max<std::size_t>(timeline.size(), 1));
-            for (const auto& sample : timeline) {
-                ChildFrameSample entry_sample = sample;
-                entry_sample.child_index = static_cast<int>(child_idx);
-                frames.push_back(child_frame_to_json(entry_sample));
-            }
-            if (frames.empty()) {
-                ChildFrameSample fallback{};
-                fallback.child_index = static_cast<int>(child_idx);
-                fallback.visible = false;
-                frames.push_back(child_frame_to_json(fallback));
-            }
-            entry["frames"] = std::move(frames);
-        } else {
-            float start_time = 0.0f;
-            if (child_idx < async_start_times.size()) {
-                start_time = async_start_times[child_idx];
-            }
-            if (start_time < 0.0f) {
-                start_time = 0.0f;
-            }
-            if (child_idx < async_timelines_by_child.size()) {
-                nlohmann::json frames = nlohmann::json::array();
-                for (const auto& sample : async_timelines_by_child[child_idx]) {
-                    ChildFrameSample entry_sample = sample;
-                    entry_sample.child_index = static_cast<int>(child_idx);
-                    frames.push_back(child_frame_to_json(entry_sample));
-                }
-                if (frames.empty()) {
-                    ChildFrameSample fallback{};
-                    fallback.child_index = static_cast<int>(child_idx);
-                    fallback.visible = false;
-                    frames.push_back(child_frame_to_json(fallback));
-                }
-                entry["frames"] = std::move(frames);
-            } else {
-                ChildFrameSample fallback{};
-                fallback.child_index = static_cast<int>(child_idx);
-                fallback.visible = false;
-                entry["frames"] = nlohmann::json::array();
-                entry["frames"].push_back(child_frame_to_json(fallback));
-            }
-
-            // Async timelines should always emit start metadata; default to immediate start when none is provided.
-            int start_frame = 0;
-            if (start_time > 0.0f) {
-                start_frame = static_cast<int>(std::lround(start_time * static_cast<float>(kBaseAnimationFps)));
-            }
-            if (start_frame < 0) {
-                start_frame = 0;
-            }
-            if (start_time <= 0.0f && start_frame > 0) {
-                start_time = static_cast<float>(start_frame) / static_cast<float>(kBaseAnimationFps);
-            }
-            entry["start_frame"] = start_frame;
-            entry["start_time"] = start_time;
-            entry["auto_start"] = true;
-            entry["autostart"] = true;
+        nlohmann::json frames = nlohmann::json::array();
+        const auto& timeline = (child_idx < static_frames_by_child.size()) ? static_frames_by_child[child_idx] : std::vector<ChildFrameSample>{};
+        frames.get_ref<nlohmann::json::array_t&>().reserve(std::max<std::size_t>(timeline.size(), 1));
+        for (const auto& sample : timeline) {
+            ChildFrameSample entry_sample = sample;
+            entry_sample.child_index = static_cast<int>(child_idx);
+            frames.push_back(child_frame_to_json(entry_sample));
         }
+        if (frames.empty()) {
+            ChildFrameSample fallback{};
+            fallback.child_index = static_cast<int>(child_idx);
+            fallback.visible = false;
+            frames.push_back(child_frame_to_json(fallback));
+        }
+        entry["frames"] = std::move(frames);
         normalized.push_back(std::move(entry));
     }
     return normalized;

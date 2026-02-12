@@ -255,35 +255,6 @@ This document provides a comprehensive reference for all keyboard shortcuts, key
 - **Updates:** `selected_child_index_` and selection state
 - **Context:** Synchronized children frame editor
 
-#### Tab (Cycle Child in Async Editor)
-- **File:** [AsyncChildrenFrameEditor.cpp:216-222](ENGINE/editor/devtools/frame_editors/AsyncChildrenFrameEditor.cpp)
-- **Action:** Cycle to next child asset
-- **Context:** Async children frame editor active
-
-#### Comma (,) (Previous Child Frame)
-- **File:** [AsyncChildrenFrameEditor.cpp:223-228](ENGINE/editor/devtools/frame_editors/AsyncChildrenFrameEditor.cpp)
-- **Action:** Move to previous child frame
-- **Effect:** Decrements `selected_child_frame_index_`
-- **Context:** Async children editor
-
-#### Period (.) (Next Child Frame)
-- **File:** [AsyncChildrenFrameEditor.cpp:229-235](ENGINE/editor/devtools/frame_editors/AsyncChildrenFrameEditor.cpp)
-- **Action:** Move to next child frame
-- **Effect:** Increments `selected_child_frame_index_`
-- **Context:** Async children editor
-
-#### Left Bracket ([) (Decrease Start Frame)
-- **File:** [AsyncChildrenFrameEditor.cpp:236-238](ENGINE/editor/devtools/frame_editors/AsyncChildrenFrameEditor.cpp)
-- **Action:** Decrease child start frame by 1
-- **Function:** `adjust_start_frame(selected_child_index_, -1)`
-- **Context:** Async children editor
-
-#### Right Bracket (]) (Increase Start Frame)
-- **File:** [AsyncChildrenFrameEditor.cpp:239-241](ENGINE/editor/devtools/frame_editors/AsyncChildrenFrameEditor.cpp)
-- **Action:** Increase child start frame by 1
-- **Function:** `adjust_start_frame(selected_child_index_, 1)`
-- **Context:** Async children editor
-
 #### Up Arrow (Increase Point Position)
 - **File:** [Point3DEditor.cpp:207-232](ENGINE/editor/devtools/frame_editors/shared/Point3DEditor.cpp)
 - **Action:** Increase selected 3D point position along current axis
@@ -624,8 +595,7 @@ ENGINE/editor/devtools/
 │   │   └── Point3DEditor.cpp              # 3D point editing
 │   ├── AttackGeoFrameEditor.cpp           # Attack geometry
 │   ├── MovementFrameEditor.cpp            # Movement editing
-│   ├── SyncChildrenFrameEditor.cpp        # Synchronized children
-│   └── AsyncChildrenFrameEditor.cpp       # Async children
+│   └── SyncChildrenFrameEditor.cpp        # Synchronized children
 └── [other dialog files]          # Various modal dialogs
 ```
 

@@ -1016,7 +1016,7 @@ void AssetLibraryUI::close() {
 }
 
 bool AssetLibraryUI::is_input_blocking() const {
-    return (floating_ && floating_->is_expanded()) || showing_delete_popup_;
+    return ((floating_ && floating_->is_visible() && floating_->is_expanded()) || showing_delete_popup_);
 }
 
 bool AssetLibraryUI::is_locked() const {
@@ -2198,6 +2198,14 @@ void AssetLibraryUI::update(const Input& input,
 
 void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
     if (!floating_) return;
+
+    const bool modal_overlay = picker_mode_.enabled && floating_->is_visible() && !showing_delete_popup_;
+    if (modal_overlay && r && screen_w > 0 && screen_h > 0) {
+        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
+        SDL_SetRenderDrawColor(r, 0, 0, 0, 120);
+        SDL_Rect dim{ 0, 0, screen_w, screen_h };
+        sdl_render::FillRect(r, &dim);
+    }
     floating_->render(r);
 
     if (showing_delete_popup_) {
@@ -2317,6 +2325,8 @@ void AssetLibraryUI::render(SDL_Renderer* r, int screen_w, int screen_h) const {
 bool AssetLibraryUI::handle_event(const SDL_Event& e) {
     if (!floating_) return false;
 
+    const bool modal_picker = picker_mode_.enabled && floating_->is_visible();
+
     if (showing_delete_popup_) {
         if (handle_delete_modal_event(e)) {
             return true;
@@ -2349,6 +2359,24 @@ bool AssetLibraryUI::handle_event(const SDL_Event& e) {
         }
     }
 
+    if (!handled && modal_picker) {
+        switch (e.type) {
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+            case SDL_EVENT_MOUSE_BUTTON_UP:
+            case SDL_EVENT_MOUSE_MOTION:
+            case SDL_EVENT_MOUSE_WHEEL:
+                return true;
+            case SDL_EVENT_KEY_DOWN:
+                if (e.key.key == SDLK_ESCAPE) {
+                    close();
+                    return true;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
     return handled;
 }
 
@@ -2361,6 +2389,9 @@ std::shared_ptr<AssetInfo> AssetLibraryUI::consume_selection() {
 bool AssetLibraryUI::is_input_blocking_at(int mx, int my) const {
     if (!floating_ || !floating_->is_visible() || !floating_->is_expanded())
         return false;
+    if (picker_mode_.enabled) {
+        return true;
+    }
     SDL_Point p{ mx, my };
     if (showing_delete_popup_) {
         if (delete_modal_rect_.w > 0 && delete_modal_rect_.h > 0) {

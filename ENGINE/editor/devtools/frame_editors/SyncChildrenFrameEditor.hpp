@@ -8,7 +8,6 @@
 #include <SDL3/SDL.h>
 
 #include "FrameEditorBase.hpp"
-#include "animation/child_attachment_controller.hpp"
 #include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "animation/animation_update.hpp"
 #include "assets/animation_child_data.hpp"
@@ -62,6 +61,13 @@ private:
     void refresh_selection_state();
     void sync_visibility_checkbox();
     void reset_current_frame();
+    void apply_current_sample_to_next_frame();
+    void apply_current_sample_to_all_frames();
+    void copy_current_sample_to_frame(int frame_index);
+    child_timelines::ChildFrameSample* selected_sample();
+    const child_timelines::ChildFrameSample* selected_sample() const;
+    bool has_static_child_selection() const;
+    void cache_parent_pose();
 
     FrameEditorContext context_{};
     SelectionState* selection_state_ = nullptr;
@@ -69,9 +75,7 @@ private:
     ManifestTransaction manifest_txn_;
 
     std::vector<std::string> child_assets_;
-    std::vector<AnimationChildMode> child_modes_;
     std::vector<std::vector<child_timelines::ChildFrameSample>> static_frames_by_child_;
-    std::vector<std::vector<child_timelines::ChildFrameSample>> async_timelines_by_child_;
     int frame_count_ = 0;
     int selected_frame_index_ = 0;
     int selected_child_index_ = 0;
@@ -82,6 +86,8 @@ private:
     std::unique_ptr<FrameNavigator> frame_navigator_;
     std::unique_ptr<DMDropdown> dd_child_selector_;
     std::unique_ptr<CallbackCheckboxWidget> cb_child_visible_;
+    std::unique_ptr<DMButton> btn_apply_next_;
+    std::unique_ptr<DMButton> btn_apply_all_;
     mutable SDL_Rect back_rect_{0, 0, 0, 0};
     mutable SDL_Rect ui_rect_{0, 0, 0, 0};
 
@@ -90,7 +96,11 @@ private:
     float cached_perspective_scale_ = 1.0f;
     // Cache the full attachment scale at session start so edits stay stable if the camera moves
     float cached_attachment_scale_ = 1.0f;
+    SDL_Point cached_anchor_world_{0, 0};
+    SDL_Point cached_world_point_{0, 0};
+    float cached_base_world_z_ = 0.0f;
+    float cached_parent_height_ = 0.0f;
+    bool cached_parent_pose_valid_ = false;
 };
 
 }  // namespace devmode::frame_editors
-

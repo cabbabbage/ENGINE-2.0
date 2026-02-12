@@ -14,8 +14,6 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/render.hpp"
 #include "animation/animation_runtime.hpp"
-#include "animation/child_attachment_controller.hpp"
-#include "animation/child_3d_world_position.hpp"
 #include "animation/animation_update.hpp"
 #include "utils/area_helpers.hpp"
 #include "assets/asset_types.hpp"
@@ -215,9 +213,6 @@ Asset::Asset(const Asset& o)
         finalized_                = o.finalized_;
         for (auto& slot : animation_children_) {
                 slot.timeline = nullptr;
-                slot.timeline_active = false;
-                slot.timeline_frame_cursor = 0;
-                slot.timeline_frame_progress = 0.0f;
         }
 }
 
@@ -284,9 +279,6 @@ Asset& Asset::operator=(const Asset& o) {
         child_timeline_index_ = o.child_timeline_index_;
         for (auto& slot : animation_children_) {
                 slot.timeline = nullptr;
-                slot.timeline_active = false;
-                slot.timeline_frame_cursor = 0;
-                slot.timeline_frame_progress = 0.0f;
         }
         return *this;
 }
@@ -469,45 +461,6 @@ void Asset::update() {
     if (!info) return;
 
 
-
-    if (parent && !parent->dead && !parent->hidden) {
-        const bool parent_hidden = parent->is_hidden();
-        bool resolved_from_parent = false;
-        bool visible_from_parent = false;
-
-        if (child_timeline_index_ >= 0) {
-            const auto& parent_slots = parent->animation_children_;
-            const Asset::AnimationChildAttachment* slot = nullptr;
-            if (child_timeline_index_ < static_cast<int>(parent_slots.size()) &&
-                parent_slots[child_timeline_index_].child_index == child_timeline_index_) {
-                slot = &parent_slots[child_timeline_index_];
-            } else {
-                auto it = std::find_if(parent_slots.begin(), parent_slots.end(),
-                                       [&](const AnimationChildAttachment& entry) {
-                                           return entry.child_index == child_timeline_index_;
-                                       });
-                if (it != parent_slots.end()) {
-                    slot = &(*it);
-                }
-            }
-
-            if (slot) {
-                // Use FramePointResolver to position child in 3D world space
-                // Child's position is derived from parent's position plus frame-specific offsets
-                // Note: Full implementation requires frame data structure with x/y/z offset information
-                // For now, child assets inherit parent's world position
-                // TODO: When frame data is available, use FramePointResolver to calculate proper 3D offset
-                if (slot->info && slot->asset_name.empty() == false) {
-                    // Child asset positioning will be handled by animation runtime
-                    // using parent position and frame timeline data
-                }
-            }
-        }
-    }
-
-
-
-
     const int previous_x = pos_ ? pos_->world_x() : 0;
     const int previous_y = pos_ ? pos_->world_y() : 0;
     const int previous_z = pos_ ? pos_->world_z() : 0;
@@ -615,18 +568,6 @@ void Asset::request_child_timeline_creation_if_needed() {
 
 
 void Asset::stop_all_child_async() {
-        bool any = false;
-        for (auto& slot : animation_children_) {
-                if (slot.timeline_mode == AnimationChildMode::Async && slot.timeline_active) {
-                        slot.timeline_active = false;
-                        any = true;
-                }
-                slot.visible = false;
-                slot.was_visible = false;
-        }
-        if (any) {
-                mark_composite_dirty();
-        }
 }
 
 bool Asset::is_current_animation_locked_in_progress() const {

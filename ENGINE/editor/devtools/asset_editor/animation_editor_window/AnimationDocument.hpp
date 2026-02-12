@@ -19,8 +19,6 @@ class AnimationDocument {
     AnimationDocument();
 
     struct ChildTimelineSettings {
-        AnimationChildMode mode = AnimationChildMode::Static;
-        bool auto_start = false;
         std::string animation_override;
         bool found = false;
 };
@@ -51,8 +49,7 @@ class AnimationDocument {
     void replace_animation_children(const std::vector<std::string>& children);
     std::string animation_children_signature() const;
     ChildTimelineSettings child_timeline_settings(const std::string& animation_id, const std::string& child_name) const;
-    bool set_child_timeline_settings(const std::string& animation_id, const std::string& child_name, AnimationChildMode mode, bool auto_start, const std::string& animation_override);
-    bool set_child_mode_for_all_animations(const std::string& child_name, AnimationChildMode mode, bool auto_start);
+    bool set_child_timeline_settings(const std::string& animation_id, const std::string& child_name, const std::string& animation_override);
     bool reset_child_timeline(const std::string& animation_id, const std::string& child_name);
 
     const std::filesystem::path& info_path() const { return info_path_; }

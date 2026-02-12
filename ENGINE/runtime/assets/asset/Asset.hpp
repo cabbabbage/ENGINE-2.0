@@ -94,24 +94,7 @@ class Asset {
         int child_index = -1;
         std::string asset_name;
         std::shared_ptr<AssetInfo> info;
-        const Animation* animation = nullptr;
-        const AnimationFrame* current_frame = nullptr;
-        float frame_progress = 0.0f;
-
-
-        float rotation_degrees = 0.0f;
-        bool visible = false;
-        int cached_w = 0;
-        int cached_h = 0;
-        bool was_visible = false;
-        int last_parent_frame_index = -1;
         const AnimationChildData* timeline = nullptr;
-        AnimationChildMode timeline_mode = AnimationChildMode::Static;
-        bool timeline_active = false;
-        int timeline_frame_cursor = 0;
-        float timeline_frame_progress = 0.0f;
-        SDL_Point world_pos = {0, 0};
-        float world_z = 0.0f;
 };
 
     Area get_area(const std::string& name) const;
@@ -159,9 +142,6 @@ class Asset {
     bool is_current_animation_looping() const;
     const std::vector<AnimationChildAttachment>& animation_children() const;
     std::vector<AnimationChildAttachment>& animation_children();
-    bool start_child_async(const std::string& name);
-    bool stop_child_async(const std::string& name);
-    void stop_all_child_async();
     const AnimationFrame* current_animation_frame() const { return current_frame; }
     void request_child_timeline_creation_if_needed();
     bool is_child_timeline_asset() const { return is_child_timeline_asset_; }

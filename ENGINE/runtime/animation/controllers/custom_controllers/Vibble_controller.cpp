@@ -72,7 +72,6 @@ void VibbleController::movement(const Input& input) {
 
     }
     if(melee && canMelee == true) {
-        player_->anim_->run_async("Vibble_attack_1");
         canMelee = false;
         isMeleeing = true;
         meleeCooldownEndTime = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(meleeCooldown));
@@ -238,24 +237,6 @@ void VibbleController::process_pending_attacks(Asset& self) {
 
     // Create child snapshots
     std::vector<ChildAttachmentSnapshot> child_snapshots;
-    for (const auto& child : self.animation_children()) {
-        if (child.current_frame && child.visible) {
-            ChildAttachmentSnapshot child_snap;
-            child_snap.asset_id = child.asset_name;
-            child_snap.asset_name = child.asset_name;
-            child_snap.frame = child.current_frame;
-
-            // Create geometry context for child
-            GeometryContext child_context{};
-            child_context.anchor = {child.world_pos.x, child.world_pos.y};
-            child_context.scale = 1.0f; // Children use world scale
-            child_context.flipped = self.flipped;
-            child_context.plane = CombatPlane::XY;
-
-            child_snap.transform = child_context;
-            child_snapshots.push_back(child_snap);
-        }
-    }
 
     // Get active assets as potential targets
     const auto& active_assets = assets->getActive();

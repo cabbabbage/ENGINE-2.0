@@ -259,16 +259,11 @@ add_executable(engine_tests
     ${TESTS_SOURCE_DIR}/test_dev_json_store.cpp
     ${TESTS_SOURCE_DIR}/test_manifest_loader.cpp
     ${TESTS_SOURCE_DIR}/test_scene_renderer_prereqs.cpp
-    ${TESTS_SOURCE_DIR}/test_animation_child_visibility.cpp
-    ${TESTS_SOURCE_DIR}/test_animation_child_runtime.cpp
-    ${TESTS_SOURCE_DIR}/test_animation_child_clone.cpp
-    ${TESTS_SOURCE_DIR}/test_frame_editor_async_payload.cpp
     ${TESTS_SOURCE_DIR}/test_attack_validation.cpp
     ${TESTS_SOURCE_DIR}/frame_editor_session_test_helpers.cpp
     ENGINE/runtime/assets/asset/animation.cpp
     ENGINE/runtime/assets/asset/surface_utils.cpp
     ENGINE/runtime/assets/asset/animation_cloner.cpp
-    ENGINE/runtime/animation/child_attachment_controller.cpp
     ENGINE/runtime/animation/attack_validation.cpp
     ENGINE/editor/devtools/asset_editor/animation_editor_window/AnimationDocument.cpp
     ENGINE/editor/devtools/dm_styles.cpp

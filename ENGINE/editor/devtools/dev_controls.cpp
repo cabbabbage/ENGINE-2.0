@@ -1173,7 +1173,12 @@ void DevControls::update(const Input& input) {
         const bool room_editor_active =
             mode_ == Mode::RoomEditor && room_editor_ && room_editor_->is_enabled();
         if (!room_editor_active) {
+            const bool was_visible = camera_panel_ && camera_panel_->is_visible();
             toggle_camera_panel();
+            const bool now_visible = camera_panel_ && camera_panel_->is_visible();
+            if (assets_ && was_visible != now_visible) {
+                assets_->show_dev_notice(now_visible ? "Camera panel opened" : "Camera panel closed", 1400);
+            }
         }
     }
 
@@ -1183,7 +1188,12 @@ void DevControls::update(const Input& input) {
         image_effect_panel_ && image_effect_panel_->is_visible() && image_effect_panel_->is_point_inside(input.getX(), input.getY());
     if (mode_ == Mode::MapEditor) {
         if (map_mode_ui_ && input.wasScancodePressed(SDL_SCANCODE_F8)) {
+            const bool was_visible = map_mode_ui_->is_layers_panel_visible();
             map_mode_ui_->toggle_layers_panel();
+            const bool now_visible = map_mode_ui_->is_layers_panel_visible();
+            if (assets_ && was_visible != now_visible) {
+                assets_->show_dev_notice(now_visible ? "Layers panel opened" : "Layers panel closed", 1400);
+            }
         }
         if (map_editor_) {
             map_editor_->update(input);
@@ -1378,7 +1388,12 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
 
     if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
         if (layers_panel_open && map_mode_ui_) {
+            const bool was_visible = layers_panel_open;
             map_mode_ui_->toggle_layers_panel();
+            const bool now_visible = map_mode_ui_->is_layers_panel_visible();
+            if (assets_ && was_visible != now_visible) {
+                assets_->show_dev_notice("Layers panel closed", 1200);
+            }
             if (input_) {
                 input_->consumeEvent(event);
             }

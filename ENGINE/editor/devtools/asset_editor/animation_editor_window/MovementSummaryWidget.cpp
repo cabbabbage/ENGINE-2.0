@@ -35,7 +35,7 @@ namespace {
 
 const int kButtonHeight = DMButton::height();
 const int kButtonWidth = 160;
-constexpr std::size_t kModeButtonCount = 5;
+constexpr std::size_t kModeButtonCount = 4;
 
 using animation_editor::strings::trim_copy;
 
@@ -320,7 +320,7 @@ void MovementSummaryWidget::render(SDL_Renderer* renderer) const {
             int label_y = button_rect_.y + (button_rect_.h - button_style.label.font_size) / 2;
             render_summary_label(renderer, button_text, label_x, label_y, button_style.text);
         } else {
-            static const char* kLabels[5] = {"Movement", "Sync Child", "Async Child", "Attack Geo", "Hit Geo"};
+            static const char* kLabels[4] = {"Movement", "Sync Child", "Attack Geo", "Hit Geo"};
             for (std::size_t i = 0; i < kModeButtonCount; ++i) {
                 const SDL_Rect rect = mode_button_rects_[i];
                 SDL_Color button_color = button_style.bg;
@@ -397,9 +397,8 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             bool handled = false;
             handled = handle_mode_button_event(FrameEditorLaunchMode::Movement, 0, p, true) || handled;
             handled = handle_mode_button_event(FrameEditorLaunchMode::SyncChildren, 1, p, true) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AsyncChildren, 2, p, true) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 3, p, true) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 4, p, true) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 2, p, true) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 3, p, true) || handled;
             return handled;
         }
         case SDL_EVENT_MOUSE_BUTTON_UP: {
@@ -426,9 +425,8 @@ bool MovementSummaryWidget::handle_event(const SDL_Event& e) {
             bool handled = false;
             handled = handle_mode_button_event(FrameEditorLaunchMode::Movement, 0, p, false) || handled;
             handled = handle_mode_button_event(FrameEditorLaunchMode::SyncChildren, 1, p, false) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AsyncChildren, 2, p, false) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 3, p, false) || handled;
-            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 4, p, false) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::AttackGeometry, 2, p, false) || handled;
+            handled = handle_mode_button_event(FrameEditorLaunchMode::HitGeometry, 3, p, false) || handled;
             return handled;
         }
         default:

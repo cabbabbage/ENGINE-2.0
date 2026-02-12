@@ -41,7 +41,6 @@ class ManifestStore;
 enum class FrameEditorLaunchMode {
     Movement,
     SyncChildren,
-    AsyncChildren,
     AttackGeometry,
     HitGeometry
 };

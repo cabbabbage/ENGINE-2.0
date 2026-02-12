@@ -363,6 +363,12 @@ void RoomEditor::copy_selected_spawn_group() {
     }
     spawn_group_clipboard_->base_display_name = std::move(base);
     spawn_group_clipboard_->paste_count = 0;
+
+    if (!display_name.empty()) {
+        show_notice(std::string("Copied spawn group \"") + display_name + "\"");
+    } else {
+        show_notice("Copied spawn group to clipboard");
+    }
 }
 
 void RoomEditor::paste_spawn_group_from_clipboard() {
@@ -424,6 +430,12 @@ void RoomEditor::paste_spawn_group_from_clipboard() {
 
     active_spawn_group_id_ = new_id;
     select_spawn_group_assets(new_id);
+
+    if (!display_name.empty()) {
+        show_notice(std::string("Pasted spawn group \"") + display_name + "\"");
+    } else {
+        show_notice("Pasted spawn group");
+    }
 }
 
 std::optional<std::string> RoomEditor::selected_spawn_group_id() const {
@@ -3692,7 +3704,12 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         if (library_ui_ && library_ui_->is_locked()) {
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Asset library is locked; shortcut ignored.");
         } else {
+            const bool was_open = is_asset_library_open();
             toggle_asset_library();
+            const bool now_open = is_asset_library_open();
+            if (was_open != now_open) {
+                show_notice(now_open ? "Opened asset library" : "Closed asset library");
+            }
         }
     }
 
@@ -3981,15 +3998,19 @@ void RoomEditor::handle_delete_shortcut(const Input& input) {
         spawn_ids.push_back(*active_spawn_group_id_);
     }
 
-    bool deleted_any = false;
+    int deleted_count = 0;
     for (const std::string& id : spawn_ids) {
         if (delete_spawn_group_internal(id)) {
-            deleted_any = true;
+            ++deleted_count;
         }
     }
 
-    if (deleted_any) {
+    if (deleted_count > 0) {
         clear_selection();
+        const std::string message = (deleted_count == 1)
+            ? std::string("Deleted 1 spawn group")
+            : std::string("Deleted ") + std::to_string(deleted_count) + " spawn groups";
+        show_notice(message);
     }
 }
 

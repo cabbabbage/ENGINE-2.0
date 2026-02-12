@@ -229,7 +229,6 @@
     "asset_directory": "resources/assets/spider",
     "asset_name": "spider",
     "asset_type": "enemy",
-    "async_children": [],
     "lighting_info": [],
     "neighbor_search_distance": 500,
     "shading_opacity_multiplier": 1.0,

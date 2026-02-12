@@ -54,10 +54,6 @@ file(GLOB_RECURSE ENGINE_SRC CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.c
     ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.hpp
     ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools/*.h
-    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.cpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.c
-    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.hpp
-    ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline/*.h
 )
 
 list(REMOVE_DUPLICATES ENGINE_SRC)
@@ -204,7 +200,6 @@ target_include_directories(engine
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/gameplay/spawn
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
           ${CMAKE_SOURCE_DIR}/ENGINE/editor/devtools
-          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
   )
 
 target_compile_definitions(engine PRIVATE PROJECT_ROOT="${CMAKE_SOURCE_DIR}")
@@ -288,7 +283,6 @@ target_include_directories(engine_tests
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/assets
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
-          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
           ${CMAKE_SOURCE_DIR}/external
   )
 
@@ -347,7 +341,6 @@ target_include_directories(engine_world_tests
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime
           ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
           ${CMAKE_SOURCE_DIR}/ENGINE/editor
-          ${CMAKE_SOURCE_DIR}/ENGINE/tooling/asset_pipeline
           ${CMAKE_SOURCE_DIR}/external
 )
 

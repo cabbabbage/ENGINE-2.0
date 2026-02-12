@@ -31,8 +31,7 @@ nlohmann::json make_default_manifest_json() {
 ManifestData make_manifest_data(nlohmann::json manifest_json) {
     ManifestData data;
     data.raw = std::move(manifest_json);
-    // Assets are stored in bundles; keep the manifest assets map empty for compatibility.
-    data.assets = nlohmann::json::object();
+    data.assets = data.raw.at("assets");
     data.maps = data.raw.at("maps");
     return data;
 }
@@ -142,10 +141,6 @@ ManifestData load_manifest() {
     }
 
     if (!manifest_json.contains("assets") || !manifest_json["assets"].is_object()) {
-        manifest_json["assets"] = nlohmann::json::object();
-        mutated = true;
-    } else if (!manifest_json["assets"].empty()) {
-        // Strip legacy asset data; assets now live in cache bundles.
         manifest_json["assets"] = nlohmann::json::object();
         mutated = true;
     }

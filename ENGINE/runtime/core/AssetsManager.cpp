@@ -830,7 +830,6 @@ void Assets::update(const Input& input)
             if (player->info) {
                 player->update_scale_values();
             }
-            player->request_child_timeline_creation_if_needed();
         }
     }
 
@@ -887,7 +886,6 @@ void Assets::update(const Input& input)
             if (asset->info) {
                 asset->update_scale_values();
             }
-            asset->request_child_timeline_creation_if_needed();
         }
     }
 
@@ -978,45 +976,9 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         return;
     }
 
-    // Helper to compute parent depth for ordering within a grid point
-    auto compute_parent_depth = [](const Asset* asset) -> int {
-        int depth = 0;
-        const Asset* current = asset;
-        while (current && current->parent) {
-            ++depth;
-            current = current->parent;
-            if (depth > 1000) break; // Prevent infinite loops from circular references
-        }
-        return depth;
+    auto compute_depth_hint = [](const Asset* asset) -> int {
+        return asset ? asset->depth : 0;
     };
-
-    // Build lookup for child timeline assets keyed by their parent
-    std::unordered_map<Asset*, std::vector<Asset*>> child_lookup;
-    child_lookup.reserve(all.size());
-    for (Asset* asset : all) {
-        if (!asset || asset->dead) {
-            continue;
-        }
-        if (asset->child_timeline_index() < 0) {
-            continue;
-        }
-        Asset* parent_asset = asset->parent;
-        if (!parent_asset || parent_asset->dead) {
-            continue;
-        }
-        child_lookup[parent_asset].push_back(asset);
-    }
-    for (auto& kv : child_lookup) {
-        auto& children = kv.second;
-        std::stable_sort(children.begin(), children.end(),
-                         [](const Asset* a, const Asset* b) {
-                             if (!a || !b) return b != nullptr;
-                             if (a->child_timeline_index() != b->child_timeline_index()) {
-                                 return a->child_timeline_index() < b->child_timeline_index();
-                             }
-                             return a < b;
-                         });
-    }
 
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(active_traversal_.size());
@@ -1043,12 +1005,12 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
 
         std::stable_sort(point_assets.begin(),
                          point_assets.end(),
-                         [&compute_parent_depth](const Asset* a, const Asset* b) {
+                         [&compute_depth_hint](const Asset* a, const Asset* b) {
                              if (!a || !b) return b != nullptr;
-                             const int depth_a = compute_parent_depth(a);
-                             const int depth_b = compute_parent_depth(b);
+                             const int depth_a = compute_depth_hint(a);
+                             const int depth_b = compute_depth_hint(b);
                              if (depth_a != depth_b) {
-                                 return depth_a < depth_b; // parents before children
+                                 return depth_a < depth_b;
                              }
                              return a < b;
                          });
@@ -1063,21 +1025,6 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
                 non_player_update_buffer_.push_back(asset);
             }
 
-            // Append child timeline assets immediately after their parent (or player).
-            auto child_it = child_lookup.find(asset);
-            if (child_it == child_lookup.end() && asset == player) {
-                child_it = child_lookup.find(player);
-            }
-            if (child_it != child_lookup.end()) {
-                for (Asset* child : child_it->second) {
-                    if (!child || child->dead) {
-                        continue;
-                    }
-                    if (buffer_set.insert(child).second) {
-                        non_player_update_buffer_.push_back(child);
-                    }
-                }
-            }
         }
     }
 
@@ -1433,79 +1380,6 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     mark_non_player_update_buffer_dirty();
 
     return raw;
-}
-
-void Assets::request_child_timeline_creation(Asset* parent) {
-    if (!parent || parent->dead || !parent->active) {
-        return;
-    }
-    if (parent->animation_children_.empty()) {
-        return;
-    }
-
-    std::string owning_room = map_id_;
-    if (current_room_) {
-        owning_room = current_room_->room_name;
-    }
-    Area spawn_area(owning_room, 0);
-    bool created_any = false;
-
-    for (std::size_t i = 0; i < parent->animation_children_.size(); ++i) {
-        const auto& slot = parent->animation_children_[i];
-        if (slot.child_index < 0 || slot.asset_name.empty() || !slot.timeline) {
-            continue;
-        }
-        if (find_child_timeline_asset(parent, static_cast<int>(i))) {
-            continue;
-        }
-        std::shared_ptr<AssetInfo> info = slot.info ? slot.info : library_.get(slot.asset_name);
-        if (!info) {
-            continue;
-        }
-
-        int depth = parent->depth;
-        int grid_res = parent->grid_resolution;
-        auto uptr = std::make_unique<Asset>(info, spawn_area, parent->world_point(), depth, parent, std::string{}, std::string{"ChildTimeline"}, grid_res);
-        Asset* raw = uptr.get();
-        if (!raw) {
-            continue;
-        }
-        raw->set_assets(this);
-        raw->set_camera(&camera_);
-        raw->finalize_setup();
-        raw->child_timeline_index_ = static_cast<int>(i);
-
-        raw = world_grid_.create_asset_at_point(std::move(uptr));
-        if (!raw) {
-            continue;
-        }
-        all.push_back(raw);
-        queue_asset_dimension_update(raw);
-        created_any = true;
-    }
-
-    if (created_any) {
-        mark_grid_dirty();
-        mark_active_assets_dirty();
-        mark_non_player_update_buffer_dirty();
-        needs_filtered_active_refresh_ = true;
-        touch_dev_active_state_version();
-    }
-}
-
-Asset* Assets::find_child_timeline_asset(const Asset* parent, int slot_index) const {
-    if (!parent || slot_index < 0) {
-        return nullptr;
-    }
-    for (Asset* asset : all) {
-        if (!asset || asset->dead) {
-            continue;
-        }
-        if (asset->parent == parent && asset->child_timeline_index() == slot_index) {
-            return asset;
-        }
-    }
-    return nullptr;
 }
 
 void Assets::rebuild_from_grid_state() {
@@ -2315,7 +2189,6 @@ void Assets::rebuild_active_from_screen_grid() {
         if (!still_active && asset->last_active_frame_id == previous_active_frame_id) {
             active_changed = true;
             asset->active = false;
-            asset->child_creation_requested_ = false;
         }
     }
 

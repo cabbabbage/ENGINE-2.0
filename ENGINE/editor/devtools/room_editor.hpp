@@ -274,8 +274,6 @@ private:
     static std::string strip_copy_suffix(const std::string& name);
     std::string next_clipboard_display_name();
     void show_notice(const std::string& message) const;
-    class Asset* find_asset_spawn_owner(const std::string& spawn_id) const;
-    void respawn_asset_child_spawn_group(class Asset* owner, const nlohmann::json& entry);
     static bool asset_info_contains_spawn_group(const class AssetInfo* info, const std::string& spawn_id);
     void mark_highlight_dirty();
     bool spawn_group_locked(const std::string& spawn_id) const;
@@ -319,11 +317,10 @@ private:
     bool mouse_controls_enabled_last_frame_ = false;
 
     enum class SelectionFilter {
-        Normal,          // Normal assets only (not map, not boundary, not tiled, not child timelines)
+        Normal,          // Normal assets only (not map, not boundary, not tiled)
         Tiled,           // Tiled assets only
         MapWide,         // Map-wide assets only
         Boundary,        // Boundary assets only
-        ChildTimeline    // Child timeline assets only
     };
     SelectionFilter selection_filter_ = SelectionFilter::Normal;
     bool shift_was_down_last_frame_ = false;

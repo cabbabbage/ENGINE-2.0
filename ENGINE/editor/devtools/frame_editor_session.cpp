@@ -11,7 +11,6 @@
 #include "devtools/frame_editors/FrameEditorBase.hpp"
 #include "devtools/frame_editors/HitGeoFrameEditor.hpp"
 #include "devtools/frame_editors/MovementFrameEditor.hpp"
-#include "devtools/frame_editors/SyncChildrenFrameEditor.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
 #include "utils/input.hpp"
@@ -22,7 +21,6 @@ namespace {
 FrameEditorSession::Mode mode_for_launch(FrameEditorLaunchMode launch_mode) {
     switch (launch_mode) {
         case FrameEditorLaunchMode::Movement: return FrameEditorSession::Mode::Movement;
-        case FrameEditorLaunchMode::SyncChildren: return FrameEditorSession::Mode::SyncChildren;
         case FrameEditorLaunchMode::AttackGeometry: return FrameEditorSession::Mode::AttackGeometry;
         case FrameEditorLaunchMode::HitGeometry: return FrameEditorSession::Mode::HitGeometry;
     }
@@ -32,7 +30,6 @@ FrameEditorSession::Mode mode_for_launch(FrameEditorLaunchMode launch_mode) {
 FrameEditorLaunchMode launch_mode_for_mode(FrameEditorSession::Mode mode) {
     switch (mode) {
         case FrameEditorSession::Mode::Movement: return FrameEditorLaunchMode::Movement;
-        case FrameEditorSession::Mode::SyncChildren: return FrameEditorLaunchMode::SyncChildren;
         case FrameEditorSession::Mode::AttackGeometry: return FrameEditorLaunchMode::AttackGeometry;
         case FrameEditorSession::Mode::HitGeometry: return FrameEditorLaunchMode::HitGeometry;
     }
@@ -43,8 +40,6 @@ std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(FrameEdit
     switch (mode) {
         case FrameEditorSession::Mode::Movement:
             return std::make_unique<devmode::frame_editors::MovementFrameEditor>();
-        case FrameEditorSession::Mode::SyncChildren:
-            return std::make_unique<devmode::frame_editors::SyncChildrenFrameEditor>();
         case FrameEditorSession::Mode::AttackGeometry:
             return std::make_unique<devmode::frame_editors::AttackGeoFrameEditor>();
         case FrameEditorSession::Mode::HitGeometry:

@@ -2,7 +2,6 @@
 
 #include "assets/asset_types.hpp"
 #include "assets/animation_loader.hpp"
-#include "assets/info_methods/asset_child_loader.hpp"
 #include "utils/cache_manager.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
 #include "utils/rebuild_queue.hpp"
@@ -531,9 +530,6 @@ AssetInfo::AreaCodec::decode_entry(const AssetInfo& info, const nlohmann::json& 
 
             named.attachment_is_on_top = entry["placed_on_top_parent"].get<bool>();
         }
-        if (entry.contains("child_candidates") && entry["child_candidates"].is_array()) {
-            named.attachment_child_candidates = entry["child_candidates"];
-        }
     } catch (...) {
 
     }
@@ -586,11 +582,12 @@ AssetInfo::AssetInfo(const std::string& asset_folder_name, const nlohmann::json&
 
 std::shared_ptr<AssetInfo> AssetInfo::from_manifest_entry(const std::string& asset_folder_name,
                                                          const nlohmann::json& metadata) {
-    // Prefer bundle metadata snapshot when available to keep manifest assets lean.
-    nlohmann::json meta = metadata;
+    nlohmann::json meta = metadata.is_object() ? metadata : nlohmann::json::object();
+    const bool has_manifest_payload = meta.is_object() && !meta.empty();
+    // Only fall back to bundle metadata if the manifest entry is missing/empty.
     const std::filesystem::path bundle_path = std::filesystem::path("cache") / asset_folder_name / "bundle.bin";
     CacheManager::BundleData bundle;
-    if (CacheManager::load_bundle(bundle_path.generic_string(), bundle)) {
+    if (!has_manifest_payload && CacheManager::load_bundle(bundle_path.generic_string(), bundle)) {
         if (bundle.metadata_snapshot.is_object()) {
             meta = bundle.metadata_snapshot;
         }
@@ -658,21 +655,52 @@ bool AssetInfo::commit_manifest() {
                 payload["asset_name"] = name;
         }
 
-        // Persist asset state to the primary bundle cache instead of manifest.json.
+        bool manifest_saved = false;
+        try {
+                auto& provider = manifest_store_provider_slot();
+                if (provider) {
+                        if (auto* store = provider()) {
+                                auto txn = store->begin_asset_transaction(name, true);
+                                if (txn) {
+                                        txn.data() = payload;
+                                        manifest_saved = txn.finalize();
+                                        store->flush();
+                                }
+                        }
+                }
+                if (!manifest_saved) {
+                        manifest::ManifestData manifest = manifest::load_manifest();
+                        if (!manifest.raw.contains("assets") || !manifest.raw["assets"].is_object()) {
+                                manifest.raw["assets"] = nlohmann::json::object();
+                        }
+                        manifest.raw["assets"][name] = payload;
+                        manifest.assets = manifest.raw["assets"];
+                        manifest::save_manifest(manifest);
+                        manifest_saved = true;
+                }
+        } catch (const std::exception& ex) {
+                std::cerr << "[AssetInfo] Failed to persist manifest entry for '" << name << "': " << ex.what() << "\n";
+        } catch (...) {
+                std::cerr << "[AssetInfo] Unknown error persisting manifest entry for '" << name << "'\n";
+        }
+
+        bool bundle_saved = false;
         try {
                 PrimaryAssetCache cache(nullptr);
-                if (!cache.save_current(*this)) {
+                bundle_saved = cache.save_current(*this);
+                if (!bundle_saved) {
                         std::cerr << "[AssetInfo] Failed to save bundle for '" << name << "'\n";
-                        return false;
                 }
-                info_json_ = std::move(payload);
-                return true;
         } catch (const std::exception& ex) {
                 std::cerr << "[AssetInfo] Exception during bundle save for '" << name << "': " << ex.what() << "\n";
         } catch (...) {
                 std::cerr << "[AssetInfo] Unknown error saving bundle for '" << name << "'\n";
         }
-        return false;
+
+        if (manifest_saved) {
+                info_json_ = std::move(payload);
+        }
+        return manifest_saved && bundle_saved;
 }
 
 void AssetInfo::set_asset_type(const std::string &t) {
@@ -780,77 +808,6 @@ void AssetInfo::remove_anti_tag(const std::string &tag) {
         set_anti_tags(anti_tags);
 }
 
-void AssetInfo::set_animation_children(const std::vector<std::string>& children) {
-        animation_children.clear();
-        std::unordered_set<std::string> seen;
-        for (const auto& entry : children) {
-                if (entry.empty()) {
-                        continue;
-                }
-                if (seen.insert(entry).second) {
-                        animation_children.push_back(entry);
-                }
-        }
-        nlohmann::json arr = nlohmann::json::array();
-        for (const auto& name : animation_children) {
-                arr.push_back(name);
-        }
-        info_json_["animation_children"] = std::move(arr);
-
-    for (auto& [anim_id, anim] : animations) {
-        std::vector<std::string> merged;
-        merged.reserve(animation_children.size() + anim.child_assets().size());
-        std::unordered_set<std::string> anim_seen;
-        for (const auto& name : animation_children) {
-            if (name.empty()) continue;
-            if (anim_seen.insert(name).second) {
-                merged.push_back(name);
-            }
-        }
-        for (const auto& name : anim.child_assets()) {
-            if (name.empty()) continue;
-            if (anim_seen.insert(name).second) {
-                merged.push_back(name);
-            }
-        }
-        anim.child_assets() = std::move(merged);
-        anim.rebuild_frames_from_child_timelines();
-        anim.refresh_child_start_events();
-    }
-}
-
-void AssetInfo::append_animation_child(const std::string& child) {
-    if (child.empty()) {
-        return;
-    }
-    animation_children.push_back(child);
-    if (!info_json_.contains("animation_children") || !info_json_["animation_children"].is_array()) {
-        info_json_["animation_children"] = nlohmann::json::array();
-    }
-    info_json_["animation_children"].push_back(child);
-}
-
-void AssetInfo::remove_animation_child_at(std::size_t index) {
-    if (index >= animation_children.size()) {
-        return;
-    }
-    animation_children.erase(animation_children.begin() + static_cast<long>(index));
-    if (!info_json_.contains("animation_children") || !info_json_["animation_children"].is_array()) {
-        info_json_["animation_children"] = animation_children;
-        return;
-    }
-    auto& arr = info_json_["animation_children"];
-    if (!arr.is_array()) {
-        info_json_["animation_children"] = animation_children;
-        return;
-    }
-    if (index < arr.size()) {
-        arr.erase(arr.begin() + static_cast<nlohmann::json::difference_type>(index));
-    } else {
-        info_json_["animation_children"] = animation_children;
-    }
-}
-
 void AssetInfo::rebuild_tag_cache() {
         tag_lookup_.clear();
         tag_lookup_.reserve(tags.size());
@@ -955,7 +912,7 @@ void AssetInfo::upsert_area_from_editor(const Area& area,
 
     if (existing_entry && existing_entry->is_object()) {
         static const char* kAttachmentKeys[] = {
-            "attachment_subtype", "is_on_top", "child_candidates", "placed_on_top_parent"
+            "attachment_subtype", "is_on_top", "placed_on_top_parent"
 };
         for (const char* key : kAttachmentKeys) {
             auto it = existing_entry->find(key);
@@ -1009,10 +966,6 @@ void AssetInfo::load_areas(const nlohmann::json& data) {
         }
 }
 
-void AssetInfo::load_children(const nlohmann::json& data) {
-    ChildLoader::load_children(*this, data, dir_path_);
-}
-
 void AssetInfo::load_animations(const nlohmann::json& data) {
     const nlohmann::json* payloads = locate_animation_payloads(data);
 
@@ -1057,62 +1010,12 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         rebuild_tag_cache();
         rebuild_anti_tag_cache();
 
-        animation_children = parse_string_array(data.value("animation_children", nlohmann::json::array()));
-        if (animation_children.empty()) {
-                const nlohmann::json* anim_payloads = nullptr;
-                if (data.contains("animations") && data["animations"].is_object()) {
-                        anim_payloads = &data["animations"];
-                        if (data["animations"].contains("animations") && data["animations"]["animations"].is_object()) {
-                                anim_payloads = &data["animations"]["animations"];
-                        }
-                }
-                if (anim_payloads) {
-                        std::unordered_set<std::string> seen;
-                        for (const auto& item : anim_payloads->items()) {
-                                if (!item.value().is_object()) continue;
-                                auto it_children = item.value().find("children");
-                                if (it_children != item.value().end() && it_children->is_array()) {
-                                    for (const auto& entry : *it_children) {
-                                        if (!entry.is_string()) continue;
-                                        std::string name = entry.get<std::string>();
-                                        if (name.empty() || !seen.insert(name).second) continue;
-                                        animation_children.push_back(std::move(name));
-                                    }
-                                }
-
-                                auto it_timelines = item.value().find("child_timelines");
-                                if (it_timelines != item.value().end() && it_timelines->is_array()) {
-                                    for (const auto& entry : *it_timelines) {
-                                        if (!entry.is_object()) continue;
-                                        std::string name;
-                                        if (entry.contains("asset") && entry["asset"].is_string()) {
-                                            name = entry["asset"].get<std::string>();
-                                        }
-                                        if (name.empty()) {
-                                            continue;
-                                        }
-                                        if (!seen.insert(name).second) continue;
-                                        animation_children.push_back(std::move(name));
-                                    }
-                                }
-                        }
-                }
-        }
-
         if (!info_json_.contains("tags") || !info_json_["tags"].is_array()) {
                 info_json_["tags"] = nlohmann::json::array();
         }
         if (!info_json_.contains("anti_tags") || !info_json_["anti_tags"].is_array()) {
                 info_json_["anti_tags"] = nlohmann::json::array();
         }
-        nlohmann::json animation_children_json = nlohmann::json::array();
-        for (const auto& name : animation_children) {
-                if (!name.empty()) {
-                        animation_children_json.push_back(name);
-                }
-        }
-        info_json_["animation_children"] = std::move(animation_children_json);
-
         load_animations(data);
 
         mappings.clear();
@@ -1174,8 +1077,6 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
 
         }
 
-        load_children(data);
-
         try {
                 if (data.contains("custom_controller_key") && data["custom_controller_key"].is_string()) {
                         custom_controller_key = data["custom_controller_key"].get<std::string>();
@@ -1185,34 +1086,6 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         } catch (...) {
                 custom_controller_key.clear();
         }
-}
-
-void AssetInfo::set_children(const std::vector<ChildInfo>& new_children) {
-
-    asset_children = new_children;
-
-    nlohmann::json groups = nlohmann::json::array();
-    for (const auto& c : new_children) {
-        nlohmann::json entry = nlohmann::json::object();
-        if (c.spawn_group.is_object()) {
-            entry = c.spawn_group;
-        }
-
-        if (!c.area_name.empty()) {
-            entry["linked_area"] = c.area_name;
-            entry["link_to_area"] = true;
-        }
-
-        entry["placed_on_top_parent"] = c.placed_on_top_parent;
-
-        if (!entry.contains("candidates") || !entry["candidates"].is_array()) {
-            entry["candidates"] = nlohmann::json::array();
-        }
-
-        groups.push_back(std::move(entry));
-    }
-
-    set_spawn_groups(groups);
 }
 
 void AssetInfo::set_spawn_groups_payload(const nlohmann::json& groups) {

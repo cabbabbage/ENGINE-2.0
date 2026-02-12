@@ -58,7 +58,6 @@ public:
         return result;
     }
 
-    Asset* move_asset_to_point(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos);
     Asset* move_asset(Asset* a, const GridPoint& old_pos, const GridPoint& new_pos);
 
     Asset* remove_asset(Asset* a);
@@ -86,7 +85,6 @@ public:
     GridPoint* find_grid_point_strict(const GridKey& key);
     const GridPoint* find_grid_point_strict(const GridKey& key) const;
     GridPoint& find_or_create_grid_point(const GridKey& key, Chunk* owning_chunk = nullptr, GridPoint* parent = nullptr);
-    GridKey grid_key_from_legacy(GridPoint grid_index, int world_z = 0, int layer = -1) const;
     GridPoint& ensure_child(GridPoint& parent, GridPoint::ChildDirection dir, const GridKey& child_key, Chunk* owning_chunk = nullptr);
     void attach_asset_to_hierarchy(GridPoint& point);
     void detach_asset_from_hierarchy(GridPoint& point);

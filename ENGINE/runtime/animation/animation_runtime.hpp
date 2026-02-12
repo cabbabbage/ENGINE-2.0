@@ -65,10 +65,6 @@ private:
     bool       attempt_unstick(SDL_Point from, SDL_Point to, const std::vector<const Asset*>& blockers);
     bool       adjust_next_checkpoint(const std::vector<const Asset*>& blockers);
     bool       replan_to_destination();
-    void       update_child_attachments(Animation& anim, float dt);
-    void       ensure_child_slots(Animation& anim);
-    void       apply_child_frame_data(Animation& anim, const AnimationFrame* frame, float dt);
-    void       destroy_child_assets();
     float      parent_world_z() const;
 
     void       apply_pending_move();

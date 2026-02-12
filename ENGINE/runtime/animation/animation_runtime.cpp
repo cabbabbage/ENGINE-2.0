@@ -24,7 +24,6 @@
 #include <iostream>
 #include "animation_update.hpp"
 #include "utils/transform_smoothing.hpp"
-#include "utils/FramePointResolver.hpp"
 
 namespace {
 template <typename Fn>
@@ -238,13 +237,11 @@ void AnimationRuntime::apply_pending_move() {
 
 bool AnimationRuntime::advance(AnimationFrame*& frame) {
     if (!self_ || !self_->info) {
-        destroy_child_assets();
         return false;
     }
 
     auto it = self_->info->animations.find(self_->current_animation);
     if (it == self_->info->animations.end()) {
-        destroy_child_assets();
         return false;
     }
 
@@ -253,7 +250,6 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     if (!frame) {
         frame = anim.get_first_frame(path_index);
         if (!frame) {
-            destroy_child_assets();
             return false;
         }
     }
@@ -263,7 +259,6 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     bool has_overriding_plan = planner_iface_ && !planner_iface_->plan_.strides.empty() && planner_iface_->plan_.override_non_locked;
     if (should_skip && !has_overriding_plan) {
         self_->static_frame = self_->static_frame || anim.is_frozen() || anim.locked;
-        update_child_attachments(anim, 0.0f);
         return true;
     }
     if (is_player) {
@@ -294,8 +289,6 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
                 frame = anim.get_first_frame(path_index);
                 advanced_any = true;
             } else {
-
-                update_child_attachments(anim, dt);
                 return false;
             }
         }
@@ -303,8 +296,7 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     if (advanced_any) {
         self_->mark_composite_dirty();
     }
-    update_child_attachments(anim, dt);
-    return advanced_any || true;
+    return true;
 }
 
 void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_index) {
@@ -313,9 +305,6 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     }
 
     const bool animation_changed = self_->current_animation != anim_id;
-    if (animation_changed) {
-        destroy_child_assets();
-    }
 
     auto it = self_->info->animations.find(anim_id);
     if (it == self_->info->animations.end()) {
@@ -342,8 +331,6 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     self_->frame_progress    = 0.0f;
     active_paths_[self_->current_animation] = path_index;
     self_->mark_composite_dirty();
-    ensure_child_slots(anim);
-    apply_child_frame_data(anim, self_->current_frame, 0.0f);
 }
 
 bool AnimationRuntime::should_defer_for_non_locked(bool override_non_locked) const {
@@ -376,165 +363,6 @@ void AnimationRuntime::reset_plan_progress() {
     stride_index_ = 0;
     stride_frame_counter_ = 0;
     next_checkpoint_index_ = 0;
-}
-
-void AnimationRuntime::update_child_attachments(Animation& anim, float dt) {
-    if (!self_) {
-        return;
-    }
-    if (!anim.has_child_assets()) {
-        destroy_child_assets();
-        return;
-    }
-    ensure_child_slots(anim);
-    self_->request_child_timeline_creation_if_needed();
-    if (self_->animation_children_.empty()) {
-        return;
-    }
-    apply_child_frame_data(anim, self_->current_frame, dt);
-}
-
-void AnimationRuntime::ensure_child_slots(Animation& anim) {
-    if (!self_) {
-        return;
-    }
-    auto& slots = self_->animation_children_;
-    const auto& timelines = anim.child_timelines();
-    const auto& child_assets = anim.child_assets();
-
-    std::vector<std::string> requested = child_assets;
-    if (requested.empty() && !timelines.empty()) {
-        requested.reserve(timelines.size());
-        for (const auto& timeline : timelines) {
-            requested.push_back(timeline.asset_name);
-        }
-    }
-
-    std::unordered_map<std::string, const AnimationChildData*> timeline_by_asset;
-    timeline_by_asset.reserve(timelines.size());
-    for (const auto& timeline : timelines) {
-        if (!timeline.asset_name.empty() && !timeline_by_asset.count(timeline.asset_name)) {
-            timeline_by_asset.emplace(timeline.asset_name, &timeline);
-        }
-    }
-
-    AssetLibrary* library = assets_owner_ ? &assets_owner_->library() : nullptr;
-
-    std::vector<Asset::AnimationChildAttachment> rebuilt;
-    rebuilt.resize(requested.size());
-    for (std::size_t i = 0; i < requested.size(); ++i) {
-        auto& slot = rebuilt[i];
-        slot.child_index = static_cast<int>(i);
-        slot.asset_name = requested[i];
-        auto it = timeline_by_asset.find(slot.asset_name);
-        slot.timeline = (it != timeline_by_asset.end()) ? it->second : nullptr;
-        if (!slot.info && library && !slot.asset_name.empty()) {
-            slot.info = library->get(slot.asset_name);
-        }
-    }
-
-    slots = std::move(rebuilt);
-}
-
-void AnimationRuntime::apply_child_frame_data(Animation& /*anim*/, const AnimationFrame* frame, float /*dt*/) {
-    if (!self_ || !assets_owner_ || self_->animation_children_.empty()) {
-        return;
-    }
-
-    const int parent_frame_index = frame ? frame->frame_index : -1;
-    devmode::frame_editors::FramePointResolver resolver(self_);
-    const SDL_Point anchor = resolver.anchor_world();
-    const float parent_height = std::max(0.0f, resolver.parent_height_px());
-    const float base_world_z = resolver.base_world_z();
-    float attachment_scale = 1.0f;
-    if (assets_owner_) {
-        const WarpedScreenGrid& cam = assets_owner_->getView();
-        if (const auto* gp = cam.grid_point_for_asset(self_)) {
-            const float perspective = std::max(0.0001f, gp->perspective_scale);
-            float remainder = self_->current_remaining_scale_adjustment;
-            if (!(remainder > 0.0f)) {
-                remainder = 1.0f;
-            }
-            attachment_scale = remainder / perspective;
-            if (!(attachment_scale > 0.0f)) {
-                attachment_scale = 1.0f;
-            }
-        }
-    }
-
-    for (const auto& slot : self_->animation_children_) {
-        if (!slot.timeline || slot.child_index < 0) {
-            continue;
-        }
-        Asset* child_asset = assets_owner_->find_child_timeline_asset(self_, slot.child_index);
-        if (!child_asset) {
-            continue;
-        }
-
-        const auto& frames = slot.timeline->frames;
-        if (frames.empty()) {
-            child_asset->set_hidden(true);
-            continue;
-        }
-
-        if (parent_frame_index < 0) {
-            child_asset->set_hidden(true);
-            continue;
-        }
-
-        std::size_t sample_idx = 0;
-        if (parent_frame_index >= 0) {
-            sample_idx = std::min(frames.size() - 1, static_cast<std::size_t>(parent_frame_index));
-        }
-        const AnimationChildFrameData& sample = frames[sample_idx];
-        if (!sample.visible) {
-            child_asset->set_hidden(true);
-            continue;
-        }
-
-        const float offset_scale = parent_height;
-        float offset_x = sample.offset.px * offset_scale * attachment_scale;
-        if (self_->flipped) {
-            offset_x = -offset_x;
-        }
-        const float offset_y = sample.offset.py * offset_scale * attachment_scale;
-        const float world_x = static_cast<float>(anchor.x) + offset_x;
-        const float world_y = static_cast<float>(anchor.y) + offset_y;
-        const float world_z = base_world_z + sample.offset.pz * offset_scale;
-
-        child_asset->set_hidden(false);
-        child_asset->move_to_world_position(static_cast<int>(std::lround(world_x)),
-                                            static_cast<int>(std::lround(world_y)),
-                                            static_cast<int>(std::lround(world_z)));
-    }
-}
-
-void AnimationRuntime::destroy_child_assets() {
-    if (!self_) {
-        return;
-    }
-
-    if (assets_owner_) {
-        for (const auto& slot : self_->animation_children_) {
-            if (slot.child_index < 0) {
-                continue;
-            }
-            if (Asset* child_asset = assets_owner_->find_child_timeline_asset(self_, slot.child_index)) {
-                child_asset->Delete();
-            }
-        }
-    }
-
-    auto park_slot = [](Asset::AnimationChildAttachment& slot) {
-        slot.child_index = -1;
-        slot.timeline = nullptr;
-};
-
-    for (auto& slot : self_->animation_children_) {
-        park_slot(slot);
-    }
-    self_->animation_children_.clear();
-    self_->child_creation_requested_ = false;
 }
 
 world::GridPoint AnimationRuntime::bottom_middle(const world::GridPoint& pos) const {

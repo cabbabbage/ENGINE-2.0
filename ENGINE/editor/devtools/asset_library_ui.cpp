@@ -272,66 +272,6 @@ namespace {
         return changed;
     }
 
-    bool remove_asset_from_animation_children(nlohmann::json& asset_json, const std::string& asset_name) {
-        if (!asset_json.is_object()) {
-            return false;
-        }
-
-        auto children_it = asset_json.find("animation_children");
-        if (children_it == asset_json.end() || !children_it->is_array()) {
-            return false;
-        }
-        std::vector<int> removed_indices;
-        auto& children = *children_it;
-        for (int idx = 0; idx < static_cast<int>(children.size()); ++idx) {
-            if (children[idx].is_string() && children[idx].get<std::string>() == asset_name) {
-                removed_indices.push_back(idx);
-            }
-        }
-        if (removed_indices.empty()) {
-            return false;
-        }
-        std::sort(removed_indices.begin(), removed_indices.end());
-        removed_indices.erase(std::unique(removed_indices.begin(), removed_indices.end()), removed_indices.end());
-        for (auto it = removed_indices.rbegin(); it != removed_indices.rend(); ++it) {
-            children.erase(children.begin() + *it);
-        }
-        if (children.empty()) {
-            asset_json.erase(children_it);
-        }
-
-        auto animations_it = asset_json.find("animations");
-        if (animations_it != asset_json.end() && animations_it->is_object()) {
-            for (auto anim_it = animations_it->begin(); anim_it != animations_it->end(); ++anim_it) {
-                if (!anim_it.value().is_object()) continue;
-                auto& anim_json = anim_it.value();
-                auto anim_children_it = anim_json.find("children");
-                if (anim_children_it != anim_json.end() && anim_children_it->is_array()) {
-                    auto& child_arr = *anim_children_it;
-                    for (auto it = removed_indices.rbegin(); it != removed_indices.rend(); ++it) {
-                        if (*it >= 0 && *it < static_cast<int>(child_arr.size())) {
-                            child_arr.erase(child_arr.begin() + *it);
-                        }
-                    }
-                    if (child_arr.empty()) {
-                        anim_json.erase(anim_children_it);
-                    }
-                }
-                auto movement_it = anim_json.find("movement");
-                if (movement_it != anim_json.end()) {
-                    adjust_movement_entries(*movement_it, removed_indices);
-                }
-                auto paths_it = anim_json.find("movement_paths");
-                if (paths_it != anim_json.end() && paths_it->is_array()) {
-                    for (auto& path : *paths_it) {
-                        adjust_movement_entries(path, removed_indices);
-                    }
-                }
-            }
-        }
-        return true;
-    }
-
 }
 
 struct AssetLibraryUI::AssetTileWidget : public Widget {
@@ -1712,7 +1652,6 @@ void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer
                         }
                         bool updated = false;
                         updated |= devmode::manifest_utils::remove_asset_from_spawn_groups(transaction.data(), asset_name);
-                        updated |= remove_asset_from_animation_children(transaction.data(), asset_name);
                         if (updated) {
                             if (!transaction.finalize()) {
                                 std::cerr << "[AssetLibraryUI] Failed to update manifest asset entry '"

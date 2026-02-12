@@ -52,15 +52,12 @@ void send_attack_if_hit(Asset* self, Asset* target) {
     // Create attacker snapshot
     CombatantSnapshot attacker_snapshot = snapshot_from_asset(*self);
 
-    // Child snapshots are omitted in the simplified sync-child flow.
-    std::vector<ChildAttachmentSnapshot> child_snapshots;
-
     // Create target snapshot
     CombatantSnapshot target_snapshot = snapshot_from_asset(*target);
 
     // Check for attack hit
     auto attack_opt = AttackValidation::compute_attack_if_hit(
-        attacker_snapshot, target_snapshot, child_snapshots);
+        attacker_snapshot, target_snapshot);
 
     if (attack_opt.has_value()) {
         target->send_attack(*attack_opt);

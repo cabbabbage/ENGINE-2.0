@@ -1,6 +1,5 @@
 //TODO we need to implement a public height() that should return the current height in screen pixles of our asset
 //we need to add a public method to return the current grid point of the asset
-//TODO remove unessesary data for animation child attachment
 #ifndef ASSET_HPP
 #define ASSET_HPP
 

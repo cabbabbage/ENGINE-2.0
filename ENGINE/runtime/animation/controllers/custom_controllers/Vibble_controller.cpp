@@ -235,9 +235,6 @@ void VibbleController::process_pending_attacks(Asset& self) {
     // Create attacker snapshot
     CombatantSnapshot attacker_snapshot = snapshot_from_asset(self);
 
-    // Create child snapshots
-    std::vector<ChildAttachmentSnapshot> child_snapshots;
-
     // Get active assets as potential targets
     const auto& active_assets = assets->getActive();
 
@@ -251,7 +248,7 @@ void VibbleController::process_pending_attacks(Asset& self) {
         CombatantSnapshot target_snapshot = snapshot_from_asset(*target);
 
         auto attack_opt = AttackValidation::compute_attack_if_hit(
-            attacker_snapshot, target_snapshot, child_snapshots);
+            attacker_snapshot, target_snapshot);
 
         if (attack_opt.has_value()) {
             target->send_attack(*attack_opt);

@@ -5486,39 +5486,11 @@ void RoomEditor::regenerate_current_room() {
     save_current_room_assets_json();
 }
 
-Asset* RoomEditor::find_asset_spawn_owner(const std::string& spawn_id) const {
-    if (spawn_id.empty() || !assets_) {
-        return nullptr;
-    }
-
-    // In the new model, children are independent assets with a parent pointer
-    // Search through active assets to find the one with this spawn_id and return its parent
-    const auto& active_assets_view = assets_->getActive();
-    for (Asset* asset : active_assets_view) {
-        if (!asset || asset->dead) {
-            continue;
-        }
-        if (asset->spawn_id == spawn_id && asset->parent) {
-            return asset->parent;
-        }
-    }
-    return nullptr;
-}
-
-void RoomEditor::respawn_asset_child_spawn_group(Asset* , const nlohmann::json& ) {
-
-}
-
 void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
     if (!assets_ || !current_room_ || !current_room_->room_area) return;
     if (!entry.is_object()) return;
     std::string spawn_id = entry.value("spawn_id", std::string{});
     if (spawn_id.empty()) return;
-
-    if (Asset* owner = find_asset_spawn_owner(spawn_id)) {
-        respawn_asset_child_spawn_group(owner, entry);
-        return;
-    }
 
     std::vector<Asset*> to_remove;
     for (Asset* asset : assets_->all) {
@@ -5810,18 +5782,9 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
     // Check if asset is a tiled asset
     const bool is_tiled_asset = asset->info && asset->info->tillable;
 
-    // Check if asset is a child timeline asset
-    const bool is_child_timeline_asset =
-        (asset->child_timeline_index() >= 0) || asset->is_child_timeline_asset();
-
-    // Only allow child timeline assets when explicitly requested
-    if (selection_filter_ != SelectionFilter::ChildTimeline && is_child_timeline_asset) {
-        return false;
-    }
-
     switch (selection_filter_) {
         case SelectionFilter::Normal:
-            // Normal assets: not map, not boundary, not tiled, not child timeline
+            // Normal assets: not map, not boundary, not tiled
             return !is_map_asset && !is_boundary_asset && !is_tiled_asset;
 
         case SelectionFilter::Tiled:
@@ -5835,10 +5798,6 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
         case SelectionFilter::Boundary:
             // Boundary assets only
             return is_boundary_asset;
-
-        case SelectionFilter::ChildTimeline:
-            // Child timeline assets only
-            return is_child_timeline_asset;
 
         default:
             return true;
@@ -5860,10 +5819,9 @@ void RoomEditor::cycle_selection_filter() {
             show_notice("Selecting boundary assets");
             break;
         case SelectionFilter::Boundary:
-            selection_filter_ = SelectionFilter::ChildTimeline;
-            show_notice("Selecting child timeline assets");
+            selection_filter_ = SelectionFilter::Normal;
+            show_notice("Selecting normal assets");
             break;
-        case SelectionFilter::ChildTimeline:
         default:
             selection_filter_ = SelectionFilter::Normal;
             show_notice("Selecting normal assets");

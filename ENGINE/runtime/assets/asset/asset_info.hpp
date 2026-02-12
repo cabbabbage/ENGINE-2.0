@@ -34,7 +34,6 @@ class AssetInfo {
 
         public:
     SDL_Texture* preview_texture = nullptr;
-    using ChildInfo = ::ChildInfo;
     AssetInfo(const std::string &asset_folder_name);
     AssetInfo(const std::string &asset_folder_name, const nlohmann::json& metadata);
     static std::shared_ptr<AssetInfo> from_manifest_entry(const std::string& asset_folder_name, const nlohmann::json& metadata);
@@ -81,7 +80,6 @@ class AssetInfo {
 
         std::string attachment_subtype;
         bool        attachment_is_on_top = false;
-        nlohmann::json attachment_child_candidates = nlohmann::json::array();
 };
     std::vector<NamedArea> areas;
     std::map<std::string, Animation> animations;
@@ -155,7 +153,6 @@ class AssetInfo {
     void load_base_properties(const nlohmann::json &data);
     void load_animations(const nlohmann::json& data);
     void load_areas(const nlohmann::json &data);
-    void load_children(const nlohmann::json &data);
     nlohmann::json anims_json_;
     std::string dir_path_;
     nlohmann::json info_json_;
@@ -167,7 +164,6 @@ class AssetInfo {
     std::unordered_set<std::string> anti_tag_lookup_;
     friend class AnimationLoader;
     friend class PrimaryAssetCache;
-    friend class ChildLoader;
 #if defined(ASSET_INFO_ENABLE_TEST_ACCESS)
     friend struct AssetInfoTestAccess;
 #endif

@@ -482,13 +482,6 @@ void Asset::update() {
         anim_runtime_->update();
     }
 
-    request_child_timeline_creation_if_needed();
-
-
-    
-
-
-
     if (info->moving_asset && moved) {
         update_neighbor_lists(true);
     }

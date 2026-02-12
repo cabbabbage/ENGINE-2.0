@@ -716,20 +716,6 @@ void AnimationLoader::load(Animation& animation,
         if (derive_from_animation) {
                 apply_movement_transforms(animation.movement_paths_);
         }
-        auto warn_on_legacy_frame_children = [&](const std::vector<std::vector<AnimationFrame>>& paths) {
-                for (const auto& path : paths) {
-                        for (const auto& frame : path) {
-                                if (!frame.children.empty()) {
-                                        cache_invalid_detected = true;
-                                        vibble::log::warn("[AnimationLoader] " + info.name + "::" + trigger
-                                                  + " contains legacy frame child data; child_timelines is the only supported child format. Continuing with animation load while ignoring child data.");
-                                        // Clear legacy child data but continue loading
-                                        const_cast<AnimationFrame&>(frame).children.clear();
-                                }
-                        }
-                }
-        };
-        warn_on_legacy_frame_children(animation.movement_paths_);
         const bool has_audio_json = anim_json.contains("audio") && anim_json["audio"].is_object();
         const nlohmann::json* audio_json = has_audio_json ? &anim_json["audio"] : nullptr;
         auto clamp_volume = [](int value) {

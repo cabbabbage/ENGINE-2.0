@@ -1148,19 +1148,29 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
         return;
     }
 
-    constexpr double kHalfFovY = 3.14159265358979323846 / 4.0;
-    const double pitch_rad = cam.current_pitch_radians();
-    const double tan_pitch = std::tan(pitch_rad);
-    const double tan_half_fov_y = std::tan(kHalfFovY);
-    const double horizon_ndc = (std::isfinite(tan_pitch) && std::isfinite(tan_half_fov_y) && tan_half_fov_y != 0.0)
-        ? (tan_pitch / tan_half_fov_y)
-        : 0.0;
-    const double horizon_y =
-        static_cast<double>(screen_height_) * 0.5 - horizon_ndc * static_cast<double>(screen_height_) * 0.5;
+    const auto floor_params = cam.compute_floor_depth_params();
+    double horizon_y = std::numeric_limits<double>::quiet_NaN();
+    if (floor_params.enabled && std::isfinite(floor_params.horizon_screen_y)) {
+        // Match the same clamped horizon used for floor warping and depth effects.
+        horizon_y = floor_params.horizon_screen_y;
+    } else {
+        constexpr double kHalfFovY = 3.14159265358979323846 / 4.0;
+        const double pitch_rad = cam.current_pitch_radians();
+        const double tan_pitch = std::tan(pitch_rad);
+        const double tan_half_fov_y = std::tan(kHalfFovY);
+        const double horizon_ndc = (std::isfinite(tan_pitch) && std::isfinite(tan_half_fov_y) && tan_half_fov_y != 0.0)
+            ? (tan_pitch / tan_half_fov_y)
+            : 0.0;
+        horizon_y = static_cast<double>(screen_height_) * 0.5 - horizon_ndc * static_cast<double>(screen_height_) * 0.5;
+    }
+
     if (!std::isfinite(horizon_y)) {
         return;
     }
-    if (horizon_y < 0.0 || horizon_y > static_cast<double>(screen_height_)) {
+
+    const float sky_visible_height =
+        std::clamp(static_cast<float>(horizon_y), 0.0f, static_cast<float>(screen_height_));
+    if (sky_visible_height <= 0.0f) {
         return;
     }
 
@@ -1174,11 +1184,6 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
         return;
     }
 
-    const float sky_visible_height =
-        std::clamp(static_cast<float>(horizon_y), 0.0f, static_cast<float>(screen_height_));
-    if (sky_visible_height <= 0.0f) {
-        return;
-    }
     const float scale_x = static_cast<float>(screen_width_) / tex_w;
     const float scale_y = sky_visible_height / tex_h;
     const float scale   = std::max(scale_x, scale_y);

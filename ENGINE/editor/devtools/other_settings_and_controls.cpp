@@ -1,6 +1,8 @@
 #include "other_settings_and_controls.hpp"
 #include "utils/sdl_render_conversions.hpp"
 
+#include <SDL3/SDL.h>
+
 #include "assets/Asset.hpp"
 #include "assets/asset_types.hpp"
 #include "core/AssetsManager.hpp"
@@ -20,6 +22,7 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
 
@@ -167,15 +170,20 @@ std::string fallback_cpu_label() {
         return brand;
     }
 #endif
+    unsigned int cores = std::thread::hardware_concurrency();
+    if (cores == 0) {
+        cores = 1;
+    }
     std::ostringstream oss;
-    oss << SDL_GetCPUCount() << "-core CPU";
+    oss << cores << "-core CPU";
     return oss.str();
 }
 
 std::string renderer_description(SDL_Renderer* renderer) {
-    SDL_RendererInfo info{};
-    if (renderer && SDL_GetRendererInfo(renderer, &info) == 0 && info.name) {
-        return std::string(info.name);
+    if (renderer) {
+        if (const char* driver = SDL_GetCurrentVideoDriver()) {
+            return std::string(driver);
+        }
     }
     const char* driver = SDL_GetCurrentVideoDriver();
     if (driver) {

@@ -383,8 +383,6 @@ bool Animation::copy_from(const Animation& source, bool flip_horizontal, bool fl
     variant_steps_ = source.variant_steps_;
     locked = source.locked;
     inherit_source_movement = source.inherit_source_movement;
-    // Child asset timelines are not cloned; child support has been removed.
-
     const std::size_t frame_count = source.frame_cache_.size();
     const std::size_t variant_count = variant_steps_.size();
 

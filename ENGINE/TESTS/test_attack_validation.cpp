@@ -4,7 +4,6 @@
 #include "animation/attack_validation.hpp"
 
 using animation_update::AttackValidation;
-using animation_update::ChildAttachmentSnapshot;
 using animation_update::CombatantSnapshot;
 using animation_update::CombatPlane;
 using animation_update::GeometryContext;
@@ -56,13 +55,13 @@ TEST_CASE("AttackValidation reports a hit when an attack vector touches a hitbox
         "dummy", "Target", &target_frame, GeometryContext{SDL_Point{10, 0}, 1.0f, false, CombatPlane::XY}
     };
 
-    auto result = AttackValidation::compute_attack_if_hit(attacker_snapshot, target_snapshot, {});
+    auto result = AttackValidation::compute_attack_if_hit(attacker_snapshot, target_snapshot);
     REQUIRE(result.has_value());
     CHECK(result->damage_amount == 5);
     CHECK(result->hit_x == doctest::Approx(5.0f));
     CHECK(result->hit_y == doctest::Approx(0.0f));
 
     target_snapshot.transform.anchor.x = 30;
-    result = AttackValidation::compute_attack_if_hit(attacker_snapshot, target_snapshot, {});
+    result = AttackValidation::compute_attack_if_hit(attacker_snapshot, target_snapshot);
     CHECK_FALSE(result.has_value());
 }

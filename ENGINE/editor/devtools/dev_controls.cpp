@@ -284,10 +284,9 @@ std::string canonicalize_asset_area_type(std::string raw) {
 }
 
 bool is_known_asset_area_type(const std::string& type) {
-    static const std::array<const char*, 4> kKnownTypes = {
+    static const std::array<const char*, 3> kKnownTypes = {
         "impassable",
         "trigger",
-        "child",
         "spawning"
 };
     for (const char* known : kKnownTypes) {

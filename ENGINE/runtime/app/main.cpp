@@ -497,7 +497,6 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
     spawn_spec["name"] = "spawn";
     spawn_spec["min_instances"] = 1;
     spawn_spec["max_instances"] = 1;
-    spawn_spec["required_children"] = nlohmann::json::array();
     layer["rooms"] = nlohmann::json::array({spawn_spec});
     map_info["map_layers"] = nlohmann::json::array({layer});
 

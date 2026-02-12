@@ -521,13 +521,15 @@ void CameraUIPanel::layout_custom_content(int screen_w, int screen_h) const {
 void CameraUIPanel::sync_from_camera() {
     if (!assets_) return;
     WarpedScreenGrid& cam = assets_->getView();
+    const auto& settings = cam.get_settings();
 
-    if (min_render_size_slider_) min_render_size_slider_->set_value(cam.get_settings().min_visible_screen_ratio);
-    if (render_quality_slider_) render_quality_slider_->set_value(cam.get_settings().render_quality_percent);
-    if (cull_margin_slider_) cull_margin_slider_->set_value(cam.get_settings().extra_cull_margin);
-    if (meters_slider_) {
-        meters_slider_->set_value(cam.get_settings().meters_per_100_world_px);
-    }
+    if (min_render_size_slider_) min_render_size_slider_->set_value(settings.min_visible_screen_ratio);
+    if (render_quality_slider_) render_quality_slider_->set_value(settings.render_quality_percent);
+    if (cull_margin_slider_) cull_margin_slider_->set_value(settings.extra_cull_margin);
+    if (meters_slider_) meters_slider_->set_value(settings.meters_per_100_world_px);
+    if (perspective_cap_slider_) perspective_cap_slider_->set_value(settings.near_camera_max_perspective_scale);
+    if (offscreen_fade_slider_) offscreen_fade_slider_->set_value(settings.offscreen_fade_amount_px);
+    if (depthcue_checkbox_) depthcue_checkbox_->set_value(assets_->depth_effects_enabled());
 }
 
 void CameraUIPanel::build_ui() {
@@ -545,6 +547,9 @@ void CameraUIPanel::build_ui() {
     depthcue_checkbox_ = std::make_unique<DMCheckbox>("Enable Depth Cue", false);
     depthcue_widget_ = std::make_unique<CheckboxWidget>(depthcue_checkbox_.get());
     depthcue_widget_->set_tooltip("Toggle depth cue texture compositing.\nDoes not affect parallax or perspective scaling.");
+    if (depthcue_checkbox_ && assets_) {
+        depthcue_checkbox_->set_value(assets_->depth_effects_enabled());
+    }
 
     WarpedScreenGrid::RealismSettings defaults;
     if (assets_) {
@@ -594,6 +599,14 @@ void CameraUIPanel::build_ui() {
     meters_slider_->set_tooltip("Defines how many meters are represented by 100 world pixels, translating engine space into physical units.");
     meters_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
 
+    perspective_cap_slider_ = std::make_unique<FloatSliderWidget>("Max Perspective Scale", 0.25f, 12.0f, 0.05f, defaults.near_camera_max_perspective_scale, 2);
+    perspective_cap_slider_->set_tooltip("Upper bound on perspective stretching near the camera. Lower values flatten the scene; higher values increase depth exaggeration.");
+    perspective_cap_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
+    offscreen_fade_slider_ = std::make_unique<FloatSliderWidget>("Offscreen Fade Distance (px)", 0.0f, 800.0f, 5.0f, defaults.offscreen_fade_amount_px, 0);
+    offscreen_fade_slider_->set_tooltip("How far below the viewport sprites continue to fade before they are fully hidden.");
+    offscreen_fade_slider_->set_on_value_changed([this](float) { on_control_value_changed(); });
+
     image_effect_button_ = std::make_unique<DMButton>("Configure Image Effects", &DMStyles::AccentButton(), DockableCollapsible::kDefaultFloatingContentWidth, DMButton::height());
     image_effect_widget_ = std::make_unique<ButtonWidget>(image_effect_button_.get(), [this]() {
         if (open_image_effects_cb_) {
@@ -631,6 +644,8 @@ void CameraUIPanel::rebuild_rows() {
     if (depth_section_header_) rows.push_back({ depth_section_header_.get() });
     if (depth_section_expanded_) {
         if (meters_slider_) rows.push_back({ meters_slider_.get() });
+        if (perspective_cap_slider_) rows.push_back({ perspective_cap_slider_.get() });
+        if (offscreen_fade_slider_) rows.push_back({ offscreen_fade_slider_.get() });
     }
 
     if (depthcue_section_header_) rows.push_back({ depthcue_section_header_.get() });
@@ -653,20 +668,45 @@ void CameraUIPanel::apply_settings_if_needed() {
     } guard(applying_settings_);
     WarpedScreenGrid& cam = assets_->getView();
 
-    WarpedScreenGrid::RealismSettings settings;
-    if (min_render_size_slider_) settings.min_visible_screen_ratio = min_render_size_slider_->value();
-    if (render_quality_slider_) settings.render_quality_percent = render_quality_slider_->value();
-    if (cull_margin_slider_) settings.extra_cull_margin = cull_margin_slider_->value();
-    if (meters_slider_) settings.meters_per_100_world_px = meters_slider_->value();
+    const WarpedScreenGrid::RealismSettings current = cam.get_settings();
+    WarpedScreenGrid::RealismSettings updated = current;
 
-    cam.set_realism_settings(settings);
+    if (min_render_size_slider_) updated.min_visible_screen_ratio = min_render_size_slider_->value();
+    if (render_quality_slider_)   updated.render_quality_percent = render_quality_slider_->value();
+    if (cull_margin_slider_)      updated.extra_cull_margin = cull_margin_slider_->value();
+    if (meters_slider_)           updated.meters_per_100_world_px = meters_slider_->value();
+    if (perspective_cap_slider_)  updated.near_camera_max_perspective_scale = perspective_cap_slider_->value();
+    if (offscreen_fade_slider_)   updated.offscreen_fade_amount_px = offscreen_fade_slider_->value();
 
-    devmode::camera_prefs::save_min_visible_screen_ratio(settings.min_visible_screen_ratio);
-    devmode::camera_prefs::save_extra_cull_margin(settings.extra_cull_margin);
-    devmode::camera_prefs::save_meters_per_100_world_px(settings.meters_per_100_world_px);
-    devmode::camera_prefs::save_render_quality_percent(settings.render_quality_percent);
+    auto float_changed = [](float a, float b, float eps = 1e-5f) {
+        return std::fabs(a - b) > eps;
+    };
+    const bool realism_changed =
+        float_changed(updated.min_visible_screen_ratio, current.min_visible_screen_ratio) ||
+        float_changed(updated.extra_cull_margin, current.extra_cull_margin) ||
+        float_changed(updated.meters_per_100_world_px, current.meters_per_100_world_px) ||
+        float_changed(updated.near_camera_max_perspective_scale, current.near_camera_max_perspective_scale) ||
+        float_changed(updated.offscreen_fade_amount_px, current.offscreen_fade_amount_px) ||
+        updated.render_quality_percent != current.render_quality_percent;
 
-    assets_->on_camera_settings_changed();
+    if (realism_changed) {
+        cam.set_realism_settings(updated);
+        devmode::camera_prefs::save_min_visible_screen_ratio(updated.min_visible_screen_ratio);
+        devmode::camera_prefs::save_extra_cull_margin(updated.extra_cull_margin);
+        devmode::camera_prefs::save_meters_per_100_world_px(updated.meters_per_100_world_px);
+        devmode::camera_prefs::save_render_quality_percent(updated.render_quality_percent);
+        devmode::camera_prefs::save_near_camera_max_perspective_scale(updated.near_camera_max_perspective_scale);
+        devmode::camera_prefs::save_offscreen_fade_amount_px(updated.offscreen_fade_amount_px);
+        assets_->on_camera_settings_changed();
+    }
+
+    if (depthcue_checkbox_) {
+        const bool desired_depth_effects = depthcue_checkbox_->value();
+        const bool current_depth_effects = assets_->depth_effects_enabled();
+        if (desired_depth_effects != current_depth_effects) {
+            assets_->set_depth_effects_enabled(desired_depth_effects);
+        }
+    }
 }
 
 

@@ -115,38 +115,11 @@ public:
         sdl_render::FillRect(r, &rect_);
 
         const int pad = palette.padding;
-        const int badge_h = result_.recommended ? palette.badge_height : 0;
+        const int badge_h = 0;
         const int corner_radius = palette.corner_radius;
         const int bevel_depth = palette.bevel_depth;
         const SDL_Color& highlight = DMStyles::HighlightColor();
         const SDL_Color& shadow = DMStyles::ShadowColor();
-
-        if (result_.recommended) {
-            SDL_Rect badge_rect{ rect_.x + pad, rect_.y + pad, 64, badge_h };
-            const DMButtonStyle& badge_style = DMStyles::AccentButton();
-            dm_draw::DrawBeveledRect(r, badge_rect, corner_radius, bevel_depth, badge_style.bg, highlight, shadow, false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-            dm_draw::DrawRoundedOutline(r, badge_rect, std::min(corner_radius, badge_rect.h / 2), 1, badge_style.border);
-            TTF_Font* badge_font = devmode::utils::load_font(std::max(12, badge_style.label.font_size - 2));
-            if (badge_font) {
-                const char* text = "#child";
-                SDL_Surface* surf = ttf_util::RenderTextBlended(badge_font, text, badge_style.text);
-                if (surf) {
-                    SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-                    SDL_DestroySurface(surf);
-                    if (tex) {
-                        int tw = 0;
-                        int th = 0;
-                        texture_size(tex, tw, th);
-                        SDL_Rect dst{ badge_rect.x + (badge_rect.w - tw) / 2,
-                                      badge_rect.y + (badge_rect.h - th) / 2,
-                                      tw,
-                                      th };
-                        sdl_render::Texture(r, tex, nullptr, &dst);
-                        SDL_DestroyTexture(tex);
-                    }
-                }
-            }
-        }
 
         SDL_Rect label_rect{ rect_.x + pad,
                              rect_.y + pad + badge_h,
@@ -569,13 +542,6 @@ void SearchAssets::load_assets() {
             asset.manifest_name = lib_name;
             asset.tags = info->tags;
             asset.payload = nullptr;
-            asset.has_child_tag = false;
-            for (const auto& tag : info->tags) {
-                if (normalize_tag_value(tag) == "child") {
-                    asset.has_child_tag = true;
-                    break;
-                }
-            }
             all_.push_back(std::move(asset));
         }
         return;
@@ -605,9 +571,6 @@ void SearchAssets::load_assets() {
                 if (tag.is_string()) {
                     std::string tag_value = tag.get<std::string>();
                     asset.tags.push_back(tag_value);
-                    if (normalize_tag_value(tag_value) == "child") {
-                        asset.has_child_tag = true;
-                    }
                 }
             }
         }
@@ -654,7 +617,6 @@ void SearchAssets::filter_assets() {
         res.manifest_name = a.manifest_name;
         res.tags = a.tags;
         res.is_tag = false;
-        res.recommended = a.has_child_tag;
         if (seen_labels.insert(res.label).second) {
             asset_results.push_back(std::move(res));
         }
@@ -666,7 +628,6 @@ void SearchAssets::filter_assets() {
     }
 
     std::sort(asset_results.begin(), asset_results.end(), [](const Result& a, const Result& b) {
-        if (a.recommended != b.recommended) return a.recommended && !b.recommended;
         return to_lower(a.label) < to_lower(b.label);
     });
 

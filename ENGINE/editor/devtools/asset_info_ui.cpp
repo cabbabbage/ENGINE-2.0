@@ -54,7 +54,6 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/render.hpp"
 #include "search_assets.hpp"
-#include "devtools/widgets/ChildrenTimelinesPanel.hpp"
 #include "draw_utils.hpp"
 #include <SDL3_ttf/SDL_ttf.h>
 #include "devtools/manifest_spawn_group_utils.hpp"
@@ -411,9 +410,6 @@ void AssetInfoUI::set_assets(Assets* a) {
     }
     assets_ = a;
     set_manifest_store(assets_ ? assets_->manifest_store() : nullptr);
-    if (children_panel_) {
-        children_panel_->set_assets(assets_);
-    }
     if (asset_selector_) {
         asset_selector_->set_assets(assets_);
     }
@@ -430,9 +426,6 @@ void AssetInfoUI::set_manifest_store(devmode::core::ManifestStore* store) {
     manifest_store_ = store;
     if (animation_editor_window_) {
         animation_editor_window_->set_manifest_store(manifest_store_);
-    }
-    if (children_panel_) {
-        children_panel_->set_manifest_store(manifest_store_);
     }
 }
 
@@ -458,19 +451,6 @@ void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
                 }
             });
             animation_editor_window_->set_info(info_);
-            if (children_panel_) {
-                children_panel_->set_manifest_store(manifest_store_);
-                children_panel_->set_document(animation_document());
-                children_panel_->set_status_callback([](const std::string& msg, int) {
-                    if (!msg.empty()) {
-                        SDL_Log("[AssetInfoUI] %s", msg.c_str());
-                    }
-                });
-                children_panel_->set_on_children_changed([this](const std::vector<std::string>& names) {
-                    this->on_animation_children_changed(names);
-                });
-                children_panel_->refresh();
-            }
         } catch (const std::exception& ex) {
             SDL_Log("AssetInfoUI: failed to configure animation editor for %s: %s", info_ ? info_->name.c_str() : "<null>", ex.what());
             animation_editor_window_->clear_info();
@@ -516,10 +496,6 @@ void AssetInfoUI::clear_info() {
         } catch (...) {
             SDL_Log("AssetInfoUI: failed to reset animation editor due to unknown error.");
         }
-    }
-    if (children_panel_) {
-        children_panel_->set_document(nullptr);
-        children_panel_->refresh();
     }
     for (auto& s : sections_) {
         try {
@@ -668,9 +644,6 @@ bool AssetInfoUI::handle_event(const SDL_Event& e) {
         }
     }
 
-    if (children_panel_ && children_panel_->handle_asset_picker_event(e)) {
-        return true;
-    }
 
     const bool pointer_event =
         (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
@@ -795,9 +768,6 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
 
     if (!visible_) return;
 
-    if (children_panel_) {
-        children_panel_->update(input, screen_w, screen_h);
-    }
 
     if (info_ && asset_selector_ && asset_selector_->visible()) {
         asset_selector_->update(input);
@@ -1453,29 +1423,6 @@ void AssetInfoUI::sync_target_tags() {
     }
 }
 
-void AssetInfoUI::sync_animation_children() {
-    if (!info_) {
-        return;
-    }
-
-    info_->set_animation_children(info_->animation_children);
-    (void)info_->commit_manifest();
-
-    bool updated_any = apply_to_assets_with_info([&](Asset* asset) {
-        if (!asset || !asset->info) {
-            return;
-        }
-        if (asset->info != info_) {
-            asset->info->set_animation_children(info_->animation_children);
-        }
-        asset->rebuild_animation_runtime();
-    });
-
-    if (updated_any && assets_) {
-        assets_->mark_active_assets_dirty();
-    }
-}
-
 void AssetInfoUI::sync_target_basic_render_settings(bool type_changed) {
     if (!info_) {
         return;
@@ -1531,12 +1478,6 @@ bool AssetInfoUI::is_point_inside(int x, int y) const {
         }
     }
 
-    if (children_panel_ && children_panel_->is_asset_picker_visible()) {
-        if (children_panel_->asset_picker_blocks_point(x, y)) {
-            return true;
-        }
-    }
-
     if (container_.is_point_inside(x, y)) return true;
     if (asset_selector_ && asset_selector_->visible() && asset_selector_->is_point_inside(x, y)) return true;
     return false;
@@ -1556,26 +1497,11 @@ std::shared_ptr<animation_editor::AnimationDocument> AssetInfoUI::animation_docu
     }
     return nullptr;
 }
-
-void AssetInfoUI::on_animation_children_changed(const std::vector<std::string>& names) {
-    if (info_) {
-        info_->animation_children = names;
-        sync_animation_children();
-    }
-    if (auto doc = animation_document()) {
-        try {
-            doc->save_to_file();
-        } catch (...) {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to save animation document after child change.");
-        }
-    }
-}
 void AssetInfoUI::rebuild_default_sections() {
     sections_.clear();
     section_bounds_.clear();
     basic_info_section_ = nullptr;
     focused_section_ = nullptr;
-    children_panel_ = nullptr;
 
     auto adopt_section = [](auto* section) {
         configure_panel_for_container(section);
@@ -1609,12 +1535,6 @@ void AssetInfoUI::rebuild_default_sections() {
     adopt_section(tags.get());
     finalize_section(tags.get());
     sections_.push_back(std::move(tags));
-
-    auto children_panel = std::make_unique<animation_editor::ChildrenTimelinesPanel>();
-    children_panel_ = children_panel.get();
-    adopt_section(children_panel_);
-    finalize_section(children_panel_);
-    sections_.push_back(std::move(children_panel));
 
     auto spacing = std::make_unique<Section_Spacing>();
     spacing->set_ui(this);

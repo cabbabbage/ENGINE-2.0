@@ -85,10 +85,6 @@ inline ordered_json BuildImageMetadataSnippet(const ordered_json& asset_meta) {
         snippet["animations"] = *anims;
     }
 
-    if (asset_meta.contains("animation_children")) {
-        snippet["animation_children"] = asset_meta["animation_children"];
-    }
-
     return snippet;
 }
 

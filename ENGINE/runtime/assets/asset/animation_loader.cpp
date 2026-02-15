@@ -272,20 +272,24 @@ std::vector<std::vector<DisplacedAssetAnchorPoint>> collect_anchor_frames_from_a
 void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>& anchors,
                              bool                                                 reverse_frames,
                              bool                                                 flip_x,
-                             bool                                                 flip_y) {
+                             bool                                                 flip_y,
+                             bool                                                 flip_movement_x,
+                             bool                                                 flip_movement_y) {
         if (anchors.empty()) {
                 return;
         }
         if (reverse_frames) {
                 std::reverse(anchors.begin(), anchors.end());
         }
+        const bool flip_horizontal = flip_x || flip_movement_x;
+        const bool flip_vertical = flip_y || flip_movement_y;
         for (auto& frame : anchors) {
                 for (auto& anchor : frame) {
-                        if (flip_x) {
+                        if (flip_horizontal) {
                                 anchor.px = -anchor.px;
                                 anchor.rotation_deg = -anchor.rotation_deg;
                         }
-                        if (flip_y) {
+                        if (flip_vertical) {
                                 anchor.py = -anchor.py;
                         }
                 }
@@ -849,7 +853,9 @@ void AnimationLoader::load(Animation& animation,
                 apply_anchor_transforms(anchor_frames,
                                         animation.reverse_source,
                                         animation.flipped_source,
-                                        animation.flip_vertical_source);
+                                        animation.flip_vertical_source,
+                                        animation.flip_movement_horizontal,
+                                        animation.flip_movement_vertical);
         }
         if (anchor_frames.size() < frame_count) {
                 anchor_frames.resize(frame_count);

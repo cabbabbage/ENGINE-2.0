@@ -195,6 +195,7 @@ public:
 
     bool should_run_runtime_updates() const;
     bool is_dev_mode() const { return dev_mode; }
+    bool is_frame_editor_target_active(const Asset* asset) const;
     bool should_advance_animation_for(const Asset* asset) const;
 
 

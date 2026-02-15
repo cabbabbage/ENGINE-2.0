@@ -1365,14 +1365,10 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
         owning_room = current_room_->room_name;
     }
 
-    auto resolved_anchor = anchor_owner->anchor_state(anchor_name);
+    auto resolved_anchor = anchor_owner->anchor_state(anchor_name, anchor_points::GridMaterialization::Ensure);
     SDL_Point spawn_pos = resolved_anchor ? resolved_anchor->world_px : anchor_owner->world_point();
-    const int spawn_z = (resolved_anchor && resolved_anchor->grid_point)
-        ? resolved_anchor->grid_point->world_z()
-        : anchor_owner->world_z();
-    const int resolved_layer = (resolved_anchor && resolved_anchor->grid_point)
-        ? resolved_anchor->grid_point->resolution_layer()
-        : anchor_owner->grid_resolution;
+    const int spawn_z = resolved_anchor ? resolved_anchor->world_z : anchor_owner->world_z();
+    const int resolved_layer = resolved_anchor ? resolved_anchor->resolution_layer : anchor_owner->grid_resolution;
 
     Area spawn_area(owning_room,  0);
 
@@ -2333,6 +2329,17 @@ bool Assets::has_pending_dev_work(bool include_animation_plans) const {
     return false;
 }
 
+bool Assets::is_frame_editor_target_active(const Asset* asset) const {
+    if (!asset) {
+        return false;
+    }
+    if (!dev_controls_ || !dev_controls_->is_frame_editor_session_active()) {
+        return false;
+    }
+    const Asset* target = dev_controls_->frame_editor_target();
+    return target && target == asset;
+}
+
 bool Assets::should_run_runtime_updates() const {
     if (!dev_mode) {
         return true;
@@ -2350,11 +2357,8 @@ bool Assets::should_advance_animation_for(const Asset* asset) const {
     if (!dev_mode) {
         return true;
     }
-    if (dev_controls_ && dev_controls_->is_frame_editor_session_active()) {
-        const Asset* target = dev_controls_->frame_editor_target();
-        if (target && target == asset) {
-            return true;
-        }
+    if (is_frame_editor_target_active(asset)) {
+        return true;
     }
     return false;
 }

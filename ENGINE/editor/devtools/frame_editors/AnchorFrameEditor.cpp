@@ -10,7 +10,6 @@
 #include "devtools/draw_utils.hpp"
 #include "devtools/font_cache.hpp"
 #include "devtools/frame_editors/shared/SelectionState.hpp"
-#include "devtools/frame_editors/shared/SnapUtils.hpp"
 #include "devtools/widgets.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/AnchorPointResolver.hpp"
@@ -93,17 +92,11 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
 
         point_3d_editor_->set_on_coordinates_changed([this]() {
             if (!selection_state_) return;
-            SDL_FPoint snapped_world = snap_world_point_to_grid(selection_state_->world_pos, context_.snap_resolution);
-            float snapped_world_z = snap_world_z_to_grid(selection_state_->world_z, context_.snap_resolution);
-            selection_state_->world_pos = snapped_world;
-            selection_state_->world_z = snapped_world_z;
-            update_selected_anchor_from_world(snapped_world, snapped_world_z);
+            update_selected_anchor_from_world(selection_state_->world_pos, selection_state_->world_z);
         });
 
         point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
-            SDL_FPoint snapped_world = snap_world_point_to_grid(new_world_pos, context_.snap_resolution);
-            float snapped_world_z = snap_world_z_to_grid(new_world_z, context_.snap_resolution);
-            update_selected_anchor_from_world(snapped_world, snapped_world_z);
+            update_selected_anchor_from_world(new_world_pos, new_world_z);
         });
 
         point_3d_editor_->set_on_point_selected([this](int index) {
@@ -675,10 +668,11 @@ bool AnchorFrameEditor::resolve_anchor_screen(int anchor_index,
     const auto& anchor = frame.anchors[static_cast<std::size_t>(anchor_index)];
     const auto resolved = anchor_points::resolve_anchor_point(
         *context_.target,
-        DisplacedAssetAnchorPoint{anchor.name, anchor.px, anchor.py, anchor.pz, anchor.rotation});
+        DisplacedAssetAnchorPoint{anchor.name, anchor.px, anchor.py, anchor.pz, anchor.rotation},
+        anchor_points::GridMaterialization::None);
 
     SDL_FPoint world_f{static_cast<float>(resolved.world_px.x), static_cast<float>(resolved.world_px.y)};
-    out_world_z = resolved.grid_point ? static_cast<float>(resolved.grid_point->world_z()) : static_cast<float>(context_.target->world_z());
+    out_world_z = static_cast<float>(resolved.world_z);
     if (out_world) {
         *out_world = world_f;
     }

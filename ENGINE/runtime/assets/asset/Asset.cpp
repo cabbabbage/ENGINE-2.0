@@ -443,8 +443,11 @@ void Asset::update() {
 
     apply_anchor_follow_target();
 
+    const bool controller_suppressed_for_frame_editor =
+        assets_ && assets_->is_frame_editor_target_active(this);
+
     if (controller_) {
-        if (assets_) {
+        if (!controller_suppressed_for_frame_editor && assets_) {
             if (Input* in = assets_->get_input()) {
                 controller_->update(*in);
             }
@@ -884,10 +887,20 @@ void Asset::apply_anchor_follow_target() {
         }
 
         SDL_Point target_px = resolved->world_px;
-        const int target_z = resolved->grid_point ? resolved->grid_point->world_z() : source->world_z();
-        const int target_layer = resolved->grid_point
-            ? resolved->grid_point->resolution_layer()
-            : (pos_ ? pos_->resolution_layer() : grid_resolution);
+        int target_z = resolved->world_z;
+        int target_layer = resolved->resolution_layer;
+
+        if (resolved->grid_point) {
+                target_px = SDL_Point{resolved->grid_point->world_x(), resolved->grid_point->world_y()};
+                target_z = resolved->grid_point->world_z();
+                target_layer = resolved->grid_point->resolution_layer();
+        } else if (source) {
+                if (auto* source_gp = source->grid_point()) {
+                        target_layer = source_gp->resolution_layer();
+                } else {
+                        target_layer = source->grid_resolution;
+                }
+        }
 
         grid_resolution = target_layer;
 
@@ -909,15 +922,22 @@ void Asset::apply_anchor_follow_target() {
                 return;
         }
 
-        if (assets_ && pos_ && pos_->resolution_layer() != target_layer) {
-                world::WorldGrid& grid = assets_->world_grid();
-                world::GridPoint& target = world::GridPoint::from_world(target_px.x, target_px.y, target_z, target_layer, grid);
+        world::WorldGrid& grid = assets_->world_grid();
+        if (pos_) {
+                world::GridPoint& target = resolved->grid_point
+                        ? *resolved->grid_point
+                        : world::GridPoint::from_world(target_px.x, target_px.y, target_z, target_layer, grid);
                 grid.move_asset(this, *pos_, target);
-                mark_anchors_dirty();
-                return;
+        } else {
+                const int start_x = target_px.x + 1;
+                const int start_y = target_px.y + 1;
+                world::GridPoint virtual_start = world::GridPoint::make_virtual(start_x, start_y, target_z, target_layer);
+                world::GridPoint& target = resolved->grid_point
+                        ? *resolved->grid_point
+                        : world::GridPoint::from_world(target_px.x, target_px.y, target_z, target_layer, grid);
+                grid.move_asset(this, virtual_start, target);
         }
-
-        move_to_world_position(target_px.x, target_px.y, target_z);
+        mark_anchors_dirty();
 }
 
 Asset::AnchorHandle& Asset::get_anchor_point(const std::string& name) {
@@ -934,20 +954,25 @@ Asset::AnchorHandle& Asset::get_anchor_point(const std::string& name) {
         return anchor_handles_.back();
 }
 
-std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name) {
+std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name,
+                                                  anchor_points::GridMaterialization grid_policy) {
         AnchorHandle& handle = get_anchor_point(name);
-        if (handle.dirty) {
-                handle.update();
+        const bool needs_materialization = (grid_policy == anchor_points::GridMaterialization::Ensure) &&
+                                           !handle.grid;
+        if (handle.dirty || needs_materialization) {
+                handle.update(grid_policy);
         }
         ResolvedAnchor resolved{};
         resolved.world_px    = handle.world_px;
+        resolved.world_z     = handle.world_z;
+        resolved.resolution_layer = handle.resolution_layer;
         resolved.grid_point  = handle.grid;
         resolved.rotation_deg = handle.rotation;
         resolved.missing     = handle.missing;
         return resolved;
 }
 
-void Asset::AnchorHandle::update() {
+void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy) {
         if (!owner) {
                 dirty = false;
                 return;
@@ -959,10 +984,12 @@ void Asset::AnchorHandle::update() {
         base_anchor.name = name;
         const DisplacedAssetAnchorPoint* target_anchor = anchor ? anchor : &base_anchor;
 
-        const ResolvedAnchor resolved = anchor_points::resolve_anchor_point(*owner, *target_anchor);
+        const ResolvedAnchor resolved = anchor_points::resolve_anchor_point(*owner, *target_anchor, grid_policy);
 
         grid       = resolved.grid_point;
         world_px   = resolved.world_px;
+        world_z    = resolved.world_z;
+        resolution_layer = resolved.resolution_layer;
         rotation   = resolved.rotation_deg;
         missing    = (anchor == nullptr);
         last_frame_index = frame ? frame->frame_index : -1;

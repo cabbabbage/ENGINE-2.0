@@ -1176,9 +1176,9 @@
             [
               {
                 "name": "eyes",
-                "px": 0.009877000004053116,
-                "py": 0.0,
-                "pz": 0.03950599953532219,
+                "px": -0.0015739999944344163,
+                "py": -0.11567799746990204,
+                "pz": 0.34152698516845703,
                 "rotation": 0.0
               }
             ]
@@ -3036,16 +3036,16 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 2529,
+          "camera_height_px": 2000,
           "camera_pan_y_percent": 0,
           "camera_tilt_deg": 75.0,
           "camera_y_distance_px": 891,
           "camera_zoom_percent": 3,
           "curvyness": 2,
           "display_color": [
-            139,
-            36,
             242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -3074,8 +3074,8 @@
                 }
               ],
               "display_name": "Bartender",
-              "dx": -44,
-              "dy": 164,
+              "dx": 52,
+              "dy": 1108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -3246,9 +3246,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            138,
-            242,
             36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 2,

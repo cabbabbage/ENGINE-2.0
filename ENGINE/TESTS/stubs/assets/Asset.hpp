@@ -1,3 +1,5 @@
 #pragma once
 
-#include "../asset/Asset.hpp"
+// Wrapper to keep include paths compatible with runtime headers.
+#include "asset/Asset.hpp"
+

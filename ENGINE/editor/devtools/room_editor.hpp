@@ -317,10 +317,11 @@ private:
     bool mouse_controls_enabled_last_frame_ = false;
 
     enum class SelectionFilter {
-        Normal,          // Normal assets only (not map, not boundary, not tiled)
+        Normal,          // Normal assets only (not map, not boundary, not tiled, not anchored)
         Tiled,           // Tiled assets only
         MapWide,         // Map-wide assets only
         Boundary,        // Boundary assets only
+        Anchored,        // Assets following another asset's anchor point
     };
     SelectionFilter selection_filter_ = SelectionFilter::Normal;
     bool shift_was_down_last_frame_ = false;

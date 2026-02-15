@@ -1,4 +1,4 @@
-﻿#include "Vibble_controller.hpp"
+#include "Vibble_controller.hpp"
 
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
@@ -69,18 +69,17 @@ void VibbleController::movement(const Input& input) {
 
     const float stride_count = sprint ? kSprintMultiplier : 1.0f;
 
-    if(dash && canDash == true) {
+    if (dash && canDash) {
         Dash();
-
     }
-    if(melee && canMelee == true) {
+    if (melee && canMelee) {
         canMelee = false;
         isMeleeing = true;
         meleeCooldownEndTime = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<float>(meleeCooldown));
     }
 
     float speedMultiplier = kWalkSpeed;
-    if(isDashing) {
+    if (isDashing) {
         speedMultiplier *= dashingPower;
     }
 
@@ -97,7 +96,7 @@ void VibbleController::movement(const Input& input) {
             accumulator -= static_cast<float>(whole);
         }
         return whole;
-};
+    };
 
     subpixel_x_ += velocity_x * dt;
     subpixel_y_ += velocity_y * dt;
@@ -144,16 +143,16 @@ void VibbleController::update(const Input& input) {
     // Ensure the follower exists and stays attached; no respawns after creation.
     spawn_eyes_follower();
 
-    if(isDashing && now >= dashEndTime) {
+    if (isDashing && now >= dashEndTime) {
         isDashing = false;
         cooldownEndTime = now + duration_cast<steady_clock::duration>(duration<float>(dashingCooldown));
     }
 
-    if(!canDash && !isDashing && now >= cooldownEndTime) {
+    if (!canDash && !isDashing && now >= cooldownEndTime) {
         canDash = true;
     }
 
-    if(!canMelee && !isMeleeing && now >= meleeCooldownEndTime) {
+    if (!canMelee && !isMeleeing && now >= meleeCooldownEndTime) {
         canMelee = true;
     }
 
@@ -177,7 +176,7 @@ std::string VibbleController::animation_for_direction(int raw_x, int raw_y) cons
 
     auto has_animation = [&animations](const std::string& name) {
         return animations.find(name) != animations.end();
-};
+    };
 
     const std::string forward_anim   = "forward";
     const std::string backward_anim  = "backward";
@@ -218,11 +217,15 @@ std::string VibbleController::animation_for_direction(int raw_x, int raw_y) cons
 }
 
 void VibbleController::Dash() {
-    if(!canDash) return;
+    if (!canDash) {
+        return;
+    }
 
     canDash = false;
     isDashing = true;
-    dashEndTime = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>( std::chrono::duration<float>(dashingTime) );
+    dashEndTime = std::chrono::steady_clock::now()
+        + std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+            std::chrono::duration<float>(dashingTime));
 }
 
 void VibbleController::process_pending_attacks(Asset& self) {

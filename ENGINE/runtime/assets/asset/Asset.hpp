@@ -267,6 +267,8 @@ class Asset {
         std::string     name;
         world::GridPoint* grid = nullptr;
         SDL_Point       world_px{0, 0};
+        int             world_z = 0;
+        int             resolution_layer = 0;
         float           rotation = 0.0f;
         bool            dirty = true;
         int             last_frame_index = -1;
@@ -274,11 +276,12 @@ class Asset {
         bool            missing = false;
         Asset*          owner = nullptr;
 
-        void update();
+        void update(anchor_points::GridMaterialization grid_policy);
     };
 
     AnchorHandle& get_anchor_point(const std::string& name);
-    std::optional<ResolvedAnchor> anchor_state(const std::string& name);
+    std::optional<ResolvedAnchor> anchor_state(const std::string& name,
+                                               anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None);
     void mark_anchors_dirty();
     void set_anchor_follow_target(std::optional<AnchorFollowTarget> follow);
     const std::optional<AnchorFollowTarget>& anchor_follow_target() const { return follow_anchor_; }

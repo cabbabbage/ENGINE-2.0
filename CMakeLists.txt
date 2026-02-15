@@ -326,10 +326,13 @@ endif()
 add_executable(engine_world_tests
     ${TESTS_SOURCE_DIR}/test_main.cpp
     ${TESTS_SOURCE_DIR}/test_world_grid_same_chunk_move.cpp
+    ${TESTS_SOURCE_DIR}/test_frame_point_resolver.cpp
     ENGINE/runtime/gameplay/world/world_grid.cpp
     ENGINE/runtime/gameplay/world/grid_point.cpp
     ENGINE/runtime/gameplay/world/chunk_manager.cpp
     ENGINE/runtime/utils/utils/grid_math.cpp
+    ENGINE/runtime/utils/utils/FramePointResolver.cpp
+    ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
     ENGINE/runtime/utils/utils/log.cpp
     ENGINE/TESTS/stubs/asset/Asset_world_tests_stubs.cpp
     ${TESTS_SOURCE_DIR}/stubs/chunk_stubs.cpp

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <string>
 #include <unordered_set>
 
@@ -25,14 +26,34 @@ float read_float(const nlohmann::json& v, float fallback = 0.0f) {
     return fallback;
 }
 
+std::size_t read_positive_size(const nlohmann::json& v) {
+    const float parsed = read_float(v, 0.0f);
+    if (!std::isfinite(parsed)) {
+        return 0;
+    }
+    const int rounded = static_cast<int>(std::lround(parsed));
+    return rounded > 0 ? static_cast<std::size_t>(rounded) : 0;
+}
+
+std::size_t declared_frame_count(const nlohmann::json& payload) {
+    if (payload.contains("number_of_frames")) {
+        return read_positive_size(payload["number_of_frames"]);
+    }
+    return 0;
+}
+
 std::size_t inferred_frame_count(const nlohmann::json& payload) {
-    if (payload.contains("movement") && payload["movement"].is_array()) {
-        return payload["movement"].size();
-    }
-    if (payload.contains("frames") && payload["frames"].is_array()) {
-        return payload["frames"].size();
-    }
-    return 1;
+    const std::size_t declared = declared_frame_count(payload);
+    const std::size_t movement = (payload.contains("movement") && payload["movement"].is_array())
+                                     ? payload["movement"].size()
+                                     : 0;
+    const std::size_t frames = (payload.contains("frames") && payload["frames"].is_array())
+                                   ? payload["frames"].size()
+                                   : 0;
+    const std::size_t anchors = (payload.contains("anchor_points") && payload["anchor_points"].is_array())
+                                    ? payload["anchor_points"].size()
+                                    : 0;
+    return std::max<std::size_t>(1, std::max({declared, movement, frames, anchors}));
 }
 
 }  // namespace
@@ -81,14 +102,19 @@ std::vector<AnchorFrame> parse_anchor_frames_from_payload(const nlohmann::json& 
 
 nlohmann::json build_payload_with_anchors(const std::vector<AnchorFrame>& frames, const nlohmann::json& existing_payload) {
     nlohmann::json payload = existing_payload.is_object() ? existing_payload : nlohmann::json::object();
-    const std::size_t frame_count = std::max<std::size_t>(1, frames.size());
+    const std::size_t declared_frame_count =
+        payload.contains("number_of_frames") ? read_positive_size(payload["number_of_frames"]) : 0;
+    nlohmann::json anchor_points =
+        (payload.contains("anchor_points") && payload["anchor_points"].is_array()) ? payload["anchor_points"]
+                                                                                   : nlohmann::json::array();
+    const std::size_t existing_anchor_frames = anchor_points.is_array() ? anchor_points.size() : 0;
+    const std::size_t frame_count =
+        std::max<std::size_t>(1, std::max(declared_frame_count, std::max(frames.size(), existing_anchor_frames)));
 
-    nlohmann::json anchor_points = (payload.contains("anchor_points") && payload["anchor_points"].is_array())
-                                       ? payload["anchor_points"]
-                                       : nlohmann::json::array();
     anchor_points.get_ref<nlohmann::json::array_t&>().resize(frame_count, nlohmann::json::array());
 
-    for (std::size_t i = 0; i < frame_count; ++i) {
+    const std::size_t frames_to_write = std::min<std::size_t>(frames.size(), frame_count);
+    for (std::size_t i = 0; i < frames_to_write; ++i) {
         nlohmann::json frame_array = nlohmann::json::array();
         std::unordered_set<std::string> names;
         const auto& anchor_frame = frames[i];
@@ -117,4 +143,3 @@ nlohmann::json build_payload_with_anchors(const std::vector<AnchorFrame>& frames
 }
 
 }  // namespace devmode::frame_editors
-

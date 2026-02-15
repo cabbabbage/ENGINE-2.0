@@ -7,6 +7,7 @@
 #include "assets/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/world/grid_point.hpp"
+#include "utils/AnchorPointResolver.hpp"
 
 namespace devmode::frame_editors {
 
@@ -21,20 +22,7 @@ float FramePointResolver::parent_height_px() const {
     if (!asset_) {
         return 0.0f;
     }
-
-    int height_px = asset_->height();
-    if (height_px <= 0) {
-        if (SDL_Texture* tex = asset_->get_current_frame()) {
-            float fw = 0.0f;
-            float fh = 0.0f;
-            if (SDL_GetTextureSize(tex, &fw, &fh)) {
-                height_px = static_cast<int>(std::lround(fh));
-            } else {
-                height_px = 0;
-            }
-        }
-    }
-    return static_cast<float>(height_px);
+    return anchor_points::anchor_height_px(*asset_);
 }
 
 float FramePointResolver::base_world_z() const {
@@ -83,12 +71,13 @@ FramePointResolver::Displacement_percent_vals FramePointResolver::to_percent_dis
     if (!source_asset) {
         return vals;
     }
-    int source_height = source_asset->height();
 
-    if (source_height > 0) {
-        vals.dx_percent = static_cast<float>(x) / static_cast<float>(source_height);
-        vals.dy_percent = static_cast<float>(y) / static_cast<float>(source_height);
-        vals.dz_percent = static_cast<float>(z) / static_cast<float>(source_height);
+    const float source_height = anchor_points::anchor_height_px(*source_asset);
+
+    if (source_height > 0.0f) {
+        vals.dx_percent = static_cast<float>(x) / source_height;
+        vals.dy_percent = static_cast<float>(y) / source_height;
+        vals.dz_percent = static_cast<float>(z) / source_height;
     }
     return vals;
 }
@@ -103,11 +92,14 @@ world::GridPoint* FramePointResolver::to_grid_point_displacement(FramePointResol
     Assets* assets = source_asset->get_assets();
     if (!assets) return nullptr;
 
-    int source_height = source_asset->height();
+    const float source_height = anchor_points::anchor_height_px(*source_asset);
+    if (!(source_height > 0.0f)) {
+        return nullptr;
+    }
 
-    int displaced_x = source_gp->world_x() + static_cast<int>(vals.dx_percent * source_height);
-    int displaced_y = source_gp->world_y() + static_cast<int>(vals.dy_percent * source_height);
-    int displaced_z = source_gp->world_z() + static_cast<int>(vals.dz_percent * source_height);
+    const int displaced_x = source_gp->world_x() + static_cast<int>(std::lround(vals.dx_percent * source_height));
+    const int displaced_y = source_gp->world_y() + static_cast<int>(std::lround(vals.dy_percent * source_height));
+    const int displaced_z = source_gp->world_z() + static_cast<int>(std::lround(vals.dz_percent * source_height));
 
     world::GridKey key{displaced_x, displaced_y, displaced_z, source_gp->resolution_layer()};
     return assets->world_grid().find_grid_point_strict(key);

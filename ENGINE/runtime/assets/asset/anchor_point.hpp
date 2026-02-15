@@ -24,7 +24,18 @@ struct DisplacedAssetAnchorPoint {
 
 struct ResolvedAnchor {
     SDL_Point        world_px{0, 0};
+    int              world_z = 0;
+    int              resolution_layer = 0;
     world::GridPoint* grid_point = nullptr;
     float            rotation_deg = 0.0f;
     bool             missing = false;
 };
+
+namespace anchor_points {
+
+enum class GridMaterialization {
+    None,
+    Ensure
+};
+
+}

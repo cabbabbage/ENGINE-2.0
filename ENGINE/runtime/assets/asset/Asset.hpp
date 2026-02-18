@@ -271,12 +271,13 @@ class Asset {
         SDL_Point       world_px{0, 0};
         int             world_z = 0;
         int             resolution_layer = 0;
-        float           rotation = 0.0f;
         bool            dirty = true;
         int             last_frame_index = -1;
         std::string     last_anim;
         bool            missing = false;
+        bool            in_front = true;
         Asset*          owner = nullptr;
+        std::uint64_t   last_camera_version = 0;
 
         void update(anchor_points::GridMaterialization grid_policy);
     };

@@ -11,10 +11,7 @@
 #include "devtools/font_cache.hpp"
 #include "devtools/frame_editors/shared/SelectionState.hpp"
 #include "devtools/widgets.hpp"
-#include "rendering/render/warped_screen_grid.hpp"
 #include "utils/AnchorPointResolver.hpp"
-#include "utils/FramePointResolver.hpp"
-#include "utils/sdl_mouse_utils.hpp"
 
 namespace devmode::frame_editors {
 
@@ -22,10 +19,10 @@ namespace {
 
 constexpr SDL_Color kListAccent{90, 200, 255, 255};
 
-float parse_float_box(DMTextBox* box, float fallback = 0.0f) {
+int parse_int_box(DMTextBox* box, int fallback = 0) {
     if (!box) return fallback;
     try {
-        return std::stof(box->value());
+        return std::stoi(box->value());
     } catch (...) {
         return fallback;
     }
@@ -202,10 +199,9 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     btn_save_ = std::make_unique<DMButton>("Save", &DMStyles::AccentButton(), 140, DMButton::height());
 
     tb_name_ = std::make_unique<DMTextBox>("Name", "");
-    tb_px_ = std::make_unique<DMTextBox>("px (percent of height)", "0.0");
-    tb_py_ = std::make_unique<DMTextBox>("py (percent of height)", "0.0");
-    tb_pz_ = std::make_unique<DMTextBox>("pz (percent of height)", "0.0");
-    tb_rot_ = std::make_unique<DMTextBox>("rotation (deg)", "0.0");
+    tb_tex_x_ = std::make_unique<DMTextBox>("Texture X (px)", "0");
+    tb_tex_z_ = std::make_unique<DMTextBox>("Texture Z (px)", "0");
+    cb_in_front_ = std::make_unique<DMCheckbox>("In Front (unchecked = Behind)", true);
 
     tool_panel_ = std::make_unique<FrameToolPanel>("Anchor Tool Panel", "frame_editor_tool_panel_anchor");
     back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() { wants_close_ = true; });
@@ -237,38 +233,11 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     }));
     anchor_list_widget_->set_selected_anchor_ref(&selected_anchor_);
     name_widget_ = std::make_unique<TextBoxWidget>(tb_name_.get(), true);
-    px_widget_ = std::make_unique<TextBoxWidget>(tb_px_.get(), true);
-    py_widget_ = std::make_unique<TextBoxWidget>(tb_py_.get(), true);
-    pz_widget_ = std::make_unique<TextBoxWidget>(tb_pz_.get(), true);
-    rot_widget_ = std::make_unique<TextBoxWidget>(tb_rot_.get(), true);
+    tex_x_widget_ = std::make_unique<TextBoxWidget>(tb_tex_x_.get(), true);
+    tex_z_widget_ = std::make_unique<TextBoxWidget>(tb_tex_z_.get(), true);
+    in_front_widget_ = std::make_unique<CheckboxWidget>(cb_in_front_.get());
     rebuild_tool_panel_layout();
     // Position set on first update when screen dimensions are available.
-
-    point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);
-    if (point_3d_editor_) {
-        point_3d_editor_->reset_axis(AdjustmentAxis::X);
-        point_3d_editor_->set_grid_resolution(context_.snap_resolution);
-        point_3d_editor_->set_xy_display_mode(CoordinateDisplayMode::Percentage);
-        point_3d_editor_->set_z_display_mode(CoordinateDisplayMode::Percentage);
-        point_3d_editor_->set_parent_height(parent_height_px());
-
-        point_3d_editor_->set_on_coordinates_changed([this]() {
-            if (!selection_state_) return;
-            update_selected_anchor_from_world(selection_state_->world_pos, selection_state_->world_z);
-        });
-
-        point_3d_editor_->set_on_position_changed([this](const SDL_FPoint& new_world_pos, float new_world_z) {
-            update_selected_anchor_from_world(new_world_pos, new_world_z);
-        });
-
-        point_3d_editor_->set_on_point_selected([this](int index) {
-            if (index < 0) {
-                if (selection_state_) selection_state_->reset();
-                return;
-            }
-            select_anchor(index);
-        });
-    }
 
     refresh_form();
     refresh_selection_state();
@@ -290,48 +259,34 @@ void AnchorFrameEditor::end() {
     save_widget_.reset();
     anchor_list_widget_.reset();
     name_widget_.reset();
-    px_widget_.reset();
-    py_widget_.reset();
-    pz_widget_.reset();
-    rot_widget_.reset();
+    tex_x_widget_.reset();
+    tex_z_widget_.reset();
+    in_front_widget_.reset();
     frame_navigator_.reset();
     btn_back_.reset();
     btn_add_.reset();
     btn_delete_.reset();
     btn_save_.reset();
-    point_3d_editor_.reset();
     if (selection_state_) {
         selection_state_->reset();
         selection_state_ = nullptr;
     }
     tb_name_.reset();
-    tb_px_.reset();
-    tb_py_.reset();
-    tb_pz_.reset();
-    tb_rot_.reset();
+    tb_tex_x_.reset();
+    tb_tex_z_.reset();
+    cb_in_front_.reset();
     dirty_ = false;
     wants_close_ = false;
 }
 
 bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
-    SDL_Rect overlay_rect{0, 0, 0, 0};
-    bool overlay_valid = false;
-    if (point_3d_editor_) {
-        overlay_rect = point_3d_editor_->get_cached_container();
-        overlay_valid = (overlay_rect.w > 0 && overlay_rect.h > 0);
-        if (point_3d_editor_->handle_event(e, overlay_rect)) {
-            return true;
-        }
-    }
-
     bool handled = false;
 
     if (tool_panel_) {
         const std::string name_before = tb_name_ ? tb_name_->value() : std::string{};
-        const std::string px_before = tb_px_ ? tb_px_->value() : std::string{};
-        const std::string py_before = tb_py_ ? tb_py_->value() : std::string{};
-        const std::string pz_before = tb_pz_ ? tb_pz_->value() : std::string{};
-        const std::string rot_before = tb_rot_ ? tb_rot_->value() : std::string{};
+        const std::string tx_before = tb_tex_x_ ? tb_tex_x_->value() : std::string{};
+        const std::string tz_before = tb_tex_z_ ? tb_tex_z_->value() : std::string{};
+        const bool front_before = cb_in_front_ ? cb_in_front_->value() : true;
 
         if (tool_panel_->handle_event(e)) {
             handled = true;
@@ -339,10 +294,9 @@ bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
 
         const bool text_changed =
             (tb_name_ && tb_name_->value() != name_before) ||
-            (tb_px_ && tb_px_->value() != px_before) ||
-            (tb_py_ && tb_py_->value() != py_before) ||
-            (tb_pz_ && tb_pz_->value() != pz_before) ||
-            (tb_rot_ && tb_rot_->value() != rot_before);
+            (tb_tex_x_ && tb_tex_x_->value() != tx_before) ||
+            (tb_tex_z_ && tb_tex_z_->value() != tz_before) ||
+            (cb_in_front_ && cb_in_front_->value() != front_before);
 
         if (text_changed && apply_form_to_anchor()) {
             refresh_selection_state();
@@ -355,39 +309,32 @@ bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
         handled = true;
     }
 
-    if (!context_.assets || !context_.target || !point_3d_editor_) {
-        return handled;
-    }
-
-    SDL_Point mouse_pos{0, 0};
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-        mouse_pos = {static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
-    } else if (e.type == SDL_EVENT_MOUSE_MOTION) {
-        mouse_pos = {static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
-    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
-        sdl_mouse_util::GetMouseState(&mouse_pos.x, &mouse_pos.y);
-    }
-
-    const bool pointer_in_overlay = overlay_valid && SDL_PointInRect(&mouse_pos, &overlay_rect);
-    if (!ui_contains_point(mouse_pos) && !pointer_in_overlay) {
-        std::vector<SDL_FPoint> point_screens;
-        std::vector<bool> selectable;
-        const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
-        point_screens.reserve(frame.anchors.size());
-        selectable.reserve(frame.anchors.size());
-        for (std::size_t i = 0; i < frame.anchors.size(); ++i) {
-            SDL_FPoint screen{};
-            float world_z = 0.0f;
-            if (resolve_anchor_screen(static_cast<int>(i), screen, world_z)) {
-                point_screens.push_back(screen);
-                selectable.push_back(true);
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        SDL_Point mouse_pos{static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
+        if (!ui_contains_point(mouse_pos) && selected_frame_ >= 0 && selected_frame_ < static_cast<int>(frames_.size())) {
+            const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
+            int closest = -1;
+            float closest_dist_sq = 36.0f; // 6px radius
+            for (std::size_t i = 0; i < frame.anchors.size(); ++i) {
+                SDL_FPoint screen{};
+                float world_z = 0.0f;
+                if (!resolve_anchor_screen(static_cast<int>(i), screen, world_z)) {
+                    continue;
+                }
+                const float dx = screen.x - static_cast<float>(mouse_pos.x);
+                const float dy = screen.y - static_cast<float>(mouse_pos.y);
+                const float dist_sq = dx * dx + dy * dy;
+                if (dist_sq <= closest_dist_sq) {
+                    closest_dist_sq = dist_sq;
+                    closest = static_cast<int>(i);
+                }
+            }
+            if (closest >= 0) {
+                select_anchor(closest);
+                handled = true;
             }
         }
-        if (!point_screens.empty() && point_3d_editor_->handle_mouse_event(e, point_screens, selectable)) {
-            handled = true;
-        }
     }
-
     return handled;
 }
 
@@ -429,26 +376,13 @@ void AnchorFrameEditor::render_overlays(SDL_Renderer* renderer) const {
             continue;
         }
         const bool is_selected = static_cast<int>(i) == selected_anchor_;
-        const bool is_hovered = point_3d_editor_ && static_cast<int>(i) == point_3d_editor_->get_hovered_point_index();
-        if (point_3d_editor_) {
-            point_3d_editor_->render_selectable_point(renderer, screen, is_selected, is_hovered, 7.0f);
-        } else {
-            SDL_Color color = is_selected ? kListAccent : SDL_Color{200, 200, 200, 255};
-            SDL_Rect dot{
-                static_cast<int>(std::lround(screen.x)) - 4,
-                static_cast<int>(std::lround(screen.y)) - 4,
-                8,
-                8};
-            dm_draw::DrawRoundedSolidRect(renderer, dot, 4, color);
-        }
-    }
-
-    if (point_3d_editor_) {
-        int sw = 0, sh = 0;
-        SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
-        int height = point_3d_editor_->get_overlay_height(sw);
-        SDL_Rect bottom_container{0, sh - height, sw, height};
-        point_3d_editor_->render_overlays(renderer, bottom_container);
+        SDL_Color color = is_selected ? kListAccent : SDL_Color{200, 200, 200, 255};
+        SDL_Rect dot{
+            static_cast<int>(std::lround(screen.x)) - 4,
+            static_cast<int>(std::lround(screen.y)) - 4,
+            8,
+            8};
+        dm_draw::DrawRoundedSolidRect(renderer, dot, 4, color);
     }
 }
 
@@ -527,16 +461,14 @@ void AnchorFrameEditor::refresh_form() {
     if (selected_anchor_ >= 0 && selected_anchor_ < static_cast<int>(frame.anchors.size())) {
         const auto& a = frame.anchors[static_cast<std::size_t>(selected_anchor_)];
         tb_name_->set_value(a.name);
-        tb_px_->set_value(std::to_string(a.px));
-        tb_py_->set_value(std::to_string(a.py));
-        tb_pz_->set_value(std::to_string(a.pz));
-        tb_rot_->set_value(std::to_string(a.rotation));
+        tb_tex_x_->set_value(std::to_string(a.texture_x));
+        tb_tex_z_->set_value(std::to_string(a.texture_z));
+        if (cb_in_front_) cb_in_front_->set_value(a.in_front);
     } else {
         tb_name_->set_value("");
-        tb_px_->set_value("0.0");
-        tb_py_->set_value("0.0");
-        tb_pz_->set_value("0.0");
-        tb_rot_->set_value("0.0");
+        tb_tex_x_->set_value("0");
+        tb_tex_z_->set_value("0");
+        if (cb_in_front_) cb_in_front_->set_value(true);
     }
 }
 
@@ -573,25 +505,20 @@ bool AnchorFrameEditor::apply_form_to_anchor() {
         }
     }
 
-    const float new_px = parse_float_box(tb_px_.get(), a.px);
-    const float new_py = parse_float_box(tb_py_.get(), a.py);
-    const float new_pz = std::clamp(parse_float_box(tb_pz_.get(), a.pz), 0.0f, 1.0f);
-    const float new_rot = parse_float_box(tb_rot_.get(), a.rotation);
+    const int new_tex_x = std::max(0, parse_int_box(tb_tex_x_.get(), a.texture_x));
+    const int new_tex_z = std::max(0, parse_int_box(tb_tex_z_.get(), a.texture_z));
+    const bool new_front = cb_in_front_ ? cb_in_front_->value() : a.in_front;
 
-    if (a.px != new_px) {
-        a.px = new_px;
+    if (a.texture_x != new_tex_x) {
+        a.texture_x = new_tex_x;
         changed = true;
     }
-    if (a.py != new_py) {
-        a.py = new_py;
+    if (a.texture_z != new_tex_z) {
+        a.texture_z = new_tex_z;
         changed = true;
     }
-    if (a.pz != new_pz) {
-        a.pz = new_pz;
-        changed = true;
-    }
-    if (a.rotation != new_rot) {
-        a.rotation = new_rot;
+    if (a.in_front != new_front) {
+        a.in_front = new_front;
         changed = true;
     }
 
@@ -692,71 +619,16 @@ void AnchorFrameEditor::refresh_selection_state() {
     float world_z = 0.0f;
     SDL_FPoint world{};
     if (!resolve_anchor_screen(selected_anchor_, screen, world_z, &world)) {
+        selection_state_->target = SelectionTarget::None;
+        selection_state_->clear_anchor_world();
         return;
     }
 
-    FramePointResolver resolver(context_.target);
     selection_state_->target = SelectionTarget::AnchorPoint;
     selection_state_->world_pos = world;
     selection_state_->world_z = world_z;
     selection_state_->screen_pos = round_point(screen);
-    selection_state_->set_anchor_world(resolver.anchor_world(), resolver.base_world_z());
-
-    if (point_3d_editor_) {
-        point_3d_editor_->set_parent_height(parent_height_px());
-    }
-}
-
-void AnchorFrameEditor::update_selected_anchor_from_world(const SDL_FPoint& world_pos, float world_z) {
-    if (!context_.target) return;
-    if (selected_anchor_ < 0 || selected_anchor_ >= static_cast<int>(frames_.at(static_cast<std::size_t>(selected_frame_)).anchors.size())) {
-        return;
-    }
-
-    const float height = parent_height_px();
-    if (!(height > 0.0f)) {
-        return;
-    }
-
-    SDL_Point base = animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_point());
-    const float base_z = static_cast<float>(context_.target->world_z());
-    auto& anchor = frames_[static_cast<std::size_t>(selected_frame_)].anchors[static_cast<std::size_t>(selected_anchor_)];
-
-    const float next_px = (world_pos.x - static_cast<float>(base.x)) / height;
-    const float next_py = (world_pos.y - static_cast<float>(base.y)) / height;
-    const float next_pz = std::clamp((world_z - base_z) / height, 0.0f, 1.0f);
-
-    bool changed = false;
-    if (anchor.px != next_px) {
-        anchor.px = next_px;
-        changed = true;
-    }
-    if (anchor.py != next_py) {
-        anchor.py = next_py;
-        changed = true;
-    }
-    if (anchor.pz != next_pz) {
-        anchor.pz = next_pz;
-        changed = true;
-    }
-
-    if (changed) {
-        refresh_form();
-        refresh_selection_state();
-        dirty_ = true;
-    }
-}
-
-float AnchorFrameEditor::parent_height_px() const {
-    if (!context_.target) {
-        return 0.0f;
-    }
-    const float runtime_height = context_.target->runtime_height_px();
-    if (std::isfinite(runtime_height) && runtime_height > 0.0f) {
-        return runtime_height;
-    }
-    FramePointResolver resolver(context_.target);
-    return resolver.parent_height_px();
+    selection_state_->set_anchor_world(context_.target->world_point(), static_cast<float>(context_.target->world_z()));
 }
 
 bool AnchorFrameEditor::resolve_anchor_screen(int anchor_index,
@@ -774,24 +646,21 @@ bool AnchorFrameEditor::resolve_anchor_screen(int anchor_index,
         return false;
     }
     const auto& anchor = frame.anchors[static_cast<std::size_t>(anchor_index)];
-    const auto resolved = anchor_points::resolve_anchor_point(
+    const auto pixel_locked = anchor_points::resolve_pixel_locked_anchor(
         *context_.target,
-        DisplacedAssetAnchorPoint{anchor.name, anchor.px, anchor.py, anchor.pz, anchor.rotation},
+        DisplacedAssetAnchorPoint{anchor.name, anchor.texture_x, anchor.texture_z, anchor.in_front},
         anchor_points::GridMaterialization::None);
 
-    SDL_FPoint world_f{static_cast<float>(resolved.world_px.x), static_cast<float>(resolved.world_px.y)};
-    out_world_z = static_cast<float>(resolved.world_z);
-    if (out_world) {
-        *out_world = world_f;
+    if (pixel_locked.resolved.missing) {
+        return false;
     }
 
-    const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
-    SDL_FPoint projected{};
-    if (context_.camera && context_.camera->project_world_point(world_f, out_world_z, projected)) {
-        out_screen = projected;
-    } else {
-        out_screen = cam.map_to_screen_f(world_f);
+    out_world_z = static_cast<float>(pixel_locked.resolved.world_z);
+    if (out_world) {
+        *out_world = SDL_FPoint{static_cast<float>(pixel_locked.resolved.world_px.x),
+                                static_cast<float>(pixel_locked.resolved.world_px.y)};
     }
+    out_screen = pixel_locked.screen_px;
     return true;
 }
 
@@ -837,10 +706,9 @@ void AnchorFrameEditor::rebuild_tool_panel_layout() {
     if (selected_anchor_ >= 0) {
         if (name_widget_) rows.push_back({name_widget_.get()});
         if (save_widget_) rows.push_back({save_widget_.get()});
-        if (px_widget_) rows.push_back({px_widget_.get()});
-        if (py_widget_) rows.push_back({py_widget_.get()});
-        if (pz_widget_) rows.push_back({pz_widget_.get()});
-        if (rot_widget_) rows.push_back({rot_widget_.get()});
+        if (tex_x_widget_) rows.push_back({tex_x_widget_.get()});
+        if (tex_z_widget_) rows.push_back({tex_z_widget_.get()});
+        if (in_front_widget_) rows.push_back({in_front_widget_.get()});
     }
 
     tool_panel_->set_rows(rows);

@@ -8,17 +8,12 @@ namespace world { struct GridPoint; }
 
 struct DisplacedAssetAnchorPoint {
     std::string name;
-    float       px = 0.0f;
-    float       py = 0.0f;
-    float       pz = 0.0f;
-    float       rotation_deg = 0.0f;
+    int         texture_x = 0;   // Pixel coordinate on the sprite texture (X axis)
+    int         texture_z = 0;   // Pixel coordinate on the sprite texture (vertical axis)
+    bool        in_front = true; // True = one pixel closer to camera than owner, false = one pixel behind
 
     bool is_valid() const {
-        return !name.empty() &&
-               std::isfinite(px) &&
-               std::isfinite(py) &&
-               std::isfinite(pz) &&
-               std::isfinite(rotation_deg);
+        return !name.empty();
     }
 };
 
@@ -27,8 +22,8 @@ struct ResolvedAnchor {
     int              world_z = 0;
     int              resolution_layer = 0;
     world::GridPoint* grid_point = nullptr;
-    float            rotation_deg = 0.0f;
     bool             missing = false;
+    bool             in_front = true;
 };
 
 namespace anchor_points {

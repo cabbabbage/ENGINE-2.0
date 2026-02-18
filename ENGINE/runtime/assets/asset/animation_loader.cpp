@@ -219,13 +219,16 @@ DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node, bool& va
                 return anchor;
         }
         anchor.name = node.value("name", std::string{});
-        anchor.px = read_float(node.value("px", 0.0f));
-        anchor.py = read_float(node.value("py", 0.0f));
-        anchor.pz = std::clamp(read_float(node.value("pz", 0.0f)), 0.0f, 1.0f);
-        anchor.rotation_deg = read_float(node.value("rotation", node.value("rotation_deg", 0.0f)));
-        if (anchor.is_valid()) {
-                valid = true;
+        if (anchor.name.empty()) {
+                return anchor;
         }
+        if (!node.contains("texture_x") || !node.contains("texture_z")) {
+                return anchor;
+        }
+        anchor.texture_x = static_cast<int>(std::lround(read_float(node.value("texture_x", 0.0f))));
+        anchor.texture_z = static_cast<int>(std::lround(read_float(node.value("texture_z", 0.0f))));
+        anchor.in_front = node.value("in_front", true);
+        valid = anchor.is_valid();
         return anchor;
 }
 
@@ -270,6 +273,7 @@ std::vector<std::vector<DisplacedAssetAnchorPoint>> collect_anchor_frames_from_a
 }
 
 void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>& anchors,
+                             const std::vector<Animation::FrameCache>& frame_cache,
                              bool                                                 reverse_frames,
                              bool                                                 flip_x,
                              bool                                                 flip_y,
@@ -283,14 +287,25 @@ void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>
         }
         const bool flip_horizontal = flip_x || flip_movement_x;
         const bool flip_vertical = flip_y || flip_movement_y;
-        for (auto& frame : anchors) {
-                for (auto& anchor : frame) {
-                        if (flip_horizontal) {
-                                anchor.px = -anchor.px;
-                                anchor.rotation_deg = -anchor.rotation_deg;
+        for (std::size_t frame_index = 0; frame_index < anchors.size(); ++frame_index) {
+                auto& frame = anchors[frame_index];
+                int frame_w = 0;
+                int frame_h = 0;
+                if (frame_index < frame_cache.size()) {
+                        const auto& cache = frame_cache[frame_index];
+                        if (!cache.widths.empty()) frame_w = cache.widths.front();
+                        if (!cache.heights.empty()) frame_h = cache.heights.front();
+                        if (!cache.source_rects.empty() && !cache.uses_atlas.empty() && cache.uses_atlas.front()) {
+                                frame_w = cache.source_rects.front().w;
+                                frame_h = cache.source_rects.front().h;
                         }
-                        if (flip_vertical) {
-                                anchor.py = -anchor.py;
+                }
+                for (auto& anchor : frame) {
+                        if (flip_horizontal && frame_w > 0) {
+                                anchor.texture_x = frame_w - 1 - anchor.texture_x;
+                        }
+                        if (flip_vertical && frame_h > 0) {
+                                anchor.texture_z = frame_h - 1 - anchor.texture_z;
                         }
                 }
         }
@@ -851,6 +866,7 @@ void AnimationLoader::load(Animation& animation,
         } else if (source_animation_ptr) {
                 anchor_frames = collect_anchor_frames_from_animation(*source_animation_ptr, frame_count);
                 apply_anchor_transforms(anchor_frames,
+                                        animation.frame_cache_,
                                         animation.reverse_source,
                                         animation.flipped_source,
                                         animation.flip_vertical_source,

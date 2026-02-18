@@ -194,13 +194,24 @@ bool AnimationCloner::Clone(const Animation& source,
             if (src_frame) {
                 dst_frame.anchor_points.clear();
                 dst_frame.anchor_points.reserve(src_frame->anchor_points.size());
+                int frame_w = 0;
+                int frame_h = 0;
+                if (!dst_cache.widths.empty()) frame_w = dst_cache.widths.front();
+                if (!dst_cache.heights.empty()) frame_h = dst_cache.heights.front();
+                if (!dst_cache.source_rects.empty() && !dst_cache.uses_atlas.empty() && dst_cache.uses_atlas.front()) {
+                    frame_w = dst_cache.source_rects.front().w;
+                    frame_h = dst_cache.source_rects.front().h;
+                }
                 for (auto anchor : src_frame->anchor_points) {
                     if (opts.flip_horizontal) {
-                        anchor.px = -anchor.px;
-                        anchor.rotation_deg = -anchor.rotation_deg;
+                        if (frame_w > 0) {
+                            anchor.texture_x = frame_w - 1 - anchor.texture_x;
+                        }
                     }
                     if (opts.flip_vertical) {
-                        anchor.py = -anchor.py;
+                        if (frame_h > 0) {
+                            anchor.texture_z = frame_h - 1 - anchor.texture_z;
+                        }
                     }
                     dst_frame.anchor_points.push_back(anchor);
                 }

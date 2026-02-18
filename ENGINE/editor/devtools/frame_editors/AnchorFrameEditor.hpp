@@ -8,7 +8,6 @@
 #include "shared/AnchorFrameState.hpp"
 #include "shared/FrameEditorContext.hpp"
 #include "shared/FrameNavigator.hpp"
-#include "shared/Point3DEditor.hpp"
 #include "shared/ToolPanel.hpp"
 #include "shared/ManifestTransaction.hpp"
 #include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
@@ -49,8 +48,6 @@ private:
     void apply_live_changes(bool force = false);
     void invalidate_preview() const;
     void refresh_selection_state();
-    void update_selected_anchor_from_world(const SDL_FPoint& world_pos, float world_z);
-    float parent_height_px() const;
     bool resolve_anchor_screen(int anchor_index, SDL_FPoint& out_screen, float& out_world_z, SDL_FPoint* out_world = nullptr) const;
     bool ui_contains_point(const SDL_Point& p) const;
     void add_anchor();
@@ -70,13 +67,11 @@ private:
     std::unique_ptr<DMButton> btn_add_;
     std::unique_ptr<DMButton> btn_delete_;
     std::unique_ptr<DMButton> btn_save_;
-    std::unique_ptr<Point3DEditor> point_3d_editor_;
 
     std::unique_ptr<DMTextBox> tb_name_;
-    std::unique_ptr<DMTextBox> tb_px_;
-    std::unique_ptr<DMTextBox> tb_py_;
-    std::unique_ptr<DMTextBox> tb_pz_;
-    std::unique_ptr<DMTextBox> tb_rot_;
+    std::unique_ptr<DMTextBox> tb_tex_x_;
+    std::unique_ptr<DMTextBox> tb_tex_z_;
+    std::unique_ptr<DMCheckbox> cb_in_front_;
 
     mutable SDL_Rect nav_rect_{0, 0, 0, 0};
     mutable int screen_w_ = 1920;
@@ -88,10 +83,9 @@ private:
     std::unique_ptr<ButtonWidget> delete_widget_;
     std::unique_ptr<ButtonWidget> save_widget_;
     std::unique_ptr<TextBoxWidget> name_widget_;
-    std::unique_ptr<TextBoxWidget> px_widget_;
-    std::unique_ptr<TextBoxWidget> py_widget_;
-    std::unique_ptr<TextBoxWidget> pz_widget_;
-    std::unique_ptr<TextBoxWidget> rot_widget_;
+    std::unique_ptr<TextBoxWidget> tex_x_widget_;
+    std::unique_ptr<TextBoxWidget> tex_z_widget_;
+    std::unique_ptr<CheckboxWidget> in_front_widget_;
     std::unique_ptr<AnchorListWidget, AnchorListWidgetDeleter> anchor_list_widget_;
 };
 

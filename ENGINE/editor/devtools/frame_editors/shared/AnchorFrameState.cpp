@@ -83,16 +83,11 @@ std::vector<AnchorFrame> parse_anchor_frames_from_payload(const nlohmann::json& 
             FrameAnchorPoint pt{};
             pt.name = node.value("name", std::string{});
             if (pt.name.empty()) continue;
-            pt.px = read_float(node.value("px", 0.0f));
-            pt.py = read_float(node.value("py", 0.0f));
-            pt.pz = std::clamp(read_float(node.value("pz", 0.0f)), 0.0f, 1.0f);
-            pt.rotation = read_float(node.value("rotation", node.value("rotation_deg", 0.0f)));
-            if (!std::isfinite(pt.px) || !std::isfinite(pt.py) || !std::isfinite(pt.pz) || !std::isfinite(pt.rotation)) {
-                continue;
-            }
-            if (!names.insert(pt.name).second) {
-                continue;
-            }
+            if (!node.contains("texture_x") || !node.contains("texture_z")) continue;
+            pt.texture_x = static_cast<int>(std::lround(read_float(node.value("texture_x", 0.0f))));
+            pt.texture_z = static_cast<int>(std::lround(read_float(node.value("texture_z", 0.0f))));
+            pt.in_front = node.value("in_front", true);
+            if (!names.insert(pt.name).second) continue;
             frames[i].anchors.push_back(pt);
         }
     }
@@ -120,19 +115,14 @@ nlohmann::json build_payload_with_anchors(const std::vector<AnchorFrame>& frames
         const auto& anchor_frame = frames[i];
         for (const auto& anchor : anchor_frame.anchors) {
             if (anchor.name.empty()) continue;
-            if (!std::isfinite(anchor.px) || !std::isfinite(anchor.py) || !std::isfinite(anchor.pz) ||
-                !std::isfinite(anchor.rotation)) {
-                continue;
-            }
             if (!names.insert(anchor.name).second) {
                 continue;
             }
             frame_array.push_back(nlohmann::json{
                 {"name", anchor.name},
-                {"px", anchor.px},
-                {"py", anchor.py},
-                {"pz", std::clamp(anchor.pz, 0.0f, 1.0f)},
-                {"rotation", anchor.rotation},
+                {"texture_x", anchor.texture_x},
+                {"texture_z", anchor.texture_z},
+                {"in_front", anchor.in_front},
             });
         }
         anchor_points[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(frame_array);

@@ -1175,11 +1175,10 @@
           "anchor_points": [
             [
               {
+                "in_front": true,
                 "name": "eyes",
-                "px": -0.4000000059604645,
-                "py": 0.044443998485803604,
-                "pz": 0.7555559873580933,
-                "rotation": 0.0
+                "texture_x": 0,
+                "texture_z": 0
               }
             ]
           ],

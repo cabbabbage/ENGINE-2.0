@@ -53,6 +53,7 @@ namespace world {
     class WorldGrid;
     struct GridPoint;
     struct Chunk;
+    struct CameraProjectionParams;
 }
 
 class WarpedScreenGrid {
@@ -187,6 +188,7 @@ public:
     void set_render_areas_enabled(bool enabled) { render_areas_enabled_ = enabled; }
     const Area& get_current_view() const { return current_view_; }
     const Area& get_camera_area() const { return current_view_; }
+    world::CameraProjectionParams projection_params() const;
 
     bool is_manual_height_override() const;
     void set_manual_height_override(bool);

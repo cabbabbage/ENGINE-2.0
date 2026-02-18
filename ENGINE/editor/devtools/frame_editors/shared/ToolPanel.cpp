@@ -2,16 +2,13 @@
 
 #include <algorithm>
 #include <utility>
-#include <vector>
 
 #include <SDL3/SDL.h>
 
 #include "FloatingDockableManager.hpp"
 #include "FloatingPanelLayoutManager.hpp"
 #include "devtools/dm_styles.hpp"
-#include "devtools/draw_utils.hpp"
 #include "utils/input.hpp"
-#include "utils/sdl_render_conversions.hpp"
 
 namespace devmode::frame_editors {
 
@@ -23,43 +20,48 @@ int default_content_width() {
 SDL_Rect full_work_area(int w, int h) {
     return SDL_Rect{0, 0, std::max(0, w), std::max(0, h)};
 }
+}  // namespace
 
 class FrameToolDockable final : public DockableCollapsible {
 public:
     using DockableCollapsible::DockableCollapsible;
 
-    bool is_point_over_empty_area(const SDL_Point& p) const {
-        if (!expanded_) return false;
-        if (body_viewport_.w <= 0 || body_viewport_.h <= 0) return false;
-        if (!SDL_PointInRect(&p, &body_viewport_)) return false;
-        for (const SDL_Rect& rect : widget_bounds_) {
-            if (SDL_PointInRect(&p, &rect)) {
-                return false;
+    // Returns true if the point is on the panel rect but NOT on any
+    // interactive widget. This includes the body padding, gaps between
+    // widgets, and the header area (which DockableCollapsible's own drag
+    // also handles, but we want a consistent experience).
+    bool is_point_in_non_widget_area(const SDL_Point& p) const {
+        if (!SDL_PointInRect(&p, &rect_)) return false;
+        // Check each widget rect directly (avoids stale cache issues).
+        for (const auto& row : rows_) {
+            for (Widget* w : row) {
+                if (!w) continue;
+                SDL_Rect wr = w->rect();
+                if (wr.w > 0 && wr.h > 0 && SDL_PointInRect(&p, &wr)) {
+                    return false;
+                }
             }
+        }
+        // Don't hijack close/lock button clicks.
+        if (close_btn_) {
+            SDL_Rect cr = close_btn_->rect();
+            if (cr.w > 0 && cr.h > 0 && SDL_PointInRect(&p, &cr)) return false;
+        }
+        if (lock_btn_) {
+            SDL_Rect lr = lock_btn_->rect();
+            if (lr.w > 0 && lr.h > 0 && SDL_PointInRect(&p, &lr)) return false;
+        }
+        if (header_btn_) {
+            SDL_Rect hr = header_btn_->rect();
+            if (hr.w > 0 && hr.h > 0 && SDL_PointInRect(&p, &hr)) return false;
         }
         return true;
     }
 
-    const SDL_Rect& body_viewport_bounds() const {
-        return body_viewport_;
+    bool is_point_on_panel(const SDL_Point& p) const {
+        return SDL_PointInRect(&p, &rect_);
     }
-
-protected:
-    void layout_custom_content(int screen_w, int screen_h) const override {
-        widget_bounds_.clear();
-        for (const auto& row : rows_) {
-            for (Widget* w : row) {
-                if (w) {
-                    widget_bounds_.push_back(w->rect());
-                }
-            }
-        }
-    }
-
-private:
-    mutable std::vector<SDL_Rect> widget_bounds_;
 };
-}  // namespace
 
 FrameToolPanel::FrameToolPanel(std::string title, std::string stack_key)
     : panel_(std::make_unique<FrameToolDockable>(std::move(title), true)),
@@ -100,8 +102,11 @@ void FrameToolPanel::set_rows(const DockableCollapsible::Rows& rows) const {
     panel_->reset_scroll();
 }
 
-void FrameToolPanel::set_position_if_unset(int x, int y) const {
+void FrameToolPanel::set_position_if_unset(int screen_w, int y) const {
     if (!panel_ || has_position_) return;
+    if (screen_w <= 0) return;  // need valid screen width to position on right
+    const int panel_w = std::max(panel_->rect().w, default_content_width());
+    const int x = screen_w - panel_w - DMSpacing::item_gap();
     panel_->set_position(x, y);
     has_position_ = true;
 }
@@ -148,33 +153,26 @@ bool FrameToolPanel::handle_event(const SDL_Event& e) const {
         }
     }
 
-    if (panel_impl_) {
-        if (pointer_event) {
-            hover_empty_area_ = panel_impl_->is_point_over_empty_area(pointer);
-        }
-    } else {
-        hover_empty_area_ = false;
-    }
-
+    // ── Active drag ──────────────────────────────────────────────────
     if (dragging_empty_area_) {
         if (pointer_event && e.type == SDL_EVENT_MOUSE_MOTION) {
-            const int target_x = pointer.x - drag_offset_.x;
-            const int target_y = pointer.y - drag_offset_.y;
-            panel_->set_position(target_x, target_y);
+            panel_->set_position(pointer.x - drag_offset_.x,
+                                 pointer.y - drag_offset_.y);
             return true;
         }
-        if (pointer_event && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        if (pointer_event && e.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+            e.button.button == SDL_BUTTON_LEFT) {
             dragging_empty_area_ = false;
             FloatingPanelLayoutManager::instance().notifyPanelUserMoved(panel_.get());
             return true;
         }
-        if (pointer_event && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-            return true;
-        }
+        if (pointer_event) return true;  // swallow stray events while dragging
     }
 
-    if (pointer_event && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT &&
-        panel_impl_ && panel_impl_->is_point_over_empty_area(pointer)) {
+    // ── Start drag: mouse-down on any non-widget part of the panel ──
+    if (pointer_event && e.type == SDL_EVENT_MOUSE_BUTTON_DOWN &&
+        e.button.button == SDL_BUTTON_LEFT && panel_impl_ &&
+        panel_impl_->is_point_in_non_widget_area(pointer)) {
         dragging_empty_area_ = true;
         drag_offset_.x = pointer.x - panel_->rect().x;
         drag_offset_.y = pointer.y - panel_->rect().y;
@@ -182,47 +180,37 @@ bool FrameToolPanel::handle_event(const SDL_Event& e) const {
         return true;
     }
 
-    return panel_->handle_event(e);
+    // ── Forward to the underlying DockableCollapsible (widgets, scroll, etc.)
+    if (panel_->handle_event(e)) {
+        return true;
+    }
+
+    // ── Consume all remaining pointer events that land on the panel ──
+    // This prevents clicks/motion from bleeding through to the canvas.
+    if (pointer_event && panel_impl_ && panel_impl_->is_point_on_panel(pointer)) {
+        return true;
+    }
+
+    if (e.type == SDL_EVENT_MOUSE_WHEEL && panel_impl_) {
+        float mx = 0.0f;
+        float my = 0.0f;
+        SDL_GetMouseState(&mx, &my);
+        SDL_Point wheel_pos{
+            static_cast<int>(std::lround(mx)),
+            static_cast<int>(std::lround(my))};
+        if (panel_impl_->is_point_on_panel(wheel_pos)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void FrameToolPanel::render(SDL_Renderer* renderer) const {
     if (!panel_ || !panel_->is_visible() || !renderer) {
         return;
     }
-
     panel_->render(renderer);
-
-    if (!hover_empty_area_ || !panel_impl_) {
-        return;
-    }
-
-    SDL_Rect highlight_rect = panel_impl_->body_viewport_bounds();
-    if (highlight_rect.w <= 0 || highlight_rect.h <= 0) {
-        return;
-    }
-
-    constexpr int glow_padding = 2;
-    SDL_Rect glow_rect = highlight_rect;
-    glow_rect.x -= glow_padding;
-    glow_rect.y -= glow_padding;
-    glow_rect.w += glow_padding * 2;
-    glow_rect.h += glow_padding * 2;
-
-    SDL_BlendMode prev_blend = SDL_BLENDMODE_BLEND;
-    if (SDL_GetRenderDrawBlendMode(renderer, &prev_blend) != 0) {
-        prev_blend = SDL_BLENDMODE_BLEND;
-    }
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-
-    SDL_Color fill = DMStyles::HighlightColor();
-    fill.a = 40;
-    sdl_render::FillRect(renderer, &glow_rect);
-
-    SDL_Color outline = DMStyles::AccentButton().hover_bg;
-    outline.a = 160;
-    dm_draw::DrawRoundedOutline(renderer, glow_rect, DMStyles::CornerRadius(), 2, outline);
-
-    SDL_SetRenderDrawBlendMode(renderer, prev_blend);
 }
 
 bool FrameToolPanel::contains_point(const SDL_Point& p) const {

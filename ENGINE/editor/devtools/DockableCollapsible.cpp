@@ -461,6 +461,7 @@ void DockableCollapsible::set_position_internal(int x, int y, bool from_layout_m
         return;
     }
 
+    FloatingPanelLayoutManager::instance().notifyPanelUserMoved(this);
     notify_layout_manager_geometry_changed();
     clamp_to_bounds(last_screen_w_, last_screen_h_);
     invalidate_layout(true);

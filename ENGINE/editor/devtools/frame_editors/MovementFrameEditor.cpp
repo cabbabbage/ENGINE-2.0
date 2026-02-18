@@ -123,9 +123,9 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     };
     if (tool_panel_) {
         tool_panel_->set_rows(rows);
-        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), DMSpacing::header_gap());
+        // Position set on first update when screen dimensions are available.
     }
-    
+
     if (point_3d_editor_) {
         point_3d_editor_->set_on_coordinates_changed([this]() {
             if (!selection_state_) {
@@ -341,7 +341,7 @@ void MovementFrameEditor::update(const Input& input, float) {
     }
     if (tool_panel_) {
         tool_panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
-        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), nav_rect_.h + DMSpacing::header_gap());
+        tool_panel_->set_position_if_unset(screen_w_, nav_rect_.h + DMSpacing::header_gap());
         tool_panel_->update(input, screen_w_, screen_h_);
     }
 }
@@ -419,7 +419,7 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 
     if (tool_panel_) {
         tool_panel_->set_work_area(SDL_Rect{0, 0, sw, sh});
-        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), nav_height + DMSpacing::header_gap());
+        tool_panel_->set_position_if_unset(sw, nav_height + DMSpacing::header_gap());
     }
 }
 

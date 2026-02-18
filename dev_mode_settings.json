@@ -30,7 +30,7 @@
         "grid": {
             "cell_size_px": 9.0,
             "overlay": {
-                "enabled": true,
+                "enabled": false,
                 "r": 2.0
             },
             "snap": {

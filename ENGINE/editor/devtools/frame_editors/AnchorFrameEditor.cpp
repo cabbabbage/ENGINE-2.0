@@ -199,6 +199,7 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
     btn_add_ = std::make_unique<DMButton>("Add Anchor", &DMStyles::AccentButton(), 140, DMButton::height());
     btn_delete_ = std::make_unique<DMButton>("Delete Anchor", &DMStyles::DeleteButton(), 140, DMButton::height());
+    btn_save_ = std::make_unique<DMButton>("Save", &DMStyles::AccentButton(), 140, DMButton::height());
 
     tb_name_ = std::make_unique<DMTextBox>("Name", "");
     tb_px_ = std::make_unique<DMTextBox>("px (percent of height)", "0.0");
@@ -223,6 +224,14 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
         select_anchor(std::min(selected_anchor_, remaining - 1));
         dirty_ = true;
     });
+    save_widget_ = std::make_unique<ButtonWidget>(btn_save_.get(), [this]() {
+        apply_form_to_anchor();
+        persist_changes();
+        if (context_.document) {
+            context_.document->save_to_file_checked(true);
+        }
+        dirty_ = false;
+    });
     anchor_list_widget_.reset(new AnchorListWidget(&frames_, &selected_frame_, &selected_anchor_, [this](int idx) {
         select_anchor(idx);
     }));
@@ -233,7 +242,7 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     pz_widget_ = std::make_unique<TextBoxWidget>(tb_pz_.get(), true);
     rot_widget_ = std::make_unique<TextBoxWidget>(tb_rot_.get(), true);
     rebuild_tool_panel_layout();
-    tool_panel_->set_position_if_unset(DMSpacing::item_gap(), DMSpacing::header_gap());
+    // Position set on first update when screen dimensions are available.
 
     point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);
     if (point_3d_editor_) {
@@ -278,6 +287,7 @@ void AnchorFrameEditor::end() {
     back_widget_.reset();
     add_widget_.reset();
     delete_widget_.reset();
+    save_widget_.reset();
     anchor_list_widget_.reset();
     name_widget_.reset();
     px_widget_.reset();
@@ -288,6 +298,7 @@ void AnchorFrameEditor::end() {
     btn_back_.reset();
     btn_add_.reset();
     btn_delete_.reset();
+    btn_save_.reset();
     point_3d_editor_.reset();
     if (selection_state_) {
         selection_state_->reset();
@@ -390,7 +401,7 @@ void AnchorFrameEditor::update(const Input& input, float) {
     }
     if (tool_panel_) {
         tool_panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
-        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), nav_rect_.h + DMSpacing::header_gap());
+        tool_panel_->set_position_if_unset(screen_w_, nav_rect_.h + DMSpacing::header_gap());
         tool_panel_->update(input, screen_w_, screen_h_);
     }
     refresh_selection_state();
@@ -468,11 +479,15 @@ void AnchorFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     }
     if (tool_panel_) {
         tool_panel_->set_work_area(SDL_Rect{0, 0, sw, sh});
-        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), nav_height + DMSpacing::header_gap());
+        tool_panel_->set_position_if_unset(sw, nav_height + DMSpacing::header_gap());
     }
 }
 
 void AnchorFrameEditor::select_frame(int index) {
+    // Apply pending textbox edits before switching frames.
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+    }
     apply_live_changes(true);
     selected_frame_ = std::clamp(index, 0, static_cast<int>(frames_.size()) - 1);
     selected_anchor_ = std::min(selected_anchor_, static_cast<int>(frames_[static_cast<std::size_t>(selected_frame_)].anchors.size()) - 1);
@@ -485,6 +500,11 @@ void AnchorFrameEditor::select_frame(int index) {
 }
 
 void AnchorFrameEditor::select_anchor(int index) {
+    // Apply pending textbox edits to the outgoing anchor before switching.
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+    }
+
     const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
     if (frame.anchors.empty()) {
         selected_anchor_ = -1;
@@ -494,6 +514,11 @@ void AnchorFrameEditor::select_anchor(int index) {
     refresh_form();
     refresh_selection_state();
     rebuild_tool_panel_layout();
+
+    // Auto-persist so anchor edits survive any subsequent action.
+    if (dirty_) {
+        persist_pending_changes();
+    }
 }
 
 void AnchorFrameEditor::refresh_form() {
@@ -811,6 +836,7 @@ void AnchorFrameEditor::rebuild_tool_panel_layout() {
 
     if (selected_anchor_ >= 0) {
         if (name_widget_) rows.push_back({name_widget_.get()});
+        if (save_widget_) rows.push_back({save_widget_.get()});
         if (px_widget_) rows.push_back({px_widget_.get()});
         if (py_widget_) rows.push_back({py_widget_.get()});
         if (pz_widget_) rows.push_back({pz_widget_.get()});

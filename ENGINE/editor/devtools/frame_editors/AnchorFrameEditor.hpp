@@ -69,6 +69,7 @@ private:
     std::unique_ptr<DMButton> btn_back_;
     std::unique_ptr<DMButton> btn_add_;
     std::unique_ptr<DMButton> btn_delete_;
+    std::unique_ptr<DMButton> btn_save_;
     std::unique_ptr<Point3DEditor> point_3d_editor_;
 
     std::unique_ptr<DMTextBox> tb_name_;
@@ -85,6 +86,7 @@ private:
     std::unique_ptr<ButtonWidget> back_widget_;
     std::unique_ptr<ButtonWidget> add_widget_;
     std::unique_ptr<ButtonWidget> delete_widget_;
+    std::unique_ptr<ButtonWidget> save_widget_;
     std::unique_ptr<TextBoxWidget> name_widget_;
     std::unique_ptr<TextBoxWidget> px_widget_;
     std::unique_ptr<TextBoxWidget> py_widget_;

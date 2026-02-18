@@ -262,7 +262,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
         {add_remove_widget_.get(), delete_widget_.get()},
     };
     tool_panel_->set_rows(rows);
-    tool_panel_->set_position_if_unset(DMSpacing::item_gap(), DMSpacing::header_gap());
+    // Position set on first update when screen dimensions are available.
 
     clamp_attack_selection();
     refresh_attack_form();
@@ -439,7 +439,7 @@ void AttackGeoFrameEditor::update(const Input& input, float) {
     }
     if (tool_panel_) {
         tool_panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
-        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), nav_rect_.h + DMSpacing::header_gap());
+        tool_panel_->set_position_if_unset(screen_w_, nav_rect_.h + DMSpacing::header_gap());
         tool_panel_->update(input, screen_w_, screen_h_);
     }
     refresh_selection_state();
@@ -480,7 +480,7 @@ void AttackGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     }
     if (tool_panel_) {
         tool_panel_->set_work_area(SDL_Rect{0, 0, sw, sh});
-        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), nav_height + DMSpacing::header_gap());
+        tool_panel_->set_position_if_unset(sw, nav_height + DMSpacing::header_gap());
     }
 }
 

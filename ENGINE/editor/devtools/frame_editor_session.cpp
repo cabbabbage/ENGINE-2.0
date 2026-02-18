@@ -258,8 +258,8 @@ void FrameEditorSession::frame_camera_for_editor_entry() {
     cam.set_focus_override(focus);
     cam.set_screen_center(focus);
 
-    constexpr float kFlatTiltDeg = 90.0f;
-    cam.set_tilt_override(kFlatTiltDeg);
+    constexpr float kFramingTiltDeg = 1.0f;  // Forward-facing, not top-down.
+    cam.set_tilt_override(kFramingTiltDeg);
 
     SDL_Renderer* renderer = assets_->renderer();
     int screen_w = 0;

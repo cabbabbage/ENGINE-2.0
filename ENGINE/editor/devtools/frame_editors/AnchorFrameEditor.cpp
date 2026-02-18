@@ -210,15 +210,18 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() { wants_close_ = true; });
     add_widget_ = std::make_unique<ButtonWidget>(btn_add_.get(), [this]() { add_anchor(); });
     delete_widget_ = std::make_unique<ButtonWidget>(btn_delete_.get(), [this]() {
-        const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
-        if (selected_anchor_ >= 0 && selected_anchor_ < static_cast<int>(frame.anchors.size())) {
-            const std::string name = frame.anchors[static_cast<std::size_t>(selected_anchor_)].name;
-            remove_anchor_everywhere(name);
-            const int remaining = static_cast<int>(frames_.at(static_cast<std::size_t>(selected_frame_)).anchors.size());
-            select_anchor(std::min(selected_anchor_, remaining - 1));
-            dirty_ = true;
-            rebuild_tool_panel_layout();
+        if (frames_.empty() || selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size()) ||
+            selected_anchor_ < 0) {
+            return;
         }
+        auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
+        if (selected_anchor_ >= static_cast<int>(frame.anchors.size())) {
+            return;
+        }
+        frame.anchors.erase(frame.anchors.begin() + static_cast<std::size_t>(selected_anchor_));
+        const int remaining = static_cast<int>(frame.anchors.size());
+        select_anchor(std::min(selected_anchor_, remaining - 1));
+        dirty_ = true;
     });
     anchor_list_widget_.reset(new AnchorListWidget(&frames_, &selected_frame_, &selected_anchor_, [this](int idx) {
         select_anchor(idx);
@@ -490,6 +493,7 @@ void AnchorFrameEditor::select_anchor(int index) {
     }
     refresh_form();
     refresh_selection_state();
+    rebuild_tool_panel_layout();
 }
 
 void AnchorFrameEditor::refresh_form() {
@@ -537,7 +541,6 @@ bool AnchorFrameEditor::apply_form_to_anchor() {
             }
         }
         if (!duplicate && requested_name != old_name) {
-            rename_anchor_everywhere(old_name, requested_name);
             a.name = requested_name;
             changed = true;
         } else if (duplicate && tb_name_) {
@@ -773,14 +776,13 @@ bool AnchorFrameEditor::ui_contains_point(const SDL_Point& p) const {
 }
 
 void AnchorFrameEditor::add_anchor() {
-    if (frames_.empty()) return;
+    if (frames_.empty() || selected_frame_ < 0) return;
 
-    int suffix = static_cast<int>(frames_.at(static_cast<std::size_t>(selected_frame_)).anchors.size());
+    auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
+    int suffix = static_cast<int>(frame.anchors.size());
     auto name_exists = [&](const std::string& candidate) {
-        for (const auto& f : frames_) {
-            for (const auto& a : f.anchors) {
-                if (a.name == candidate) return true;
-            }
+        for (const auto& a : frame.anchors) {
+            if (a.name == candidate) return true;
         }
         return false;
     };
@@ -789,19 +791,11 @@ void AnchorFrameEditor::add_anchor() {
         new_name = "anchor_" + std::to_string(suffix++);
     } while (name_exists(new_name));
 
-    ensure_anchor_exists_everywhere(new_name);
-
-    const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
-    int idx = -1;
-    for (std::size_t i = 0; i < frame.anchors.size(); ++i) {
-        if (frame.anchors[i].name == new_name) {
-            idx = static_cast<int>(i);
-            break;
-        }
-    }
-    select_anchor(idx);
+    FrameAnchorPoint point;
+    point.name = new_name;
+    frame.anchors.push_back(point);
+    select_anchor(static_cast<int>(frame.anchors.size()) - 1);
     dirty_ = true;
-    rebuild_tool_panel_layout();
 }
 
 void AnchorFrameEditor::rebuild_tool_panel_layout() {
@@ -815,50 +809,15 @@ void AnchorFrameEditor::rebuild_tool_panel_layout() {
     if (delete_widget_) buttons_row.push_back(delete_widget_.get());
     if (!buttons_row.empty()) rows.push_back(buttons_row);
 
-    if (name_widget_) rows.push_back({name_widget_.get()});
-    if (px_widget_) rows.push_back({px_widget_.get()});
-    if (py_widget_) rows.push_back({py_widget_.get()});
-    if (pz_widget_) rows.push_back({pz_widget_.get()});
-    if (rot_widget_) rows.push_back({rot_widget_.get()});
+    if (selected_anchor_ >= 0) {
+        if (name_widget_) rows.push_back({name_widget_.get()});
+        if (px_widget_) rows.push_back({px_widget_.get()});
+        if (py_widget_) rows.push_back({py_widget_.get()});
+        if (pz_widget_) rows.push_back({pz_widget_.get()});
+        if (rot_widget_) rows.push_back({rot_widget_.get()});
+    }
 
     tool_panel_->set_rows(rows);
-}
-
-void AnchorFrameEditor::ensure_anchor_exists_everywhere(const std::string& name) {
-    if (name.empty()) return;
-
-    for (auto& f : frames_) {
-        const bool exists = std::any_of(f.anchors.begin(), f.anchors.end(), [&](const FrameAnchorPoint& a) { return a.name == name; });
-        if (!exists) {
-            FrameAnchorPoint pt;
-            pt.name = name;
-            f.anchors.push_back(pt);
-        }
-    }
-}
-
-void AnchorFrameEditor::remove_anchor_everywhere(const std::string& name) {
-    if (name.empty()) return;
-    for (auto& f : frames_) {
-        f.anchors.erase(std::remove_if(f.anchors.begin(),
-                                       f.anchors.end(),
-                                       [&](const FrameAnchorPoint& a) { return a.name == name; }),
-                        f.anchors.end());
-    }
-}
-
-void AnchorFrameEditor::rename_anchor_everywhere(const std::string& old_name, const std::string& new_name) {
-    if (old_name.empty() || new_name.empty() || old_name == new_name) {
-        return;
-    }
-
-    for (auto& f : frames_) {
-        for (auto& a : f.anchors) {
-            if (a.name == old_name) {
-                a.name = new_name;
-            }
-        }
-    }
 }
 
 }  // namespace devmode::frame_editors

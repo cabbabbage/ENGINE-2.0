@@ -277,8 +277,8 @@ void VibbleController::spawn_eyes_follower() {
         return;
     }
 
-    eyes_follower_ = assets->spawn_asset_attached("Vibble_eyes", player_, "eyes");
+    eyes_follower_ = assets->spawn_asset("Vibble_eyes", player_->world_point());
     if (eyes_follower_) {
-        player_->mark_anchors_dirty();
+        player_->bind_child_to_anchor(eyes_follower_, "eyes");
     }
 }

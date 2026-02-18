@@ -3,15 +3,19 @@
 #include <memory>
 #include <string>
 
+#include <SDL3/SDL.h>
 #include <SDL3/SDL_rect.h>
 
 #include "DockableCollapsible.hpp"
+
+namespace devmode::frame_editors {
+
+class FrameToolDockable;
 
 class Input;
 union SDL_Event;
 struct SDL_Renderer;
 
-namespace devmode::frame_editors {
 
 // Lightweight helper that wraps DockableCollapsible with a consistent
 // floating-tool styling for all frame editor modes.
@@ -35,8 +39,12 @@ public:
 
 private:
     mutable std::unique_ptr<DockableCollapsible> panel_;
+    mutable FrameToolDockable* panel_impl_ = nullptr;
     mutable bool has_position_ = false;
     mutable bool registered_with_manager_ = false;
+    mutable bool hover_empty_area_ = false;
+    mutable bool dragging_empty_area_ = false;
+    mutable SDL_Point drag_offset_{0, 0};
     std::string stack_key_;
 };
 

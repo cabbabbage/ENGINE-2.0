@@ -822,6 +822,9 @@ void Asset::on_scale_factor_changed() {
 void Asset::set_hidden(bool state){ hidden = state; }
 bool  Asset::is_hidden() const { return hidden; }
 
+void Asset::set_anchor_hidden(bool state){ anchor_hidden_ = state; }
+bool  Asset::is_anchor_hidden() const { return anchor_hidden_; }
+
 
 
 void Asset::set_highlighted(bool state){ highlighted = state; }
@@ -868,6 +871,20 @@ void Asset::set_anchor_follow_target(std::optional<AnchorFollowTarget> follow) {
         last_follow_world_z_ = 0;
         if (follow_anchor_) {
                 apply_anchor_follow_target();
+        } else {
+                set_anchor_hidden(false);
+        }
+}
+
+void Asset::bind_child_to_anchor(Asset* child, const std::string& anchor_name) {
+        if (!child || anchor_name.empty()) {
+                return;
+        }
+        child->set_anchor_hidden(false);
+        child->set_anchor_follow_target(AnchorFollowTarget{ this, anchor_name });
+        mark_anchors_dirty();
+        if (std::find(bound_children_.begin(), bound_children_.end(), child) == bound_children_.end()) {
+                bound_children_.push_back(child);
         }
 }
 
@@ -882,9 +899,11 @@ void Asset::apply_anchor_follow_target() {
         }
 
         auto resolved = source->anchor_state(follow.anchor_name);
-        if (!resolved.has_value()) {
+        if (!resolved.has_value() || resolved->missing) {
+                set_anchor_hidden(true);
                 return;
         }
+        set_anchor_hidden(false);
 
         SDL_Point target_px = resolved->world_px;
         int target_z = resolved->world_z;
@@ -980,21 +999,30 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy)
         const AnimationFrame* frame = owner->current_frame;
         const DisplacedAssetAnchorPoint* anchor = (frame ? frame->find_anchor(name) : nullptr);
 
-        DisplacedAssetAnchorPoint base_anchor;
-        base_anchor.name = name;
-        const DisplacedAssetAnchorPoint* target_anchor = anchor ? anchor : &base_anchor;
+        if (!anchor) {
+                grid = nullptr;
+                world_px = SDL_Point{0, 0};
+                world_z = 0;
+                resolution_layer = 0;
+                rotation = 0.0f;
+                missing = true;
+                last_frame_index = frame ? frame->frame_index : -1;
+                last_anim = owner->current_animation;
+                dirty = false;
+                return;
+        }
 
-        const ResolvedAnchor resolved = anchor_points::resolve_anchor_point(*owner, *target_anchor, grid_policy);
+        const ResolvedAnchor resolved = anchor_points::resolve_anchor_point(*owner, *anchor, grid_policy);
 
-        grid       = resolved.grid_point;
-        world_px   = resolved.world_px;
-        world_z    = resolved.world_z;
+        grid = resolved.grid_point;
+        world_px = resolved.world_px;
+        world_z = resolved.world_z;
         resolution_layer = resolved.resolution_layer;
-        rotation   = resolved.rotation_deg;
-        missing    = (anchor == nullptr);
+        rotation = resolved.rotation_deg;
+        missing = false;
         last_frame_index = frame ? frame->frame_index : -1;
-        last_anim  = owner->current_animation;
-        dirty      = false;
+        last_anim = owner->current_animation;
+        dirty = false;
 }
 
 

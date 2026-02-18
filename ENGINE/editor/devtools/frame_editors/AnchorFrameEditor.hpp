@@ -54,9 +54,6 @@ private:
     bool resolve_anchor_screen(int anchor_index, SDL_FPoint& out_screen, float& out_world_z, SDL_FPoint* out_world = nullptr) const;
     bool ui_contains_point(const SDL_Point& p) const;
     void add_anchor();
-    void ensure_anchor_exists_everywhere(const std::string& name);
-    void remove_anchor_everywhere(const std::string& name);
-    void rename_anchor_everywhere(const std::string& old_name, const std::string& new_name);
     void rebuild_tool_panel_layout();
 
     FrameEditorContext context_{};

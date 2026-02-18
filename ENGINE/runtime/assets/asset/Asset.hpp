@@ -185,6 +185,8 @@ class Asset {
     int NeighborSearchRadius;
     void set_hidden(bool state);
     bool is_hidden() const;
+    void set_anchor_hidden(bool state);
+    bool is_anchor_hidden() const;
     void set_highlighted(bool state);
     bool is_highlighted();
     void set_selected(bool state);
@@ -284,6 +286,7 @@ class Asset {
                                                anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None);
     void mark_anchors_dirty();
     void set_anchor_follow_target(std::optional<AnchorFollowTarget> follow);
+    void bind_child_to_anchor(Asset* child, const std::string& anchor_name);
     const std::optional<AnchorFollowTarget>& anchor_follow_target() const { return follow_anchor_; }
 
 public:
@@ -304,6 +307,7 @@ private:
     WarpedScreenGrid* window = nullptr;
     bool highlighted = false;
     bool hidden = false;
+    bool anchor_hidden_ = false;
     bool selected = false;
     bool merged_from_neighbors_ = false;
     GridPoint* pos_ = nullptr; // Non-owning pointer to GridPoint in WorldGrid; set by WorldGrid on registration
@@ -364,6 +368,7 @@ private:
 
     std::vector<AnchorHandle> anchor_handles_;
     std::unordered_map<std::string, std::size_t> anchor_lookup_;
+    std::vector<Asset*> bound_children_;
 
     std::optional<AnchorFollowTarget> follow_anchor_{};
     SDL_Point last_follow_world_{0, 0};

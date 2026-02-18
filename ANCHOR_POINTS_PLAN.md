@@ -6,6 +6,12 @@ Anchor points currently use an "ensure everywhere" pattern — creating, renamin
 
 This plan makes anchor points **per-animation** by default and introduces a **bind** API for controllers to declaratively attach child assets to named anchors.
 
+## Progress
+- [x] Part 1: Editor operations now work per-frame, the tool panel hides anchor fields until a selection exists, and the everywhere helpers were removed (`ENGINE/editor/devtools/frame_editors/AnchorFrameEditor.*`).
+- [x] Part 2: Anchor lookups now skip resolution when missing, missing anchors hide dependent assets via the new `anchor_hidden` flag, and the renderer ignores hidden assets (`ENGINE/runtime/assets/asset/Asset.*`, `ENGINE/runtime/rendering/render/render.cpp`).
+- [x] Part 3: Added `Asset::bind_child_to_anchor`, routed `spawn_asset_attached` through it, and updated `Vibble_controller` to spawn + bind manually.
+- [x] Part 4: Legacy manifest/animation anchor sync cleanups verified and complete; only per-animation payload anchors are loaded, with no asset-level defaults or automatic sync.
+
 ---
 
 ## Part 1: Editor — Per-Animation Anchor Operations

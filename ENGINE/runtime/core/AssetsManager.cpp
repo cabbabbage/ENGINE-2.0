@@ -1373,7 +1373,6 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
     Area spawn_area(owning_room,  0);
 
     int depth = 0;
-    Asset::AnchorFollowTarget follow_cfg{ anchor_owner, anchor_name };
     auto uptr = std::make_unique<Asset>(info,
                                         spawn_area,
                                         spawn_pos,
@@ -1381,8 +1380,7 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
                                         nullptr,
                                         std::string{},
                                         std::string{},
-                                        resolved_layer,
-                                        follow_cfg);
+                                        resolved_layer);
     Asset* raw = uptr.get();
     if (!raw) {
         return nullptr;
@@ -1393,6 +1391,10 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
 
     raw = world_grid_.create_asset_at_point(std::move(uptr), spawn_z, resolved_layer);
     all.push_back(raw);
+
+    if (raw) {
+        anchor_owner->bind_child_to_anchor(raw, anchor_name);
+    }
 
     queue_asset_dimension_update(raw);
     mark_grid_dirty();

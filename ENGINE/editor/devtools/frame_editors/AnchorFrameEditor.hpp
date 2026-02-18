@@ -9,15 +9,22 @@
 #include "shared/FrameEditorContext.hpp"
 #include "shared/FrameNavigator.hpp"
 #include "shared/Point3DEditor.hpp"
+#include "shared/ToolPanel.hpp"
 #include "shared/ManifestTransaction.hpp"
 #include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "devtools/widgets.hpp"
 
 namespace devmode::frame_editors {
 
+class AnchorListWidget;
+struct AnchorListWidgetDeleter {
+    void operator()(AnchorListWidget* ptr) const noexcept;
+};
+
 class AnchorFrameEditor : public FrameEditorBase {
 public:
     AnchorFrameEditor() = default;
+    ~AnchorFrameEditor();
 
     void begin(const FrameEditorContext& context) override;
     void end() override;
@@ -35,6 +42,9 @@ private:
     void refresh_form();
     bool apply_form_to_anchor();
     void apply_to_all_frames();
+    void apply_to_next_frame();
+    bool apply_to_all_animations();
+    void apply_to_animation();
     void persist_changes();
     void apply_live_changes(bool force = false);
     void invalidate_preview() const;
@@ -43,12 +53,11 @@ private:
     float parent_height_px() const;
     bool resolve_anchor_screen(int anchor_index, SDL_FPoint& out_screen, float& out_world_z, SDL_FPoint* out_world = nullptr) const;
     bool ui_contains_point(const SDL_Point& p) const;
-    SDL_Rect anchor_list_rect() const;
-    void render_anchor_list(SDL_Renderer* renderer) const;
-    void rebuild_anchor_rows() const;
+    void add_anchor();
     void ensure_anchor_exists_everywhere(const std::string& name);
     void remove_anchor_everywhere(const std::string& name);
     void rename_anchor_everywhere(const std::string& old_name, const std::string& new_name);
+    void rebuild_tool_panel_layout();
 
     FrameEditorContext context_{};
     ManifestTransaction manifest_txn_{};
@@ -63,7 +72,6 @@ private:
     std::unique_ptr<DMButton> btn_back_;
     std::unique_ptr<DMButton> btn_add_;
     std::unique_ptr<DMButton> btn_delete_;
-    std::unique_ptr<DMButton> btn_apply_all_;
     std::unique_ptr<Point3DEditor> point_3d_editor_;
 
     std::unique_ptr<DMTextBox> tb_name_;
@@ -72,8 +80,20 @@ private:
     std::unique_ptr<DMTextBox> tb_pz_;
     std::unique_ptr<DMTextBox> tb_rot_;
 
-    mutable SDL_Rect ui_rect_{0, 0, 0, 0};
-    mutable std::vector<SDL_Rect> anchor_rows_;
+    mutable SDL_Rect nav_rect_{0, 0, 0, 0};
+    mutable int screen_w_ = 1920;
+    mutable int screen_h_ = 1080;
+
+    std::unique_ptr<FrameToolPanel> tool_panel_;
+    std::unique_ptr<ButtonWidget> back_widget_;
+    std::unique_ptr<ButtonWidget> add_widget_;
+    std::unique_ptr<ButtonWidget> delete_widget_;
+    std::unique_ptr<TextBoxWidget> name_widget_;
+    std::unique_ptr<TextBoxWidget> px_widget_;
+    std::unique_ptr<TextBoxWidget> py_widget_;
+    std::unique_ptr<TextBoxWidget> pz_widget_;
+    std::unique_ptr<TextBoxWidget> rot_widget_;
+    std::unique_ptr<AnchorListWidget, AnchorListWidgetDeleter> anchor_list_widget_;
 };
 
 }  // namespace devmode::frame_editors

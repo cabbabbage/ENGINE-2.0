@@ -11,6 +11,7 @@
 #include <memory>
 #include "shared/FrameEditorContext.hpp"
 #include "shared/FrameNavigator.hpp"
+#include "shared/ToolPanel.hpp"
 #include "shared/ManifestTransaction.hpp"
 #include "shared/SelectionState.hpp"
 #include "devtools/widgets.hpp"
@@ -43,7 +44,10 @@ private:
     void persist_changes();
     void apply_live_changes();
     void invalidate_preview() const;
-    void apply_to_all_frames();
+    void apply_movement_to_next_frame();
+    void apply_movement_to_animation();
+    bool apply_movement_to_all_animations();
+    void copy_movement_fields(MovementFrame& dest, const MovementFrame& src) const;
     void refresh_selection_state();
     SDL_Point asset_anchor_world() const;
     SDL_FPoint screen_to_world_relative(const SDL_Point& screen) const;
@@ -62,15 +66,21 @@ private:
     bool dirty_ = false;
     bool wants_close_ = false;
 
-    mutable SDL_Rect ui_rect_{0, 0, 0, 0};
+    mutable SDL_Rect nav_rect_{0, 0, 0, 0};
+    mutable int screen_w_ = 1920;
+    mutable int screen_h_ = 1080;
 
     std::unique_ptr<DMCheckbox> cb_smooth_;
     std::unique_ptr<DMCheckbox> cb_curve_;
     std::unique_ptr<DMButton> btn_back_;
-    std::unique_ptr<DMButton> btn_apply_all_;
     std::unique_ptr<FrameNavigator> frame_navigator_;
     bool smooth_enabled_ = false;
     bool curve_enabled_ = false;
+
+    std::unique_ptr<FrameToolPanel> tool_panel_;
+    std::unique_ptr<ButtonWidget> back_widget_;
+    std::unique_ptr<CheckboxWidget> smooth_widget_;
+    std::unique_ptr<CheckboxWidget> curve_widget_;
 };
 
 }  // namespace devmode::frame_editors

@@ -238,77 +238,59 @@ void FrameEditorSession::create_and_begin_editor() {
 
     active_editor_ = create_editor(mode_);
     if (active_editor_) {
-        if (mode_ == Mode::AnchorPoints) {
-            frame_camera_for_anchor_mode();
-        }
+        frame_camera_for_editor_entry();
         active_editor_->begin(editor_context_);
     }
 }
 
-void FrameEditorSession::frame_camera_for_anchor_mode() {
+void FrameEditorSession::frame_camera_for_editor_entry() {
     if (!assets_ || !target_) {
         return;
     }
 
     WarpedScreenGrid& cam = assets_->getView();
-    SDL_Renderer* renderer = assets_->renderer();
-    int screen_w = 0;
-    int screen_h = 0;
-    if (renderer) {
-        SDL_GetCurrentRenderOutputSize(renderer, &screen_w, &screen_h);
-    }
-    if (screen_h <= 0) {
-        return;
-    }
-    (void)screen_w;
-
-    int fw = target_->cached_w;
-    int fh = target_->cached_h;
-    if (fw <= 0 || fh <= 0) {
-        if (SDL_Texture* tex = target_->get_current_frame()) {
-            float wf = 0.0f;
-            float hf = 0.0f;
-            if (SDL_GetTextureSize(tex, &wf, &hf)) {
-                fw = static_cast<int>(std::lround(wf));
-                fh = static_cast<int>(std::lround(hf));
-            }
-        }
-    }
-    if ((fw <= 0 || fh <= 0) && target_->info) {
-        fw = target_->info->original_canvas_width;
-        fh = target_->info->original_canvas_height;
-    }
-    if (fw <= 0 || fh <= 0) {
-        return;
-    }
-
-    float base_scale = 1.0f;
-    if (target_->info && std::isfinite(target_->info->scale_factor) && target_->info->scale_factor > 0.0f) {
-        base_scale = target_->info->scale_factor;
-    }
-    if (!(base_scale > 0.0f)) {
-        base_scale = 1.0f;
-    }
-    const float scaled_fw = static_cast<float>(fw) * base_scale;
-    if (!(scaled_fw > 0.0f)) {
-        return;
-    }
-
     const SDL_Point focus = target_->world_point();
+
+    // Establish a consistent baseline before computing scale.
     cam.set_manual_height_override(true);
     cam.set_manual_zoom_override(true);
     cam.set_zoom_percent(0.0);
     cam.set_focus_override(focus);
     cam.set_screen_center(focus);
 
-    constexpr float kAnchorTiltDeg = 55.0f;
-    cam.set_tilt_override(kAnchorTiltDeg);
+    constexpr float kFlatTiltDeg = 90.0f;
+    cam.set_tilt_override(kFlatTiltDeg);
 
-    constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
-    const double tilt_rad = static_cast<double>(kAnchorTiltDeg) * kDegToRad;
-    // Equal top/bottom margins when anchored at the asset require sprite height ~= cot(tilt) of the screen height.
-    const double target_height_ratio = std::clamp(1.0 / std::tan(tilt_rad), 0.05, 0.95);
-    const double target_height_px = static_cast<double>(screen_h) * target_height_ratio;
+    SDL_Renderer* renderer = assets_->renderer();
+    int screen_w = 0;
+    int screen_h = 0;
+    if (renderer) {
+        SDL_GetCurrentRenderOutputSize(renderer, &screen_w, &screen_h);
+    }
+    if (screen_w <= 0 || screen_h <= 0) {
+        return;
+    }
+
+    const int frame_h = target_->height();
+    if (frame_h <= 0) {
+        return;
+    }
+
+    auto sanitize_scale = [](float value) -> double {
+        return (std::isfinite(value) && value > 0.0f) ? static_cast<double>(value) : 1.0;
+    };
+
+    double sprite_height_world = static_cast<double>(frame_h);
+    if (target_->info && std::isfinite(target_->info->scale_factor) && target_->info->scale_factor > 0.0f) {
+        sprite_height_world *= static_cast<double>(target_->info->scale_factor);
+    }
+    sprite_height_world *= sanitize_scale(target_->smoothed_scale());
+    if (!(sprite_height_world > 0.0)) {
+        return;
+    }
+
+    constexpr double kTargetHeightRatio = 0.7;
+    const double target_height_px = static_cast<double>(screen_h) * kTargetHeightRatio;
 
     const double starting_scale = cam.get_scale();
     auto sprite_height_for_scale = [&](double scale) -> std::optional<double> {
@@ -318,7 +300,7 @@ void FrameEditorSession::frame_camera_for_anchor_mode() {
         if (effects.distance_scale <= 0.0f || effects.vertical_scale <= 0.0f) {
             return std::nullopt;
         }
-        const double h_px = static_cast<double>(scaled_fw) *
+        const double h_px = sprite_height_world *
                             static_cast<double>(effects.distance_scale) *
                             static_cast<double>(effects.vertical_scale);
         if (!std::isfinite(h_px)) {
@@ -329,13 +311,11 @@ void FrameEditorSession::frame_camera_for_anchor_mode() {
 
     constexpr double kMinScale = 1.0;
     constexpr double kMaxScale = 50000.0;
-    auto low_height_opt = sprite_height_for_scale(kMinScale);
-    auto high_height_opt = sprite_height_for_scale(kMaxScale);
-
-    double best_scale = starting_scale;
+    double best_scale = std::clamp(starting_scale, kMinScale, kMaxScale);
     double best_diff = std::numeric_limits<double>::infinity();
 
-    auto consider = [&](double scale, const std::optional<double>& height_opt) {
+    auto consider = [&](double scale) {
+        auto height_opt = sprite_height_for_scale(scale);
         if (!height_opt.has_value()) {
             return;
         }
@@ -346,43 +326,24 @@ void FrameEditorSession::frame_camera_for_anchor_mode() {
         }
     };
 
-    consider(best_scale, sprite_height_for_scale(best_scale));
-    consider(kMinScale, low_height_opt);
-    consider(kMaxScale, high_height_opt);
-
-    if (!low_height_opt.has_value() || !high_height_opt.has_value()) {
-        cam.set_scale(best_scale);
-        cam.set_focus_override(focus);
-        cam.set_screen_center(focus);
-        return;
-    }
-
-    if (*low_height_opt < target_height_px && *high_height_opt < target_height_px) {
-        cam.set_scale(kMinScale);
-        cam.set_focus_override(focus);
-        cam.set_screen_center(focus);
-        return;
-    }
-    if (*low_height_opt > target_height_px && *high_height_opt > target_height_px) {
-        cam.set_scale(kMaxScale);
-        cam.set_focus_override(focus);
-        cam.set_screen_center(focus);
-        return;
-    }
+    consider(best_scale);
+    consider(kMinScale);
+    consider(kMaxScale);
 
     double lo = kMinScale;
     double hi = kMaxScale;
     for (int i = 0; i < 26; ++i) {
         const double mid = 0.5 * (lo + hi);
         auto h_opt = sprite_height_for_scale(mid);
-        consider(mid, h_opt);
-        if (!h_opt.has_value()) {
-            break;
-        }
-        if (*h_opt > target_height_px) {
-            lo = mid;  // Sprite too large -> move camera farther.
+        if (h_opt.has_value()) {
+            consider(mid);
+            if (*h_opt > target_height_px) {
+                lo = mid;  // Sprite too large -> move camera farther.
+            } else {
+                hi = mid;  // Sprite too small -> move camera closer.
+            }
         } else {
-            hi = mid;  // Sprite too small -> move camera closer.
+            break;
         }
     }
 

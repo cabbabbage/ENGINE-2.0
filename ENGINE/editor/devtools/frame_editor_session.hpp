@@ -63,7 +63,7 @@ private:
     void create_and_begin_editor();
     void destroy_editor(bool persist_changes);
     std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(Mode mode);
-    void frame_camera_for_anchor_mode();
+    void frame_camera_for_editor_entry();
 
     void capture_camera_state();
     void restore_camera_state();

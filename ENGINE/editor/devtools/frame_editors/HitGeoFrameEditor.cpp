@@ -172,12 +172,44 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
     dd_hitbox_type_ = std::make_unique<DMDropdown>(
         "Hitbox Type", hitbox_labels,
         std::clamp(selected_hitbox_type_index_, 0, static_cast<int>(hitbox_labels.size()) - 1));
+    frame_navigator_ = std::make_unique<FrameNavigator>();
+    frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
+    frame_navigator_->set_current_frame(selected_index_);
+    frame_navigator_->set_on_frame_changed([this](int frame) {
+        select_frame(frame);
+    });
+    frame_navigator_->set_on_before_change([this](int, int) {
+        persist_pending_changes();
+        return true;
+    });
+    frame_navigator_->set_preview_source(context_.preview, context_.animation_id);
+    frame_navigator_->set_on_apply_next([this]() { apply_hit_to_next_frame(); });
+    frame_navigator_->set_on_apply_animation([this]() { apply_hit_to_animation(); });
+    frame_navigator_->set_on_apply_all([this]() { (void)apply_hit_to_all_animations(); });
     btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
-    btn_prev_frame_ = std::make_unique<DMButton>("<", &DMStyles::AccentButton(), 36, DMButton::height());
-    btn_next_frame_ = std::make_unique<DMButton>(">", &DMStyles::AccentButton(), 36, DMButton::height());
     btn_add_remove_ = std::make_unique<DMButton>("Add Hit Box", &DMStyles::AccentButton(), 150, DMButton::height());
-    btn_copy_next_ = std::make_unique<DMButton>("Copy To Next", &DMStyles::HeaderButton(), 150, DMButton::height());
-    btn_apply_all_ = std::make_unique<DMButton>("Apply To All Frames", &DMStyles::HeaderButton(), 180, DMButton::height());
+
+    tool_panel_ = std::make_unique<FrameToolPanel>("Hit Geometry Tool Panel", "frame_editor_tool_panel_hit");
+    back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() { wants_close_ = true; });
+    hitbox_type_widget_ = std::make_unique<DropdownWidget>(dd_hitbox_type_.get());
+    add_remove_widget_ = std::make_unique<ButtonWidget>(btn_add_remove_.get(), [this]() {
+        auto* box = current_hit_box();
+        const std::string type = current_hitbox_type();
+        if (box) {
+            delete_hit_box_for_type(type);
+        } else {
+            ensure_hit_box_for_type(type);
+            persist_changes();
+        }
+        refresh_hitbox_form();
+    });
+    DockableCollapsible::Rows rows{
+        {back_widget_.get()},
+        {hitbox_type_widget_.get()},
+        {add_remove_widget_.get()},
+    };
+    tool_panel_->set_rows(rows);
+    tool_panel_->set_position_if_unset(DMSpacing::item_gap(), DMSpacing::header_gap());
 
     refresh_hitbox_form();
     refresh_selection_state();
@@ -191,13 +223,14 @@ void HitGeoFrameEditor::end() {
         selection_state_ = nullptr;
     }
     point_3d_editor_ = nullptr;
+    tool_panel_.reset();
+    back_widget_.reset();
+    hitbox_type_widget_.reset();
+    add_remove_widget_.reset();
     dd_hitbox_type_.reset();
+    frame_navigator_.reset();
     btn_back_.reset();
-    btn_prev_frame_.reset();
-    btn_next_frame_.reset();
     btn_add_remove_.reset();
-    btn_copy_next_.reset();
-    btn_apply_all_.reset();
     wants_close_ = false;
 }
 
@@ -217,42 +250,27 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
 
     bool consumed = false;
 
-    if (btn_prev_frame_ && btn_prev_frame_->handle_event(e)) {
-        select_frame(selected_index_ - 1);
-        consumed = true;
-    }
-    if (btn_next_frame_ && btn_next_frame_->handle_event(e)) {
-        select_frame(selected_index_ + 1);
-        consumed = true;
-    }
-    if (btn_back_ && btn_back_->handle_event(e)) {
-        wants_close_ = true;
-        consumed = true;
-    }
-    if (dd_hitbox_type_ && dd_hitbox_type_->handle_event(e)) {
-        selected_hitbox_type_index_ = std::clamp(dd_hitbox_type_->selected(), 0, static_cast<int>(kDamageTypeNames.size()) - 1);
-        refresh_hitbox_form();
-        consumed = true;
-    }
-    if (btn_add_remove_ && btn_add_remove_->handle_event(e)) {
-        auto* box = current_hit_box();
-        const std::string type = current_hitbox_type();
-        if (box) {
-            delete_hit_box_for_type(type);
-        } else {
-            ensure_hit_box_for_type(type);
-            persist_changes();
+    if (tool_panel_) {
+        const int prev_selection = dd_hitbox_type_ ? dd_hitbox_type_->selected() : selected_hitbox_type_index_;
+        const bool prev_has_box = current_hit_box() != nullptr;
+        if (tool_panel_->handle_event(e)) {
+            consumed = true;
         }
-        refresh_hitbox_form();
-        consumed = true;
+        if (dd_hitbox_type_) {
+            selected_hitbox_type_index_ = std::clamp(dd_hitbox_type_->selected(),
+                                                     0,
+                                                     static_cast<int>(kDamageTypeNames.size()) - 1);
+        }
+        if (selected_hitbox_type_index_ != prev_selection || prev_has_box != (current_hit_box() != nullptr)) {
+            refresh_hitbox_form();
+            consumed = true;
+        }
     }
-    if (btn_copy_next_ && btn_copy_next_->handle_event(e)) {
-        copy_hit_box_to_next_frame();
+
+    if (frame_navigator_ && frame_navigator_->handle_event(e)) {
         consumed = true;
-    }
-    if (btn_apply_all_ && btn_apply_all_->handle_event(e)) {
-        apply_hit_to_all_frames();
-        consumed = true;
+        if (selection_state_) selection_state_->reset();
+        if (point_3d_editor_) point_3d_editor_->set_selected_point_index(-1);
     }
 
     // No arrow key navigation - use frame navigator buttons only
@@ -309,7 +327,19 @@ bool HitGeoFrameEditor::handle_event(const SDL_Event& e) {
     return consumed;
 }
 
-void HitGeoFrameEditor::update(const Input&, float) {
+void HitGeoFrameEditor::update(const Input& input, float) {
+    nav_rect_.x = 0;
+    nav_rect_.y = 0;
+    nav_rect_.w = screen_w_;
+    nav_rect_.h = frame_navigator_ ? frame_navigator_->get_preferred_rect().h : 0;
+    if (frame_navigator_) {
+        frame_navigator_->set_rect(nav_rect_);
+    }
+    if (tool_panel_) {
+        tool_panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), nav_rect_.h + DMSpacing::header_gap());
+        tool_panel_->update(input, screen_w_, screen_h_);
+    }
     refresh_selection_state();
     refresh_hitbox_form();
 }
@@ -322,13 +352,8 @@ void HitGeoFrameEditor::render_world(SDL_Renderer* renderer) const {
 void HitGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (!renderer) return;
     layout_ui(renderer);
-    if (btn_back_) btn_back_->render(renderer);
-    if (btn_prev_frame_) btn_prev_frame_->render(renderer);
-    if (btn_next_frame_) btn_next_frame_->render(renderer);
-    if (dd_hitbox_type_) dd_hitbox_type_->render(renderer);
-    if (btn_add_remove_) btn_add_remove_->render(renderer);
-    if (btn_copy_next_) btn_copy_next_->render(renderer);
-    if (btn_apply_all_) btn_apply_all_->render(renderer);
+    if (frame_navigator_) frame_navigator_->render(renderer);
+    if (tool_panel_) tool_panel_->render(renderer);
 
     // Render Point3DEditor overlays at the bottom
     if (point_3d_editor_) {
@@ -344,58 +369,17 @@ void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     if (!renderer) return;
     int sw = 0, sh = 0;
     SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
-    const int padding = DMSpacing::small_gap();
-    const int width = 320;
-    const int x = padding;
-    const int y = padding;
-    ui_rect_ = SDL_Rect{x, y, width, 0};
-    int inner_w = width - padding * 2;
-    int cursor_y = y + padding;
-
-    auto place_row = [&](int h) -> SDL_Rect {
-        SDL_Rect r{x + padding, cursor_y, inner_w, h};
-        cursor_y += h + DMSpacing::small_gap();
-        return r;
-    };
-
-    if (btn_back_) {
-        btn_back_->set_rect(place_row(DMButton::height()));
+    screen_w_ = sw;
+    screen_h_ = sh;
+    const int nav_height = frame_navigator_ ? frame_navigator_->get_preferred_rect().h : 0;
+    nav_rect_ = SDL_Rect{0, 0, sw, nav_height};
+    if (frame_navigator_) {
+        frame_navigator_->set_rect(nav_rect_);
     }
-
-    if (btn_prev_frame_ && btn_next_frame_) {
-        int half_w = (inner_w - DMSpacing::small_gap()) / 2;
-        SDL_Rect left{x + padding, cursor_y, half_w, DMButton::height()};
-        SDL_Rect right{x + padding + half_w + DMSpacing::small_gap(), cursor_y, half_w, DMButton::height()};
-        btn_prev_frame_->set_rect(left);
-        btn_next_frame_->set_rect(right);
-        cursor_y += DMButton::height() + DMSpacing::small_gap();
+    if (tool_panel_) {
+        tool_panel_->set_work_area(SDL_Rect{0, 0, sw, sh});
+        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), nav_height + DMSpacing::header_gap());
     }
-
-    if (dd_hitbox_type_) {
-        dd_hitbox_type_->set_rect(place_row(DMDropdown::height()));
-    }
-
-    if (btn_add_remove_ || btn_copy_next_) {
-        SDL_Rect row = place_row(DMButton::height());
-        int button_count = 0;
-        if (btn_add_remove_) ++button_count;
-        if (btn_copy_next_) ++button_count;
-        const int total_gap = DMSpacing::small_gap() * std::max(0, button_count - 1);
-        const int button_w = (inner_w - total_gap) / std::max(1, button_count);
-        int offset_x = row.x;
-        if (btn_add_remove_) {
-            btn_add_remove_->set_rect(SDL_Rect{offset_x, row.y, button_w, row.h});
-            offset_x += button_w + DMSpacing::small_gap();
-        }
-        if (btn_copy_next_) {
-            btn_copy_next_->set_rect(SDL_Rect{offset_x, row.y, button_w, row.h});
-        }
-    }
-
-    if (btn_apply_all_) {
-        btn_apply_all_->set_rect(place_row(DMButton::height()));
-    }
-    ui_rect_.h = cursor_y - y;
 }
 
 void HitGeoFrameEditor::select_frame(int index) {
@@ -413,6 +397,9 @@ void HitGeoFrameEditor::select_frame(int index) {
     }
 
     refresh_hitbox_form();
+    if (frame_navigator_) {
+        frame_navigator_->set_current_frame(selected_index_);
+    }
 }
 
 void HitGeoFrameEditor::refresh_hitbox_form() const {
@@ -448,7 +435,8 @@ float HitGeoFrameEditor::base_world_z() const {
     return context_.target ? context_.target->world_z_offset() : 0.0f;
 }
 
-void HitGeoFrameEditor::apply_hit_to_all_frames() {
+void HitGeoFrameEditor::apply_hit_to_animation() {
+    if (frames_.empty()) return;
     const std::string type = current_hitbox_type();
     const auto* source = current_hit_box();
     for (auto& f : frames_) {
@@ -462,6 +450,8 @@ void HitGeoFrameEditor::apply_hit_to_all_frames() {
     }
     refresh_hitbox_form();
     persist_changes();
+    persist_pending_changes();
+    invalidate_preview();
 }
 
 void HitGeoFrameEditor::apply_live_changes() {
@@ -474,21 +464,54 @@ void HitGeoFrameEditor::invalidate_preview() const {
     }
 }
 
-void HitGeoFrameEditor::copy_hit_box_to_next_frame() {
+void HitGeoFrameEditor::apply_hit_to_next_frame() {
     if (frames_.empty()) return;
-    const int next_index = selected_index_ + 1;
-    if (next_index >= static_cast<int>(frames_.size())) {
-        return;
-    }
+    const int count = static_cast<int>(frames_.size());
+    const int idx = clamp_index(selected_index_, count);
+    const int target = (idx + 1) % count;
     const std::string type = current_hitbox_type();
     const auto* source = current_hit_box();
-    if (!source) return;
-    auto& dest_boxes = frames_[next_index].hit.boxes;
+    auto& dest_boxes = frames_[target].hit.boxes;
     dest_boxes.erase(std::remove_if(dest_boxes.begin(), dest_boxes.end(),
                                     [&](const auto& b) { return b.type == type; }),
                      dest_boxes.end());
-    dest_boxes.push_back(*source);
+    if (source) {
+        dest_boxes.push_back(*source);
+    }
     persist_changes();
+    persist_pending_changes();
+    invalidate_preview();
+}
+
+bool HitGeoFrameEditor::apply_hit_to_all_animations() {
+    if (!context_.document || frames_.empty()) return false;
+    apply_hit_to_animation();
+
+    const std::string type = current_hitbox_type();
+    const auto* source = current_hit_box();
+    const auto ids = context_.document->animation_ids();
+    for (const auto& id : ids) {
+        auto payload_opt = context_.document->animation_payload_json(id);
+        nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
+        auto frames = parse_frames_from_payload(payload);
+        if (frames.empty()) frames.push_back(MovementFrame{});
+        for (auto& f : frames) {
+            auto& boxes = f.hit.boxes;
+            boxes.erase(std::remove_if(boxes.begin(), boxes.end(),
+                                       [&](const auto& b) { return b.type == type; }),
+                        boxes.end());
+            if (source) {
+                boxes.push_back(*source);
+            }
+        }
+        nlohmann::json updated = build_payload_from_frames(frames, payload);
+        context_.document->update_animation_payload(id, updated);
+        if (context_.preview) {
+            context_.preview->invalidate(id);
+        }
+    }
+    context_.document->save_to_file_checked(true);
+    return true;
 }
 
 std::string HitGeoFrameEditor::current_hitbox_type() const {
@@ -739,7 +762,8 @@ void HitGeoFrameEditor::refresh_selection_state() {
 }
 
 bool HitGeoFrameEditor::ui_contains_point(const SDL_Point& pt) const {
-    return SDL_PointInRect(&pt, &ui_rect_);
+    if (SDL_PointInRect(&pt, &nav_rect_)) return true;
+    return tool_panel_ && tool_panel_->contains_point(pt);
 }
 
 

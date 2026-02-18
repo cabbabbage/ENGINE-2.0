@@ -1,19 +1,50 @@
 #include "FrameNavigator.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <string>
+#include <utility>
 
-#include "devtools/widgets.hpp"
+#include "devtools/asset_editor/animation_editor_window/PreviewProvider.hpp"
+#include "devtools/dm_styles.hpp"
+#include "devtools/draw_utils.hpp"
+#include "devtools/font_cache.hpp"
+#include "utils/sdl_mouse_utils.hpp"
 
 namespace devmode::frame_editors {
+namespace {
+constexpr int kThumbSize = 64;
+const int kThumbSpacing = DMSpacing::small_gap();
+const int kBarPadding = DMSpacing::item_gap();
+constexpr int kThumbCorner = 8;
+constexpr int kBadgeHeight = 16;
+constexpr int kBadgePadding = 4;
+const int kApplyButtonGap = DMSpacing::small_gap();
+constexpr int kApplyButtonWidth = 140;
+
+SDL_FRect ToFRect(const SDL_Rect& rect) {
+    return SDL_FRect{
+        static_cast<float>(rect.x),
+        static_cast<float>(rect.y),
+        static_cast<float>(rect.w),
+        static_cast<float>(rect.h)
+    };
+}
+
+float content_width(int frame_count) {
+    if (frame_count <= 0) return 0.0f;
+    const float stride = static_cast<float>(kThumbSize + kThumbSpacing);
+    return static_cast<float>(frame_count) * stride - static_cast<float>(kThumbSpacing);
+}
+}  // namespace
 
 FrameNavigator::FrameNavigator() {
-    btn_prev_ = std::make_unique<DMButton>("<", &DMStyles::AccentButton(), 36, DMButton::height());
-    btn_next_ = std::make_unique<DMButton>(">", &DMStyles::AccentButton(), 36, DMButton::height());
-    tb_frame_number_ = std::make_unique<DMTextBox>("", "0");
-
+    btn_prev_ = std::make_unique<DMButton>("<", &DMStyles::AccentButton(), kThumbSize, kThumbSize);
+    btn_next_ = std::make_unique<DMButton>(">", &DMStyles::AccentButton(), kThumbSize, kThumbSize);
+    btn_apply_next_ = std::make_unique<DMButton>("Apply To Next", &DMStyles::HeaderButton(), kApplyButtonWidth, kThumbSize);
+    btn_apply_animation_ = std::make_unique<DMButton>("Apply To Animation", &DMStyles::HeaderButton(), kApplyButtonWidth + 20, kThumbSize);
+    btn_apply_all_ = std::make_unique<DMButton>("Apply To All", &DMStyles::HeaderButton(), kApplyButtonWidth, kThumbSize);
     update_button_states();
-    update_textbox_value();
 }
 
 FrameNavigator::~FrameNavigator() = default;
@@ -22,16 +53,18 @@ void FrameNavigator::set_frame_count(int count) {
     frame_count_ = std::max(0, count);
     validate_frame_index();
     update_button_states();
+    clamp_scroll();
+    ensure_frame_visible(current_frame_);
 }
 
 void FrameNavigator::set_current_frame(int frame) {
     int old_frame = current_frame_;
     current_frame_ = frame;
     validate_frame_index();
+    clamp_scroll();
+    ensure_frame_visible(current_frame_);
 
-    // Only notify if the frame actually changed
     if (current_frame_ != old_frame) {
-        update_textbox_value();
         update_button_states();
         notify_frame_changed();
     }
@@ -41,39 +74,86 @@ void FrameNavigator::set_on_frame_changed(std::function<void(int)> callback) {
     on_frame_changed_ = std::move(callback);
 }
 
+void FrameNavigator::set_on_before_change(std::function<bool(int, int)> callback) {
+    on_before_change_ = std::move(callback);
+}
+
+void FrameNavigator::set_on_apply_next(std::function<void()> callback) {
+    on_apply_next_ = std::move(callback);
+}
+
+void FrameNavigator::set_on_apply_animation(std::function<void()> callback) {
+    on_apply_animation_ = std::move(callback);
+}
+
+void FrameNavigator::set_on_apply_all(std::function<void()> callback) {
+    on_apply_all_ = std::move(callback);
+}
+
+void FrameNavigator::set_confirmation_handler(std::function<bool(const std::string&, const std::string&)> callback) {
+    on_confirm_ = std::move(callback);
+}
+
+void FrameNavigator::set_preview_source(std::weak_ptr<animation_editor::PreviewProvider> provider,
+                                        const std::string& animation_id) {
+    preview_provider_ = std::move(provider);
+    animation_id_ = animation_id;
+}
+
 void FrameNavigator::set_enabled(bool enabled) {
     enabled_ = enabled;
+    if (!enabled_) {
+        reset_hover();
+    }
     update_button_states();
 }
 
 void FrameNavigator::set_rect(const SDL_Rect& rect) {
     rect_ = rect;
+    rect_.h = std::max(rect_.h, get_preferred_rect().h);
 
-    const int spacing = 4;
-    const int button_width = 36;
-    const int textbox_width = rect.w - (button_width * 2) - (spacing * 2);
+    const int top_y = rect_.y + kBarPadding;
+    const int left_x = rect_.x + kBarPadding;
+    const int right_x = rect_.x + rect_.w - kBarPadding;
 
-    int x_offset = rect.x;
-
-    // Previous button
     if (btn_prev_) {
-        SDL_Rect prev_rect = {x_offset, rect.y, button_width, rect.h};
-        btn_prev_->set_rect(prev_rect);
-        x_offset += button_width + spacing;
+        btn_prev_->set_rect(SDL_Rect{left_x, top_y, kThumbSize, kThumbSize});
     }
 
-    // Frame number textbox
-    if (tb_frame_number_) {
-        SDL_Rect tb_rect = {x_offset, rect.y, textbox_width, rect.h};
-        tb_frame_number_->set_rect(tb_rect);
-        x_offset += textbox_width + spacing;
+    int apply_x = right_x;
+    if (btn_apply_all_) {
+        apply_x -= btn_apply_all_->rect().w;
+        btn_apply_all_->set_rect(SDL_Rect{apply_x, top_y, btn_apply_all_->rect().w, kThumbSize});
+        apply_x -= kApplyButtonGap;
+    }
+    if (btn_apply_animation_) {
+        apply_x -= btn_apply_animation_->rect().w;
+        btn_apply_animation_->set_rect(SDL_Rect{apply_x, top_y, btn_apply_animation_->rect().w, kThumbSize});
+        apply_x -= kApplyButtonGap;
+    }
+    if (btn_apply_next_) {
+        apply_x -= btn_apply_next_->rect().w;
+        btn_apply_next_->set_rect(SDL_Rect{apply_x, top_y, btn_apply_next_->rect().w, kThumbSize});
+        apply_x -= kApplyButtonGap;
     }
 
-    // Next button
     if (btn_next_) {
-        SDL_Rect next_rect = {x_offset, rect.y, button_width, rect.h};
-        btn_next_->set_rect(next_rect);
+        int next_x = apply_x - kThumbSize;
+        btn_next_->set_rect(SDL_Rect{next_x, top_y, kThumbSize, kThumbSize});
+        apply_x = next_x - kApplyButtonGap;
     }
+
+    const int strip_x = left_x + kThumbSize + kBarPadding;
+    const int strip_right = apply_x;
+    strip_rect_ = SDL_Rect{
+        strip_x,
+        top_y,
+        std::max(0, strip_right - strip_x),
+        kThumbSize
+    };
+
+    clamp_scroll();
+    ensure_frame_visible(current_frame_);
 }
 
 const SDL_Rect& FrameNavigator::get_rect() const {
@@ -81,11 +161,7 @@ const SDL_Rect& FrameNavigator::get_rect() const {
 }
 
 SDL_Rect FrameNavigator::get_preferred_rect() const {
-    const int button_width = 36;
-    const int spacing = 4;
-    const int textbox_width = 60; // Minimum reasonable width
-    const int total_width = (button_width * 2) + textbox_width + (spacing * 2);
-    return SDL_Rect{0, 0, total_width, 32};
+    return SDL_Rect{0, 0, 0, kThumbSize + kBarPadding * 2};
 }
 
 bool FrameNavigator::handle_event(const SDL_Event& e) {
@@ -93,59 +169,327 @@ bool FrameNavigator::handle_event(const SDL_Event& e) {
 
     bool consumed = false;
 
-    // NOTE: Keyboard navigation (arrow keys) removed - now used for point selection in frame editors
-
-    // Handle button clicks
     if (btn_prev_ && btn_prev_->handle_event(e)) {
-        set_current_frame(current_frame_ - 1);
+        request_frame_change(current_frame_ - 1);
         consumed = true;
     }
 
     if (btn_next_ && btn_next_->handle_event(e)) {
-        set_current_frame(current_frame_ + 1);
+        request_frame_change(current_frame_ + 1);
+        consumed = true;
+    }
+    if (btn_apply_next_ && btn_apply_next_->handle_event(e)) {
+        handle_apply_next();
+        consumed = true;
+    }
+    if (btn_apply_animation_ && btn_apply_animation_->handle_event(e)) {
+        handle_apply_animation();
+        consumed = true;
+    }
+    if (btn_apply_all_ && btn_apply_all_->handle_event(e)) {
+        handle_apply_all();
         consumed = true;
     }
 
-    // Handle textbox input
-    if (tb_frame_number_ && tb_frame_number_->handle_event(e)) {
-        // Check if textbox value changed
-        if (!tb_frame_number_->is_editing()) {
-            // Textbox lost focus or enter was pressed
-            try {
-                int new_frame = std::stoi(tb_frame_number_->value());
-                set_current_frame(new_frame);
-            } catch (...) {
-                // Invalid input, revert to current value
-                update_textbox_value();
-            }
+    if (e.type == SDL_EVENT_MOUSE_MOTION) {
+        SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
+        update_hover(p);
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+        int idx = frame_index_at_point(p);
+        pressed_thumb_index_ = idx;
+        if (idx >= 0) {
+            consumed = true;
         }
-        consumed = true;
+        update_hover(p);
+    } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+        int idx = frame_index_at_point(p);
+        if (idx >= 0 && idx == pressed_thumb_index_) {
+            request_frame_change(idx);
+            consumed = true;
+        }
+        pressed_thumb_index_ = -1;
+        update_hover(p);
+    } else if (e.type == SDL_EVENT_MOUSE_WHEEL) {
+        SDL_Point p = sdl_mouse_util::WheelPoint(e.wheel);
+        if (SDL_PointInRect(&p, &strip_rect_)) {
+            int delta_x = e.wheel.x;
+            int delta_y = e.wheel.y;
+            if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+                delta_x = -delta_x;
+                delta_y = -delta_y;
+            }
+            const int steps = (delta_x != 0) ? delta_x : delta_y;
+            const float scroll_step = static_cast<float>(kThumbSize + kThumbSpacing);
+            scroll_offset_ = std::clamp(scroll_offset_ - static_cast<float>(steps) * scroll_step,
+                                        0.0f,
+                                        std::max(0.0f, content_width(frame_count_) - static_cast<float>(strip_rect_.w)));
+            consumed = true;
+        }
     }
 
     return consumed;
 }
 
 void FrameNavigator::render(SDL_Renderer* renderer) {
-    if (!enabled_) return;
+    if (!enabled_ || !renderer) return;
 
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    render_background(renderer);
+    render_thumbnails(renderer);
     if (btn_prev_) btn_prev_->render(renderer);
-    if (tb_frame_number_) tb_frame_number_->render(renderer);
     if (btn_next_) btn_next_->render(renderer);
+    if (btn_apply_next_) btn_apply_next_->render(renderer);
+    if (btn_apply_animation_) btn_apply_animation_->render(renderer);
+    if (btn_apply_all_) btn_apply_all_->render(renderer);
+}
+
+void FrameNavigator::request_frame_change(int frame) {
+    if (!enabled_ || frame_count_ <= 0) {
+        return;
+    }
+    int clamped = std::clamp(frame, 0, frame_count_ - 1);
+    if (clamped == current_frame_) {
+        return;
+    }
+    if (on_before_change_) {
+        if (!on_before_change_(current_frame_, clamped)) {
+            return;
+        }
+    }
+    set_current_frame(clamped);
+}
+
+void FrameNavigator::ensure_frame_visible(int frame) {
+    if (strip_rect_.w <= 0 || frame_count_ <= 0) return;
+    const float stride = static_cast<float>(kThumbSize + kThumbSpacing);
+    const float start = static_cast<float>(frame) * stride;
+    const float end = start + static_cast<float>(kThumbSize);
+    const float view_start = scroll_offset_;
+    const float view_end = scroll_offset_ + static_cast<float>(strip_rect_.w);
+
+    if (start < view_start) {
+        scroll_offset_ = std::max(0.0f, start - static_cast<float>(kThumbSpacing));
+    } else if (end > view_end) {
+        scroll_offset_ = end - static_cast<float>(strip_rect_.w) + static_cast<float>(kThumbSpacing);
+    }
+
+    clamp_scroll();
+}
+
+void FrameNavigator::clamp_scroll() {
+    const float max_scroll = std::max(0.0f, content_width(frame_count_) - static_cast<float>(strip_rect_.w));
+    scroll_offset_ = std::clamp(scroll_offset_, 0.0f, max_scroll);
+}
+
+int FrameNavigator::frame_index_at_point(const SDL_Point& p) const {
+    if (!SDL_PointInRect(&p, &strip_rect_)) {
+        return -1;
+    }
+    const float stride = static_cast<float>(kThumbSize + kThumbSpacing);
+    float rel_x = static_cast<float>(p.x - strip_rect_.x) + scroll_offset_;
+    if (rel_x < 0.0f) return -1;
+    int idx = static_cast<int>(rel_x / stride);
+    float offset_in_tile = rel_x - static_cast<float>(idx) * stride;
+    if (offset_in_tile > static_cast<float>(kThumbSize)) {
+        return -1;
+    }
+    if (idx < 0 || idx >= frame_count_) return -1;
+    return idx;
+}
+
+void FrameNavigator::update_hover(const SDL_Point& p) {
+    int idx = frame_index_at_point(p);
+    hovered_index_ = idx;
+}
+
+void FrameNavigator::reset_hover() {
+    hovered_index_ = -1;
+    pressed_thumb_index_ = -1;
+}
+
+SDL_Rect FrameNavigator::compute_thumb_rect(int index) const {
+    const float stride = static_cast<float>(kThumbSize + kThumbSpacing);
+    const float x = static_cast<float>(strip_rect_.x) + static_cast<float>(index) * stride - scroll_offset_;
+    return SDL_Rect{
+        static_cast<int>(std::lround(x)),
+        strip_rect_.y,
+        kThumbSize,
+        kThumbSize
+    };
+}
+
+void FrameNavigator::render_background(SDL_Renderer* renderer) const {
+    SDL_Color bar_bg = DMStyles::PanelHeader();
+    SDL_SetRenderDrawColor(renderer, bar_bg.r, bar_bg.g, bar_bg.b, bar_bg.a);
+    SDL_FRect rect_f = ToFRect(rect_);
+    SDL_RenderFillRect(renderer, &rect_f);
+
+    SDL_Color strip_bg = DMStyles::PanelBG();
+    SDL_SetRenderDrawColor(renderer, strip_bg.r, strip_bg.g, strip_bg.b, strip_bg.a);
+    SDL_FRect strip_f = ToFRect(strip_rect_);
+    SDL_RenderFillRect(renderer, &strip_f);
+
+    SDL_Color border = DMStyles::Border();
+    SDL_Rect bottom_line{rect_.x, rect_.y + rect_.h - 2, rect_.w, 2};
+    SDL_SetRenderDrawColor(renderer, border.r, border.g, border.b, border.a);
+    SDL_FRect bottom_line_f = ToFRect(bottom_line);
+    SDL_RenderFillRect(renderer, &bottom_line_f);
+}
+
+void FrameNavigator::render_thumbnails(SDL_Renderer* renderer) {
+    if (strip_rect_.w <= 0 || strip_rect_.h <= 0) return;
+
+    SDL_Rect prev_clip{};
+    SDL_GetRenderClipRect(renderer, &prev_clip);
+    const bool was_clipping = SDL_RenderClipEnabled(renderer);
+    SDL_SetRenderClipRect(renderer, &strip_rect_);
+
+    for (int i = 0; i < frame_count_; ++i) {
+        SDL_Rect thumb = compute_thumb_rect(i);
+        if (thumb.x + thumb.w < strip_rect_.x || thumb.x > strip_rect_.x + strip_rect_.w) {
+            continue;
+        }
+
+        SDL_Color base = DMStyles::PanelHeader();
+        dm_draw::DrawRoundedSolidRect(renderer, thumb, kThumbCorner, base);
+
+        SDL_Texture* tex = nullptr;
+        if (auto provider = preview_provider_.lock()) {
+            tex = provider->get_frame_texture(renderer, animation_id_, i);
+        }
+
+        if (tex) {
+            float tex_w = 0.0f;
+            float tex_h = 0.0f;
+            if (SDL_GetTextureSize(tex, &tex_w, &tex_h) && tex_w > 0.0f && tex_h > 0.0f) {
+                const float inset = 6.0f;
+                const float avail_w = static_cast<float>(thumb.w) - inset * 2.0f;
+                const float avail_h = static_cast<float>(thumb.h) - inset * 2.0f;
+                const float scale = std::min(avail_w / tex_w, avail_h / tex_h);
+                SDL_FRect dst{
+                    static_cast<float>(thumb.x) + (static_cast<float>(thumb.w) - tex_w * scale) * 0.5f,
+                    static_cast<float>(thumb.y) + (static_cast<float>(thumb.h) - tex_h * scale) * 0.5f,
+                    tex_w * scale,
+                    tex_h * scale
+                };
+                SDL_RenderTexture(renderer, tex, nullptr, &dst);
+            }
+        }
+
+        const bool active = (i == current_frame_);
+        if (active) {
+            SDL_Color glow = DMStyles::AccentButton().bg;
+            glow.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(glow.a * 0.45f), 0, 255));
+            dm_draw::DrawRoundedSolidRect(renderer, thumb, kThumbCorner, glow);
+        }
+
+        SDL_Color border = active ? DMStyles::AccentButton().border : DMStyles::Border();
+        dm_draw::DrawRoundedOutline(renderer, thumb, kThumbCorner, 2, border);
+
+        if (hovered_index_ == i) {
+            SDL_Color hover = DMStyles::HighlightColor();
+            dm_draw::DrawRoundedOutline(renderer, thumb, kThumbCorner, 2, hover);
+        }
+
+        render_badge(renderer, thumb, i, active);
+    }
+
+    if (was_clipping) {
+        SDL_SetRenderClipRect(renderer, &prev_clip);
+    } else {
+        SDL_SetRenderClipRect(renderer, nullptr);
+    }
+}
+
+void FrameNavigator::render_badge(SDL_Renderer* renderer, const SDL_Rect& thumb_rect, int index, bool active) const {
+    const SDL_Color badge_bg = active ? DMStyles::AccentButton().bg : DMStyles::PanelHeader();
+    const SDL_Color badge_border = active ? DMStyles::AccentButton().border : DMStyles::Border();
+    SDL_Rect badge{
+        thumb_rect.x + kBadgePadding,
+        thumb_rect.y + thumb_rect.h - kBadgeHeight - kBadgePadding,
+        thumb_rect.w - kBadgePadding * 2,
+        kBadgeHeight
+    };
+    SDL_SetRenderDrawColor(renderer, badge_bg.r, badge_bg.g, badge_bg.b, badge_bg.a);
+    SDL_FRect badge_f = ToFRect(badge);
+    SDL_RenderFillRect(renderer, &badge_f);
+    SDL_SetRenderDrawColor(renderer, badge_border.r, badge_border.g, badge_border.b, badge_border.a);
+    SDL_RenderRect(renderer, &badge_f);
+
+    const SDL_Color text_color = active ? DMStyles::AccentButton().text : DMStyles::Label().color;
+    DMLabelStyle label_style{DMStyles::Label().font_path, 12, text_color};
+    const std::string label = std::to_string(index);
+    SDL_Point text_size = DMFontCache::instance().measure_text(label_style, label);
+    const int text_x = badge.x + badge.w - text_size.x - 4;
+    const int text_y = badge.y + (badge.h - text_size.y) / 2;
+    DMFontCache::instance().draw_text(renderer, label_style, label, text_x, text_y);
+}
+
+bool FrameNavigator::confirm_action(const std::string& title, const std::string& message) const {
+    if (on_confirm_) {
+        return on_confirm_(title, message);
+    }
+
+    SDL_MessageBoxButtonData buttons[] = {
+        {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Yes"},
+        {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "No"},
+    };
+    SDL_MessageBoxData data{};
+    data.flags = SDL_MESSAGEBOX_WARNING;
+    data.window = nullptr;
+    data.title = title.c_str();
+    data.message = message.c_str();
+    data.numbuttons = 2;
+    data.buttons = buttons;
+    int button_id = 0;
+    if (SDL_ShowMessageBox(&data, &button_id) == 0) {
+        return button_id == 1;
+    }
+    return false;
+}
+
+void FrameNavigator::handle_apply_next() {
+    if (on_apply_next_) {
+        on_apply_next_();
+    }
+}
+
+void FrameNavigator::handle_apply_animation() {
+    if (on_apply_animation_) {
+        const std::string title = "Apply To Animation";
+        const std::string msg = "Replace current frame's data across every frame in this animation?";
+        if (!confirm_action(title, msg)) {
+            return;
+        }
+        on_apply_animation_();
+    }
+}
+
+void FrameNavigator::handle_apply_all() {
+    if (on_apply_all_) {
+        const std::string title = "Apply To All Animations";
+        const std::string msg = "Replace this frame's data across every frame of every animation for this asset?";
+        if (!confirm_action(title, msg)) {
+            return;
+        }
+        on_apply_all_();
+    }
 }
 
 void FrameNavigator::update_button_states() {
-    if (!enabled_ || frame_count_ <= 1) {
-        if (btn_prev_) btn_prev_->set_text("");
-        if (btn_next_) btn_next_->set_text("");
-        return;
-    }
+    prev_enabled_ = enabled_ && frame_count_ > 0 && current_frame_ > 0;
+    next_enabled_ = enabled_ && frame_count_ > 0 && current_frame_ < frame_count_ - 1;
 
     if (btn_prev_) {
-        btn_prev_->set_text(current_frame_ > 0 ? "<" : "");
+        btn_prev_->set_text("<");
+        btn_prev_->set_style(prev_enabled_ ? &DMStyles::AccentButton() : &DMStyles::ListButton());
     }
 
     if (btn_next_) {
-        btn_next_->set_text(current_frame_ < frame_count_ - 1 ? ">" : "");
+        btn_next_->set_text(">");
+        btn_next_->set_style(next_enabled_ ? &DMStyles::AccentButton() : &DMStyles::ListButton());
     }
 }
 
@@ -161,35 +505,6 @@ void FrameNavigator::validate_frame_index() {
 void FrameNavigator::notify_frame_changed() {
     if (on_frame_changed_) {
         on_frame_changed_(current_frame_);
-    }
-}
-
-bool FrameNavigator::handle_keyboard_navigation(const SDL_Event& e) {
-    if (e.type != SDL_EVENT_KEY_DOWN) return false;
-
-    switch (e.key.key) {
-        case SDLK_LEFT:
-            if (current_frame_ > 0) {
-                set_current_frame(current_frame_ - 1);
-                return true;
-            }
-            break;
-        case SDLK_RIGHT:
-            if (current_frame_ < frame_count_ - 1) {
-                set_current_frame(current_frame_ + 1);
-                return true;
-            }
-            break;
-        default:
-            break;
-    }
-
-    return false;
-}
-
-void FrameNavigator::update_textbox_value() {
-    if (tb_frame_number_) {
-        tb_frame_number_->set_value(std::to_string(current_frame_));
     }
 }
 

@@ -20,10 +20,6 @@ namespace devmode::frame_editors {
 
 namespace {
 
-constexpr int kPanelPadding = 12;
-constexpr int kListWidth = 240;
-constexpr int kControlsWidth = 260;
-constexpr SDL_Color kListBg{24, 26, 32, 220};
 constexpr SDL_Color kListAccent{90, 200, 255, 255};
 
 float parse_float_box(DMTextBox* box, float fallback = 0.0f) {
@@ -41,6 +37,126 @@ SDL_Point round_point(const SDL_FPoint& pt) {
 
 }  // namespace
 
+class AnchorListWidget : public Widget {
+public:
+    AnchorListWidget(const std::vector<AnchorFrame>* frames,
+                     const int* selected_frame,
+                     const int* selected_anchor,
+                     std::function<void(int)> on_select)
+        : frames_(frames),
+          selected_frame_(selected_frame),
+          selected_anchor_(selected_anchor),
+          on_select_(std::move(on_select)) {}
+
+    void set_rect(const SDL_Rect& r) override { rect_ = r; }
+    const SDL_Rect& rect() const override { return rect_; }
+
+    int height_for_width(int) const override {
+        const int row_h = DMButton::height();
+        const int count = anchor_count();
+        return std::max(row_h + DMSpacing::small_gap() * 2,
+                        count * (row_h + DMSpacing::small_gap()) + DMSpacing::small_gap() * 2);
+    }
+
+    bool handle_event(const SDL_Event& e) override {
+        if (e.type != SDL_EVENT_MOUSE_BUTTON_DOWN || e.button.button != SDL_BUTTON_LEFT) {
+            return false;
+        }
+        SDL_Point p{e.button.x, e.button.y};
+        if (!SDL_PointInRect(&p, &rect_)) {
+            return false;
+        }
+        const int row_h = DMButton::height();
+        int cursor_y = rect_.y + DMSpacing::small_gap();
+        const int count = anchor_count();
+        for (int i = 0; i < count; ++i) {
+            SDL_Rect row{rect_.x + DMSpacing::small_gap(),
+                         cursor_y,
+                         std::max(0, rect_.w - DMSpacing::small_gap() * 2),
+                         row_h};
+            if (SDL_PointInRect(&p, &row)) {
+                if (on_select_) on_select_(i);
+                return true;
+            }
+            cursor_y += row_h + DMSpacing::small_gap();
+        }
+        return true;
+    }
+
+    void render(SDL_Renderer* renderer) const override {
+        if (!renderer) return;
+        dm_draw::DrawBeveledRect(renderer,
+                                 rect_,
+                                 DMStyles::CornerRadius(),
+                                 DMStyles::BevelDepth(),
+                                 DMStyles::PanelBG(),
+                                 DMStyles::PanelBG(),
+                                 DMStyles::PanelBG(),
+                                 false,
+                                 0.0f,
+                                 0.0f);
+        const auto* anchors = anchor_list();
+        if (!anchors) return;
+        const int row_h = DMButton::height();
+        int cursor_y = rect_.y + DMSpacing::small_gap();
+        for (std::size_t i = 0; i < anchors->size(); ++i) {
+            SDL_Rect row{rect_.x + DMSpacing::small_gap(),
+                         cursor_y,
+                         std::max(0, rect_.w - DMSpacing::small_gap() * 2),
+                         row_h};
+            const bool selected = selected_anchor_ && (*selected_anchor_ == static_cast<int>(i));
+            SDL_Color bg = selected ? DMStyles::AccentButton().bg : DMStyles::ButtonBaseFill();
+            bg.a = selected ? 240 : 210;
+            dm_draw::DrawBeveledRect(renderer,
+                                     row,
+                                     DMStyles::CornerRadius(),
+                                     DMStyles::BevelDepth(),
+                                     bg,
+                                     bg,
+                                     bg,
+                                     false,
+                                     DMStyles::HighlightIntensity(),
+                                     DMStyles::ShadowIntensity());
+            const std::string label = (*anchors)[i].name.empty() ? "(unnamed)" : (*anchors)[i].name;
+            DMFontCache::instance().draw_text(renderer,
+                                              DMStyles::Label(),
+                                              label,
+                                              row.x + DMSpacing::small_gap(),
+                                              row.y + (row.h - DMStyles::Label().font_size) / 2);
+            cursor_y += row_h + DMSpacing::small_gap();
+        }
+    }
+
+    bool wants_full_row() const override { return true; }
+    void set_selected_anchor_ref(const int* ptr) { selected_anchor_ = ptr; }
+
+private:
+    const std::vector<FrameAnchorPoint>* anchor_list() const {
+        if (!frames_ || !selected_frame_ || *selected_frame_ < 0 ||
+            *selected_frame_ >= static_cast<int>(frames_->size())) {
+            return nullptr;
+        }
+        return &frames_->at(static_cast<std::size_t>(*selected_frame_)).anchors;
+    }
+
+    int anchor_count() const {
+        const auto* list = anchor_list();
+        return list ? static_cast<int>(list->size()) : 0;
+    }
+
+    const std::vector<AnchorFrame>* frames_ = nullptr;
+    const int* selected_frame_ = nullptr;
+    const int* selected_anchor_ = nullptr;
+    std::function<void(int)> on_select_;
+    SDL_Rect rect_{0, 0, 0, DMButton::height()};
+};
+
+void AnchorListWidgetDeleter::operator()(AnchorListWidget* ptr) const noexcept {
+    delete ptr;
+}
+
+AnchorFrameEditor::~AnchorFrameEditor() = default;
+
 void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     context_ = context;
     selection_state_ = context.selection_state;
@@ -49,7 +165,8 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     selected_anchor_ = -1;
     dirty_ = false;
     frames_.clear();
-    anchor_rows_.clear();
+    screen_w_ = std::max(screen_w_, 1920);
+    screen_h_ = std::max(screen_h_, 1080);
 
     if (selection_state_) {
         selection_state_->reset();
@@ -70,17 +187,50 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
     frame_navigator_->set_current_frame(selected_frame_);
     frame_navigator_->set_on_frame_changed([this](int idx) { select_frame(idx); });
+    frame_navigator_->set_on_before_change([this](int, int) {
+        persist_pending_changes();
+        return true;
+    });
+    frame_navigator_->set_on_apply_next([this]() { apply_to_next_frame(); });
+    frame_navigator_->set_on_apply_animation([this]() { apply_to_animation(); });
+    frame_navigator_->set_on_apply_all([this]() { (void)apply_to_all_animations(); });
+    frame_navigator_->set_preview_source(context_.preview, context_.animation_id);
 
     btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
     btn_add_ = std::make_unique<DMButton>("Add Anchor", &DMStyles::AccentButton(), 140, DMButton::height());
     btn_delete_ = std::make_unique<DMButton>("Delete Anchor", &DMStyles::DeleteButton(), 140, DMButton::height());
-    btn_apply_all_ = std::make_unique<DMButton>("Apply To All Frames", &DMStyles::HeaderButton(), 180, DMButton::height());
 
     tb_name_ = std::make_unique<DMTextBox>("Name", "");
     tb_px_ = std::make_unique<DMTextBox>("px (percent of height)", "0.0");
     tb_py_ = std::make_unique<DMTextBox>("py (percent of height)", "0.0");
     tb_pz_ = std::make_unique<DMTextBox>("pz (percent of height)", "0.0");
     tb_rot_ = std::make_unique<DMTextBox>("rotation (deg)", "0.0");
+
+    tool_panel_ = std::make_unique<FrameToolPanel>("Anchor Tool Panel", "frame_editor_tool_panel_anchor");
+    back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() { wants_close_ = true; });
+    add_widget_ = std::make_unique<ButtonWidget>(btn_add_.get(), [this]() { add_anchor(); });
+    delete_widget_ = std::make_unique<ButtonWidget>(btn_delete_.get(), [this]() {
+        const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
+        if (selected_anchor_ >= 0 && selected_anchor_ < static_cast<int>(frame.anchors.size())) {
+            const std::string name = frame.anchors[static_cast<std::size_t>(selected_anchor_)].name;
+            remove_anchor_everywhere(name);
+            const int remaining = static_cast<int>(frames_.at(static_cast<std::size_t>(selected_frame_)).anchors.size());
+            select_anchor(std::min(selected_anchor_, remaining - 1));
+            dirty_ = true;
+            rebuild_tool_panel_layout();
+        }
+    });
+    anchor_list_widget_.reset(new AnchorListWidget(&frames_, &selected_frame_, &selected_anchor_, [this](int idx) {
+        select_anchor(idx);
+    }));
+    anchor_list_widget_->set_selected_anchor_ref(&selected_anchor_);
+    name_widget_ = std::make_unique<TextBoxWidget>(tb_name_.get(), true);
+    px_widget_ = std::make_unique<TextBoxWidget>(tb_px_.get(), true);
+    py_widget_ = std::make_unique<TextBoxWidget>(tb_py_.get(), true);
+    pz_widget_ = std::make_unique<TextBoxWidget>(tb_pz_.get(), true);
+    rot_widget_ = std::make_unique<TextBoxWidget>(tb_rot_.get(), true);
+    rebuild_tool_panel_layout();
+    tool_panel_->set_position_if_unset(DMSpacing::item_gap(), DMSpacing::header_gap());
 
     point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);
     if (point_3d_editor_) {
@@ -121,12 +271,20 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
 
 void AnchorFrameEditor::end() {
     frames_.clear();
-    anchor_rows_.clear();
+    tool_panel_.reset();
+    back_widget_.reset();
+    add_widget_.reset();
+    delete_widget_.reset();
+    anchor_list_widget_.reset();
+    name_widget_.reset();
+    px_widget_.reset();
+    py_widget_.reset();
+    pz_widget_.reset();
+    rot_widget_.reset();
     frame_navigator_.reset();
     btn_back_.reset();
     btn_add_.reset();
     btn_delete_.reset();
-    btn_apply_all_.reset();
     point_3d_editor_.reset();
     if (selection_state_) {
         selection_state_->reset();
@@ -152,100 +310,35 @@ bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
         }
     }
 
-    auto anchor_index_for_name = [&](const std::string& name) -> int {
-        const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
-        for (std::size_t i = 0; i < frame.anchors.size(); ++i) {
-            if (frame.anchors[i].name == name) {
-                return static_cast<int>(i);
-            }
-        }
-        return -1;
-    };
-
     bool handled = false;
-    if (frame_navigator_ && frame_navigator_->handle_event(e)) {
-        select_frame(frame_navigator_->get_current_frame());
-        handled = true;
-    }
-    if (btn_back_ && btn_back_->handle_event(e)) {
-        wants_close_ = true;
-        handled = true;
-    }
-    if (btn_add_ && btn_add_->handle_event(e)) {
-        // Generate a unique anchor name and add it everywhere (all frames, all animations)
-        int suffix = static_cast<int>(frames_.at(static_cast<std::size_t>(selected_frame_)).anchors.size());
-        auto name_exists = [&](const std::string& candidate) {
-            for (const auto& f : frames_) {
-                for (const auto& a : f.anchors) {
-                    if (a.name == candidate) return true;
-                }
-            }
-            return false;
-        };
-        std::string new_name;
-        do {
-            new_name = "anchor_" + std::to_string(suffix++);
-        } while (name_exists(new_name));
 
-        ensure_anchor_exists_everywhere(new_name);
-        select_anchor(anchor_index_for_name(new_name));
-        dirty_ = true;
-        handled = true;
-    }
-    if (btn_delete_ && btn_delete_->handle_event(e)) {
-        const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
-        if (selected_anchor_ >= 0 && selected_anchor_ < static_cast<int>(frame.anchors.size())) {
-            const std::string name = frame.anchors[static_cast<std::size_t>(selected_anchor_)].name;
-            remove_anchor_everywhere(name);
-            const int remaining = static_cast<int>(frames_.at(static_cast<std::size_t>(selected_frame_)).anchors.size());
-            select_anchor(std::min(selected_anchor_, remaining - 1));
-            dirty_ = true;
+    if (tool_panel_) {
+        const std::string name_before = tb_name_ ? tb_name_->value() : std::string{};
+        const std::string px_before = tb_px_ ? tb_px_->value() : std::string{};
+        const std::string py_before = tb_py_ ? tb_py_->value() : std::string{};
+        const std::string pz_before = tb_pz_ ? tb_pz_->value() : std::string{};
+        const std::string rot_before = tb_rot_ ? tb_rot_->value() : std::string{};
+
+        if (tool_panel_->handle_event(e)) {
+            handled = true;
         }
-        handled = true;
-    }
-    if (btn_apply_all_ && btn_apply_all_->handle_event(e)) {
-        apply_to_all_frames();
-        handled = true;
-    }
 
-    bool text_changed = false;
-    if (tb_name_ && tb_name_->handle_event(e)) {
-        text_changed = true;
-        handled = true;
-    }
-    if (tb_px_ && tb_px_->handle_event(e)) {
-        text_changed = true;
-        handled = true;
-    }
-    if (tb_py_ && tb_py_->handle_event(e)) {
-        text_changed = true;
-        handled = true;
-    }
-    if (tb_pz_ && tb_pz_->handle_event(e)) {
-        text_changed = true;
-        handled = true;
-    }
-    if (tb_rot_ && tb_rot_->handle_event(e)) {
-        text_changed = true;
-        handled = true;
-    }
+        const bool text_changed =
+            (tb_name_ && tb_name_->value() != name_before) ||
+            (tb_px_ && tb_px_->value() != px_before) ||
+            (tb_py_ && tb_py_->value() != py_before) ||
+            (tb_pz_ && tb_pz_->value() != pz_before) ||
+            (tb_rot_ && tb_rot_->value() != rot_before);
 
-    if (text_changed) {
-        if (apply_form_to_anchor()) {
+        if (text_changed && apply_form_to_anchor()) {
             refresh_selection_state();
             dirty_ = true;
+            handled = true;
         }
     }
 
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-        SDL_Point p{e.button.x, e.button.y};
-        for (std::size_t i = 0; i < anchor_rows_.size(); ++i) {
-            if (SDL_PointInRect(&p, &anchor_rows_[i])) {
-                select_anchor(static_cast<int>(i));
-                handled = true;
-                break;
-            }
-        }
+    if (frame_navigator_ && frame_navigator_->handle_event(e)) {
+        handled = true;
     }
 
     if (!context_.assets || !context_.target || !point_3d_editor_) {
@@ -284,8 +377,19 @@ bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
     return handled;
 }
 
-void AnchorFrameEditor::update(const Input&, float) {
-    layout_ui();
+void AnchorFrameEditor::update(const Input& input, float) {
+    nav_rect_.x = 0;
+    nav_rect_.y = 0;
+    nav_rect_.w = screen_w_;
+    nav_rect_.h = frame_navigator_ ? frame_navigator_->get_preferred_rect().h : 0;
+    if (frame_navigator_) {
+        frame_navigator_->set_rect(nav_rect_);
+    }
+    if (tool_panel_) {
+        tool_panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), nav_rect_.h + DMSpacing::header_gap());
+        tool_panel_->update(input, screen_w_, screen_h_);
+    }
     refresh_selection_state();
 }
 
@@ -299,48 +403,8 @@ void AnchorFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     }
 
     layout_ui(renderer);
-
-    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-    // Anchor list container
-    SDL_Rect list_rect = anchor_list_rect();
-    dm_draw::DrawBeveledRect(renderer,
-                             list_rect,
-                             DMStyles::CornerRadius(),
-                             DMStyles::BevelDepth(),
-                             kListBg,
-                             kListBg,
-                             kListBg,
-                             false,
-                             0.0f,
-                             0.0f);
-    render_anchor_list(renderer);
-
-    // Controls container background
-    SDL_Rect controls_bg{list_rect.x + list_rect.w + DMSpacing::item_gap(),
-                         list_rect.y,
-                         kControlsWidth,
-                         ui_rect_.h};
-    dm_draw::DrawBeveledRect(renderer,
-                             controls_bg,
-                             DMStyles::CornerRadius(),
-                             DMStyles::BevelDepth(),
-                             SDL_Color{18, 20, 26, 200},
-                             SDL_Color{18, 20, 26, 200},
-                             SDL_Color{18, 20, 26, 200},
-                             false,
-                             0.0f,
-                             0.0f);
-
     if (frame_navigator_) frame_navigator_->render(renderer);
-    if (btn_back_) btn_back_->render(renderer);
-    if (btn_add_) btn_add_->render(renderer);
-    if (btn_delete_) btn_delete_->render(renderer);
-    if (btn_apply_all_) btn_apply_all_->render(renderer);
-    if (tb_name_) tb_name_->render(renderer);
-    if (tb_px_) tb_px_->render(renderer);
-    if (tb_py_) tb_py_->render(renderer);
-    if (tb_pz_) tb_pz_->render(renderer);
-    if (tb_rot_) tb_rot_->render(renderer);
+    if (tool_panel_) tool_panel_->render(renderer);
 
     const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
     for (std::size_t i = 0; i < frame.anchors.size(); ++i) {
@@ -384,54 +448,25 @@ void AnchorFrameEditor::persist_pending_changes() {
 }
 
 void AnchorFrameEditor::layout_ui(SDL_Renderer* renderer) const {
-    const int padding = kPanelPadding;
-    const int left_x = padding;
-    const int top_y = padding;
-    const int controls_x = left_x + kListWidth + DMSpacing::item_gap();
-    int cursor_y = top_y + padding;
-
-    ui_rect_ = SDL_Rect{left_x, top_y, kListWidth + kControlsWidth + DMSpacing::item_gap(), 0};
-
-    if (frame_navigator_) {
-        SDL_Rect preferred = frame_navigator_->get_preferred_rect();
-        SDL_Rect rect{controls_x, cursor_y, kControlsWidth - padding * 2, preferred.h};
-        frame_navigator_->set_rect(rect);
-        cursor_y += rect.h + padding;
+    int sw = screen_w_;
+    int sh = screen_h_;
+    if (renderer) {
+        SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
+        screen_w_ = sw;
+        screen_h_ = sh;
     }
-    if (btn_back_) {
-        btn_back_->set_rect(SDL_Rect{controls_x, cursor_y, kControlsWidth - padding * 2, DMButton::height()});
-        cursor_y += DMButton::height() + padding;
+    const int nav_height = frame_navigator_ ? frame_navigator_->get_preferred_rect().h : 0;
+    nav_rect_.x = 0;
+    nav_rect_.y = 0;
+    nav_rect_.w = sw;
+    nav_rect_.h = nav_height;
+    if (frame_navigator_ && nav_rect_.w > 0) {
+        frame_navigator_->set_rect(nav_rect_);
     }
-    if (btn_add_) {
-        btn_add_->set_rect(SDL_Rect{controls_x, cursor_y, kControlsWidth - padding * 2, DMButton::height()});
-        cursor_y += DMButton::height() + padding;
+    if (tool_panel_) {
+        tool_panel_->set_work_area(SDL_Rect{0, 0, sw, sh});
+        tool_panel_->set_position_if_unset(DMSpacing::item_gap(), nav_height + DMSpacing::header_gap());
     }
-    if (btn_delete_) {
-        btn_delete_->set_rect(SDL_Rect{controls_x, cursor_y, kControlsWidth - padding * 2, DMButton::height()});
-        cursor_y += DMButton::height() + padding;
-    }
-    if (btn_apply_all_) {
-        btn_apply_all_->set_rect(SDL_Rect{controls_x, cursor_y, kControlsWidth - padding * 2, DMButton::height()});
-        cursor_y += DMButton::height() + padding;
-    }
-    auto place_textbox = [&](DMTextBox* tb) {
-        if (!tb) return;
-        tb->set_rect(SDL_Rect{controls_x, cursor_y, kControlsWidth - padding * 2, DMTextBox::height()});
-        cursor_y += DMTextBox::height() + padding;
-    };
-    place_textbox(tb_name_.get());
-    place_textbox(tb_px_.get());
-    place_textbox(tb_py_.get());
-    place_textbox(tb_pz_.get());
-    place_textbox(tb_rot_.get());
-
-    const int controls_height = cursor_y - top_y;
-    const int list_height = anchor_list_rect().h + padding * 2;
-    const int panel_height = std::max(list_height, controls_height);
-    ui_rect_.h = panel_height;
-
-    rebuild_anchor_rows();
-    (void)renderer;
 }
 
 void AnchorFrameEditor::select_frame(int index) {
@@ -440,6 +475,7 @@ void AnchorFrameEditor::select_frame(int index) {
     selected_anchor_ = std::min(selected_anchor_, static_cast<int>(frames_[static_cast<std::size_t>(selected_frame_)].anchors.size()) - 1);
     refresh_form();
     refresh_selection_state();
+    rebuild_tool_panel_layout();
     if (frame_navigator_) {
         frame_navigator_->set_current_frame(selected_frame_);
     }
@@ -539,10 +575,54 @@ void AnchorFrameEditor::apply_to_all_frames() {
     if (selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size())) return;
     const auto source = frames_[static_cast<std::size_t>(selected_frame_)];
     for (std::size_t i = 0; i < frames_.size(); ++i) {
-        if (static_cast<int>(i) == selected_frame_) continue;
         frames_[i] = source;
     }
     dirty_ = true;
+}
+
+void AnchorFrameEditor::apply_to_next_frame() {
+    if (frames_.empty() || selected_frame_ < 0) return;
+    const int count = static_cast<int>(frames_.size());
+    const int current = std::clamp(selected_frame_, 0, count - 1);
+    const int target = (current + 1) % count;
+    selected_frame_ = current;
+    frames_[static_cast<std::size_t>(target)] = frames_[static_cast<std::size_t>(selected_frame_)];
+    dirty_ = true;
+    persist_changes();
+    persist_pending_changes();
+}
+
+void AnchorFrameEditor::apply_to_animation() {
+    if (selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size())) return;
+    apply_to_all_frames();
+    persist_changes();
+    persist_pending_changes();
+}
+
+bool AnchorFrameEditor::apply_to_all_animations() {
+    if (!context_.document || frames_.empty() || selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size())) return false;
+    apply_to_animation();
+
+    const auto source = frames_[static_cast<std::size_t>(selected_frame_)];
+    const auto ids = context_.document->animation_ids();
+    for (const auto& id : ids) {
+        auto payload_opt = context_.document->animation_payload_json(id);
+        nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
+        auto frames = parse_anchor_frames_from_payload(payload);
+        if (frames.empty()) {
+            frames.emplace_back();
+        }
+        for (auto& f : frames) {
+            f = source;
+        }
+        nlohmann::json updated = build_payload_with_anchors(frames, payload);
+        context_.document->update_animation_payload(id, updated);
+        if (context_.preview) {
+            context_.preview->invalidate(id);
+        }
+    }
+    context_.document->save_to_file_checked(true);
+    return true;
 }
 
 void AnchorFrameEditor::persist_changes() {
@@ -688,44 +768,60 @@ bool AnchorFrameEditor::resolve_anchor_screen(int anchor_index,
 }
 
 bool AnchorFrameEditor::ui_contains_point(const SDL_Point& p) const {
-    return SDL_PointInRect(&p, &ui_rect_);
+    if (SDL_PointInRect(&p, &nav_rect_)) return true;
+    return tool_panel_ && tool_panel_->contains_point(p);
 }
 
-SDL_Rect AnchorFrameEditor::anchor_list_rect() const {
-    const int row_h = DMButton::height();
-    const int row_count = frames_.empty() ? 0 : static_cast<int>(frames_[static_cast<std::size_t>(selected_frame_)].anchors.size());
-    const int h = std::max(row_h + DMSpacing::small_gap() * 2, row_count * (row_h + DMSpacing::small_gap()) + DMSpacing::small_gap() * 2);
-    return SDL_Rect{kPanelPadding, kPanelPadding, kListWidth, h};
-}
-
-void AnchorFrameEditor::render_anchor_list(SDL_Renderer* renderer) const {
-    rebuild_anchor_rows();
-    const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
-    for (std::size_t i = 0; i < anchor_rows_.size(); ++i) {
-        SDL_Rect row = anchor_rows_[i];
-        SDL_Color bg = (static_cast<int>(i) == selected_anchor_) ? kListAccent : SDL_Color{60, 60, 60, 200};
-        dm_draw::DrawBeveledRect(renderer, row, DMStyles::CornerRadius(), DMStyles::BevelDepth(), bg, bg, bg, false, 0.0f, 0.0f);
-        const std::string label = frame.anchors[i].name.empty() ? "(unnamed)" : frame.anchors[i].name;
-        DMFontCache::instance().draw_text(renderer,
-                                          DMStyles::Label(),
-                                          label,
-                                          row.x + DMSpacing::small_gap(),
-                                          row.y + (row.h - DMStyles::Label().font_size) / 2);
-    }
-}
-
-void AnchorFrameEditor::rebuild_anchor_rows() const {
-    anchor_rows_.clear();
+void AnchorFrameEditor::add_anchor() {
     if (frames_.empty()) return;
+
+    int suffix = static_cast<int>(frames_.at(static_cast<std::size_t>(selected_frame_)).anchors.size());
+    auto name_exists = [&](const std::string& candidate) {
+        for (const auto& f : frames_) {
+            for (const auto& a : f.anchors) {
+                if (a.name == candidate) return true;
+            }
+        }
+        return false;
+    };
+    std::string new_name;
+    do {
+        new_name = "anchor_" + std::to_string(suffix++);
+    } while (name_exists(new_name));
+
+    ensure_anchor_exists_everywhere(new_name);
+
     const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
-    SDL_Rect list = anchor_list_rect();
-    int cursor_y = list.y + DMSpacing::small_gap();
-    const int row_h = DMButton::height();
+    int idx = -1;
     for (std::size_t i = 0; i < frame.anchors.size(); ++i) {
-        SDL_Rect row{list.x + DMSpacing::small_gap(), cursor_y, list.w - DMSpacing::small_gap() * 2, row_h};
-        anchor_rows_.push_back(row);
-        cursor_y += row_h + DMSpacing::small_gap();
+        if (frame.anchors[i].name == new_name) {
+            idx = static_cast<int>(i);
+            break;
+        }
     }
+    select_anchor(idx);
+    dirty_ = true;
+    rebuild_tool_panel_layout();
+}
+
+void AnchorFrameEditor::rebuild_tool_panel_layout() {
+    if (!tool_panel_) return;
+    DockableCollapsible::Rows rows;
+    if (back_widget_) rows.push_back({back_widget_.get()});
+    if (anchor_list_widget_) rows.push_back({anchor_list_widget_.get()});
+
+    DockableCollapsible::Row buttons_row;
+    if (add_widget_) buttons_row.push_back(add_widget_.get());
+    if (delete_widget_) buttons_row.push_back(delete_widget_.get());
+    if (!buttons_row.empty()) rows.push_back(buttons_row);
+
+    if (name_widget_) rows.push_back({name_widget_.get()});
+    if (px_widget_) rows.push_back({px_widget_.get()});
+    if (py_widget_) rows.push_back({py_widget_.get()});
+    if (pz_widget_) rows.push_back({pz_widget_.get()});
+    if (rot_widget_) rows.push_back({rot_widget_.get()});
+
+    tool_panel_->set_rows(rows);
 }
 
 void AnchorFrameEditor::ensure_anchor_exists_everywhere(const std::string& name) {

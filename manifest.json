@@ -975,9 +975,68 @@
       ],
       "animations": {
         "attack": {
+          "anchor_points": [
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ]
+          ],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {}
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
@@ -988,14 +1047,19 @@
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0
+            "dy": 0,
+            "dz": 0
           },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "attack"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "backward": {
           "attack_geometry": [
@@ -1040,6 +1104,7 @@
               "projectile": []
             }
           ],
+          "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": false,
             "flipMovementY": false,
@@ -1047,6 +1112,7 @@
             "flipY": false,
             "reverse": false
           },
+          "flipped_source": true,
           "frames": [
             {}
           ],
@@ -1092,42 +1158,52 @@
               "projectile": null
             }
           ],
+          "inherit_source_movement": true,
           "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "animation",
             "name": "forward",
             "path": ""
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "default": {
-          "attack_geometry": [
-            {
-              "vectors": []
-            }
+          "anchor_points": [
+            [
+              {
+                "in_front": true,
+                "name": "eyes",
+                "texture_x": 91,
+                "texture_z": 71
+              }
+            ]
           ],
+          "attack_geometry": [
+            []
+          ],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {}
           ],
           "hit_geometry": [
             {
-              "boxes": []
+              "boxes": [],
+              "explosion": null,
+              "melee": null,
+              "projectile": null
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
             [
+              0,
               0,
               0,
               false
@@ -1135,16 +1211,95 @@
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0
+            "dy": 0,
+            "dz": 0
           },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "forward": {
+          "anchor_points": [
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ]
+          ],
           "attack_geometry": [
             {
               "explosion": [],
@@ -1187,6 +1342,8 @@
               "projectile": []
             }
           ],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {}
           ],
@@ -1232,6 +1389,7 @@
               "projectile": null
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
@@ -1243,16 +1401,95 @@
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0
+            "dy": 0,
+            "dz": 0
           },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "forward"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "left": {
+          "anchor_points": [
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ],
+            [
+              {
+                "name": "eyes",
+                "px": 0.5,
+                "py": 0.5,
+                "pz": 0.01,
+                "rotation": 0.0
+              }
+            ]
+          ],
           "attack_geometry": [
             {
               "vectors": [
@@ -1292,6 +1529,8 @@
               "vectors": []
             }
           ],
+          "crop_frames": false,
+          "flipped_source": false,
           "frames": [
             {}
           ],
@@ -1304,7 +1543,7 @@
                   "center_z": 1230.8443603515625,
                   "half_height": 702.7274780273438,
                   "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007812
+                  "rotation": -178.48147583007813
                 }
               ]
             },
@@ -1330,6 +1569,7 @@
               "boxes": []
             }
           ],
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
@@ -1341,16 +1581,22 @@
           ],
           "movement_total": {
             "dx": 0,
-            "dy": 0
+            "dy": 0,
+            "dz": 0
           },
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "left"
-          }
+          },
+          "speed_multiplier": 1.0
         },
         "right": {
+          "crop_frames": false,
           "derived_modifiers": {
             "flipMovementX": true,
             "flipMovementY": false,
@@ -1358,16 +1604,22 @@
             "flipY": false,
             "reverse": false
           },
+          "flipped_source": true,
           "frames": [
             {}
           ],
+          "inherit_source_movement": true,
           "loop": true,
           "number_of_frames": 1,
+          "on_end": "default",
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "animation",
             "name": "left",
             "path": ""
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "asset_directory": "resources/assets/Vibble",
@@ -1708,7 +1960,7 @@
                   "center_z": 5163.4951171875,
                   "half_height": 1570.3231201171875,
                   "half_width": 5179.4228515625,
-                  "rotation": -93.25064086914062
+                  "rotation": -93.25064086914063
                 }
               ]
             }
@@ -2783,16 +3035,16 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 2529,
+          "camera_height_px": 2000,
           "camera_pan_y_percent": 0,
           "camera_tilt_deg": 75.0,
           "camera_y_distance_px": 891,
           "camera_zoom_percent": 3,
           "curvyness": 2,
           "display_color": [
-            139,
-            36,
             242,
+            36,
+            36,
             255
           ],
           "edge_smoothness": 101,
@@ -2821,8 +3073,8 @@
                 }
               ],
               "display_name": "Bartender",
-              "dx": -44,
-              "dy": 164,
+              "dx": 52,
+              "dy": 1108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2993,9 +3245,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
-            138,
-            242,
             36,
+            242,
+            242,
             255
           ],
           "edge_smoothness": 2,

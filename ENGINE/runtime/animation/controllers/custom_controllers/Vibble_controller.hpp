@@ -25,11 +25,13 @@ private:
     float frame_dt() const;
     std::string animation_for_direction(int raw_x, int raw_y) const;
     void Dash();
+    void spawn_eyes_follower();
 
     static constexpr float kWalkSpeed        = 300.0f;
     static constexpr float kSprintMultiplier = 2.0f;
 
     Asset* player_ = nullptr;
+    Asset* eyes_follower_ = nullptr;
     int    dx_ = 0;
     int    dy_ = 0;
 

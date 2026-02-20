@@ -5773,6 +5773,9 @@ bool RoomEditor::spawn_group_locked(const std::string& spawn_id) const {
 bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
     if (!asset) return false;
 
+    const auto& anchor_follow = asset->anchor_follow_target();
+    const bool is_anchored_asset = anchor_follow && anchor_follow->valid();
+
     // Check if asset is a map asset
     const bool is_map_asset = !asset->spawn_id.empty() && !is_room_spawn_id(asset->spawn_id);
 
@@ -5782,9 +5785,14 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
     // Check if asset is a tiled asset
     const bool is_tiled_asset = asset->info && asset->info->tillable;
 
+    // Anchored assets are only selectable in anchored mode
+    if (selection_filter_ != SelectionFilter::Anchored && is_anchored_asset) {
+        return false;
+    }
+
     switch (selection_filter_) {
         case SelectionFilter::Normal:
-            // Normal assets: not map, not boundary, not tiled
+            // Normal assets: not map, not boundary, not tiled, not anchored
             return !is_map_asset && !is_boundary_asset && !is_tiled_asset;
 
         case SelectionFilter::Tiled:
@@ -5799,8 +5807,12 @@ bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
             // Boundary assets only
             return is_boundary_asset;
 
+        case SelectionFilter::Anchored:
+            // Anchored assets only
+            return is_anchored_asset;
+
         default:
-            return true;
+            return !is_anchored_asset;
     }
 }
 
@@ -5819,6 +5831,10 @@ void RoomEditor::cycle_selection_filter() {
             show_notice("Selecting boundary assets");
             break;
         case SelectionFilter::Boundary:
+            selection_filter_ = SelectionFilter::Anchored;
+            show_notice("Selecting anchored assets");
+            break;
+        case SelectionFilter::Anchored:
             selection_filter_ = SelectionFilter::Normal;
             show_notice("Selecting normal assets");
             break;

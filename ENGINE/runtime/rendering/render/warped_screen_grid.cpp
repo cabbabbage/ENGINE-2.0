@@ -977,6 +977,15 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
     return result;
 }
 
+world::CameraProjectionParams WarpedScreenGrid::projection_params() const {
+    const CameraState& cam_state = camera_state_cached();
+    const float horizon_band = horizon_fade_for_height(cam_state.camera_height);
+    world::CameraProjectionParams params = camera_state_to_projection_params(
+        cam_state, screen_width_, screen_height_, horizon_band);
+    params.state_version = camera_state_version_;
+    return params;
+}
+
 void WarpedScreenGrid::apply_camera_settings(const nlohmann::json& data) {
     if (!data.is_object()) {
         return;

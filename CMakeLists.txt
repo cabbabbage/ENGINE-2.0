@@ -330,6 +330,8 @@ add_executable(engine_world_tests
     ENGINE/runtime/gameplay/world/grid_point.cpp
     ENGINE/runtime/gameplay/world/chunk_manager.cpp
     ENGINE/runtime/utils/utils/grid_math.cpp
+    ENGINE/runtime/utils/utils/FramePointResolver.cpp
+    ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
     ENGINE/runtime/utils/utils/log.cpp
     ENGINE/TESTS/stubs/asset/Asset_world_tests_stubs.cpp
     ${TESTS_SOURCE_DIR}/stubs/chunk_stubs.cpp
@@ -347,6 +349,7 @@ target_include_directories(engine_world_tests
 target_compile_definitions(engine_world_tests PRIVATE
     PROJECT_ROOT="${TEST_ROOT}"
     DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
+    ENGINE_WORLD_TESTS=1
 )
 
 # No heavy libs needed; these sources don't call into SDL functions

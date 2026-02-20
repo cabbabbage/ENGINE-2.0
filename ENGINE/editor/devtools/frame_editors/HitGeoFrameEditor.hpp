@@ -9,6 +9,8 @@
 #include "shared/Point3DEditor.hpp"
 #include "shared/FrameEditState.hpp"
 #include "shared/FrameEditorContext.hpp"
+#include "shared/FrameNavigator.hpp"
+#include "shared/ToolPanel.hpp"
 #include "shared/ManifestTransaction.hpp"
 #include "shared/SelectionState.hpp"
 
@@ -36,8 +38,9 @@ private:
     void persist_changes();
     void apply_live_changes();
     void invalidate_preview() const;
-    void apply_hit_to_all_frames();
-    void copy_hit_box_to_next_frame();
+    void apply_hit_to_next_frame();
+    void apply_hit_to_animation();
+    bool apply_hit_to_all_animations();
     std::string current_hitbox_type() const;
     float base_world_z() const;
     animation_update::FrameHitGeometry::HitBox* current_hit_box();
@@ -63,18 +66,23 @@ private:
     std::vector<MovementFrame> frames_;
     int selected_index_ = 0;
     int selected_hitbox_type_index_ = 1;
+    bool dirty_ = false;
 
     std::unique_ptr<DMDropdown> dd_hitbox_type_;
     std::unique_ptr<DMButton> btn_back_;
-    std::unique_ptr<DMButton> btn_prev_frame_;
-    std::unique_ptr<DMButton> btn_next_frame_;
+    std::unique_ptr<FrameNavigator> frame_navigator_;
     std::unique_ptr<DMButton> btn_add_remove_;
-    std::unique_ptr<DMButton> btn_copy_next_;
-    std::unique_ptr<DMButton> btn_apply_all_;
 
-    mutable SDL_Rect ui_rect_{0, 0, 0, 0};
+    mutable SDL_Rect nav_rect_{0, 0, 0, 0};
+    mutable int screen_w_ = 1920;
+    mutable int screen_h_ = 1080;
 
     bool wants_close_ = false;
+
+    std::unique_ptr<FrameToolPanel> tool_panel_;
+    std::unique_ptr<ButtonWidget> back_widget_;
+    std::unique_ptr<DropdownWidget> hitbox_type_widget_;
+    std::unique_ptr<ButtonWidget> add_remove_widget_;
 };
 
 }  // namespace devmode::frame_editors

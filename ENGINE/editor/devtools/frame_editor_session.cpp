@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <optional>
 #include <utility>
 
 #include "core/AssetsManager.hpp"
@@ -11,6 +13,7 @@
 #include "devtools/frame_editors/FrameEditorBase.hpp"
 #include "devtools/frame_editors/HitGeoFrameEditor.hpp"
 #include "devtools/frame_editors/MovementFrameEditor.hpp"
+#include "devtools/frame_editors/AnchorFrameEditor.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
 #include "utils/input.hpp"
@@ -23,6 +26,7 @@ FrameEditorSession::Mode mode_for_launch(FrameEditorLaunchMode launch_mode) {
         case FrameEditorLaunchMode::Movement: return FrameEditorSession::Mode::Movement;
         case FrameEditorLaunchMode::AttackGeometry: return FrameEditorSession::Mode::AttackGeometry;
         case FrameEditorLaunchMode::HitGeometry: return FrameEditorSession::Mode::HitGeometry;
+        case FrameEditorLaunchMode::AnchorPoints: return FrameEditorSession::Mode::AnchorPoints;
     }
     return FrameEditorSession::Mode::Movement;
 }
@@ -32,6 +36,7 @@ FrameEditorLaunchMode launch_mode_for_mode(FrameEditorSession::Mode mode) {
         case FrameEditorSession::Mode::Movement: return FrameEditorLaunchMode::Movement;
         case FrameEditorSession::Mode::AttackGeometry: return FrameEditorLaunchMode::AttackGeometry;
         case FrameEditorSession::Mode::HitGeometry: return FrameEditorLaunchMode::HitGeometry;
+        case FrameEditorSession::Mode::AnchorPoints: return FrameEditorLaunchMode::AnchorPoints;
     }
     return FrameEditorLaunchMode::Movement;
 }
@@ -44,6 +49,8 @@ std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(FrameEdit
             return std::make_unique<devmode::frame_editors::AttackGeoFrameEditor>();
         case FrameEditorSession::Mode::HitGeometry:
             return std::make_unique<devmode::frame_editors::HitGeoFrameEditor>();
+        case FrameEditorSession::Mode::AnchorPoints:
+            return std::make_unique<devmode::frame_editors::AnchorFrameEditor>();
     }
     return nullptr;
 }
@@ -231,8 +238,118 @@ void FrameEditorSession::create_and_begin_editor() {
 
     active_editor_ = create_editor(mode_);
     if (active_editor_) {
+        frame_camera_for_editor_entry();
         active_editor_->begin(editor_context_);
     }
+}
+
+void FrameEditorSession::frame_camera_for_editor_entry() {
+    if (!assets_ || !target_) {
+        return;
+    }
+
+    WarpedScreenGrid& cam = assets_->getView();
+    const SDL_Point focus = target_->world_point();
+
+    // Establish a consistent baseline before computing scale.
+    cam.set_manual_height_override(true);
+    cam.set_manual_zoom_override(true);
+    cam.set_zoom_percent(0.0);
+    cam.set_focus_override(focus);
+    cam.set_screen_center(focus);
+
+    constexpr float kFramingTiltDeg = 1.0f;  // Forward-facing, not top-down.
+    cam.set_tilt_override(kFramingTiltDeg);
+
+    SDL_Renderer* renderer = assets_->renderer();
+    int screen_w = 0;
+    int screen_h = 0;
+    if (renderer) {
+        SDL_GetCurrentRenderOutputSize(renderer, &screen_w, &screen_h);
+    }
+    if (screen_w <= 0 || screen_h <= 0) {
+        return;
+    }
+
+    const int frame_h = target_->height();
+    if (frame_h <= 0) {
+        return;
+    }
+
+    auto sanitize_scale = [](float value) -> double {
+        return (std::isfinite(value) && value > 0.0f) ? static_cast<double>(value) : 1.0;
+    };
+
+    double sprite_height_world = static_cast<double>(frame_h);
+    if (target_->info && std::isfinite(target_->info->scale_factor) && target_->info->scale_factor > 0.0f) {
+        sprite_height_world *= static_cast<double>(target_->info->scale_factor);
+    }
+    sprite_height_world *= sanitize_scale(target_->smoothed_scale());
+    if (!(sprite_height_world > 0.0)) {
+        return;
+    }
+
+    constexpr double kTargetHeightRatio = 0.7;
+    const double target_height_px = static_cast<double>(screen_h) * kTargetHeightRatio;
+
+    const double starting_scale = cam.get_scale();
+    auto sprite_height_for_scale = [&](double scale) -> std::optional<double> {
+        cam.set_scale(scale);
+        const auto effects = cam.compute_render_effects(
+            focus, 0.0f, 0.0f, WarpedScreenGrid::RenderSmoothingKey{}, target_->world_z());
+        if (effects.distance_scale <= 0.0f || effects.vertical_scale <= 0.0f) {
+            return std::nullopt;
+        }
+        const double h_px = sprite_height_world *
+                            static_cast<double>(effects.distance_scale) *
+                            static_cast<double>(effects.vertical_scale);
+        if (!std::isfinite(h_px)) {
+            return std::nullopt;
+        }
+        return h_px;
+    };
+
+    constexpr double kMinScale = 1.0;
+    constexpr double kMaxScale = 50000.0;
+    double best_scale = std::clamp(starting_scale, kMinScale, kMaxScale);
+    double best_diff = std::numeric_limits<double>::infinity();
+
+    auto consider = [&](double scale) {
+        auto height_opt = sprite_height_for_scale(scale);
+        if (!height_opt.has_value()) {
+            return;
+        }
+        const double diff = std::abs(*height_opt - target_height_px);
+        if (diff < best_diff) {
+            best_diff = diff;
+            best_scale = scale;
+        }
+    };
+
+    consider(best_scale);
+    consider(kMinScale);
+    consider(kMaxScale);
+
+    double lo = kMinScale;
+    double hi = kMaxScale;
+    for (int i = 0; i < 26; ++i) {
+        const double mid = 0.5 * (lo + hi);
+        auto h_opt = sprite_height_for_scale(mid);
+        if (h_opt.has_value()) {
+            consider(mid);
+            if (*h_opt > target_height_px) {
+                lo = mid;  // Sprite too large -> move camera farther.
+            } else {
+                hi = mid;  // Sprite too small -> move camera closer.
+            }
+        } else {
+            break;
+        }
+    }
+
+    cam.set_scale(best_scale);
+    cam.set_focus_override(focus);
+    cam.set_screen_center(focus);
 }
 
 void FrameEditorSession::destroy_editor(bool persist_changes) {

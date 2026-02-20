@@ -33,7 +33,7 @@ class FrameEditorBase;
 
 class FrameEditorSession {
 public:
-    enum class Mode { Movement, AttackGeometry, HitGeometry };
+    enum class Mode { Movement, AttackGeometry, HitGeometry, AnchorPoints };
 
     FrameEditorSession();
     ~FrameEditorSession();
@@ -50,6 +50,7 @@ public:
 
     bool is_active() const { return active_; }
     Mode mode() const { return mode_; }
+    const Asset* target_asset() const { return target_; }
     void set_mode(Mode mode);
 
     void update(const Input& input);
@@ -62,6 +63,7 @@ private:
     void create_and_begin_editor();
     void destroy_editor(bool persist_changes);
     std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(Mode mode);
+    void frame_camera_for_editor_entry();
 
     void capture_camera_state();
     void restore_camera_state();

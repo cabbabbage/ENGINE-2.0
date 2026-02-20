@@ -366,6 +366,15 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
         attack_geometry[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(attack_array);
     }
 
+    nlohmann::json anchor_points = (payload.contains("anchor_points") && payload["anchor_points"].is_array())
+                                       ? payload["anchor_points"]
+                                       : nlohmann::json::array();
+    if (anchor_points.size() < frame_count) {
+        anchor_points.get_ref<nlohmann::json::array_t&>().resize(frame_count, nlohmann::json::array());
+    } else if (anchor_points.size() > frame_count) {
+        anchor_points.erase(anchor_points.begin() + static_cast<std::ptrdiff_t>(frame_count), anchor_points.end());
+    }
+
     int total_dx = 0;
     int total_dy = 0;
     double total_dz = 0.0;
@@ -385,6 +394,7 @@ nlohmann::json build_payload_from_frames(const std::vector<MovementFrame>& frame
     payload["movement_total"] = nlohmann::json{{"dx", total_dx}, {"dy", total_dy}, {"dz", total_dz}};
     payload["hit_geometry"] = std::move(hit_geometry);
     payload["attack_geometry"] = std::move(attack_geometry);
+    payload["anchor_points"] = std::move(anchor_points);
     return payload;
 }
 

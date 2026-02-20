@@ -10,6 +10,7 @@
 #include "shared/FrameEditState.hpp"
 #include "shared/FrameEditorContext.hpp"
 #include "shared/FrameNavigator.hpp"
+#include "shared/ToolPanel.hpp"
 #include "shared/ManifestTransaction.hpp"
 #include "shared/SelectionState.hpp"
 #include "devtools/widgets.hpp"
@@ -39,7 +40,9 @@ private:
     void apply_live_changes();
     void invalidate_preview() const;
     void apply_attack_to_all_frames();
-    void copy_attack_vector_to_next_frame();
+    void apply_attack_to_next_frame();
+    void apply_attack_to_animation();
+    bool apply_attack_to_all_animations();
     std::string current_attack_type() const;
     int current_attack_vector_index() const;
     void set_current_attack_vector_index(int index);
@@ -63,21 +66,25 @@ private:
     std::vector<MovementFrame> frames_;
     int selected_index_ = 0;
     int selected_attack_vector_index_ = -1;
+    bool dirty_ = false;
 
 
     std::unique_ptr<DMButton> btn_back_;
     std::unique_ptr<FrameNavigator> frame_navigator_;
     std::unique_ptr<DMButton> btn_add_remove_;
     std::unique_ptr<DMButton> btn_delete_;
-    std::unique_ptr<DMButton> btn_copy_next_;
-    std::unique_ptr<DMButton> btn_apply_all_;
 
-
-
-    mutable SDL_Rect ui_rect_{0, 0, 0, 0};
+    mutable SDL_Rect nav_rect_{0, 0, 0, 0};
+    mutable int screen_w_ = 1920;
+    mutable int screen_h_ = 1080;
 
     AttackHandle selected_handle_ = AttackHandle::None;
     bool wants_close_ = false;
+
+    std::unique_ptr<FrameToolPanel> tool_panel_;
+    std::unique_ptr<ButtonWidget> back_widget_;
+    std::unique_ptr<ButtonWidget> add_remove_widget_;
+    std::unique_ptr<ButtonWidget> delete_widget_;
 };
 
 }  // namespace devmode::frame_editors

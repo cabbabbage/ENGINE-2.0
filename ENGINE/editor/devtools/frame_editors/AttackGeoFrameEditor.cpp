@@ -195,6 +195,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
             persist_changes();
         });
     }
+    dirty_ = false;
     wants_close_ = false;
     selected_index_ = 0;
     selected_attack_vector_index_ = -1;
@@ -211,8 +212,7 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     }
 
     manifest_txn_.begin(context_);
-    manifest_txn_.set_immediate_persist(true);
-    manifest_txn_.set_deferred_persist(false);
+    manifest_txn_.set_immediate_persist(false);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -230,10 +230,39 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
     frame_navigator_->set_on_frame_changed([this](int frame) {
         select_frame(frame);
     });
+    frame_navigator_->set_on_before_change([this](int, int) {
+        persist_pending_changes();
+        return true;
+    });
+    frame_navigator_->set_preview_source(context_.preview, context_.animation_id);
+    frame_navigator_->set_on_apply_next([this]() { apply_attack_to_next_frame(); });
+    frame_navigator_->set_on_apply_animation([this]() { apply_attack_to_animation(); });
+    frame_navigator_->set_on_apply_all([this]() { (void)apply_attack_to_all_animations(); });
     btn_add_remove_ = std::make_unique<DMButton>("Add Attack", &DMStyles::AccentButton(), 150, DMButton::height());
     btn_delete_ = std::make_unique<DMButton>("Delete Attack", &DMStyles::DeleteButton(), 150, DMButton::height());
-    btn_copy_next_ = std::make_unique<DMButton>("Copy To Next", &DMStyles::HeaderButton(), 150, DMButton::height());
-    btn_apply_all_ = std::make_unique<DMButton>("Apply To All Frames", &DMStyles::HeaderButton(), 180, DMButton::height());
+
+    tool_panel_ = std::make_unique<FrameToolPanel>("Attack Geometry Tool Panel", "frame_editor_tool_panel_attack");
+    back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() { wants_close_ = true; });
+    add_remove_widget_ = std::make_unique<ButtonWidget>(btn_add_remove_.get(), [this]() {
+        auto* vec = current_attack_vector();
+        if (vec) {
+            delete_current_attack_vector();
+        } else {
+            ensure_attack_vector_for_type(current_attack_type());
+            persist_changes();
+        }
+        refresh_attack_form();
+    });
+    delete_widget_ = std::make_unique<ButtonWidget>(btn_delete_.get(), [this]() {
+        delete_current_attack_vector();
+        refresh_attack_form();
+    });
+    DockableCollapsible::Rows rows{
+        {back_widget_.get()},
+        {add_remove_widget_.get(), delete_widget_.get()},
+    };
+    tool_panel_->set_rows(rows);
+    // Position set on first update when screen dimensions are available.
 
     clamp_attack_selection();
     refresh_attack_form();
@@ -242,16 +271,19 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
 
 void AttackGeoFrameEditor::end() {
     frames_.clear();
+    dirty_ = false;
     if (selection_state_) {
         selection_state_->reset();
         selection_state_ = nullptr;
     }
     point_3d_editor_ = nullptr;
+    tool_panel_.reset();
+    back_widget_.reset();
+    add_remove_widget_.reset();
+    delete_widget_.reset();
     btn_back_.reset();
     btn_add_remove_.reset();
     btn_delete_.reset();
-    btn_copy_next_.reset();
-    btn_apply_all_.reset();
     wants_close_ = false;
 }
 
@@ -271,38 +303,14 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
 
     bool consumed = false;
 
+    if (tool_panel_ && tool_panel_->handle_event(e)) {
+        consumed = true;
+    }
+
     if (frame_navigator_ && frame_navigator_->handle_event(e)) {
         consumed = true;
         if (selection_state_) selection_state_->reset();
         if (point_3d_editor_) point_3d_editor_->set_selected_point_index(-1);
-    }
-    if (btn_back_ && btn_back_->handle_event(e)) {
-        wants_close_ = true;
-        consumed = true;
-    }
-
-    if (btn_add_remove_ && btn_add_remove_->handle_event(e)) {
-        auto* vec = current_attack_vector();
-        if (vec) {
-            delete_current_attack_vector();
-        } else {
-            ensure_attack_vector_for_type(current_attack_type());
-        }
-        refresh_attack_form();
-        consumed = true;
-    }
-    if (btn_delete_ && btn_delete_->handle_event(e)) {
-        delete_current_attack_vector();
-        refresh_attack_form();
-        consumed = true;
-    }
-    if (btn_copy_next_ && btn_copy_next_->handle_event(e)) {
-        copy_attack_vector_to_next_frame();
-        consumed = true;
-    }
-    if (btn_apply_all_ && btn_apply_all_->handle_event(e)) {
-        apply_attack_to_all_frames();
-        consumed = true;
     }
 
     if (e.type == SDL_EVENT_KEY_DOWN) {
@@ -421,7 +429,19 @@ bool AttackGeoFrameEditor::handle_event(const SDL_Event& e) {
     return consumed;
 }
 
-void AttackGeoFrameEditor::update(const Input&, float) {
+void AttackGeoFrameEditor::update(const Input& input, float) {
+    nav_rect_.x = 0;
+    nav_rect_.y = 0;
+    nav_rect_.w = screen_w_;
+    nav_rect_.h = frame_navigator_ ? frame_navigator_->get_preferred_rect().h : 0;
+    if (frame_navigator_) {
+        frame_navigator_->set_rect(nav_rect_);
+    }
+    if (tool_panel_) {
+        tool_panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+        tool_panel_->set_position_if_unset(screen_w_, nav_rect_.h + DMSpacing::header_gap());
+        tool_panel_->update(input, screen_w_, screen_h_);
+    }
     refresh_selection_state();
     refresh_attack_form();
 }
@@ -434,13 +454,8 @@ void AttackGeoFrameEditor::render_world(SDL_Renderer* renderer) const {
 void AttackGeoFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (!renderer) return;
     layout_ui(renderer);
-    if (btn_back_) btn_back_->render(renderer);
     if (frame_navigator_) frame_navigator_->render(renderer);
-
-    if (btn_add_remove_) btn_add_remove_->render(renderer);
-    if (btn_delete_) btn_delete_->render(renderer);
-    if (btn_copy_next_) btn_copy_next_->render(renderer);
-    if (btn_apply_all_) btn_apply_all_->render(renderer);
+    if (tool_panel_) tool_panel_->render(renderer);
 
     // Render Point3DEditor overlays at the bottom
     if (point_3d_editor_) {
@@ -456,56 +471,17 @@ void AttackGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     if (!renderer) return;
     int sw = 0, sh = 0;
     SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
-    const int padding = DMSpacing::small_gap();
-    const int width = 320;
-    const int x = padding;
-    const int y = padding;
-    ui_rect_ = SDL_Rect{x, y, width, 0};
-    int inner_w = width - padding * 2;
-    int cursor_y = y + padding;
-
-    auto place_row = [&](int h) -> SDL_Rect {
-        SDL_Rect r{x + padding, cursor_y, inner_w, h};
-        cursor_y += h + DMSpacing::small_gap();
-        return r;
-    };
-
-    if (btn_back_) {
-        btn_back_->set_rect(place_row(DMButton::height()));
-    }
-
+    screen_w_ = sw;
+    screen_h_ = sh;
+    const int nav_height = frame_navigator_ ? frame_navigator_->get_preferred_rect().h : 0;
+    nav_rect_ = SDL_Rect{0, 0, sw, nav_height};
     if (frame_navigator_) {
-        SDL_Rect nav_rect{x + padding, cursor_y, inner_w, frame_navigator_->get_preferred_rect().h};
-        frame_navigator_->set_rect(nav_rect);
-        cursor_y += nav_rect.h + DMSpacing::small_gap();
+        frame_navigator_->set_rect(nav_rect_);
     }
-
-
-
-    if (btn_add_remove_ || btn_delete_ || btn_copy_next_) {
-        int button_count = 0;
-        if (btn_add_remove_) ++button_count;
-        if (btn_delete_) ++button_count;
-        if (btn_copy_next_) ++button_count;
-        const int total_gap = DMSpacing::small_gap() * std::max(0, button_count - 1);
-        const int button_w = (inner_w - total_gap) / std::max(1, button_count);
-        SDL_Rect row = place_row(DMButton::height());
-        int offset_x = row.x;
-        auto place_btn = [&](DMButton* btn) {
-            if (!btn) return;
-            btn->set_rect(SDL_Rect{offset_x, row.y, button_w, row.h});
-            offset_x += button_w + DMSpacing::small_gap();
-        };
-        place_btn(btn_add_remove_.get());
-        place_btn(btn_delete_.get());
-        place_btn(btn_copy_next_.get());
+    if (tool_panel_) {
+        tool_panel_->set_work_area(SDL_Rect{0, 0, sw, sh});
+        tool_panel_->set_position_if_unset(sw, nav_height + DMSpacing::header_gap());
     }
-
-
-    if (btn_apply_all_) {
-        btn_apply_all_->set_rect(place_row(DMButton::height()));
-    }
-    ui_rect_.h = cursor_y - y;
 }
 
 void AttackGeoFrameEditor::render_attack_geometry(SDL_Renderer* renderer) const {
@@ -643,11 +619,13 @@ void AttackGeoFrameEditor::persist_changes() {
 }
 
 void AttackGeoFrameEditor::persist_pending_changes() {
-    if (!manifest_txn_.active()) {
+    if (!manifest_txn_.active() || !dirty_) {
         return;
     }
-    manifest_txn_.commit(true);
-    invalidate_preview();
+    if (manifest_txn_.commit(true)) {
+        dirty_ = false;
+        invalidate_preview();
+    }
 }
 
 float AttackGeoFrameEditor::base_world_z() const {
@@ -655,29 +633,58 @@ float AttackGeoFrameEditor::base_world_z() const {
 }
 
 void AttackGeoFrameEditor::apply_attack_to_all_frames() {
-    const auto* source = current_attack_vector();
-    if (!source) return;
+    if (frames_.empty()) return;
+    const int idx = clamp_index(selected_index_, static_cast<int>(frames_.size()));
+    animation_update::FrameAttackGeometry src = frames_[idx].attack;
     for (auto& f : frames_) {
-        f.attack.vectors.clear();
-        f.attack.vectors.push_back(*source);
+        f.attack = src;
     }
     refresh_attack_form();
     persist_changes();
+    persist_pending_changes();
+    invalidate_preview();
 }
 
-void AttackGeoFrameEditor::copy_attack_vector_to_next_frame() {
+void AttackGeoFrameEditor::apply_attack_to_next_frame() {
     if (frames_.empty()) return;
-    const int next_index = selected_index_ + 1;
-    if (next_index >= static_cast<int>(frames_.size())) {
-        return;
-    }
-    const auto* source = current_attack_vector();
-    if (!source) return;
-    auto& dest_vecs = frames_[next_index].attack.vectors;
-    dest_vecs.clear();
-    dest_vecs.push_back(*source);
-    set_current_attack_vector_index(0);
+    const int count = static_cast<int>(frames_.size());
+    const int idx = clamp_index(selected_index_, count);
+    const int target = (idx + 1) % count;
+    frames_[target].attack = frames_[idx].attack;
     persist_changes();
+    persist_pending_changes();
+    if (context_.preview && !context_.animation_id.empty()) {
+        context_.preview->invalidate(context_.animation_id);
+    }
+}
+
+void AttackGeoFrameEditor::apply_attack_to_animation() {
+    apply_attack_to_all_frames();
+}
+
+bool AttackGeoFrameEditor::apply_attack_to_all_animations() {
+    if (!context_.document || frames_.empty()) return false;
+    apply_attack_to_animation();
+
+    const int idx = clamp_index(selected_index_, static_cast<int>(frames_.size()));
+    const animation_update::FrameAttackGeometry src = frames_[idx].attack;
+    const auto ids = context_.document->animation_ids();
+    for (const auto& id : ids) {
+        auto payload_opt = context_.document->animation_payload_json(id);
+        nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
+        auto frames = parse_frames_from_payload(payload);
+        if (frames.empty()) frames.push_back(MovementFrame{});
+        for (auto& f : frames) {
+            f.attack = src;
+        }
+        nlohmann::json updated = build_payload_from_frames(frames, payload);
+        context_.document->update_animation_payload(id, updated);
+        if (context_.preview) {
+            context_.preview->invalidate(id);
+        }
+    }
+    context_.document->save_to_file_checked(true);
+    return true;
 }
 
 std::string AttackGeoFrameEditor::current_attack_type() const {
@@ -730,10 +737,7 @@ void AttackGeoFrameEditor::delete_current_attack_vector() {
 }
 
 void AttackGeoFrameEditor::apply_live_changes() {
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit(false);
-    }
-    invalidate_preview();
+    dirty_ = true;
 }
 
 void AttackGeoFrameEditor::invalidate_preview() const {
@@ -851,7 +855,8 @@ void AttackGeoFrameEditor::refresh_selection_state() {
 }
 
 bool AttackGeoFrameEditor::ui_contains_point(const SDL_Point& p) const {
-    return SDL_PointInRect(&p, &ui_rect_);
+    if (SDL_PointInRect(&p, &nav_rect_)) return true;
+    return tool_panel_ && tool_panel_->contains_point(p);
 }
 
 }  // namespace devmode::frame_editors

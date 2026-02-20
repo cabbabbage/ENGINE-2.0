@@ -135,39 +135,57 @@ void AnimationRuntime::update() {
         }
     } decay{ this };
 
-    const bool got_input = planner_iface_->consume_input_event();
+    const bool freeze_for_frame_editor =
+        assets_owner_ && assets_owner_->is_frame_editor_target_active(self_);
 
-    const bool has_plan = !planner_iface_->plan_.strides.empty();
-    const bool plan_deferred = has_plan &&
-                               should_defer_for_non_locked(planner_iface_->plan_.override_non_locked);
-
-    if (has_plan && !plan_deferred &&
-        executor_.tick(*this, planner_iface_->plan_, stride_index_, stride_frame_counter_)) {
+    if (freeze_for_frame_editor) {
+        const bool has_plan = !planner_iface_->plan_.strides.empty();
+        if (has_plan || planner_iface_->has_pending_move()) {
+            planner_iface_->clear_movement_plan();
+            planner_iface_->move_pending_ = false;
+            planner_iface_->pending_move_ = {};
+        }
         just_applied_controller_move_ = false;
-        return;
     }
 
-    if (planner_iface_->has_pending_move()) {
-        const auto& req = planner_iface_->pending_move_;
-        if (!should_defer_for_non_locked(req.override_non_locked)) {
-            apply_pending_move();
-            just_applied_controller_move_ = true;
+    bool got_input = false;
+    if (!freeze_for_frame_editor) {
+        got_input = planner_iface_->consume_input_event();
+    }
+
+    if (!freeze_for_frame_editor) {
+        const bool has_plan = !planner_iface_->plan_.strides.empty();
+        const bool plan_deferred = has_plan &&
+                                   should_defer_for_non_locked(planner_iface_->plan_.override_non_locked);
+
+        if (has_plan && !plan_deferred &&
+            executor_.tick(*this, planner_iface_->plan_, stride_index_, stride_frame_counter_)) {
+            just_applied_controller_move_ = false;
             return;
         }
-    }
 
-    if (!got_input && just_applied_controller_move_) {
-        auto it = self_->info->animations.find(self_->current_animation);
-        if (it != self_->info->animations.end()) {
-            Animation& anim = it->second;
-            if (!anim.locked) {
-                const std::string next_id = anim.on_end_animation.empty()
-                                              ? std::string{ animation_update::detail::kDefaultAnimation }
-                                              : anim.on_end_animation;
-                switch_to(resolve_animation(*self_, next_id), path_index_for(next_id));
+        if (planner_iface_->has_pending_move()) {
+            const auto& req = planner_iface_->pending_move_;
+            if (!should_defer_for_non_locked(req.override_non_locked)) {
+                apply_pending_move();
+                just_applied_controller_move_ = true;
+                return;
             }
         }
-        just_applied_controller_move_ = false;
+
+        if (!got_input && just_applied_controller_move_) {
+            auto it = self_->info->animations.find(self_->current_animation);
+            if (it != self_->info->animations.end()) {
+                Animation& anim = it->second;
+                if (!anim.locked) {
+                    const std::string next_id = anim.on_end_animation.empty()
+                                                  ? std::string{ animation_update::detail::kDefaultAnimation }
+                                                  : anim.on_end_animation;
+                    switch_to(resolve_animation(*self_, next_id), path_index_for(next_id));
+                }
+            }
+            just_applied_controller_move_ = false;
+        }
     }
 
     if (self_->get_current_animation() != animation_update::detail::kDefaultAnimation) {
@@ -295,6 +313,7 @@ bool AnimationRuntime::advance(AnimationFrame*& frame) {
     }
     if (advanced_any) {
         self_->mark_composite_dirty();
+        self_->mark_anchors_dirty();
     }
     return true;
 }
@@ -331,6 +350,7 @@ void AnimationRuntime::switch_to(const std::string& anim_id, std::size_t path_in
     self_->frame_progress    = 0.0f;
     active_paths_[self_->current_animation] = path_index;
     self_->mark_composite_dirty();
+    self_->mark_anchors_dirty();
 }
 
 bool AnimationRuntime::should_defer_for_non_locked(bool override_non_locked) const {

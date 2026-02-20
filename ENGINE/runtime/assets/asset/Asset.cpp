@@ -32,6 +32,7 @@
 #include <unordered_set>
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
+#include "utils/AnchorPointResolver.hpp"
 static std::mt19937& asset_rng()
 {
         static std::mt19937 rng{ std::random_device{}() };
@@ -44,6 +45,50 @@ static std::mutex& asset_rng_mutex()
         return mutex;
 }
 
+
+const DisplacedAssetAnchorPoint* find_anchor_with_frame_fallback(const Asset& asset,
+                                                                  const AnimationFrame* current_frame,
+                                                                  const std::string& name) {
+        if (current_frame) {
+                if (const auto* direct = current_frame->find_anchor(name)) {
+                        return direct;
+                }
+        }
+
+        if (!asset.info) {
+                return nullptr;
+        }
+        auto anim_it = asset.info->animations.find(asset.current_animation);
+        if (anim_it == asset.info->animations.end()) {
+                return nullptr;
+        }
+
+        const Animation& anim = anim_it->second;
+        const int current_index = current_frame ? current_frame->frame_index : 0;
+
+        const DisplacedAssetAnchorPoint* best = nullptr;
+        int best_distance = std::numeric_limits<int>::max();
+        for (const AnimationFrame* frame : anim.frames) {
+                if (!frame) {
+                        continue;
+                }
+                const auto* candidate = frame->find_anchor(name);
+                if (!candidate) {
+                        continue;
+                }
+                const int distance = std::abs(frame->frame_index - current_index);
+                if (!best || distance < best_distance) {
+                        best = candidate;
+                        best_distance = distance;
+                        if (distance == 0) {
+                                break;
+                        }
+                }
+        }
+
+        return best;
+}
+
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
 std::mutex Asset::s_flip_overrides_mutex_{};
 
@@ -54,7 +99,8 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
              Asset* parent_,
              const std::string& spawn_id_,
              const std::string& spawn_method_,
-             int grid_resolution_)
+             int grid_resolution_,
+             std::optional<AnchorFollowTarget> anchor_follow)
 : parent(parent_)
 , info(std::move(info_))
 , current_animation()
@@ -67,6 +113,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , spawn_id(spawn_id_)
 , spawn_method(spawn_method_)
 , owning_room_name_(spawn_area.get_name())
+, follow_anchor_(std::move(anchor_follow))
 {
 	set_flip();
 
@@ -173,6 +220,10 @@ Asset::Asset(const Asset& o)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
     , composite_scale_(o.composite_scale_)
+    , follow_anchor_(o.follow_anchor_)
+    , last_follow_world_(o.last_follow_world_)
+    , last_follow_world_z_(o.last_follow_world_z_)
+    , follow_initialized_(o.follow_initialized_)
 {
 
         clear_render_caches();
@@ -241,6 +292,12 @@ Asset& Asset::operator=(const Asset& o) {
         composite_dirty_          = true;
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
+        follow_anchor_            = o.follow_anchor_;
+        last_follow_world_        = o.last_follow_world_;
+        last_follow_world_z_      = o.last_follow_world_z_;
+        follow_initialized_       = o.follow_initialized_;
+        anchor_handles_.clear();
+        anchor_lookup_.clear();
         return *this;
 }
 
@@ -378,6 +435,7 @@ void Asset::update_scale_values() {
     last_scale_usage_.remainder_scale = current_remaining_scale_adjustment;
     last_scale_usage_.variant_index = current_variant_index;
 
+    mark_anchors_dirty();
     mark_mesh_dirty();
 }
 
@@ -415,6 +473,7 @@ void Asset::set_current_animation(const std::string& name)
 		anim.change(current_frame, static_frame);
 		frame_progress = 0.0f;
 		refresh_cached_dimensions();
+                mark_anchors_dirty();
 	}
 }
 
@@ -422,12 +481,17 @@ void Asset::update() {
     if (!info) return;
 
 
-    const int previous_x = pos_ ? pos_->world_x() : 0;
-    const int previous_y = pos_ ? pos_->world_y() : 0;
-    const int previous_z = pos_ ? pos_->world_z() : 0;
+    const int previous_x = world_x();
+    const int previous_y = world_y();
+    const int previous_z = world_z();
+
+    apply_anchor_follow_target();
+
+    const bool controller_suppressed_for_frame_editor =
+        assets_ && assets_->is_frame_editor_target_active(this);
 
     if (controller_) {
-        if (assets_) {
+        if (!controller_suppressed_for_frame_editor && assets_) {
             if (Input* in = assets_->get_input()) {
                 controller_->update(*in);
             }
@@ -435,10 +499,16 @@ void Asset::update() {
         controller_->process_pending_attacks(*this);
     }
 
-    const int current_x = pos_ ? pos_->world_x() : 0;
-    const int current_y = pos_ ? pos_->world_y() : 0;
-    const int current_z = pos_ ? pos_->world_z() : 0;
+    apply_anchor_follow_target();
+
+    const int current_x = world_x();
+    const int current_y = world_y();
+    const int current_z = world_z();
     const bool moved = (current_x != previous_x || current_y != previous_y || current_z != previous_z);
+
+    if (moved) {
+        mark_anchors_dirty();
+    }
 
     update_scale_values();
 
@@ -478,7 +548,9 @@ void Asset::update() {
         }
     }
 
-    if (!dead && anim_runtime_) {
+    const bool can_advance_animation = !assets_ || assets_->should_advance_animation_for(this);
+
+    if (!dead && anim_runtime_ && can_advance_animation) {
         anim_runtime_->update();
     }
 
@@ -764,6 +836,18 @@ void Asset::refresh_cached_dimensions() {
         cached_h = (height > 0) ? height : 0;
 }
 
+float Asset::runtime_height_px() const {
+        const float base_height = static_cast<float>(height());
+        if (!(base_height > 0.0f)) {
+                return 0.0f;
+        }
+        float remainder = last_scale_usage_.remainder_scale;
+        if (!std::isfinite(remainder) || remainder <= 0.0f) {
+                remainder = 1.0f;
+        }
+        return base_height * remainder;
+}
+
 void Asset::on_scale_factor_changed() {
 
         last_scale_usage_ = {};
@@ -772,6 +856,7 @@ void Asset::on_scale_factor_changed() {
 
         mark_composite_dirty();
         mark_mesh_dirty();
+        mark_anchors_dirty();
 
         if (assets_) {
                 assets_->queue_asset_dimension_update(this);
@@ -780,6 +865,9 @@ void Asset::on_scale_factor_changed() {
 
 void Asset::set_hidden(bool state){ hidden = state; }
 bool  Asset::is_hidden() const { return hidden; }
+
+void Asset::set_anchor_hidden(bool state){ anchor_hidden_ = state; }
+bool  Asset::is_anchor_hidden() const { return anchor_hidden_; }
 
 
 
@@ -812,6 +900,173 @@ std::vector<animation_update::Attack> Asset::process_pending_attacks() {
         std::vector<animation_update::Attack> attacks;
         attacks.swap(pending_attacks_);
         return attacks;
+}
+
+void Asset::mark_anchors_dirty() {
+        for (auto& handle : anchor_handles_) {
+                handle.dirty = true;
+        }
+}
+
+void Asset::set_anchor_follow_target(std::optional<AnchorFollowTarget> follow) {
+        follow_anchor_ = std::move(follow);
+        follow_initialized_ = false;
+        last_follow_world_ = SDL_Point{0, 0};
+        last_follow_world_z_ = 0;
+        if (follow_anchor_) {
+                apply_anchor_follow_target();
+        } else {
+                set_anchor_hidden(false);
+        }
+}
+
+void Asset::bind_child_to_anchor(Asset* child, const std::string& anchor_name) {
+        if (!child || anchor_name.empty()) {
+                return;
+        }
+        child->set_anchor_hidden(false);
+        child->set_anchor_follow_target(AnchorFollowTarget{ this, anchor_name });
+        mark_anchors_dirty();
+        if (std::find(bound_children_.begin(), bound_children_.end(), child) == bound_children_.end()) {
+                bound_children_.push_back(child);
+        }
+}
+
+void Asset::apply_anchor_follow_target() {
+        if (!follow_anchor_ || !follow_anchor_->valid()) {
+                return;
+        }
+        AnchorFollowTarget& follow = *follow_anchor_;
+        Asset* source = follow.source;
+        if (!source) {
+                return;
+        }
+
+        auto resolved = source->anchor_state(follow.anchor_name);
+        if (!resolved.has_value() || resolved->missing) {
+                set_anchor_hidden(true);
+                return;
+        }
+        set_anchor_hidden(false);
+
+        SDL_Point target_px = resolved->world_px;
+        int target_z = resolved->world_z;
+        int target_layer = resolved->resolution_layer;
+
+        if (!resolved->grid_point && source) {
+                if (auto* source_gp = source->grid_point()) {
+                        target_layer = source_gp->resolution_layer();
+                } else {
+                        target_layer = source->grid_resolution;
+                }
+        }
+
+        grid_resolution = target_layer;
+
+        last_follow_world_ = target_px;
+        last_follow_world_z_ = target_z;
+        follow_initialized_ = true;
+
+        if (!assets_) {
+                initial_world_pos_ = target_px;
+                return;
+        }
+
+        const bool unchanged = follow_initialized_ &&
+                               world_x() == target_px.x &&
+                               world_y() == target_px.y &&
+                               world_z() == target_z &&
+                               (!pos_ || pos_->resolution_layer() == target_layer);
+        if (unchanged) {
+                return;
+        }
+
+        world::WorldGrid& grid = assets_->world_grid();
+        world::GridPoint& target = world::GridPoint::from_world(target_px.x, target_px.y, target_z, target_layer, grid);
+        if (pos_) {
+                grid.move_asset(this, *pos_, target);
+        } else {
+                const int start_x = target_px.x + 1;
+                const int start_y = target_px.y + 1;
+                world::GridPoint virtual_start = world::GridPoint::make_virtual(start_x, start_y, target_z, target_layer);
+                grid.move_asset(this, virtual_start, target);
+        }
+        mark_anchors_dirty();
+}
+
+Asset::AnchorHandle& Asset::get_anchor_point(const std::string& name) {
+        auto it = anchor_lookup_.find(name);
+        if (it != anchor_lookup_.end() && it->second < anchor_handles_.size()) {
+                return anchor_handles_[it->second];
+        }
+
+        AnchorHandle handle;
+        handle.name  = name;
+        handle.owner = this;
+        anchor_handles_.push_back(std::move(handle));
+        anchor_lookup_[name] = anchor_handles_.size() - 1;
+        return anchor_handles_.back();
+}
+
+std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name,
+                                                  anchor_points::GridMaterialization grid_policy) {
+        AnchorHandle& handle = get_anchor_point(name);
+        if (assets_) {
+                const std::uint64_t cam_version = assets_->getView().camera_state_version();
+                if (handle.last_camera_version != cam_version) {
+                        handle.dirty = true;
+                }
+        }
+        const bool needs_materialization = (grid_policy == anchor_points::GridMaterialization::Ensure) &&
+                                           !handle.grid;
+        if (handle.dirty || needs_materialization) {
+                handle.update(grid_policy);
+        }
+        ResolvedAnchor resolved{};
+        resolved.world_px    = handle.world_px;
+        resolved.world_z     = handle.world_z;
+        resolved.resolution_layer = handle.resolution_layer;
+        resolved.grid_point  = handle.grid;
+        resolved.missing     = handle.missing;
+        resolved.in_front    = handle.in_front;
+        return resolved;
+}
+
+void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy) {
+        if (!owner) {
+                dirty = false;
+                return;
+        }
+        const std::uint64_t cam_version = owner->assets_ ? owner->assets_->getView().camera_state_version() : 0;
+        const AnimationFrame* frame = owner->current_frame;
+        const DisplacedAssetAnchorPoint* anchor = find_anchor_with_frame_fallback(*owner, frame, name);
+
+        if (!anchor) {
+                grid = nullptr;
+                world_px = SDL_Point{0, 0};
+                world_z = 0;
+                resolution_layer = 0;
+                missing = true;
+                in_front = true;
+                last_frame_index = frame ? frame->frame_index : -1;
+                last_anim = owner->current_animation;
+                last_camera_version = cam_version;
+                dirty = false;
+                return;
+        }
+
+        const auto resolved = anchor_points::resolve_pixel_locked_anchor(*owner, *anchor, grid_policy);
+
+        grid = resolved.resolved.grid_point;
+        world_px = resolved.resolved.world_px;
+        world_z = resolved.resolved.world_z;
+        resolution_layer = resolved.resolved.resolution_layer;
+        missing = resolved.resolved.missing;
+        in_front = resolved.resolved.in_front;
+        last_frame_index = frame ? frame->frame_index : -1;
+        last_anim = owner->current_animation;
+        last_camera_version = cam_version;
+        dirty = false;
 }
 
 
@@ -874,6 +1129,8 @@ void Asset::move_to_world_position(int world_x, int world_y, int world_z) {
         world::GridPoint virtual_start = world::GridPoint::make_virtual(start_x, start_y, world_z, grid_resolution);
         grid.move_asset(this, virtual_start, target);
     }
+
+    mark_anchors_dirty();
 }
 
 void Asset::set_world_z(int world_z) {

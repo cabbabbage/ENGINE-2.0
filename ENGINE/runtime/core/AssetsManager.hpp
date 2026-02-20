@@ -41,7 +41,8 @@ class ManifestStore;
 enum class FrameEditorLaunchMode {
     Movement,
     AttackGeometry,
-    HitGeometry
+    HitGeometry,
+    AnchorPoints
 };
 
 class Assets {
@@ -194,12 +195,15 @@ public:
 
     bool should_run_runtime_updates() const;
     bool is_dev_mode() const { return dev_mode; }
+    bool is_frame_editor_target_active(const Asset* asset) const;
+    bool should_advance_animation_for(const Asset* asset) const;
 
 
     std::vector<Asset*> all;
     Asset* player = nullptr;
 
     Asset* spawn_asset(const std::string& name, SDL_Point world_pos);
+    Asset* spawn_asset_attached(const std::string& name, Asset* anchor_owner, const std::string& anchor_name);
 
     void rebuild_from_grid_state();
 

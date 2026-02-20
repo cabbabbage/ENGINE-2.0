@@ -1,6 +1,7 @@
 #include "animation_loader.hpp"
 #include "animation.hpp"
 #include "animation_cloner.hpp"
+#include "anchor_point.hpp"
 #include "assets/asset_info.hpp"
 #include "assets/asset_types.hpp"
 #include "assets/surface_utils.hpp"
@@ -209,6 +210,166 @@ int read_int(const nlohmann::json& value, int fallback = 0) {
                 } catch (...) {}
         }
         return fallback;
+}
+
+DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node, bool& valid) {
+        DisplacedAssetAnchorPoint anchor{};
+        valid = false;
+        if (!node.is_object()) {
+                return anchor;
+        }
+        anchor.name = node.value("name", std::string{});
+        if (anchor.name.empty()) {
+                return anchor;
+        }
+
+        const bool has_tex_x = node.contains("texture_x");
+        const bool has_tex_z = node.contains("texture_z");
+        if (has_tex_x && has_tex_z) {
+                anchor.texture_x = static_cast<int>(std::lround(read_float(node.value("texture_x", 0.0f))));
+                anchor.texture_z = static_cast<int>(std::lround(read_float(node.value("texture_z", 0.0f))));
+                anchor.has_pixel_coords = true;
+        }
+
+        const bool has_px = node.contains("px");
+        const bool has_py = node.contains("py");
+        bool normalized_x_valid = false;
+        bool normalized_z_valid = false;
+        if (has_px) {
+                anchor.normalized_x = read_float(node.value("px", 0.0f));
+                normalized_x_valid = std::isfinite(anchor.normalized_x);
+        } else {
+                anchor.normalized_x = std::numeric_limits<float>::quiet_NaN();
+        }
+        if (has_py) {
+                anchor.normalized_z = read_float(node.value("py", 0.0f));
+                normalized_z_valid = std::isfinite(anchor.normalized_z);
+        } else {
+                anchor.normalized_z = std::numeric_limits<float>::quiet_NaN();
+        }
+        anchor.has_normalized_coords = normalized_x_valid && normalized_z_valid;
+
+        anchor.in_front = node.value("in_front", true);
+        if (!has_tex_x && !has_tex_z && node.contains("pz")) {
+                const float pz = read_float(node.value("pz", 0.0f));
+                if (std::isfinite(pz)) {
+                        anchor.in_front = pz >= 0.0f;
+                }
+        }
+
+        valid = anchor.is_valid();
+        return anchor;
+}
+
+std::vector<std::vector<DisplacedAssetAnchorPoint>> parse_anchor_frames(const nlohmann::json& anchor_json,
+                                                                        std::size_t           frame_count) {
+        std::vector<std::vector<DisplacedAssetAnchorPoint>> anchors(frame_count);
+        if (!anchor_json.is_array()) {
+                return anchors;
+        }
+        const std::size_t limit = std::min<std::size_t>(frame_count, anchor_json.size());
+        for (std::size_t idx = 0; idx < limit; ++idx) {
+                const auto& entry = anchor_json[idx];
+                if (!entry.is_array()) continue;
+                std::unordered_set<std::string> names;
+                for (const auto& node : entry) {
+                        bool ok = false;
+                        auto anchor = read_anchor_point(node, ok);
+                        if (!ok) continue;
+                        if (names.insert(anchor.name).second) {
+                                anchors[idx].push_back(anchor);
+                        }
+                }
+        }
+        if (anchors.size() < frame_count) {
+                anchors.resize(frame_count);
+        }
+        return anchors;
+}
+
+std::vector<std::vector<DisplacedAssetAnchorPoint>> collect_anchor_frames_from_animation(const Animation& anim,
+                                                                                        std::size_t       frame_count) {
+        std::vector<std::vector<DisplacedAssetAnchorPoint>> anchors(frame_count);
+        if (anim.movement_path_count() == 0) {
+                return anchors;
+        }
+        const auto& path = anim.movement_path(0);
+        const std::size_t limit = std::min(frame_count, path.size());
+        for (std::size_t i = 0; i < limit; ++i) {
+                anchors[i] = path[i].anchor_points;
+        }
+        return anchors;
+}
+
+void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>& anchors,
+                             const std::vector<Animation::FrameCache>& frame_cache,
+                             bool                                                 reverse_frames,
+                             bool                                                 flip_x,
+                             bool                                                 flip_y,
+                             bool                                                 flip_movement_x,
+                             bool                                                 flip_movement_y) {
+        if (anchors.empty()) {
+                return;
+        }
+        if (reverse_frames) {
+                std::reverse(anchors.begin(), anchors.end());
+        }
+        const bool flip_horizontal = flip_x || flip_movement_x;
+        const bool flip_vertical = flip_y || flip_movement_y;
+        for (std::size_t frame_index = 0; frame_index < anchors.size(); ++frame_index) {
+                auto& frame = anchors[frame_index];
+                int frame_w = 0;
+                int frame_h = 0;
+                if (frame_index < frame_cache.size()) {
+                        const auto& cache = frame_cache[frame_index];
+                        if (!cache.widths.empty()) frame_w = cache.widths.front();
+                        if (!cache.heights.empty()) frame_h = cache.heights.front();
+                        if (!cache.source_rects.empty() && !cache.uses_atlas.empty() && cache.uses_atlas.front()) {
+                                frame_w = cache.source_rects.front().w;
+                                frame_h = cache.source_rects.front().h;
+                        }
+                }
+                for (auto& anchor : frame) {
+                        auto normalized_to_pixel = [](float norm, int dimension) -> std::optional<int> {
+                                if (dimension <= 0 || !std::isfinite(norm)) {
+                                        return std::nullopt;
+                                }
+                                const int max_index = std::max(0, dimension - 1);
+                                const float clamped = std::clamp(norm, 0.0f, 1.0f);
+                                const int pixel = static_cast<int>(std::lround(clamped * static_cast<float>(max_index)));
+                                return std::clamp(pixel, 0, max_index);
+                        };
+
+                        if (anchor.has_normalized_coords) {
+                                if (auto px = normalized_to_pixel(anchor.normalized_x, frame_w)) {
+                                        anchor.texture_x = *px;
+                                }
+                                if (auto pz = normalized_to_pixel(anchor.normalized_z, frame_h)) {
+                                        anchor.texture_z = *pz;
+                                }
+                                if (frame_w > 0 && frame_h > 0 &&
+                                    std::isfinite(anchor.normalized_x) && std::isfinite(anchor.normalized_z)) {
+                                        anchor.has_pixel_coords = true;
+                                }
+                        }
+
+                        if (flip_horizontal && frame_w > 0) {
+                                anchor.texture_x = frame_w - 1 - anchor.texture_x;
+                        }
+                        if (flip_vertical && frame_h > 0) {
+                                anchor.texture_z = frame_h - 1 - anchor.texture_z;
+                        }
+                        if (anchor.has_pixel_coords && frame_w > 0 && frame_h > 0) {
+                                const int max_w = std::max(1, frame_w);
+                                const int max_h = std::max(1, frame_h);
+                                anchor.normalized_x =
+                                        static_cast<float>(anchor.texture_x) / static_cast<float>(std::max(1, max_w - 1));
+                                anchor.normalized_z =
+                                        static_cast<float>(anchor.texture_z) / static_cast<float>(std::max(1, max_h - 1));
+                                anchor.has_normalized_coords = std::isfinite(anchor.normalized_x) && std::isfinite(anchor.normalized_z);
+                        }
+                }
+        }
 }
 
 void append_hit_box(animation_update::FrameHitGeometry& geometry,
@@ -452,6 +613,7 @@ void AnimationLoader::load(Animation& animation,
                 }
 };
         const double safe_scale = sanitize_scale_factor(scale_factor);
+        const Animation* source_animation_ptr = nullptr;
         animation.clear_texture_cache();
         animation.variant_steps_ = info.scale_variants;
         (void)root_cache;
@@ -485,6 +647,7 @@ void AnimationLoader::load(Animation& animation,
         if (animation.source.kind == "animation" && !animation.source.name.empty()) {
                 auto it = info.animations.find(animation.source.name);
                 if (it != info.animations.end()) {
+                        source_animation_ptr = &it->second;
                         const Animation& src_anim = it->second;
                         if (!src_anim.variant_steps_.empty()) {
                                 animation.variant_steps_ = src_anim.variant_steps_;
@@ -531,6 +694,11 @@ void AnimationLoader::load(Animation& animation,
         animation.movement_paths_.clear();
         animation.audio_clip = Animation::AudioClip{};
         bool movement_specified = false;
+        nlohmann::json anchor_points_json = nlohmann::json::array();
+        const bool has_anchor_points_json = anim_json.contains("anchor_points") && anim_json["anchor_points"].is_array();
+        if (has_anchor_points_json) {
+                anchor_points_json = anim_json["anchor_points"];
+        }
         nlohmann::json hit_geometry_json = nlohmann::json::array();
         if (anim_json.contains("hit_geometry") && anim_json["hit_geometry"].is_array()) {
                 hit_geometry_json = anim_json["hit_geometry"];
@@ -753,6 +921,22 @@ void AnimationLoader::load(Animation& animation,
                 }
         }
         const std::size_t frame_count = animation.frame_cache_.size();
+        std::vector<std::vector<DisplacedAssetAnchorPoint>> anchor_frames;
+        if (has_anchor_points_json) {
+                anchor_frames = parse_anchor_frames(anchor_points_json, frame_count);
+        } else if (source_animation_ptr) {
+                anchor_frames = collect_anchor_frames_from_animation(*source_animation_ptr, frame_count);
+                apply_anchor_transforms(anchor_frames,
+                                        animation.frame_cache_,
+                                        animation.reverse_source,
+                                        animation.flipped_source,
+                                        animation.flip_vertical_source,
+                                        animation.flip_movement_horizontal,
+                                        animation.flip_movement_vertical);
+        }
+        if (anchor_frames.size() < frame_count) {
+                anchor_frames.resize(frame_count);
+        }
         if (animation.movement_paths_.empty()) {
                 animation.movement_paths_.emplace_back();
         }
@@ -788,6 +972,12 @@ void AnimationLoader::load(Animation& animation,
                                 variant.uses_atlas = (v < cache.uses_atlas.size()) ? cache.uses_atlas[v] : false;
                                 f.variants.push_back(variant);
                             }
+                        }
+
+                        if (i < anchor_frames.size()) {
+                                f.set_anchor_points(anchor_frames[i]);
+                        } else {
+                                f.set_anchor_points({});
                         }
 
                         if (f.dx != 0 || f.dy != 0 || f.dz != 0) {

@@ -831,7 +831,7 @@ void SceneRenderer::render() {
         while (asset_index < render_traversal.size()) {
             const auto& entry = render_traversal[asset_index++];
             Asset* asset = entry.asset;
-            if (!asset || asset->is_hidden() || !asset->info) {
+            if (!asset || asset->is_hidden() || asset->is_anchor_hidden() || !asset->info) {
                 continue;
             }
             if (const auto& tiling = asset->tiling_info(); tiling && tiling->is_valid()) {
@@ -1004,7 +1004,7 @@ void SceneRenderer::render() {
         SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
         for (const auto& entry : render_traversal) {
             Asset* asset = entry.asset;
-            if (!asset || asset->is_hidden() || !asset->info || !asset->anim_) {
+            if (!asset || asset->is_hidden() || asset->is_anchor_hidden() || !asset->info || !asset->anim_) {
                 continue;
             }
             const Plan* plan = asset->anim_->current_plan();

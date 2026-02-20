@@ -62,6 +62,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         // Movement mode uses raw delta Z values (like dx/dy), not percentages
         point_3d_editor_->set_z_display_mode(ZDisplayMode::RawDelta);
     }
+    dirty_ = false;
     wants_close_ = false;
     selected_index_ = 0;
     frames_.clear();
@@ -82,8 +83,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     refresh_selection_state();
 
     manifest_txn_.begin(context_);
-    manifest_txn_.set_immediate_persist(true);
-    manifest_txn_.set_deferred_persist(false);
+    manifest_txn_.set_immediate_persist(false);
     manifest_txn_.set_apply_callback([this]() -> bool {
         if (!context_.document) {
             return false;
@@ -97,14 +97,35 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
     cb_smooth_ = std::make_unique<DMCheckbox>("Smooth", smooth_enabled_);
     cb_curve_ = std::make_unique<DMCheckbox>("Curve", curve_enabled_);
     btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
-    btn_apply_all_ = std::make_unique<DMButton>("Apply To All Frames", &DMStyles::HeaderButton(), 180, DMButton::height());
     frame_navigator_ = std::make_unique<FrameNavigator>();
     frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
     frame_navigator_->set_current_frame(selected_index_);
     frame_navigator_->set_on_frame_changed([this](int frame) {
         select_frame(frame);
     });
-    
+    frame_navigator_->set_on_before_change([this](int, int) {
+        persist_pending_changes();
+        return true;
+    });
+    frame_navigator_->set_preview_source(context_.preview, context_.animation_id);
+    frame_navigator_->set_on_apply_next([this]() { apply_movement_to_next_frame(); });
+    frame_navigator_->set_on_apply_animation([this]() { apply_movement_to_animation(); });
+    frame_navigator_->set_on_apply_all([this]() { (void)apply_movement_to_all_animations(); });
+
+    tool_panel_ = std::make_unique<FrameToolPanel>("Movement Tool Panel", "frame_editor_tool_panel_movement");
+    back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() { wants_close_ = true; });
+    smooth_widget_ = std::make_unique<CheckboxWidget>(cb_smooth_.get());
+    curve_widget_ = std::make_unique<CheckboxWidget>(cb_curve_.get());
+    DockableCollapsible::Rows rows{
+        {back_widget_.get()},
+        {smooth_widget_.get()},
+        {curve_widget_.get()},
+    };
+    if (tool_panel_) {
+        tool_panel_->set_rows(rows);
+        // Position set on first update when screen dimensions are available.
+    }
+
     if (point_3d_editor_) {
         point_3d_editor_->set_on_coordinates_changed([this]() {
             if (!selection_state_) {
@@ -204,6 +225,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
 
 void MovementFrameEditor::end() {
     wants_close_ = false;
+    dirty_ = false;
     frames_.clear();
     rel_positions_.clear();
     rel_positions_z_.clear();
@@ -212,10 +234,13 @@ void MovementFrameEditor::end() {
         selection_state_ = nullptr;
     }
     point_3d_editor_ = nullptr;
+    tool_panel_.reset();
+    back_widget_.reset();
+    smooth_widget_.reset();
+    curve_widget_.reset();
     cb_smooth_.reset();
     cb_curve_.reset();
     btn_back_.reset();
-    btn_apply_all_.reset();
 }
 
 bool MovementFrameEditor::handle_event(const SDL_Event& e) {
@@ -233,31 +258,33 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
     }
     bool consumed = false;
 
+    if (tool_panel_) {
+        const bool prev_smooth = cb_smooth_ ? cb_smooth_->value() : smooth_enabled_;
+        const bool prev_curve = cb_curve_ ? cb_curve_->value() : curve_enabled_;
+        if (tool_panel_->handle_event(e)) {
+            consumed = true;
+        }
+        if (cb_smooth_) {
+            smooth_enabled_ = cb_smooth_->value();
+        }
+        if (cb_curve_) {
+            curve_enabled_ = cb_curve_->value();
+        }
+        if (!smooth_enabled_) {
+            curve_enabled_ = false;
+            if (cb_curve_) {
+                cb_curve_->set_value(false);
+            }
+        }
+        if (smooth_enabled_ != prev_smooth || curve_enabled_ != prev_curve) {
+            consumed = true;
+        }
+    }
+
     if (frame_navigator_ && frame_navigator_->handle_event(e)) {
         consumed = true;
         if (selection_state_) selection_state_->reset();
         if (point_3d_editor_) point_3d_editor_->set_selected_point_index(-1);
-    }
-    if (btn_back_ && btn_back_->handle_event(e)) {
-        wants_close_ = true;
-        consumed = true;
-    }
-    if (btn_apply_all_ && btn_apply_all_->handle_event(e)) {
-        apply_to_all_frames();
-        consumed = true;
-    }
-    if (cb_smooth_ && cb_smooth_->handle_event(e)) {
-        smooth_enabled_ = cb_smooth_->value();
-        if (!smooth_enabled_) {
-            curve_enabled_ = false;
-            if (cb_curve_) cb_curve_->set_value(false);
-        }
-        consumed = true;
-    }
-    if (cb_curve_ && cb_curve_->handle_event(e)) {
-        curve_enabled_ = smooth_enabled_ ? cb_curve_->value() : false;
-        if (!smooth_enabled_) cb_curve_->set_value(false);
-        consumed = true;
     }
 
     if (e.type == SDL_EVENT_KEY_DOWN) {
@@ -304,7 +331,19 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
     return consumed;
 }
 
-void MovementFrameEditor::update(const Input&, float) {
+void MovementFrameEditor::update(const Input& input, float) {
+    nav_rect_.x = 0;
+    nav_rect_.y = 0;
+    nav_rect_.w = screen_w_;
+    nav_rect_.h = frame_navigator_ ? frame_navigator_->get_preferred_rect().h : 0;
+    if (frame_navigator_) {
+        frame_navigator_->set_rect(nav_rect_);
+    }
+    if (tool_panel_) {
+        tool_panel_->set_work_area(SDL_Rect{0, 0, screen_w_, screen_h_});
+        tool_panel_->set_position_if_unset(screen_w_, nav_rect_.h + DMSpacing::header_gap());
+        tool_panel_->update(input, screen_w_, screen_h_);
+    }
 }
 
 void MovementFrameEditor::render_world(SDL_Renderer* renderer) const {
@@ -351,11 +390,8 @@ void MovementFrameEditor::render_world(SDL_Renderer* renderer) const {
 void MovementFrameEditor::render_overlays(SDL_Renderer* renderer) const {
     if (!renderer) return;
     layout_ui(renderer);
-    if (btn_back_) btn_back_->render(renderer);
     if (frame_navigator_) frame_navigator_->render(renderer);
-    if (cb_smooth_) cb_smooth_->render(renderer);
-    if (cb_curve_) cb_curve_->render(renderer);
-    if (btn_apply_all_) btn_apply_all_->render(renderer);
+    if (tool_panel_) tool_panel_->render(renderer);
 
     // Render Point3DEditor overlays at the bottom
     if (point_3d_editor_) {
@@ -372,40 +408,19 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
     int sw = 0;
     int sh = 0;
     SDL_GetCurrentRenderOutputSize(renderer, &sw, &sh);
-    const int padding = DMSpacing::small_gap();
-    const int width = 280;
-    const int x = padding;
-    const int y = padding;
-    ui_rect_ = SDL_Rect{x, y, width, 0};
-    int cursor_y = y + padding;
-    int inner_w = width - padding * 2;
+    screen_w_ = sw;
+    screen_h_ = sh;
 
-    auto place_row = [&](int h) -> SDL_Rect {
-        SDL_Rect r{x + padding, cursor_y, inner_w, h};
-        cursor_y += h + DMSpacing::small_gap();
-        return r;
-    };
-
-    const int button_h = DMButton::height();
-    if (btn_back_) {
-        btn_back_->set_rect(place_row(button_h));
-    }
+    const int nav_height = frame_navigator_ ? frame_navigator_->get_preferred_rect().h : 0;
+    nav_rect_ = SDL_Rect{0, 0, sw, nav_height};
     if (frame_navigator_) {
-        SDL_Rect nav_rect{x + padding, cursor_y, inner_w, frame_navigator_->get_preferred_rect().h};
-        frame_navigator_->set_rect(nav_rect);
-        cursor_y += nav_rect.h + DMSpacing::small_gap();
+        frame_navigator_->set_rect(nav_rect_);
     }
 
-    if (cb_smooth_) {
-        cb_smooth_->set_rect(place_row(DMCheckbox::height()));
+    if (tool_panel_) {
+        tool_panel_->set_work_area(SDL_Rect{0, 0, sw, sh});
+        tool_panel_->set_position_if_unset(sw, nav_height + DMSpacing::header_gap());
     }
-    if (cb_curve_) {
-        cb_curve_->set_rect(place_row(DMCheckbox::height()));
-    }
-    if (btn_apply_all_) {
-        btn_apply_all_->set_rect(place_row(DMButton::height()));
-    }
-    ui_rect_.h = cursor_y - y;
 }
 
 
@@ -591,32 +606,78 @@ void MovementFrameEditor::persist_changes() {
 }
 
 void MovementFrameEditor::persist_pending_changes() {
-    if (!manifest_txn_.active()) {
+    if (!manifest_txn_.active() || !dirty_) {
         return;
     }
-    manifest_txn_.commit(true);
+    if (manifest_txn_.commit(true)) {
+        dirty_ = false;
+        invalidate_preview();
+    }
+}
+
+void MovementFrameEditor::copy_movement_fields(MovementFrame& dest, const MovementFrame& src) const {
+    dest.dx = src.dx;
+    dest.dy = src.dy;
+    dest.dz = src.dz;
+    dest.resort_z = src.resort_z;
+    dest.children = src.children;
+}
+
+void MovementFrameEditor::apply_movement_to_next_frame() {
+    if (frames_.empty()) return;
+    const int count = static_cast<int>(frames_.size());
+    const int idx = clamp_index(selected_index_, count);
+    const int target = (idx + 1) % count;
+    MovementFrame src = frames_[idx];
+    copy_movement_fields(frames_[target], src);
+    rebuild_rel_positions();
+    persist_changes();
+    persist_pending_changes();
     invalidate_preview();
 }
 
-void MovementFrameEditor::apply_to_all_frames() {
+void MovementFrameEditor::apply_movement_to_animation() {
     if (frames_.empty()) return;
     const int idx = clamp_index(selected_index_, static_cast<int>(frames_.size()));
     MovementFrame src = frames_[idx];
-    for (size_t i = 1; i < frames_.size(); ++i) {
-        frames_[i].dx = src.dx;
-        frames_[i].dy = src.dy;
-        frames_[i].dz = src.dz;
-        frames_[i].resort_z = src.resort_z;
+    for (auto& f : frames_) {
+        copy_movement_fields(f, src);
     }
     rebuild_rel_positions();
     persist_changes();
+    persist_pending_changes();
+    invalidate_preview();
+}
+
+bool MovementFrameEditor::apply_movement_to_all_animations() {
+    if (!context_.document || frames_.empty()) return false;
+    apply_movement_to_animation();
+
+    const int idx = clamp_index(selected_index_, static_cast<int>(frames_.size()));
+    const MovementFrame src = frames_[idx];
+    const auto ids = context_.document->animation_ids();
+    for (const auto& id : ids) {
+        auto payload_opt = context_.document->animation_payload_json(id);
+        nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
+        auto frames = parse_frames_from_payload(payload);
+        if (frames.empty()) {
+            frames.push_back(MovementFrame{});
+        }
+        for (auto& f : frames) {
+            copy_movement_fields(f, src);
+        }
+        nlohmann::json updated = build_payload_from_frames(frames, payload);
+        context_.document->update_animation_payload(id, updated);
+        if (context_.preview) {
+            context_.preview->invalidate(id);
+        }
+    }
+    context_.document->save_to_file_checked(true);
+    return true;
 }
 
 void MovementFrameEditor::apply_live_changes() {
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit(false);
-    }
-    invalidate_preview();
+    dirty_ = true;
 }
 
 void MovementFrameEditor::invalidate_preview() const {
@@ -703,7 +764,8 @@ SDL_FPoint MovementFrameEditor::screen_to_world_relative(const SDL_Point& screen
 }
 
 bool MovementFrameEditor::ui_contains_point(const SDL_Point& pt) const {
-    return SDL_PointInRect(&pt, &ui_rect_);
+    if (SDL_PointInRect(&pt, &nav_rect_)) return true;
+    return tool_panel_ && tool_panel_->contains_point(pt);
 }
 
 }  // namespace devmode::frame_editors

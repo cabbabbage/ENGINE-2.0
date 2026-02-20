@@ -18,6 +18,7 @@
 #include "utils/area.hpp"
 #include "asset_info.hpp"
 #include "gameplay/world/grid_point.hpp"
+#include "anchor_point.hpp"
 
 #include "utils/transform_smoothing.hpp"
 
@@ -76,6 +77,13 @@ class Asset {
         public:
     RenderCompositePackage render_package;
 
+    struct AnchorFollowTarget {
+        Asset*       source = nullptr;
+        std::string  anchor_name;
+
+        bool valid() const { return source != nullptr && !anchor_name.empty(); }
+    };
+
     struct TilingInfo {
         bool      enabled      = false;
         SDL_Point grid_origin{0, 0};
@@ -97,7 +105,8 @@ class Asset {
           Asset* parent = nullptr,
           const std::string& spawn_id = std::string{},
           const std::string& spawn_method = std::string{},
-          int grid_resolution = 0);
+          int grid_resolution = 0,
+          std::optional<AnchorFollowTarget> anchor_follow = std::nullopt);
     Asset(const Asset& other);
     Asset& operator=(const Asset& other);
     Asset(Asset&&) noexcept = default;
@@ -123,6 +132,7 @@ class Asset {
         }
         return cached_h;
     }
+    float runtime_height_px() const;
     void move_to_world_position(int world_x, int world_y, int world_z = 0);
     void set_world_z(int world_z);
 
@@ -175,6 +185,8 @@ class Asset {
     int NeighborSearchRadius;
     void set_hidden(bool state);
     bool is_hidden() const;
+    void set_anchor_hidden(bool state);
+    bool is_anchor_hidden() const;
     void set_highlighted(bool state);
     bool is_highlighted();
     void set_selected(bool state);
@@ -253,6 +265,31 @@ class Asset {
     // Drain and return queued attacks for this tick.
     std::vector<animation_update::Attack> process_pending_attacks();
 
+    struct AnchorHandle {
+        std::string     name;
+        world::GridPoint* grid = nullptr;
+        SDL_Point       world_px{0, 0};
+        int             world_z = 0;
+        int             resolution_layer = 0;
+        bool            dirty = true;
+        int             last_frame_index = -1;
+        std::string     last_anim;
+        bool            missing = false;
+        bool            in_front = true;
+        Asset*          owner = nullptr;
+        std::uint64_t   last_camera_version = 0;
+
+        void update(anchor_points::GridMaterialization grid_policy);
+    };
+
+    AnchorHandle& get_anchor_point(const std::string& name);
+    std::optional<ResolvedAnchor> anchor_state(const std::string& name,
+                                               anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None);
+    void mark_anchors_dirty();
+    void set_anchor_follow_target(std::optional<AnchorFollowTarget> follow);
+    void bind_child_to_anchor(Asset* child, const std::string& anchor_name);
+    const std::optional<AnchorFollowTarget>& anchor_follow_target() const { return follow_anchor_; }
+
 public:
     static void SetFlipOverrideForSpawnId(const std::string& spawn_id, bool enabled, bool flipped);
     static void ClearFlipOverrideForSpawnId(const std::string& spawn_id);
@@ -271,6 +308,7 @@ private:
     WarpedScreenGrid* window = nullptr;
     bool highlighted = false;
     bool hidden = false;
+    bool anchor_hidden_ = false;
     bool selected = false;
     bool merged_from_neighbors_ = false;
     GridPoint* pos_ = nullptr; // Non-owning pointer to GridPoint in WorldGrid; set by WorldGrid on registration
@@ -328,6 +366,16 @@ private:
     float        composite_scale_   = 1.0f;
     float        world_z_offset_    = 0.0f;
     bool         mesh_dirty_        = true;
+
+    std::vector<AnchorHandle> anchor_handles_;
+    std::unordered_map<std::string, std::size_t> anchor_lookup_;
+    std::vector<Asset*> bound_children_;
+
+    std::optional<AnchorFollowTarget> follow_anchor_{};
+    SDL_Point last_follow_world_{0, 0};
+    int last_follow_world_z_ = 0;
+    bool follow_initialized_ = false;
+    void apply_anchor_follow_target();
 
 
 };

@@ -14,6 +14,7 @@ enum class SelectionTarget {
     AttackControl,
     AttackEnd,
     HitboxCenter,
+    AnchorPoint,
 };
 
 struct SelectionState {

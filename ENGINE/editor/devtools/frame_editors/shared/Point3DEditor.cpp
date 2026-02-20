@@ -29,9 +29,9 @@ float parse_float(const std::string& text, float fallback) {
 
 Point3DEditor::Point3DEditor(SelectionState* selection)
     : selection_(selection) {
-    tb_dx_ = std::make_unique<DMTextBox>("X (Left/Right)", "0");
-    tb_dy_ = std::make_unique<DMTextBox>("Y (Depth)", "0");
-    tb_dz_ = std::make_unique<DMTextBox>("Z (Height)", "0");
+    tb_dx_ = std::make_unique<DMTextBox>("X", "0");
+    tb_dy_ = std::make_unique<DMTextBox>("Y", "0");
+    tb_dz_ = std::make_unique<DMTextBox>("Z", "0");
 }
 
 Point3DEditor::~Point3DEditor() = default;
@@ -132,60 +132,39 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
         ? container
         : cached_container_;
 
-    // Check for textbox clicks to set axis
-    bool pointer_clicked_textbox = false;
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point mouse_pos = sdl_mouse_util::ButtonPoint(e.button);
-        const int padding = DMSpacing::small_gap();
-        const int inner_w = effective_container.w - padding * 2;
-        const int third_w = (inner_w - DMSpacing::small_gap() * 2) / 3;
-        int y = effective_container.y + padding;
-
-        if (tb_dx_) {
-            SDL_Rect dx_rect{
-                effective_container.x + padding,
-                y,
-                third_w,
-                tb_dx_->height_for_width(third_w)
-            };
-            if (SDL_PointInRect(&mouse_pos, &dx_rect) && is_axis_enabled(AdjustmentAxis::X)) {
-                set_axis_from_textbox_click(0);
-                pointer_clicked_textbox = true;
-            }
-        }
-
-        if (tb_dy_) {
-            SDL_Rect dy_rect{
-                effective_container.x + padding + third_w + DMSpacing::small_gap(),
-                y,
-                third_w,
-                tb_dy_->height_for_width(third_w)
-            };
-            if (SDL_PointInRect(&mouse_pos, &dy_rect) && is_axis_enabled(AdjustmentAxis::Y)) {
-                set_axis_from_textbox_click(1);
-                pointer_clicked_textbox = true;
-            }
-        }
-
-        if (tb_dz_) {
-            SDL_Rect dz_rect{
-                effective_container.x + padding + (third_w + DMSpacing::small_gap()) * 2,
-                y,
-                third_w,
-                tb_dz_->height_for_width(third_w)
-            };
-            if (SDL_PointInRect(&mouse_pos, &dz_rect) && is_axis_enabled(AdjustmentAxis::Z)) {
-                set_axis_from_textbox_click(2);
-                pointer_clicked_textbox = true;
-            }
-        }
-    }
-
-    bool consumed = false;
-
     const bool dx_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::X)].has_value();
     const bool dy_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::Y)].has_value();
     const bool dz_locked = axis_locked_values_[axis_to_index(AdjustmentAxis::Z)].has_value();
+
+    auto rects_for_textboxes = [&](SDL_Rect& dx_rect, SDL_Rect& dy_rect, SDL_Rect& dz_rect) {
+        const int padding = DMSpacing::small_gap();
+        const int inner_w = std::max(0, effective_container.w - padding * 2);
+        const int third_w = std::max(0, (inner_w - DMSpacing::small_gap() * 2) / 3);
+        const int height_dx = tb_dx_ ? tb_dx_->height_for_width(third_w) : DMTextBox::height();
+        const int height_dy = tb_dy_ ? tb_dy_->height_for_width(third_w) : DMTextBox::height();
+        const int height_dz = tb_dz_ ? tb_dz_->height_for_width(third_w) : DMTextBox::height();
+        const int row_height = std::max({height_dx, height_dy, height_dz});
+        const int y = effective_container.y + effective_container.h - row_height - padding;
+        dx_rect = SDL_Rect{effective_container.x + padding, y, third_w, row_height};
+        dy_rect = SDL_Rect{effective_container.x + padding + third_w + DMSpacing::small_gap(), y, third_w, row_height};
+        dz_rect = SDL_Rect{effective_container.x + padding + (third_w + DMSpacing::small_gap()) * 2, y, third_w, row_height};
+    };
+
+    SDL_Rect dx_rect{}, dy_rect{}, dz_rect{};
+    rects_for_textboxes(dx_rect, dy_rect, dz_rect);
+
+    bool consumed = false;
+    bool pointer_clicked_textbox = false;
+
+    if (tb_dx_ && is_axis_enabled(AdjustmentAxis::X) && !dx_locked) {
+        tb_dx_->set_rect(dx_rect);
+    }
+    if (tb_dy_ && is_axis_enabled(AdjustmentAxis::Y) && !dy_locked) {
+        tb_dy_->set_rect(dy_rect);
+    }
+    if (tb_dz_ && is_axis_enabled(AdjustmentAxis::Z) && !dz_locked) {
+        tb_dz_->set_rect(dz_rect);
+    }
 
     if (tb_dx_ && is_axis_enabled(AdjustmentAxis::X) && !dx_locked && tb_dx_->handle_event(e)) {
         apply_textbox_changes();
@@ -200,35 +179,22 @@ bool Point3DEditor::handle_event(const SDL_Event& e, const SDL_Rect& container) 
         consumed = true;
     }
 
-    if (pointer_clicked_textbox) {
-        consumed = true;
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
+        SDL_Point mouse_pos = sdl_mouse_util::ButtonPoint(e.button);
+        if (SDL_PointInRect(&mouse_pos, &dx_rect) && is_axis_enabled(AdjustmentAxis::X)) {
+            set_axis_from_textbox_click(0);
+            pointer_clicked_textbox = true;
+        } else if (SDL_PointInRect(&mouse_pos, &dy_rect) && is_axis_enabled(AdjustmentAxis::Y)) {
+            set_axis_from_textbox_click(1);
+            pointer_clicked_textbox = true;
+        } else if (SDL_PointInRect(&mouse_pos, &dz_rect) && is_axis_enabled(AdjustmentAxis::Z)) {
+            set_axis_from_textbox_click(2);
+            pointer_clicked_textbox = true;
+        }
     }
 
-    if (!consumed && e.type == SDL_EVENT_KEY_DOWN &&
-        (e.key.key == SDLK_UP || e.key.key == SDLK_DOWN)) {
-        if (selection_ && selection_->has_target() && selected_point_index_ >= 0 && on_position_changed_) {
-            if (!is_axis_enabled(selection_->axis) ||
-                axis_locked_values_[axis_to_index(selection_->axis)].has_value()) {
-                return consumed;
-            }
-            const float step = (grid_step_world_ > 0.0f) ? grid_step_world_ : 1.0f;
-            const float direction = (e.key.key == SDLK_UP) ? 1.0f : -1.0f;
-            SDL_FPoint new_world = selection_->world_pos;
-            float new_world_z = selection_->world_z;
-            switch (selection_->axis) {
-                case AdjustmentAxis::X:
-                    new_world.x += direction * step;
-                    break;
-                case AdjustmentAxis::Y:
-                    new_world.y += direction * step;
-                    break;
-                case AdjustmentAxis::Z:
-                    new_world_z += direction * step;
-                    break;
-            }
-            on_position_changed_(new_world, new_world_z);
-            consumed = true;
-        }
+    if (pointer_clicked_textbox) {
+        consumed = true;
     }
 
     return consumed;
@@ -247,30 +213,17 @@ void Point3DEditor::render_overlays(SDL_Renderer* renderer, const SDL_Rect& cont
     const int padding = DMSpacing::small_gap();
     const int inner_w = container.w - padding * 2;
     const int third_w = (inner_w - DMSpacing::small_gap() * 2) / 3;
+    const int row_height = std::max({
+        tb_dx_ ? tb_dx_->height_for_width(third_w) : DMTextBox::height(),
+        tb_dy_ ? tb_dy_->height_for_width(third_w) : DMTextBox::height(),
+        tb_dz_ ? tb_dz_->height_for_width(third_w) : DMTextBox::height()});
 
-    int y = container.y + padding;
+    const int y = container.y + container.h - row_height - padding;
 
     if (tb_dx_ && tb_dy_ && tb_dz_) {
-        SDL_Rect dx_rect{
-            container.x + padding,
-            y,
-            third_w,
-            tb_dx_->height_for_width(third_w)
-        };
-
-        SDL_Rect dy_rect{
-            container.x + padding + third_w + DMSpacing::small_gap(),
-            y,
-            third_w,
-            tb_dy_->height_for_width(third_w)
-        };
-
-        SDL_Rect dz_rect{
-            container.x + padding + (third_w + DMSpacing::small_gap()) * 2,
-            y,
-            third_w,
-            tb_dz_->height_for_width(third_w)
-        };
+        SDL_Rect dx_rect{container.x + padding, y, third_w, row_height};
+        SDL_Rect dy_rect{container.x + padding + third_w + DMSpacing::small_gap(), y, third_w, row_height};
+        SDL_Rect dz_rect{container.x + padding + (third_w + DMSpacing::small_gap()) * 2, y, third_w, row_height};
 
         tb_dx_->set_rect(dx_rect);
         tb_dy_->set_rect(dy_rect);
@@ -481,6 +434,8 @@ void Point3DEditor::render_axis_point(SDL_Renderer* renderer,
 
     // Only draw larger outer circle if selected
     if (is_selected) {
+        render_axis_line(renderer, screen_pos, axis, 180.0f);
+
         const float outer_radius = radius * 1.5f;  // Larger circle
 
         // Draw larger outer circle with axis color
@@ -507,8 +462,6 @@ void Point3DEditor::render_axis_point(SDL_Renderer* renderer,
             }
         }
 
-        // Draw movement arrows if selected (longer and more pronounced)
-        render_movement_arrows(renderer, screen_pos, axis, 32.0f);
     }
 
     // Always draw small center point (always on top, white)
@@ -541,6 +494,11 @@ void Point3DEditor::render_axis_point_with_depth(SDL_Renderer* renderer,
 
     // Only draw larger outer circle if selected
     if (is_selected) {
+        SDL_Color line_color = point_color;
+        line_color.a = 140;
+        const float length = 180.0f * std::max(0.5f, std::min(1.5f, std::max(0.5f, std::min(1.5f, 1.0f + (world_z * 0.001f)))));
+        render_axis_line(renderer, screen_pos, axis, length, line_color.a);
+
         const float outer_radius = depth_scaled_radius * 1.5f;  // Larger circle with depth scaling
 
         // Apply subtle depth-based darkening for objects behind
@@ -645,6 +603,11 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
 
     // Only draw larger outer circle if selected
     if (is_selected) {
+        SDL_Color line_color = point_color;
+        line_color.a = 140;
+        const float length = 180.0f * std::max(0.5f, std::min(2.0f, perspective_scale));
+        render_axis_line(renderer, screen_pos, axis, length, line_color.a);
+
         const float outer_radius = camera_scaled_radius * 1.5f;
 
         // Apply depth and height shading
@@ -676,10 +639,6 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
                 }
             }
         }
-
-        // Draw movement arrows if selected
-        const float arrow_length = 32.0f * perspective_scale;
-        render_movement_arrows(renderer, screen_pos, axis, arrow_length);
     }
 
     // Always draw small center point (always visible, fixed size)
@@ -723,6 +682,28 @@ SDL_FPoint Point3DEditor::constrain_drag_delta(const SDL_FPoint& drag_delta,
             break;
     }
     return constrained;
+}
+
+void Point3DEditor::render_axis_line(SDL_Renderer* renderer,
+                                     SDL_FPoint screen_pos,
+                                     AdjustmentAxis axis,
+                                     float length,
+                                     Uint8 alpha) {
+    if (!renderer) return;
+    SDL_FPoint dir;
+    switch (axis) {
+        case AdjustmentAxis::X: dir = SDL_FPoint{1.0f, 0.0f}; break;
+        case AdjustmentAxis::Y: dir = SDL_FPoint{0.0f, 1.0f}; break;
+        case AdjustmentAxis::Z: dir = SDL_FPoint{0.0f, -1.0f}; break;
+    }
+    SDL_Color axis_color = get_axis_color(axis);
+    SDL_Color line_color = axis_color;
+    line_color.a = alpha;
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_SetRenderDrawColor(renderer, line_color.r, line_color.g, line_color.b, line_color.a);
+    SDL_FPoint a{screen_pos.x - dir.x * length, screen_pos.y - dir.y * length};
+    SDL_FPoint b{screen_pos.x + dir.x * length, screen_pos.y + dir.y * length};
+    SDL_RenderLine(renderer, a.x, a.y, b.x, b.y);
 }
 
 SDL_Color Point3DEditor::get_axis_color(AdjustmentAxis axis) {
@@ -808,6 +789,19 @@ void Point3DEditor::render_movement_arrows(SDL_Renderer* renderer,
 bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                                       const std::vector<SDL_FPoint>& point_screens,
                                       const std::vector<bool>& point_selectable) {
+    if (!selection_ || !selection_->has_target()) {
+        return false;
+    }
+
+    auto axis_dir = [this]() -> SDL_FPoint {
+        switch (selection_->axis) {
+            case AdjustmentAxis::X: return SDL_FPoint{1.0f, 0.0f};
+            case AdjustmentAxis::Y: return SDL_FPoint{0.0f, 1.0f};
+            case AdjustmentAxis::Z: return SDL_FPoint{0.0f, -1.0f};
+        }
+        return SDL_FPoint{1.0f, 0.0f};
+    };
+
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
         SDL_Point mouse_pos = sdl_mouse_util::MotionPoint(e.motion);
         int new_hover = -1;
@@ -822,6 +816,40 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
 
         if (new_hover != hovered_point_index_) {
             hovered_point_index_ = new_hover;
+        }
+
+        if (is_dragging_ && selected_point_index_ >= 0 && on_position_changed_) {
+            if (!is_axis_enabled(selection_->axis) ||
+                axis_locked_values_[axis_to_index(selection_->axis)].has_value()) {
+                return true;
+            }
+            SDL_FPoint dir = axis_dir();
+            const float len = std::max(0.001f, std::sqrt(dir.x * dir.x + dir.y * dir.y));
+            dir.x /= len;
+            dir.y /= len;
+
+            const float dx = static_cast<float>(mouse_pos.x - drag_start_screen_.x);
+            const float dy = static_cast<float>(mouse_pos.y - drag_start_screen_.y);
+            const float projected = dx * dir.x + dy * dir.y;
+
+            float step = grid_step_world_ > 0.0f ? grid_step_world_ : 1.0f;
+            float world_delta = std::round(projected / step) * step;
+
+            SDL_FPoint new_world = drag_start_world_;
+            float new_world_z = drag_start_world_z_;
+            switch (selection_->axis) {
+                case AdjustmentAxis::X:
+                    new_world.x += world_delta;
+                    break;
+                case AdjustmentAxis::Y:
+                    new_world.y += world_delta;
+                    break;
+                case AdjustmentAxis::Z:
+                    new_world_z += world_delta;
+                    break;
+            }
+            on_position_changed_(new_world, new_world_z);
+            return true;
         }
     }
 
@@ -854,6 +882,16 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
                         }
                     }
                 }
+
+                // Start drag on selected point
+                if (selected_point_index_ >= 0 &&
+                    is_axis_enabled(selection_->axis) &&
+                    !axis_locked_values_[axis_to_index(selection_->axis)].has_value()) {
+                    is_dragging_ = true;
+                    drag_start_screen_ = mouse_pos;
+                    drag_start_world_ = selection_->world_pos;
+                    drag_start_world_z_ = selection_->world_z;
+                }
                 return true;
             }
         }
@@ -862,13 +900,18 @@ bool Point3DEditor::handle_mouse_event(const SDL_Event& e,
         hovered_point_index_ = -1;
         last_click_time_ = 0;
         last_clicked_point_ = -1;
+        is_dragging_ = false;
         if (on_point_selected_) {
             on_point_selected_(-1);
         }
         return false;
     }
 
-    return false;
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        is_dragging_ = false;
+    }
+
+    return is_dragging_;
 }
 
 void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,
@@ -880,11 +923,13 @@ void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,
 
     const SDL_Color orange{255, 165, 0, 255};
     const float center_radius = radius * 0.4f;
+    const AdjustmentAxis active_axis = selection_ ? selection_->axis : AdjustmentAxis::X;
 
     // If selected, draw larger outer circle with axis color
     if (is_selected) {
+        render_axis_line(renderer, screen_pos, active_axis, 180.0f);
         const float outer_radius = radius * 1.5f;
-        SDL_Color axis_color = get_axis_color(selection_ ? selection_->axis : AdjustmentAxis::X);
+        SDL_Color axis_color = get_axis_color(active_axis);
 
         // Draw outer circle with axis color
         SDL_SetRenderDrawColor(renderer, axis_color.r, axis_color.g, axis_color.b, 255);
@@ -911,7 +956,7 @@ void Point3DEditor::render_selectable_point(SDL_Renderer* renderer,
         }
 
         // Movement arrows
-        render_movement_arrows(renderer, screen_pos, selection_ ? selection_->axis : AdjustmentAxis::X, 32.0f);
+        render_movement_arrows(renderer, screen_pos, active_axis, 32.0f);
     }
     // If hovered (but not selected), draw white outline
     else if (is_hovered) {

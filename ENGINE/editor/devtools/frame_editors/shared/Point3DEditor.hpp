@@ -145,6 +145,7 @@ public:
         selected_point_index_ = index;
         last_click_time_ = 0;
         last_clicked_point_ = -1;
+        is_dragging_ = false;
     }
 
     int get_hovered_point_index() const { return hovered_point_index_; }
@@ -178,6 +179,9 @@ private:
     int selected_point_index_ = -1;
     int hovered_point_index_ = -1;
     bool is_dragging_ = false;  // Mouse drag state for potential dragging interactions.
+    SDL_Point drag_start_screen_{0, 0};
+    SDL_FPoint drag_start_world_{0.0f, 0.0f};
+    float drag_start_world_z_ = 0.0f;
 
     int grid_resolution_ = 0;
     float grid_step_world_ = 1.0f;
@@ -198,6 +202,11 @@ private:
     SDL_Rect cached_container_{0, 0, 0, 0};
 
     // Rendering helper methods
+    void render_axis_line(SDL_Renderer* renderer,
+                          SDL_FPoint screen_pos,
+                          AdjustmentAxis axis,
+                          float length,
+                          Uint8 alpha = 140);
     SDL_Color get_axis_color(AdjustmentAxis axis);
     void render_movement_arrows(SDL_Renderer* renderer,
                                SDL_FPoint center,

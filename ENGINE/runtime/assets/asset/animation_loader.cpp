@@ -222,12 +222,41 @@ DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node, bool& va
         if (anchor.name.empty()) {
                 return anchor;
         }
-        if (!node.contains("texture_x") || !node.contains("texture_z")) {
-                return anchor;
+
+        const bool has_tex_x = node.contains("texture_x");
+        const bool has_tex_z = node.contains("texture_z");
+        if (has_tex_x && has_tex_z) {
+                anchor.texture_x = static_cast<int>(std::lround(read_float(node.value("texture_x", 0.0f))));
+                anchor.texture_z = static_cast<int>(std::lround(read_float(node.value("texture_z", 0.0f))));
+                anchor.has_pixel_coords = true;
         }
-        anchor.texture_x = static_cast<int>(std::lround(read_float(node.value("texture_x", 0.0f))));
-        anchor.texture_z = static_cast<int>(std::lround(read_float(node.value("texture_z", 0.0f))));
+
+        const bool has_px = node.contains("px");
+        const bool has_py = node.contains("py");
+        bool normalized_x_valid = false;
+        bool normalized_z_valid = false;
+        if (has_px) {
+                anchor.normalized_x = read_float(node.value("px", 0.0f));
+                normalized_x_valid = std::isfinite(anchor.normalized_x);
+        } else {
+                anchor.normalized_x = std::numeric_limits<float>::quiet_NaN();
+        }
+        if (has_py) {
+                anchor.normalized_z = read_float(node.value("py", 0.0f));
+                normalized_z_valid = std::isfinite(anchor.normalized_z);
+        } else {
+                anchor.normalized_z = std::numeric_limits<float>::quiet_NaN();
+        }
+        anchor.has_normalized_coords = normalized_x_valid && normalized_z_valid;
+
         anchor.in_front = node.value("in_front", true);
+        if (!has_tex_x && !has_tex_z && node.contains("pz")) {
+                const float pz = read_float(node.value("pz", 0.0f));
+                if (std::isfinite(pz)) {
+                        anchor.in_front = pz >= 0.0f;
+                }
+        }
+
         valid = anchor.is_valid();
         return anchor;
 }
@@ -301,11 +330,43 @@ void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>
                         }
                 }
                 for (auto& anchor : frame) {
+                        auto normalized_to_pixel = [](float norm, int dimension) -> std::optional<int> {
+                                if (dimension <= 0 || !std::isfinite(norm)) {
+                                        return std::nullopt;
+                                }
+                                const int max_index = std::max(0, dimension - 1);
+                                const float clamped = std::clamp(norm, 0.0f, 1.0f);
+                                const int pixel = static_cast<int>(std::lround(clamped * static_cast<float>(max_index)));
+                                return std::clamp(pixel, 0, max_index);
+                        };
+
+                        if (anchor.has_normalized_coords) {
+                                if (auto px = normalized_to_pixel(anchor.normalized_x, frame_w)) {
+                                        anchor.texture_x = *px;
+                                }
+                                if (auto pz = normalized_to_pixel(anchor.normalized_z, frame_h)) {
+                                        anchor.texture_z = *pz;
+                                }
+                                if (frame_w > 0 && frame_h > 0 &&
+                                    std::isfinite(anchor.normalized_x) && std::isfinite(anchor.normalized_z)) {
+                                        anchor.has_pixel_coords = true;
+                                }
+                        }
+
                         if (flip_horizontal && frame_w > 0) {
                                 anchor.texture_x = frame_w - 1 - anchor.texture_x;
                         }
                         if (flip_vertical && frame_h > 0) {
                                 anchor.texture_z = frame_h - 1 - anchor.texture_z;
+                        }
+                        if (anchor.has_pixel_coords && frame_w > 0 && frame_h > 0) {
+                                const int max_w = std::max(1, frame_w);
+                                const int max_h = std::max(1, frame_h);
+                                anchor.normalized_x =
+                                        static_cast<float>(anchor.texture_x) / static_cast<float>(std::max(1, max_w - 1));
+                                anchor.normalized_z =
+                                        static_cast<float>(anchor.texture_z) / static_cast<float>(std::max(1, max_h - 1));
+                                anchor.has_normalized_coords = std::isfinite(anchor.normalized_x) && std::isfinite(anchor.normalized_z);
                         }
                 }
         }

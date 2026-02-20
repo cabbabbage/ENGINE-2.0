@@ -45,6 +45,50 @@ static std::mutex& asset_rng_mutex()
         return mutex;
 }
 
+
+const DisplacedAssetAnchorPoint* find_anchor_with_frame_fallback(const Asset& asset,
+                                                                  const AnimationFrame* current_frame,
+                                                                  const std::string& name) {
+        if (current_frame) {
+                if (const auto* direct = current_frame->find_anchor(name)) {
+                        return direct;
+                }
+        }
+
+        if (!asset.info) {
+                return nullptr;
+        }
+        auto anim_it = asset.info->animations.find(asset.current_animation);
+        if (anim_it == asset.info->animations.end()) {
+                return nullptr;
+        }
+
+        const Animation& anim = anim_it->second;
+        const int current_index = current_frame ? current_frame->frame_index : 0;
+
+        const DisplacedAssetAnchorPoint* best = nullptr;
+        int best_distance = std::numeric_limits<int>::max();
+        for (const AnimationFrame* frame : anim.frames) {
+                if (!frame) {
+                        continue;
+                }
+                const auto* candidate = frame->find_anchor(name);
+                if (!candidate) {
+                        continue;
+                }
+                const int distance = std::abs(frame->frame_index - current_index);
+                if (!best || distance < best_distance) {
+                        best = candidate;
+                        best_distance = distance;
+                        if (distance == 0) {
+                                break;
+                        }
+                }
+        }
+
+        return best;
+}
+
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
 std::mutex Asset::s_flip_overrides_mutex_{};
 
@@ -909,11 +953,7 @@ void Asset::apply_anchor_follow_target() {
         int target_z = resolved->world_z;
         int target_layer = resolved->resolution_layer;
 
-        if (resolved->grid_point) {
-                target_px = SDL_Point{resolved->grid_point->world_x(), resolved->grid_point->world_y()};
-                target_z = resolved->grid_point->world_z();
-                target_layer = resolved->grid_point->resolution_layer();
-        } else if (source) {
+        if (!resolved->grid_point && source) {
                 if (auto* source_gp = source->grid_point()) {
                         target_layer = source_gp->resolution_layer();
                 } else {
@@ -942,18 +982,13 @@ void Asset::apply_anchor_follow_target() {
         }
 
         world::WorldGrid& grid = assets_->world_grid();
+        world::GridPoint& target = world::GridPoint::from_world(target_px.x, target_px.y, target_z, target_layer, grid);
         if (pos_) {
-                world::GridPoint& target = resolved->grid_point
-                        ? *resolved->grid_point
-                        : world::GridPoint::from_world(target_px.x, target_px.y, target_z, target_layer, grid);
                 grid.move_asset(this, *pos_, target);
         } else {
                 const int start_x = target_px.x + 1;
                 const int start_y = target_px.y + 1;
                 world::GridPoint virtual_start = world::GridPoint::make_virtual(start_x, start_y, target_z, target_layer);
-                world::GridPoint& target = resolved->grid_point
-                        ? *resolved->grid_point
-                        : world::GridPoint::from_world(target_px.x, target_px.y, target_z, target_layer, grid);
                 grid.move_asset(this, virtual_start, target);
         }
         mark_anchors_dirty();
@@ -1004,7 +1039,7 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy)
         }
         const std::uint64_t cam_version = owner->assets_ ? owner->assets_->getView().camera_state_version() : 0;
         const AnimationFrame* frame = owner->current_frame;
-        const DisplacedAssetAnchorPoint* anchor = (frame ? frame->find_anchor(name) : nullptr);
+        const DisplacedAssetAnchorPoint* anchor = find_anchor_with_frame_fallback(*owner, frame, name);
 
         if (!anchor) {
                 grid = nullptr;

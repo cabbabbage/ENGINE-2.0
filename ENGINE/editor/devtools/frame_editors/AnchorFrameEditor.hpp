@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "FrameEditorBase.hpp"
@@ -52,6 +53,10 @@ private:
     bool ui_contains_point(const SDL_Point& p) const;
     void add_anchor();
     void rebuild_tool_panel_layout();
+    void update_anchor_from_drag(SDL_Point mouse_screen);
+    void hydrate_anchor_pixels_from_target();
+    std::pair<int, int> current_frame_dimensions() const;
+    DisplacedAssetAnchorPoint to_runtime_anchor(const FrameAnchorPoint& anchor) const;
 
     FrameEditorContext context_{};
     ManifestTransaction manifest_txn_{};
@@ -61,6 +66,9 @@ private:
     int selected_anchor_ = -1;
     bool wants_close_ = false;
     bool dirty_ = false;
+    bool is_dragging_ = false;
+    int drag_anchor_start_tex_x_ = 0;
+    int drag_anchor_start_tex_z_ = 0;
 
     std::unique_ptr<FrameNavigator> frame_navigator_;
     std::unique_ptr<DMButton> btn_back_;

@@ -1177,8 +1177,8 @@
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 0,
-                "texture_z": 0
+                "texture_x": 91,
+                "texture_z": 71
               }
             ]
           ],

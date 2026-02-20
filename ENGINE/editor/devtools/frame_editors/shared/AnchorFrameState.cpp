@@ -83,10 +83,41 @@ std::vector<AnchorFrame> parse_anchor_frames_from_payload(const nlohmann::json& 
             FrameAnchorPoint pt{};
             pt.name = node.value("name", std::string{});
             if (pt.name.empty()) continue;
-            if (!node.contains("texture_x") || !node.contains("texture_z")) continue;
-            pt.texture_x = static_cast<int>(std::lround(read_float(node.value("texture_x", 0.0f))));
-            pt.texture_z = static_cast<int>(std::lround(read_float(node.value("texture_z", 0.0f))));
+
+            const bool has_tex_x = node.contains("texture_x");
+            const bool has_tex_z = node.contains("texture_z");
+            if (has_tex_x && has_tex_z) {
+                pt.texture_x = static_cast<int>(std::lround(read_float(node.value("texture_x", 0.0f))));
+                pt.texture_z = static_cast<int>(std::lround(read_float(node.value("texture_z", 0.0f))));
+                pt.has_pixel_coords = true;
+            }
+
+            const bool has_px = node.contains("px");
+            const bool has_py = node.contains("py");
+            if (has_px) {
+                pt.normalized_x = read_float(node.value("px", 0.0f));
+                if (std::isfinite(pt.normalized_x)) {
+                    pt.has_normalized_coords = true;
+                }
+            }
+            if (has_py) {
+                pt.normalized_z = read_float(node.value("py", 0.0f));
+                if (std::isfinite(pt.normalized_z)) {
+                    pt.has_normalized_coords = true;
+                }
+            }
+
             pt.in_front = node.value("in_front", true);
+            if (!pt.has_pixel_coords && node.contains("pz")) {
+                const float pz = read_float(node.value("pz", 0.0f));
+                if (std::isfinite(pz)) {
+                    pt.in_front = pz >= 0.0f;
+                }
+            }
+
+            if (!pt.has_pixel_coords && !pt.has_normalized_coords) {
+                continue;
+            }
             if (!names.insert(pt.name).second) continue;
             frames[i].anchors.push_back(pt);
         }
@@ -115,15 +146,22 @@ nlohmann::json build_payload_with_anchors(const std::vector<AnchorFrame>& frames
         const auto& anchor_frame = frames[i];
         for (const auto& anchor : anchor_frame.anchors) {
             if (anchor.name.empty()) continue;
+            if (!anchor.has_pixel_coords && !anchor.has_normalized_coords) {
+                continue;
+            }
+            if (!anchor.has_pixel_coords) {
+                continue;
+            }
             if (!names.insert(anchor.name).second) {
                 continue;
             }
-            frame_array.push_back(nlohmann::json{
+            nlohmann::json entry{
                 {"name", anchor.name},
                 {"texture_x", anchor.texture_x},
                 {"texture_z", anchor.texture_z},
                 {"in_front", anchor.in_front},
-            });
+            };
+            frame_array.push_back(std::move(entry));
         }
         anchor_points[static_cast<nlohmann::json::array_t::size_type>(i)] = std::move(frame_array);
     }

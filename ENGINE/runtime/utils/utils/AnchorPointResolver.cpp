@@ -258,6 +258,11 @@ PixelLockedAnchor resolve_pixel_locked_anchor(const Asset& asset,
         return result;
     }
 
+    if (!anchor.has_pixel_coords && !anchor.has_normalized_coords) {
+        result.resolved.missing = true;
+        return result;
+    }
+
     Assets* assets_owner = asset.get_assets();
     WarpedScreenGrid& cam = assets_owner->getView();
     world::WorldGrid& grid = assets_owner->world_grid();
@@ -272,8 +277,32 @@ PixelLockedAnchor resolve_pixel_locked_anchor(const Asset& asset,
     }
     const SpriteQuad& quad = *quad_opt;
 
-    const float fx = std::clamp((static_cast<float>(anchor.texture_x) + 0.5f) / static_cast<float>(dims.frame_w), 0.0f, 1.0f);
-    const float fz = std::clamp((static_cast<float>(anchor.texture_z) + 0.5f) / static_cast<float>(dims.frame_h), 0.0f, 1.0f);
+    auto fraction_from_pixels = [](int pixel, int dimension) -> float {
+        if (dimension <= 0) {
+            return 0.5f;
+        }
+        return (static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension);
+    };
+    auto fraction_from_normalized = [](float normalized, int dimension) -> std::optional<float> {
+        if (!std::isfinite(normalized) || dimension <= 0) {
+            return std::nullopt;
+        }
+        return std::clamp(normalized, 0.0f, 1.0f);
+    };
+
+    const bool use_normalized = !anchor.has_pixel_coords && anchor.has_normalized_coords;
+    const std::optional<float> norm_x = use_normalized ? fraction_from_normalized(anchor.normalized_x, dims.frame_w) : std::nullopt;
+    const std::optional<float> norm_z = use_normalized ? fraction_from_normalized(anchor.normalized_z, dims.frame_h) : std::nullopt;
+
+    const float fx_raw = norm_x.has_value()
+        ? *norm_x
+        : fraction_from_pixels(anchor.texture_x, dims.frame_w);
+    const float fz_raw = norm_z.has_value()
+        ? *norm_z
+        : fraction_from_pixels(anchor.texture_z, dims.frame_h);
+
+    const float fx = std::clamp(fx_raw, 0.0f, 1.0f);
+    const float fz = std::clamp(fz_raw, 0.0f, 1.0f);
     const float u = ((dims.flip & SDL_FLIP_HORIZONTAL) != 0) ? (1.0f - fx) : fx;
 
     const SDL_FPoint bottom = lerp_point(quad.bl, quad.br, u);

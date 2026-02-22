@@ -679,9 +679,11 @@ void Assets::update_filtered_active_assets() {
             return;
         }
 
+        // Snapshot the active size for pre-sizing both the filtered list and membership cache.
+        const std::size_t active_size = active_assets.size();
         filtered_active_assets.clear();
         filtered_active_asset_membership_.clear();
-        filtered_active_assets.reserve(active_assets.size());
+        filtered_active_assets.reserve(active_size);
         for (Asset* asset : active_assets) {
             if (!asset) {
                 continue;

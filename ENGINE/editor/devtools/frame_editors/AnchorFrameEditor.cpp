@@ -352,49 +352,6 @@ bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
         handled = true;
     }
 
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-        SDL_Point mouse_pos{static_cast<int>(std::lround(e.button.x)), static_cast<int>(std::lround(e.button.y))};
-        if (!ui_contains_point(mouse_pos) && selected_frame_ >= 0 && selected_frame_ < static_cast<int>(frames_.size())) {
-            const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
-            int closest = -1;
-            float closest_dist_sq = 196.0f; // 14px radius
-            for (std::size_t i = 0; i < frame.anchors.size(); ++i) {
-                SDL_FPoint screen{};
-                float world_z = 0.0f;
-                if (!resolve_anchor_screen(static_cast<int>(i), screen, world_z)) {
-                    continue;
-                }
-                const float dx = screen.x - static_cast<float>(mouse_pos.x);
-                const float dy = screen.y - static_cast<float>(mouse_pos.y);
-                const float dist_sq = dx * dx + dy * dy;
-                if (dist_sq <= closest_dist_sq) {
-                    closest_dist_sq = dist_sq;
-                    closest = static_cast<int>(i);
-                }
-            }
-            if (closest >= 0) {
-                select_anchor(closest);
-                // Start drag
-                const auto& anchor = frame.anchors[static_cast<std::size_t>(closest)];
-                is_dragging_ = true;
-                drag_anchor_start_tex_x_ = anchor.texture_x;
-                drag_anchor_start_tex_y_ = anchor.texture_y;
-                handled = true;
-            }
-        }
-    }
-
-    if (e.type == SDL_EVENT_MOUSE_MOTION && is_dragging_ && selected_anchor_ >= 0) {
-        SDL_Point mouse_pos{static_cast<int>(std::lround(e.motion.x)), static_cast<int>(std::lround(e.motion.y))};
-        update_anchor_from_drag(mouse_pos);
-        handled = true;
-    }
-
-    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT && is_dragging_) {
-        is_dragging_ = false;
-        handled = true;
-    }
-
     return handled;
 }
 
@@ -833,89 +790,6 @@ void AnchorFrameEditor::add_anchor() {
     frame.anchors.push_back(point);
     select_anchor(static_cast<int>(frame.anchors.size()) - 1);
     dirty_ = true;
-}
-
-void AnchorFrameEditor::update_anchor_from_drag(SDL_Point mouse_screen) {
-    if (selected_anchor_ < 0 || selected_frame_ < 0 ||
-        selected_frame_ >= static_cast<int>(frames_.size())) {
-        return;
-    }
-    auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
-    if (selected_anchor_ >= static_cast<int>(frame.anchors.size())) {
-        return;
-    }
-    if (!context_.target || !context_.assets) {
-        return;
-    }
-
-    hydrate_anchor_pixels_from_target();
-    auto& anchor = frame.anchors[static_cast<std::size_t>(selected_anchor_)];
-
-    // Resolve current screen position of the anchor.
-    const auto base_result = anchor_points::resolve_pixel_locked_anchor(
-        *context_.target,
-        to_runtime_anchor(anchor),
-        anchor_points::GridMaterialization::None);
-    if (base_result.resolved.missing) {
-        return;
-    }
-
-    const SDL_FPoint base_screen = base_result.screen_px;
-    const float screen_err_x = static_cast<float>(mouse_screen.x) - base_screen.x;
-    const float screen_err_y = static_cast<float>(mouse_screen.y) - base_screen.y;
-
-    // If already close enough, skip update.
-    if (screen_err_x * screen_err_x + screen_err_y * screen_err_y < 0.25f) {
-        return;
-    }
-
-    // Build numerical Jacobian using perturbation delta.
-    constexpr int kDelta = 5;
-
-    DisplacedAssetAnchorPoint dx_anchor = to_runtime_anchor(anchor);
-    dx_anchor.texture_x += kDelta;
-    DisplacedAssetAnchorPoint dz_anchor = to_runtime_anchor(anchor);
-    dz_anchor.texture_y += kDelta;
-
-    const auto dx_result = anchor_points::resolve_pixel_locked_anchor(
-        *context_.target,
-        dx_anchor,
-        anchor_points::GridMaterialization::None);
-    const auto dz_result = anchor_points::resolve_pixel_locked_anchor(
-        *context_.target,
-        dz_anchor,
-        anchor_points::GridMaterialization::None);
-
-    if (dx_result.resolved.missing || dz_result.resolved.missing) {
-        return;
-    }
-
-    // Jacobian columns: d(screen) / d(tex_x) and d(screen) / d(tex_y)
-    const float inv_delta = 1.0f / static_cast<float>(kDelta);
-    const float j00 = (dx_result.screen_px.x - base_screen.x) * inv_delta; // dSx/dTx
-    const float j10 = (dx_result.screen_px.y - base_screen.y) * inv_delta; // dSy/dTx
-    const float j01 = (dz_result.screen_px.x - base_screen.x) * inv_delta; // dSx/dTz
-    const float j11 = (dz_result.screen_px.y - base_screen.y) * inv_delta; // dSy/dTz
-
-    // Invert 2x2 Jacobian.
-    const float det = j00 * j11 - j01 * j10;
-    if (std::abs(det) < 1e-6f) {
-        return;
-    }
-    const float inv_det = 1.0f / det;
-    const float dtex_x = inv_det * (j11 * screen_err_x - j01 * screen_err_y);
-    const float dtex_y = inv_det * (-j10 * screen_err_x + j00 * screen_err_y);
-
-    const int new_tex_x = std::max(0, anchor.texture_x + static_cast<int>(std::lround(dtex_x)));
-    const int new_tex_y = std::max(0, anchor.texture_y + static_cast<int>(std::lround(dtex_y)));
-
-    if (new_tex_x != anchor.texture_x || new_tex_y != anchor.texture_y) {
-        anchor.texture_x = new_tex_x;
-        anchor.texture_y = new_tex_y;
-        refresh_form();
-        refresh_selection_state();
-        dirty_ = true;
-    }
 }
 
 void AnchorFrameEditor::rebuild_tool_panel_layout() {

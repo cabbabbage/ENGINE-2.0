@@ -58,7 +58,6 @@ private:
     bool ui_contains_point(const SDL_Point& p) const;
     void add_anchor();
     void rebuild_tool_panel_layout();
-    void update_anchor_from_drag(SDL_Point mouse_screen);
     void hydrate_anchor_pixels_from_target();
     std::pair<int, int> current_frame_dimensions() const;
     std::pair<int, int> frame_dimensions_for_index(std::size_t frame_index) const;
@@ -75,9 +74,6 @@ private:
     int selected_anchor_ = -1;
     bool wants_close_ = false;
     bool dirty_ = false;
-    bool is_dragging_ = false;
-    int drag_anchor_start_tex_x_ = 0;
-    int drag_anchor_start_tex_y_ = 0;
     bool target_frame_lock_active_ = false;
     std::string saved_target_animation_;
     AnimationFrame* saved_target_frame_ = nullptr;

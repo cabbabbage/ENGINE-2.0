@@ -30,6 +30,8 @@ struct ResolvedAnchor {
     SDL_Point        world_px{0, 0};
     int              world_z = 0;
     int              resolution_layer = 0;
+    SDL_Point        source_texture_px{0, 0};
+    bool             has_canonical_texture_source = false;
     world::GridPoint* grid_point = nullptr;
     bool             missing = false;
     bool             in_front = true;

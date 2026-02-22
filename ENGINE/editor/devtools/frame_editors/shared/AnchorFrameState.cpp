@@ -67,6 +67,7 @@ bool read_anchor(const nlohmann::json& node, FrameAnchorPoint& pt) {
     if (pt.name.empty()) return false;
     pt.texture_x = node["texture_x"].get<int>();
     pt.texture_y = node["texture_y"].get<int>();
+    if (pt.texture_x < 0 || pt.texture_y < 0) return false;
     pt.in_front = node["in_front"].get<bool>();
     return true;
 }
@@ -124,8 +125,8 @@ nlohmann::json build_payload_with_anchors(const std::vector<AnchorFrame>& frames
             }
             nlohmann::json entry{
                 {"name", anchor.name},
-                {"texture_x", anchor.texture_x},
-                {"texture_y", anchor.texture_y},
+                {"texture_x", std::max(0, anchor.texture_x)},
+                {"texture_y", std::max(0, anchor.texture_y)},
                 {"in_front", anchor.in_front},
             };
             frame_array.push_back(std::move(entry));

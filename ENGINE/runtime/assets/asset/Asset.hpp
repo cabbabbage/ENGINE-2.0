@@ -278,9 +278,9 @@ class Asset {
         SDL_Point       world_px{0, 0};
         int             world_z = 0;
         int             resolution_layer = 0;
+        SDL_Point       source_texture_px{0, 0};
+        bool            has_canonical_texture_source = false;
         bool            dirty = true;
-        int             last_frame_index = -1;
-        std::string     last_anim;
         bool            missing = false;
         bool            in_front = true;
         Asset*          owner = nullptr;

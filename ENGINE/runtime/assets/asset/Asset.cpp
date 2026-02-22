@@ -1045,9 +1045,14 @@ std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name,
         resolved.world_px    = handle.world_px;
         resolved.world_z     = handle.world_z;
         resolved.resolution_layer = handle.resolution_layer;
+        resolved.source_texture_px = handle.source_texture_px;
+        resolved.has_canonical_texture_source = handle.has_canonical_texture_source;
         resolved.grid_point  = handle.grid;
         resolved.missing     = handle.missing;
         resolved.in_front    = handle.in_front;
+        if (!resolved.missing && !resolved.has_canonical_texture_source) {
+                throw std::runtime_error("Anchor invariant failure: resolved anchor missing canonical texture source");
+        }
         return resolved;
 }
 
@@ -1067,8 +1072,8 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 resolution_layer = 0;
                 missing = true;
                 in_front = true;
-                last_frame_index = frame ? frame->frame_index : -1;
-                last_anim = owner->current_animation;
+                source_texture_px = SDL_Point{0, 0};
+                has_canonical_texture_source = false;
                 dirty = false;
                 return;
         }
@@ -1088,8 +1093,11 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
         resolution_layer = resolved.resolved.resolution_layer;
         missing = resolved.resolved.missing;
         in_front = resolved.resolved.in_front;
-        last_frame_index = frame ? frame->frame_index : -1;
-        last_anim = owner->current_animation;
+        source_texture_px = resolved.resolved.source_texture_px;
+        has_canonical_texture_source = resolved.resolved.has_canonical_texture_source;
+        if (!missing && !resolved.resolved.has_canonical_texture_source) {
+                throw std::runtime_error("Anchor invariant failure: resolved anchor missing canonical texture source");
+        }
         dirty = false;
 }
 

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <stdexcept>
 
 #include "animation/animation_update.hpp"
 #include "assets/Asset.hpp"
@@ -31,6 +32,8 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     sample.resolved.world_z = asset.world_z();
     sample.screen_px = SDL_FPoint{static_cast<float>(asset.world_x()), static_cast<float>(asset.world_y())};
     sample.resolved.in_front = anchor.in_front;
+    sample.resolved.source_texture_px = SDL_Point{anchor.texture_x, anchor.texture_y};
+    sample.resolved.has_canonical_texture_source = true;
     sample.resolved.missing = false;
     return sample;
 }
@@ -66,6 +69,12 @@ struct FrameDimensions {
     SDL_FlipMode flip = SDL_FLIP_NONE;
     float world_z_offset = 0.0f;
 };
+
+void assert_anchor_is_canonical_texture_pixel(const DisplacedAssetAnchorPoint& anchor) {
+    if (anchor.texture_x < 0 || anchor.texture_y < 0) {
+        throw std::runtime_error("Anchor resolver invariant failure: canonical texture pixel coordinates must be non-negative");
+    }
+}
 
 float safe_remainder_scale(const Asset& asset) {
     float remainder = asset.current_remaining_scale_adjustment;
@@ -236,6 +245,8 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         return sample;
     }
 
+    assert_anchor_is_canonical_texture_pixel(anchor);
+
     const SDL_FPoint uv = compute_anchor_uv(anchor, dims);
     sample.uv = uv;
 
@@ -267,6 +278,8 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     sample.resolved.world_px = SDL_Point{resolved_x, resolved_y};
     sample.resolved.world_z = resolved_z;
     sample.resolved.resolution_layer = resolution_layer;
+    sample.resolved.source_texture_px = SDL_Point{anchor.texture_x, anchor.texture_y};
+    sample.resolved.has_canonical_texture_source = true;
     sample.resolved.missing = false;
 
     world::WorldGrid& grid = assets_owner->world_grid();

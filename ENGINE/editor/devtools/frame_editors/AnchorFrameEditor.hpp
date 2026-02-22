@@ -14,6 +14,8 @@
 #include "devtools/asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "devtools/widgets.hpp"
 
+class AnimationFrame;
+
 namespace devmode::frame_editors {
 
 class AnchorListWidget;
@@ -56,7 +58,11 @@ private:
     void update_anchor_from_drag(SDL_Point mouse_screen);
     void hydrate_anchor_pixels_from_target();
     std::pair<int, int> current_frame_dimensions() const;
+    std::pair<int, int> frame_dimensions_for_index(std::size_t frame_index) const;
     DisplacedAssetAnchorPoint to_runtime_anchor(const FrameAnchorPoint& anchor) const;
+    void lock_target_to_selected_frame();
+    void restore_target_frame_lock();
+    void sync_runtime_animation_anchors(const std::string& animation_id, const std::vector<AnchorFrame>& frames);
 
     FrameEditorContext context_{};
     ManifestTransaction manifest_txn_{};
@@ -69,6 +75,10 @@ private:
     bool is_dragging_ = false;
     int drag_anchor_start_tex_x_ = 0;
     int drag_anchor_start_tex_z_ = 0;
+    bool target_frame_lock_active_ = false;
+    std::string saved_target_animation_;
+    AnimationFrame* saved_target_frame_ = nullptr;
+    bool saved_target_static_frame_ = false;
 
     std::unique_ptr<FrameNavigator> frame_navigator_;
     std::unique_ptr<DMButton> btn_back_;

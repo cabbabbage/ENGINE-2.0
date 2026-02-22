@@ -184,7 +184,12 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
     if (!active_editor_) {
         return false;
     }
-    return active_editor_->handle_event(e);
+    const bool handled = active_editor_->handle_event(e);
+    if (active_editor_ && active_editor_->wants_close()) {
+        end();
+        return true;
+    }
+    return handled;
 }
 
 void FrameEditorSession::render(SDL_Renderer* renderer) const {

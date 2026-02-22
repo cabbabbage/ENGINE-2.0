@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <optional>
+#include <unordered_set>
 
 #include "animation/animation_update.hpp"
 #include "devtools/dm_styles.hpp"
@@ -16,6 +17,7 @@
 #include "assets/Asset.hpp"
 #include "assets/animation_frame.hpp"
 #include "assets/animation_frame_variant.hpp"
+#include "assets/asset/animation.hpp"
 #include "utils/AnchorPointResolver.hpp"
 
 namespace devmode::frame_editors {
@@ -170,6 +172,17 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     frames_.clear();
     screen_w_ = std::max(screen_w_, 1920);
     screen_h_ = std::max(screen_h_, 1080);
+    target_frame_lock_active_ = false;
+    saved_target_animation_.clear();
+    saved_target_frame_ = nullptr;
+    saved_target_static_frame_ = false;
+
+    if (context_.target) {
+        target_frame_lock_active_ = true;
+        saved_target_animation_ = context_.target->current_animation;
+        saved_target_frame_ = context_.target->current_frame;
+        saved_target_static_frame_ = context_.target->static_frame;
+    }
 
     if (selection_state_) {
         selection_state_->reset();
@@ -184,6 +197,9 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
         }
     } else {
         frames_.resize(1);
+    }
+    if (!frames_.empty() && !frames_.front().anchors.empty()) {
+        selected_anchor_ = 0;
     }
 
     frame_navigator_ = std::make_unique<FrameNavigator>();
@@ -210,7 +226,13 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     cb_in_front_ = std::make_unique<DMCheckbox>("In Front (unchecked = Behind)", true);
 
     tool_panel_ = std::make_unique<FrameToolPanel>("Anchor Tool Panel", "frame_editor_tool_panel_anchor");
-    back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() { wants_close_ = true; });
+    back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() {
+        if (apply_form_to_anchor()) {
+            dirty_ = true;
+        }
+        persist_pending_changes();
+        wants_close_ = true;
+    });
     add_widget_ = std::make_unique<ButtonWidget>(btn_add_.get(), [this]() { add_anchor(); });
     delete_widget_ = std::make_unique<ButtonWidget>(btn_delete_.get(), [this]() {
         if (frames_.empty() || selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size()) ||
@@ -245,6 +267,7 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     rebuild_tool_panel_layout();
     // Position set on first update when screen dimensions are available.
 
+    lock_target_to_selected_frame();
     hydrate_anchor_pixels_from_target();
     refresh_form();
     refresh_selection_state();
@@ -258,6 +281,8 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
 }
 
 void AnchorFrameEditor::end() {
+    persist_pending_changes();
+    restore_target_frame_lock();
     frames_.clear();
     tool_panel_.reset();
     back_widget_.reset();
@@ -284,10 +309,23 @@ void AnchorFrameEditor::end() {
     cb_in_front_.reset();
     dirty_ = false;
     wants_close_ = false;
+    target_frame_lock_active_ = false;
+    saved_target_animation_.clear();
+    saved_target_frame_ = nullptr;
+    saved_target_static_frame_ = false;
 }
 
 bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
     bool handled = false;
+
+    if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) {
+        if (apply_form_to_anchor()) {
+            dirty_ = true;
+        }
+        persist_pending_changes();
+        wants_close_ = true;
+        return true;
+    }
 
     if (tool_panel_) {
         const std::string name_before = tb_name_ ? tb_name_->value() : std::string{};
@@ -321,7 +359,7 @@ bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
         if (!ui_contains_point(mouse_pos) && selected_frame_ >= 0 && selected_frame_ < static_cast<int>(frames_.size())) {
             const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
             int closest = -1;
-            float closest_dist_sq = 36.0f; // 6px radius
+            float closest_dist_sq = 196.0f; // 14px radius
             for (std::size_t i = 0; i < frame.anchors.size(); ++i) {
                 SDL_FPoint screen{};
                 float world_z = 0.0f;
@@ -363,6 +401,7 @@ bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
 }
 
 void AnchorFrameEditor::update(const Input& input, float) {
+    lock_target_to_selected_frame();
     nav_rect_.x = 0;
     nav_rect_.y = 0;
     nav_rect_.w = screen_w_;
@@ -448,7 +487,15 @@ void AnchorFrameEditor::select_frame(int index) {
     }
     apply_live_changes(true);
     selected_frame_ = std::clamp(index, 0, static_cast<int>(frames_.size()) - 1);
-    selected_anchor_ = std::min(selected_anchor_, static_cast<int>(frames_[static_cast<std::size_t>(selected_frame_)].anchors.size()) - 1);
+    const auto& frame = frames_[static_cast<std::size_t>(selected_frame_)];
+    if (frame.anchors.empty()) {
+        selected_anchor_ = -1;
+    } else if (selected_anchor_ < 0) {
+        selected_anchor_ = 0;
+    } else {
+        selected_anchor_ = std::clamp(selected_anchor_, 0, static_cast<int>(frame.anchors.size()) - 1);
+    }
+    lock_target_to_selected_frame();
     refresh_form();
     refresh_selection_state();
     rebuild_tool_panel_layout();
@@ -606,6 +653,7 @@ bool AnchorFrameEditor::apply_to_all_animations() {
         }
         nlohmann::json updated = build_payload_with_anchors(frames, payload);
         context_.document->update_animation_payload(id, updated);
+        sync_runtime_animation_anchors(id, frames);
         if (context_.preview) {
             context_.preview->invalidate(id);
         }
@@ -624,6 +672,7 @@ void AnchorFrameEditor::persist_changes() {
     nlohmann::json existing = payload_opt.value_or(nlohmann::json::object());
     nlohmann::json updated = build_payload_with_anchors(frames_, existing);
     context_.document->update_animation_payload(context_.animation_id, updated);
+    sync_runtime_animation_anchors(context_.animation_id, frames_);
     invalidate_preview();
 }
 
@@ -850,48 +899,51 @@ void AnchorFrameEditor::rebuild_tool_panel_layout() {
     tool_panel_->set_rows(rows);
 }
 
-std::pair<int, int> AnchorFrameEditor::current_frame_dimensions() const {
+std::pair<int, int> AnchorFrameEditor::frame_dimensions_for_index(std::size_t frame_index) const {
     int frame_w = 0;
     int frame_h = 0;
-    if (!context_.target) {
+    if (!context_.target || !context_.target->info) {
         return {frame_w, frame_h};
     }
 
-    if (const AnimationFrame* frame = context_.target->current_frame) {
-        if (!frame->variants.empty()) {
-            const int variant_idx = std::clamp(
-                context_.target->current_variant_index,
-                0,
-                static_cast<int>(frame->variants.size()) - 1);
-            const FrameVariant& variant = frame->variants[static_cast<std::size_t>(variant_idx)];
-            if (variant.source_rect.w > 0 && variant.source_rect.h > 0) {
-                frame_w = variant.source_rect.w;
-                frame_h = variant.source_rect.h;
+    const auto anim_it = context_.target->info->animations.find(context_.animation_id);
+    if (anim_it != context_.target->info->animations.end()) {
+        const Animation& anim = anim_it->second;
+        if (anim.movement_path_count() > 0) {
+            const auto& path = anim.movement_path(0);
+            if (frame_index < path.size()) {
+                const AnimationFrame& frame = path[frame_index];
+                if (!frame.variants.empty()) {
+                    const int variant_idx = std::clamp(
+                        context_.target->current_variant_index,
+                        0,
+                        static_cast<int>(frame.variants.size()) - 1);
+                    const FrameVariant& variant = frame.variants[static_cast<std::size_t>(variant_idx)];
+                    if (variant.source_rect.w > 0 && variant.source_rect.h > 0) {
+                        frame_w = variant.source_rect.w;
+                        frame_h = variant.source_rect.h;
+                    }
+                }
             }
         }
     }
 
-    SDL_Texture* tex = context_.target->get_current_variant_texture();
-    float tex_wf = 0.0f;
-    float tex_hf = 0.0f;
-    if ((frame_w <= 0 || frame_h <= 0) && tex && SDL_GetTextureSize(tex, &tex_wf, &tex_hf)) {
-        frame_w = static_cast<int>(std::lround(tex_wf));
-        frame_h = static_cast<int>(std::lround(tex_hf));
-    }
-
-    if ((frame_w <= 0 || frame_h <= 0) && context_.target->info) {
+    if (frame_w <= 0 || frame_h <= 0) {
         frame_w = context_.target->info->original_canvas_width;
         frame_h = context_.target->info->original_canvas_height;
     }
+
     return {frame_w, frame_h};
 }
 
-void AnchorFrameEditor::hydrate_anchor_pixels_from_target() {
-    const auto [frame_w, frame_h] = current_frame_dimensions();
-    if (frame_w <= 0 || frame_h <= 0) {
-        return;
+std::pair<int, int> AnchorFrameEditor::current_frame_dimensions() const {
+    if (selected_frame_ < 0) {
+        return frame_dimensions_for_index(0);
     }
+    return frame_dimensions_for_index(static_cast<std::size_t>(selected_frame_));
+}
 
+void AnchorFrameEditor::hydrate_anchor_pixels_from_target() {
     auto normalized_to_pixel = [&](float norm, int dimension) -> std::optional<int> {
         if (!std::isfinite(norm)) {
             return std::nullopt;
@@ -902,7 +954,12 @@ void AnchorFrameEditor::hydrate_anchor_pixels_from_target() {
         return std::clamp(px, 0, max_index);
     };
 
-    for (auto& frame : frames_) {
+    for (std::size_t frame_idx = 0; frame_idx < frames_.size(); ++frame_idx) {
+        auto& frame = frames_[frame_idx];
+        const auto [frame_w, frame_h] = frame_dimensions_for_index(frame_idx);
+        if (frame_w <= 0 || frame_h <= 0) {
+            continue;
+        }
         for (auto& anchor : frame.anchors) {
             if (anchor.has_pixel_coords || !anchor.has_normalized_coords) {
                 continue;
@@ -926,9 +983,107 @@ void AnchorFrameEditor::hydrate_anchor_pixels_from_target() {
                 if (max_h > 0) {
                     anchor.normalized_z = static_cast<float>(anchor.texture_z) / static_cast<float>(max_h);
                 }
+                dirty_ = true;
             }
         }
     }
+}
+
+void AnchorFrameEditor::lock_target_to_selected_frame() {
+    if (!context_.target || !context_.target->info) {
+        return;
+    }
+    auto anim_it = context_.target->info->animations.find(context_.animation_id);
+    if (anim_it == context_.target->info->animations.end() || anim_it->second.frames.empty()) {
+        return;
+    }
+    const int max_index = static_cast<int>(anim_it->second.frames.size()) - 1;
+    const int index = std::clamp(selected_frame_, 0, max_index);
+    AnimationFrame* frame = anim_it->second.frames[static_cast<std::size_t>(index)];
+    if (!frame) {
+        return;
+    }
+
+    bool changed = false;
+    if (context_.target->current_animation != context_.animation_id) {
+        context_.target->current_animation = context_.animation_id;
+        changed = true;
+    }
+    if (context_.target->current_frame != frame) {
+        context_.target->current_frame = frame;
+        changed = true;
+    }
+    if (!context_.target->static_frame) {
+        context_.target->static_frame = true;
+        changed = true;
+    }
+    if (changed) {
+        context_.target->mark_anchors_dirty();
+    }
+}
+
+void AnchorFrameEditor::restore_target_frame_lock() {
+    if (!target_frame_lock_active_ || !context_.target) {
+        return;
+    }
+    bool changed = false;
+    if (context_.target->current_animation != saved_target_animation_) {
+        context_.target->current_animation = saved_target_animation_;
+        changed = true;
+    }
+    if (context_.target->current_frame != saved_target_frame_) {
+        context_.target->current_frame = saved_target_frame_;
+        changed = true;
+    }
+    if (context_.target->static_frame != saved_target_static_frame_) {
+        context_.target->static_frame = saved_target_static_frame_;
+        changed = true;
+    }
+    if (changed) {
+        context_.target->mark_anchors_dirty();
+    }
+}
+
+void AnchorFrameEditor::sync_runtime_animation_anchors(const std::string& animation_id,
+                                                       const std::vector<AnchorFrame>& frames) {
+    if (!context_.target || !context_.target->info || animation_id.empty()) {
+        return;
+    }
+    auto anim_it = context_.target->info->animations.find(animation_id);
+    if (anim_it == context_.target->info->animations.end()) {
+        return;
+    }
+    Animation& animation = anim_it->second;
+    if (animation.frames.empty()) {
+        return;
+    }
+
+    const std::size_t count = std::min(frames.size(), animation.frames.size());
+    for (std::size_t i = 0; i < count; ++i) {
+        AnimationFrame* runtime_frame = animation.frames[i];
+        if (!runtime_frame) {
+            continue;
+        }
+        std::vector<DisplacedAssetAnchorPoint> runtime_anchors;
+        runtime_anchors.reserve(frames[i].anchors.size());
+        std::unordered_set<std::string> seen_names;
+        for (const auto& anchor : frames[i].anchors) {
+            if (anchor.name.empty()) {
+                continue;
+            }
+            if (!seen_names.insert(anchor.name).second) {
+                continue;
+            }
+            DisplacedAssetAnchorPoint runtime_anchor = to_runtime_anchor(anchor);
+            if (!runtime_anchor.has_pixel_coords && !runtime_anchor.has_normalized_coords) {
+                continue;
+            }
+            runtime_anchors.push_back(std::move(runtime_anchor));
+        }
+        runtime_frame->set_anchor_points(std::move(runtime_anchors));
+    }
+
+    context_.target->mark_anchors_dirty();
 }
 
 DisplacedAssetAnchorPoint AnchorFrameEditor::to_runtime_anchor(const FrameAnchorPoint& anchor) const {

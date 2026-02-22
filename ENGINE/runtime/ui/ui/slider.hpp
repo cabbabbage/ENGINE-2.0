@@ -6,6 +6,7 @@
 #include <optional>
 #include "utils/text_style.hpp"
 #include "font_paths.hpp"
+#include "widget_base.hpp"
 
 struct SliderStyle {
     SDL_Color frame_normal{200,200,200,255};
@@ -20,7 +21,7 @@ struct SliderStyle {
     TextStyle value_style{ ui_fonts::sans_regular(), 16, SDL_Color{31,41,55,255} };
 };
 
-class Slider {
+class Slider : public WidgetBase {
 public:
     Slider(const std::string& label, int min_val, int max_val);
     Slider(const std::string& label, int min_val, int max_val, int current_val);
@@ -50,7 +51,6 @@ private:
     void     draw_text(SDL_Renderer* r) const;
 
 private:
-    SDL_Rect rect_{0,0,520,64};
     std::string label_;
     int min_ = 0;
     int max_ = 100;

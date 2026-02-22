@@ -1784,6 +1784,16 @@ void SpawnGroupConfig::load_impl(nlohmann::json* array,
     rebuild_rows();
 }
 
+void SpawnGroupConfig::clear_binding() {
+    bound_array_ = nullptr;
+    bound_entry_ = nullptr;
+    single_entry_mode_ = false;
+    single_entry_shadow_.clear();
+    readonly_snapshot_.clear();
+    entries_.clear();
+    mark_layout_dirty();
+}
+
 void SpawnGroupConfig::append_rows(Rows& rows) {
     const bool was_suppressed = suppress_layout_change_callback_;
 

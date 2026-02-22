@@ -50,17 +50,6 @@
 
 namespace {
 
-std::uint64_t hash_active_asset_list(const std::vector<Asset*>& list) {
-    std::uint64_t hash = static_cast<std::uint64_t>(list.size());
-    constexpr std::uint64_t prime = 1469598103934665603ull;
-    for (const Asset* asset : list) {
-        auto ptr_value = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(asset));
-        hash ^= (ptr_value >> 4);
-        hash *= prime;
-    }
-    return hash;
-}
-
 constexpr int kQualityOptions[] = {100, 75, 50, 25, 10};
 constexpr int kMinRenderQuality = kQualityOptions[sizeof(kQualityOptions) / sizeof(kQualityOptions[0]) - 1];
 constexpr std::size_t kNonPlayerParallelThreshold = 4;
@@ -680,38 +669,48 @@ void Assets::refresh_filtered_active_assets() {
 }
 
 void Assets::update_filtered_active_assets() {
-    const std::uint64_t previous_hash = filtered_active_assets_hash_;
+    const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
+    const std::uint64_t current_generation = active_assets_generation_;
+    const std::uint64_t filter_version = dev_controls_enabled ? dev_controls_->other_settings_state_version() : 0;
 
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        const std::uint64_t active_hash = hash_active_asset_list(active_assets);
-        const std::uint64_t filter_version = dev_controls_->other_settings_state_version();
-        if (active_hash == filtered_active_assets_source_hash_ &&
-            filter_version == filtered_active_assets_filter_version_) {
+    if (dev_controls_enabled) {
+        if (filtered_active_assets_source_generation_ == current_generation &&
+            filtered_active_assets_filter_version_ == filter_version) {
             return;
         }
 
-        filtered_active_assets = active_assets;
-        dev_controls_->filter_active_assets(filtered_active_assets);
-        filtered_active_assets_hash_ = hash_active_asset_list(filtered_active_assets);
-        filtered_active_assets_source_hash_ = active_hash;
+        filtered_active_assets.clear();
+        filtered_active_asset_membership_.clear();
+        filtered_active_assets.reserve(active_assets.size());
+        for (Asset* asset : active_assets) {
+            if (!asset) {
+                continue;
+            }
+            if (!dev_controls_->passes_asset_filters(asset)) {
+                continue;
+            }
+            filtered_active_assets.push_back(asset);
+            filtered_active_asset_membership_.insert(asset);
+        }
+
+        filtered_active_assets_source_generation_ = current_generation;
         filtered_active_assets_filter_version_ = filter_version;
+        dev_controls_->filter_active_assets(filtered_active_assets);
     } else {
         if (filtered_active_assets.empty() &&
-            filtered_active_assets_hash_ == 0 &&
-            filtered_active_assets_source_hash_ == 0 &&
+            filtered_active_asset_membership_.empty() &&
+            filtered_active_assets_source_generation_ == current_generation &&
             filtered_active_assets_filter_version_ == 0) {
             return;
         }
 
         filtered_active_assets.clear();
-        filtered_active_assets_hash_ = hash_active_asset_list(filtered_active_assets);
-        filtered_active_assets_source_hash_ = 0;
+        filtered_active_asset_membership_.clear();
+        filtered_active_assets_source_generation_ = current_generation;
         filtered_active_assets_filter_version_ = 0;
     }
 
-    if (filtered_active_assets_hash_ != previous_hash) {
-        touch_dev_active_state_version();
-    }
+    touch_dev_active_state_version();
 }
 
 void Assets::log_asset_movement(Asset* asset, const world::GridPoint& previous, const world::GridPoint& current) {
@@ -1401,12 +1400,16 @@ void Assets::initialize_active_assets(const world::GridPoint& ) {
     active_assets.clear();
     active_assets.reserve(all.size());
     filtered_active_assets.clear();
-    filtered_active_assets_hash_ = 0;
-    filtered_active_assets_source_hash_ = 0;
+    filtered_active_asset_membership_.clear();
+    filtered_active_assets_source_generation_ = 0;
     filtered_active_assets_filter_version_ = 0;
 
     mark_non_player_update_buffer_dirty();
     needs_filtered_active_refresh_ = true;
+    ++active_assets_generation_;
+    if (active_assets_generation_ == 0) {
+        ++active_assets_generation_;
+    }
 }
 
 void Assets::touch_dev_active_state_version() {
@@ -2373,6 +2376,10 @@ void Assets::rebuild_active_from_screen_grid() {
 
     active_assets_dirty_.store(false, std::memory_order_release);
     if (active_changed) {
+        ++active_assets_generation_;
+        if (active_assets_generation_ == 0) {
+            ++active_assets_generation_;
+        }
         mark_non_player_update_buffer_dirty();
         needs_filtered_active_refresh_ = true;
     }

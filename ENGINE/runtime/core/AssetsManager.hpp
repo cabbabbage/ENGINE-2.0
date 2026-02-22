@@ -250,6 +250,7 @@ private:
     int dy = 0;
     std::vector<Asset*> active_assets;
     std::vector<Asset*> filtered_active_assets;
+    std::unordered_set<Asset*> filtered_active_asset_membership_;
     std::vector<Room*> rooms_;
     std::size_t rooms_generation_ = 0;
     Room* current_room_ = nullptr;
@@ -298,6 +299,7 @@ private:
     Asset* max_asset_height_holder_ = nullptr;
     std::vector<Asset*> visible_candidate_buffer_;
     std::uint64_t active_candidate_generation_ = 0;
+    std::uint64_t active_assets_generation_ = 1;
     std::uint32_t frame_id_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
@@ -335,7 +337,6 @@ private:
     void touch_dev_active_state_version();
 
     std::uint64_t dev_active_state_version_ = 1;
-    std::uint64_t filtered_active_assets_hash_ = 0;
 
     std::function<void()> dev_grid_overlay_callback_;
 
@@ -362,7 +363,7 @@ private:
     bool      last_player_pos_valid_ = false;
 
     std::vector<SDL_Rect> culled_debug_rects_;
-    std::uint64_t filtered_active_assets_source_hash_ = 0;
+    std::uint64_t filtered_active_assets_source_generation_ = 0;
     std::uint64_t filtered_active_assets_filter_version_ = 0;
     bool needs_filtered_active_refresh_ = true;
     bool last_dev_controls_enabled_ = false;

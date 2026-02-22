@@ -264,16 +264,12 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
                 continue;
             }
 
-            int tex_w_int = 0, tex_h_int = 0;
-            float tex_wf = 0.0f;
-            float tex_hf = 0.0f;
-            if (!SDL_GetTextureSize(tile.texture, &tex_wf, &tex_hf)) {
+            SDL_FPoint tex_size{};
+            if (!fetch_texture_size(tile.texture, tex_size)) {
                 continue;
             }
-            tex_w_int = static_cast<int>(std::lround(tex_wf));
-            tex_h_int = static_cast<int>(std::lround(tex_hf));
-            const float tex_w = static_cast<float>(tex_w_int);
-            const float tex_h = static_cast<float>(tex_h_int);
+            const float tex_w = tex_size.x;
+            const float tex_h = tex_size.y;
             if (tex_w <= 0.0f || tex_h <= 0.0f) {
                 continue;
             }

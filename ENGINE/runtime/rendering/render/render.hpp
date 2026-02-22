@@ -5,7 +5,6 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <unordered_set>
 
 #include "rendering/render/composite_asset_renderer.hpp"
 #include "rendering/render/scaling_logic.hpp"
@@ -47,11 +46,6 @@ private:
         SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
         SDL_Vertex vertices[4];
         double depth = 0.0;
-    };
-
-    struct QuadData {
-        SDL_Vertex vertices[4];
-        double depth;
     };
 
     SDL_Renderer* renderer_;

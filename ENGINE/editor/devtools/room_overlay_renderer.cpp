@@ -1,6 +1,7 @@
 #include "room_overlay_renderer.hpp"
 #include "utils/sdl_render_conversions.hpp"
 
+#include <array>
 #include <cmath>
 #include <algorithm>
 #include <vector>
@@ -22,15 +23,18 @@ namespace dm_draw {
 RoomBoundsOverlayStyle ResolveRoomBoundsOverlayStyle(SDL_Color base_color) {
     RoomBoundsOverlayStyle style{};
     base_color.a = 255;
-    SDL_Color outline = LightenColor(base_color, 0.12f);
-    outline.a = 210;
-    SDL_Color fill = LightenColor(base_color, 0.02f);
-    fill.a = 56;
-    SDL_Color center = LightenColor(base_color, 0.2f);
+    SDL_Color outline = LightenColor(base_color, 0.16f);
+    outline.a = 220;
+    SDL_Color fill = LightenColor(base_color, 0.04f);
+    fill.a = 60;
+    SDL_Color center = LightenColor(base_color, 0.25f);
     center.a = 235;
+    SDL_Color glow = LightenColor(base_color, 0.35f);
+    glow.a = 140;
     style.outline = outline;
     style.fill = fill;
     style.center = center;
+    style.glow = glow;
     return style;
 }
 
@@ -49,35 +53,53 @@ void RenderRoomBoundsOverlay(
     SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
 
     const auto& area_points = area.get_points();
-    if (!area_points.empty()) {
-        std::vector<SDL_Point> screen_segment;
-        screen_segment.reserve(area_points.size());
-        auto flush_segment = [&]() {
-            if (screen_segment.size() < 2) {
-                screen_segment.clear();
-                return;
-            }
-            const SDL_Point& first = screen_segment.front();
-            const SDL_Point& last = screen_segment.back();
-            if (first.x != last.x || first.y != last.y) {
-                screen_segment.push_back(first);
-            }
-            SDL_SetRenderDrawColor(renderer, style.outline.r, style.outline.g, style.outline.b, style.outline.a);
-            sdl_render::Lines(renderer, screen_segment.data(), static_cast<int>(screen_segment.size()));
-            screen_segment.clear();
-        };
-
-        for (const SDL_Point& world_point : area_points) {
-            SDL_FPoint world_f{static_cast<float>(world_point.x), static_cast<float>(world_point.y)};
-            SDL_FPoint screen_f{};
-            if (!cam.project_world_point(world_f, 0.0f, screen_f)) {
-                flush_segment();
+    std::vector<SDL_Point> screen_points;
+    screen_points.reserve(area_points.size());
+    for (const SDL_Point& world_point : area_points) {
+        SDL_FPoint world_f{static_cast<float>(world_point.x), static_cast<float>(world_point.y)};
+        SDL_FPoint screen_f{};
+        if (!cam.project_world_point(world_f, 0.0f, screen_f)) {
+            continue;
+        }
+        SDL_Point screen_pt{static_cast<int>(std::lround(screen_f.x)), static_cast<int>(std::lround(screen_f.y))};
+        if (!screen_points.empty()) {
+            const SDL_Point& prev = screen_points.back();
+            if (prev.x == screen_pt.x && prev.y == screen_pt.y) {
                 continue;
             }
-            SDL_Point screen_pt{static_cast<int>(std::lround(screen_f.x)), static_cast<int>(std::lround(screen_f.y))};
-            screen_segment.push_back(screen_pt);
         }
-        flush_segment();
+        screen_points.push_back(screen_pt);
+    }
+    if (screen_points.size() >= 2) {
+        const SDL_Point& first = screen_points.front();
+        const SDL_Point& last = screen_points.back();
+        if (first.x != last.x || first.y != last.y) {
+            screen_points.push_back(first);
+        }
+        std::vector<SDL_Point> offset_points;
+        offset_points.reserve(screen_points.size());
+        auto draw_with_offset = [&](const SDL_Color& color, int ox, int oy) {
+            if (color.a == 0) return;
+            offset_points.clear();
+            for (const SDL_Point& pt : screen_points) {
+                offset_points.push_back(SDL_Point{pt.x + ox, pt.y + oy});
+            }
+            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+            sdl_render::Lines(renderer, offset_points.data(), static_cast<int>(offset_points.size()));
+        };
+
+        if (style.glow.a > 0) {
+            const std::array<SDL_Point, 4> glow_offsets = {{
+                SDL_Point{-1, 0},
+                SDL_Point{1, 0},
+                SDL_Point{0, -1},
+                SDL_Point{0, 1},
+            }};
+            for (const SDL_Point& offset : glow_offsets) {
+                draw_with_offset(style.glow, offset.x, offset.y);
+            }
+        }
+        draw_with_offset(style.outline, 0, 0);
     }
 
     SDL_FPoint center_screen_f = cam.map_to_screen(area.get_center());

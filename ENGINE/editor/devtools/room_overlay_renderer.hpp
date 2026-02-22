@@ -10,6 +10,7 @@ struct RoomBoundsOverlayStyle {
     SDL_Color outline{};
     SDL_Color fill{};
     SDL_Color center{};
+    SDL_Color glow{};
 };
 
 RoomBoundsOverlayStyle ResolveRoomBoundsOverlayStyle(SDL_Color base_color);

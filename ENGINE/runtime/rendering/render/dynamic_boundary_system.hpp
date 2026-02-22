@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 #include "rendering/render/scaling_logic.hpp"
+#include "gameplay/world/grid_point.hpp"
 
 #include <cstdint>
 #include <memory>

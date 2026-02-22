@@ -13,6 +13,7 @@
 #include <vector>
 
 class Room;
+class Area;
 class WarpedScreenGrid;
 class AssetLibrary;
 class Assets;

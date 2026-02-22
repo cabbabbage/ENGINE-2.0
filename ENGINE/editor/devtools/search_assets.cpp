@@ -187,6 +187,7 @@ public:
     }
 
 private:
+    friend class SearchAssets;
     struct LabelCacheKey {
         std::string text;
         std::string font_path;

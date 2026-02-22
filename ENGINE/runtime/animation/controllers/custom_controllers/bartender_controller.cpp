@@ -5,7 +5,7 @@
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
-Bartender_controller::bartender_controller(Assets* assets, Asset* self)
+bartender_controller::bartender_controller(Assets* assets, Asset* self)
     : assets_(assets), self_(self) {
     rng_ = std::mt19937(std::random_device{}());
     if (self_ && self_->anim_) {

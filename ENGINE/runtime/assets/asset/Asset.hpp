@@ -252,6 +252,8 @@ class Asset {
     std::uint32_t last_active_frame_id = 0;
     std::string spawn_id;
     std::string spawn_method;
+    const std::string& filter_type_tag() const { return filter_type_tag_; }
+    const std::string& filter_method_tag() const { return filter_method_tag_; }
     std::string owning_room_name_;
     std::unique_ptr<AnimationUpdate> anim_;
     std::unique_ptr<class AnimationRuntime> anim_runtime_;
@@ -387,6 +389,10 @@ private:
     bool follow_error_reported_ = false;
     void apply_anchor_follow_target();
 
+    void refresh_filter_tags();
+
+    std::string filter_type_tag_;
+    std::string filter_method_tag_;
 
 };
 

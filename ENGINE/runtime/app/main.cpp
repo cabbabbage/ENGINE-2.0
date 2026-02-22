@@ -484,19 +484,19 @@ std::optional<std::string> sanitize_map_name(const std::string& input) {
     if (trimmed.empty()) {
         return std::nullopt;
     }
-    std::string result;
-    result.reserve(trimmed.size());
-    for (char ch : trimmed) {
-        unsigned char uc = static_cast<unsigned char>(ch);
-        if (std::isalnum(uc) || ch == '_' || ch == '-') {
-            result.push_back(ch);
-        } else if (std::isspace(uc)) {
-            return std::nullopt;
-        } else {
-            return std::nullopt;
+        std::string result;
+        result.reserve(trimmed.size());
+        for (char ch : trimmed) {
+            unsigned char uc = static_cast<unsigned char>(ch);
+            if (std::isalnum(uc) || ch == '_' || ch == '-') {
+                result.push_back(static_cast<char>(std::tolower(uc)));
+            } else if (std::isspace(uc)) {
+                return std::nullopt;
+            } else {
+                return std::nullopt;
+            }
         }
-    }
-    return result;
+        return result;
 }
 
 nlohmann::json build_default_map_manifest(const std::string& map_name) {

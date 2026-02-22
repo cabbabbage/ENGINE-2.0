@@ -103,7 +103,7 @@ void CustomControllerService::create_new_controller(const std::string& controlle
 
     bool header_exists = std::filesystem::exists(header_path, ec);
     bool source_exists = std::filesystem::exists(source_path, ec);
-    std::string class_name = to_pascal_case(base_name);
+    std::string class_name = base_name;
 
     if (!header_exists || !source_exists) {
         write_controller_files(header_path, source_path, base_name, class_name);
@@ -173,7 +173,7 @@ std::string CustomControllerService::sanitize_controller_name(const std::string&
     for (char ch : trimmed) {
         unsigned char uch = static_cast<unsigned char>(ch);
         if (std::isalnum(uch)) {
-            result.push_back(ch);
+            result.push_back(static_cast<char>(std::tolower(uch)));
             last_was_underscore = false;
         } else if (ch == '_' || ch == '-' || std::isspace(uch)) {
             if (!result.empty() && !last_was_underscore) {
@@ -188,7 +188,7 @@ std::string CustomControllerService::sanitize_controller_name(const std::string&
     }
 
     if (!result.empty() && !std::isalpha(static_cast<unsigned char>(result.front()))) {
-        result = std::string("Controller_") + result;
+        result = std::string("controller_") + result;
     }
 
     return result;
@@ -199,30 +199,6 @@ std::string CustomControllerService::default_controller_name() const {
         return std::string();
     }
     return sanitize_controller_name(asset_name_ + "_controller");
-}
-
-std::string CustomControllerService::to_pascal_case(const std::string& base_name) {
-    std::string normalized = base_name;
-    std::replace(normalized.begin(), normalized.end(), '-', '_');
-
-    std::stringstream stream(normalized);
-    std::string part;
-    std::string result;
-    while (std::getline(stream, part, '_')) {
-        if (part.empty()) {
-            continue;
-        }
-        part[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(part[0])));
-        for (std::size_t i = 1; i < part.size(); ++i) {
-            part[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(part[i])));
-        }
-        result += part;
-    }
-
-    if (result.empty()) {
-        result = "CustomController";
-    }
-    return result;
 }
 
 std::string CustomControllerService::build_header_guard(const std::string& base_name) {

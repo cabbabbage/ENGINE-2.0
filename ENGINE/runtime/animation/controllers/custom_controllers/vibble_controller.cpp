@@ -1,4 +1,4 @@
-#include "Vibble_controller.hpp"
+#include "vibble_controller.hpp"
 
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"

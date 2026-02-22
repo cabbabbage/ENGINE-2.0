@@ -3,6 +3,7 @@
 #include "dm_styles.hpp"
 #include <SDL3_ttf/SDL_ttf.h>
 #include <algorithm>
+#include <cctype>
 #include <string>
 #include <unordered_map>
 
@@ -33,6 +34,29 @@ std::string trim_whitespace_copy(const std::string& value) {
         end = prev;
     }
     return std::string(begin, end);
+}
+
+std::string normalize_asset_name(std::string value) {
+    std::string trimmed = trim_whitespace_copy(value);
+    std::string result;
+    result.reserve(trimmed.size());
+    bool last_was_separator = false;
+    for (char ch : trimmed) {
+        unsigned char uch = static_cast<unsigned char>(ch);
+        if (std::isalnum(uch)) {
+            result.push_back(static_cast<char>(std::tolower(uch)));
+            last_was_separator = false;
+        } else if (ch == '_' || ch == '-' || std::isspace(uch)) {
+            if (!result.empty() && !last_was_separator) {
+                result.push_back('_');
+                last_was_separator = true;
+            }
+        }
+    }
+    while (!result.empty() && result.back() == '_') {
+        result.pop_back();
+    }
+    return result;
 }
 
 }

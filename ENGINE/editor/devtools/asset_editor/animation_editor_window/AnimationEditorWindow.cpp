@@ -1086,6 +1086,7 @@ void AnimationEditorWindow::prompt_rename_animation(const std::string& animation
         set_status_message("Animation name cannot be empty.", 180);
         return;
     }
+    desired = animation_editor::strings::to_lower_copy(desired);
 
     auto before_ids = document_->animation_ids();
     document_->rename_animation(animation_id, desired);
@@ -1554,6 +1555,9 @@ void AnimationEditorWindow::create_animation_via_prompt() {
     const char* input = tinyfd_inputBox("Create Animation", "Enter new animation identifier", "animation");
     if (!input) return;
     std::string name = animation_editor::strings::trim_copy(input);
+    if (!name.empty()) {
+        name = animation_editor::strings::to_lower_copy(name);
+    }
 
     if (name.empty()) {
         return;

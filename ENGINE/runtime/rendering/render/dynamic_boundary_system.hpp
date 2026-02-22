@@ -136,6 +136,55 @@ private:
     std::unordered_map<BoundaryKey, FrameState, BoundaryKeyHash> animation_states_;
     std::vector<BoundarySprite> active_boundary_sprites_;
     std::unordered_set<int> dense_type_warnings_;
+    struct RegionCacheKey {
+        int x = 0;
+        int y = 0;
+        bool operator==(const RegionCacheKey& other) const noexcept {
+            return x == other.x && y == other.y;
+        }
+    };
+    struct RegionCacheKeyHash {
+        std::size_t operator()(const RegionCacheKey& key) const noexcept {
+            const std::uint64_t a = static_cast<std::uint32_t>(key.x);
+            const std::uint64_t b = static_cast<std::uint32_t>(key.y);
+            std::uint64_t combined = (a << 32) | b;
+            combined ^= combined >> 33;
+            combined *= 0xff51afd7ed558ccdULL;
+            combined ^= combined >> 33;
+            return static_cast<std::size_t>(combined);
+        }
+    };
+    struct RegionCacheEntry {
+        world::GridPoint::RegionKind region_kind = world::GridPoint::RegionKind::Boundary;
+        const Room* owner = nullptr;
+        bool blocked = false;
+    };
+    struct RegionCacheFingerprint {
+        std::uint64_t config_revision = 0;
+        std::size_t map_info_hash = 0;
+        std::size_t rooms_hash = 0;
+        int origin_x = 0;
+        int origin_y = 0;
+        int origin_layer = 0;
+        int grid_resolution = 0;
+        float spacing_multiplier = kDefaultGridSpacingMultiplier;
+
+        bool operator==(const RegionCacheFingerprint& other) const noexcept {
+            return config_revision == other.config_revision &&
+                   map_info_hash == other.map_info_hash &&
+                   rooms_hash == other.rooms_hash &&
+                   origin_x == other.origin_x &&
+                   origin_y == other.origin_y &&
+                   origin_layer == other.origin_layer &&
+                   grid_resolution == other.grid_resolution &&
+                   spacing_multiplier == other.spacing_multiplier;
+        }
+        bool operator!=(const RegionCacheFingerprint& other) const noexcept {
+            return !(*this == other);
+        }
+    };
+    std::unordered_map<RegionCacheKey, RegionCacheEntry, RegionCacheKeyHash> region_cache_;
+    RegionCacheFingerprint region_cache_fingerprint_;
 
     void parse_boundary_config(const nlohmann::json& map_info);
     void build_candidate_frames(BoundaryCandidate& candidate);
@@ -146,6 +195,16 @@ private:
     std::uint64_t hash_key(const BoundaryKey& key) const;
     int select_candidate_for_key(const BoundaryKey& key, const BoundaryType& btype);
     SDL_FPoint sample_jitter_offset(const BoundaryKey& key, float max_jitter) const;
+    void ensure_region_cache_valid(const world::WorldGrid& grid,
+                                   std::size_t map_info_hash,
+                                   std::size_t rooms_hash,
+                                   float spacing_multiplier);
+    const RegionCacheEntry& resolve_region_cache(const SDL_Point& world_pt,
+                                                 const std::vector<Room*>& rooms);
+    RegionCacheEntry classify_region_point(const SDL_Point& world_pt,
+                                           const std::vector<Room*>& rooms) const;
+    std::size_t compute_map_info_hash(const nlohmann::json& map_info) const;
+    std::size_t compute_rooms_topology_hash(const Assets* assets) const;
 
     struct BoundaryConfig {
         float grid_spacing_multiplier = kDefaultGridSpacingMultiplier;

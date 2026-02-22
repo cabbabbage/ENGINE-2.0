@@ -1804,18 +1804,26 @@ bool Assets::process_removals() {
     }
 
     if (!removal_set.empty()) {
-        bool added = true;
-        while (added) {
-            added = false;
-            const std::vector<Asset*> all_assets = world_grid_.all_assets();
-            for (Asset* asset : all_assets) {
-                if (!asset || !asset->parent) {
+        std::vector<Asset*> traversal_queue;
+        traversal_queue.reserve(removal_set.size());
+        for (Asset* asset : removal_set) {
+            traversal_queue.push_back(asset);
+        }
+
+        while (!traversal_queue.empty()) {
+            Asset* current = traversal_queue.back();
+            traversal_queue.pop_back();
+            if (!current) {
+                continue;
+            }
+
+            const std::vector<Asset*> children = world_grid_.children_of(current);
+            for (Asset* child : children) {
+                if (!child) {
                     continue;
                 }
-                if (removal_set.find(asset->parent) != removal_set.end()) {
-                    if (removal_set.insert(asset).second) {
-                        added = true;
-                    }
+                if (removal_set.insert(child).second) {
+                    traversal_queue.push_back(child);
                 }
             }
         }

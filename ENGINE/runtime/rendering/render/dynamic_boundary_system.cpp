@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <functional>
 #include <limits>
 #include <cstdint>
 
@@ -50,76 +51,6 @@ inline bool is_trail_string(const std::string& text) {
            std::tolower(static_cast<unsigned char>(text[4])) == 'l';
 }
 
-struct ExclusionArea {
-    const Area* area = nullptr;
-    int min_x = 0;
-    int max_x = 0;
-    int min_y = 0;
-    int max_y = 0;
-};
-
-inline void try_add_area(const Area* area, std::vector<ExclusionArea>& out) {
-    if (!area) {
-        return;
-    }
-    try {
-        auto [minx, miny, maxx, maxy] = area->get_bounds();
-        out.push_back(ExclusionArea{area, minx, maxx, miny, maxy});
-    } catch (...) {
-        // Ignore malformed areas that cannot produce bounds.
-    }
-}
-
-inline std::vector<ExclusionArea> collect_exclusion_areas(const Assets* assets) {
-    std::vector<ExclusionArea> result;
-    if (!assets) {
-        return result;
-    }
-    const auto& rooms = assets->rooms();
-    result.reserve(rooms.size() * 2);
-    for (const Room* room : rooms) {
-        if (!room) {
-            continue;
-        }
-        try_add_area(room->room_area.get(), result);
-        for (const auto& named : room->areas) {
-            if (!named.area) {
-                continue;
-            }
-            if (is_trail_string(named.type) || is_trail_string(named.kind) || is_trail_string(named.name)) {
-                try_add_area(named.area.get(), result);
-            }
-        }
-    }
-    return result;
-}
-
-inline bool is_blocked(const SDL_FPoint& world_pos, const std::vector<ExclusionArea>& exclusions) {
-    if (exclusions.empty()) {
-        return false;
-    }
-    const SDL_Point pt{
-        static_cast<int>(std::lround(world_pos.x)),
-        static_cast<int>(std::lround(world_pos.y))
-    };
-    for (const auto& ex : exclusions) {
-        if (!ex.area) {
-            continue;
-        }
-        if (pt.x < ex.min_x || pt.x > ex.max_x || pt.y < ex.min_y || pt.y > ex.max_y) {
-            continue;
-        }
-        try {
-            if (ex.area->contains_point(pt)) {
-                return true;
-            }
-        } catch (...) {
-            // Skip problematic areas
-        }
-    }
-    return false;
-}
-
 inline int scaled_spacing(int base_spacing, float multiplier) {
     const double scaled = static_cast<double>(base_spacing) * static_cast<double>(multiplier);
     if (!std::isfinite(scaled) || scaled <= 0.0) {
@@ -145,35 +76,6 @@ inline int spacing_for_resolution(int resolution) {
         value *= 3LL;
     }
     return static_cast<int>(value);
-}
-
-inline world::GridPoint::RegionKind classify_region_at(const std::vector<Room*>& rooms,
-                                                       SDL_Point pt,
-                                                       const Room** owner_out) {
-    if (owner_out) *owner_out = nullptr;
-    for (Room* room : rooms) {
-        if (!room) continue;
-        const bool room_is_trail = is_trail_string(room->type);
-        if (room->room_area && room->room_area->contains_point(pt)) {
-            if (owner_out) *owner_out = room;
-            return room_is_trail ? world::GridPoint::RegionKind::Trail
-                                 : world::GridPoint::RegionKind::Room;
-        }
-        for (const auto& named : room->areas) {
-            if (!named.area) continue;
-            if (!(is_trail_string(named.type) || is_trail_string(named.kind) || is_trail_string(named.name))) {
-                continue;
-            }
-            try {
-                if (named.area->contains_point(pt)) {
-                    if (owner_out) *owner_out = room;
-                    return world::GridPoint::RegionKind::Trail;
-                }
-            } catch (...) {
-            }
-        }
-    }
-    return world::GridPoint::RegionKind::Boundary;
 }
 
 inline float make_positive_scale(float value, float fallback = 1.0f) {
@@ -319,8 +221,10 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
 
     const world::GridPoint grid_origin = grid.origin();
     const float spacing_multiplier = std::clamp(config().grid_spacing_multiplier, kMinGridMultiplier, kMaxGridMultiplier);
-    const std::vector<ExclusionArea> exclusion_areas = collect_exclusion_areas(assets);
-    const std::vector<Room*>& rooms = assets ? assets->rooms() : std::vector<Room*>{};
+    const std::vector<Room*>& rooms = assets->rooms();
+    const std::size_t map_info_hash = compute_map_info_hash(map_info);
+    const std::size_t rooms_hash = compute_rooms_topology_hash(assets);
+    ensure_region_cache_valid(grid, map_info_hash, rooms_hash, spacing_multiplier);
 
     for (size_t type_idx = 0; type_idx < boundary_types_.size(); ++type_idx) {
         BoundaryType& btype = boundary_types_[type_idx];
@@ -402,9 +306,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                     static_cast<float>(world_y) + jitter.y
                 };
                 const SDL_Point world_pt{static_cast<int>(std::lround(world_pos.x)), static_cast<int>(std::lround(world_pos.y))};
-                const Room* owning_room = nullptr;
-                const auto region_kind = classify_region_at(rooms, world_pt, &owning_room);
-                if (region_kind != world::GridPoint::RegionKind::Boundary) {
+                const auto& region_entry = resolve_region_cache(world_pt, rooms);
+                if (region_entry.region_kind != world::GridPoint::RegionKind::Boundary || region_entry.blocked) {
                     continue;
                 }
                 const world::GridPoint virtual_point =
@@ -412,12 +315,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 const world::GridKey virtual_key =
                     grid.grid_key_from_world(virtual_point, world_z, resolution_layer);
                 if (world::GridPoint* gp = grid.find_grid_point(virtual_key)) {
-                    gp->region_kind = region_kind;
-                    gp->region_owner = owning_room;
-                }
-
-                if (is_blocked(world_pos, exclusion_areas)) {
-                    continue;
+                    gp->region_kind = region_entry.region_kind;
+                    gp->region_owner = region_entry.owner;
                 }
 
                 SDL_FPoint screen_pos{};
@@ -782,6 +681,8 @@ void DynamicBoundarySystem::clear_runtime_caches() {
     boundary_assignments_.clear();
     animation_states_.clear();
     active_boundary_sprites_.clear();
+    region_cache_.clear();
+    region_cache_fingerprint_ = {};
 }
 
 void DynamicBoundarySystem::invalidate_config() {
@@ -838,4 +739,140 @@ void DynamicBoundarySystem::set_max_random_jitter(float jitter) {
 
 float DynamicBoundarySystem::max_random_jitter() {
     return config().max_random_jitter;
+}
+
+void DynamicBoundarySystem::ensure_region_cache_valid(const world::WorldGrid& grid,
+                                                      std::size_t map_info_hash,
+                                                      std::size_t rooms_hash,
+                                                      float spacing_multiplier) {
+    RegionCacheFingerprint fingerprint{};
+    fingerprint.config_revision = config_revision_;
+    fingerprint.map_info_hash = map_info_hash;
+    fingerprint.rooms_hash = rooms_hash;
+    const world::GridPoint origin = grid.origin();
+    fingerprint.origin_x = origin.world_x();
+    fingerprint.origin_y = origin.world_y();
+    fingerprint.origin_layer = origin.resolution_layer();
+    fingerprint.grid_resolution = grid.grid_resolution();
+    fingerprint.spacing_multiplier = spacing_multiplier;
+    if (fingerprint != region_cache_fingerprint_) {
+        region_cache_.clear();
+        region_cache_fingerprint_ = fingerprint;
+    }
+}
+
+const DynamicBoundarySystem::RegionCacheEntry& DynamicBoundarySystem::resolve_region_cache(
+    const SDL_Point& world_pt,
+    const std::vector<Room*>& rooms) {
+    RegionCacheKey key{world_pt.x, world_pt.y};
+    auto [it, inserted] = region_cache_.try_emplace(key);
+    if (inserted) {
+        it->second = classify_region_point(world_pt, rooms);
+    }
+    return it->second;
+}
+
+DynamicBoundarySystem::RegionCacheEntry DynamicBoundarySystem::classify_region_point(
+    const SDL_Point& world_pt,
+    const std::vector<Room*>& rooms) const {
+    RegionCacheEntry entry;
+    entry.region_kind = world::GridPoint::RegionKind::Boundary;
+    entry.owner = nullptr;
+    entry.blocked = false;
+
+    const auto match_area = [&](const Area* area, world::GridPoint::RegionKind kind, const Room* room) -> bool {
+        if (!area || !room) {
+            return false;
+        }
+        try {
+            if (area->contains_point(world_pt)) {
+                entry.region_kind = kind;
+                entry.owner = room;
+                entry.blocked = true;
+                return true;
+            }
+        } catch (...) {
+        }
+        return false;
+    };
+
+    for (Room* room : rooms) {
+        if (!room) {
+            continue;
+        }
+        if (match_area(room->room_area.get(), world::GridPoint::RegionKind::Room, room)) {
+            return entry;
+        }
+        for (const auto& named : room->areas) {
+            if (!named.area) {
+                continue;
+            }
+            if (!(is_trail_string(named.type) || is_trail_string(named.kind) || is_trail_string(named.name))) {
+                continue;
+            }
+            if (match_area(named.area.get(), world::GridPoint::RegionKind::Trail, room)) {
+                return entry;
+            }
+        }
+    }
+    return entry;
+}
+
+std::size_t DynamicBoundarySystem::compute_map_info_hash(const nlohmann::json& map_info) const {
+    if (!map_info.is_object()) {
+        return 0;
+    }
+    try {
+        const std::string serialized = map_info.dump();
+        return std::hash<std::string>{}(serialized);
+    } catch (...) {
+        return 0;
+    }
+}
+
+std::size_t DynamicBoundarySystem::compute_rooms_topology_hash(const Assets* assets) const {
+    std::uint64_t hash = 0;
+    if (!assets) {
+        return static_cast<std::size_t>(hash);
+    }
+    hash = mix_uint64(hash, static_cast<std::uint64_t>(assets->rooms_generation()));
+    const std::hash<std::string> string_hasher{};
+    const auto& rooms = assets->rooms();
+    for (const Room* room : rooms) {
+        if (!room) {
+            hash = mix_uint64(hash, 0x9e3779b97f4a7c15ULL);
+            continue;
+        }
+        hash = mix_uint64(hash, static_cast<std::uint64_t>(room->map_origin.first));
+        hash = mix_uint64(hash, static_cast<std::uint64_t>(room->map_origin.second));
+        hash = mix_uint64(hash, static_cast<std::uint64_t>(room->layer));
+        hash = mix_uint64(hash, string_hasher(room->room_name));
+        hash = mix_uint64(hash, string_hasher(room->type));
+        if (room->room_area) {
+            try {
+                auto [minx, miny, maxx, maxy] = room->room_area->get_bounds();
+                hash = mix_uint64(hash, static_cast<std::uint64_t>(minx));
+                hash = mix_uint64(hash, static_cast<std::uint64_t>(miny));
+                hash = mix_uint64(hash, static_cast<std::uint64_t>(maxx));
+                hash = mix_uint64(hash, static_cast<std::uint64_t>(maxy));
+            } catch (...) {
+            }
+        }
+        for (const auto& named : room->areas) {
+            hash = mix_uint64(hash, string_hasher(named.name));
+            hash = mix_uint64(hash, string_hasher(named.type));
+            hash = mix_uint64(hash, string_hasher(named.kind));
+            if (named.area) {
+                try {
+                    auto [minx, miny, maxx, maxy] = named.area->get_bounds();
+                    hash = mix_uint64(hash, static_cast<std::uint64_t>(minx));
+                    hash = mix_uint64(hash, static_cast<std::uint64_t>(miny));
+                    hash = mix_uint64(hash, static_cast<std::uint64_t>(maxx));
+                    hash = mix_uint64(hash, static_cast<std::uint64_t>(maxy));
+                } catch (...) {
+                }
+            }
+        }
+    }
+    return static_cast<std::size_t>(hash);
 }

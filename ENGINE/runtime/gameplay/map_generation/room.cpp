@@ -897,7 +897,8 @@ SDL_Color Room::display_color() const {
 }
 
 void Room::rename(const std::string& new_name, nlohmann::json& map_info_json) {
-        if (new_name.empty() || new_name == room_name) {
+        std::string normalized = vibble::strings::to_lower_copy(new_name);
+        if (normalized.empty() || normalized == room_name) {
                 if (!room_data_ptr_ && map_info_json.is_object()) {
                         nlohmann::json& section = map_info_json[data_section_];
                         if (section.is_object() && section.contains(room_name)) {
@@ -925,16 +926,16 @@ void Room::rename(const std::string& new_name, nlohmann::json& map_info_json) {
                 }
         }
 
-        assets_json["name"] = new_name;
+        assets_json["name"] = normalized;
 
-        section[new_name] = assets_json;
-        nlohmann::json* new_entry = &section[new_name];
+        section[normalized] = assets_json;
+        nlohmann::json* new_entry = &section[normalized];
 
         if (section.contains(room_name)) {
                 section.erase(room_name);
         }
 
-        room_name = new_name;
+        room_name = normalized;
         room_data_ptr_ = new_entry;
         assets_json = *room_data_ptr_;
 

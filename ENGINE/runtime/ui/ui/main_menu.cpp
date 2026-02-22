@@ -108,7 +108,11 @@ void MainMenu::buildButtons() {
                         if (name_it != it.value().end() && name_it->is_string()) {
                                 label = name_it->get<std::string>();
                         }
-                        Button b = Button::get_main_button(label);
+                        std::string button_label = label;
+                        std::transform(button_label.begin(), button_label.end(), button_label.begin(), [](unsigned char ch) {
+                                return static_cast<char>(std::toupper(ch));
+                        });
+                        Button b = Button::get_main_button(button_label);
                         configure_button(b);
                         b.set_rect(SDL_Rect{ x, y, btn_w, btn_h });
                         buttons_.push_back(MenuEntry{ std::move(b), map_id, true });

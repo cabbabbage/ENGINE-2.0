@@ -271,19 +271,7 @@ struct DropValidationResult {
 };
 
 std::string sanitize_asset_name_local(const std::string& name) {
-    if (name.empty()) return {};
-    std::string sanitized;
-    sanitized.reserve(name.size());
-    for (char c : name) {
-        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
-            sanitized.push_back(c);
-        } else {
-            sanitized.push_back('_');
-        }
-    }
-    while (!sanitized.empty() && sanitized.front() == '_') sanitized.erase(sanitized.begin());
-    while (!sanitized.empty() && sanitized.back() == '_') sanitized.pop_back();
-    return sanitized;
+    return devmode::utils::normalize_asset_name(name);
 }
 
 DropValidationResult validate_drop_items(const std::vector<std::filesystem::path>& raw_items) {

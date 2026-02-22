@@ -24,7 +24,6 @@ class CustomControllerService {
   private:
     std::string sanitize_controller_name(const std::string& controller_name) const;
     std::string default_controller_name() const;
-    static std::string to_pascal_case(const std::string& base_name);
     static std::string build_header_guard(const std::string& base_name);
     void write_controller_files(const std::filesystem::path& header_path, const std::filesystem::path& source_path, const std::string& base_name, const std::string& class_name) const;
     void ensure_controller_factory_registration(const std::string& base_name, const std::string& class_name) const;

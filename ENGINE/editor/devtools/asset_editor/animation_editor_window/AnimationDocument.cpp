@@ -1,5 +1,7 @@
 #include "AnimationDocument.hpp"
 
+#include "devtools/core/dev_json_store.hpp"
+
 #include <SDL3/SDL_log.h>
 
 #include <algorithm>
@@ -10,8 +12,8 @@
 #include <optional>
 #include <nlohmann/json.hpp>
 
-#include "devtools/core/dev_json_store.hpp"
 #include "assets/animation.hpp"
+#include "string_utils.hpp"
 
 namespace {
 
@@ -516,7 +518,7 @@ bool AnimationDocument::consume_dirty_flag() const {
 }
 
 void AnimationDocument::create_animation(const std::string& animation_id) {
-    std::string base = animation_id.empty() ? std::string{"animation"} : animation_id;
+    std::string base = animation_editor::strings::to_lower_copy(animation_id.empty() ? std::string{"animation"} : animation_id);
     std::string candidate = base;
     int suffix = 2;
     while (animations_.count(candidate) != 0) {
@@ -590,11 +592,13 @@ void AnimationDocument::set_start_animation(const std::string& animation_id) {
 }
 
 void AnimationDocument::rename_animation(const std::string& old_id, const std::string& new_id) {
-    if (old_id.empty() || new_id.empty() || old_id == new_id) return;
+    if (old_id.empty() || new_id.empty()) return;
+    std::string normalized = animation_editor::strings::to_lower_copy(new_id);
+    if (normalized.empty() || normalized == old_id) return;
     auto it = animations_.find(old_id);
     if (it == animations_.end()) return;
 
-    std::string base = new_id;
+    std::string base = normalized;
     std::string candidate = base;
     int suffix = 2;
     while (animations_.count(candidate) != 0 && candidate != old_id) {

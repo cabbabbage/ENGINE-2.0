@@ -5,13 +5,13 @@
 
 #include "assets/Asset.hpp"
 #include "core/AssetsManager.hpp"
-#include "animation/controllers/custom_controllers/Davey_controller.hpp"
-#include "animation/controllers/custom_controllers/Vibble_controller.hpp"
-#include "animation/controllers/custom_controllers/Frog_controller.hpp"
-#include "animation/controllers/custom_controllers/Bomb_controller.hpp"
-#include "animation/controllers/custom_controllers/Bartender_controller.hpp"
-#include "animation/controllers/custom_controllers/Carrie_controller.hpp"
-#include "animation/controllers/custom_controllers/Gary_controller.hpp"
+#include "animation/controllers/custom_controllers/davey_controller.hpp"
+#include "animation/controllers/custom_controllers/vibble_controller.hpp"
+#include "animation/controllers/custom_controllers/frog_controller.hpp"
+#include "animation/controllers/custom_controllers/bomb_controller.hpp"
+#include "animation/controllers/custom_controllers/bartender_controller.hpp"
+#include "animation/controllers/custom_controllers/carrie_controller.hpp"
+#include "animation/controllers/custom_controllers/gary_controller.hpp"
 #include "animation/controllers/custom_controllers/spider_controller.hpp"
 
 #include "animation/controllers/custom_controllers/default_controller.hpp"
@@ -97,37 +97,37 @@ ControllerFactory::create_by_key(const std::string& key, Asset* self) const {
 
         try {
                 if (self->info && (self->info->type == "Player" || self->info->type == "player")) {
-                        return std::make_unique<VibbleController>(self);
+                        return std::make_unique<vibble_controller>(self);
                 }
 
-                if (matches("Davey_controller"))
-                        return std::make_unique<DaveyController>(assets_, self);
-                if (matches("Frog_controller"))
-                        return std::make_unique<FrogController>(assets_, self);
-                if (matches("Carrie_controller"))
-                        return std::make_unique<CarrieController>(assets_, self);
-                if (matches("Gary_controller"))
-                        return std::make_unique<GaryController>(assets_, self);
-                if (matches("Bartender_controller"))
-                        return std::make_unique<BartenderController>(assets_, self);
+                if (matches("davey_controller"))
+                        return std::make_unique<davey_controller>(assets_, self);
+                if (matches("frog_controller"))
+                        return std::make_unique<frog_controller>(assets_, self);
+                if (matches("carrie_controller"))
+                        return std::make_unique<carrie_controller>(assets_, self);
+                if (matches("gary_controller"))
+                        return std::make_unique<gary_controller>(assets_, self);
+                if (matches("bartender_controller"))
+                        return std::make_unique<bartender_controller>(assets_, self);
                 if (matches("spider_controller"))
-                        return std::make_unique<spiderController>(assets_, self);
-                if (matches("Bomb_controller"))
-                        return std::make_unique<BombController>(assets_, self);
+                        return std::make_unique<spider_controller>(assets_, self);
+                if (matches("bomb_controller"))
+                        return std::make_unique<bomb_controller>(assets_, self);
 
                 // AUTO-GENERATED CUSTOM CONTROLLERS (do not remove marker)
                 // <<CUSTOM_CONTROLLER_FACTORY_INSERT_POINT>>
 
         } catch (...) {
         }
-        return std::make_unique<DefaultController>(self);
+        return std::make_unique<default_controller>(self);
 }
 
 std::unique_ptr<AssetController>
 ControllerFactory::create_for_asset(Asset* self) const {
         if (!assets_ || !self || !self->info) return nullptr;
         if (self->info->type == "Player" || self->info->type == "player") {
-                return std::make_unique<VibbleController>(self);
+                return std::make_unique<vibble_controller>(self);
         }
 
         // Prefer controller derived from asset name; fall back to explicit key for legacy assets.

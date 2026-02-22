@@ -1,11 +1,11 @@
-#include "Gary_controller.hpp"
+#include "gary_controller.hpp"
 #include "animation/controllers/custom_controllers/attack_helpers.hpp"
 #include "assets/Asset.hpp"
 #include "core/AssetsManager.hpp"
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
-GaryController::GaryController(Assets* assets, Asset* self)
+gary_controller::gary_controller(Assets* assets, Asset* self)
     : assets_(assets), self_(self) {
     rng_ = std::mt19937(std::random_device{}());
     if (self_ && self_->anim_) {
@@ -14,7 +14,7 @@ GaryController::GaryController(Assets* assets, Asset* self)
     }
 }
 
-SDL_Point GaryController::get_random_point_in_room() {
+SDL_Point gary_controller::get_random_point_in_room() {
     if (!self_) {
         return {0, 0};
     }
@@ -25,7 +25,7 @@ SDL_Point GaryController::get_random_point_in_room() {
     return {self_->world_x() + dx, self_->world_y() + dy};
 }
 
-void GaryController::update(const Input&) {
+void gary_controller::update(const Input&) {
     if (!self_ || !self_->anim_ || !assets_) {
         return;
     }
@@ -41,14 +41,13 @@ void GaryController::update(const Input&) {
         if (self_->needs_target) {
             self_->anim_->set_animation("default");
         }
-    }
-    else if (self_->needs_target) {
+    } else if (self_->needs_target) {
         self_->anim_->auto_move(get_random_point_in_room());
     }
 
     attack_helpers::send_attack_if_hit(self_, player);
 }
 
-void GaryController::process_pending_attacks(Asset& self) {
+void gary_controller::process_pending_attacks(Asset& self) {
     (void)self.process_pending_attacks();
 }

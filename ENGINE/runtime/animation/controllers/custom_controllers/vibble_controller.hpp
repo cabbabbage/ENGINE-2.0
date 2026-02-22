@@ -10,11 +10,11 @@
 class Asset;
 class Input;
 
-class VibbleController : public AssetController {
+class vibble_controller : public AssetController {
 
 public:
-    VibbleController(Asset* player);
-    ~VibbleController() = default;
+    vibble_controller(Asset* player);
+    ~vibble_controller() = default;
     void update(const Input& in) override;
     void process_pending_attacks(Asset& self) override;
     int get_dx() const;

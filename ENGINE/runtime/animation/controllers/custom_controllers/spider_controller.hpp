@@ -7,11 +7,11 @@ class Asset;
 class Assets;
 class Input;
 
-class spiderController : public AssetController {
+class spider_controller : public AssetController {
 
 public:
-    spiderController(Assets* assets, Asset* self);
-    ~spiderController() override = default;
+    spider_controller(Assets* assets, Asset* self);
+    ~spider_controller() override = default;
     void update(const Input&) override;
     void process_pending_attacks(Asset& self) override;
 

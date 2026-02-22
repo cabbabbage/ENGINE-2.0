@@ -47,6 +47,10 @@ protected:
     AssetLibrary*  asset_library_    = nullptr;
     SDL_Window*    window_           = nullptr;
     bool           is_fullscreen_    = false;
+    int            windowed_x_       = SDL_WINDOWPOS_CENTERED;
+    int            windowed_y_       = SDL_WINDOWPOS_CENTERED;
+    int            windowed_width_   = 1280;
+    int            windowed_height_  = 720;
 };
 
 void run(SDL_Window* window, EngineRenderer& renderer, int screen_w, int screen_h, bool rebuild_cache);

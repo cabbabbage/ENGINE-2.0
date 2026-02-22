@@ -8,11 +8,10 @@ class Assets;
 class Asset;
 class Input;
 
-class BartenderController : public AssetController {
+class carrie_controller : public AssetController {
 public:
-    BartenderController(Assets* assets, Asset* self);
-    ~BartenderController() override = default;
-
+    carrie_controller(Assets* assets, Asset* self);
+    ~carrie_controller() override = default;
 
     void update(const Input& in) override;
     void process_pending_attacks(Asset& self) override;

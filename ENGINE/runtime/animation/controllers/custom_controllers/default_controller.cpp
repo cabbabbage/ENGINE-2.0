@@ -1,4 +1,4 @@
-﻿#include "default_controller.hpp"
+#include "default_controller.hpp"
 #include "assets/Asset.hpp"
 #include "assets/animation.hpp"
 #include "assets/asset_info.hpp"
@@ -6,10 +6,10 @@
 
 #include <string>
 
-DefaultController::DefaultController(Asset* self)
+default_controller::default_controller(Asset* self)
     : self_(self) {}
 
-void DefaultController::update(const Input& ) {
+void default_controller::update(const Input& ) {
     if (!self_ || !self_->info || !self_->anim_) {
         return;
     }
@@ -28,7 +28,7 @@ void DefaultController::update(const Input& ) {
 
 }
 
-void DefaultController::process_pending_attacks(Asset& ) {
+void default_controller::process_pending_attacks(Asset& ) {
     if (!self_ || !self_->info || !self_->anim_) {
         return;
     }
@@ -39,4 +39,3 @@ void DefaultController::process_pending_attacks(Asset& ) {
         self_->anim_->set_animation("damaged");
     }
 }
-

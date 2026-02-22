@@ -7,11 +7,11 @@ class Asset;
 class Assets;
 class Input;
 
-class BombController : public AssetController {
+class bomb_controller : public AssetController {
 
 public:
-    BombController(Assets* assets, Asset* self);
-    ~BombController() override = default;
+    bomb_controller(Assets* assets, Asset* self);
+    ~bomb_controller() override = default;
     void update(const Input&) override;
     void process_pending_attacks(Asset& self) override;
 

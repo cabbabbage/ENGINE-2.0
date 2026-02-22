@@ -73,7 +73,18 @@ MainApp::MainApp(MapDescriptor map,
   loading_screen_(loading_screen),
   asset_library_(asset_library),
   window_(window),
-  is_fullscreen_(window_ ? ((SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0) : false) {}
+  is_fullscreen_(window_ ? ((SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0) : false) {
+        if (window_) {
+                int width = 0;
+                int height = 0;
+                SDL_GetWindowSize(window_, &width, &height);
+                if (width > 0 && height > 0) {
+                        windowed_width_ = width;
+                        windowed_height_ = height;
+                }
+                SDL_GetWindowPosition(window_, &windowed_x_, &windowed_y_);
+        }
+}
 
 MainApp::~MainApp() {
         // Persist current asset state to primary bundles before tearing down.
@@ -397,15 +408,45 @@ void MainApp::toggle_fullscreen() {
         if (!window_) {
                 return;
         }
-        const bool request_fullscreen = !is_fullscreen_;
-        const bool result = SDL_SetWindowFullscreen(window_, request_fullscreen);
-        if (result) {
-                is_fullscreen_ = !is_fullscreen_;
-                const char* mode = is_fullscreen_ ? "fullscreen" : "windowed";
-                vibble::log::info(std::string("[MainApp] Window mode switched to ") + mode + ".");
-        } else {
-                vibble::log::warn(std::string("[MainApp] Failed to toggle fullscreen: ") + SDL_GetError());
+
+        if (is_fullscreen_) {
+                const bool result = SDL_SetWindowFullscreen(window_, false);
+                if (!result) {
+                        vibble::log::warn(std::string("[MainApp] Failed to switch to windowed mode: ") + SDL_GetError());
+                        return;
+                }
+
+                SDL_SetWindowResizable(window_, true);
+                SDL_SetWindowBordered(window_, true);
+                SDL_SetWindowPosition(window_, windowed_x_, windowed_y_);
+                SDL_SetWindowSize(window_, windowed_width_, windowed_height_);
+
+                is_fullscreen_ = false;
+                vibble::log::info("[MainApp] Window mode switched to windowed.");
+                return;
         }
+
+        int current_x = 0;
+        int current_y = 0;
+        int current_width = 0;
+        int current_height = 0;
+        SDL_GetWindowPosition(window_, &current_x, &current_y);
+        SDL_GetWindowSize(window_, &current_width, &current_height);
+        if (current_width > 0 && current_height > 0) {
+                windowed_x_ = current_x;
+                windowed_y_ = current_y;
+                windowed_width_ = current_width;
+                windowed_height_ = current_height;
+        }
+
+        const bool result = SDL_SetWindowFullscreen(window_, true);
+        if (!result) {
+                vibble::log::warn(std::string("[MainApp] Failed to switch to fullscreen mode: ") + SDL_GetError());
+                return;
+        }
+
+        is_fullscreen_ = true;
+        vibble::log::info("[MainApp] Window mode switched to fullscreen.");
 }
 
 void MainApp::handle_global_shortcuts(const SDL_Event& e) {

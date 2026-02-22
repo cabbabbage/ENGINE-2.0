@@ -1853,23 +1853,6 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
     if (renderer && enabled_) {
 
-        int mx = input_ ? input_->getX() : 0;
-        int my = input_ ? input_->getY() : 0;
-        if (!is_ui_blocking_input(mx, my)) {
-            SDL_FPoint screen_f = cam.map_to_screen(snapped_cursor_world_);
-            SDL_Point screen{ static_cast<int>(std::lround(screen_f.x)), static_cast<int>(std::lround(screen_f.y)) };
-
-            if (assets_) {
-
-            }
-            SDL_Color color = DMStyles::HighlightColor();
-            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, 220);
-            const int cross = 8;
-            SDL_RenderLine(renderer, screen.x - cross, screen.y, screen.x + cross, screen.y);
-            SDL_RenderLine(renderer, screen.x, screen.y - cross, screen.x, screen.y + cross);
-        }
-
         if (is_shift_key_down() && !highlighted_assets_.empty()) {
             ensure_spatial_index(cam);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);

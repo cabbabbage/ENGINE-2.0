@@ -1,4 +1,4 @@
-﻿#ifndef FROG_CONTROLLER_HPP
+#ifndef FROG_CONTROLLER_HPP
 #define FROG_CONTROLLER_HPP
 
 #include "assets/asset_controller.hpp"
@@ -9,13 +9,13 @@ class Assets;
 class Asset;
 class Input;
 
-class FrogController : public AssetController {
+class frog_controller : public AssetController {
 
 public:
 
-    FrogController(Assets* assets, Asset* self);
+    frog_controller(Assets* assets, Asset* self);
 
-    ~FrogController() override = default;
+    ~frog_controller() override = default;
     void update(const Input& in) override;
     void process_pending_attacks(Asset& self) override;
 
@@ -25,4 +25,3 @@ private:
 };
 
 #endif
-

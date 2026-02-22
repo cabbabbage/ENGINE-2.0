@@ -1,4 +1,4 @@
-#include "Frog_controller.hpp"
+#include "frog_controller.hpp"
 #include "animation/controllers/custom_controllers/attack_helpers.hpp"
 
 #include "animation/controllers/custom_controllers/controller_path_utils.hpp"
@@ -8,7 +8,7 @@
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
-FrogController::FrogController(Assets* assets, Asset* self)
+frog_controller::frog_controller(Assets* assets, Asset* self)
     : assets_(assets), self_(self) {
     if (self_ && self_->anim_) {
         self_->anim_->set_debug_enabled(false);
@@ -16,7 +16,7 @@ FrogController::FrogController(Assets* assets, Asset* self)
     }
 }
 
-void FrogController::update(const Input&) {
+void frog_controller::update(const Input&) {
     if (!self_ || !self_->anim_ || !assets_) {
         return;
     }
@@ -49,6 +49,6 @@ void FrogController::update(const Input&) {
     attack_helpers::send_attack_if_hit(self_, player);
 }
 
-void FrogController::process_pending_attacks(Asset& self) {
+void frog_controller::process_pending_attacks(Asset& self) {
     (void)self.process_pending_attacks();
 }

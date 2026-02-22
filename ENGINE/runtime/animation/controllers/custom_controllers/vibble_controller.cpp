@@ -35,15 +35,15 @@ animation_update::CombatantSnapshot snapshot_from_asset(const Asset& asset) {
 
 }
 
-VibbleController::VibbleController(Asset* player)
+vibble_controller::vibble_controller(Asset* player)
     : player_(player) {
     spawn_eyes_follower();
 }
 
-int VibbleController::get_dx() const { return dx_; }
-int VibbleController::get_dy() const { return dy_; }
+int vibble_controller::get_dx() const { return dx_; }
+int vibble_controller::get_dy() const { return dy_; }
 
-void VibbleController::movement(const Input& input) {
+void vibble_controller::movement(const Input& input) {
     dx_ = dy_ = 0;
     if (!player_ || !player_->anim_) return;
 
@@ -122,7 +122,7 @@ void VibbleController::movement(const Input& input) {
 
 }
 
-float VibbleController::frame_dt() const {
+float vibble_controller::frame_dt() const {
     constexpr float kFallbackDt = 1.0f / 60.0f;
     if (!player_) {
         return kFallbackDt;
@@ -137,7 +137,7 @@ float VibbleController::frame_dt() const {
     return kFallbackDt;
 }
 
-void VibbleController::update(const Input& input) {
+void vibble_controller::update(const Input& input) {
     using namespace std::chrono;
     auto now = steady_clock::now();
 
@@ -161,7 +161,7 @@ void VibbleController::update(const Input& input) {
     movement(input);
 }
 
-std::string VibbleController::animation_for_direction(int raw_x, int raw_y) const {
+std::string vibble_controller::animation_for_direction(int raw_x, int raw_y) const {
     const int sign_x = (raw_x > 0) - (raw_x < 0);
     const int sign_y = (raw_y > 0) - (raw_y < 0);
 
@@ -217,7 +217,7 @@ std::string VibbleController::animation_for_direction(int raw_x, int raw_y) cons
     return std::string{ animation_update::detail::kDefaultAnimation };
 }
 
-void VibbleController::Dash() {
+void vibble_controller::Dash() {
     if (!canDash) {
         return;
     }
@@ -229,7 +229,7 @@ void VibbleController::Dash() {
             std::chrono::duration<float>(dashingTime));
 }
 
-void VibbleController::process_pending_attacks(Asset& self) {
+void vibble_controller::process_pending_attacks(Asset& self) {
     using namespace animation_update;
 
     if (!self.info || !self.current_animation_frame() || self.dead || !self.active) {
@@ -268,7 +268,7 @@ void VibbleController::process_pending_attacks(Asset& self) {
     self.process_pending_attacks();
 }
 
-void VibbleController::spawn_eyes_follower() {
+void vibble_controller::spawn_eyes_follower() {
     if (eyes_follower_ || !player_) {
         return;
     }

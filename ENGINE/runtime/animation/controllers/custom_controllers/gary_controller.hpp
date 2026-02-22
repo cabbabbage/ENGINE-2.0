@@ -8,10 +8,10 @@ class Assets;
 class Asset;
 class Input;
 
-class GaryController : public AssetController {
+class gary_controller : public AssetController {
 public:
-    GaryController(Assets* assets, Asset* self);
-    ~GaryController() override = default;
+    gary_controller(Assets* assets, Asset* self);
+    ~gary_controller() override = default;
     
 
     void update(const Input& in) override;

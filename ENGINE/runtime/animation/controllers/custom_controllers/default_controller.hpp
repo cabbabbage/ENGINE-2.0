@@ -1,18 +1,17 @@
-﻿#pragma once
+#pragma once
 #include "assets/asset_controller.hpp"
 
 class Asset;
 class Input;
 
-class DefaultController : public AssetController {
+class default_controller : public AssetController {
 
 public:
-    DefaultController(Asset* self);
-    ~DefaultController() override = default;
+    default_controller(Asset* self);
+    ~default_controller() override = default;
     void update(const Input& in) override;
     void process_pending_attacks(Asset& self) override;
 
 private:
     Asset* self_ = nullptr;
 };
-

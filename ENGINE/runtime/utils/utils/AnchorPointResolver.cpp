@@ -118,19 +118,16 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
     return true;
 }
 
-float anchor_to_unit(float normalized, int pixel, bool has_normalized, int dimension) {
+float anchor_to_unit(int pixel, int dimension) {
     if (dimension <= 0) {
         return 0.5f;
-    }
-    if (has_normalized && std::isfinite(normalized)) {
-        return std::clamp(normalized, 0.0f, 1.0f);
     }
     return std::clamp((static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension), 0.0f, 1.0f);
 }
 
 SDL_FPoint compute_anchor_uv(const DisplacedAssetAnchorPoint& anchor, const FrameDimensions& dims) {
-    const float frame_u = anchor_to_unit(anchor.normalized_x, anchor.texture_x, anchor.has_normalized_coords, dims.frame_w);
-    const float frame_v = anchor_to_unit(anchor.normalized_z, anchor.texture_z, anchor.has_normalized_coords, dims.frame_h);
+    const float frame_u = anchor_to_unit(anchor.texture_x, dims.frame_w);
+    const float frame_v = anchor_to_unit(anchor.texture_y, dims.frame_h);
     const float render_u = ((dims.flip & SDL_FLIP_HORIZONTAL) != 0) ? (1.0f - frame_u) : frame_u;
     return SDL_FPoint{render_u, frame_v};
 }
@@ -234,7 +231,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     }
 
     FrameDimensions dims{};
-    if (!gather_frame_dimensions(asset, dims) || (!anchor.has_pixel_coords && !anchor.has_normalized_coords)) {
+    if (!gather_frame_dimensions(asset, dims)) {
         sample.resolved.missing = true;
         return sample;
     }

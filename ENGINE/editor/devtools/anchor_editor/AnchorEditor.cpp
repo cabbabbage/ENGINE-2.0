@@ -164,14 +164,14 @@ bool AnchorEditor::handle_event(const SDL_Event& e) {
                 auto& frame = frames_[static_cast<std::size_t>(selected_frame_)];
                 int closest = -1; float best = 100.0f;
                 for (int i = 0; i < static_cast<int>(frame.anchors.size()); ++i) {
-                    SDL_FPoint s = texture_to_screen(frame.anchors[i].texture_x, frame.anchors[i].texture_z);
+                    SDL_FPoint s = texture_to_screen(frame.anchors[i].texture_x, frame.anchors[i].texture_y);
                     const float dx = s.x - p.x, dy = s.y - p.y, d = dx*dx + dy*dy;
                     if (d < best) { best = d; closest = i; }
                 }
                 if (closest >= 0) select_anchor(closest);
                 if (selected_anchor_ >= 0 && selected_anchor_ < static_cast<int>(frame.anchors.size())) {
                     auto& a = frame.anchors[static_cast<std::size_t>(selected_anchor_)];
-                    a.texture_x = tx; a.texture_z = ty; a.has_pixel_coords = true; a.has_normalized_coords = false;
+                    a.texture_x = tx; a.texture_y = ty;
                     dirty_ = true; refresh_form(); refresh_selection_state();
                     is_dragging_anchor_ = true;
                 }
@@ -216,7 +216,7 @@ void AnchorEditor::render_overlays(SDL_Renderer* renderer) const {
     }
     const auto& frame = frames_.at(static_cast<std::size_t>(selected_frame_));
     for (int i = 0; i < static_cast<int>(frame.anchors.size()); ++i) {
-        SDL_FPoint p = texture_to_screen(frame.anchors[i].texture_x, frame.anchors[i].texture_z);
+        SDL_FPoint p = texture_to_screen(frame.anchors[i].texture_x, frame.anchors[i].texture_y);
         SDL_Rect dot{static_cast<int>(p.x)-4, static_cast<int>(p.y)-4, 8, 8};
         dm_draw::DrawRoundedSolidRect(renderer, dot, 4, i == selected_anchor_ ? kSelectedColor : SDL_Color{220,220,220,255});
     }
@@ -254,7 +254,7 @@ void AnchorEditor::refresh_form() {
     auto& list = frames_[static_cast<std::size_t>(selected_frame_)].anchors;
     if (selected_anchor_ >= 0 && selected_anchor_ < static_cast<int>(list.size())) {
         const auto& a = list[static_cast<std::size_t>(selected_anchor_)];
-        tb_name_->set_value(a.name); tb_tex_x_->set_value(std::to_string(a.texture_x)); tb_tex_y_->set_value(std::to_string(a.texture_z)); cb_in_front_->set_value(a.in_front);
+        tb_name_->set_value(a.name); tb_tex_x_->set_value(std::to_string(a.texture_x)); tb_tex_y_->set_value(std::to_string(a.texture_y)); cb_in_front_->set_value(a.in_front);
     } else { tb_name_->set_value(""); tb_tex_x_->set_value("0"); tb_tex_y_->set_value("0"); cb_in_front_->set_value(true); }
 }
 
@@ -265,16 +265,16 @@ bool AnchorEditor::apply_form_to_anchor() {
     bool changed = false;
     if (tb_name_ && !tb_name_->value().empty() && tb_name_->value() != a.name) { a.name = tb_name_->value(); changed = true; }
     int tx = std::max(0, parse_int_box(tb_tex_x_.get(), a.texture_x));
-    int ty = std::max(0, parse_int_box(tb_tex_y_.get(), a.texture_z));
-    if (tx != a.texture_x || ty != a.texture_z) { a.texture_x = tx; a.texture_z = ty; changed = true; }
+    int ty = std::max(0, parse_int_box(tb_tex_y_.get(), a.texture_y));
+    if (tx != a.texture_x || ty != a.texture_y) { a.texture_x = tx; a.texture_y = ty; changed = true; }
     if (cb_in_front_ && cb_in_front_->value() != a.in_front) { a.in_front = cb_in_front_->value(); changed = true; }
-    a.has_pixel_coords = true; a.has_normalized_coords = false;
+
     return changed;
 }
 
 void AnchorEditor::select_frame(int index) { if (apply_form_to_anchor()) dirty_ = true; selected_frame_ = std::clamp(index, 0, static_cast<int>(frames_.size()) - 1); if (!frames_[selected_frame_].anchors.empty()) selected_anchor_ = std::clamp(selected_anchor_, 0, static_cast<int>(frames_[selected_frame_].anchors.size()) - 1); else selected_anchor_ = -1; refresh_form(); }
 void AnchorEditor::select_anchor(int index) { selected_anchor_ = index; refresh_form(); rebuild_tool_panel_layout(); }
-void AnchorEditor::add_anchor() { auto& list = frames_[selected_frame_].anchors; frame_editors::FrameAnchorPoint p; p.name = "anchor_" + std::to_string(list.size()); p.has_pixel_coords = true; list.push_back(p); select_anchor(static_cast<int>(list.size()) - 1); dirty_ = true; }
+void AnchorEditor::add_anchor() { auto& list = frames_[selected_frame_].anchors; frame_editors::FrameAnchorPoint p; p.name = "anchor_" + std::to_string(list.size()); list.push_back(p); select_anchor(static_cast<int>(list.size()) - 1); dirty_ = true; }
 void AnchorEditor::apply_to_all_frames() { for (auto& f : frames_) f = frames_[selected_frame_]; dirty_ = true; }
 void AnchorEditor::apply_to_next_frame() { if (frames_.empty()) return; frames_[(selected_frame_ + 1) % static_cast<int>(frames_.size())] = frames_[selected_frame_]; dirty_ = true; persist_changes(); }
 void AnchorEditor::apply_to_animation() { apply_to_all_frames(); persist_changes(); }
@@ -296,7 +296,7 @@ void AnchorEditor::refresh_selection_state() {
     auto& list = frames_[selected_frame_].anchors;
     if (selected_anchor_ < 0 || selected_anchor_ >= static_cast<int>(list.size())) { selection_state_->target = frame_editors::SelectionTarget::None; return; }
     const auto& a = list[static_cast<std::size_t>(selected_anchor_)];
-    SDL_FPoint s = texture_to_screen(a.texture_x, a.texture_z);
+    SDL_FPoint s = texture_to_screen(a.texture_x, a.texture_y);
     selection_state_->target = frame_editors::SelectionTarget::AnchorPoint;
     selection_state_->screen_pos = SDL_Point{static_cast<int>(std::lround(s.x)), static_cast<int>(std::lround(s.y))};
 }
@@ -311,9 +311,7 @@ std::pair<int, int> AnchorEditor::current_frame_dimensions() const { return fram
 void AnchorEditor::hydrate_anchor_pixels_from_target() {}
 
 DisplacedAssetAnchorPoint AnchorEditor::to_runtime_anchor(const frame_editors::FrameAnchorPoint& anchor) const {
-    DisplacedAssetAnchorPoint runtime(anchor.name, anchor.texture_x, anchor.texture_z, anchor.in_front);
-    runtime.has_pixel_coords = true;
-    runtime.has_normalized_coords = false;
+    DisplacedAssetAnchorPoint runtime(anchor.name, anchor.texture_x, anchor.texture_y, anchor.in_front);
     return runtime;
 }
 
@@ -363,7 +361,7 @@ void AnchorEditor::update_drag_pick(const SDL_Point& p) {
     auto& list = frames_[selected_frame_].anchors;
     if (selected_anchor_ < 0 || selected_anchor_ >= static_cast<int>(list.size())) return;
     auto& a = list[static_cast<std::size_t>(selected_anchor_)];
-    if (a.texture_x != tx || a.texture_z != ty) { a.texture_x = tx; a.texture_z = ty; a.has_pixel_coords = true; a.has_normalized_coords = false; dirty_ = true; refresh_form(); }
+    if (a.texture_x != tx || a.texture_y != ty) { a.texture_x = tx; a.texture_y = ty; dirty_ = true; refresh_form(); }
 }
 
 SDL_Texture* AnchorEditor::current_frame_texture() const {

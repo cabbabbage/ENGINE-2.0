@@ -74,7 +74,7 @@ private:
     bool dirty_ = false;
     bool is_dragging_ = false;
     int drag_anchor_start_tex_x_ = 0;
-    int drag_anchor_start_tex_z_ = 0;
+    int drag_anchor_start_tex_y_ = 0;
     bool target_frame_lock_active_ = false;
     std::string saved_target_animation_;
     AnimationFrame* saved_target_frame_ = nullptr;
@@ -88,7 +88,7 @@ private:
 
     std::unique_ptr<DMTextBox> tb_name_;
     std::unique_ptr<DMTextBox> tb_tex_x_;
-    std::unique_ptr<DMTextBox> tb_tex_z_;
+    std::unique_ptr<DMTextBox> tb_tex_y_;
     std::unique_ptr<DMCheckbox> cb_in_front_;
 
     mutable SDL_Rect nav_rect_{0, 0, 0, 0};
@@ -102,7 +102,7 @@ private:
     std::unique_ptr<ButtonWidget> save_widget_;
     std::unique_ptr<TextBoxWidget> name_widget_;
     std::unique_ptr<TextBoxWidget> tex_x_widget_;
-    std::unique_ptr<TextBoxWidget> tex_z_widget_;
+    std::unique_ptr<TextBoxWidget> tex_y_widget_;
     std::unique_ptr<CheckboxWidget> in_front_widget_;
     std::unique_ptr<AnchorListWidget, AnchorListWidgetDeleter> anchor_list_widget_;
 };

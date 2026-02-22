@@ -4,8 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
-#include <optional>
 #include <unordered_set>
 
 #include "animation/animation_update.hpp"
@@ -222,7 +220,7 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
 
     tb_name_ = std::make_unique<DMTextBox>("Name", "");
     tb_tex_x_ = std::make_unique<DMTextBox>("Texture X (px)", "0");
-    tb_tex_z_ = std::make_unique<DMTextBox>("Texture Z (px)", "0");
+    tb_tex_y_ = std::make_unique<DMTextBox>("Texture Y (px)", "0");
     cb_in_front_ = std::make_unique<DMCheckbox>("In Front (unchecked = Behind)", true);
 
     tool_panel_ = std::make_unique<FrameToolPanel>("Anchor Tool Panel", "frame_editor_tool_panel_anchor");
@@ -262,7 +260,7 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
     anchor_list_widget_->set_selected_anchor_ref(&selected_anchor_);
     name_widget_ = std::make_unique<TextBoxWidget>(tb_name_.get(), true);
     tex_x_widget_ = std::make_unique<TextBoxWidget>(tb_tex_x_.get(), true);
-    tex_z_widget_ = std::make_unique<TextBoxWidget>(tb_tex_z_.get(), true);
+    tex_y_widget_ = std::make_unique<TextBoxWidget>(tb_tex_y_.get(), true);
     in_front_widget_ = std::make_unique<CheckboxWidget>(cb_in_front_.get());
     rebuild_tool_panel_layout();
     // Position set on first update when screen dimensions are available.
@@ -292,7 +290,7 @@ void AnchorFrameEditor::end() {
     anchor_list_widget_.reset();
     name_widget_.reset();
     tex_x_widget_.reset();
-    tex_z_widget_.reset();
+    tex_y_widget_.reset();
     in_front_widget_.reset();
     frame_navigator_.reset();
     btn_back_.reset();
@@ -305,7 +303,7 @@ void AnchorFrameEditor::end() {
     }
     tb_name_.reset();
     tb_tex_x_.reset();
-    tb_tex_z_.reset();
+    tb_tex_y_.reset();
     cb_in_front_.reset();
     dirty_ = false;
     wants_close_ = false;
@@ -330,7 +328,7 @@ bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
     if (tool_panel_) {
         const std::string name_before = tb_name_ ? tb_name_->value() : std::string{};
         const std::string tx_before = tb_tex_x_ ? tb_tex_x_->value() : std::string{};
-        const std::string tz_before = tb_tex_z_ ? tb_tex_z_->value() : std::string{};
+        const std::string tz_before = tb_tex_y_ ? tb_tex_y_->value() : std::string{};
         const bool front_before = cb_in_front_ ? cb_in_front_->value() : true;
 
         if (tool_panel_->handle_event(e)) {
@@ -340,7 +338,7 @@ bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
         const bool text_changed =
             (tb_name_ && tb_name_->value() != name_before) ||
             (tb_tex_x_ && tb_tex_x_->value() != tx_before) ||
-            (tb_tex_z_ && tb_tex_z_->value() != tz_before) ||
+            (tb_tex_y_ && tb_tex_y_->value() != tz_before) ||
             (cb_in_front_ && cb_in_front_->value() != front_before);
 
         if (text_changed && apply_form_to_anchor()) {
@@ -380,7 +378,7 @@ bool AnchorFrameEditor::handle_event(const SDL_Event& e) {
                 const auto& anchor = frame.anchors[static_cast<std::size_t>(closest)];
                 is_dragging_ = true;
                 drag_anchor_start_tex_x_ = anchor.texture_x;
-                drag_anchor_start_tex_z_ = anchor.texture_z;
+                drag_anchor_start_tex_y_ = anchor.texture_y;
                 handled = true;
             }
         }
@@ -534,12 +532,12 @@ void AnchorFrameEditor::refresh_form() {
         const auto& a = frame.anchors[static_cast<std::size_t>(selected_anchor_)];
         tb_name_->set_value(a.name);
         tb_tex_x_->set_value(std::to_string(a.texture_x));
-        tb_tex_z_->set_value(std::to_string(a.texture_z));
+        tb_tex_y_->set_value(std::to_string(a.texture_y));
         if (cb_in_front_) cb_in_front_->set_value(a.in_front);
     } else {
         tb_name_->set_value("");
         tb_tex_x_->set_value("0");
-        tb_tex_z_->set_value("0");
+        tb_tex_y_->set_value("0");
         if (cb_in_front_) cb_in_front_->set_value(true);
     }
 }
@@ -578,27 +576,20 @@ bool AnchorFrameEditor::apply_form_to_anchor() {
     }
 
     const int new_tex_x = std::max(0, parse_int_box(tb_tex_x_.get(), a.texture_x));
-    const int new_tex_z = std::max(0, parse_int_box(tb_tex_z_.get(), a.texture_z));
+    const int new_tex_y = std::max(0, parse_int_box(tb_tex_y_.get(), a.texture_y));
     const bool new_front = cb_in_front_ ? cb_in_front_->value() : a.in_front;
 
-    const bool coords_changed = (a.texture_x != new_tex_x) || (a.texture_z != new_tex_z);
     if (a.texture_x != new_tex_x) {
         a.texture_x = new_tex_x;
         changed = true;
     }
-    if (a.texture_z != new_tex_z) {
-        a.texture_z = new_tex_z;
+    if (a.texture_y != new_tex_y) {
+        a.texture_y = new_tex_y;
         changed = true;
     }
     if (a.in_front != new_front) {
         a.in_front = new_front;
         changed = true;
-    }
-    if (coords_changed || !a.has_pixel_coords) {
-        a.has_pixel_coords = true;
-        a.has_normalized_coords = false;
-        a.normalized_x = std::numeric_limits<float>::quiet_NaN();
-        a.normalized_z = std::numeric_limits<float>::quiet_NaN();
     }
 
     return changed;
@@ -732,9 +723,6 @@ bool AnchorFrameEditor::resolve_anchor_screen(int anchor_index,
         return false;
     }
     const auto& anchor = frame.anchors[static_cast<std::size_t>(anchor_index)];
-    if (!anchor.has_pixel_coords && !anchor.has_normalized_coords) {
-        return false;
-    }
     const auto runtime_anchor = to_runtime_anchor(anchor);
     const auto pixel_locked = anchor_points::resolve_pixel_locked_anchor(
         *context_.target,
@@ -777,7 +765,6 @@ void AnchorFrameEditor::add_anchor() {
 
     FrameAnchorPoint point;
     point.name = new_name;
-    point.has_pixel_coords = true;
     frame.anchors.push_back(point);
     select_anchor(static_cast<int>(frame.anchors.size()) - 1);
     dirty_ = true;
@@ -798,9 +785,6 @@ void AnchorFrameEditor::update_anchor_from_drag(SDL_Point mouse_screen) {
 
     hydrate_anchor_pixels_from_target();
     auto& anchor = frame.anchors[static_cast<std::size_t>(selected_anchor_)];
-    if (!anchor.has_pixel_coords && !anchor.has_normalized_coords) {
-        return;
-    }
 
     // Resolve current screen position of the anchor.
     const auto base_result = anchor_points::resolve_pixel_locked_anchor(
@@ -825,12 +809,8 @@ void AnchorFrameEditor::update_anchor_from_drag(SDL_Point mouse_screen) {
 
     DisplacedAssetAnchorPoint dx_anchor = to_runtime_anchor(anchor);
     dx_anchor.texture_x += kDelta;
-    dx_anchor.has_pixel_coords = true;
-    dx_anchor.has_normalized_coords = false;
     DisplacedAssetAnchorPoint dz_anchor = to_runtime_anchor(anchor);
-    dz_anchor.texture_z += kDelta;
-    dz_anchor.has_pixel_coords = true;
-    dz_anchor.has_normalized_coords = false;
+    dz_anchor.texture_y += kDelta;
 
     const auto dx_result = anchor_points::resolve_pixel_locked_anchor(
         *context_.target,
@@ -845,7 +825,7 @@ void AnchorFrameEditor::update_anchor_from_drag(SDL_Point mouse_screen) {
         return;
     }
 
-    // Jacobian columns: d(screen) / d(tex_x) and d(screen) / d(tex_z)
+    // Jacobian columns: d(screen) / d(tex_x) and d(screen) / d(tex_y)
     const float inv_delta = 1.0f / static_cast<float>(kDelta);
     const float j00 = (dx_result.screen_px.x - base_screen.x) * inv_delta; // dSx/dTx
     const float j10 = (dx_result.screen_px.y - base_screen.y) * inv_delta; // dSy/dTx
@@ -859,18 +839,14 @@ void AnchorFrameEditor::update_anchor_from_drag(SDL_Point mouse_screen) {
     }
     const float inv_det = 1.0f / det;
     const float dtex_x = inv_det * (j11 * screen_err_x - j01 * screen_err_y);
-    const float dtex_z = inv_det * (-j10 * screen_err_x + j00 * screen_err_y);
+    const float dtex_y = inv_det * (-j10 * screen_err_x + j00 * screen_err_y);
 
     const int new_tex_x = std::max(0, anchor.texture_x + static_cast<int>(std::lround(dtex_x)));
-    const int new_tex_z = std::max(0, anchor.texture_z + static_cast<int>(std::lround(dtex_z)));
+    const int new_tex_y = std::max(0, anchor.texture_y + static_cast<int>(std::lround(dtex_y)));
 
-    if (new_tex_x != anchor.texture_x || new_tex_z != anchor.texture_z) {
+    if (new_tex_x != anchor.texture_x || new_tex_y != anchor.texture_y) {
         anchor.texture_x = new_tex_x;
-        anchor.texture_z = new_tex_z;
-        anchor.has_pixel_coords = true;
-        anchor.has_normalized_coords = false;
-        anchor.normalized_x = std::numeric_limits<float>::quiet_NaN();
-        anchor.normalized_z = std::numeric_limits<float>::quiet_NaN();
+        anchor.texture_y = new_tex_y;
         refresh_form();
         refresh_selection_state();
         dirty_ = true;
@@ -892,7 +868,7 @@ void AnchorFrameEditor::rebuild_tool_panel_layout() {
         if (name_widget_) rows.push_back({name_widget_.get()});
         if (save_widget_) rows.push_back({save_widget_.get()});
         if (tex_x_widget_) rows.push_back({tex_x_widget_.get()});
-        if (tex_z_widget_) rows.push_back({tex_z_widget_.get()});
+        if (tex_y_widget_) rows.push_back({tex_y_widget_.get()});
         if (in_front_widget_) rows.push_back({in_front_widget_.get()});
     }
 
@@ -944,49 +920,6 @@ std::pair<int, int> AnchorFrameEditor::current_frame_dimensions() const {
 }
 
 void AnchorFrameEditor::hydrate_anchor_pixels_from_target() {
-    auto normalized_to_pixel = [&](float norm, int dimension) -> std::optional<int> {
-        if (!std::isfinite(norm)) {
-            return std::nullopt;
-        }
-        const int max_index = std::max(0, dimension - 1);
-        const float clamped = std::clamp(norm, 0.0f, 1.0f);
-        const int px = static_cast<int>(std::lround(clamped * static_cast<float>(max_index)));
-        return std::clamp(px, 0, max_index);
-    };
-
-    for (std::size_t frame_idx = 0; frame_idx < frames_.size(); ++frame_idx) {
-        auto& frame = frames_[frame_idx];
-        const auto [frame_w, frame_h] = frame_dimensions_for_index(frame_idx);
-        if (frame_w <= 0 || frame_h <= 0) {
-            continue;
-        }
-        for (auto& anchor : frame.anchors) {
-            if (anchor.has_pixel_coords || !anchor.has_normalized_coords) {
-                continue;
-            }
-            bool updated = false;
-            if (auto px = normalized_to_pixel(anchor.normalized_x, frame_w)) {
-                anchor.texture_x = *px;
-                updated = true;
-            }
-            if (auto pz = normalized_to_pixel(anchor.normalized_z, frame_h)) {
-                anchor.texture_z = *pz;
-                updated = true;
-            }
-            if (updated) {
-                anchor.has_pixel_coords = true;
-                const int max_w = std::max(1, frame_w - 1);
-                const int max_h = std::max(1, frame_h - 1);
-                if (max_w > 0) {
-                    anchor.normalized_x = static_cast<float>(anchor.texture_x) / static_cast<float>(max_w);
-                }
-                if (max_h > 0) {
-                    anchor.normalized_z = static_cast<float>(anchor.texture_z) / static_cast<float>(max_h);
-                }
-                dirty_ = true;
-            }
-        }
-    }
 }
 
 void AnchorFrameEditor::lock_target_to_selected_frame() {
@@ -1075,9 +1008,6 @@ void AnchorFrameEditor::sync_runtime_animation_anchors(const std::string& animat
                 continue;
             }
             DisplacedAssetAnchorPoint runtime_anchor = to_runtime_anchor(anchor);
-            if (!runtime_anchor.has_pixel_coords && !runtime_anchor.has_normalized_coords) {
-                continue;
-            }
             runtime_anchors.push_back(std::move(runtime_anchor));
         }
         runtime_frame->set_anchor_points(std::move(runtime_anchors));
@@ -1087,11 +1017,7 @@ void AnchorFrameEditor::sync_runtime_animation_anchors(const std::string& animat
 }
 
 DisplacedAssetAnchorPoint AnchorFrameEditor::to_runtime_anchor(const FrameAnchorPoint& anchor) const {
-    DisplacedAssetAnchorPoint runtime(anchor.name, anchor.texture_x, anchor.texture_z, anchor.in_front);
-    runtime.has_pixel_coords = anchor.has_pixel_coords;
-    runtime.has_normalized_coords = anchor.has_normalized_coords;
-    runtime.normalized_x = anchor.normalized_x;
-    runtime.normalized_z = anchor.normalized_z;
+    DisplacedAssetAnchorPoint runtime(anchor.name, anchor.texture_x, anchor.texture_y, anchor.in_front);
     return runtime;
 }
 

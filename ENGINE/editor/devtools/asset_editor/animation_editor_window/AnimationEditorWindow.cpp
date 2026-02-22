@@ -58,6 +58,7 @@
 #include "core/AssetsManager.hpp"
 #include "devtools/asset_paths.hpp"
 #include "devtools/animation_runtime_refresh.hpp"
+#include "devtools/dev_mode_utils.hpp"
 #include "core/AssetsManager.hpp"
 
 namespace {
@@ -1882,19 +1883,7 @@ bool AnimationEditorWindow::does_controller_exist() const {
 }
 
 std::string AnimationEditorWindow::sanitize_asset_name(const std::string& name) const {
-    if (name.empty()) return "";
-    std::string sanitized;
-    for (char c : name) {
-        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
-            sanitized += c;
-        } else {
-            sanitized += '_';
-        }
-    }
-
-    sanitized.erase(0, sanitized.find_first_not_of('_'));
-    sanitized.erase(sanitized.find_last_not_of('_') + 1);
-    return sanitized;
+    return devmode::utils::normalize_asset_name(name);
 }
 
 std::string AnimationEditorWindow::generate_controller_key(const std::string& asset_name) const {
@@ -1903,12 +1892,7 @@ std::string AnimationEditorWindow::generate_controller_key(const std::string& as
 
 std::string AnimationEditorWindow::generate_class_name(const std::string& asset_name) const {
     if (asset_name.empty()) return "";
-    std::string class_name = asset_name;
-
-    if (!class_name.empty()) {
-        class_name[0] = std::toupper(static_cast<unsigned char>(class_name[0]));
-    }
-    return class_name + "Controller";
+    return asset_name + "_controller";
 }
 
 std::vector<std::string> AnimationEditorWindow::collect_available_animation_ids() const {

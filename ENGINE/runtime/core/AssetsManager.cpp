@@ -681,6 +681,7 @@ void Assets::update_filtered_active_assets() {
 
         // Snapshot the active size for pre-sizing both the filtered list and membership cache.
         const std::size_t active_size = active_assets.size();
+        // When DevControls is off, ensure the membership cache is reset so future toggles rebuild reliably.
         filtered_active_assets.clear();
         filtered_active_asset_membership_.clear();
         filtered_active_assets.reserve(active_size);

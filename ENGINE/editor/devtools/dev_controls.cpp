@@ -4299,6 +4299,8 @@ void DevControls::filter_active_assets(std::vector<Asset*>& assets) const {
     }
 
     const auto& membership = assets_->filtered_active_asset_membership();
+    const auto membership_end = membership.end();
+    // Only mutate hide state when the filtered membership actually changes.
     std::unordered_map<Asset*, bool> next_hidden;
     next_hidden.reserve(filter_hidden_assets_.size() + 8);
 
@@ -4307,7 +4309,8 @@ void DevControls::filter_active_assets(std::vector<Asset*>& assets) const {
         if (!asset) {
             continue;
         }
-        if (membership.find(asset) != membership.end()) {
+        const auto membership_it = membership.find(asset);
+        if (membership_it != membership_end) {
             asset->set_hidden(kv.second);
             continue;
         }
@@ -4319,7 +4322,8 @@ void DevControls::filter_active_assets(std::vector<Asset*>& assets) const {
         if (!asset) {
             continue;
         }
-        if (membership.find(asset) != membership.end()) {
+        const auto membership_it = membership.find(asset);
+        if (membership_it != membership_end) {
             continue;
         }
         if (next_hidden.find(asset) != next_hidden.end()) {

@@ -153,6 +153,7 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
     }
     return BoundaryScaleResult{remainder_scale, selection.index};
 }
+
 world::GridPoint::RegionKind to_world_region_kind(DynamicBoundarySystem::RegionKind kind) {
     switch (kind) {
     case DynamicBoundarySystem::RegionKind::Room:

@@ -5,6 +5,7 @@
 #include "assets/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
+#include "utils/AnchorPointResolver.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -277,5 +278,34 @@ void VibbleController::spawn_eyes_follower() {
         return;
     }
 
-    eyes_follower_ = assets->spawn_asset_attached("Vibble_eyes", player_, "eyes");
+    Asset::AnchorFollowTarget binding{};
+    binding.source = player_;
+    binding.anchor_name = "eyes";
+
+    if (auto follower_info = assets->library().get("Vibble_eyes"); follower_info && follower_info->follower_binding.has_value()) {
+        const auto& spec = follower_info->follower_binding.value();
+        binding.source = nullptr;
+        binding.controller_asset_id = spec.controller_asset_id;
+        binding.anchor_name = spec.anchor_name;
+        if (spec.depth_policy.has_value()) {
+            const std::string policy = spec.depth_policy.value();
+            if (policy == "match_owner") {
+                binding.depth_policy = anchor_points::AnchorDepthPolicy::MatchOwner;
+            } else if (policy == "behind") {
+                binding.depth_policy = anchor_points::AnchorDepthPolicy::Behind;
+            } else {
+                binding.depth_policy = anchor_points::AnchorDepthPolicy::InFront;
+            }
+        }
+        if (spec.layer_policy.has_value()) {
+            const std::string policy = spec.layer_policy.value();
+            if (policy == "match_controller_asset") {
+                binding.layer_policy = Asset::AnchorFollowTarget::LayerPolicy::MatchControllerAsset;
+            } else {
+                binding.layer_policy = Asset::AnchorFollowTarget::LayerPolicy::MatchResolvedAnchor;
+            }
+        }
+    }
+
+    eyes_follower_ = assets->spawn_asset_attached("Vibble_eyes", binding);
 }

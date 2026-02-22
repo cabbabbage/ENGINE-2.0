@@ -30,6 +30,7 @@
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
+#include <stdexcept>
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
 #include "utils/AnchorPointResolver.hpp"
@@ -923,10 +924,20 @@ void Asset::set_anchor_follow_target(std::optional<AnchorFollowTarget> follow) {
 
 void Asset::bind_child_to_anchor(Asset* child, const std::string& anchor_name) {
         if (!child || anchor_name.empty()) {
-                return;
+                throw std::runtime_error("bind_child_to_anchor requires non-null child and non-empty anchor name");
         }
+
+        auto resolved = anchor_state(anchor_name, anchor_points::GridMaterialization::Ensure);
+        if (!resolved.has_value() || resolved->missing) {
+                throw std::runtime_error("bind_child_to_anchor failed: anchor '" + anchor_name + "' is missing on controller '" +
+                                         (info ? info->name : std::string("<unknown>")) + "'");
+        }
+
         child->set_anchor_hidden(false);
-        child->set_anchor_follow_target(AnchorFollowTarget{ this, anchor_name });
+        AnchorFollowTarget follow = child->anchor_follow_target().value_or(AnchorFollowTarget{});
+        follow.source = this;
+        follow.anchor_name = anchor_name;
+        child->set_anchor_follow_target(std::move(follow));
         mark_anchors_dirty();
         if (std::find(bound_children_.begin(), bound_children_.end(), child) == bound_children_.end()) {
                 bound_children_.push_back(child);
@@ -940,19 +951,35 @@ void Asset::apply_anchor_follow_target() {
         AnchorFollowTarget& follow = *follow_anchor_;
         Asset* source = follow.source;
         if (!source) {
-                return;
+                throw std::runtime_error("Anchor follow failed: missing controller source for anchor '" + follow.anchor_name + "'");
         }
 
-        auto resolved = source->anchor_state(follow.anchor_name);
+        auto resolved = source->anchor_state(follow.anchor_name, anchor_points::GridMaterialization::Ensure, follow.depth_policy);
         if (!resolved.has_value() || resolved->missing) {
+                if (!follow_error_reported_) {
+                        follow_error_reported_ = true;
+                        throw std::runtime_error("Anchor follow failed: controller '" +
+                                                 (source->info ? source->info->name : std::string("<unknown>")) +
+                                                 "' does not expose anchor '" + follow.anchor_name + "'");
+                }
                 set_anchor_hidden(true);
                 return;
         }
+        follow_error_reported_ = false;
         set_anchor_hidden(false);
 
         SDL_Point target_px = resolved->world_px;
         int target_z = resolved->world_z;
         int target_layer = resolved->resolution_layer;
+
+        if (follow.layer_policy.has_value() &&
+            follow.layer_policy.value() == AnchorFollowTarget::LayerPolicy::MatchControllerAsset) {
+                if (auto* source_gp = source->grid_point()) {
+                        target_layer = source_gp->resolution_layer();
+                } else {
+                        target_layer = source->grid_resolution;
+                }
+        }
 
         if (!resolved->grid_point && source) {
                 if (auto* source_gp = source->grid_point()) {
@@ -1010,9 +1037,10 @@ Asset::AnchorHandle& Asset::get_anchor_point(const std::string& name) {
 }
 
 std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name,
-                                                  anchor_points::GridMaterialization grid_policy) {
+                                                  anchor_points::GridMaterialization grid_policy,
+                                                  std::optional<anchor_points::AnchorDepthPolicy> depth_policy) {
         AnchorHandle& handle = get_anchor_point(name);
-        handle.update(grid_policy);
+        handle.update(grid_policy, depth_policy);
         ResolvedAnchor resolved{};
         resolved.world_px    = handle.world_px;
         resolved.world_z     = handle.world_z;
@@ -1023,7 +1051,8 @@ std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name,
         return resolved;
 }
 
-void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy) {
+void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
+                                 std::optional<anchor_points::AnchorDepthPolicy> depth_policy) {
         if (!owner) {
                 dirty = false;
                 return;
@@ -1044,10 +1073,13 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy)
                 return;
         }
 
+        const anchor_points::AnchorDepthPolicy resolved_depth = depth_policy.value_or(
+                anchor->in_front ? anchor_points::AnchorDepthPolicy::InFront : anchor_points::AnchorDepthPolicy::Behind);
+
         const auto resolved = anchor_points::resolve_frame_anchor_sample(
                 *owner,
                 *anchor,
-                anchor->in_front ? anchor_points::AnchorDepthPolicy::InFront : anchor_points::AnchorDepthPolicy::Behind,
+                resolved_depth,
                 grid_policy);
 
         grid = resolved.resolved.grid_point;

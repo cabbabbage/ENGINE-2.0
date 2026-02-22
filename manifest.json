@@ -1543,7 +1543,7 @@
                   "center_z": 1230.8443603515625,
                   "half_height": 702.7274780273438,
                   "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
+                  "rotation": -178.48147583007812
                 }
               ]
             },
@@ -1834,7 +1834,13 @@
       "asset_name": "Vibble_eyes",
       "asset_type": "object",
       "cache_atlas": true,
-      "start": "default"
+      "start": "default",
+      "follower_binding": {
+        "controller_asset_id": "vibble_controller",
+        "anchor_name": "eyes",
+        "depth_policy": "in_front",
+        "layer_policy": "match_resolved_anchor"
+      }
     },
     "barrel": {
       "animation_children": [],
@@ -1960,7 +1966,7 @@
                   "center_z": 5163.4951171875,
                   "half_height": 1570.3231201171875,
                   "half_width": 5179.4228515625,
-                  "rotation": -93.25064086914063
+                  "rotation": -93.25064086914062
                 }
               ]
             }

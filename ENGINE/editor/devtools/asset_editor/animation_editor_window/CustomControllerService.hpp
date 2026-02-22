@@ -28,7 +28,7 @@ class CustomControllerService {
     static std::string build_header_guard(const std::string& base_name);
     void write_controller_files(const std::filesystem::path& header_path, const std::filesystem::path& source_path, const std::string& base_name, const std::string& class_name) const;
     void ensure_controller_factory_registration(const std::string& base_name, const std::string& class_name) const;
-    void update_asset_metadata(const std::string& base_name, const std::string& animation_id) const;
+    void update_asset_metadata(const std::string& base_name, const std::string& animation_id, const std::string& binding_reference = std::string()) const;
     std::filesystem::path resolve_engine_root(const std::filesystem::path& start) const;
     void open_in_default_editor(const std::filesystem::path& path) const;
 

@@ -204,6 +204,7 @@ public:
 
     Asset* spawn_asset(const std::string& name, SDL_Point world_pos);
     Asset* spawn_asset_attached(const std::string& name, Asset* anchor_owner, const std::string& anchor_name);
+    Asset* spawn_asset_attached(const std::string& name, const Asset::AnchorFollowTarget& binding);
 
     void rebuild_from_grid_state();
 

@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cctype>
 #include <exception>
+#include <stdexcept>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -83,6 +84,43 @@ int halved_render_quality_percent(int percent) {
     }
     const int halved = static_cast<int>(std::lround(percent * 0.5));
     return std::max(kMinRenderQuality, align_render_quality_percent(halved));
+}
+
+
+std::string normalize_controller_id(const std::string& value) {
+    std::string out;
+    out.reserve(value.size());
+    for (char ch : value) {
+        unsigned char uch = static_cast<unsigned char>(ch);
+        if (std::isalnum(uch)) {
+            out.push_back(static_cast<char>(std::tolower(uch)));
+        } else if (ch == '_' || ch == '-' || std::isspace(uch)) {
+            if (!out.empty() && out.back() != '_') {
+                out.push_back('_');
+            }
+        }
+    }
+    while (!out.empty() && out.back() == '_') {
+        out.pop_back();
+    }
+    return out;
+}
+
+Asset* resolve_controller_for_binding(const std::vector<Asset*>& assets, const std::string& controller_asset_id) {
+    const std::string wanted = normalize_controller_id(controller_asset_id);
+    if (wanted.empty()) {
+        return nullptr;
+    }
+    for (Asset* asset : assets) {
+        if (!asset || !asset->info) {
+            continue;
+        }
+        if (normalize_controller_id(asset->info->custom_controller_key) == wanted ||
+            normalize_controller_id(asset->info->name) == wanted) {
+            return asset;
+        }
+    }
+    return nullptr;
 }
 
 struct AssetWorldBounds {
@@ -1350,9 +1388,17 @@ void Assets::mark_active_assets_dirty() {
 Asset* Assets::spawn_asset_attached(const std::string& name,
                                     Asset* anchor_owner,
                                     const std::string& anchor_name) {
+    Asset::AnchorFollowTarget binding{};
+    binding.source = anchor_owner;
+    binding.anchor_name = anchor_name;
+    return spawn_asset_attached(name, binding);
+}
 
-    if (!anchor_owner || anchor_name.empty()) {
-        return nullptr;
+Asset* Assets::spawn_asset_attached(const std::string& name,
+                                    const Asset::AnchorFollowTarget& binding) {
+
+    if (!binding.valid()) {
+        throw std::runtime_error("spawn_asset_attached requires a valid anchor follow binding spec");
     }
 
     std::shared_ptr<AssetInfo> info = library_.get(name);
@@ -1360,15 +1406,42 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
         return nullptr;
     }
 
+    Asset* anchor_owner = binding.source;
+    if (!anchor_owner && !binding.controller_asset_id.empty()) {
+        anchor_owner = resolve_controller_for_binding(active_assets, binding.controller_asset_id);
+        if (!anchor_owner) {
+            anchor_owner = resolve_controller_for_binding(all, binding.controller_asset_id);
+        }
+    }
+
+    if (!anchor_owner) {
+        throw std::runtime_error("spawn_asset_attached failed: controller asset '" + binding.controller_asset_id + "' was not found");
+    }
+
+    auto resolved_anchor = anchor_owner->anchor_state(binding.anchor_name,
+                                                       anchor_points::GridMaterialization::Ensure,
+                                                       binding.depth_policy);
+    if (!resolved_anchor.has_value() || resolved_anchor->missing) {
+        throw std::runtime_error("spawn_asset_attached failed: anchor '" + binding.anchor_name +
+                                 "' is missing on controller '" + (anchor_owner->info ? anchor_owner->info->name : std::string("<unknown>")) + "'");
+    }
+
     std::string owning_room = map_id_;
     if (current_room_) {
         owning_room = current_room_->room_name;
     }
 
-    auto resolved_anchor = anchor_owner->anchor_state(anchor_name, anchor_points::GridMaterialization::Ensure);
-    SDL_Point spawn_pos = resolved_anchor ? resolved_anchor->world_px : anchor_owner->world_point();
-    const int spawn_z = resolved_anchor ? resolved_anchor->world_z : anchor_owner->world_z();
-    const int resolved_layer = resolved_anchor ? resolved_anchor->resolution_layer : anchor_owner->grid_resolution;
+    SDL_Point spawn_pos = resolved_anchor->world_px;
+    const int spawn_z = resolved_anchor->world_z;
+    int resolved_layer = resolved_anchor->resolution_layer;
+    if (binding.layer_policy.has_value() &&
+        binding.layer_policy.value() == Asset::AnchorFollowTarget::LayerPolicy::MatchControllerAsset) {
+        if (auto* owner_gp = anchor_owner->grid_point()) {
+            resolved_layer = owner_gp->resolution_layer();
+        } else {
+            resolved_layer = anchor_owner->grid_resolution;
+        }
+    }
 
     Area spawn_area(owning_room,  0);
 
@@ -1380,7 +1453,8 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
                                         nullptr,
                                         std::string{},
                                         std::string{},
-                                        resolved_layer);
+                                        resolved_layer,
+                                        binding);
     Asset* raw = uptr.get();
     if (!raw) {
         return nullptr;
@@ -1393,7 +1467,7 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
     all.push_back(raw);
 
     if (raw) {
-        anchor_owner->bind_child_to_anchor(raw, anchor_name);
+        anchor_owner->bind_child_to_anchor(raw, binding.anchor_name);
     }
 
     queue_asset_dimension_update(raw);

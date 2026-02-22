@@ -79,9 +79,16 @@ class Asset {
 
     struct AnchorFollowTarget {
         Asset*       source = nullptr;
+        std::string  controller_asset_id;
         std::string  anchor_name;
+        std::optional<anchor_points::AnchorDepthPolicy> depth_policy;
+        enum class LayerPolicy {
+            MatchResolvedAnchor,
+            MatchControllerAsset
+        };
+        std::optional<LayerPolicy> layer_policy;
 
-        bool valid() const { return source != nullptr && !anchor_name.empty(); }
+        bool valid() const { return (source != nullptr || !controller_asset_id.empty()) && !anchor_name.empty(); }
     };
 
     struct TilingInfo {
@@ -278,12 +285,14 @@ class Asset {
         bool            in_front = true;
         Asset*          owner = nullptr;
 
-        void update(anchor_points::GridMaterialization grid_policy);
+        void update(anchor_points::GridMaterialization grid_policy,
+                    std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
     };
 
     AnchorHandle& get_anchor_point(const std::string& name);
     std::optional<ResolvedAnchor> anchor_state(const std::string& name,
-                                               anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None);
+                                               anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None,
+                                               std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
     void mark_anchors_dirty();
     void set_anchor_follow_target(std::optional<AnchorFollowTarget> follow);
     void bind_child_to_anchor(Asset* child, const std::string& anchor_name);
@@ -374,6 +383,7 @@ private:
     SDL_Point last_follow_world_{0, 0};
     int last_follow_world_z_ = 0;
     bool follow_initialized_ = false;
+    bool follow_error_reported_ = false;
     void apply_anchor_follow_target();
 
 

@@ -1086,6 +1086,30 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
         } catch (...) {
                 custom_controller_key.clear();
         }
+
+        try {
+                if (data.contains("follower_binding") && data["follower_binding"].is_object()) {
+                        const auto& binding = data["follower_binding"];
+                        FollowerBindingSpec spec;
+                        if (binding.contains("controller_asset_id") && binding["controller_asset_id"].is_string()) {
+                                spec.controller_asset_id = binding["controller_asset_id"].get<std::string>();
+                        }
+                        if (binding.contains("anchor_name") && binding["anchor_name"].is_string()) {
+                                spec.anchor_name = binding["anchor_name"].get<std::string>();
+                        }
+                        if (binding.contains("depth_policy") && binding["depth_policy"].is_string()) {
+                                spec.depth_policy = binding["depth_policy"].get<std::string>();
+                        }
+                        if (binding.contains("layer_policy") && binding["layer_policy"].is_string()) {
+                                spec.layer_policy = binding["layer_policy"].get<std::string>();
+                        }
+                        follower_binding = spec.is_valid() ? std::optional<FollowerBindingSpec>(std::move(spec)) : std::nullopt;
+                } else {
+                        follower_binding.reset();
+                }
+        } catch (...) {
+                follower_binding.reset();
+        }
 }
 
 void AssetInfo::set_spawn_groups_payload(const nlohmann::json& groups) {

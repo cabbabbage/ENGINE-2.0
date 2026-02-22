@@ -23,7 +23,7 @@
                 "enemy": false,
                 "npc": false,
                 "object": true,
-                "player": false,
+                "player": true,
                 "texture": false
             }
         },

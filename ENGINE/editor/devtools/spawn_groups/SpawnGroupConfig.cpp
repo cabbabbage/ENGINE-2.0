@@ -1237,6 +1237,7 @@ private:
                 return results;
             });
             graph->set_candidates_from_json(entry_view());
+            graph->set_defer_adjust_until_release(false);
             graph->set_on_adjust([this](int index, int delta){
                 if (!editable_) return;
                 if (index < 0) return;

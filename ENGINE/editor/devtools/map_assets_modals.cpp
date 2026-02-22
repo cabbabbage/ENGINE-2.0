@@ -223,6 +223,8 @@ public:
         }
         pie_widget_->set_screen_dimensions(screen_w_, screen_h_);
         pie_widget_->set_on_request_layout([this]() { this->layout(); });
+        // Regular modal writes directly to the section; apply immediately
+        pie_widget_->set_defer_adjust_until_release(false);
         pie_widget_->set_on_adjust([this](int index, int delta) { adjust_candidate_weight(index, delta); });
         pie_widget_->set_on_delete([this](int index) { remove_candidate(index); });
         if (regen_callback_) {
@@ -759,6 +761,8 @@ private:
             group.pie_widget = std::make_unique<CandidateEditorPieGraphWidget>();
             group.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
             group.pie_widget->set_on_request_layout([this]() { this->layout(); });
+            // Boundary edits immediately rebuild geometry; defer weight application until the slice is deselected
+            group.pie_widget->set_defer_adjust_until_release(true);
             group.pie_widget->set_on_adjust([this, spawn_id = group.spawn_id](int idx, int delta) {
                 this->adjust_candidate_weight(spawn_id, idx, delta);
             });

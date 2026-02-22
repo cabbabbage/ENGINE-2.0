@@ -104,6 +104,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             if (collapsed_) {
                 hovered_index_ = -1;
                 active_index_ = -1;
+                flush_pending_adjustment();
                 wheel_scroll_accumulator_ = 0.0;
                 hide_search();
                 release_scroll_capture();
@@ -140,6 +141,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
 
     if (candidates_.empty()) {
         hovered_index_ = -1;
+        flush_pending_adjustment();
         release_scroll_capture();
         return false;
     }
@@ -183,6 +185,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             hovered_index_ = target_index;
             if (e.button.clicks >= 2) {
                 if (on_delete_) {
+                    flush_pending_adjustment();
                     on_delete_(target_index);
                 }
                 active_index_ = -1;
@@ -192,6 +195,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             }
 
             if (active_index_ != target_index) {
+                flush_pending_adjustment();
                 active_index_ = target_index;
                 wheel_scroll_accumulator_ = 0.0;
                 if (!scroll_capture_active_) {
@@ -199,6 +203,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
                     scroll_capture_active_ = true;
                 }
             } else {
+                flush_pending_adjustment();
                 active_index_ = -1;
                 wheel_scroll_accumulator_ = 0.0;
                 release_scroll_capture();
@@ -207,6 +212,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         }
 
         if (active_index_ != -1) {
+            flush_pending_adjustment();
             active_index_ = -1;
             wheel_scroll_accumulator_ = 0.0;
             release_scroll_capture();
@@ -234,7 +240,12 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             }
 
             if (steps != 0) {
-                on_adjust_(active_index_, steps);
+                if (defer_adjust_until_release_) {
+                    pending_delta_ += steps;
+                    apply_live_delta(active_index_, steps);
+                } else {
+                    on_adjust_(active_index_, steps);
+                }
                 return true;
             }
 
@@ -245,6 +256,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
     }
 
     if (active_index_ == -1) {
+        flush_pending_adjustment();
         release_scroll_capture();
     }
 
@@ -430,6 +442,7 @@ void CandidateEditorPieGraphWidget::set_candidates_from_json(const nlohmann::jso
     hovered_index_ = -1;
     legend_row_rects_.clear();
     legend_row_height_ = 0;
+    flush_pending_adjustment();
     if (active_index_ >= static_cast<int>(candidates_.size())) {
         active_index_ = -1;
         if (scroll_capture_active_) {
@@ -524,6 +537,13 @@ void CandidateEditorPieGraphWidget::update_search(const Input& input) {
             notify_layout_change();
         }
     }
+}
+
+void CandidateEditorPieGraphWidget::flush_pending_adjustment() {
+    if (defer_adjust_until_release_ && pending_delta_ != 0 && active_index_ >= 0 && on_adjust_) {
+        on_adjust_(active_index_, pending_delta_);
+    }
+    pending_delta_ = 0;
 }
 
 CandidateEditorPieGraphWidget::Layout CandidateEditorPieGraphWidget::compute_layout() const {
@@ -1015,6 +1035,14 @@ void CandidateEditorPieGraphWidget::notify_layout_change() const {
 
 bool CandidateEditorPieGraphWidget::search_visible() const {
     return search_assets_ && search_assets_->visible();
+}
+
+void CandidateEditorPieGraphWidget::apply_live_delta(int index, int delta) {
+    if (index < 0 || index >= static_cast<int>(candidates_.size()) || delta == 0) {
+        return;
+    }
+    auto& candidate = candidates_[index];
+    candidate.weight = std::max(0.0, candidate.weight + static_cast<double>(delta));
 }
 
 

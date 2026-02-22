@@ -790,6 +790,9 @@ void RoomEditor::set_shared_footer_bar(DevFooterBar* footer) {
     shared_footer_bar_ = footer;
     configure_shared_panel();
     update_spawn_group_config_anchor();
+    Asset* primary = selected_assets_.empty() ? nullptr : selected_assets_.front();
+    update_grid_resolution_for_selection(primary);
+    refresh_cursor_snap();
 }
 
 void RoomEditor::set_snap_to_grid_enabled(bool enabled) {
@@ -797,6 +800,12 @@ void RoomEditor::set_snap_to_grid_enabled(bool enabled) {
         return;
     }
     snap_to_grid_enabled_ = enabled;
+    if (snap_to_grid_enabled_) {
+        clear_selection_grid_resolution_override();
+    } else {
+        Asset* primary = selected_assets_.empty() ? nullptr : selected_assets_.front();
+        update_grid_resolution_for_selection(primary);
+    }
     refresh_cursor_snap();
 }
 
@@ -4134,33 +4143,14 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
     MapGridSettings map_settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     map_settings.clamp();
 
-    overlay_resolution_before_drag_.reset();
-    overlay_resolution_override_during_drag_.reset();
-
-    const int user_grid_resolution = shared_footer_bar_
-        ? vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution())
-        : 0;
-
     SpawnEntryResolution resolved_entry = drag_spawn_id_.empty() ? SpawnEntryResolution{} : locate_spawn_entry(drag_spawn_id_);
     nlohmann::json* spawn_entry = resolved_entry.entry;
 
-    int desired_resolution = cursor_snap_resolution_ > 0
-        ? cursor_snap_resolution_
-        : map_settings.grid_resolution;
-
-    if (spawn_entry) {
-        desired_resolution = spawn_entry->value("resolution", desired_resolution);
-    } else if (primary && primary->grid_resolution > 0) {
-        desired_resolution = primary->grid_resolution;
+    int desired_resolution = current_grid_resolution();
+    if (desired_resolution <= 0) {
+        desired_resolution = map_settings.grid_resolution;
     }
-
     drag_resolution_ = vibble::grid::clamp_resolution(std::max(0, desired_resolution));
-
-    if (shared_footer_bar_ && drag_resolution_ > 0 && drag_resolution_ != user_grid_resolution) {
-        overlay_resolution_before_drag_ = user_grid_resolution;
-        overlay_resolution_override_during_drag_ = drag_resolution_;
-        shared_footer_bar_->set_grid_resolution(drag_resolution_);
-    }
 
     const std::string& method = primary->spawn_method;
     if (method == "Exact" || method == "Exact Position") {
@@ -4678,23 +4668,7 @@ bool RoomEditor::snap_dragged_assets_to_grid() {
 void RoomEditor::finalize_drag_session() {
 
     const bool snap_was_enabled = snap_to_grid_enabled_;
-    const int  resolution_used_for_drag = shared_footer_bar_
-        ? vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution())
-        : vibble::grid::clamp_resolution(drag_resolution_);
-
-    if (shared_footer_bar_ && overlay_resolution_before_drag_.has_value()) {
-        const int current_grid = vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution());
-        const bool should_restore_overlay =
-            overlay_resolution_override_during_drag_.has_value() &&
-            current_grid == *overlay_resolution_override_during_drag_;
-
-        if (should_restore_overlay) {
-            shared_footer_bar_->set_grid_resolution(*overlay_resolution_before_drag_);
-        }
-
-        overlay_resolution_before_drag_.reset();
-        overlay_resolution_override_during_drag_.reset();
-    }
+    const int  resolution_used_for_drag = vibble::grid::clamp_resolution(drag_resolution_);
 
     if (drag_states_.empty()) {
         reset_drag_state();
@@ -4830,8 +4804,6 @@ void RoomEditor::reset_drag_state() {
     drag_moved_ = false;
     drag_spawn_id_.clear();
 
-    overlay_resolution_before_drag_.reset();
-    overlay_resolution_override_during_drag_.reset();
 }
 
 nlohmann::json* RoomEditor::find_spawn_entry(const std::string& spawn_id) {
@@ -4910,9 +4882,6 @@ std::pair<int, int> RoomEditor::get_room_dimensions() const {
 }
 
 int RoomEditor::current_grid_resolution() const {
-    if (!snap_to_grid_enabled_) {
-        return 0;
-    }
     if (shared_footer_bar_) {
         return vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution());
     }
@@ -5120,6 +5089,8 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         spawn_id = primary->spawn_id;
     }
 
+    update_grid_resolution_for_selection(primary);
+
     if (spawn_id.empty()) {
         if (spawn_group_panel_) {
             spawn_group_panel_->close();
@@ -5204,6 +5175,69 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         spawn_group_panel_->close();
         spawn_group_panel_->set_visible(false);
     }
+}
+
+void RoomEditor::update_grid_resolution_for_selection(Asset* primary) {
+    if (!shared_footer_bar_) {
+        return;
+    }
+
+    if (snap_to_grid_enabled_) {
+        clear_selection_grid_resolution_override();
+        if (!primary || primary->spawn_id.empty()) {
+            return;
+        }
+        const int resolution = current_grid_resolution();
+        if (resolution > 0) {
+            snap_spawn_group_to_resolution(primary, resolution);
+        }
+        return;
+    }
+
+    if (!primary || primary->spawn_id.empty()) {
+        clear_selection_grid_resolution_override();
+        return;
+    }
+
+    int selected_resolution = 0;
+    SpawnEntryResolution resolved = locate_spawn_entry(primary->spawn_id);
+    if (resolved.entry) {
+        selected_resolution = resolved.entry->value("resolution", 0);
+    } else if (primary->grid_resolution > 0) {
+        selected_resolution = primary->grid_resolution;
+    }
+    selected_resolution = vibble::grid::clamp_resolution(std::max(0, selected_resolution));
+    if (selected_resolution <= 0) {
+        clear_selection_grid_resolution_override();
+        return;
+    }
+
+    if (!selection_overlay_resolution_before_override_.has_value()) {
+        selection_overlay_resolution_before_override_ = vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution());
+    }
+    selection_overlay_resolution_override_ = selected_resolution;
+
+    if (vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution()) != selected_resolution) {
+        shared_footer_bar_->set_grid_resolution(selected_resolution);
+    }
+}
+
+void RoomEditor::clear_selection_grid_resolution_override() {
+    if (!shared_footer_bar_ || !selection_overlay_resolution_before_override_.has_value()) {
+        selection_overlay_resolution_before_override_.reset();
+        selection_overlay_resolution_override_.reset();
+        return;
+    }
+
+    const int current = vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution());
+    const bool should_restore = selection_overlay_resolution_override_.has_value() &&
+                                current == *selection_overlay_resolution_override_;
+    if (should_restore) {
+        shared_footer_bar_->set_grid_resolution(*selection_overlay_resolution_before_override_);
+    }
+
+    selection_overlay_resolution_before_override_.reset();
+    selection_overlay_resolution_override_.reset();
 }
 
 void RoomEditor::sanitize_perimeter_spawn_groups() {
@@ -5547,41 +5581,51 @@ bool RoomEditor::snap_spawn_group_to_resolution(Asset* anchor, int resolution) {
     const int clamped = vibble::grid::clamp_resolution(std::max(0, resolution));
     SDL_Point current = anchor->world_point();
     SDL_Point snapped = grid_service.snap_to_vertex(current, clamped);
-    if (snapped.x == current.x && snapped.y == current.y) {
-        return false;
-    }
 
     const int dx = snapped.x - current.x;
     const int dy = snapped.y - current.y;
+    const bool moved = (dx != 0 || dy != 0);
+    bool changed = false;
 
     // Move all assets in the spawn group together.
     for (Asset* asset : *active_assets_) {
         if (!asset || asset->dead) continue;
         if (!asset_belongs_to_room(asset)) continue;
         if (asset->spawn_id != anchor->spawn_id) continue;
-        asset->move_to_world_position(asset->world_x() + dx, asset->world_y() + dy, asset->world_z());
-        asset->grid_resolution = clamped;
-    }
-
-    bool json_modified = false;
-    SpawnEntryResolution resolved = locate_spawn_entry(anchor->spawn_id);
-    if (resolved.entry) {
-        (*resolved.entry)["resolution"] = clamped;
-
-        SDL_Point center = get_room_center();
-        auto [width, height] = get_room_dimensions();
-        std::string method = resolved.entry->value("position", std::string{});
-
-        if (method == "Percent") {
-            update_percent_json(*resolved.entry, *anchor, center, width, height);
-            json_modified = true;
-        } else if (method.empty() || method == "Exact" || method == "Exact Position") {
-            update_exact_json(*resolved.entry, *anchor, center, width, height);
-            json_modified = true;
+        if (moved) {
+            asset->move_to_world_position(asset->world_x() + dx, asset->world_y() + dy, asset->world_z());
+            changed = true;
+        }
+        if (asset->grid_resolution != clamped) {
+            asset->grid_resolution = clamped;
+            changed = true;
         }
     }
 
-    if (json_modified) {
+    bool persist_needed = false;
+    SpawnEntryResolution resolved = locate_spawn_entry(anchor->spawn_id);
+    if (resolved.entry) {
+        if (resolved.entry->value("resolution", 0) != clamped) {
+            (*resolved.entry)["resolution"] = clamped;
+            persist_needed = true;
+        }
+
+        if (moved) {
+            SDL_Point center = get_room_center();
+            auto [width, height] = get_room_dimensions();
+            std::string method = resolved.entry->value("position", std::string{});
+
+            if (method == "Percent") {
+                update_percent_json(*resolved.entry, *anchor, center, width, height);
+                persist_needed = true;
+            } else if (method.empty() || method == "Exact" || method == "Exact Position") {
+                update_exact_json(*resolved.entry, *anchor, center, width, height);
+                persist_needed = true;
+            }
+        }
+    }
+
+    if (persist_needed) {
         if (resolved.source == SpawnEntryResolution::Source::Room) {
             save_current_room_assets_json();
         } else if (resolved.source == SpawnEntryResolution::Source::Map) {
@@ -5593,9 +5637,11 @@ bool RoomEditor::snap_spawn_group_to_resolution(Asset* anchor, int resolution) {
         refresh_spawn_group_config_ui();
     }
 
-    mark_spatial_index_dirty();
-    mark_highlight_dirty();
-    return true;
+    if (changed) {
+        mark_spatial_index_dirty();
+        mark_highlight_dirty();
+    }
+    return changed || persist_needed;
 }
 
 void RoomEditor::integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& spawned) {
@@ -6096,78 +6142,22 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
         SDL_SetTextureColorMod(texture, overlay_color.r, overlay_color.g, overlay_color.b);
         SDL_SetTextureAlphaMod(texture, overlay_color.a);
 
-        auto render_with_geometry = [&](const RenderObject* obj) -> bool {
-            if (!obj) return false;
-
-            float atlas_wf = 0.0f;
-            float atlas_hf = 0.0f;
-            if (!SDL_GetTextureSize(texture, &atlas_wf, &atlas_hf)) {
-                return false;
+        bool ok = false;
+        if (src_obj && !src_obj->cached_vertices.empty() && !src_obj->mesh_dirty) {
+            std::vector<SDL_Vertex> overlay_vertices;
+            overlay_vertices.reserve(src_obj->cached_vertices.size());
+            for (const auto& vert : src_obj->cached_vertices) {
+                SDL_Vertex copy = vert;
+                copy.color = SDL_FColor{1.0f, 1.0f, 1.0f, 1.0f};
+                overlay_vertices.push_back(copy);
             }
-            const float atlas_w = atlas_wf;
-            const float atlas_h = atlas_hf;
-            if (atlas_w <= 0.0f || atlas_h <= 0.0f) {
-                return false;
-            }
-
-            float u0 = 0.0f, u1 = 1.0f, v0 = 0.0f, v1 = 1.0f;
-            float tex_w = static_cast<float>(src_rect.w > 0 ? src_rect.w : atlas_w);
-            float tex_h = static_cast<float>(src_rect.h > 0 ? src_rect.h : atlas_h);
-
-            if (obj->has_src_rect) {
-                const float pad_x = 0.5f / atlas_w;
-                const float pad_y = 0.5f / atlas_h;
-                u0 = (static_cast<float>(obj->src_rect.x) + pad_x) / atlas_w;
-                u1 = (static_cast<float>(obj->src_rect.x + obj->src_rect.w) - pad_x) / atlas_w;
-                v0 = (static_cast<float>(obj->src_rect.y) + pad_y) / atlas_h;
-                v1 = (static_cast<float>(obj->src_rect.y + obj->src_rect.h) - pad_y) / atlas_h;
-                tex_w = static_cast<float>(obj->src_rect.w);
-                tex_h = static_cast<float>(obj->src_rect.h);
-            } else {
-                const float pad_x = 0.5f / tex_w;
-                const float pad_y = 0.5f / tex_h;
-                u0 = pad_x;
-                u1 = 1.0f - pad_x;
-                v0 = pad_y;
-                v1 = 1.0f - pad_y;
-            }
-
-            // Build a simple quad in screen space using current world projection.
-            const float world_x = static_cast<float>(obj->screen_rect.x);
-            const float world_y = static_cast<float>(obj->screen_rect.y);
-            const float half_width = static_cast<float>(obj->screen_rect.w) * 0.5f;
-            const float height = static_cast<float>(obj->screen_rect.h);
-            const float base_z = obj->world_z_offset;
-
-            SDL_FPoint bl{}, br{}, tl{}, tr{};
-            const bool ok_bl = cam.project_world_point(SDL_FPoint{world_x - half_width, world_y}, base_z, bl);
-            const bool ok_br = cam.project_world_point(SDL_FPoint{world_x + half_width, world_y}, base_z, br);
-            const bool ok_tl = cam.project_world_point(SDL_FPoint{world_x - half_width, world_y - height}, base_z, tl);
-            const bool ok_tr = cam.project_world_point(SDL_FPoint{world_x + half_width, world_y - height}, base_z, tr);
-            if (!(ok_bl && ok_br && ok_tl && ok_tr) ||
-                !std::isfinite(bl.x) || !std::isfinite(bl.y) ||
-                !std::isfinite(br.x) || !std::isfinite(br.y) ||
-                !std::isfinite(tl.x) || !std::isfinite(tl.y) ||
-                !std::isfinite(tr.x) || !std::isfinite(tr.y)) {
-                return false;
-            }
-
-            SDL_Vertex verts[4]{};
-            verts[0].position = tl; verts[0].color = SDL_FColor{1.0f,1.0f,1.0f,1.0f}; verts[0].tex_coord = SDL_FPoint{u0, v0};
-            verts[1].position = tr; verts[1].color = SDL_FColor{1.0f,1.0f,1.0f,1.0f}; verts[1].tex_coord = SDL_FPoint{u1, v0};
-            verts[2].position = br; verts[2].color = SDL_FColor{1.0f,1.0f,1.0f,1.0f}; verts[2].tex_coord = SDL_FPoint{u1, v1};
-            verts[3].position = bl; verts[3].color = SDL_FColor{1.0f,1.0f,1.0f,1.0f}; verts[3].tex_coord = SDL_FPoint{u0, v1};
-
-            static const int indices[6] = {0, 1, 2, 0, 2, 3};
-            return SDL_RenderGeometry(renderer,
-                                      texture,
-                                      verts,
-                                      4,
-                                      indices,
-                                      6) == 0;
-        };
-
-        bool ok = render_with_geometry(src_obj);
+            ok = (SDL_RenderGeometry(renderer,
+                                     texture,
+                                     overlay_vertices.data(),
+                                     static_cast<int>(overlay_vertices.size()),
+                                     src_obj->cached_indices.data(),
+                                     static_cast<int>(src_obj->cached_indices.size())) == 0);
+        }
         if (!ok) {
             ok = SDL_RenderTexture(renderer, texture, src_ptr, &dst_rect) == 0;
         }
@@ -6181,7 +6171,20 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
 
     bool drew_mask = false;
 
+    SDL_Texture* base_texture = asset->get_current_frame();
     for (const auto& obj : asset->render_package) {
+        // Only draw the primary sprite to avoid duplicating depth-cue/background layers.
+        if (base_texture) {
+            if (obj.texture != base_texture) {
+                continue;
+            }
+        } else {
+            // If no base texture, use the first render object only.
+            if (&obj != &asset->render_package.front()) {
+                continue;
+            }
+        }
+
         SDL_FRect rect{};
         if (!project_render_object_rect(obj, rect)) {
             continue;
@@ -6189,6 +6192,8 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
         if (render_mask(obj.texture, rect, &obj)) {
             drew_mask = true;
         }
+        // We only need one overlay draw.
+        break;
     }
 
     if (!drew_mask) {

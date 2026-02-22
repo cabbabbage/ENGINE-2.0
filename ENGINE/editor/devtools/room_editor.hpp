@@ -223,6 +223,8 @@ private:
     SDL_Point spawn_groups_anchor_point() const;
     void clear_active_spawn_group_target();
     void sync_spawn_group_panel_with_selection();
+    void update_grid_resolution_for_selection(Asset* primary);
+    void clear_selection_grid_resolution_override();
     void update_exact_json(nlohmann::json& entry, const Asset& asset, SDL_Point center, int width, int height);
     void update_percent_json(nlohmann::json& entry, const Asset& asset, SDL_Point center, int width, int height);
     void save_perimeter_json(nlohmann::json& entry, int dx, int dy, int orig_w, int orig_h, int radius);
@@ -381,8 +383,8 @@ private:
     std::string drag_spawn_id_;
     bool suppress_next_left_click_ = false;
 
-    std::optional<int> overlay_resolution_before_drag_{};
-    std::optional<int> overlay_resolution_override_during_drag_{};
+    std::optional<int> selection_overlay_resolution_before_override_{};
+    std::optional<int> selection_overlay_resolution_override_{};
 
     int click_buffer_frames_ = 0;
     int rclick_buffer_frames_ = 0;

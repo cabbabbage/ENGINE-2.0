@@ -47,6 +47,8 @@ private:
     void persist_changes();
     void invalidate_preview() const;
     void refresh_selection_state();
+    void request_close();
+    void prime_textures();
     bool ui_contains_point(const SDL_Point& p) const;
     std::pair<int, int> frame_dimensions_for_index(std::size_t frame_index) const;
     std::pair<int, int> current_frame_dimensions() const;
@@ -54,6 +56,13 @@ private:
     DisplacedAssetAnchorPoint to_runtime_anchor(const frame_editors::FrameAnchorPoint& anchor) const;
     void sync_runtime_animation_anchors(const std::string& animation_id,
                                         const std::vector<frame_editors::AnchorFrame>& frames);
+
+    struct FrameTextureInfo {
+        SDL_Texture* texture = nullptr;
+        SDL_Rect src_rect{0, 0, 0, 0};
+        bool has_src_rect = false;
+    };
+    FrameTextureInfo resolve_frame_texture(SDL_Renderer* renderer, int frame_index) const;
 
     bool point_in_viewport(const SDL_Point& p) const;
     SDL_FPoint texture_to_screen(int tx, int ty) const;
@@ -70,6 +79,9 @@ private:
     int selected_anchor_ = -1;
     bool wants_close_ = false;
     bool dirty_ = false;
+    bool texture_primed_ = false;
+    bool tried_runtime_rebuild_ = false;
+    bool preview_refreshed_ = false;
 
     bool is_dragging_anchor_ = false;
     bool is_panning_ = false;

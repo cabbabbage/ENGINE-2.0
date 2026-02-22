@@ -744,23 +744,48 @@
     "vibble": {
       "animations": {
         "default": {
+          "anchor_points": [
+            [
+              {
+                "in_front": true,
+                "name": "eyes",
+                "texture_x": 855,
+                "texture_y": 486
+              }
+            ]
+          ],
+          "crop_frames": false,
           "flipped_source": false,
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "anti_tags": [],
       "asset_directory": "resources/assets/vibble",
       "asset_name": "vibble",
-      "asset_type": "object",
+      "asset_type": "player",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
@@ -771,6 +796,7 @@
       },
       "start": "default",
       "tags": [],
+      "tillable": false,
       "update_radius": 0
     },
     "water": {
@@ -857,7 +883,7 @@
                 "name": "null"
               },
               {
-                "chance": 4,
+                "chance": 52,
                 "name": "tree"
               }
             ],
@@ -866,7 +892,7 @@
             "explicit_flip": false,
             "force_flipped": false,
             "grid_resolution": 6,
-            "jitter": 0,
+            "jitter": 2,
             "locked": false,
             "max_number": 1,
             "min_number": 1,
@@ -953,9 +979,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 2,
@@ -1025,7 +1051,7 @@
               "origional_width": 3352,
               "position": "Exact",
               "priority": 1,
-              "resolution": 6,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-3eb247634353"
@@ -1042,19 +1068,19 @@
                 }
               ],
               "display_name": "tailor",
-              "dx": -412,
-              "dy": 1108,
+              "dx": -1848,
+              "dy": 908,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3160,
-              "origional_width": 3000,
+              "origional_height": 2968,
+              "origional_width": 3104,
               "position": "Exact",
               "priority": 2,
-              "resolution": 2,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-61e4c02a6dc9"
@@ -1112,7 +1138,7 @@
               "origional_width": 3360,
               "position": "Exact",
               "priority": 4,
-              "resolution": 6,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-4950e10ceb63"
@@ -1170,7 +1196,7 @@
               "origional_width": 3288,
               "position": "Exact",
               "priority": 6,
-              "resolution": 6,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-a9115a2605ca"
@@ -1198,7 +1224,8 @@
               "origional_height": 3104,
               "origional_width": 3232,
               "position": "Exact",
-              "resolution": 6,
+              "priority": 7,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-ffc8ea7fe7b3"
@@ -1215,18 +1242,19 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": 121,
-              "dy": 767,
+              "dx": -712,
+              "dy": 1008,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3104,
-              "origional_width": 3232,
+              "origional_height": 2864,
+              "origional_width": 3056,
               "position": "Exact",
-              "resolution": 6,
+              "priority": 8,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-68b9da720bd3"

@@ -1836,16 +1836,18 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
     if (renderer) {
         if (current_room_ && current_room_->room_area) {
-            const SDL_Color accent_base = DMStyles::AccentButton().hover_bg;
-            auto style = dm_draw::ResolveRoomBoundsOverlayStyle(accent_base);
+            const SDL_Color accent_hover = DMStyles::AccentButton().hover_bg;
+            auto style = dm_draw::ResolveRoomBoundsOverlayStyle(accent_hover);
             SDL_Color accent_fill = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.18f);
             accent_fill.a = 110;
             style.fill = accent_fill;
             style.outline = DMStyles::AccentButton().border;
-            style.outline.a = 235;
             style.center = DMStyles::HighlightColor();
             style.center.a = 235;
-            dm_draw::RenderRoomBoundsOverlay( renderer, assets_->getView(), *current_room_->room_area, style);
+            SDL_Color accent_glow = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.35f);
+            accent_glow.a = 140;
+            style.glow = accent_glow;
+            dm_draw::RenderRoomBoundsOverlay(renderer, assets_->getView(), *current_room_->room_area, style);
         }
     }
 

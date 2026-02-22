@@ -181,33 +181,38 @@ void MapEditor::render(SDL_Renderer* renderer) {
 
     WarpedScreenGrid& view = assets_->getView();
 
-    const SDL_Color accent_base = DMStyles::AccentButton().hover_bg;
-    const SDL_Color accent_fill = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.18f);
+    const SDL_Color accent_hover = DMStyles::AccentButton().hover_bg;
+    SDL_Color accent_fill = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.18f);
+    accent_fill.a = 110;
     const SDL_Color accent_outline = DMStyles::AccentButton().border;
-    const SDL_Color highlight_center = DMStyles::HighlightColor();
-    SDL_Color grey_base = dm_draw::LightenColor(DMStyles::Border(), 0.12f);
+    SDL_Color accent_center = DMStyles::HighlightColor();
+    accent_center.a = 235;
+    SDL_Color accent_glow = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.35f);
+    accent_glow.a = 140;
+    SDL_Color grey_base = dm_draw::LightenColor(DMStyles::Border(), 0.04f);
     grey_base.a = 255;
-    SDL_Color grey_fill = dm_draw::LightenColor(DMStyles::Border(), 0.35f);
-    grey_fill.a = 30;
+    SDL_Color grey_fill = dm_draw::LightenColor(DMStyles::Border(), 0.08f);
+    grey_fill.a = 35;
     SDL_Color grey_outline = dm_draw::LightenColor(DMStyles::Border(), 0.08f);
-    grey_outline.a = 140;
+    grey_outline.a = 180;
+    SDL_Color grey_glow = dm_draw::LightenColor(DMStyles::Border(), 0.24f);
+    grey_glow.a = 70;
 
     for (Room* room : *rooms_) {
         if (!room || !room->room_area) continue;
         const bool is_current = (room == current_room_);
-        SDL_Color base_color = is_current ? accent_base : grey_base;
+        SDL_Color base_color = is_current ? accent_hover : grey_base;
         auto style = dm_draw::ResolveRoomBoundsOverlayStyle(base_color);
         if (is_current) {
             style.fill = accent_fill;
-            style.fill.a = 110;
             style.outline = accent_outline;
-            style.outline.a = 235;
-            style.center = highlight_center;
-            style.center.a = 235;
+            style.center = accent_center;
+            style.glow = accent_glow;
         } else {
             style.fill = grey_fill;
             style.outline = grey_outline;
             style.center = SDL_Color{0, 0, 0, 0};
+            style.glow = grey_glow;
         }
 
         dm_draw::RenderRoomBoundsOverlay( renderer, view, *room->room_area, style);

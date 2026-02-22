@@ -87,6 +87,42 @@ int halved_render_quality_percent(int percent) {
 }
 
 
+std::optional<Asset::AnchorFollowTarget> make_binding_from_follower_spec(const AssetInfo& info) {
+    if (!info.follower_binding.has_value()) {
+        return std::nullopt;
+    }
+    const auto& spec = info.follower_binding.value();
+    if (!spec.is_valid()) {
+        return std::nullopt;
+    }
+
+    Asset::AnchorFollowTarget binding{};
+    binding.controller_asset_id = spec.controller_asset_id;
+    binding.anchor_name = spec.anchor_name;
+
+    if (spec.depth_policy.has_value()) {
+        const std::string policy = spec.depth_policy.value();
+        if (policy == "match_owner") {
+            binding.depth_policy = anchor_points::AnchorDepthPolicy::MatchOwner;
+        } else if (policy == "behind") {
+            binding.depth_policy = anchor_points::AnchorDepthPolicy::Behind;
+        } else {
+            binding.depth_policy = anchor_points::AnchorDepthPolicy::InFront;
+        }
+    }
+
+    if (spec.layer_policy.has_value()) {
+        const std::string policy = spec.layer_policy.value();
+        if (policy == "match_controller_asset") {
+            binding.layer_policy = Asset::AnchorFollowTarget::LayerPolicy::MatchControllerAsset;
+        } else {
+            binding.layer_policy = Asset::AnchorFollowTarget::LayerPolicy::MatchResolvedAnchor;
+        }
+    }
+
+    return binding;
+}
+
 std::string normalize_controller_id(const std::string& value) {
     std::string out;
     out.reserve(value.size());
@@ -1483,6 +1519,10 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     std::shared_ptr<AssetInfo> info = library_.get(name);
     if (!info) {
         return nullptr;
+    }
+
+    if (auto binding = make_binding_from_follower_spec(*info); binding.has_value()) {
+        return spawn_asset_attached(name, binding.value());
     }
 
     std::string owning_room = map_id_;

@@ -42,6 +42,7 @@ private:
     void apply_to_all_frames();
     void apply_to_next_frame();
     void apply_to_animation();
+    bool apply_to_selected_animations();
     bool apply_to_all_animations();
     void persist_changes();
     void invalidate_preview() const;

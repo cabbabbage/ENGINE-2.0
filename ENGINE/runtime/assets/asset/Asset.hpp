@@ -19,6 +19,7 @@
 #include "asset_info.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "anchor_point.hpp"
+#include "utils/AnchorPointResolver.hpp"
 
 #include "utils/transform_smoothing.hpp"
 

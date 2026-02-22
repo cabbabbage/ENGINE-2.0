@@ -13,7 +13,7 @@
 #include "devtools/frame_editors/FrameEditorBase.hpp"
 #include "devtools/frame_editors/HitGeoFrameEditor.hpp"
 #include "devtools/frame_editors/MovementFrameEditor.hpp"
-#include "devtools/frame_editors/AnchorFrameEditor.hpp"
+#include "devtools/anchor_editor/AnchorEditor.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
 #include "utils/input.hpp"
@@ -50,7 +50,7 @@ std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(FrameEdit
         case FrameEditorSession::Mode::HitGeometry:
             return std::make_unique<devmode::frame_editors::HitGeoFrameEditor>();
         case FrameEditorSession::Mode::AnchorPoints:
-            return std::make_unique<devmode::frame_editors::AnchorFrameEditor>();
+            return std::make_unique<devmode::anchor_editor::AnchorEditor>();
     }
     return nullptr;
 }

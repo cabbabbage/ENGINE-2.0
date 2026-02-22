@@ -91,6 +91,10 @@ public:
 
     void set_default_resolution(int resolution);
     void set_manifest_store(class devmode::core::ManifestStore* store) { manifest_store_ = store; }
+    // Detach from any bound JSON so external callers can safely mutate/delete
+    // the underlying spawn group data without leaving dangling pointers inside
+    // the config panel.
+    void clear_binding();
 
     void expand_group(const std::string& id);
     void collapse_group(const std::string& id);

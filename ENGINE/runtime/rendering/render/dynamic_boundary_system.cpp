@@ -153,6 +153,17 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
     }
     return BoundaryScaleResult{remainder_scale, selection.index};
 }
+world::GridPoint::RegionKind to_world_region_kind(DynamicBoundarySystem::RegionKind kind) {
+    switch (kind) {
+    case DynamicBoundarySystem::RegionKind::Room:
+        return world::GridPoint::RegionKind::Room;
+    case DynamicBoundarySystem::RegionKind::Trail:
+        return world::GridPoint::RegionKind::Trail;
+    default:
+        return world::GridPoint::RegionKind::Boundary;
+    }
+}
+
 }
 
 DynamicBoundarySystem::DynamicBoundarySystem() = default;
@@ -307,7 +318,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 };
                 const SDL_Point world_pt{static_cast<int>(std::lround(world_pos.x)), static_cast<int>(std::lround(world_pos.y))};
                 const auto& region_entry = resolve_region_cache(world_pt, rooms);
-                if (region_entry.region_kind != world::GridPoint::RegionKind::Boundary || region_entry.blocked) {
+                if (region_entry.region_kind != RegionKind::Boundary || region_entry.blocked) {
                     continue;
                 }
                 const world::GridPoint virtual_point =
@@ -315,7 +326,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 const world::GridKey virtual_key =
                     grid.grid_key_from_world(virtual_point, world_z, resolution_layer);
                 if (world::GridPoint* gp = grid.find_grid_point(virtual_key)) {
-                    gp->region_kind = region_entry.region_kind;
+                    gp->region_kind = to_world_region_kind(region_entry.region_kind);
                     gp->region_owner = region_entry.owner;
                 }
 
@@ -776,11 +787,11 @@ DynamicBoundarySystem::RegionCacheEntry DynamicBoundarySystem::classify_region_p
     const SDL_Point& world_pt,
     const std::vector<Room*>& rooms) const {
     RegionCacheEntry entry;
-    entry.region_kind = world::GridPoint::RegionKind::Boundary;
+    entry.region_kind = RegionKind::Boundary;
     entry.owner = nullptr;
     entry.blocked = false;
 
-    const auto match_area = [&](const Area* area, world::GridPoint::RegionKind kind, const Room* room) -> bool {
+    const auto match_area = [&](const Area* area, RegionKind kind, const Room* room) -> bool {
         if (!area || !room) {
             return false;
         }
@@ -800,7 +811,7 @@ DynamicBoundarySystem::RegionCacheEntry DynamicBoundarySystem::classify_region_p
         if (!room) {
             continue;
         }
-        if (match_area(room->room_area.get(), world::GridPoint::RegionKind::Room, room)) {
+        if (match_area(room->room_area.get(), RegionKind::Room, room)) {
             return entry;
         }
         for (const auto& named : room->areas) {
@@ -810,7 +821,7 @@ DynamicBoundarySystem::RegionCacheEntry DynamicBoundarySystem::classify_region_p
             if (!(is_trail_string(named.type) || is_trail_string(named.kind) || is_trail_string(named.name))) {
                 continue;
             }
-            if (match_area(named.area.get(), world::GridPoint::RegionKind::Trail, room)) {
+            if (match_area(named.area.get(), RegionKind::Trail, room)) {
                 return entry;
             }
         }

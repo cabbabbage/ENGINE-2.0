@@ -13,6 +13,9 @@
 #include <cstdio>
 #include <numeric>
 #include <limits>
+#include <filesystem>
+#include <regex>
+#include <system_error>
 
 #include "devtools/map_editor.hpp"
 #include "devtools/room_editor.hpp"
@@ -27,6 +30,8 @@
 #include "devtools/font_cache.hpp"
 #include "devtools/sdl_pointer_utils.hpp"
 #include "devtools/dev_ui_settings.hpp"
+#include "dev_mode_utils.hpp"
+#include "asset_paths.hpp"
 #include "utils/log.hpp"
 #include "assets/asset_info.hpp"
 #include "dm_styles.hpp"
@@ -58,6 +63,8 @@
 #include "utils/grid.hpp"
 #include "utils/grid_occupancy.hpp"
 #include "utils/input.hpp"
+#include "utils/stb_image.h"
+#include "utils/stb_image_write.h"
 #include "utils/string_utils.hpp"
 #include "utils/display_color.hpp"
 
@@ -209,6 +216,177 @@ private:
 SimpleLabelCache& simple_label_cache() {
     static SimpleLabelCache cache;
     return cache;
+}
+
+using DropKind = DevControls::DropContentKind;
+
+bool has_extension_ci(const std::filesystem::path& path, std::string_view ext) {
+    std::string a = vibble::strings::to_lower_copy(path.extension().string());
+    std::string b = vibble::strings::to_lower_copy(std::string(ext));
+    return a == b;
+}
+
+bool has_any_extension_ci(const std::filesystem::path& path, std::initializer_list<std::string_view> exts) {
+    for (auto ext : exts) {
+        if (has_extension_ci(path, ext)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<std::filesystem::path> normalize_sequence(const std::vector<std::filesystem::path>& files) {
+    std::vector<std::filesystem::path> normalized = files;
+
+    auto numeric_key = [](const std::filesystem::path& p) {
+        std::string stem = p.stem().string();
+        try {
+            return std::make_tuple(0, std::stoi(stem), vibble::strings::to_lower_copy(stem));
+        } catch (...) {
+            std::smatch match;
+            static const std::regex kNumber{"(\\d+)", std::regex::icase};
+            if (std::regex_search(stem, match, kNumber)) {
+                try {
+                    return std::make_tuple(0, std::stoi(match.str(1)), vibble::strings::to_lower_copy(stem));
+                } catch (...) {
+                }
+            }
+        }
+        return std::make_tuple(1, 0, vibble::strings::to_lower_copy(stem));
+    };
+
+    std::sort(normalized.begin(), normalized.end(), [&](const auto& lhs, const auto& rhs) {
+        return numeric_key(lhs) < numeric_key(rhs);
+    });
+    return normalized;
+}
+
+struct DropValidationResult {
+    DropKind kind = DropKind::None;
+    std::vector<std::filesystem::path> files;
+    std::filesystem::path folder;
+    bool valid = false;
+    std::string reason;
+};
+
+std::string sanitize_asset_name_local(const std::string& name) {
+    if (name.empty()) return {};
+    std::string sanitized;
+    sanitized.reserve(name.size());
+    for (char c : name) {
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
+            sanitized.push_back(c);
+        } else {
+            sanitized.push_back('_');
+        }
+    }
+    while (!sanitized.empty() && sanitized.front() == '_') sanitized.erase(sanitized.begin());
+    while (!sanitized.empty() && sanitized.back() == '_') sanitized.pop_back();
+    return sanitized;
+}
+
+DropValidationResult validate_drop_items(const std::vector<std::filesystem::path>& raw_items) {
+    DropValidationResult result;
+    if (raw_items.empty()) {
+        result.reason = "No items provided";
+        return result;
+    }
+
+    std::vector<std::filesystem::path> items;
+    items.reserve(raw_items.size());
+    for (const auto& path : raw_items) {
+        try {
+            if (std::filesystem::exists(path)) {
+                items.push_back(path);
+            }
+        } catch (...) {
+        }
+    }
+    if (items.empty()) {
+        result.reason = "Dropped items missing";
+        return result;
+    }
+
+    auto is_image = [](const std::filesystem::path& p) {
+        return has_any_extension_ci(p, {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif"});
+    };
+
+    if (items.size() == 1) {
+        const auto& only = items.front();
+        std::error_code ec;
+        const bool is_dir = std::filesystem::is_directory(only, ec);
+        if (is_dir && !ec) {
+            std::vector<std::filesystem::path> pngs;
+            try {
+                for (const auto& entry : std::filesystem::directory_iterator(only)) {
+                    if (!entry.is_regular_file()) continue;
+                    if (has_extension_ci(entry.path(), ".png")) {
+                        pngs.push_back(entry.path());
+                    }
+                }
+            } catch (...) {
+            }
+            if (pngs.empty()) {
+                result.reason = "Folder contains no PNG images";
+                return result;
+            }
+            result.kind = DropKind::PngFolder;
+            result.folder = only;
+            result.files = normalize_sequence(pngs);
+            result.valid = true;
+            return result;
+        }
+
+        if (has_extension_ci(only, ".gif")) {
+            result.kind = DropKind::Gif;
+            result.files = {only};
+            result.valid = true;
+            return result;
+        }
+        if (has_extension_ci(only, ".png")) {
+            result.kind = DropKind::SinglePng;
+            result.files = {only};
+            result.valid = true;
+            return result;
+        }
+        if (is_image(only)) {
+            result.reason = "Only PNG or GIF files are accepted";
+            return result;
+        }
+        result.reason = "Unsupported file type";
+        return result;
+    }
+
+    for (const auto& item : items) {
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(item, ec) || !is_image(item)) {
+            result.reason = "All dropped items must be image files";
+            return result;
+        }
+    }
+    result.kind = DropKind::MultiImages;
+    result.files = normalize_sequence(items);
+    result.valid = true;
+    return result;
+}
+
+std::string suggest_name_from_drop(const DropValidationResult& validation) {
+    auto base_from_path = [] (const std::filesystem::path& p) {
+        std::string stem = p.stem().string();
+        if (stem.empty()) return std::string{};
+        return sanitize_asset_name_local(stem);
+    };
+
+    if (!validation.files.empty()) {
+        if (validation.kind == DropKind::PngFolder && !validation.folder.empty()) {
+            auto stem = validation.folder.filename().string();
+            auto candidate = sanitize_asset_name_local(stem);
+            if (!candidate.empty()) return candidate;
+        }
+        auto candidate = base_from_path(validation.files.front());
+        if (!candidate.empty()) return candidate;
+    }
+    return std::string{"new_asset"};
 }
 
 void draw_simple_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {

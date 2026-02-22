@@ -108,6 +108,13 @@ std::string format_fps(double fps) {
     return oss.str();
 }
 
+SDL_Color reduced_alpha_color(const SDL_Color& color) {
+    SDL_Color result = color;
+    const int alpha = (static_cast<int>(result.a) + 1) / 2;
+    result.a = static_cast<Uint8>(std::clamp(alpha, 0, 255));
+    return result;
+}
+
 std::string format_ram_line(double used_gb, double total_gb) {
     if (used_gb <= 0.0 || total_gb <= 0.0) {
         return std::string("RAM: N/A");
@@ -700,7 +707,9 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
     }
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-    const SDL_Color panel_bg = DMStyles::PanelBG();
+    const bool expanded = filters_expanded_;
+    const SDL_Color base_panel_bg = DMStyles::PanelBG();
+    const SDL_Color panel_bg = expanded ? reduced_alpha_color(base_panel_bg) : base_panel_bg;
     const SDL_Color highlight = DMStyles::HighlightColor();
     const SDL_Color shadow = DMStyles::ShadowColor();
     dm_draw::DrawBeveledRect( renderer, layout_bounds_, DMStyles::CornerRadius(), DMStyles::BevelDepth(), panel_bg, highlight, shadow, false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
@@ -728,9 +737,10 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
         return;
     }
 
-    const SDL_Color content_bg = DMStyles::PanelBG();
+    const SDL_Color content_bg = expanded ? panel_bg : base_panel_bg;
+    const Uint8 content_alpha = expanded ? content_bg.a : 220;
     if (settings_rect_.w > 0 && settings_rect_.h > 0) {
-        SDL_SetRenderDrawColor(renderer, content_bg.r, content_bg.g, content_bg.b, 220);
+        SDL_SetRenderDrawColor(renderer, content_bg.r, content_bg.g, content_bg.b, content_alpha);
         sdl_render::FillRect(renderer, &settings_rect_);
     }
 
@@ -769,7 +779,7 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
     }
 
     if (filters_rect_.w > 0 && filters_rect_.h > 0) {
-        SDL_SetRenderDrawColor(renderer, content_bg.r, content_bg.g, content_bg.b, 220);
+        SDL_SetRenderDrawColor(renderer, content_bg.r, content_bg.g, content_bg.b, content_alpha);
         sdl_render::FillRect(renderer, &filters_rect_);
     }
 
@@ -1207,58 +1217,93 @@ void OtherSettingsAndControls::layout_dev_settings() {
 
     const int margin_x = DMSpacing::item_gap();
     const int margin_y = DMSpacing::item_gap();
-    const int row_gap = DMSpacing::small_gap();
+    const int row_gap = DMSpacing::item_gap();
+    const int section_gap = DMSpacing::section_gap();
+    const int label_gap = DMSpacing::label_gap();
     const int content_width = std::max(0, settings_rect_.w - margin_x * 2);
     if (content_width <= 0) {
         return;
     }
 
+    const int max_content_width = std::min(content_width, 960);
+    const int content_left = settings_rect_.x + margin_x + (content_width - max_content_width) / 2;
+
     int y = settings_rect_.y + margin_y;
     const DMLabelStyle& heading_style = DMStyles::Label();
-    settings_heading_rect_ = SDL_Rect{ settings_rect_.x + margin_x,
-                                       y,
-                                       content_width,
-                                       heading_style.font_size };
-    y += settings_heading_rect_.h + kSectionHeaderSpacing;
+    settings_heading_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
+    y += settings_heading_rect_.h + label_gap;
 
-    const int checkbox_height = DMCheckbox::height();
-    const int col_gap = DMSpacing::small_gap();
-    const int col_width = content_width > col_gap ? (content_width - col_gap) / 2 : content_width;
-    const int left_x = settings_rect_.x + margin_x;
-    const int right_x = left_x + col_width + col_gap;
+    const int control_height = DMCheckbox::height();
+    const bool wide_mode = max_content_width >= 520;
+    const int column_gap = wide_mode ? DMSpacing::item_gap() * 2 : 0;
+    const int column_width = wide_mode ? std::max(0, (max_content_width - column_gap) / 2) : max_content_width;
+    const int left_column = content_left;
+    const int right_column = content_left + column_width + (wide_mode ? column_gap : 0);
 
-    grid_section_label_rect_ = SDL_Rect{left_x, y, content_width, heading_style.font_size};
-    y += grid_section_label_rect_.h + row_gap / 2;
-
+    grid_section_label_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
+    y += grid_section_label_rect_.h + row_gap;
+    bool grid_row_started = false;
     if (overlay_grid_checkbox_) {
-        overlay_grid_checkbox_->set_rect(SDL_Rect{left_x, y, col_width, checkbox_height});
+        overlay_grid_checkbox_->set_rect(SDL_Rect{left_column, y, column_width, control_height});
+        grid_row_started = true;
     }
+    const bool grid_two_column = wide_mode && overlay_grid_checkbox_ && snap_to_grid_checkbox_;
     if (snap_to_grid_checkbox_) {
-        snap_to_grid_checkbox_->set_rect(SDL_Rect{right_x, y, col_width, checkbox_height});
+        if (grid_two_column) {
+            snap_to_grid_checkbox_->set_rect(SDL_Rect{right_column, y, column_width, control_height});
+            y += control_height + row_gap;
+            grid_row_started = false;
+        } else {
+            if (grid_row_started) {
+                y += control_height;
+            }
+            snap_to_grid_checkbox_->set_rect(SDL_Rect{left_column, y, column_width, control_height});
+            y += control_height + row_gap;
+            grid_row_started = false;
+        }
+    } else if (grid_row_started) {
+        y += control_height + row_gap;
+        grid_row_started = false;
     }
-    y += checkbox_height + row_gap;
+    y += section_gap;
 
-    debug_section_label_rect_ = SDL_Rect{left_x, y, content_width, heading_style.font_size};
-    y += debug_section_label_rect_.h + row_gap / 2;
-
+    debug_section_label_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
+    y += debug_section_label_rect_.h + row_gap;
+    bool debug_row_started = false;
     if (movement_debug_checkbox_) {
-        movement_debug_checkbox_->set_rect(SDL_Rect{left_x, y, col_width, checkbox_height});
+        movement_debug_checkbox_->set_rect(SDL_Rect{left_column, y, column_width, control_height});
+        debug_row_started = true;
     }
+    const bool debug_two_column = wide_mode && movement_debug_checkbox_ && depth_effects_checkbox_;
     if (depth_effects_checkbox_) {
-        depth_effects_checkbox_->set_rect(SDL_Rect{right_x, y, col_width, checkbox_height});
+        if (debug_two_column) {
+            depth_effects_checkbox_->set_rect(SDL_Rect{right_column, y, column_width, control_height});
+            y += control_height + row_gap;
+            debug_row_started = false;
+        } else {
+            if (debug_row_started) {
+                y += control_height;
+            }
+            depth_effects_checkbox_->set_rect(SDL_Rect{left_column, y, column_width, control_height});
+            y += control_height + row_gap;
+            debug_row_started = false;
+        }
+    } else if (debug_row_started) {
+        y += control_height + row_gap;
+        debug_row_started = false;
     }
-    y += checkbox_height + row_gap;
+    y += section_gap;
 
-    overlay_section_label_rect_ = SDL_Rect{left_x, y, content_width, heading_style.font_size};
-    y += overlay_section_label_rect_.h + row_gap / 2;
-
+    overlay_section_label_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
+    y += overlay_section_label_rect_.h + row_gap;
     if (overlay_grid_stepper_) {
-        const int stepper_height = overlay_grid_stepper_->preferred_height(content_width);
-        overlay_grid_stepper_->set_rect(SDL_Rect{left_x, y, content_width, stepper_height});
-        y += stepper_height + row_gap;
+        const int stepper_width = max_content_width;
+        const int stepper_height = overlay_grid_stepper_->preferred_height(stepper_width);
+        overlay_grid_stepper_->set_rect(SDL_Rect{content_left, y, stepper_width, stepper_height});
+        y += stepper_height;
     }
-
-    settings_rect_.h = y - settings_rect_.y + margin_y;
+    y += margin_y;
+    settings_rect_.h = std::max(0, y - settings_rect_.y);
 }
 
 void OtherSettingsAndControls::layout_filter_checkboxes() {
@@ -1569,8 +1614,8 @@ void OtherSettingsAndControls::render_stats(SDL_Renderer* renderer) const {
     auto* self = const_cast<OtherSettingsAndControls*>(this);
     self->maybe_refresh_stats(renderer);
 
-    const SDL_Color content_bg = DMStyles::PanelBG();
-    SDL_SetRenderDrawColor(renderer, content_bg.r, content_bg.g, content_bg.b, 210);
+    const SDL_Color stats_bg = reduced_alpha_color(DMStyles::PanelBG());
+    SDL_SetRenderDrawColor(renderer, stats_bg.r, stats_bg.g, stats_bg.b, stats_bg.a);
     sdl_render::FillRect(renderer, &stats_rect_);
 
     const int margin_x = DMSpacing::item_gap();

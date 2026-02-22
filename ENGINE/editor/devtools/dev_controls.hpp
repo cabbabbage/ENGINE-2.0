@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <vector>
 #include <optional>
+#include <filesystem>
 
 #include <nlohmann/json_fwd.hpp>
 
@@ -36,6 +37,9 @@ namespace animation_editor {
 class AnimationDocument;
 class PreviewProvider;
 }
+
+class DMButton;
+class DMTextBox;
 
 class DevControls {
 public:
@@ -131,6 +135,42 @@ public:
     const Asset* frame_editor_target() const;
 
 private:
+    enum class DropContentKind {
+        None,
+        SinglePng,
+        Gif,
+        MultiImages,
+        PngFolder
+    };
+
+    struct DropPreviewState {
+        bool active = false;
+        bool valid = false;
+        SDL_Point screen{0, 0};
+        std::vector<std::filesystem::path> items;
+    };
+
+    struct DropImportRequest {
+        DropContentKind kind = DropContentKind::None;
+        std::vector<std::filesystem::path> files;
+        std::filesystem::path folder;
+        SDL_Point drop_screen{0, 0};
+    };
+
+    struct DropNameModal {
+        bool visible = false;
+        DropImportRequest request;
+        std::unique_ptr<DMTextBox> name_box;
+        std::unique_ptr<DMButton> create_button;
+        std::unique_ptr<DMButton> cancel_button;
+        SDL_Rect modal_rect{0, 0, 0, 0};
+        SDL_Rect create_rect{0, 0, 0, 0};
+        SDL_Rect cancel_rect{0, 0, 0, 0};
+        bool create_pressed = false;
+        bool cancel_pressed = false;
+        std::string error;
+    };
+
     bool can_use_room_editor_ui() const;
     void enter_map_editor_mode();
     void exit_map_editor_mode(bool focus_player, bool restore_previous_state);
@@ -177,6 +217,16 @@ private:
     void mark_dirty(std::uint32_t flags);
     bool has_dirty(std::uint32_t flags) const;
     void clear_dirty(std::uint32_t flags);
+    bool handle_drop_event(const SDL_Event& event);
+    void reset_drop_preview();
+    void reset_drop_modal();
+    void open_drop_modal(const DropImportRequest& request);
+    bool handle_drop_modal_event(const SDL_Event& event);
+    void render_drop_overlay(SDL_Renderer* renderer);
+    void render_drop_modal(SDL_Renderer* renderer);
+    void layout_drop_modal();
+    bool finalize_drop_creation(const std::string& desired_name);
+    SDL_Point drop_world_from_screen(SDL_Point screen) const;
 
 private:
     enum class DirtyFlag : std::uint32_t {
@@ -272,6 +322,8 @@ private:
     SDL_Rect last_header_rect_{0, 0, 0, 0};
     SDL_Rect last_footer_rect_{0, 0, 0, 0};
 
+    DropPreviewState drop_state_;
+    DropNameModal drop_modal_;
+
 
 };
-

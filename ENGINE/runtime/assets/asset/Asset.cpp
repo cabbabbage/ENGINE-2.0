@@ -1012,17 +1012,7 @@ Asset::AnchorHandle& Asset::get_anchor_point(const std::string& name) {
 std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name,
                                                   anchor_points::GridMaterialization grid_policy) {
         AnchorHandle& handle = get_anchor_point(name);
-        if (assets_) {
-                const std::uint64_t cam_version = assets_->getView().camera_state_version();
-                if (handle.last_camera_version != cam_version) {
-                        handle.dirty = true;
-                }
-        }
-        const bool needs_materialization = (grid_policy == anchor_points::GridMaterialization::Ensure) &&
-                                           !handle.grid;
-        if (handle.dirty || needs_materialization) {
-                handle.update(grid_policy);
-        }
+        handle.update(grid_policy);
         ResolvedAnchor resolved{};
         resolved.world_px    = handle.world_px;
         resolved.world_z     = handle.world_z;
@@ -1038,7 +1028,6 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy)
                 dirty = false;
                 return;
         }
-        const std::uint64_t cam_version = owner->assets_ ? owner->assets_->getView().camera_state_version() : 0;
         const AnimationFrame* frame = owner->current_frame;
         const DisplacedAssetAnchorPoint* anchor = find_anchor_with_frame_fallback(*owner, frame, name);
 
@@ -1051,12 +1040,15 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy)
                 in_front = true;
                 last_frame_index = frame ? frame->frame_index : -1;
                 last_anim = owner->current_animation;
-                last_camera_version = cam_version;
                 dirty = false;
                 return;
         }
 
-        const auto resolved = anchor_points::resolve_pixel_locked_anchor(*owner, *anchor, grid_policy);
+        const auto resolved = anchor_points::resolve_frame_anchor_sample(
+                *owner,
+                *anchor,
+                anchor->in_front ? anchor_points::AnchorDepthPolicy::InFront : anchor_points::AnchorDepthPolicy::Behind,
+                grid_policy);
 
         grid = resolved.resolved.grid_point;
         world_px = resolved.resolved.world_px;
@@ -1066,7 +1058,6 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy)
         in_front = resolved.resolved.in_front;
         last_frame_index = frame ? frame->frame_index : -1;
         last_anim = owner->current_animation;
-        last_camera_version = cam_version;
         dirty = false;
 }
 

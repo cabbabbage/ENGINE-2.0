@@ -277,7 +277,6 @@ class Asset {
         bool            missing = false;
         bool            in_front = true;
         Asset*          owner = nullptr;
-        std::uint64_t   last_camera_version = 0;
 
         void update(anchor_points::GridMaterialization grid_policy);
     };

@@ -108,13 +108,8 @@ nlohmann::json build_payload_with_anchors(const std::vector<AnchorFrame>& frames
     nlohmann::json payload = existing_payload.is_object() ? existing_payload : nlohmann::json::object();
     const std::size_t declared_frame_count =
         payload.contains("number_of_frames") ? read_positive_size(payload["number_of_frames"]) : 0;
-    nlohmann::json anchor_points =
-        (payload.contains("anchor_points") && payload["anchor_points"].is_array()) ? payload["anchor_points"]
-                                                                                   : nlohmann::json::array();
-    const std::size_t existing_anchor_frames = anchor_points.is_array() ? anchor_points.size() : 0;
-    const std::size_t frame_count =
-        std::max<std::size_t>(1, std::max(declared_frame_count, std::max(frames.size(), existing_anchor_frames)));
-
+    const std::size_t frame_count = std::max<std::size_t>(1, std::max(declared_frame_count, frames.size()));
+    nlohmann::json anchor_points = nlohmann::json::array();
     anchor_points.get_ref<nlohmann::json::array_t&>().resize(frame_count, nlohmann::json::array());
 
     const std::size_t frames_to_write = std::min<std::size_t>(frames.size(), frame_count);
@@ -140,6 +135,14 @@ nlohmann::json build_payload_with_anchors(const std::vector<AnchorFrame>& frames
 
     payload["anchor_points"] = std::move(anchor_points);
     return payload;
+}
+
+
+void apply_anchor_scope(AnchorFrame& target, const AnchorFrame& source, AnchorConflictPolicy policy) {
+    if (policy != AnchorConflictPolicy::SyncExact) {
+        return;
+    }
+    target = source;
 }
 
 }  // namespace devmode::frame_editors

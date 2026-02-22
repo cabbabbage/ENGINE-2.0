@@ -43,10 +43,13 @@ private:
     void select_anchor(int index);
     void refresh_form();
     bool apply_form_to_anchor();
-    void apply_to_all_frames();
-    void apply_to_next_frame();
-    bool apply_to_all_animations();
-    void apply_to_animation();
+    bool apply_scope_to_next_frame();
+    bool apply_scope_to_animation(const std::string& animation_id);
+    bool apply_scope_to_selected_animations();
+    bool apply_scope_to_all_animations();
+    bool apply_scope_to_all_frames_in_animation(const std::string& animation_id);
+    bool persist_payload_for_animation(const std::string& animation_id, const std::vector<AnchorFrame>& frames, bool save_to_disk);
+    void checkpoint_undo(const std::string& label) const;
     void persist_changes();
     void apply_live_changes(bool force = false);
     void invalidate_preview() const;

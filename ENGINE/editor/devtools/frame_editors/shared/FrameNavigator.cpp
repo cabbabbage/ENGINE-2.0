@@ -42,7 +42,7 @@ FrameNavigator::FrameNavigator() {
     btn_prev_ = std::make_unique<DMButton>("<", &DMStyles::AccentButton(), kThumbSize, kThumbSize);
     btn_next_ = std::make_unique<DMButton>(">", &DMStyles::AccentButton(), kThumbSize, kThumbSize);
     btn_apply_next_ = std::make_unique<DMButton>("Apply To Next", &DMStyles::HeaderButton(), kApplyButtonWidth, kThumbSize);
-    btn_apply_animation_ = std::make_unique<DMButton>("Apply To Animation", &DMStyles::HeaderButton(), kApplyButtonWidth + 20, kThumbSize);
+    btn_apply_animation_ = std::make_unique<DMButton>("Apply To Selected", &DMStyles::HeaderButton(), kApplyButtonWidth + 20, kThumbSize);
     btn_apply_all_ = std::make_unique<DMButton>("Apply To All", &DMStyles::HeaderButton(), kApplyButtonWidth, kThumbSize);
     update_button_states();
 }
@@ -458,8 +458,8 @@ void FrameNavigator::handle_apply_next() {
 
 void FrameNavigator::handle_apply_animation() {
     if (on_apply_animation_) {
-        const std::string title = "Apply To Animation";
-        const std::string msg = "Replace current frame's data across every frame in this animation?";
+        const std::string title = "Apply To Selected Animations";
+        const std::string msg = "Apply current anchor set to every frame in selected animation scope?";
         if (!confirm_action(title, msg)) {
             return;
         }
@@ -470,7 +470,7 @@ void FrameNavigator::handle_apply_animation() {
 void FrameNavigator::handle_apply_all() {
     if (on_apply_all_) {
         const std::string title = "Apply To All Animations";
-        const std::string msg = "Replace this frame's data across every frame of every animation for this asset?";
+        const std::string msg = "Apply current anchor set to every frame in every animation for this asset?";
         if (!confirm_action(title, msg)) {
             return;
         }

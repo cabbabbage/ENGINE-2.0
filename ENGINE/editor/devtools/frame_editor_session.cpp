@@ -7,6 +7,7 @@
 #include <limits>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "core/AssetsManager.hpp"
 #include "devtools/frame_editors/AttackGeoFrameEditor.hpp"
@@ -104,6 +105,13 @@ void FrameEditorSession::begin(Assets* assets,
     editor_context_.snap_resolution = snap_resolution_r_;
     editor_context_.snap_override = snap_resolution_override_;
     editor_context_.selection_state = &selection_state_;
+    editor_context_.selected_animation_ids_provider = [this]() {
+        if (!animation_id_.empty()) {
+            return std::vector<std::string>{animation_id_};
+        }
+        return std::vector<std::string>{};
+    };
+    editor_context_.on_undo_checkpoint = [](const std::string&) {};
 
     mode_ = mode_for_launch(launch_mode_);
     camera_controls_.set_height_scale_factor(1.1);
@@ -240,6 +248,13 @@ void FrameEditorSession::create_and_begin_editor() {
 
     selection_state_.reset();
     editor_context_.selection_state = &selection_state_;
+    editor_context_.selected_animation_ids_provider = [this]() {
+        if (!animation_id_.empty()) {
+            return std::vector<std::string>{animation_id_};
+        }
+        return std::vector<std::string>{};
+    };
+    editor_context_.on_undo_checkpoint = [](const std::string&) {};
 
     active_editor_ = create_editor(mode_);
     if (active_editor_) {

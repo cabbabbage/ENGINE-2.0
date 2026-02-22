@@ -20,4 +20,10 @@ struct AnchorFrame {
 std::vector<AnchorFrame> parse_anchor_frames_from_payload(const nlohmann::json& payload);
 nlohmann::json build_payload_with_anchors(const std::vector<AnchorFrame>& frames, const nlohmann::json& existing_payload);
 
+enum class AnchorConflictPolicy {
+    SyncExact,
+};
+
+void apply_anchor_scope(AnchorFrame& target, const AnchorFrame& source, AnchorConflictPolicy policy = AnchorConflictPolicy::SyncExact);
+
 }  // namespace devmode::frame_editors

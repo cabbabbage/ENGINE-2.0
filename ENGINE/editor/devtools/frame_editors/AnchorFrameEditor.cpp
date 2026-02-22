@@ -208,9 +208,9 @@ void AnchorFrameEditor::begin(const FrameEditorContext& context) {
         persist_pending_changes();
         return true;
     });
-    frame_navigator_->set_on_apply_next([this]() { apply_to_next_frame(); });
-    frame_navigator_->set_on_apply_animation([this]() { apply_to_animation(); });
-    frame_navigator_->set_on_apply_all([this]() { (void)apply_to_all_animations(); });
+    frame_navigator_->set_on_apply_next([this]() { (void)apply_scope_to_next_frame(); });
+    frame_navigator_->set_on_apply_animation([this]() { (void)apply_scope_to_selected_animations(); });
+    frame_navigator_->set_on_apply_all([this]() { (void)apply_scope_to_all_animations(); });
     frame_navigator_->set_preview_source(context_.preview, context_.animation_id);
 
     btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
@@ -595,62 +595,131 @@ bool AnchorFrameEditor::apply_form_to_anchor() {
     return changed;
 }
 
-void AnchorFrameEditor::apply_to_all_frames() {
-    if (frames_.empty()) return;
-    if (selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size())) return;
-    const auto source = frames_[static_cast<std::size_t>(selected_frame_)];
-    for (std::size_t i = 0; i < frames_.size(); ++i) {
-        frames_[i] = source;
+bool AnchorFrameEditor::apply_scope_to_next_frame() {
+    if (frames_.empty() || selected_frame_ < 0) return false;
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
     }
-    dirty_ = true;
-}
-
-void AnchorFrameEditor::apply_to_next_frame() {
-    if (frames_.empty() || selected_frame_ < 0) return;
+    hydrate_anchor_pixels_from_target();
     const int count = static_cast<int>(frames_.size());
     const int current = std::clamp(selected_frame_, 0, count - 1);
     const int target = (current + 1) % count;
-    selected_frame_ = current;
-    frames_[static_cast<std::size_t>(target)] = frames_[static_cast<std::size_t>(selected_frame_)];
-    dirty_ = true;
-    persist_changes();
-    persist_pending_changes();
+    apply_anchor_scope(frames_[static_cast<std::size_t>(target)],
+                       frames_[static_cast<std::size_t>(current)],
+                       AnchorConflictPolicy::SyncExact);
+    checkpoint_undo("Apply anchors to next frame");
+    return persist_payload_for_animation(context_.animation_id, frames_, true);
 }
 
-void AnchorFrameEditor::apply_to_animation() {
-    if (selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size())) return;
+bool AnchorFrameEditor::apply_scope_to_all_frames_in_animation(const std::string& animation_id) {
+    if (selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size())) return false;
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+    }
     hydrate_anchor_pixels_from_target();
-    apply_to_all_frames();
-    persist_changes();
-    persist_pending_changes();
-}
-
-bool AnchorFrameEditor::apply_to_all_animations() {
-    if (!context_.document || frames_.empty() || selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size())) return false;
-    hydrate_anchor_pixels_from_target();
-    apply_to_animation();
-
     const auto source = frames_[static_cast<std::size_t>(selected_frame_)];
-    const auto ids = context_.document->animation_ids();
-    for (const auto& id : ids) {
-        auto payload_opt = context_.document->animation_payload_json(id);
-        nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
-        auto frames = parse_anchor_frames_from_payload(payload);
-        if (frames.empty()) {
-            frames.emplace_back();
-        }
-        for (auto& f : frames) {
-            f = source;
-        }
-        nlohmann::json updated = build_payload_with_anchors(frames, payload);
-        context_.document->update_animation_payload(id, updated);
-        sync_runtime_animation_anchors(id, frames);
-        if (context_.preview) {
-            context_.preview->invalidate(id);
+    for (auto& frame : frames_) {
+        apply_anchor_scope(frame, source, AnchorConflictPolicy::SyncExact);
+    }
+    checkpoint_undo("Apply anchors to all frames in animation");
+    return persist_payload_for_animation(animation_id, frames_, true);
+}
+
+bool AnchorFrameEditor::apply_scope_to_animation(const std::string& animation_id) {
+    if (!context_.document || animation_id.empty()) return false;
+    auto payload_opt = context_.document->animation_payload_json(animation_id);
+    nlohmann::json payload = payload_opt.value_or(nlohmann::json::object());
+    auto target_frames = parse_anchor_frames_from_payload(payload);
+    if (target_frames.empty()) {
+        target_frames.emplace_back();
+    }
+    const auto source = frames_[static_cast<std::size_t>(selected_frame_)];
+    for (auto& frame : target_frames) {
+        apply_anchor_scope(frame, source, AnchorConflictPolicy::SyncExact);
+    }
+    checkpoint_undo("Apply anchors to animation: " + animation_id);
+    return persist_payload_for_animation(animation_id, target_frames, false);
+}
+
+bool AnchorFrameEditor::apply_scope_to_selected_animations() {
+    if (!context_.document || selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size())) return false;
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+    }
+    hydrate_anchor_pixels_from_target();
+
+    std::vector<std::string> target_ids;
+    if (context_.selected_animation_ids_provider) {
+        target_ids = context_.selected_animation_ids_provider();
+    }
+    if (target_ids.empty() && !context_.animation_id.empty()) {
+        target_ids.push_back(context_.animation_id);
+    }
+
+    bool changed = false;
+    for (const auto& id : target_ids) {
+        if (id == context_.animation_id) {
+            changed = apply_scope_to_all_frames_in_animation(id) || changed;
+        } else {
+            changed = apply_scope_to_animation(id) || changed;
         }
     }
-    context_.document->save_to_file_checked(true);
-    return true;
+    if (changed) {
+        context_.document->save_to_file_checked(true);
+    }
+    return changed;
+}
+
+bool AnchorFrameEditor::apply_scope_to_all_animations() {
+    if (!context_.document || frames_.empty() || selected_frame_ < 0 || selected_frame_ >= static_cast<int>(frames_.size())) return false;
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+    }
+    hydrate_anchor_pixels_from_target();
+
+    const auto ids = context_.document->animation_ids();
+    bool changed = false;
+    for (const auto& id : ids) {
+        if (id == context_.animation_id) {
+            changed = apply_scope_to_all_frames_in_animation(id) || changed;
+        } else {
+            changed = apply_scope_to_animation(id) || changed;
+        }
+    }
+    if (changed) {
+        context_.document->save_to_file_checked(true);
+    }
+    return changed;
+}
+
+bool AnchorFrameEditor::persist_payload_for_animation(const std::string& animation_id,
+                                                      const std::vector<AnchorFrame>& frames,
+                                                      bool save_to_disk) {
+    if (!context_.document || animation_id.empty()) {
+        return false;
+    }
+    auto payload_opt = context_.document->animation_payload_json(animation_id);
+    nlohmann::json existing = payload_opt.value_or(nlohmann::json::object());
+    nlohmann::json updated = build_payload_with_anchors(frames, existing);
+    const bool changed = context_.document->update_animation_payload(animation_id, updated);
+    sync_runtime_animation_anchors(animation_id, frames);
+    if (context_.preview) {
+        context_.preview->invalidate(animation_id);
+    }
+    if (animation_id == context_.animation_id) {
+        frames_ = frames;
+    }
+    if (changed && save_to_disk) {
+        context_.document->save_to_file_checked(true);
+        dirty_ = false;
+    }
+    return changed;
+}
+
+void AnchorFrameEditor::checkpoint_undo(const std::string& label) const {
+    if (context_.on_undo_checkpoint) {
+        context_.on_undo_checkpoint(label);
+    }
 }
 
 void AnchorFrameEditor::persist_changes() {
@@ -659,11 +728,7 @@ void AnchorFrameEditor::persist_changes() {
     }
     apply_form_to_anchor();
     hydrate_anchor_pixels_from_target();
-    auto payload_opt = context_.document->animation_payload_json(context_.animation_id);
-    nlohmann::json existing = payload_opt.value_or(nlohmann::json::object());
-    nlohmann::json updated = build_payload_with_anchors(frames_, existing);
-    context_.document->update_animation_payload(context_.animation_id, updated);
-    sync_runtime_animation_anchors(context_.animation_id, frames_);
+    (void)persist_payload_for_animation(context_.animation_id, frames_, false);
     invalidate_preview();
 }
 

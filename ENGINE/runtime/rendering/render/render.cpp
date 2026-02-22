@@ -162,6 +162,38 @@ size_t GeometryBatcher::getBatchCount() const {
     return unique.size();
 }
 
+void GridTileRenderer::invalidate_texture_cache() {
+    texture_size_cache_.clear();
+}
+
+bool GridTileRenderer::fetch_texture_size(SDL_Texture* texture, SDL_FPoint& out_size) {
+    if (!texture) {
+        return false;
+    }
+    auto it = texture_size_cache_.find(texture);
+    if (it != texture_size_cache_.end()) {
+        out_size = it->second;
+        return true;
+    }
+
+    float tex_wf = 0.0f;
+    float tex_hf = 0.0f;
+    if (!SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+        return false;
+    }
+
+    const float rounded_w = static_cast<float>(std::lround(tex_wf));
+    const float rounded_h = static_cast<float>(std::lround(tex_hf));
+    if (rounded_w <= 0.0f || rounded_h <= 0.0f) {
+        return false;
+    }
+
+    SDL_FPoint dims{rounded_w, rounded_h};
+    texture_size_cache_.emplace(texture, dims);
+    out_size = dims;
+    return true;
+}
+
 void GridTileRenderer::render(SDL_Renderer* renderer) {
     if (!renderer || !assets_) return;
     render(renderer, assets_->getView(), assets_->world_grid(), nullptr);

@@ -50,22 +50,34 @@ void RenderRoomBoundsOverlay(
 
     const auto& area_points = area.get_points();
     if (!area_points.empty()) {
-        std::vector<SDL_Point> screen_points;
-        screen_points.reserve(area_points.size() + 1);
-        for (const SDL_Point& world_point : area_points) {
-            SDL_FPoint screen_f = cam.map_to_screen(world_point);
-            screen_points.push_back(SDL_Point{static_cast<int>(std::lround(screen_f.x)),
-                                              static_cast<int>(std::lround(screen_f.y))});
-        }
-        if (screen_points.size() >= 2) {
-            const SDL_Point& first = screen_points.front();
-            const SDL_Point& last  = screen_points.back();
+        std::vector<SDL_Point> screen_segment;
+        screen_segment.reserve(area_points.size());
+        auto flush_segment = [&]() {
+            if (screen_segment.size() < 2) {
+                screen_segment.clear();
+                return;
+            }
+            const SDL_Point& first = screen_segment.front();
+            const SDL_Point& last = screen_segment.back();
             if (first.x != last.x || first.y != last.y) {
-                screen_points.push_back(first);
+                screen_segment.push_back(first);
             }
             SDL_SetRenderDrawColor(renderer, style.outline.r, style.outline.g, style.outline.b, style.outline.a);
-            sdl_render::Lines(renderer, screen_points.data(), static_cast<int>(screen_points.size()));
+            sdl_render::Lines(renderer, screen_segment.data(), static_cast<int>(screen_segment.size()));
+            screen_segment.clear();
+        };
+
+        for (const SDL_Point& world_point : area_points) {
+            SDL_FPoint world_f{static_cast<float>(world_point.x), static_cast<float>(world_point.y)};
+            SDL_FPoint screen_f{};
+            if (!cam.project_world_point(world_f, 0.0f, screen_f)) {
+                flush_segment();
+                continue;
+            }
+            SDL_Point screen_pt{static_cast<int>(std::lround(screen_f.x)), static_cast<int>(std::lround(screen_f.y))};
+            screen_segment.push_back(screen_pt);
         }
+        flush_segment();
     }
 
     SDL_FPoint center_screen_f = cam.map_to_screen(area.get_center());

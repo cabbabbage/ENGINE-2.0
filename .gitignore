@@ -1,6 +1,7 @@
 # Ignore vcpkg installed packages and build artifacts
 vcpkg
 build/
+og_art
 cache
 CMakeFiles/
 CMakeCache.txt

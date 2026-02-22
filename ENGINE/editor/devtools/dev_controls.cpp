@@ -1106,6 +1106,9 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
             vibble::log::debug("[DevControls] set_current_room -> room_editor set_current_room");
         } catch (...) {}
         room_editor_->set_current_room(room);
+        if (map_editor_) {
+            map_editor_->set_current_room(room);
+        }
     }
     other_settings_.set_current_room(room);
     if (map_mode_ui_) {
@@ -1559,7 +1562,7 @@ bool DevControls::handle_drop_event(const SDL_Event& event) {
         if (event.drop.data) {
             std::filesystem::path path = std::filesystem::u8path(event.drop.data);
             drop_state_.items.push_back(path);
-            SDL_free(event.drop.data);
+            SDL_free(const_cast<char*>(event.drop.data));
         }
         DropValidationResult validation = validate_drop_items(drop_state_.items);
         drop_state_.valid = validation.valid;
@@ -1567,7 +1570,7 @@ bool DevControls::handle_drop_event(const SDL_Event& event) {
     }
     case SDL_EVENT_DROP_COMPLETE: {
         if (event.drop.data) {
-            SDL_free(event.drop.data);
+            SDL_free(const_cast<char*>(event.drop.data));
         }
         DropValidationResult validation = validate_drop_items(drop_state_.items);
         if (validation.valid) {
@@ -1677,7 +1680,7 @@ void DevControls::render_drop_modal(SDL_Renderer* renderer) {
 
     const int title_x = drop_modal_.modal_rect.x + 16;
     const int title_y = drop_modal_.modal_rect.y + 8;
-    DrawLabelText(renderer, "Create animation from dropped files", title_x, title_y, DMStyles::HeaderLabel());
+    DrawLabelText(renderer, "Create animation from dropped files", title_x, title_y, DMStyles::Label());
 
     if (drop_modal_.name_box) drop_modal_.name_box->render(renderer);
     if (drop_modal_.create_button) drop_modal_.create_button->render(renderer);
@@ -3815,6 +3818,9 @@ void DevControls::exit_map_editor_mode(bool focus_player, bool restore_previous_
     if (room_editor_ && enabled_) {
         room_editor_->set_enabled(true, true);
         room_editor_->set_current_room(current_room_);
+        if (map_editor_) {
+            map_editor_->set_current_room(current_room_);
+        }
     }
     if (camera_was_visible && camera_panel_) {
         camera_panel_->open();
@@ -4090,6 +4096,10 @@ void DevControls::render_grid_overlay() {
         const int radius_cells = 11;
         const float radius_world = static_cast<float>(cell * radius_cells);
         const float radius_sq = radius_world * radius_world;
+        constexpr int kGridPointSizePx = 2;
+        constexpr int kGridPointHalf = kGridPointSizePx / 2;
+        constexpr int kHighlightPointSizePx = 4;
+        constexpr int kHighlightPointHalf = kHighlightPointSizePx / 2;
 
         int mouse_x = 0;
         int mouse_y = 0;
@@ -4148,12 +4158,22 @@ void DevControls::render_grid_overlay() {
 
                 const int px = static_cast<int>(std::lround(screen_point.x));
                 const int py = static_cast<int>(std::lround(screen_point.y));
-                SDL_RenderPoint(renderer, px, py);
                 if (is_cursor_intersection) {
-                    SDL_RenderPoint(renderer, px - 1, py);
-                    SDL_RenderPoint(renderer, px + 1, py);
-                    SDL_RenderPoint(renderer, px, py - 1);
-                    SDL_RenderPoint(renderer, px, py + 1);
+                    SDL_Rect highlight_rect{
+                        px - kHighlightPointHalf,
+                        py - kHighlightPointHalf,
+                        kHighlightPointSizePx,
+                        kHighlightPointSizePx,
+                    };
+                    SDL_RenderFillRect(renderer, &highlight_rect);
+                } else {
+                    SDL_Rect point_rect{
+                        px - kGridPointHalf,
+                        py - kGridPointHalf,
+                        kGridPointSizePx,
+                        kGridPointSizePx,
+                    };
+                    SDL_RenderFillRect(renderer, &point_rect);
                 }
             }
         }

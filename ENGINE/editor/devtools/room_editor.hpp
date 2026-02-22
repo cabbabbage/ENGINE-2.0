@@ -231,6 +231,7 @@ private:
     double edge_length_along_direction(const Area& area, SDL_Point center, SDL_FPoint direction) const;
     void respawn_spawn_group(const nlohmann::json& entry);
     std::unique_ptr<vibble::grid::Occupancy> build_room_grid(const std::string& ignore_spawn_id) const;
+    bool snap_spawn_group_to_resolution(Asset* anchor, int resolution);
     void render_room_labels(SDL_Renderer* renderer);
     void render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint desired_center);
     SDL_Rect label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const;

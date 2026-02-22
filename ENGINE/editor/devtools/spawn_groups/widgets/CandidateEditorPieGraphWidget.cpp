@@ -162,11 +162,6 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             hovered_index_ = new_hover;
             changed = true;
         }
-        if (active_index_ >= 0 && new_hover != active_index_) {
-            active_index_ = -1;
-            release_scroll_capture();
-            changed = true;
-        }
         return changed;
     } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         Layout layout = compute_layout();

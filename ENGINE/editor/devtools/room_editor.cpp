@@ -58,6 +58,7 @@
 #include <limits>
 #include <random>
 #include <tuple>
+#include <vector>
 #include <unordered_map>
 #include <unordered_set>
 #include <fstream>
@@ -91,6 +92,35 @@ SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
         return static_cast<int>(scaled);
     };
     return SDL_Point{ snap_axis(world.x), snap_axis(world.y) };
+}
+
+SDL_Point grid_point_for_asset(const Asset* asset) {
+    if (!asset) {
+        return SDL_Point{0, 0};
+    }
+    if (asset->grid_point()) {
+        return asset->grid_point()->to_sdl_point();
+    }
+    return asset->world_point();
+}
+
+void render_grid_point_marker(SDL_Renderer* renderer, const WarpedScreenGrid& cam, SDL_Point world_pt, SDL_Color color, int radius_px = 3) {
+    if (!renderer) return;
+    SDL_FPoint screen_f = cam.map_to_screen(world_pt);
+    if (!std::isfinite(screen_f.x) || !std::isfinite(screen_f.y)) {
+        return;
+    }
+    const int sx = static_cast<int>(std::lround(screen_f.x));
+    const int sy = static_cast<int>(std::lround(screen_f.y));
+
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    SDL_RenderPoint(renderer, sx, sy);
+    for (int dx = -radius_px; dx <= radius_px; ++dx) {
+        SDL_RenderPoint(renderer, sx + dx, sy);
+    }
+    for (int dy = -radius_px; dy <= radius_px; ++dy) {
+        SDL_RenderPoint(renderer, sx, sy + dy);
+    }
 }
 
 }
@@ -1853,6 +1883,21 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
 
     if (renderer && enabled_) {
 
+        if (is_shift_key_down()) {
+            if (assets_ && active_assets_) {
+                SDL_Color point_color{70, 170, 255, 215};
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                for (Asset* asset : *active_assets_) {
+                    if (!asset || asset->dead) continue;
+                    if (!asset_belongs_to_room(asset)) continue;
+                    if (!asset_matches_selection_filter(asset)) continue;
+                    if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) continue;
+                    SDL_Point gp = grid_point_for_asset(asset);
+                    render_grid_point_marker(renderer, cam, gp, point_color, 3);
+                }
+            }
+        }
+
         if (is_shift_key_down() && !highlighted_assets_.empty()) {
             ensure_spatial_index(cam);
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
@@ -3279,6 +3324,7 @@ void RoomEditor::handle_click(const Input& input) {
     if (!input_) return;
 
     SDL_Point world_mouse = snapped_cursor_world_;
+    SDL_Point screen_mouse{input_->getX(), input_->getY()};
 
     bool selection_changed = false;
     bool highlight_changed = false;
@@ -3351,6 +3397,36 @@ void RoomEditor::handle_click(const Input& input) {
     const bool shift_modifier = 
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT); 
     Asset* clicked_asset = hovered_asset_;
+
+    // When shift is held, prefer picking by exact grid point so selection works even if
+    // the asset's resolution differs from the current grid snap.
+    if (shift_modifier && assets_ && active_assets_) {
+        const WarpedScreenGrid& cam = assets_->getView();
+        constexpr int kPickRadiusPx = 8;
+        const int kPickRadius2 = kPickRadiusPx * kPickRadiusPx;
+        Asset* best = nullptr;
+        int best_dist2 = std::numeric_limits<int>::max();
+        for (Asset* asset : *active_assets_) {
+            if (!asset || asset->dead) continue;
+            if (!asset_belongs_to_room(asset)) continue;
+            if (!asset_matches_selection_filter(asset)) continue;
+            if (!asset->spawn_id.empty() && spawn_group_locked(asset->spawn_id)) continue;
+            SDL_Point gp = grid_point_for_asset(asset);
+            SDL_FPoint screen_f = cam.map_to_screen(gp);
+            if (!std::isfinite(screen_f.x) || !std::isfinite(screen_f.y)) continue;
+            int dx = static_cast<int>(std::lround(screen_f.x)) - screen_mouse.x;
+            int dy = static_cast<int>(std::lround(screen_f.y)) - screen_mouse.y;
+            int dist2 = dx * dx + dy * dy;
+            if (dist2 <= kPickRadius2 && dist2 < best_dist2) {
+                best = asset;
+                best_dist2 = dist2;
+            }
+        }
+        if (best) {
+            clicked_asset = best;
+            update_hover_state(best);
+        }
+    }
     if (alt_modifier && shift_modifier && hovered_asset_) { 
         const std::string spawn_id = hovered_asset_->spawn_id; 
         if (!spawn_id.empty() && delete_spawn_group_internal(spawn_id)) { 
@@ -3430,6 +3506,19 @@ void RoomEditor::handle_click(const Input& input) {
         }
 
     }
+
+    if (shift_modifier && snap_to_grid_enabled_) {
+        const int current_res = current_grid_resolution();
+        if (current_res > 0) {
+            Asset* anchor = clicked_asset ? clicked_asset
+                                          : (!selected_assets_.empty() ? selected_assets_.front() : nullptr);
+            if (snap_spawn_group_to_resolution(anchor, current_res)) {
+                selection_changed = true;
+                highlight_changed = true;
+            }
+        }
+    }
+
     if (selection_changed || highlight_changed) {
         mark_highlight_dirty();
     }
@@ -5287,6 +5376,14 @@ void RoomEditor::add_spawn_group_internal() {
 }
 
 bool RoomEditor::delete_spawn_group_internal(const std::string& spawn_id) {
+    const bool panel_bound_to_target =
+        spawn_group_panel_ && active_spawn_group_id_ && *active_spawn_group_id_ == spawn_id;
+    if (panel_bound_to_target) {
+        // Drop any direct binding to the soon-to-be-deleted JSON entry to avoid
+        // dangling pointers inside the spawn group config panel during removal.
+        spawn_group_panel_->clear_binding();
+    }
+
     if (!remove_spawn_group_by_id(spawn_id)) {
         return false;
     }
@@ -5439,6 +5536,66 @@ std::unique_ptr<vibble::grid::Occupancy> RoomEditor::build_room_grid(const std::
         }
     }
     return occupancy;
+}
+
+bool RoomEditor::snap_spawn_group_to_resolution(Asset* anchor, int resolution) {
+    if (!anchor || !active_assets_ || resolution <= 0) return false;
+    if (anchor->spawn_id.empty()) return false;
+    if (spawn_group_locked(anchor->spawn_id)) return false;
+
+    vibble::grid::Grid& grid_service = vibble::grid::global_grid();
+    const int clamped = vibble::grid::clamp_resolution(std::max(0, resolution));
+    SDL_Point current = anchor->world_point();
+    SDL_Point snapped = grid_service.snap_to_vertex(current, clamped);
+    if (snapped.x == current.x && snapped.y == current.y) {
+        return false;
+    }
+
+    const int dx = snapped.x - current.x;
+    const int dy = snapped.y - current.y;
+
+    // Move all assets in the spawn group together.
+    for (Asset* asset : *active_assets_) {
+        if (!asset || asset->dead) continue;
+        if (!asset_belongs_to_room(asset)) continue;
+        if (asset->spawn_id != anchor->spawn_id) continue;
+        asset->move_to_world_position(asset->world_x() + dx, asset->world_y() + dy, asset->world_z());
+        asset->grid_resolution = clamped;
+    }
+
+    bool json_modified = false;
+    SpawnEntryResolution resolved = locate_spawn_entry(anchor->spawn_id);
+    if (resolved.entry) {
+        (*resolved.entry)["resolution"] = clamped;
+
+        SDL_Point center = get_room_center();
+        auto [width, height] = get_room_dimensions();
+        std::string method = resolved.entry->value("position", std::string{});
+
+        if (method == "Percent") {
+            update_percent_json(*resolved.entry, *anchor, center, width, height);
+            json_modified = true;
+        } else if (method.empty() || method == "Exact" || method == "Exact Position") {
+            update_exact_json(*resolved.entry, *anchor, center, width, height);
+            json_modified = true;
+        }
+    }
+
+    if (json_modified) {
+        if (resolved.source == SpawnEntryResolution::Source::Room) {
+            save_current_room_assets_json();
+        } else if (resolved.source == SpawnEntryResolution::Source::Map) {
+            if (assets_) {
+                assets_->persist_map_info_json();
+                assets_->notify_spawn_group_config_changed(*resolved.entry);
+            }
+        }
+        refresh_spawn_group_config_ui();
+    }
+
+    mark_spatial_index_dirty();
+    mark_highlight_dirty();
+    return true;
 }
 
 void RoomEditor::integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& spawned) {
@@ -5939,7 +6096,81 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
         SDL_SetTextureColorMod(texture, overlay_color.r, overlay_color.g, overlay_color.b);
         SDL_SetTextureAlphaMod(texture, overlay_color.a);
 
-        const bool ok = SDL_RenderTexture(renderer, texture, src_ptr, &dst_rect) == 0;
+        auto render_with_geometry = [&](const RenderObject* obj) -> bool {
+            if (!obj) return false;
+
+            float atlas_wf = 0.0f;
+            float atlas_hf = 0.0f;
+            if (!SDL_GetTextureSize(texture, &atlas_wf, &atlas_hf)) {
+                return false;
+            }
+            const float atlas_w = atlas_wf;
+            const float atlas_h = atlas_hf;
+            if (atlas_w <= 0.0f || atlas_h <= 0.0f) {
+                return false;
+            }
+
+            float u0 = 0.0f, u1 = 1.0f, v0 = 0.0f, v1 = 1.0f;
+            float tex_w = static_cast<float>(src_rect.w > 0 ? src_rect.w : atlas_w);
+            float tex_h = static_cast<float>(src_rect.h > 0 ? src_rect.h : atlas_h);
+
+            if (obj->has_src_rect) {
+                const float pad_x = 0.5f / atlas_w;
+                const float pad_y = 0.5f / atlas_h;
+                u0 = (static_cast<float>(obj->src_rect.x) + pad_x) / atlas_w;
+                u1 = (static_cast<float>(obj->src_rect.x + obj->src_rect.w) - pad_x) / atlas_w;
+                v0 = (static_cast<float>(obj->src_rect.y) + pad_y) / atlas_h;
+                v1 = (static_cast<float>(obj->src_rect.y + obj->src_rect.h) - pad_y) / atlas_h;
+                tex_w = static_cast<float>(obj->src_rect.w);
+                tex_h = static_cast<float>(obj->src_rect.h);
+            } else {
+                const float pad_x = 0.5f / tex_w;
+                const float pad_y = 0.5f / tex_h;
+                u0 = pad_x;
+                u1 = 1.0f - pad_x;
+                v0 = pad_y;
+                v1 = 1.0f - pad_y;
+            }
+
+            // Build a simple quad in screen space using current world projection.
+            const float world_x = static_cast<float>(obj->screen_rect.x);
+            const float world_y = static_cast<float>(obj->screen_rect.y);
+            const float half_width = static_cast<float>(obj->screen_rect.w) * 0.5f;
+            const float height = static_cast<float>(obj->screen_rect.h);
+            const float base_z = obj->world_z_offset;
+
+            SDL_FPoint bl{}, br{}, tl{}, tr{};
+            const bool ok_bl = cam.project_world_point(SDL_FPoint{world_x - half_width, world_y}, base_z, bl);
+            const bool ok_br = cam.project_world_point(SDL_FPoint{world_x + half_width, world_y}, base_z, br);
+            const bool ok_tl = cam.project_world_point(SDL_FPoint{world_x - half_width, world_y - height}, base_z, tl);
+            const bool ok_tr = cam.project_world_point(SDL_FPoint{world_x + half_width, world_y - height}, base_z, tr);
+            if (!(ok_bl && ok_br && ok_tl && ok_tr) ||
+                !std::isfinite(bl.x) || !std::isfinite(bl.y) ||
+                !std::isfinite(br.x) || !std::isfinite(br.y) ||
+                !std::isfinite(tl.x) || !std::isfinite(tl.y) ||
+                !std::isfinite(tr.x) || !std::isfinite(tr.y)) {
+                return false;
+            }
+
+            SDL_Vertex verts[4]{};
+            verts[0].position = tl; verts[0].color = SDL_FColor{1.0f,1.0f,1.0f,1.0f}; verts[0].tex_coord = SDL_FPoint{u0, v0};
+            verts[1].position = tr; verts[1].color = SDL_FColor{1.0f,1.0f,1.0f,1.0f}; verts[1].tex_coord = SDL_FPoint{u1, v0};
+            verts[2].position = br; verts[2].color = SDL_FColor{1.0f,1.0f,1.0f,1.0f}; verts[2].tex_coord = SDL_FPoint{u1, v1};
+            verts[3].position = bl; verts[3].color = SDL_FColor{1.0f,1.0f,1.0f,1.0f}; verts[3].tex_coord = SDL_FPoint{u0, v1};
+
+            static const int indices[6] = {0, 1, 2, 0, 2, 3};
+            return SDL_RenderGeometry(renderer,
+                                      texture,
+                                      verts,
+                                      4,
+                                      indices,
+                                      6) == 0;
+        };
+
+        bool ok = render_with_geometry(src_obj);
+        if (!ok) {
+            ok = SDL_RenderTexture(renderer, texture, src_ptr, &dst_rect) == 0;
+        }
 
         SDL_SetTextureColorMod(texture, prev_r, prev_g, prev_b);
         SDL_SetTextureAlphaMod(texture, prev_a);

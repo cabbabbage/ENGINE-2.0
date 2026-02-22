@@ -3,6 +3,19 @@
 #include "utils/sdl_mouse_utils.hpp"
 #include "utils/ttf_render_utils.hpp"
 
+#ifdef _WIN32
+#    ifndef WIN32_LEAN_AND_MEAN
+#        define WIN32_LEAN_AND_MEAN
+#        define DEV_CONTROLS_DEFINED_WIN32_LEAN_AND_MEAN
+#    endif
+#    include <windows.h>
+#    include <shellapi.h>
+#    ifdef DEV_CONTROLS_DEFINED_WIN32_LEAN_AND_MEAN
+#        undef WIN32_LEAN_AND_MEAN
+#        undef DEV_CONTROLS_DEFINED_WIN32_LEAN_AND_MEAN
+#    endif
+#endif
+
 #include <SDL3/SDL.h>
 #include <fstream>
 #include <sstream>
@@ -11,6 +24,7 @@
 #include <cmath>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <numeric>
 #include <limits>
 #include <iterator>
@@ -90,6 +104,34 @@ using devmode::sdl::is_pointer_event;
 namespace {
 
 using vibble::strings::to_lower_copy;
+
+std::filesystem::path repo_root_path() {
+#ifdef PROJECT_ROOT
+    return std::filesystem::path(PROJECT_ROOT);
+#else
+    return std::filesystem::current_path();
+#endif
+}
+
+void open_path_in_file_explorer(const std::filesystem::path& path) {
+    if (path.empty()) {
+        return;
+    }
+#if defined(_WIN32)
+    ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOWDEFAULT);
+#elif defined(__APPLE__)
+    const std::string command = std::string("open \"") + path.u8string() + "\"";
+    std::system(command.c_str());
+#else
+    const std::string command = std::string("xdg-open \"") + path.u8string() + "\"";
+    std::system(command.c_str());
+#endif
+}
+
+void open_repo_root_in_file_explorer() {
+    open_path_in_file_explorer(repo_root_path());
+}
+
 class ImportBusyScope {
 public:
     ImportBusyScope(DevControls* owner, const std::string& message, bool enabled = true)
@@ -3455,6 +3497,16 @@ void DevControls::configure_header_button_sets() {
 };
     room_buttons.push_back(std::move(regenerate_btn));
 
+    MapModeUI::HeaderButtonConfig explorer_btn;
+    explorer_btn.id = "open_explorer";
+    explorer_btn.label = "Open Explorer";
+    explorer_btn.momentary = true;
+    explorer_btn.on_toggle = [this](bool) {
+        open_repo_root_in_file_explorer();
+        sync_header_button_states();
+    };
+    room_buttons.push_back(std::move(explorer_btn));
+
     map_mode_ui_->set_mode_button_sets(std::move(map_buttons), std::move(room_buttons));
     other_settings_.ensure_layout();
     sync_header_button_states();
@@ -4377,8 +4429,7 @@ Room* DevControls::choose_room(Room* preferred) const {
     return nullptr;
 }
 
-void DevControls::filter_active_assets(std::vector<Asset*>& assets) const {
-    (void)assets;
+void DevControls::filter_active_assets(std::vector<Asset*>& /*assets*/) const {
     if (!enabled_) {
         restore_filter_hidden_assets();
         return;
@@ -4387,37 +4438,54 @@ void DevControls::filter_active_assets(std::vector<Asset*>& assets) const {
         return;
     }
 
-    const auto& membership = assets_->filtered_active_asset_membership();
+    // Visible set as computed by Assets::update_filtered_active_assets().
+    const auto& visible = assets_->filtered_active_asset_membership();
+    const auto& all_assets = assets_->getActive();
 
-    for (Asset* asset : previous_filtered_membership_) {
+    std::unordered_set<Asset*> active_set;
+    active_set.reserve(all_assets.size());
+    std::unordered_set<Asset*> to_hide;
+    to_hide.reserve(all_assets.size());
+
+    for (Asset* asset : all_assets) {
         if (!asset) {
             continue;
         }
-        if (membership.find(asset) != membership.end()) {
-            continue;
-        }
-        auto hidden_it = filter_hidden_assets_.find(asset);
-        if (hidden_it != filter_hidden_assets_.end()) {
-            asset->set_hidden(hidden_it->second);
-            filter_hidden_assets_.erase(hidden_it);
+        active_set.insert(asset);
+        if (visible.find(asset) == visible.end()) {
+            to_hide.insert(asset);
         }
     }
 
-    for (Asset* asset : membership) {
+    // Restore anything we previously hid that is now visible (or no longer active).
+    for (auto it = filter_hidden_assets_.begin(); it != filter_hidden_assets_.end();) {
+        Asset* asset = it->first;
+        const bool still_active = active_set.find(asset) != active_set.end();
+        const bool should_hide = to_hide.find(asset) != to_hide.end();
+        if (!still_active || !should_hide) {
+            if (asset && still_active) {
+                asset->set_hidden(it->second);
+            }
+            it = filter_hidden_assets_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Hide assets that failed the filters and make sure they cannot be interacted with.
+    for (Asset* asset : to_hide) {
         if (!asset) {
             continue;
         }
-        if (previous_filtered_membership_.find(asset) != previous_filtered_membership_.end()) {
-            continue;
-        }
-        const bool original_hidden = asset->is_hidden();
+        auto [entry, inserted] = filter_hidden_assets_.emplace(asset, asset->is_hidden());
         asset->set_hidden(true);
         asset->set_highlighted(false);
         asset->set_selected(false);
-        filter_hidden_assets_[asset] = original_hidden;
+        (void)inserted;
     }
 
-    previous_filtered_membership_ = membership;
+    // Track the currently hidden set so we can compare on the next update.
+    previous_filtered_membership_ = std::move(to_hide);
 }
 
 void DevControls::refresh_active_asset_filters() {

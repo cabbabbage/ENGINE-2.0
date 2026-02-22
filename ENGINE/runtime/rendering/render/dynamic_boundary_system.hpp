@@ -4,7 +4,6 @@
 #include <nlohmann/json.hpp>
 
 #include "rendering/render/scaling_logic.hpp"
-#include "gameplay/world/grid_point.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -13,6 +12,7 @@
 #include <unordered_set>
 #include <vector>
 
+class Room;
 class WarpedScreenGrid;
 class AssetLibrary;
 class Assets;
@@ -155,8 +155,14 @@ private:
             return static_cast<std::size_t>(combined);
         }
     };
+    enum class RegionKind : int {
+        Boundary = 0,
+        Room,
+        Trail
+    };
+
     struct RegionCacheEntry {
-        world::GridPoint::RegionKind region_kind = world::GridPoint::RegionKind::Boundary;
+        RegionKind region_kind = RegionKind::Boundary;
         const Room* owner = nullptr;
         bool blocked = false;
     };

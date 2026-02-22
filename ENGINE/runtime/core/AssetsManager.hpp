@@ -79,6 +79,7 @@ public:
 
     const std::vector<Asset*>& getActive() const;
     const std::vector<Asset*>& getFilteredActiveAssets() const;
+    const std::unordered_set<Asset*>& filtered_active_asset_membership() const { return filtered_active_asset_membership_; }
     const std::vector<world::GridPoint*>& active_points() const { return active_points_; }
     struct ActiveTraversalEntry {
         Asset* asset = nullptr;

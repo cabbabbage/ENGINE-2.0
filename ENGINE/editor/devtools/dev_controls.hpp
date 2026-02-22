@@ -350,6 +350,7 @@ private:
     bool modal_headers_hidden_ = false;
     bool sliding_headers_hidden_ = false;
     mutable std::unordered_map<Asset*, bool> filter_hidden_assets_;
+    mutable std::unordered_set<Asset*> previous_filtered_membership_;
     std::unique_ptr<TrailEditorSuite> trail_suite_;
     std::unique_ptr<Room> pending_trail_template_;
     devmode::core::ManifestStore manifest_store_;

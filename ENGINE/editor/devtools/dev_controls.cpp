@@ -3926,6 +3926,7 @@ void DevControls::restore_filter_hidden_assets() const {
         }
     }
     filter_hidden_assets_.clear();
+    previous_filtered_membership_.clear();
 }
 
 void DevControls::ensure_boundary_assets_modal_open() {
@@ -4299,44 +4300,36 @@ void DevControls::filter_active_assets(std::vector<Asset*>& assets) const {
     }
 
     const auto& membership = assets_->filtered_active_asset_membership();
-    const auto membership_end = membership.end();
-    // Only mutate hide state when the filtered membership actually changes.
-    std::unordered_map<Asset*, bool> next_hidden;
-    next_hidden.reserve(filter_hidden_assets_.size() + 8);
 
-    for (auto& kv : filter_hidden_assets_) {
-        Asset* asset = kv.first;
+    for (Asset* asset : previous_filtered_membership_) {
         if (!asset) {
             continue;
         }
-        const auto membership_it = membership.find(asset);
-        if (membership_it != membership_end) {
-            asset->set_hidden(kv.second);
+        if (membership.find(asset) != membership.end()) {
             continue;
         }
-        next_hidden.emplace(asset, kv.second);
+        auto hidden_it = filter_hidden_assets_.find(asset);
+        if (hidden_it != filter_hidden_assets_.end()) {
+            asset->set_hidden(hidden_it->second);
+            filter_hidden_assets_.erase(hidden_it);
+        }
     }
 
-    const auto& active = assets_->getActive();
-    for (Asset* asset : active) {
+    for (Asset* asset : membership) {
         if (!asset) {
             continue;
         }
-        const auto membership_it = membership.find(asset);
-        if (membership_it != membership_end) {
-            continue;
-        }
-        if (next_hidden.find(asset) != next_hidden.end()) {
+        if (previous_filtered_membership_.find(asset) != previous_filtered_membership_.end()) {
             continue;
         }
         const bool original_hidden = asset->is_hidden();
         asset->set_hidden(true);
         asset->set_highlighted(false);
         asset->set_selected(false);
-        next_hidden.emplace(asset, original_hidden);
+        filter_hidden_assets_[asset] = original_hidden;
     }
 
-    filter_hidden_assets_ = std::move(next_hidden);
+    previous_filtered_membership_ = membership;
 }
 
 void DevControls::refresh_active_asset_filters() {
@@ -4348,16 +4341,6 @@ void DevControls::refresh_active_asset_filters() {
     set_active_assets(filtered, assets_->dev_active_state_version());
     if (room_editor_) {
         room_editor_->clear_highlighted_assets();
-    }
-    const auto& active = assets_->getActive();
-    for (Asset* asset : active) {
-        if (!asset) {
-            continue;
-        }
-        if (!passes_asset_filters(asset)) {
-            asset->set_highlighted(false);
-            asset->set_selected(false);
-        }
     }
 }
 

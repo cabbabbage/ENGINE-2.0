@@ -196,7 +196,7 @@ void MapEditor::render(SDL_Renderer* renderer) {
         if (!room || !room->room_area) continue;
         const bool is_current = (room == current_room_);
         SDL_Color base_color = is_current ? accent_base : grey_base;
-        RoomBoundsOverlayStyle style = dm_draw::ResolveRoomBoundsOverlayStyle(base_color);
+        auto style = dm_draw::ResolveRoomBoundsOverlayStyle(base_color);
         if (is_current) {
             style.fill = accent_fill;
             style.fill.a = 110;

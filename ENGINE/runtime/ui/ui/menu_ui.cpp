@@ -26,8 +26,9 @@ MenuUI::MenuUI(EngineRenderer* renderer,
                int screen_h,
                MapDescriptor map,
                LoadingScreen* loading_screen,
-               AssetLibrary* asset_library)
-: MainApp(std::move(map), renderer, screen_w, screen_h, loading_screen, asset_library)
+               AssetLibrary* asset_library,
+               SDL_Window* window)
+: MainApp(std::move(map), renderer, screen_w, screen_h, loading_screen, asset_library, window)
 {
         if (TTF_WasInit() == 0) {
                 if (!TTF_Init()) {
@@ -72,8 +73,9 @@ void MenuUI::game_loop() {
 	while (!quit) {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
                 bool had_events = false;
-		while (SDL_PollEvent(&e)) {
+                while (SDL_PollEvent(&e)) {
                         had_events = true;
+                        handle_global_shortcuts(e);
                         const bool menu_was_active = menu_active_;
 			if (e.type == SDL_EVENT_QUIT) {
 					quit = true;

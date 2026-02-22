@@ -4159,19 +4159,19 @@ void DevControls::render_grid_overlay() {
                 const int px = static_cast<int>(std::lround(screen_point.x));
                 const int py = static_cast<int>(std::lround(screen_point.y));
                 if (is_cursor_intersection) {
-                    SDL_Rect highlight_rect{
-                        px - kHighlightPointHalf,
-                        py - kHighlightPointHalf,
-                        kHighlightPointSizePx,
-                        kHighlightPointSizePx,
+                    SDL_FRect highlight_rect{
+                        static_cast<float>(px - kHighlightPointHalf),
+                        static_cast<float>(py - kHighlightPointHalf),
+                        static_cast<float>(kHighlightPointSizePx),
+                        static_cast<float>(kHighlightPointSizePx),
                     };
                     SDL_RenderFillRect(renderer, &highlight_rect);
                 } else {
-                    SDL_Rect point_rect{
-                        px - kGridPointHalf,
-                        py - kGridPointHalf,
-                        kGridPointSizePx,
-                        kGridPointSizePx,
+                    SDL_FRect point_rect{
+                        static_cast<float>(px - kGridPointHalf),
+                        static_cast<float>(py - kGridPointHalf),
+                        static_cast<float>(kGridPointSizePx),
+                        static_cast<float>(kGridPointSizePx),
                     };
                     SDL_RenderFillRect(renderer, &point_rect);
                 }

@@ -44,6 +44,7 @@ public:
     ~EngineRenderer();
 
     SDL_Renderer* raw() const { return renderer_; }
+    SDL_Window* window() const { return window_; }
     const RenderCaps& caps() const { return caps_; }
     RenderQualityTier quality_tier() const { return quality_tier_; }
 

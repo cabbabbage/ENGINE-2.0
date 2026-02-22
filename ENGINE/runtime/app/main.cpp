@@ -63,14 +63,17 @@ MainApp::MainApp(MapDescriptor map,
                  int screen_w,
                  int screen_h,
                  LoadingScreen* loading_screen,
-                 AssetLibrary* asset_library)
+                 AssetLibrary* asset_library,
+                 SDL_Window* window)
 : map_descriptor_(std::move(map)),
   map_path_(map_descriptor_.id),
   renderer_(renderer),
   screen_w_(screen_w),
   screen_h_(screen_h),
   loading_screen_(loading_screen),
-  asset_library_(asset_library) {}
+  asset_library_(asset_library),
+  window_(window),
+  is_fullscreen_(window_ ? ((SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0) : false) {}
 
 MainApp::~MainApp() {
         // Persist current asset state to primary bundles before tearing down.
@@ -339,6 +342,7 @@ void MainApp::game_loop() {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
 
                 while (SDL_PollEvent(&e)) {
+                        handle_global_shortcuts(e);
                         if (e.type == SDL_EVENT_QUIT) {
                                 quit = true;
                         }
@@ -382,11 +386,40 @@ void MainApp::game_loop() {
                                 (idle_counts_accum * 1000.0) / perf_frequency;
                         const double average_idle_ms =
                                 total_idle_ms / static_cast<double>(idle_frame_counter);
-                        vibble::log::debug( "[MainApp] Idle pacing: total " + std::to_string(total_idle_ms) + "ms over " + std::to_string(idle_frame_counter) + " frame(s); avg " + std::to_string(average_idle_ms) + "ms.");
+                        vibble::log::debug("[MainApp] Idle pacing: total " + std::to_string(total_idle_ms) + "ms over " + std::to_string(idle_frame_counter) + " frame(s); avg " + std::to_string(average_idle_ms) + "ms.");
                         idle_counts_accum = 0.0;
                         idle_frame_counter = 0;
                 }
         }
+}
+
+void MainApp::toggle_fullscreen() {
+        if (!window_) {
+                return;
+        }
+        const bool request_fullscreen = !is_fullscreen_;
+        const bool result = SDL_SetWindowFullscreen(window_, request_fullscreen);
+        if (result) {
+                is_fullscreen_ = !is_fullscreen_;
+                const char* mode = is_fullscreen_ ? "fullscreen" : "windowed";
+                vibble::log::info(std::string("[MainApp] Window mode switched to ") + mode + ".");
+        } else {
+                vibble::log::warn(std::string("[MainApp] Failed to toggle fullscreen: ") + SDL_GetError());
+        }
+}
+
+void MainApp::handle_global_shortcuts(const SDL_Event& e) {
+        if (e.type != SDL_EVENT_KEY_DOWN || e.key.repeat != 0) {
+                return;
+        }
+        const SDL_Keycode key = e.key.key;
+        if (key != SDLK_RETURN && key != SDLK_KP_ENTER) {
+                return;
+        }
+        if ((e.key.mod & SDL_KMOD_ALT) == 0) {
+                return;
+        }
+        toggle_fullscreen();
 }
 
 namespace {
@@ -802,7 +835,7 @@ void run(SDL_Window* window,
             vibble::log::info("[Main] Shared asset library refreshed.");
         }
 
-        MenuUI app(&engine_renderer, screen_w, screen_h, std::move(selected_map), &loading_screen, shared_asset_library.get());
+        MenuUI app(&engine_renderer, screen_w, screen_h, std::move(selected_map), &loading_screen, shared_asset_library.get(), window);
         app.init();
         if (app.wants_return_to_main_menu()) {
             continue;

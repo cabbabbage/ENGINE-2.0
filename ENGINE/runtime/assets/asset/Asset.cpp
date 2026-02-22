@@ -16,6 +16,7 @@
 #include "animation/animation_runtime.hpp"
 #include "animation/animation_update.hpp"
 #include "utils/area_helpers.hpp"
+#include "assets/asset_filter_tags.hpp"
 #include "assets/asset_types.hpp"
 #include "utils/grid.hpp"
 #include "utils/transform_smoothing_settings.hpp"
@@ -151,7 +152,16 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
         alpha_smoothing_.set_params(transform_smoothing::asset_alpha_params());
 
         alpha_smoothing_.reset(hidden ? 0.0f : 1.0f);
+        refresh_filter_tags();
+}
 
+void Asset::refresh_filter_tags() {
+    if (info) {
+        filter_type_tag_ = asset_types::canonicalize(info->type);
+    } else {
+        filter_type_tag_.clear();
+    }
+    filter_method_tag_ = asset_filters::canonicalize_spawn_method(spawn_method);
 }
 
 void Asset::clear_downscale_cache() {
@@ -234,6 +244,7 @@ Asset::Asset(const Asset& o)
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
         finalized_                = o.finalized_;
+        refresh_filter_tags();
 }
 
 Asset& Asset::operator=(const Asset& o) {
@@ -299,6 +310,7 @@ Asset& Asset::operator=(const Asset& o) {
         follow_initialized_       = o.follow_initialized_;
         anchor_handles_.clear();
         anchor_lookup_.clear();
+        refresh_filter_tags();
         return *this;
 }
 

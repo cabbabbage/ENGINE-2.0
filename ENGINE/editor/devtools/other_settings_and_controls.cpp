@@ -4,6 +4,7 @@
 #include <SDL3/SDL.h>
 
 #include "assets/Asset.hpp"
+#include "assets/asset_filter_tags.hpp"
 #include "assets/asset_types.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/dev_ui_settings.hpp"
@@ -60,23 +61,9 @@ std::string make_type_setting_key(const std::string& type) {
     return key;
 }
 
-std::string canonicalize_method_string(const std::string& method) {
-    std::string canonical;
-    canonical.reserve(method.size());
-    for (unsigned char ch : method) {
-        if (std::isalnum(ch)) {
-            canonical.push_back(static_cast<char>(std::tolower(ch)));
-        } else if (std::isspace(ch) || ch == '_' || ch == '-') {
-            if (canonical.empty() || canonical.back() == '_') continue;
-            canonical.push_back('_');
-        }
-    }
-    return canonical;
-}
-
 std::string make_method_setting_key(const std::string& method) {
     std::string key = kSettingsMethodPrefix;
-    key += canonicalize_method_string(method);
+    key += asset_filters::canonicalize_spawn_method(method);
     return key;
 }
 
@@ -988,11 +975,11 @@ bool OtherSettingsAndControls::passes(const Asset& asset) const {
     if (!asset.info) {
         return true;
     }
-    const std::string type = asset_types::canonicalize(asset.info->type);
-    if (!type_filter_enabled(type)) {
+    const std::string& type = asset.filter_type_tag();
+    if (!type.empty() && !type_filter_enabled(type)) {
         return false;
     }
-    const std::string method = canonicalize_method(asset.spawn_method);
+    const std::string& method = asset.filter_method_tag();
     if (!method.empty() && !method_filter_enabled(method)) {
         return false;
     }
@@ -1721,7 +1708,7 @@ std::string OtherSettingsAndControls::format_method_label(const std::string& met
 }
 
 std::string OtherSettingsAndControls::canonicalize_method(const std::string& method) {
-    return canonicalize_method_string(method);
+    return asset_filters::canonicalize_spawn_method(method);
 }
 
 void OtherSettingsAndControls::collect_spawn_ids(const nlohmann::json& node, std::unordered_set<std::string>& out) const {

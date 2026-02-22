@@ -48,7 +48,7 @@ private:
     void invalidate_preview() const;
     void refresh_selection_state();
     void request_close();
-    void prime_textures();
+    void prime_textures() const;
     bool ui_contains_point(const SDL_Point& p) const;
     std::pair<int, int> frame_dimensions_for_index(std::size_t frame_index) const;
     std::pair<int, int> current_frame_dimensions() const;
@@ -79,9 +79,9 @@ private:
     int selected_anchor_ = -1;
     bool wants_close_ = false;
     bool dirty_ = false;
-    bool texture_primed_ = false;
-    bool tried_runtime_rebuild_ = false;
-    bool preview_refreshed_ = false;
+    mutable bool texture_primed_ = false;
+    mutable bool tried_runtime_rebuild_ = false;
+    mutable bool preview_refreshed_ = false;
 
     bool is_dragging_anchor_ = false;
     bool is_panning_ = false;

@@ -227,7 +227,7 @@ void AnchorEditor::render_world(SDL_Renderer*) const {}
 
 void AnchorEditor::render_overlays(SDL_Renderer* renderer) const {
     if (!renderer) return;
-    if (!texture_primed_) const_cast<AnchorEditor*>(this)->prime_textures();
+    if (!texture_primed_) prime_textures();
     layout_ui(renderer);
     SDL_SetRenderDrawColor(renderer, 18, 20, 24, 255);
     SDL_FRect vp{static_cast<float>(viewport_rect_.x), static_cast<float>(viewport_rect_.y), static_cast<float>(viewport_rect_.w), static_cast<float>(viewport_rect_.h)};
@@ -287,7 +287,7 @@ void AnchorEditor::request_close() {
     wants_close_ = true;
 }
 
-void AnchorEditor::prime_textures() {
+void AnchorEditor::prime_textures() const {
     SDL_Renderer* renderer = context_.assets ? context_.assets->renderer() : nullptr;
     if (context_.preview && renderer && !preview_refreshed_) {
         preview_refreshed_ = true;

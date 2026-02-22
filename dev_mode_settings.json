@@ -1,11 +1,11 @@
 {
     "dev": {
         "asset_filter": {
-            "current_room": true,
+            "current_room": false,
             "filters_expanded": false,
             "fog": false,
             "initialized": true,
-            "map_assets": true,
+            "map_assets": false,
             "methods": {
                 "center": true,
                 "childrandom": false,
@@ -22,7 +22,7 @@
                 "boundary": true,
                 "enemy": false,
                 "npc": false,
-                "object": true,
+                "object": false,
                 "player": true,
                 "texture": false
             }
@@ -30,7 +30,7 @@
         "grid": {
             "cell_size_px": 9.0,
             "overlay": {
-                "enabled": true,
+                "enabled": false,
                 "r": 2.0
             },
             "snap": {

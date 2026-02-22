@@ -4041,20 +4041,36 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
 
     drag_anchor_asset_ = primary;
     drag_spawn_id_ = primary->spawn_id;
-    overlay_resolution_before_drag_.reset();
 
     MapGridSettings map_settings = current_room_ ? current_room_->map_grid_settings() : MapGridSettings::defaults();
     map_settings.clamp();
 
-    int desired_resolution = 0;
-    if (snap_to_grid_enabled_) {
-        desired_resolution = cursor_snap_resolution_ > 0 ? cursor_snap_resolution_ : map_settings.grid_resolution;
-    }
-    drag_resolution_ = vibble::grid::clamp_resolution(desired_resolution);
+    overlay_resolution_before_drag_.reset();
+    overlay_resolution_override_during_drag_.reset();
+
+    const int user_grid_resolution = shared_footer_bar_
+        ? vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution())
+        : 0;
+
     SpawnEntryResolution resolved_entry = drag_spawn_id_.empty() ? SpawnEntryResolution{} : locate_spawn_entry(drag_spawn_id_);
     nlohmann::json* spawn_entry = resolved_entry.entry;
-    if (snap_to_grid_enabled_ && spawn_entry && drag_mode_ != DragMode::Exact) {
-        drag_resolution_ = vibble::grid::clamp_resolution(spawn_entry->value("resolution", drag_resolution_));
+
+    int desired_resolution = cursor_snap_resolution_ > 0
+        ? cursor_snap_resolution_
+        : map_settings.grid_resolution;
+
+    if (spawn_entry) {
+        desired_resolution = spawn_entry->value("resolution", desired_resolution);
+    } else if (primary && primary->grid_resolution > 0) {
+        desired_resolution = primary->grid_resolution;
+    }
+
+    drag_resolution_ = vibble::grid::clamp_resolution(std::max(0, desired_resolution));
+
+    if (shared_footer_bar_ && drag_resolution_ > 0 && drag_resolution_ != user_grid_resolution) {
+        overlay_resolution_before_drag_ = user_grid_resolution;
+        overlay_resolution_override_during_drag_ = drag_resolution_;
+        shared_footer_bar_->set_grid_resolution(drag_resolution_);
     }
 
     const std::string& method = primary->spawn_method;
@@ -4075,25 +4091,6 @@ void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modi
     }
 
     bool resolve_geometry = (method == "Exact" || method == "Exact Position" || method == "Perimeter");
-
-    const bool editing_spawn_config = is_spawn_group_panel_visible() && active_spawn_group_id_.has_value();
-
-    if (shared_footer_bar_) {
-        if (editing_spawn_config) {
-            drag_resolution_ = snap_to_grid_enabled_
-                ? vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution())
-                : 0;
-            overlay_resolution_before_drag_.reset();
-        } else {
-
-            overlay_resolution_before_drag_ = shared_footer_bar_->grid_resolution();
-            if (snap_to_grid_enabled_) {
-                shared_footer_bar_->set_grid_resolution(vibble::grid::clamp_resolution(drag_resolution_));
-            }
-        }
-    } else {
-        overlay_resolution_before_drag_.reset();
-    }
 
     auto [room_w, room_h] = get_room_dimensions();
     drag_perimeter_curr_w_ = room_w;
@@ -4591,9 +4588,23 @@ bool RoomEditor::snap_dragged_assets_to_grid() {
 
 void RoomEditor::finalize_drag_session() {
 
+    const bool snap_was_enabled = snap_to_grid_enabled_;
+    const int  resolution_used_for_drag = shared_footer_bar_
+        ? vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution())
+        : vibble::grid::clamp_resolution(drag_resolution_);
+
     if (shared_footer_bar_ && overlay_resolution_before_drag_.has_value()) {
-        shared_footer_bar_->set_grid_resolution(*overlay_resolution_before_drag_);
+        const int current_grid = vibble::grid::clamp_resolution(shared_footer_bar_->grid_resolution());
+        const bool should_restore_overlay =
+            overlay_resolution_override_during_drag_.has_value() &&
+            current_grid == *overlay_resolution_override_during_drag_;
+
+        if (should_restore_overlay) {
+            shared_footer_bar_->set_grid_resolution(*overlay_resolution_before_drag_);
+        }
+
         overlay_resolution_before_drag_.reset();
+        overlay_resolution_override_during_drag_.reset();
     }
 
     if (drag_states_.empty()) {
@@ -4670,14 +4681,11 @@ void RoomEditor::finalize_drag_session() {
                     break;
             }
 
-            if (drag_moved_) {
-                const int snap_after_drag = current_grid_resolution();
-                if (snap_after_drag > 0) {
-                    (*entry)["resolution"] = snap_after_drag;
-                    for (auto& st : drag_states_) {
-                        if (st.asset) {
-                            st.asset->grid_resolution = snap_after_drag;
-                        }
+            if (drag_moved_ && snap_was_enabled && resolution_used_for_drag > 0) {
+                (*entry)["resolution"] = resolution_used_for_drag;
+                for (auto& st : drag_states_) {
+                    if (st.asset) {
+                        st.asset->grid_resolution = resolution_used_for_drag;
                     }
                 }
             }
@@ -4734,6 +4742,7 @@ void RoomEditor::reset_drag_state() {
     drag_spawn_id_.clear();
 
     overlay_resolution_before_drag_.reset();
+    overlay_resolution_override_during_drag_.reset();
 }
 
 nlohmann::json* RoomEditor::find_spawn_entry(const std::string& spawn_id) {

@@ -381,6 +381,7 @@ private:
     bool suppress_next_left_click_ = false;
 
     std::optional<int> overlay_resolution_before_drag_{};
+    std::optional<int> overlay_resolution_override_during_drag_{};
 
     int click_buffer_frames_ = 0;
     int rclick_buffer_frames_ = 0;

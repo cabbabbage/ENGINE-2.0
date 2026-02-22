@@ -267,6 +267,7 @@ public:
     void render_drop_choice_modal(SDL_Renderer* renderer);
     void render_drop_conflict_modal(SDL_Renderer* renderer);
     void render_drop_error_popup(SDL_Renderer* renderer);
+    void render_import_busy_overlay(SDL_Renderer* renderer);
     void layout_drop_modal();
     void layout_drop_choice_modal();
     void layout_drop_conflict_modal();
@@ -287,6 +288,10 @@ public:
     void reset_drop_error_popup();
     void reset_multi_asset_import();
     SDL_Point drop_world_from_screen(SDL_Point screen) const;
+
+    void begin_import_busy(const std::string& message);
+    void end_import_busy();
+    bool is_import_busy() const;
 
 private:
     enum class DirtyFlag : std::uint32_t {
@@ -388,6 +393,11 @@ private:
     DropChoiceModal drop_choice_modal_;
     DropConflictModal drop_conflict_modal_;
     DropErrorPopup drop_error_popup_;
+    struct ImportBusyOverlay {
+        bool active = false;
+        std::string message;
+        Uint64 started_ms = 0;
+    } import_busy_;
     MultiAssetImportState multi_asset_import_;
 
 

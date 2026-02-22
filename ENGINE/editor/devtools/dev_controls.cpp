@@ -90,6 +90,25 @@ using devmode::sdl::is_pointer_event;
 namespace {
 
 using vibble::strings::to_lower_copy;
+class ImportBusyScope {
+public:
+    ImportBusyScope(DevControls* owner, const std::string& message, bool enabled = true)
+        : owner_(owner), enabled_(enabled) {
+        if (owner_ && enabled_) {
+            owner_->begin_import_busy(message);
+        }
+    }
+    ~ImportBusyScope() {
+        if (owner_ && enabled_) {
+            owner_->end_import_busy();
+        }
+    }
+    ImportBusyScope(const ImportBusyScope&) = delete;
+    ImportBusyScope& operator=(const ImportBusyScope&) = delete;
+private:
+    DevControls* owner_ = nullptr;
+    bool enabled_ = false;
+};
 
 constexpr const char* kModeIdRoom = "room";
 constexpr const char* kModeIdMap = "map";
@@ -1481,6 +1500,20 @@ void DevControls::reset_multi_asset_import() {
     multi_asset_import_ = MultiAssetImportState{};
 }
 
+void DevControls::begin_import_busy(const std::string& message) {
+    import_busy_.active = true;
+    import_busy_.message = message.empty() ? "Importing assets..." : message;
+    import_busy_.started_ms = SDL_GetTicks();
+}
+
+void DevControls::end_import_busy() {
+    import_busy_ = ImportBusyOverlay{};
+}
+
+bool DevControls::is_import_busy() const {
+    return import_busy_.active;
+}
+
 SDL_Point DevControls::drop_world_from_screen(SDL_Point screen) const {
     if (!assets_) {
         return screen;
@@ -1633,6 +1666,13 @@ void DevControls::process_next_multi_asset_item() {
     if (!multi_asset_import_.active || multi_asset_import_.waiting_for_rename) {
         return;
     }
+    ImportBusyScope busy(this, "Importing assets...");
+    if (assets_) {
+        if (SDL_Renderer* r = assets_->renderer()) {
+            render_import_busy_overlay(r);
+            SDL_RenderPresent(r);
+        }
+    }
     while (multi_asset_import_.index < multi_asset_import_.files.size()) {
         const std::filesystem::path file = multi_asset_import_.files[multi_asset_import_.index];
         std::string candidate = sanitize_asset_name_local(vibble::strings::to_lower_copy(file.stem().string()));
@@ -1708,11 +1748,11 @@ bool DevControls::handle_drop_event(const SDL_Event& event) {
     case SDL_EVENT_DROP_COMPLETE: {
         DropValidationResult validation = validate_drop_items(drop_state_.items);
         if (validation.valid) {
-            DropImportRequest req;
-            req.kind = validation.kind;
-            req.files = validation.files;
-            req.folder = validation.folder;
-            req.drop_screen = drop_point_from_event(event);
+    DropImportRequest req;
+    req.kind = validation.kind;
+    req.files = validation.files;
+    req.folder = validation.folder;
+    req.drop_screen = drop_point_from_event(event);
             if (req.kind == DropContentKind::MultiImages) {
                 bool all_png = !req.files.empty();
                 for (const auto& p : req.files) {
@@ -2058,11 +2098,51 @@ void DevControls::render_drop_error_popup(SDL_Renderer* renderer) {
     if (drop_error_popup_.ok_button) drop_error_popup_.ok_button->render(renderer);
 }
 
+void DevControls::render_import_busy_overlay(SDL_Renderer* renderer) {
+    if (!renderer || !import_busy_.active) return;
+    SDL_BlendMode prev = SDL_BLENDMODE_NONE;
+    SDL_GetRenderDrawBlendMode(renderer, &prev);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Color bg{15, 15, 20, 180};
+    SDL_SetRenderDrawColor(renderer, bg.r, bg.g, bg.b, bg.a);
+    SDL_Rect full{0, 0, screen_w_, screen_h_};
+    sdl_render::FillRect(renderer, &full);
+
+    const int spinner_size = 42;
+    const int center_x = screen_w_ / 2;
+    const int center_y = screen_h_ / 2;
+    const Uint64 elapsed = SDL_GetTicks() - import_busy_.started_ms;
+    constexpr double kTwoPi = 6.28318530717958647692;
+    const double angle = static_cast<double>(elapsed % 2000) / 2000.0 * kTwoPi;
+    SDL_Color fg{255, 255, 255, 235};
+    SDL_SetRenderDrawColor(renderer, fg.r, fg.g, fg.b, fg.a);
+    const int line_len = spinner_size;
+    int x2 = center_x + static_cast<int>(std::lround(std::cos(angle) * line_len));
+    int y2 = center_y + static_cast<int>(std::lround(std::sin(angle) * line_len));
+    SDL_RenderLine(renderer, center_x, center_y, x2, y2);
+
+    DrawLabelText(renderer,
+                  import_busy_.message,
+                  center_x - 140,
+                  center_y + spinner_size + 12,
+                  DMStyles::Label());
+
+    SDL_SetRenderDrawBlendMode(renderer, prev);
+}
+
 bool DevControls::create_drop_asset(const std::string& asset_name,
                                    const std::vector<std::filesystem::path>& files,
                                    const DropImportRequest& request,
                                    bool open_editor_and_spawn,
                                    std::string& error_out) {
+    ImportBusyScope busy(this, "Importing assets...");
+    if (assets_) {
+        if (SDL_Renderer* r = assets_->renderer()) {
+            render_import_busy_overlay(r);
+            SDL_RenderPresent(r);
+        }
+    }
+
     error_out.clear();
     const std::string sanitized = sanitize_asset_name_local(devmode::utils::trim_whitespace_copy(asset_name));
     if (sanitized.empty()) {
@@ -2256,6 +2336,17 @@ bool DevControls::finalize_drop_creation(const std::string& desired_name) {
 
 void DevControls::handle_sdl_event(const SDL_Event& event) {
     if (!enabled_) return;
+
+    if (import_busy_.active &&
+        !drop_modal_.visible &&
+        !drop_choice_modal_.visible &&
+        !drop_conflict_modal_.visible &&
+        !drop_error_popup_.visible) {
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
 
     if (drop_error_popup_.visible) {
         handle_drop_error_popup_event(event);
@@ -2971,6 +3062,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
     }
 
     render_drop_overlay(renderer);
+    render_import_busy_overlay(renderer);
     render_drop_modal(renderer);
     render_drop_choice_modal(renderer);
     render_drop_conflict_modal(renderer);

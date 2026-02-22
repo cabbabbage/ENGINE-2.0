@@ -477,6 +477,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         group["max_number"] = 0;
         group["enforce_spacing"] = false;
         group["grid_resolution"] = 6;
+        group["jitter"] = 0;
         group["resolution"] = 0;
         group["resolve_geometry_to_room_size"] = false;
         group["resolve_quantity_to_room_size"] = false;
@@ -505,28 +506,14 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
          nlohmann::json::array({ make_batch_spawn_group("map_assets",
                                                         "batch_map_assets") })}
     });
+    map_info["fog_settings"] = nlohmann::json::object({
+        {"max_random_jitter", 0}
+    });
     map_info["map_boundary_data"] = nlohmann::json::object({
         {"inherits_map_assets", false},
         {"candidate_selectors",
          nlohmann::json::array({ make_batch_spawn_group("map_boundary",
                                                         "batch_map_boundary") })}
-    });
-    map_info["reactive_shadows"] = nlohmann::json::object({
-        {"frame_blend_falloff_frames", 15},
-        {"opacity_sensitivity_percent", 100.0},
-        {"opacity_strength", 1.0},
-        {"sampling_weights", nlohmann::json::object({
-            {"dynamic_weight", 1.0},
-            {"static_weight", 0.0}
-        })},
-        {"shadow_lut", nlohmann::json::array({
-            nlohmann::json::object({
-                {"brightness", 0.0},
-                {"offset", 0.0},
-                {"opacity", 1.0},
-                {"scale", 1.0}
-            })
-        })}
     });
     map_info["trails_data"] = nlohmann::json::object({
         {"basic", nlohmann::json::object({

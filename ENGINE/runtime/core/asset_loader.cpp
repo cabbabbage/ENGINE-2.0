@@ -447,6 +447,19 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
 
         ensure_map_grid_settings(map_manifest_json_);
 
+        // Ensure fog settings exist with defaults
+        {
+                auto fog_it = map_manifest_json_.find("fog_settings");
+                if (fog_it == map_manifest_json_.end() || !fog_it->is_object()) {
+                        map_manifest_json_["fog_settings"] = nlohmann::json::object();
+                        map_manifest_json_["fog_settings"]["max_random_jitter"] = 0;
+                } else {
+                        if (!fog_it->contains("max_random_jitter") || !fog_it->at("max_random_jitter").is_number()) {
+                                (*fog_it)["max_random_jitter"] = 0;
+                        }
+                }
+        }
+
         map_assets_data_   = &map_manifest_json_["map_assets_data"];
         if (!map_assets_data_->is_object()) *map_assets_data_ = nlohmann::json::object();
         map_boundary_data_ = &map_manifest_json_["map_boundary_data"];

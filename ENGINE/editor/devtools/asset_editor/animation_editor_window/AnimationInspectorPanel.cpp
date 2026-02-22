@@ -20,6 +20,7 @@
 #include "MovementSummaryWidget.hpp"
 #include "OnEndSelector.hpp"
 #include "PlaybackSettingsPanel.hpp"
+#include "AnimationOptionsPanel.hpp"
 #include "PreviewProvider.hpp"
 #include "PreviewTimeline.hpp"
 #include "SourceConfigPanel.hpp"
@@ -416,6 +417,7 @@ int AnimationInspectorPanel::height_for_width(int width) const {
         added_section = true;
 };
 
+    add_section_height(animation_options_.get());
     add_section_height(playback_settings_.get());
     add_section_height(movement_summary_.get());
     add_section_height(on_end_selector_.get());
@@ -450,6 +452,7 @@ void AnimationInspectorPanel::update() {
 
     update_preview_playback();
 
+    if (animation_options_) animation_options_->update();
     if (playback_settings_) playback_settings_->update();
     if (movement_summary_) movement_summary_->update();
     if (on_end_selector_) on_end_selector_->update();
@@ -505,6 +508,7 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
 
         render_preview_controls(renderer);
         render_preview(renderer);
+        if (animation_options_) animation_options_->render(renderer);
         if (playback_settings_) playback_settings_->render(renderer);
         if (movement_summary_) movement_summary_->render(renderer);
         if (on_end_selector_) on_end_selector_->render(renderer);
@@ -642,6 +646,7 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
     }
 
     if (source_config_ && source_config_->handle_event(e)) handled = true;
+    if (animation_options_ && animation_options_->handle_event(e)) handled = true;
 
     if (playback_settings_ && playback_settings_->handle_event(e)) handled = true;
     if (movement_summary_ && movement_summary_->handle_event(e)) handled = true;
@@ -823,6 +828,12 @@ void AnimationInspectorPanel::rebuild_widgets() {
         });
     }
 
+    if (!animation_options_) {
+        animation_options_ = std::make_unique<AnimationOptionsPanel>();
+    }
+    animation_options_->set_document(document_);
+    animation_options_->set_animation_id(animation_id_);
+
     if (!playback_settings_) {
         playback_settings_ = std::make_unique<PlaybackSettingsPanel>();
     }
@@ -983,6 +994,7 @@ void AnimationInspectorPanel::layout_widgets() const {
         placed_section = true;
 };
 
+    place_section(animation_options_.get(), animation_options_rect_);
     place_section(playback_settings_.get(), playback_rect_);
     place_section(movement_summary_.get(), movement_rect_);
     place_section(on_end_selector_.get(), on_end_rect_);
@@ -1293,6 +1305,12 @@ void AnimationInspectorPanel::apply_dependencies() {
 
             this->layout_dirty_ = true;
         });
+    }
+
+    if (animation_options_) {
+        animation_options_->set_document(document_);
+        animation_options_->set_animation_id(animation_id_);
+        animation_options_->set_on_animation_properties_changed(on_animation_properties_changed_);
     }
 
     if (movement_summary_) {

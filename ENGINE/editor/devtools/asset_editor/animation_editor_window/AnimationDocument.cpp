@@ -530,6 +530,7 @@ void AnimationDocument::create_animation(const std::string& animation_id) {
                                                                     {"name", nullptr},
                                                                 })},
                                                 }));
+    payload["crop_frames"] = true;
     animations_[candidate] = serialize_payload(payload);
     if (!start_animation_.has_value() || start_animation_->empty()) {
         start_animation_ = candidate;
@@ -783,6 +784,7 @@ void AnimationDocument::ensure_document_initialized() {
                                                                                        {"path", "default"},
                                                                                        {"name", ""}}},
                                                        }));
+        payload["crop_frames"] = true;
         animations_["default"] = serialize_payload(payload);
         ids.push_back("default");
         start_animation_ = std::string{"default"};

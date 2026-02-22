@@ -670,7 +670,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   geometry_batcher_(std::make_unique<GeometryBatcher>(renderer)),
   texture_load_queue_(std::make_unique<texture_loading::TextureLoadQueue>(renderer)),
   sky_texture_path_(std::filesystem::path("resources") / "misc_content" / "sky.png"),
-  floor_gradient_path_(std::filesystem::path("resources") / "misc_content" / "floor_gradient.png"),
   composite_renderer_(renderer, assets),
   dynamic_fog_system_(std::make_unique<DynamicFogSystem>()),
   dynamic_boundary_system_(std::make_unique<DynamicBoundarySystem>())
@@ -711,7 +710,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
 
 SceneRenderer::~SceneRenderer() {
     destroy_sky_texture();
-    destroy_floor_gradient_texture();
     if (scene_composite_tex_) { SDL_DestroyTexture(scene_composite_tex_); scene_composite_tex_ = nullptr; }
     if (postprocess_tex_)     { SDL_DestroyTexture(postprocess_tex_);     postprocess_tex_     = nullptr; }
     if (blur_tex_)            { SDL_DestroyTexture(blur_tex_);            blur_tex_            = nullptr; }
@@ -766,8 +764,6 @@ void SceneRenderer::render() {
     SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, map_clear_color_.a);
     SDL_RenderClear(renderer_);
 
-    render_floor_gradient();
-
     const bool depth_effects_enabled = assets_->depth_effects_enabled();
     render_sky_layer(cam, depth_effects_enabled);
 
@@ -786,6 +782,26 @@ void SceneRenderer::render() {
     const bool should_render_fog = assets_->fog_visible();
     const bool runtime_updates_enabled = assets_->should_run_runtime_updates();
     if (dynamic_fog_system_ && should_render_fog) {
+        // Apply per-map fog jitter from manifest (default 0 if missing)
+        float fog_jitter = 0.0f;
+        try {
+            const nlohmann::json& map_info = assets_->map_info_json();
+            auto fog_it = map_info.find("fog_settings");
+            if (fog_it != map_info.end() && fog_it->is_object()) {
+                auto jitter_it = fog_it->find("max_random_jitter");
+                if (jitter_it != fog_it->end()) {
+                    if (jitter_it->is_number_float()) {
+                        fog_jitter = static_cast<float>(jitter_it->get<double>());
+                    } else if (jitter_it->is_number_integer()) {
+                        fog_jitter = static_cast<float>(jitter_it->get<int>());
+                    }
+                }
+            }
+        } catch (...) {
+            fog_jitter = 0.0f;
+        }
+        fog_jitter = std::clamp(fog_jitter, 0.0f, 500.0f);
+        DynamicFogSystem::set_max_random_jitter(fog_jitter);
         dynamic_fog_system_->update(cam, grid);
     }
 
@@ -1201,94 +1217,4 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
     SDL_SetTextureAlphaMod(sky_texture_, 255);
     sdl_render::Texture(renderer_, sky_texture_, nullptr, &dst);
 }
-
-bool SceneRenderer::ensure_floor_gradient_texture() {
-    if (floor_gradient_texture_ || floor_gradient_failed_) {
-        return floor_gradient_texture_ != nullptr;
-    }
-    if (!renderer_) {
-        return false;
-    }
-
-    std::filesystem::path path = floor_gradient_path_;
-    if (!path.is_absolute()) {
-        path = std::filesystem::current_path() / path;
-    }
-
-    const std::string path_str = path.string();
-    SDL_Texture* tex = IMG_LoadTexture(renderer_, path_str.c_str());
-    if (!tex) {
-        vibble::log::warn(std::string{"[SceneRenderer] Failed to load floor gradient texture '"} +
-                         path_str + "': " + SDL_GetError());
-        floor_gradient_failed_ = true;
-        return false;
-    }
-
-    int tex_w = 0;
-    int tex_h = 0;
-    float tex_wf = 0.0f;
-    float tex_hf = 0.0f;
-    if (!SDL_GetTextureSize(tex, &tex_wf, &tex_hf)) {
-        vibble::log::warn(std::string{"[SceneRenderer] Invalid floor gradient texture '"} +
-                          path_str + "': " + SDL_GetError());
-        SDL_DestroyTexture(tex);
-        floor_gradient_failed_ = true;
-        return false;
-    }
-    tex_w = static_cast<int>(std::lround(tex_wf));
-    tex_h = static_cast<int>(std::lround(tex_hf));
-    if (tex_w <= 0 || tex_h <= 0) {
-        vibble::log::warn(std::string{"[SceneRenderer] Invalid floor gradient texture '"} +
-                          path_str + "': " + SDL_GetError());
-        SDL_DestroyTexture(tex);
-        floor_gradient_failed_ = true;
-        return false;
-    }
-
-    SDL_SetTextureBlendMode(tex, SDL_BLENDMODE_BLEND);
-    floor_gradient_texture_  = tex;
-    floor_gradient_width_    = tex_w;
-    floor_gradient_height_   = tex_h;
-    return true;
-}
-
-void SceneRenderer::destroy_floor_gradient_texture() {
-    if (floor_gradient_texture_) {
-        SDL_DestroyTexture(floor_gradient_texture_);
-        floor_gradient_texture_ = nullptr;
-    }
-    floor_gradient_width_  = 0;
-    floor_gradient_height_ = 0;
-}
-
-void SceneRenderer::render_floor_gradient() {
-    if (!renderer_ || screen_width_ <= 0 || screen_height_ <= 0) {
-        return;
-    }
-
-    if (!ensure_floor_gradient_texture() || !floor_gradient_texture_) {
-        return;
-    }
-
-    const float tex_w = static_cast<float>(floor_gradient_width_);
-    const float tex_h = static_cast<float>(floor_gradient_height_);
-    if (tex_w <= 0.0f || tex_h <= 0.0f) {
-        return;
-    }
-
-    const float scale = static_cast<float>(screen_width_) / tex_w;
-    const float target_w = tex_w * scale;
-    const float target_h = tex_h * scale;
-    if (!std::isfinite(target_h) || target_h <= 0.0f || !std::isfinite(scale)) {
-        return;
-    }
-
-    SDL_FRect dst{0.0f, 0.0f, target_w, target_h};
-
-    SDL_SetTextureColorMod(floor_gradient_texture_, 255, 255, 255);
-    SDL_SetTextureAlphaMod(floor_gradient_texture_, 255);
-    sdl_render::Texture(renderer_, floor_gradient_texture_, nullptr, &dst);
-}
-
-
 

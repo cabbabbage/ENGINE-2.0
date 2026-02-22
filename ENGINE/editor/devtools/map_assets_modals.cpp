@@ -563,11 +563,15 @@ protected:
     std::string_view lock_settings_id() const override { return "boundary_candidates"; }
 
 private:
+    static constexpr int kMaxBoundaryJitter = 500;
+
     struct GroupWidgets {
         std::string spawn_id{};
         std::unique_ptr<LabelWidget> header{};
         std::unique_ptr<DMNumericStepper> resolution_stepper{};
         std::unique_ptr<StepperWidget> resolution_widget{};
+        std::unique_ptr<DMNumericStepper> jitter_stepper{};
+        std::unique_ptr<StepperWidget> jitter_widget{};
         std::unique_ptr<DMButton> remove_button{};
         std::unique_ptr<ButtonWidget> remove_button_widget{};
         std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
@@ -586,6 +590,11 @@ private:
             (*section_)["candidate_selectors"] = json::array();
         }
         return (*section_)["candidate_selectors"];
+    }
+
+    static int clamp_jitter(int value) {
+        if (!std::isfinite(static_cast<double>(value))) return 0;
+        return std::clamp(value, 0, kMaxBoundaryJitter);
     }
 
     json* find_group_by_spawn_id(const std::string& spawn_id) {
@@ -625,6 +634,7 @@ private:
             json entry = json::object();
             devmode::spawn::ensure_spawn_group_entry_defaults(entry, default_display_name_);
             entry["grid_resolution"] = vibble::grid::clamp_resolution(5);
+            entry["jitter"] = 0;
             selectors.push_back(std::move(entry));
             changed = true;
         }
@@ -640,6 +650,13 @@ private:
             if (!entry.contains("grid_resolution") || !entry["grid_resolution"].is_number_integer() ||
                 entry["grid_resolution"].get<int>() != grid_resolution) {
                 entry["grid_resolution"] = grid_resolution;
+                changed = true;
+            }
+
+            int jitter = clamp_jitter(entry.value("jitter", 0));
+            if (!entry.contains("jitter") || !entry["jitter"].is_number_integer() ||
+                entry["jitter"].get<int>() != jitter) {
+                entry["jitter"] = jitter;
                 changed = true;
             }
         }
@@ -720,12 +737,24 @@ private:
             });
             group.resolution_widget = std::make_unique<StepperWidget>(group.resolution_stepper.get());
 
+            const int jitter = clamp_jitter(entry.value("jitter", 0));
+            group.jitter_stepper = std::make_unique<DMNumericStepper>("Jitter (px)",
+                                                                      0,
+                                                                      kMaxBoundaryJitter,
+                                                                      jitter);
+            group.jitter_stepper->set_step(1);
+            group.jitter_stepper->set_on_change([this, spawn_id = group.spawn_id](int value) {
+                this->update_group_jitter(spawn_id, value);
+            });
+            group.jitter_widget = std::make_unique<StepperWidget>(group.jitter_stepper.get());
+
             group.remove_button = std::make_unique<DMButton>("Remove", &DMStyles::WarnButton(), 90, DMButton::height());
             group.remove_button_widget = std::make_unique<ButtonWidget>(
                 group.remove_button.get(),
                 [this, spawn_id = group.spawn_id]() { this->remove_group(spawn_id); });
 
             rows.push_back({group.resolution_widget.get(), group.remove_button_widget.get()});
+            rows.push_back({group.jitter_widget.get()});
 
             group.pie_widget = std::make_unique<CandidateEditorPieGraphWidget>();
             group.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
@@ -781,6 +810,7 @@ private:
         }
         int resolution = resolve_unique_resolution(entry.value("grid_resolution", 5), used);
         entry["grid_resolution"] = resolution;
+        entry["jitter"] = 0;
 
         selectors.push_back(std::move(entry));
         notify_save(true);
@@ -825,6 +855,24 @@ private:
                 group.resolution_stepper->set_value(resolved);
                 break;
             }
+        }
+    }
+
+    void update_group_jitter(const std::string& spawn_id, int parsed_value) {
+        json* entry = find_group_by_spawn_id(spawn_id);
+        if (!entry) return;
+        const int clamped = clamp_jitter(parsed_value);
+        (*entry)["jitter"] = clamped;
+        notify_save(false);
+
+        for (auto& group : group_widgets_) {
+            if (group.spawn_id == spawn_id && group.jitter_stepper) {
+                group.jitter_stepper->set_value(clamped);
+                break;
+            }
+        }
+        if (regen_callback_) {
+            regen_callback_(*entry);
         }
     }
 

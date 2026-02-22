@@ -23,6 +23,7 @@ struct SDL_Renderer;
 #include "OnEndSelector.hpp"
 #include "MovementSummaryWidget.hpp"
 #include "PlaybackSettingsPanel.hpp"
+#include "AnimationOptionsPanel.hpp"
 #include "SourceConfigPanel.hpp"
 
 namespace devmode::core {
@@ -79,7 +80,10 @@ class AnimationInspectorPanel {
     void set_audio_importer(std::shared_ptr<AudioImporter> importer);
     void set_audio_file_picker(AudioFilePicker picker);
     void set_manifest_store(devmode::core::ManifestStore* store);
-    void set_on_animation_properties_changed(std::function<void(const std::string&, const nlohmann::json&)> callback) { on_animation_properties_changed_ = std::move(callback); }
+    void set_on_animation_properties_changed(std::function<void(const std::string&, const nlohmann::json&)> callback) {
+        on_animation_properties_changed_ = std::move(callback);
+        apply_dependencies();
+    }
 
     int height_for_width(int width) const;
 
@@ -132,6 +136,7 @@ class AnimationInspectorPanel {
     std::shared_ptr<AnimationDocument> document_;
     std::shared_ptr<PreviewProvider> preview_provider_;
     std::unique_ptr<SourceConfigPanel> source_config_;
+    std::unique_ptr<AnimationOptionsPanel> animation_options_;
     std::unique_ptr<PlaybackSettingsPanel> playback_settings_;
     std::unique_ptr<MovementSummaryWidget> movement_summary_;
     std::unique_ptr<OnEndSelector> on_end_selector_;
@@ -151,6 +156,7 @@ class AnimationInspectorPanel {
     mutable SDL_Rect movement_rect_{0, 0, 0, 0};
     mutable SDL_Rect on_end_rect_{0, 0, 0, 0};
     mutable SDL_Rect audio_rect_{0, 0, 0, 0};
+    mutable SDL_Rect animation_options_rect_{0, 0, 0, 0};
     mutable SDL_Rect scrollbar_track_{0, 0, 0, 0};
     mutable SDL_Rect scrollbar_thumb_{0, 0, 0, 0};
     mutable bool layout_dirty_ = true;

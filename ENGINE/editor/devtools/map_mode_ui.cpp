@@ -843,6 +843,9 @@ void MapModeUI::sync_panel_map_info() {
         layer_controls_display_->set_selected_layer(layers_panel_ ? layers_panel_->selected_layer() : -1);
         layer_controls_display_->refresh();
     }
+    if (fog_settings_panel_) {
+        fog_settings_panel_->set_map_info(map_info_, [this]() { return this->save_map_info_to_disk(); });
+    }
 }
 
 void MapModeUI::update(const Input& input) {

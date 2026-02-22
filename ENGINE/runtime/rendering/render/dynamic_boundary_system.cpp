@@ -319,7 +319,6 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
 
     const world::GridPoint grid_origin = grid.origin();
     const float spacing_multiplier = std::clamp(config().grid_spacing_multiplier, kMinGridMultiplier, kMaxGridMultiplier);
-    const float max_random_jitter = std::clamp(config().max_random_jitter, kMinRandomJitter, kMaxRandomJitter);
     const std::vector<ExclusionArea> exclusion_areas = collect_exclusion_areas(assets);
     const std::vector<Room*>& rooms = assets ? assets->rooms() : std::vector<Room*>{};
 
@@ -334,6 +333,10 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         if (grid_spacing <= 0) {
             continue;
         }
+
+        const float max_random_jitter = std::clamp(static_cast<float>(btype.jitter),
+                                                   kMinRandomJitter,
+                                                   kMaxRandomJitter);
 
         const float min_x = visible_bounds.x;
         const float max_x = visible_bounds.x + visible_bounds.w;
@@ -713,6 +716,23 @@ void DynamicBoundarySystem::parse_boundary_config(const nlohmann::json& map_info
         type.display_name = selector.value("display_name", std::string{});
         type.grid_resolution = selector.value("grid_resolution", 5);
         type.grid_resolution = std::clamp(type.grid_resolution, 0, vibble::grid::kMaxResolution);
+        int jitter_px = 0;
+        try {
+            auto jitter_it = selector.find("jitter");
+            if (jitter_it != selector.end()) {
+                if (jitter_it->is_number_integer()) {
+                    jitter_px = jitter_it->get<int>();
+                } else if (jitter_it->is_number_float()) {
+                    jitter_px = static_cast<int>(std::lround(jitter_it->get<double>()));
+                }
+            }
+        } catch (...) {
+            jitter_px = 0;
+        }
+        jitter_px = static_cast<int>(std::clamp<double>(static_cast<double>(jitter_px),
+                                                        static_cast<double>(kMinRandomJitter),
+                                                        static_cast<double>(kMaxRandomJitter)));
+        type.jitter = jitter_px;
 
         int total_chance = 0;
         const auto candidates_it = selector.find("candidates");

@@ -118,13 +118,6 @@ class AnimationEditorWindow {
     void ensure_controller_factory_registration(const std::string& key, const std::string& class_name) const;
     void add_controller();
     void open_controller();
-    void apply_speed_multiplier_from_dropdown();
-    void apply_crop_frames_toggle();
-    void sync_header_controls();
-    float parse_speed_multiplier(const nlohmann::json& payload) const;
-    bool parse_crop_frames(const nlohmann::json& payload) const;
-    void persist_header_metadata(float speed_multiplier, bool crop_frames);
-    std::vector<float> speed_multiplier_options() const;
     bool rebuild_animation_from_sources(const std::shared_ptr<AssetInfo>& info, const std::string& animation_id);
     bool rebuild_animation_via_pipeline(const std::shared_ptr<AssetInfo>& info, const std::string& animation_id);
     bool rebuild_all_animations_via_pipeline(const std::shared_ptr<AssetInfo>& info);
@@ -133,6 +126,7 @@ class AnimationEditorWindow {
     std::filesystem::path resolved_asset_root_path() const;
     std::vector<std::filesystem::path> numbered_frame_paths(const std::filesystem::path& folder) const;
     void apply_global_cropping_to_asset_sources() const;
+    void refresh_inspector_animation_callback();
 
   private:
     bool visible_ = false;
@@ -149,9 +143,6 @@ class AnimationEditorWindow {
     std::unique_ptr<DMButton> add_button_;
     std::unique_ptr<DMButton> build_button_;
     std::unique_ptr<DMButton> controller_button_;
-    std::unique_ptr<DMDropdown> speed_dropdown_;
-    std::unique_ptr<DMCheckbox> crop_checkbox_;
-    std::unique_ptr<DMCheckbox> apply_to_all_checkbox_;
     SDL_Rect header_rect_{0, 0, 0, 0};
     SDL_Rect list_rect_{0, 0, 0, 0};
     SDL_Rect inspector_rect_{0, 0, 0, 0};
@@ -168,9 +159,8 @@ class AnimationEditorWindow {
     mutable bool layout_dirty_ = true;
     bool auto_save_pending_ = false;
     int auto_save_timer_frames_ = 0;
-    bool apply_to_all_mode_enabled_ = false;
     std::function<void()> on_document_saved_;
-    std::function<void(const std::string&, const nlohmann::json&)> on_animation_properties_changed_;
+    std::function<void(const std::string&, const nlohmann::json&)> external_animation_properties_changed_;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::ManifestStore::AssetTransaction manifest_transaction_;
     std::string manifest_asset_key_;

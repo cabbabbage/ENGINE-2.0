@@ -5,13 +5,11 @@
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
-#include <thread>
-#include <chrono>
-
-#include "utils/log.hpp"
 
 namespace manifest {
 namespace {
+constexpr int kManifestVersion = 1;
+
 std::filesystem::path project_root() {
 #ifdef PROJECT_ROOT
     return std::filesystem::path(PROJECT_ROOT);
@@ -22,7 +20,7 @@ std::filesystem::path project_root() {
 
 nlohmann::json make_default_manifest_json() {
     nlohmann::json manifest_json = nlohmann::json::object();
-    manifest_json["version"] = 1;
+    manifest_json["version"] = kManifestVersion;
     manifest_json["assets"] = nlohmann::json::object();
     manifest_json["maps"] = nlohmann::json::object();
     return manifest_json;
@@ -34,11 +32,6 @@ ManifestData make_manifest_data(nlohmann::json manifest_json) {
     data.assets = data.raw.at("assets");
     data.maps = data.raw.at("maps");
     return data;
-}
-
-static nlohmann::json& cached_manifest_ref() {
-    static nlohmann::json cached = make_default_manifest_json();
-    return cached;
 }
 
 void ensure_directory_exists(const std::filesystem::path& dir,
@@ -87,10 +80,46 @@ void write_manifest_file(const std::filesystem::path& path,
         oss << "Failed while writing manifest file at '" << path.string() << "'.";
         throw std::runtime_error(oss.str());
     }
-
 }
 
+std::string manifest_validation_error(const std::filesystem::path& path,
+                                      const char* message) {
+    std::ostringstream oss;
+    oss << "manifest: '" << path.string() << "' " << message;
+    return oss.str();
 }
+
+void validate_manifest_json(const nlohmann::json& manifest_json,
+                            const std::filesystem::path& path) {
+    if (!manifest_json.is_object()) {
+        throw std::runtime_error(manifest_validation_error(path, "must be an object."));
+    }
+
+    auto version_it = manifest_json.find("version");
+    if (version_it == manifest_json.end() || !version_it->is_number_integer()) {
+        throw std::runtime_error(manifest_validation_error(path, "\"version\" must be an integer."));
+    }
+
+    const int version_value = version_it->get<int>();
+    if (version_value != kManifestVersion) {
+        std::ostringstream oss;
+        oss << "manifest: '" << path.string() << "' has version " << version_value
+            << " but expected " << kManifestVersion << ".";
+        throw std::runtime_error(oss.str());
+    }
+
+    auto assets_it = manifest_json.find("assets");
+    if (assets_it == manifest_json.end() || !assets_it->is_object()) {
+        throw std::runtime_error(manifest_validation_error(path, "\"assets\" must be an object."));
+    }
+
+    auto maps_it = manifest_json.find("maps");
+    if (maps_it == manifest_json.end() || !maps_it->is_object()) {
+        throw std::runtime_error(manifest_validation_error(path, "\"maps\" must be an object."));
+    }
+}
+
+} // namespace
 
 std::string manifest_path() {
     return (project_root() / "manifest.json").string();
@@ -108,53 +137,23 @@ ManifestData load_manifest() {
         return data;
     }
 
-    auto read_once = [&](nlohmann::json& out) -> bool {
-        std::ifstream is(path);
-        if (!is.is_open()) return false;
-        try {
-            is >> out;
-            return true;
-        } catch (const nlohmann::json::parse_error&) {
-            return false;
-        }
-};
+    std::ifstream in(path);
+    if (!in.is_open()) {
+        std::ostringstream oss;
+        oss << "Unable to open manifest file at '" << path.string() << "' for reading.";
+        throw std::runtime_error(oss.str());
+    }
 
     nlohmann::json manifest_json;
-    if (!read_once(manifest_json)) {
-        vibble::log::warn(std::string("manifest: parse error reading '") + path.string() + "', retrying shortly...");
-        std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        if (!read_once(manifest_json)) {
-            vibble::log::warn(std::string("manifest: still unable to parse '") + path.string() + "'; using cached manifest");
-            manifest_json = cached_manifest_ref();
-        }
+    try {
+        in >> manifest_json;
+    } catch (const nlohmann::json::parse_error& error) {
+        std::ostringstream oss;
+        oss << "Failed to parse manifest at '" << path.string() << "': " << error.what();
+        throw std::runtime_error(oss.str());
     }
 
-    bool mutated = false;
-    if (!manifest_json.is_object()) {
-        manifest_json = make_default_manifest_json();
-        mutated = true;
-    }
-
-    if (!manifest_json.contains("version") || !manifest_json["version"].is_number()) {
-        manifest_json["version"] = 1;
-        mutated = true;
-    }
-
-    if (!manifest_json.contains("assets") || !manifest_json["assets"].is_object()) {
-        manifest_json["assets"] = nlohmann::json::object();
-        mutated = true;
-    }
-
-    if (!manifest_json.contains("maps") || !manifest_json["maps"].is_object()) {
-        manifest_json["maps"] = nlohmann::json::object();
-        mutated = true;
-    }
-
-    if (mutated) {
-        write_manifest_file(path, manifest_json);
-    }
-
-    cached_manifest_ref() = manifest_json;
+    validate_manifest_json(manifest_json, path);
     return make_manifest_data(std::move(manifest_json));
 }
 
@@ -164,5 +163,4 @@ void save_manifest(const ManifestData& data) {
     write_manifest_file(path, data.raw);
 }
 
-}
-
+} // namespace manifest

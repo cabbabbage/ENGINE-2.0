@@ -65,6 +65,7 @@ public:
         std::string                 spawn_id;
         std::string                 display_name;
         int                         grid_resolution = 5;
+        int                         jitter = 0;
         std::vector<BoundaryCandidate> candidates;
         int                         total_chance = 0;
     };

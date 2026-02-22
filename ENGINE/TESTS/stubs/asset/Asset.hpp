@@ -20,6 +20,7 @@ class Asset {
     SDL_Point pos{0, 0};
     int grid_resolution = 0;
     int pos_z = 0;
+    Asset* parent = nullptr;
     AssetInfo* info = nullptr;
 
     int world_x() const { return pos_ ? pos_->world_x() : pos.x; }

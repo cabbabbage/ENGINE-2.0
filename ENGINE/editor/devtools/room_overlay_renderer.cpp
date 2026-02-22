@@ -5,6 +5,7 @@
 #include <cmath>
 #include <algorithm>
 #include <vector>
+#include <optional>
 
 #include "draw_utils.hpp"
 #include "utils/area.hpp"
@@ -53,53 +54,115 @@ void RenderRoomBoundsOverlay(
     SDL_GetRenderDrawColor(renderer, &prev_r, &prev_g, &prev_b, &prev_a);
 
     const auto& area_points = area.get_points();
-    std::vector<SDL_Point> screen_points;
-    screen_points.reserve(area_points.size());
-    for (const SDL_Point& world_point : area_points) {
-        SDL_FPoint world_f{static_cast<float>(world_point.x), static_cast<float>(world_point.y)};
-        SDL_FPoint screen_f{};
-        if (!cam.project_world_point(world_f, 0.0f, screen_f)) {
-            continue;
-        }
-        SDL_Point screen_pt{static_cast<int>(std::lround(screen_f.x)), static_cast<int>(std::lround(screen_f.y))};
-        if (!screen_points.empty()) {
-            const SDL_Point& prev = screen_points.back();
-            if (prev.x == screen_pt.x && prev.y == screen_pt.y) {
-                continue;
+    if (area_points.size() >= 2) {
+        auto project_point = [&](const SDL_Point& world_point) -> std::optional<SDL_FPoint> {
+            SDL_FPoint screen_f{};
+            SDL_FPoint world_f{static_cast<float>(world_point.x), static_cast<float>(world_point.y)};
+            if (cam.project_world_point(world_f, 0.0f, screen_f)) {
+                return screen_f;
             }
-        }
-        screen_points.push_back(screen_pt);
-    }
-    if (screen_points.size() >= 2) {
-        const SDL_Point& first = screen_points.front();
-        const SDL_Point& last = screen_points.back();
-        if (first.x != last.x || first.y != last.y) {
-            screen_points.push_back(first);
-        }
-        std::vector<SDL_Point> offset_points;
-        offset_points.reserve(screen_points.size());
-        auto draw_with_offset = [&](const SDL_Color& color, int ox, int oy) {
-            if (color.a == 0) return;
-            offset_points.clear();
-            for (const SDL_Point& pt : screen_points) {
-                offset_points.push_back(SDL_Point{pt.x + ox, pt.y + oy});
-            }
-            SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
-            sdl_render::Lines(renderer, offset_points.data(), static_cast<int>(offset_points.size()));
+            return std::nullopt;
         };
 
-        if (style.glow.a > 0) {
-            const std::array<SDL_Point, 4> glow_offsets = {{
+        auto lerp_world = [](const SDL_Point& a, const SDL_Point& b, float t) -> SDL_Point {
+            const float x = static_cast<float>(a.x) + (static_cast<float>(b.x - a.x) * t);
+            const float y = static_cast<float>(a.y) + (static_cast<float>(b.y - a.y) * t);
+            return SDL_Point{static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y))};
+        };
+
+        auto refine_boundary = [&](float t0, float t1, const SDL_Point& a, const SDL_Point& b, bool keep_upper) -> std::optional<SDL_FPoint> {
+            float lo = t0;
+            float hi = t1;
+            std::optional<SDL_FPoint> last_valid;
+            for (int i = 0; i < 12; ++i) {
+                float mid = (lo + hi) * 0.5f;
+                auto mid_proj = project_point(lerp_world(a, b, mid));
+                if (mid_proj) {
+                    last_valid = mid_proj;
+                    if (keep_upper) {
+                        lo = mid;
+                    } else {
+                        hi = mid;
+                    }
+                } else {
+                    if (keep_upper) {
+                        hi = mid;
+                    } else {
+                        lo = mid;
+                    }
+                }
+            }
+            return last_valid;
+        };
+
+        auto draw_segment = [&](const SDL_FPoint& a, const SDL_FPoint& b) {
+            SDL_Point pa{static_cast<int>(std::lround(a.x)), static_cast<int>(std::lround(a.y))};
+            SDL_Point pb{static_cast<int>(std::lround(b.x)), static_cast<int>(std::lround(b.y))};
+            const std::array<SDL_Point, 5> offsets = {{
+                SDL_Point{0, 0},
                 SDL_Point{-1, 0},
                 SDL_Point{1, 0},
                 SDL_Point{0, -1},
                 SDL_Point{0, 1},
             }};
-            for (const SDL_Point& offset : glow_offsets) {
-                draw_with_offset(style.glow, offset.x, offset.y);
+            for (size_t i = 0; i < offsets.size(); ++i) {
+                const SDL_Point& o = offsets[i];
+                const SDL_Color& color = (i == 0) ? style.outline : style.glow;
+                if (color.a == 0) continue;
+                SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+                SDL_RenderLine(renderer, pa.x + o.x, pa.y + o.y, pb.x + o.x, pb.y + o.y);
+            }
+        };
+
+        const size_t count = area_points.size();
+        for (size_t i = 0; i < count; ++i) {
+            const SDL_Point& w0 = area_points[i];
+            const SDL_Point& w1 = area_points[(i + 1) % count];
+
+            auto p0 = project_point(w0);
+            auto p1 = project_point(w1);
+
+            if (p0 && p1) {
+                draw_segment(*p0, *p1);
+                continue;
+            }
+
+            // If one is valid, clip toward the valid side.
+            if (p0 && !p1) {
+                if (auto entry = refine_boundary(0.0f, 1.0f, w0, w1, true)) { // search toward invalid end
+                    draw_segment(*p0, *entry);
+                }
+                continue;
+            }
+            if (!p0 && p1) {
+                if (auto entry = refine_boundary(0.0f, 1.0f, w0, w1, false)) { // search toward valid start
+                    draw_segment(*entry, *p1);
+                }
+                continue;
+            }
+
+            // Both invalid: sample along the edge to see if any portion is visible.
+            constexpr int kSamples = 10;
+            float first_valid_t = -1.0f;
+            float last_valid_t = -1.0f;
+            for (int s = 0; s <= kSamples; ++s) {
+                float t = static_cast<float>(s) / static_cast<float>(kSamples);
+                auto proj = project_point(lerp_world(w0, w1, t));
+                if (proj) {
+                    if (first_valid_t < 0.0f) first_valid_t = t;
+                    last_valid_t = t;
+                }
+            }
+            if (first_valid_t >= 0.0f && last_valid_t >= first_valid_t) {
+                auto entry = refine_boundary(first_valid_t - 0.05f, first_valid_t, w0, w1, false);
+                auto exit = refine_boundary(last_valid_t, last_valid_t + 0.05f, w0, w1, true);
+                if (!entry) entry = project_point(lerp_world(w0, w1, first_valid_t));
+                if (!exit) exit = project_point(lerp_world(w0, w1, last_valid_t));
+                if (entry && exit) {
+                    draw_segment(*entry, *exit);
+                }
             }
         }
-        draw_with_offset(style.outline, 0, 0);
     }
 
     SDL_FPoint center_screen_f = cam.map_to_screen(area.get_center());

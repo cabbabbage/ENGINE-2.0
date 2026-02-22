@@ -1700,16 +1700,12 @@ bool DevControls::handle_drop_event(const SDL_Event& event) {
         if (event.drop.data) {
             std::filesystem::path path = std::filesystem::u8path(event.drop.data);
             drop_state_.items.push_back(path);
-            SDL_free(const_cast<char*>(event.drop.data));
         }
         DropValidationResult validation = validate_drop_items(drop_state_.items);
         drop_state_.valid = validation.valid;
         return true;
     }
     case SDL_EVENT_DROP_COMPLETE: {
-        if (event.drop.data) {
-            SDL_free(const_cast<char*>(event.drop.data));
-        }
         DropValidationResult validation = validate_drop_items(drop_state_.items);
         if (validation.valid) {
             DropImportRequest req;

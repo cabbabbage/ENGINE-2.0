@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
+#include <unordered_set>
 #include <vector>
 
 #include <SDL3_image/SDL_image.h>
@@ -47,33 +48,28 @@ GeometryBatcher::GeometryBatcher(SDL_Renderer* renderer)
     // Pre-allocate for estimated 10,000 quads (40,000 vertices, 60,000 indices)
     vertex_buffer_.reserve(40000);
     index_buffer_.reserve(60000);
+    draw_list_.reserve(10000);
 }
 
 void GeometryBatcher::addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4],
                                const int indices[6], SDL_BlendMode blend_mode, double depth) {
     if (!texture) return;
+    (void)indices; // indices are standardized for quads
 
-    BatchKey key{texture, blend_mode};
-    Batch& batch = batches_[key];
+    DrawItem item{};
+    item.texture = texture;
+    item.blend_mode = blend_mode;
+    item.vertices[0] = vertices[0];
+    item.vertices[1] = vertices[1];
+    item.vertices[2] = vertices[2];
+    item.vertices[3] = vertices[3];
+    item.depth = depth;
 
-    if (batch.texture == nullptr) {
-        batch.texture = texture;
-        batch.blend_mode = blend_mode;
-        batch.reserve(1000);  // Reserve space for ~1000 quads per texture
-    }
-
-    QuadData quad;
-    quad.vertices[0] = vertices[0];
-    quad.vertices[1] = vertices[1];
-    quad.vertices[2] = vertices[2];
-    quad.vertices[3] = vertices[3];
-    quad.depth = depth;
-
-    batch.quads.push_back(quad);
+    draw_list_.push_back(item);
 }
 
 void GeometryBatcher::flush() {
-    if (batches_.empty()) {
+    if (draw_list_.empty()) {
         return;
     }
 
@@ -83,45 +79,23 @@ void GeometryBatcher::flush() {
     // Static quad indices pattern (0,1,2, 0,2,3)
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
-    // Collect all quads with their texture/blend mode into a flat list
-    struct QuadWithTexture {
-        QuadData quad;
-        SDL_Texture* texture;
-        SDL_BlendMode blend_mode;
-    };
-    std::vector<QuadWithTexture> all_quads;
-
-    // Reserve space for all quads across all batches
-    size_t total_quad_count = 0;
-    for (const auto& [key, batch] : batches_) {
-        total_quad_count += batch.quads.size();
-    }
-    all_quads.reserve(total_quad_count);
-
-    // Collect all quads
-    for (const auto& [key, batch] : batches_) {
-        for (const auto& quad : batch.quads) {
-            all_quads.push_back({quad, batch.texture, batch.blend_mode});
-        }
-    }
-
     // Sort all quads globally by depth (highest depth = furthest = rendered first)
-    std::sort(all_quads.begin(), all_quads.end(),
-              [](const QuadWithTexture& a, const QuadWithTexture& b) {
-                  return a.quad.depth > b.quad.depth;
+    std::sort(draw_list_.begin(), draw_list_.end(),
+              [](const DrawItem& a, const DrawItem& b) {
+                  return a.depth > b.depth;
               });
 
     // Now render in depth order, batching consecutive quads with same texture+blend
     size_t i = 0;
-    while (i < all_quads.size()) {
-        SDL_Texture* current_texture = all_quads[i].texture;
-        SDL_BlendMode current_blend = all_quads[i].blend_mode;
+    while (i < draw_list_.size()) {
+        SDL_Texture* current_texture = draw_list_[i].texture;
+        SDL_BlendMode current_blend = draw_list_[i].blend_mode;
 
         // Find run of consecutive quads with same texture+blend
         size_t run_end = i;
-        while (run_end < all_quads.size() &&
-               all_quads[run_end].texture == current_texture &&
-               all_quads[run_end].blend_mode == current_blend) {
+        while (run_end < draw_list_.size() &&
+               draw_list_[run_end].texture == current_texture &&
+               draw_list_[run_end].blend_mode == current_blend) {
             ++run_end;
         }
 
@@ -133,7 +107,7 @@ void GeometryBatcher::flush() {
         index_buffer_.reserve(run_length * 6);
 
         for (size_t j = i; j < run_end; ++j) {
-            const auto& quad = all_quads[j].quad;
+            const auto& quad = draw_list_[j];
             const int base_index = static_cast<int>(vertex_buffer_.size());
 
             vertex_buffer_.push_back(quad.vertices[0]);
@@ -166,21 +140,26 @@ void GeometryBatcher::flush() {
 }
 
 void GeometryBatcher::clear() {
-    for (auto& [key, batch] : batches_) {
-        batch.quads.clear();
-    }
+    draw_list_.clear();
     draw_call_count_ = 0;
     total_vertices_ = 0;
 }
 
 size_t GeometryBatcher::getBatchCount() const {
-    size_t count = 0;
-    for (const auto& [key, batch] : batches_) {
-        if (!batch.quads.empty()) {
-            ++count;
-        }
+    if (draw_list_.empty()) {
+        return 0;
     }
-    return count;
+    struct PairHash {
+        size_t operator()(const std::pair<SDL_Texture*, SDL_BlendMode>& key) const {
+            return reinterpret_cast<size_t>(key.first) ^ static_cast<size_t>(key.second);
+        }
+    };
+    std::unordered_set<std::pair<SDL_Texture*, SDL_BlendMode>, PairHash> unique;
+    unique.reserve(draw_list_.size());
+    for (const auto& item : draw_list_) {
+        unique.emplace(item.texture, item.blend_mode);
+    }
+    return unique.size();
 }
 
 void GridTileRenderer::render(SDL_Renderer* renderer) {

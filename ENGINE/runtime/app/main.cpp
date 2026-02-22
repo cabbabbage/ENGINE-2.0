@@ -48,6 +48,41 @@ namespace fs = std::filesystem;
 
 namespace {
 
+struct WindowedPlacement {
+        int x;
+        int y;
+        int w;
+        int h;
+};
+
+WindowedPlacement compute_windowed_fallback(SDL_Window* window) {
+        WindowedPlacement placement{SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720};
+
+        if (!window) {
+                return placement;
+        }
+
+        const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+        if (display != 0) {
+                if (const SDL_DisplayMode* desktop_mode = SDL_GetDesktopDisplayMode(display)) {
+                        const int margin = 120;
+                        const int preferred_w = (desktop_mode->w * 3) / 4;
+                        const int preferred_h = (desktop_mode->h * 3) / 4;
+
+                        const int max_w = std::max(640, desktop_mode->w - margin);
+                        const int max_h = std::max(360, desktop_mode->h - margin);
+
+                        placement.w = std::max(960, preferred_w);
+                        placement.h = std::max(540, preferred_h);
+
+                        placement.w = std::min(placement.w, max_w);
+                        placement.h = std::min(placement.h, max_h);
+                }
+        }
+
+        return placement;
+}
+
 nlohmann::json build_default_map_manifest(const std::string& map_name);
 }
 
@@ -75,14 +110,22 @@ MainApp::MainApp(MapDescriptor map,
   window_(window),
   is_fullscreen_(window_ ? ((SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0) : false) {
         if (window_) {
-                int width = 0;
-                int height = 0;
-                SDL_GetWindowSize(window_, &width, &height);
-                if (width > 0 && height > 0) {
-                        windowed_width_ = width;
-                        windowed_height_ = height;
+                if (!is_fullscreen_) {
+                        int width = 0;
+                        int height = 0;
+                        SDL_GetWindowSize(window_, &width, &height);
+                        if (width > 0 && height > 0) {
+                                windowed_width_ = width;
+                                windowed_height_ = height;
+                        }
+                        SDL_GetWindowPosition(window_, &windowed_x_, &windowed_y_);
+                } else {
+                        const WindowedPlacement fallback = compute_windowed_fallback(window_);
+                        windowed_x_ = fallback.x;
+                        windowed_y_ = fallback.y;
+                        windowed_width_ = fallback.w;
+                        windowed_height_ = fallback.h;
                 }
-                SDL_GetWindowPosition(window_, &windowed_x_, &windowed_y_);
         }
 }
 
@@ -410,6 +453,21 @@ void MainApp::toggle_fullscreen() {
         }
 
         if (is_fullscreen_) {
+                WindowedPlacement target{windowed_x_, windowed_y_, windowed_width_, windowed_height_};
+
+                if (target.w <= 0 || target.h <= 0) {
+                        target = compute_windowed_fallback(window_);
+                } else {
+                        const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+                        if (display != 0) {
+                                if (const SDL_DisplayMode* desktop_mode = SDL_GetDesktopDisplayMode(display)) {
+                                        if (target.w >= desktop_mode->w - 16 || target.h >= desktop_mode->h - 16) {
+                                                target = compute_windowed_fallback(window_);
+                                        }
+                                }
+                        }
+                }
+
                 const bool result = SDL_SetWindowFullscreen(window_, false);
                 if (!result) {
                         vibble::log::warn(std::string("[MainApp] Failed to switch to windowed mode: ") + SDL_GetError());
@@ -418,10 +476,14 @@ void MainApp::toggle_fullscreen() {
 
                 SDL_SetWindowResizable(window_, true);
                 SDL_SetWindowBordered(window_, true);
-                SDL_SetWindowPosition(window_, windowed_x_, windowed_y_);
-                SDL_SetWindowSize(window_, windowed_width_, windowed_height_);
+                SDL_SetWindowSize(window_, target.w, target.h);
+                SDL_SetWindowPosition(window_, target.x, target.y);
 
                 is_fullscreen_ = false;
+                windowed_x_ = target.x;
+                windowed_y_ = target.y;
+                windowed_width_ = target.w;
+                windowed_height_ = target.h;
                 vibble::log::info("[MainApp] Window mode switched to windowed.");
                 return;
         }
@@ -941,7 +1003,8 @@ int main(int argc, char* argv[]) {
             !SDL_SetStringProperty(window_props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "Game Window") ||
             !SDL_SetNumberProperty(window_props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, window_width) ||
             !SDL_SetNumberProperty(window_props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, window_height) ||
-            !SDL_SetBooleanProperty(window_props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, true)) {
+            !SDL_SetBooleanProperty(window_props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, true) ||
+            !SDL_SetBooleanProperty(window_props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true)) {
                 vibble::log::error(std::string("SDL_CreateWindow properties failed: ") + SDL_GetError());
                 if (window_props) SDL_DestroyProperties(window_props);
                 TTF_Quit();

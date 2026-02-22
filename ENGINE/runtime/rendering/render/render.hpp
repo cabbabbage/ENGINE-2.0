@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 #include "rendering/render/composite_asset_renderer.hpp"
 #include "rendering/render/scaling_logic.hpp"
@@ -41,38 +42,20 @@ public:
     size_t getTotalVertices() const { return total_vertices_; }
 
 private:
+    struct DrawItem {
+        SDL_Texture* texture = nullptr;
+        SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
+        SDL_Vertex vertices[4];
+        double depth = 0.0;
+    };
+
     struct QuadData {
         SDL_Vertex vertices[4];
         double depth;
     };
 
-    struct BatchKey {
-        SDL_Texture* texture;
-        SDL_BlendMode blend_mode;
-
-        bool operator==(const BatchKey& other) const {
-            return texture == other.texture && blend_mode == other.blend_mode;
-        }
-    };
-
-    struct BatchKeyHash {
-        size_t operator()(const BatchKey& key) const {
-            return reinterpret_cast<size_t>(key.texture) ^ static_cast<size_t>(key.blend_mode);
-        }
-    };
-
-    struct Batch {
-        SDL_Texture* texture = nullptr;
-        SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
-        std::vector<QuadData> quads;
-
-        void reserve(size_t count) {
-            quads.reserve(count);
-        }
-    };
-
     SDL_Renderer* renderer_;
-    std::unordered_map<BatchKey, Batch, BatchKeyHash> batches_;
+    std::vector<DrawItem> draw_list_;
     size_t draw_call_count_ = 0;
     size_t total_vertices_ = 0;
 
@@ -91,8 +74,14 @@ public:
 
     void render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid, GeometryBatcher* batcher);
 
+    // Call when tile textures are rebuilt or assets are reloaded
+    void invalidate_texture_cache();
+
 private:
+    bool fetch_texture_size(SDL_Texture* texture, SDL_FPoint& out_size);
+
     Assets* assets_ = nullptr;
+    std::unordered_map<SDL_Texture*, SDL_FPoint> texture_size_cache_;
 };
 
 class SceneRenderer {

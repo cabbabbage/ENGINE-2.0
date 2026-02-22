@@ -170,6 +170,44 @@ public:
         std::string error;
     };
 
+    struct DropChoiceModal {
+        bool visible = false;
+        DropImportRequest request;
+        std::unique_ptr<DMButton> single_animation_button;
+        std::unique_ptr<DMButton> multiple_assets_button;
+        std::unique_ptr<DMButton> cancel_button;
+        SDL_Rect modal_rect{0, 0, 0, 0};
+        SDL_Rect single_rect{0, 0, 0, 0};
+        SDL_Rect multiple_rect{0, 0, 0, 0};
+        SDL_Rect cancel_rect{0, 0, 0, 0};
+    };
+
+    struct DropConflictModal {
+        bool visible = false;
+        std::string asset_name;
+        std::unique_ptr<DMButton> skip_button;
+        std::unique_ptr<DMButton> rename_button;
+        SDL_Rect modal_rect{0, 0, 0, 0};
+        SDL_Rect skip_rect{0, 0, 0, 0};
+        SDL_Rect rename_rect{0, 0, 0, 0};
+    };
+
+    struct DropErrorPopup {
+        bool visible = false;
+        std::string message;
+        std::unique_ptr<DMButton> ok_button;
+        SDL_Rect modal_rect{0, 0, 0, 0};
+        SDL_Rect ok_rect{0, 0, 0, 0};
+    };
+
+    struct MultiAssetImportState {
+        bool active = false;
+        DropImportRequest request;
+        std::vector<std::filesystem::path> files;
+        std::size_t index = 0;
+        bool waiting_for_rename = false;
+    };
+
     bool can_use_room_editor_ui() const;
     void enter_map_editor_mode();
     void exit_map_editor_mode(bool focus_player, bool restore_previous_state);
@@ -221,10 +259,33 @@ public:
     void reset_drop_modal();
     void open_drop_modal(const DropImportRequest& request);
     bool handle_drop_modal_event(const SDL_Event& event);
+    bool handle_drop_choice_modal_event(const SDL_Event& event);
+    bool handle_drop_conflict_modal_event(const SDL_Event& event);
+    bool handle_drop_error_popup_event(const SDL_Event& event);
     void render_drop_overlay(SDL_Renderer* renderer);
     void render_drop_modal(SDL_Renderer* renderer);
+    void render_drop_choice_modal(SDL_Renderer* renderer);
+    void render_drop_conflict_modal(SDL_Renderer* renderer);
+    void render_drop_error_popup(SDL_Renderer* renderer);
     void layout_drop_modal();
+    void layout_drop_choice_modal();
+    void layout_drop_conflict_modal();
+    void layout_drop_error_popup();
     bool finalize_drop_creation(const std::string& desired_name);
+    bool create_drop_asset(const std::string& asset_name,
+                           const std::vector<std::filesystem::path>& files,
+                           const DropImportRequest& request,
+                           bool open_editor_and_spawn,
+                           std::string& error_out);
+    void open_drop_choice_modal(const DropImportRequest& request);
+    void begin_multi_asset_import(const DropImportRequest& request);
+    void process_next_multi_asset_item();
+    void open_drop_conflict_modal(const std::string& asset_name);
+    void open_drop_error_popup(const std::string& message);
+    void reset_drop_choice_modal();
+    void reset_drop_conflict_modal();
+    void reset_drop_error_popup();
+    void reset_multi_asset_import();
     SDL_Point drop_world_from_screen(SDL_Point screen) const;
 
 private:
@@ -323,6 +384,10 @@ private:
 
     DropPreviewState drop_state_;
     DropNameModal drop_modal_;
+    DropChoiceModal drop_choice_modal_;
+    DropConflictModal drop_conflict_modal_;
+    DropErrorPopup drop_error_popup_;
+    MultiAssetImportState multi_asset_import_;
 
 
 };

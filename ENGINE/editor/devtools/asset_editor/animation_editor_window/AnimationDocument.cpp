@@ -314,6 +314,11 @@ nlohmann::json parse_payload(const std::string& payload_dump, const std::string&
     return coerce_payload(animation_id, parsed);
 }
 
+std::string normalize_animation_id(std::string value) {
+    std::string trimmed = animation_editor::strings::trim_copy(value);
+    return animation_editor::strings::to_lower_copy(trimmed);
+}
+
 }
 
 namespace animation_editor {
@@ -518,7 +523,7 @@ bool AnimationDocument::consume_dirty_flag() const {
 }
 
 void AnimationDocument::create_animation(const std::string& animation_id) {
-    std::string base = animation_editor::strings::to_lower_copy(animation_id.empty() ? std::string{"animation"} : animation_id);
+    std::string base = normalize_animation_id(animation_id.empty() ? std::string{"animation"} : animation_id);
     std::string candidate = base;
     int suffix = 2;
     while (animations_.count(candidate) != 0) {
@@ -593,7 +598,7 @@ void AnimationDocument::set_start_animation(const std::string& animation_id) {
 
 void AnimationDocument::rename_animation(const std::string& old_id, const std::string& new_id) {
     if (old_id.empty() || new_id.empty()) return;
-    std::string normalized = animation_editor::strings::to_lower_copy(new_id);
+    std::string normalized = normalize_animation_id(new_id);
     if (normalized.empty() || normalized == old_id) return;
     auto it = animations_.find(old_id);
     if (it == animations_.end()) return;

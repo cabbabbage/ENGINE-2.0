@@ -1072,6 +1072,11 @@ void AnimationEditorWindow::focus_animation(const std::string& animation_id) {
     select_animation(std::make_optional(animation_id), true);
 }
 
+std::string AnimationEditorWindow::normalize_animation_name(std::string_view raw) const {
+    std::string normalized = animation_editor::strings::trim_copy(raw);
+    return animation_editor::strings::to_lower_copy(normalized);
+}
+
 void AnimationEditorWindow::prompt_rename_animation(const std::string& animation_id) {
     if (!document_) return;
 
@@ -1081,7 +1086,7 @@ void AnimationEditorWindow::prompt_rename_animation(const std::string& animation
         return;
     }
 
-    std::string desired = animation_editor::strings::trim_copy(input);
+    std::string desired = normalize_animation_name(input);
     if (desired.empty()) {
         set_status_message("Animation name cannot be empty.", 180);
         return;
@@ -1554,10 +1559,7 @@ void AnimationEditorWindow::on_live_frame_editor_closed(const std::string& anima
 void AnimationEditorWindow::create_animation_via_prompt() {
     const char* input = tinyfd_inputBox("Create Animation", "Enter new animation identifier", "animation");
     if (!input) return;
-    std::string name = animation_editor::strings::trim_copy(input);
-    if (!name.empty()) {
-        name = animation_editor::strings::to_lower_copy(name);
-    }
+    std::string name = normalize_animation_name(input);
 
     if (name.empty()) {
         return;

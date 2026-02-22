@@ -1465,6 +1465,22 @@ void DevControls::reset_drop_modal() {
     drop_modal_ = DropNameModal{};
 }
 
+void DevControls::reset_drop_choice_modal() {
+    drop_choice_modal_ = DropChoiceModal{};
+}
+
+void DevControls::reset_drop_conflict_modal() {
+    drop_conflict_modal_ = DropConflictModal{};
+}
+
+void DevControls::reset_drop_error_popup() {
+    drop_error_popup_ = DropErrorPopup{};
+}
+
+void DevControls::reset_multi_asset_import() {
+    multi_asset_import_ = MultiAssetImportState{};
+}
+
 SDL_Point DevControls::drop_world_from_screen(SDL_Point screen) const {
     if (!assets_) {
         return screen;
@@ -1501,6 +1517,92 @@ void DevControls::layout_drop_modal() {
     if (drop_modal_.cancel_button) drop_modal_.cancel_button->set_rect(drop_modal_.cancel_rect);
 }
 
+void DevControls::layout_drop_choice_modal() {
+    if (!drop_choice_modal_.visible) return;
+    const int modal_w = 560;
+    const int modal_h = 250;
+    const int padding = 16;
+    int x = std::max(0, screen_w_ / 2 - modal_w / 2);
+    int y = std::max(0, screen_h_ / 2 - modal_h / 2);
+    drop_choice_modal_.modal_rect = SDL_Rect{x, y, modal_w, modal_h};
+
+    const int button_gap = 12;
+    const int button_w = modal_w - padding * 2;
+    const int button_h = DMButton::height();
+    const int buttons_y = y + 72;
+    drop_choice_modal_.single_rect = SDL_Rect{x + padding, buttons_y, button_w, button_h};
+    drop_choice_modal_.multiple_rect = SDL_Rect{x + padding, buttons_y + button_h + button_gap, button_w, button_h};
+    drop_choice_modal_.cancel_rect = SDL_Rect{x + padding, buttons_y + (button_h + button_gap) * 2, button_w, button_h};
+    if (drop_choice_modal_.single_animation_button) drop_choice_modal_.single_animation_button->set_rect(drop_choice_modal_.single_rect);
+    if (drop_choice_modal_.multiple_assets_button) drop_choice_modal_.multiple_assets_button->set_rect(drop_choice_modal_.multiple_rect);
+    if (drop_choice_modal_.cancel_button) drop_choice_modal_.cancel_button->set_rect(drop_choice_modal_.cancel_rect);
+}
+
+void DevControls::layout_drop_conflict_modal() {
+    if (!drop_conflict_modal_.visible) return;
+    const int modal_w = 560;
+    const int modal_h = 210;
+    const int padding = 16;
+    int x = std::max(0, screen_w_ / 2 - modal_w / 2);
+    int y = std::max(0, screen_h_ / 2 - modal_h / 2);
+    drop_conflict_modal_.modal_rect = SDL_Rect{x, y, modal_w, modal_h};
+
+    const int button_gap = 12;
+    const int button_w = 160;
+    const int button_h = DMButton::height();
+    const int total_w = button_w * 2 + button_gap;
+    const int bx = x + (modal_w - total_w) / 2;
+    const int by = y + modal_h - button_h - padding;
+    drop_conflict_modal_.skip_rect = SDL_Rect{bx, by, button_w, button_h};
+    drop_conflict_modal_.rename_rect = SDL_Rect{bx + button_w + button_gap, by, button_w, button_h};
+    if (drop_conflict_modal_.skip_button) drop_conflict_modal_.skip_button->set_rect(drop_conflict_modal_.skip_rect);
+    if (drop_conflict_modal_.rename_button) drop_conflict_modal_.rename_button->set_rect(drop_conflict_modal_.rename_rect);
+}
+
+void DevControls::layout_drop_error_popup() {
+    if (!drop_error_popup_.visible) return;
+    const int modal_w = 560;
+    const int modal_h = 180;
+    const int padding = 16;
+    int x = std::max(0, screen_w_ / 2 - modal_w / 2);
+    int y = std::max(0, screen_h_ / 2 - modal_h / 2);
+    drop_error_popup_.modal_rect = SDL_Rect{x, y, modal_w, modal_h};
+
+    const int button_w = 140;
+    const int button_h = DMButton::height();
+    const int bx = x + (modal_w - button_w) / 2;
+    const int by = y + modal_h - button_h - padding;
+    drop_error_popup_.ok_rect = SDL_Rect{bx, by, button_w, button_h};
+    if (drop_error_popup_.ok_button) drop_error_popup_.ok_button->set_rect(drop_error_popup_.ok_rect);
+}
+
+void DevControls::open_drop_choice_modal(const DropImportRequest& request) {
+    drop_choice_modal_ = DropChoiceModal{};
+    drop_choice_modal_.visible = true;
+    drop_choice_modal_.request = request;
+    drop_choice_modal_.single_animation_button = std::make_unique<DMButton>("Single Animation (multiple frames)", &DMStyles::CreateButton(), 280, DMButton::height());
+    drop_choice_modal_.multiple_assets_button = std::make_unique<DMButton>("Multiple Assets (one frame each)", &DMStyles::CreateButton(), 280, DMButton::height());
+    drop_choice_modal_.cancel_button = std::make_unique<DMButton>("Cancel", &DMStyles::HeaderButton(), 280, DMButton::height());
+    layout_drop_choice_modal();
+}
+
+void DevControls::open_drop_conflict_modal(const std::string& asset_name) {
+    drop_conflict_modal_ = DropConflictModal{};
+    drop_conflict_modal_.visible = true;
+    drop_conflict_modal_.asset_name = asset_name;
+    drop_conflict_modal_.skip_button = std::make_unique<DMButton>("Skip", &DMStyles::HeaderButton(), 160, DMButton::height());
+    drop_conflict_modal_.rename_button = std::make_unique<DMButton>("Rename", &DMStyles::CreateButton(), 160, DMButton::height());
+    layout_drop_conflict_modal();
+}
+
+void DevControls::open_drop_error_popup(const std::string& message) {
+    drop_error_popup_ = DropErrorPopup{};
+    drop_error_popup_.visible = true;
+    drop_error_popup_.message = message;
+    drop_error_popup_.ok_button = std::make_unique<DMButton>("OK", &DMStyles::CreateButton(), 140, DMButton::height());
+    layout_drop_error_popup();
+}
+
 void DevControls::open_drop_modal(const DropImportRequest& request) {
     drop_modal_ = DropNameModal{};
     drop_modal_.visible = true;
@@ -1517,6 +1619,54 @@ void DevControls::open_drop_modal(const DropImportRequest& request) {
     layout_drop_modal();
 }
 
+void DevControls::begin_multi_asset_import(const DropImportRequest& request) {
+    multi_asset_import_ = MultiAssetImportState{};
+    multi_asset_import_.active = true;
+    multi_asset_import_.request = request;
+    multi_asset_import_.files = request.files;
+    multi_asset_import_.index = 0;
+    multi_asset_import_.waiting_for_rename = false;
+    process_next_multi_asset_item();
+}
+
+void DevControls::process_next_multi_asset_item() {
+    if (!multi_asset_import_.active || multi_asset_import_.waiting_for_rename) {
+        return;
+    }
+    while (multi_asset_import_.index < multi_asset_import_.files.size()) {
+        const std::filesystem::path file = multi_asset_import_.files[multi_asset_import_.index];
+        std::string candidate = sanitize_asset_name_local(vibble::strings::to_lower_copy(file.stem().string()));
+        if (candidate.empty()) {
+            open_drop_error_popup("Invalid filename for asset: " + file.filename().string());
+            ++multi_asset_import_.index;
+            return;
+        }
+
+        if (manifest_store_.resolve_asset_name(candidate) || (assets_ && assets_->library().get(candidate))) {
+            open_drop_conflict_modal(candidate);
+            multi_asset_import_.waiting_for_rename = true;
+            return;
+        }
+
+        std::string error;
+        DropImportRequest single_request = multi_asset_import_.request;
+        single_request.kind = DropContentKind::SinglePng;
+        single_request.files = {file};
+        single_request.folder.clear();
+        if (!create_drop_asset(candidate, {file}, single_request, false, error)) {
+            open_drop_error_popup(error.empty() ? "Import failed for " + file.filename().string() : error);
+            ++multi_asset_import_.index;
+            return;
+        }
+        ++multi_asset_import_.index;
+    }
+
+    if (assets_) {
+        assets_->show_dev_notice("Imported dropped PNG assets", 1800);
+    }
+    reset_multi_asset_import();
+}
+
 bool DevControls::handle_drop_event(const SDL_Event& event) {
     if (!enabled_ || mode_ != Mode::RoomEditor || !room_editor_ || !room_editor_->is_enabled()) {
         return false;
@@ -1524,7 +1674,7 @@ bool DevControls::handle_drop_event(const SDL_Event& event) {
     if (frame_editor_session_ && frame_editor_session_->is_active()) {
         return false;
     }
-    if (drop_modal_.visible) {
+    if (drop_modal_.visible || drop_choice_modal_.visible || drop_conflict_modal_.visible || drop_error_popup_.visible) {
         return false;
     }
 
@@ -1567,7 +1717,22 @@ bool DevControls::handle_drop_event(const SDL_Event& event) {
             req.files = validation.files;
             req.folder = validation.folder;
             req.drop_screen = drop_point_from_event(event);
-            open_drop_modal(req);
+            if (req.kind == DropContentKind::MultiImages) {
+                bool all_png = !req.files.empty();
+                for (const auto& p : req.files) {
+                    if (!has_extension_ci(p, ".png")) {
+                        all_png = false;
+                        break;
+                    }
+                }
+                if (all_png) {
+                    open_drop_choice_modal(req);
+                } else {
+                    open_drop_modal(req);
+                }
+            } else {
+                open_drop_modal(req);
+            }
         }
         reset_drop_preview();
         return true;
@@ -1600,6 +1765,11 @@ bool DevControls::handle_drop_modal_event(const SDL_Event& event) {
             const std::string desired = drop_modal_.name_box ? drop_modal_.name_box->value() : std::string{};
             if (finalize_drop_creation(desired)) {
                 reset_drop_modal();
+                if (multi_asset_import_.active) {
+                    multi_asset_import_.waiting_for_rename = false;
+                    ++multi_asset_import_.index;
+                    process_next_multi_asset_item();
+                }
             }
         }
     }
@@ -1619,6 +1789,11 @@ bool DevControls::handle_drop_modal_event(const SDL_Event& event) {
             const std::string desired = drop_modal_.name_box ? drop_modal_.name_box->value() : std::string{};
             if (finalize_drop_creation(desired)) {
                 reset_drop_modal();
+                if (multi_asset_import_.active) {
+                    multi_asset_import_.waiting_for_rename = false;
+                    ++multi_asset_import_.index;
+                    process_next_multi_asset_item();
+                }
             }
             consumed = true;
         }
@@ -1628,6 +1803,136 @@ bool DevControls::handle_drop_modal_event(const SDL_Event& event) {
     }
 
     const bool pointer_inside = pointer_event && SDL_PointInRect(&pointer, &drop_modal_.modal_rect);
+    return consumed || pointer_inside;
+}
+
+bool DevControls::handle_drop_choice_modal_event(const SDL_Event& event) {
+    if (!drop_choice_modal_.visible) {
+        return false;
+    }
+    layout_drop_choice_modal();
+    bool consumed = false;
+    SDL_Point pointer{0, 0};
+    const bool pointer_event = is_pointer_event(event);
+    if (pointer_event) {
+        pointer = event_point(event);
+    }
+
+    if (drop_choice_modal_.single_animation_button && drop_choice_modal_.single_animation_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            DropImportRequest request = drop_choice_modal_.request;
+            reset_drop_choice_modal();
+            open_drop_modal(request);
+            return true;
+        }
+    }
+    if (drop_choice_modal_.multiple_assets_button && drop_choice_modal_.multiple_assets_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            DropImportRequest request = drop_choice_modal_.request;
+            reset_drop_choice_modal();
+            begin_multi_asset_import(request);
+            return true;
+        }
+    }
+    if (drop_choice_modal_.cancel_button && drop_choice_modal_.cancel_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            reset_drop_choice_modal();
+            reset_multi_asset_import();
+            return true;
+        }
+    }
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
+        reset_drop_choice_modal();
+        reset_multi_asset_import();
+        return true;
+    }
+
+    const bool pointer_inside = pointer_event && SDL_PointInRect(&pointer, &drop_choice_modal_.modal_rect);
+    return consumed || pointer_inside;
+}
+
+bool DevControls::handle_drop_conflict_modal_event(const SDL_Event& event) {
+    if (!drop_conflict_modal_.visible) {
+        return false;
+    }
+    layout_drop_conflict_modal();
+    bool consumed = false;
+    SDL_Point pointer{0, 0};
+    const bool pointer_event = is_pointer_event(event);
+    if (pointer_event) {
+        pointer = event_point(event);
+    }
+
+    if (drop_conflict_modal_.skip_button && drop_conflict_modal_.skip_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            reset_drop_conflict_modal();
+            multi_asset_import_.waiting_for_rename = false;
+            ++multi_asset_import_.index;
+            process_next_multi_asset_item();
+            return true;
+        }
+    }
+    if (drop_conflict_modal_.rename_button && drop_conflict_modal_.rename_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            DropImportRequest request = multi_asset_import_.request;
+            if (multi_asset_import_.index < multi_asset_import_.files.size()) {
+                const auto& file = multi_asset_import_.files[multi_asset_import_.index];
+                request.kind = DropContentKind::SinglePng;
+                request.files = {file};
+                request.folder.clear();
+            }
+            reset_drop_conflict_modal();
+            multi_asset_import_.waiting_for_rename = false;
+            open_drop_modal(request);
+            return true;
+        }
+    }
+
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
+        reset_drop_conflict_modal();
+        multi_asset_import_.waiting_for_rename = false;
+        ++multi_asset_import_.index;
+        process_next_multi_asset_item();
+        return true;
+    }
+
+    const bool pointer_inside = pointer_event && SDL_PointInRect(&pointer, &drop_conflict_modal_.modal_rect);
+    return consumed || pointer_inside;
+}
+
+bool DevControls::handle_drop_error_popup_event(const SDL_Event& event) {
+    if (!drop_error_popup_.visible) {
+        return false;
+    }
+    layout_drop_error_popup();
+    bool consumed = false;
+    SDL_Point pointer{0, 0};
+    const bool pointer_event = is_pointer_event(event);
+    if (pointer_event) {
+        pointer = event_point(event);
+    }
+
+    if (drop_error_popup_.ok_button && drop_error_popup_.ok_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            reset_drop_error_popup();
+            process_next_multi_asset_item();
+            return true;
+        }
+    }
+    if (event.type == SDL_EVENT_KEY_DOWN &&
+        (event.key.key == SDLK_ESCAPE || event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)) {
+        reset_drop_error_popup();
+        process_next_multi_asset_item();
+        return true;
+    }
+
+    const bool pointer_inside = pointer_event && SDL_PointInRect(&pointer, &drop_error_popup_.modal_rect);
     return consumed || pointer_inside;
 }
 
@@ -1683,38 +1988,111 @@ void DevControls::render_drop_modal(SDL_Renderer* renderer) {
     }
 }
 
-bool DevControls::finalize_drop_creation(const std::string& desired_name) {
-    const std::string trimmed = devmode::utils::trim_whitespace_copy(desired_name);
-    const std::string sanitized = sanitize_asset_name_local(trimmed);
-    if (sanitized.empty()) {
-        drop_modal_.error = "Please enter a name (letters, numbers, underscore).";
-        return false;
-    }
+void DevControls::render_drop_choice_modal(SDL_Renderer* renderer) {
+    if (!renderer || !drop_choice_modal_.visible) return;
+    layout_drop_choice_modal();
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    dm_draw::DrawBeveledRect(renderer,
+                             drop_choice_modal_.modal_rect,
+                             DMStyles::CornerRadius(),
+                             DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+    DrawLabelText(renderer,
+                  "Import dropped PNG files",
+                  drop_choice_modal_.modal_rect.x + 16,
+                  drop_choice_modal_.modal_rect.y + 8,
+                  DMStyles::Label());
+    if (drop_choice_modal_.single_animation_button) drop_choice_modal_.single_animation_button->render(renderer);
+    if (drop_choice_modal_.multiple_assets_button) drop_choice_modal_.multiple_assets_button->render(renderer);
+    if (drop_choice_modal_.cancel_button) drop_choice_modal_.cancel_button->render(renderer);
+}
 
-    if (manifest_store_.resolve_asset_name(sanitized)) {
-        drop_modal_.error = "An asset with that name already exists.";
+void DevControls::render_drop_conflict_modal(SDL_Renderer* renderer) {
+    if (!renderer || !drop_conflict_modal_.visible) return;
+    layout_drop_conflict_modal();
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    dm_draw::DrawBeveledRect(renderer,
+                             drop_conflict_modal_.modal_rect,
+                             DMStyles::CornerRadius(),
+                             DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+    DrawLabelText(renderer,
+                  "Asset already exists: " + drop_conflict_modal_.asset_name,
+                  drop_conflict_modal_.modal_rect.x + 16,
+                  drop_conflict_modal_.modal_rect.y + 16,
+                  DMStyles::Label());
+    DrawLabelText(renderer,
+                  "Choose Skip or Rename.",
+                  drop_conflict_modal_.modal_rect.x + 16,
+                  drop_conflict_modal_.modal_rect.y + 46,
+                  DMStyles::Label());
+    if (drop_conflict_modal_.skip_button) drop_conflict_modal_.skip_button->render(renderer);
+    if (drop_conflict_modal_.rename_button) drop_conflict_modal_.rename_button->render(renderer);
+}
+
+void DevControls::render_drop_error_popup(SDL_Renderer* renderer) {
+    if (!renderer || !drop_error_popup_.visible) return;
+    layout_drop_error_popup();
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    dm_draw::DrawBeveledRect(renderer,
+                             drop_error_popup_.modal_rect,
+                             DMStyles::CornerRadius(),
+                             DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+    DrawLabelText(renderer,
+                  drop_error_popup_.message,
+                  drop_error_popup_.modal_rect.x + 16,
+                  drop_error_popup_.modal_rect.y + 24,
+                  DMStyles::Label());
+    if (drop_error_popup_.ok_button) drop_error_popup_.ok_button->render(renderer);
+}
+
+bool DevControls::create_drop_asset(const std::string& asset_name,
+                                   const std::vector<std::filesystem::path>& files,
+                                   const DropImportRequest& request,
+                                   bool open_editor_and_spawn,
+                                   std::string& error_out) {
+    error_out.clear();
+    const std::string sanitized = sanitize_asset_name_local(devmode::utils::trim_whitespace_copy(asset_name));
+    if (sanitized.empty()) {
+        error_out = "Please enter a name (letters, numbers, underscore).";
         return false;
     }
-    if (assets_ && assets_->library().get(sanitized)) {
-        drop_modal_.error = "Asset already loaded.";
+    if (manifest_store_.resolve_asset_name(sanitized) || (assets_ && assets_->library().get(sanitized))) {
+        error_out = "An asset with that name already exists.";
         return false;
     }
 
     std::vector<std::filesystem::path> validate_targets;
-    if (drop_modal_.request.kind == DropContentKind::PngFolder && !drop_modal_.request.folder.empty()) {
-        validate_targets.push_back(drop_modal_.request.folder);
+    if (request.kind == DropContentKind::PngFolder && !request.folder.empty()) {
+        validate_targets.push_back(request.folder);
     } else {
-        validate_targets = drop_modal_.request.files;
+        validate_targets = files;
     }
     DropValidationResult validation = validate_drop_items(validate_targets);
     if (!validation.valid) {
-        drop_modal_.error = validation.reason.empty() ? "Dropped content is invalid." : validation.reason;
+        error_out = validation.reason.empty() ? "Dropped content is invalid." : validation.reason;
         return false;
     }
 
     const std::filesystem::path asset_dir = devmode::asset_paths::asset_folder_path(sanitized);
     if (std::filesystem::exists(asset_dir)) {
-        drop_modal_.error = "Asset folder already exists on disk.";
+        error_out = "Asset folder already exists on disk.";
         return false;
     }
     const std::filesystem::path default_dir = asset_dir / "default";
@@ -1727,20 +2105,20 @@ bool DevControls::finalize_drop_creation(const std::string& desired_name) {
     try {
         std::filesystem::create_directories(default_dir);
     } catch (const std::exception& ex) {
-        drop_modal_.error = std::string("Failed to create asset folder: ") + ex.what();
+        error_out = std::string("Failed to create asset folder: ") + ex.what();
         return false;
     }
 
     int frames_written = 0;
-    auto copy_sequence = [&](const std::vector<std::filesystem::path>& files) {
-        for (size_t i = 0; i < files.size(); ++i) {
+    auto copy_sequence = [&](const std::vector<std::filesystem::path>& seq_files) {
+        for (size_t i = 0; i < seq_files.size(); ++i) {
             std::filesystem::path dst = default_dir / (std::to_string(i) + ".png");
             try {
-                std::filesystem::copy_file(files[i], dst, std::filesystem::copy_options::overwrite_existing);
+                std::filesystem::copy_file(seq_files[i], dst, std::filesystem::copy_options::overwrite_existing);
                 ++frames_written;
             } catch (const std::exception& ex) {
                 SDL_Log("[DevControls] Failed to copy %s -> %s: %s",
-                        files[i].string().c_str(), dst.string().c_str(), ex.what());
+                        seq_files[i].string().c_str(), dst.string().c_str(), ex.what());
             }
         }
     };
@@ -1762,7 +2140,7 @@ bool DevControls::finalize_drop_creation(const std::string& desired_name) {
             bytes.clear();
         }
         if (bytes.empty()) {
-            drop_modal_.error = "Failed to read GIF file.";
+            error_out = "Failed to read GIF file.";
             cleanup_on_failure();
             return false;
         }
@@ -1772,7 +2150,7 @@ bool DevControls::finalize_drop_creation(const std::string& desired_name) {
         if (!data || x <= 0 || y <= 0 || z <= 0) {
             if (data) stbi_image_free(data);
             if (delays) stbi_image_free(delays);
-            drop_modal_.error = "Failed to decode GIF frames.";
+            error_out = "Failed to decode GIF frames.";
             cleanup_on_failure();
             return false;
         }
@@ -1789,8 +2167,6 @@ bool DevControls::finalize_drop_creation(const std::string& desired_name) {
             }
             if (ok) {
                 ++frames_written;
-            } else {
-                SDL_Log("[DevControls] Failed to write GIF frame %d to %s", i, dst.string().c_str());
             }
         }
         stbi_image_free(data);
@@ -1802,7 +2178,7 @@ bool DevControls::finalize_drop_creation(const std::string& desired_name) {
     }
 
     if (frames_written <= 0) {
-        drop_modal_.error = "No frames were imported.";
+        error_out = "No frames were imported.";
         cleanup_on_failure();
         return false;
     }
@@ -1813,11 +2189,7 @@ bool DevControls::finalize_drop_creation(const std::string& desired_name) {
         {"reverse_source", false},
         {"flipped_source", false},
         {"rnd_start", false},
-        {"source", nlohmann::json{
-            {"kind", "folder"},
-            {"path", "default"},
-            {"name", ""}
-        }},
+        {"source", nlohmann::json{{"kind", "folder"}, {"path", "default"}, {"name", ""}}},
         {"number_of_frames", frames_written}
     };
 
@@ -1840,40 +2212,35 @@ bool DevControls::finalize_drop_creation(const std::string& desired_name) {
 
     auto session = manifest_store_.begin_asset_edit(sanitized, true);
     if (!session || !session.is_new_asset()) {
-        drop_modal_.error = "Manifest entry already exists.";
+        error_out = "Manifest entry already exists.";
         cleanup_on_failure();
         return false;
     }
     session.data() = manifest_entry;
     if (!session.commit()) {
-        drop_modal_.error = "Failed to write manifest entry.";
+        error_out = "Failed to write manifest entry.";
         cleanup_on_failure();
         return false;
     }
     manifest_store_.flush();
 
+    std::shared_ptr<AssetInfo> info;
     if (assets_) {
         auto& lib = assets_->library();
         lib.add_asset(sanitized, manifest_entry);
         if (SDL_Renderer* r = assets_->renderer()) {
             lib.loadAnimationsFor(r, std::unordered_set<std::string>{sanitized});
         }
+        info = lib.get(sanitized);
     }
 
-    Asset* spawned = nullptr;
-    std::shared_ptr<AssetInfo> info;
-    if (assets_) {
-        info = assets_->library().get(sanitized);
-        SDL_Point screen = drop_modal_.request.drop_screen;
-        SDL_Point world = drop_world_from_screen(screen);
+    if (open_editor_and_spawn && assets_ && info) {
+        Asset* spawned = nullptr;
+        SDL_Point world = drop_world_from_screen(request.drop_screen);
         spawned = assets_->spawn_asset(sanitized, world);
-    }
-
-    if (room_editor_ && spawned && info) {
-        room_editor_->finalize_asset_drag(spawned, info);
-    }
-
-    if (assets_ && info) {
+        if (room_editor_ && spawned) {
+            room_editor_->finalize_asset_drag(spawned, info);
+        }
         assets_->open_asset_info_editor(info);
         assets_->open_animation_editor_for_asset(info);
         assets_->show_dev_notice("Created asset '" + sanitized + "'", 1800);
@@ -1882,8 +2249,41 @@ bool DevControls::finalize_drop_creation(const std::string& desired_name) {
     return true;
 }
 
+bool DevControls::finalize_drop_creation(const std::string& desired_name) {
+    std::string error;
+    if (!create_drop_asset(desired_name, drop_modal_.request.files, drop_modal_.request, true, error)) {
+        drop_modal_.error = error;
+        return false;
+    }
+    return true;
+}
+
 void DevControls::handle_sdl_event(const SDL_Event& event) {
     if (!enabled_) return;
+
+    if (drop_error_popup_.visible) {
+        handle_drop_error_popup_event(event);
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
+
+    if (drop_conflict_modal_.visible) {
+        handle_drop_conflict_modal_event(event);
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
+
+    if (drop_choice_modal_.visible) {
+        handle_drop_choice_modal_event(event);
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
 
     if (drop_modal_.visible) {
         handle_drop_modal_event(event);
@@ -2576,6 +2976,9 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
     render_drop_overlay(renderer);
     render_drop_modal(renderer);
+    render_drop_choice_modal(renderer);
+    render_drop_conflict_modal(renderer);
+    render_drop_error_popup(renderer);
 }
 
 void DevControls::begin_frame_editor_session(Asset* asset,

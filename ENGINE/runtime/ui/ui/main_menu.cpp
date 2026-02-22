@@ -108,11 +108,7 @@ void MainMenu::buildButtons() {
                         if (name_it != it.value().end() && name_it->is_string()) {
                                 label = name_it->get<std::string>();
                         }
-                        std::string button_label = label;
-                        std::transform(button_label.begin(), button_label.end(), button_label.begin(), [](unsigned char ch) {
-                                return static_cast<char>(std::toupper(ch));
-                        });
-                        Button b = Button::get_main_button(button_label);
+                        Button b = Button::get_main_button(uppercase_label(label));
                         configure_button(b);
                         b.set_rect(SDL_Rect{ x, y, btn_w, btn_h });
                         buttons_.push_back(MenuEntry{ std::move(b), map_id, true });
@@ -129,6 +125,13 @@ void MainMenu::buildButtons() {
         configure_button(quit);
         quit.set_rect(SDL_Rect{ x, y + 12, btn_w, btn_h });
         buttons_.push_back(MenuEntry{ std::move(quit), "QUIT", false });
+}
+
+std::string MainMenu::uppercase_label(std::string label) const {
+        std::transform(label.begin(), label.end(), label.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::toupper(ch));
+        });
+        return label;
 }
 
 std::optional<MainMenu::Selection> MainMenu::handle_event(const SDL_Event& e) {

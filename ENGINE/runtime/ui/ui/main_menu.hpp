@@ -44,6 +44,7 @@ class MainMenu {
     std::filesystem::path loading_content_root() const;
     std::vector<std::filesystem::path> list_loading_images(const std::filesystem::path& root, bool recursive) const;
     std::filesystem::path pick_loading_image() const;
+    std::string uppercase_label(std::string label) const;
 
         private:
     SDL_Renderer* renderer_ = nullptr;

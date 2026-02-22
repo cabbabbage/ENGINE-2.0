@@ -1664,7 +1664,7 @@ void AssetInfoUI::on_animation_document_saved() {
 
 bool AssetInfoUI::duplicate_current_asset(const std::string& raw_name) {
     if (!info_) return false;
-    std::string name = devmode::utils::trim_whitespace_copy(raw_name);
+    std::string name = devmode::utils::normalize_asset_name(raw_name);
     if (name.empty()) return false;
     if (!manifest_store_) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Manifest store unavailable; cannot duplicate '%s' to '%s'", info_->name.c_str(), name.c_str());

@@ -479,24 +479,26 @@ std::string trim_copy(const std::string& value) {
     return value.substr(start, end - start);
 }
 
+std::string lowercase_identifier(const std::string& value) {
+    std::string normalized;
+    normalized.reserve(value.size());
+    for (char ch : value) {
+        unsigned char uc = static_cast<unsigned char>(ch);
+        if (std::isalnum(uc) || ch == '_' || ch == '-') {
+            normalized.push_back(static_cast<char>(std::tolower(uc)));
+        } else {
+            return std::string{};
+        }
+    }
+    return normalized;
+}
+
 std::optional<std::string> sanitize_map_name(const std::string& input) {
     std::string trimmed = trim_copy(input);
     if (trimmed.empty()) {
         return std::nullopt;
     }
-        std::string result;
-        result.reserve(trimmed.size());
-        for (char ch : trimmed) {
-            unsigned char uc = static_cast<unsigned char>(ch);
-            if (std::isalnum(uc) || ch == '_' || ch == '-') {
-                result.push_back(static_cast<char>(std::tolower(uc)));
-            } else if (std::isspace(uc)) {
-                return std::nullopt;
-            } else {
-                return std::nullopt;
-            }
-        }
-        return result;
+        return lowercase_identifier(trimmed);
 }
 
 nlohmann::json build_default_map_manifest(const std::string& map_name) {

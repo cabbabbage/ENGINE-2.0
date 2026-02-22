@@ -88,10 +88,7 @@ void CustomControllerService::create_new_controller(const std::string& controlle
         throw std::runtime_error("Asset root has not been configured");
     }
 
-    std::string base_name = sanitize_controller_name(controller_name);
-    if (base_name.empty()) {
-        base_name = default_controller_name();
-    }
+    std::string base_name = normalized_controller_name(controller_name);
 
     if (base_name.empty()) {
         throw std::runtime_error("Unable to determine a controller name");
@@ -118,11 +115,7 @@ void CustomControllerService::open_existing_controller(const std::string& contro
         throw std::runtime_error("Asset root has not been configured");
     }
 
-    std::string base_name = sanitize_controller_name(controller_name);
-    if (base_name.empty()) {
-        base_name = default_controller_name();
-    }
-
+    std::string base_name = normalized_controller_name(controller_name);
     if (base_name.empty()) {
         throw std::runtime_error("Unable to determine a controller name");
     }
@@ -149,11 +142,7 @@ void CustomControllerService::register_controller_with_animation(const std::stri
         throw std::runtime_error("Asset root has not been configured");
     }
 
-    std::string base_name = sanitize_controller_name(controller_name);
-    if (base_name.empty()) {
-        base_name = default_controller_name();
-    }
-
+    std::string base_name = normalized_controller_name(controller_name);
     if (base_name.empty()) {
         throw std::runtime_error("Unable to determine a controller name");
     }
@@ -192,6 +181,14 @@ std::string CustomControllerService::sanitize_controller_name(const std::string&
     }
 
     return result;
+}
+
+std::string CustomControllerService::normalized_controller_name(const std::string& controller_name) const {
+    std::string normalized = sanitize_controller_name(controller_name);
+    if (normalized.empty()) {
+        normalized = default_controller_name();
+    }
+    return normalized;
 }
 
 std::string CustomControllerService::default_controller_name() const {

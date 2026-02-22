@@ -127,6 +127,7 @@ class AnimationEditorWindow {
     std::vector<std::filesystem::path> numbered_frame_paths(const std::filesystem::path& folder) const;
     void apply_global_cropping_to_asset_sources() const;
     void refresh_inspector_animation_callback();
+    std::string normalize_animation_name(std::string_view raw) const;
 
   private:
     bool visible_ = false;

@@ -48,6 +48,14 @@ public:
         MapEditor
 };
 
+    enum class DropContentKind {
+        None,
+        SinglePng,
+        Gif,
+        MultiImages,
+        PngFolder
+    };
+
     DevControls(Assets* owner, int screen_w, int screen_h);
     ~DevControls();
 
@@ -133,15 +141,6 @@ public:
     void end_frame_editor_session();
     bool is_frame_editor_session_active() const;
     const Asset* frame_editor_target() const;
-
-private:
-    enum class DropContentKind {
-        None,
-        SinglePng,
-        Gif,
-        MultiImages,
-        PngFolder
-    };
 
     struct DropPreviewState {
         bool active = false;

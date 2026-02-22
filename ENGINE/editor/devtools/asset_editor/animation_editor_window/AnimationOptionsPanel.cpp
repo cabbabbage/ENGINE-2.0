@@ -17,10 +17,39 @@
 #include "devtools/draw_utils.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/widgets.hpp"
+#include "utils/sdl_render_conversions.hpp"
+#include "utils/ttf_render_utils.hpp"
 
 namespace {
 
 using animation_editor::AnimationOptionsPanel;
+
+void render_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
+    if (!renderer || text.empty()) {
+        return;
+    }
+    const DMLabelStyle& style = DMStyles::Label();
+    TTF_Font* font = style.open_font();
+    if (!font) {
+        return;
+    }
+
+    SDL_Surface* surf = ttf_util::RenderTextBlended(font, text.c_str(), style.color);
+    if (!surf) {
+        TTF_CloseFont(font);
+        return;
+    }
+
+    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surf);
+    if (tex) {
+        SDL_Rect dst{x, y, surf->w, surf->h};
+        sdl_render::Texture(renderer, tex, nullptr, &dst);
+        SDL_DestroyTexture(tex);
+    }
+
+    SDL_DestroySurface(surf);
+    TTF_CloseFont(font);
+}
 
 float normalize_speed(float raw) {
     if (!std::isfinite(raw) || raw <= 0.0f) {
@@ -188,11 +217,11 @@ bool AnimationOptionsPanel::handle_event(const SDL_Event& e) {
 }
 
 int AnimationOptionsPanel::preferred_height(int width) const {
-    const int inner_width = std::max(0, width - PanelLayoutConstants::kPanelPadding * 2);
+    const int inner_width = std::max(0, width - kPanelPadding * 2);
     if (inner_width <= 0) {
         return 0;
     }
-    const int padding = PanelLayoutConstants::kPanelPadding;
+    const int padding = kPanelPadding;
     const auto& label_style = DMStyles::Label();
     int label_height = label_style.font_size;
     if (label_height < 0) {
@@ -223,10 +252,10 @@ void AnimationOptionsPanel::layout_widgets() const {
     if (!layout_dirty_) {
         return;
     }
-    ensure_widgets();
+    const_cast<AnimationOptionsPanel*>(this)->ensure_widgets();
     layout_dirty_ = false;
 
-    const int padding = PanelLayoutConstants::kPanelPadding;
+    const int padding = kPanelPadding;
     const int width = std::max(0, bounds_.w - padding * 2);
     const int x = bounds_.x + padding;
     int y = bounds_.y + padding;

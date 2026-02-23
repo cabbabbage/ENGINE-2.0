@@ -37,9 +37,18 @@ animation_update::CombatantSnapshot snapshot_from_asset(const Asset& asset) {
 
 vibble_controller::vibble_controller(Asset* player)
     : player_(player) {
+    if (player_) {
+        anchor_helper_ = std::make_unique<AnchorBoundAssetHelper>(player_);
+    }
     spawn_eyes_follower();
 }
 
+
+vibble_controller::~vibble_controller() {
+    if (anchor_helper_) {
+        anchor_helper_->cleanup_all();
+    }
+}
 int vibble_controller::get_dx() const { return dx_; }
 int vibble_controller::get_dy() const { return dy_; }
 
@@ -269,7 +278,7 @@ void vibble_controller::process_pending_attacks(Asset& self) {
 }
 
 void vibble_controller::spawn_eyes_follower() {
-    if (eyes_follower_ || !player_) {
+    if (eyes_follower_.valid() || !player_ || !anchor_helper_) {
         return;
     }
 
@@ -278,34 +287,14 @@ void vibble_controller::spawn_eyes_follower() {
         return;
     }
 
-    Asset::AnchorFollowTarget binding{};
-    binding.source = player_;
-    binding.anchor_name = "eyes";
-
+    std::string anchor_name = "eyes";
+    std::string follower_asset_name = "Vibble_eyes";
     if (auto follower_info = assets->library().get("vibble_eyes"); follower_info && follower_info->follower_binding.has_value()) {
         const auto& spec = follower_info->follower_binding.value();
-        binding.source = nullptr;
-        binding.controller_asset_id = spec.controller_asset_id;
-        binding.anchor_name = spec.anchor_name;
-        if (spec.depth_policy.has_value()) {
-            const std::string policy = spec.depth_policy.value();
-            if (policy == "match_owner") {
-                binding.depth_policy = anchor_points::AnchorDepthPolicy::MatchOwner;
-            } else if (policy == "behind") {
-                binding.depth_policy = anchor_points::AnchorDepthPolicy::Behind;
-            } else {
-                binding.depth_policy = anchor_points::AnchorDepthPolicy::InFront;
-            }
-        }
-        if (spec.layer_policy.has_value()) {
-            const std::string policy = spec.layer_policy.value();
-            if (policy == "match_controller_asset") {
-                binding.layer_policy = Asset::AnchorFollowTarget::LayerPolicy::MatchControllerAsset;
-            } else {
-                binding.layer_policy = Asset::AnchorFollowTarget::LayerPolicy::MatchResolvedAnchor;
-            }
+        if (!spec.anchor_name.empty()) {
+            anchor_name = spec.anchor_name;
         }
     }
 
-    eyes_follower_ = assets->spawn_asset_attached("Vibble_eyes", binding);
+    eyes_follower_ = anchor_helper_->create_asset_and_bind_to_anchor(anchor_name, follower_asset_name);
 }

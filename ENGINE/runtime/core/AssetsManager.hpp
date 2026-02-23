@@ -223,6 +223,8 @@ public:
     Asset* spawn_asset(const std::string& name, SDL_Point world_pos);
     Asset* spawn_asset_attached(const std::string& name, Asset* anchor_owner, const std::string& anchor_name);
     Asset* spawn_asset_attached(const std::string& name, const Asset::AnchorFollowTarget& binding);
+    Asset* create_asset_and_bind_to_anchor(Asset* controller_asset, const std::string& anchor_name, const std::string& asset_name);
+    bool unbind_and_delete_created(Asset* controller_asset, Asset* created_asset);
 
     void rebuild_from_grid_state();
 

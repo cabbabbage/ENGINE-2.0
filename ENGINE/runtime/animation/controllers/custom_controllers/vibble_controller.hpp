@@ -6,6 +6,9 @@
 #include <string>
 #include <chrono>
 #include <thread>
+#include <memory>
+
+#include "anchor_bound_asset_helper.hpp"
 
 class Asset;
 class Input;
@@ -14,7 +17,7 @@ class vibble_controller : public AssetController {
 
 public:
     vibble_controller(Asset* player);
-    ~vibble_controller() = default;
+    ~vibble_controller() override;
     void update(const Input& in) override;
     void process_pending_attacks(Asset& self) override;
     int get_dx() const;
@@ -31,7 +34,8 @@ private:
     static constexpr float kSprintMultiplier = 2.0f;
 
     Asset* player_ = nullptr;
-    Asset* eyes_follower_ = nullptr;
+    AnchorBoundAssetHelper::Handle eyes_follower_{};
+    std::unique_ptr<AnchorBoundAssetHelper> anchor_helper_;
     int    dx_ = 0;
     int    dy_ = 0;
 

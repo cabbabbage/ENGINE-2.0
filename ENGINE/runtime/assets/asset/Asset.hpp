@@ -299,6 +299,7 @@ class Asset {
     void mark_anchors_dirty();
     void set_anchor_follow_target(std::optional<AnchorFollowTarget> follow);
     void bind_child_to_anchor(Asset* child, const std::string& anchor_name);
+    void unbind_child_from_anchor(Asset* child);
     const std::optional<AnchorFollowTarget>& anchor_follow_target() const { return follow_anchor_; }
 
 public:

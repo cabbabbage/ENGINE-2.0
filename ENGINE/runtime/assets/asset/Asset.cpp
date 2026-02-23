@@ -939,12 +939,6 @@ void Asset::bind_child_to_anchor(Asset* child, const std::string& anchor_name) {
                 throw std::runtime_error("bind_child_to_anchor requires non-null child and non-empty anchor name");
         }
 
-        auto resolved = anchor_state(anchor_name, anchor_points::GridMaterialization::Ensure);
-        if (!resolved.has_value() || resolved->missing) {
-                throw std::runtime_error("bind_child_to_anchor failed: anchor '" + anchor_name + "' is missing on controller '" +
-                                         (info ? info->name : std::string("<unknown>")) + "'");
-        }
-
         child->set_anchor_hidden(false);
         AnchorFollowTarget follow = child->anchor_follow_target().value_or(AnchorFollowTarget{});
         follow.source = this;
@@ -954,6 +948,13 @@ void Asset::bind_child_to_anchor(Asset* child, const std::string& anchor_name) {
         if (std::find(bound_children_.begin(), bound_children_.end(), child) == bound_children_.end()) {
                 bound_children_.push_back(child);
         }
+}
+
+void Asset::unbind_child_from_anchor(Asset* child) {
+        if (!child) {
+                return;
+        }
+        bound_children_.erase(std::remove(bound_children_.begin(), bound_children_.end(), child), bound_children_.end());
 }
 
 void Asset::apply_anchor_follow_target() {
@@ -968,12 +969,7 @@ void Asset::apply_anchor_follow_target() {
 
         auto resolved = source->anchor_state(follow.anchor_name, anchor_points::GridMaterialization::Ensure, follow.depth_policy);
         if (!resolved.has_value() || resolved->missing) {
-                if (!follow_error_reported_) {
-                        follow_error_reported_ = true;
-                        throw std::runtime_error("Anchor follow failed: controller '" +
-                                                 (source->info ? source->info->name : std::string("<unknown>")) +
-                                                 "' does not expose anchor '" + follow.anchor_name + "'");
-                }
+                follow_initialized_ = false;
                 set_anchor_hidden(true);
                 return;
         }

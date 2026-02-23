@@ -1463,19 +1463,23 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
     auto resolved_anchor = anchor_owner->anchor_state(binding.anchor_name,
                                                        anchor_points::GridMaterialization::Ensure,
                                                        binding.depth_policy);
-    if (!resolved_anchor.has_value() || resolved_anchor->missing) {
-        throw std::runtime_error("spawn_asset_attached failed: anchor '" + binding.anchor_name +
-                                 "' is missing on controller '" + (anchor_owner->info ? anchor_owner->info->name : std::string("<unknown>")) + "'");
-    }
 
     std::string owning_room = map_id_;
     if (current_room_) {
         owning_room = current_room_->room_name;
     }
 
-    SDL_Point spawn_pos = resolved_anchor->world_px;
-    const int spawn_z = resolved_anchor->world_z;
-    int resolved_layer = resolved_anchor->resolution_layer;
+    SDL_Point spawn_pos = anchor_owner->world_point();
+    int spawn_z = anchor_owner->world_z();
+    int resolved_layer = anchor_owner->grid_resolution;
+    if (auto* owner_gp = anchor_owner->grid_point()) {
+        resolved_layer = owner_gp->resolution_layer();
+    }
+    if (resolved_anchor.has_value() && !resolved_anchor->missing) {
+        spawn_pos = resolved_anchor->world_px;
+        spawn_z = resolved_anchor->world_z;
+        resolved_layer = resolved_anchor->resolution_layer;
+    }
     if (binding.layer_policy.has_value() &&
         binding.layer_policy.value() == Asset::AnchorFollowTarget::LayerPolicy::MatchControllerAsset) {
         if (auto* owner_gp = anchor_owner->grid_point()) {
@@ -1518,6 +1522,34 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
     mark_non_player_update_buffer_dirty();
 
     return raw;
+}
+
+
+Asset* Assets::create_asset_and_bind_to_anchor(Asset* controller_asset,
+                                                const std::string& anchor_name,
+                                                const std::string& asset_name) {
+    if (!controller_asset || anchor_name.empty() || asset_name.empty()) {
+        return nullptr;
+    }
+
+    Asset::AnchorFollowTarget binding{};
+    binding.source = controller_asset;
+    binding.anchor_name = anchor_name;
+    return spawn_asset_attached(asset_name, binding);
+}
+
+bool Assets::unbind_and_delete_created(Asset* controller_asset, Asset* created_asset) {
+    if (!created_asset) {
+        return false;
+    }
+
+    if (controller_asset) {
+        controller_asset->unbind_child_from_anchor(created_asset);
+    }
+
+    created_asset->set_anchor_follow_target(std::nullopt);
+    created_asset->Delete();
+    return true;
 }
 
 Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
@@ -1910,6 +1942,9 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     for (Asset* asset : ordered_removals) {
         if (!asset || unique_removals.find(asset) == unique_removals.end()) {
             continue;
+        }
+        if (auto follow = asset->anchor_follow_target(); follow.has_value() && follow->source) {
+            follow->source->unbind_child_from_anchor(asset);
         }
         remove_asset_dimension_cache(asset);
         asset->clear_grid_residency_cache();

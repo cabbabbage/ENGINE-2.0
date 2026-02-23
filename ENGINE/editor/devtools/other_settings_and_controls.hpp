@@ -148,6 +148,7 @@ private:
     void layout_stats_panel();
     void maybe_refresh_stats(SDL_Renderer* renderer);
     void render_stats(SDL_Renderer* renderer) const;
+    void shift_all_by(int dy);
     int hidden_offset_y() const;
     void begin_slide(bool hidden, Uint64 now_ms);
     void update_slide(Uint64 now_ms);

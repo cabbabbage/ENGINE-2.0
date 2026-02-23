@@ -5,6 +5,7 @@
 #include "devtools/tag_utils.hpp"
 #include "widgets.hpp"
 #include "devtools/asset_info_sections.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include <memory>
 #include <vector>
 
@@ -35,12 +36,15 @@ class Section_Tags : public DockableCollapsible {
           if (!info_) return;
           info_->set_tags(tags);
           info_->set_anti_tags(anti_tags);
-          bool wrote = info_->commit_manifest();
-          if (wrote) {
-            tag_utils::notify_tags_changed();
-            if (ui_) {
-              ui_->sync_target_tags();
-            }
+          if (ui_) {
+            ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                       "Tags",
+                                       [this]() {
+                                         tag_utils::notify_tags_changed();
+                                         if (ui_) {
+                                           ui_->sync_target_tags();
+                                         }
+                                       });
           }
         });
       }

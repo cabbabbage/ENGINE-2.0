@@ -1366,16 +1366,11 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
         return false;
     }
 
-    (void)info_->commit_manifest();
-    auto source_view = manifest_store_->get_asset(info_->name);
-    if (!source_view || !source_view.data || !source_view.data->is_object()) {
-        SDL_Log("Failed to load manifest payload for source asset '%s'", info_->name.c_str());
-        return false;
-    }
-    const nlohmann::json& source = *source_view.data;
-
+    nlohmann::json source = info_->manifest_payload();
     bool all_success = true;
     bool any_written = false;
+    auto tags_notified = std::make_shared<bool>(false);
+
     for (const auto& name : asset_names) {
         if (name.empty()) {
             continue;
@@ -1385,31 +1380,62 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
             target_key = *resolved;
         }
 
-        auto session = manifest_store_->begin_asset_edit(target_key, false);
-        if (!session) {
-            SDL_Log("Failed to open manifest session for '%s'", target_key.c_str());
-            all_success = false;
+        auto apply_fn = [this, section_id, source, target_key]() -> bool {
+            auto session = manifest_store_->begin_asset_edit(target_key, false);
+            if (!session) {
+                SDL_Log("Failed to open manifest session for '%s'", target_key.c_str());
+                return false;
+            }
+
+            nlohmann::json& target = session.data();
+            if (!target.is_object()) {
+                target = nlohmann::json::object();
+            }
+            if (!copy_section_from_source(section_id, source, target)) {
+                session.cancel();
+                return false;
+            }
+            return session.commit();
+        };
+
+        auto on_success = [this, section_id, tags_notified]() {
+            if (section_id == AssetInfoSectionId::Tags) {
+                if (!*tags_notified) {
+                    tag_utils::notify_tags_changed();
+                    *tags_notified = true;
+                }
+                sync_target_tags();
+            }
+        };
+
+        if (save_coordinator_) {
+            const std::string label = std::string(section_display_name(section_id)) + " -> " + target_key;
+            save_coordinator_->enqueue_custom(devmode::core::DevSaveCoordinator::IntentKind::ManifestAsset,
+                                              std::string("asset:") + target_key,
+                                              apply_fn,
+                                              devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                              label,
+                                              on_success);
+            any_written = true;
             continue;
         }
 
-        nlohmann::json& target = session.data();
-        if (!target.is_object()) {
-            target = nlohmann::json::object();
-        }
-        if (!copy_section_from_source(section_id, source, target)) {
-            continue;
-        }
-        if (!session.commit()) {
-            SDL_Log("Failed to commit manifest changes for '%s'", target_key.c_str());
+        if (!apply_fn()) {
             all_success = false;
         } else {
             any_written = true;
+            on_success();
         }
     }
 
     if (any_written) {
-        tag_utils::notify_tags_changed();
-        manifest_store_->flush();
+        if (!save_coordinator_) {
+            if (section_id == AssetInfoSectionId::Tags && !*tags_notified) {
+                tag_utils::notify_tags_changed();
+                *tags_notified = true;
+            }
+            manifest_store_->flush();
+        }
     }
 
     if (all_success) {
@@ -1536,7 +1562,10 @@ void AssetInfoUI::save_now() const {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Panel is locked; save skipped.");
         return;
     }
-    if (info_) (void)info_->commit_manifest();
+    if (info_) {
+        auto* self = const_cast<AssetInfoUI*>(this);
+        self->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Immediate, "Asset save");
+    }
 }
 
 std::shared_ptr<animation_editor::AnimationDocument> AssetInfoUI::animation_document() const {

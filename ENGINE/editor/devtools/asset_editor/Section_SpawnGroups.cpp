@@ -176,6 +176,43 @@ bool Section_SpawnGroups::save_to_file() {
         sanitized = nlohmann::json::array();
     }
 
+    auto on_success = [this, sanitized]() {
+        groups_ = sanitized;
+        if (info_) {
+            info_->set_spawn_groups_payload(groups_);
+            info_->set_spawn_groups(groups_);
+        }
+    };
+
+    if (ui_) {
+        if (auto* coord = ui_->save_coordinator()) {
+            coord->enqueue_custom(devmode::core::DevSaveCoordinator::IntentKind::ManifestAsset,
+                                  std::string("asset:") + info_->name,
+                                  [this, sanitized](devmode::core::ManifestStore& store) {
+                                      auto session = store.begin_asset_edit(info_->name, true);
+                                      if (!session) {
+                                          std::cerr << "[Section_SpawnGroups] Failed to open manifest session for '" << info_->name << "'\n";
+                                          return false;
+                                      }
+                                      nlohmann::json& payload = session.data();
+                                      if (!payload.is_object()) {
+                                          payload = nlohmann::json::object();
+                                      }
+                                      payload["spawn_groups"] = sanitized;
+                                      if (!session.commit()) {
+                                          std::cerr << "[Section_SpawnGroups] Failed to commit spawn group payload for '" << info_->name << "'\n";
+                                          session.cancel();
+                                          return false;
+                                      }
+                                      return true;
+                                  },
+                                  devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                  "Spawn groups",
+                                  on_success);
+            return true;
+        }
+    }
+
     auto session = manifest_store_->begin_asset_edit(info_->name, true);
     if (!session) {
         std::cerr << "[Section_SpawnGroups] Failed to open manifest session for '" << info_->name << "'\n";
@@ -194,11 +231,7 @@ bool Section_SpawnGroups::save_to_file() {
     }
 
     manifest_store_->flush();
-    groups_ = std::move(sanitized);
-    if (info_) {
-        info_->set_spawn_groups_payload(groups_);
-        info_->set_spawn_groups(groups_);
-    }
+    on_success();
     return true;
 }
 

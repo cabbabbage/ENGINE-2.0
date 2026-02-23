@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "devtools/core/manifest_store.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include "devtools/widgets.hpp"
 #include "core/AssetsManager.hpp"
 
@@ -67,6 +68,7 @@ class AnimationEditorWindow {
 
     void set_assets(Assets* assets) { assets_ = assets; }
     void set_target_asset(Asset* asset) { target_asset_ = asset; }
+    void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
     void on_live_frame_editor_closed(const std::string& animation_id);
 
   private:
@@ -166,6 +168,7 @@ class AnimationEditorWindow {
     devmode::core::ManifestStore::AssetTransaction manifest_transaction_;
     std::string manifest_asset_key_;
     bool using_manifest_store_ = false;
+    devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
 
     Assets* assets_ = nullptr;
     Asset* target_asset_ = nullptr;

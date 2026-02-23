@@ -9,6 +9,7 @@
 #include "rendering/render/render.hpp"
 #include "widgets.hpp"
 #include "devtools/asset_info_sections.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include "dm_styles.hpp"
 #include <algorithm>
 #include <cmath>
@@ -191,10 +192,17 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
     }
 
     if (changed) {
-        (void)info_->commit_manifest();
-        if (ui_) {
-        if (tile_changed) ui_->sync_target_tiling_state();
+        auto on_success = [this, render_settings_changed, type_changed, tile_changed]() {
+            if (!ui_) return;
+            if (tile_changed) ui_->sync_target_tiling_state();
             if (render_settings_changed) ui_->sync_target_basic_render_settings(type_changed);
+        };
+        if (ui_) {
+            ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                       "Basic info",
+                                       on_success);
+        } else {
+            on_success();
         }
     }
     if (rebuild_needed) {

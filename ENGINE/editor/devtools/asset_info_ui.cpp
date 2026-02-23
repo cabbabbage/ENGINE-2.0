@@ -37,6 +37,7 @@
 #include "FloatingPanelLayoutManager.hpp"
 #include "dm_styles.hpp"
 #include "dev_mode_utils.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include "asset_editor/Section_BasicInfo.hpp"
 #include "asset_editor/Section_Tags.hpp"
 #include "asset_editor/Section_Spacing.hpp"
@@ -426,6 +427,13 @@ void AssetInfoUI::set_manifest_store(devmode::core::ManifestStore* store) {
     manifest_store_ = store;
     if (animation_editor_window_) {
         animation_editor_window_->set_manifest_store(manifest_store_);
+    }
+}
+
+void AssetInfoUI::set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) {
+    save_coordinator_ = coordinator;
+    if (animation_editor_window_) {
+        animation_editor_window_->set_save_coordinator(coordinator);
     }
 }
 
@@ -1131,6 +1139,46 @@ void AssetInfoUI::cancel_color_sampling(bool silent) {
     if (!silent && cancel_cb) {
         cancel_cb();
     }
+}
+
+bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority priority,
+                                        const std::string& label,
+                                        std::function<void()> on_success) {
+    if (!info_) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] No asset selected; save skipped.");
+        return false;
+    }
+    if (save_coordinator_ && manifest_store_) {
+        nlohmann::json payload = info_->manifest_payload();
+        const std::string intent_label = label.empty() ? std::string("Asset ") + info_->name : label;
+        save_coordinator_->enqueue_manifest_asset(info_->name, std::move(payload), priority, intent_label, std::move(on_success));
+        if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
+            save_coordinator_->flush_now(intent_label);
+        }
+        return true;
+    }
+
+    if (!manifest_store_) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Manifest store unavailable; direct save skipped.");
+        return false;
+    }
+
+    nlohmann::json payload = info_->manifest_payload();
+    auto session = manifest_store_->begin_asset_edit(info_->name, true);
+    if (!session) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to open manifest session for '%s'", info_->name.c_str());
+        return false;
+    }
+    session.data() = payload;
+    if (!session.commit()) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to commit manifest for '%s'", info_->name.c_str());
+        return false;
+    }
+    manifest_store_->flush();
+    if (on_success) {
+        on_success();
+    }
+    return true;
 }
 
 void AssetInfoUI::complete_color_sampling(SDL_Color color) {

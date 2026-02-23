@@ -71,6 +71,10 @@ constexpr float kSavedCameraTiltMinDeg = 0.0f;
 constexpr float kSavedCameraTiltMaxDeg = 150.0f;
 constexpr int kSavedCameraZoomMinPercent = 0;
 constexpr int kSavedCameraZoomMaxPercent = 100;
+constexpr float kShiftEdgePanThresholdFraction = 0.2f;
+constexpr float kShiftEdgePanExponent = 1.5f;
+constexpr float kShiftEdgePanBottomSampleInset = 0.92f;
+constexpr float kShiftEdgePanMaxSpeedBottomWorldUnitsPerSecond = 1400.0f;
 
 SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
     MapGridSettings settings;
@@ -2525,6 +2529,106 @@ bool RoomEditor::any_blocking_panel_visible() const {
                        [](bool state) { return state; });
 }
 
+float RoomEditor::edge_pan_intensity(int value, int max_value, float threshold_fraction) {
+    if (max_value <= 1) {
+        return 0.0f;
+    }
+    const float clamped_fraction = std::clamp(threshold_fraction, 0.0f, 0.5f);
+    const float threshold = static_cast<float>(max_value) * clamped_fraction;
+    if (threshold <= 1e-3f) {
+        return 0.0f;
+    }
+    const float signed_penetration = (value < 0)
+        ? std::min(threshold, static_cast<float>(-value))
+        : std::max(0.0f, threshold - static_cast<float>(value));
+    if (signed_penetration <= 0.0f) {
+        return 0.0f;
+    }
+    const float linear = std::clamp(signed_penetration / threshold, 0.0f, 1.0f);
+    return std::pow(linear, kShiftEdgePanExponent);
+}
+
+bool RoomEditor::apply_shift_edge_pan(const Input& input, WarpedScreenGrid& cam) {
+    const bool shift_down =
+        input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+    if (!shift_down || screen_w_ <= 1 || screen_h_ <= 1) {
+        return false;
+    }
+
+    const SDL_Point screen_pt{input.getX(), input.getY()};
+    if (is_ui_blocking_input(screen_pt.x, screen_pt.y)) {
+        return false;
+    }
+
+    const float left_intensity = edge_pan_intensity(screen_pt.x, screen_w_, kShiftEdgePanThresholdFraction);
+    const float right_intensity = edge_pan_intensity(screen_w_ - 1 - screen_pt.x, screen_w_, kShiftEdgePanThresholdFraction);
+    const float top_intensity = edge_pan_intensity(screen_pt.y, screen_h_, kShiftEdgePanThresholdFraction);
+    const float bottom_intensity = edge_pan_intensity(screen_h_ - 1 - screen_pt.y, screen_h_, kShiftEdgePanThresholdFraction);
+
+    const float pan_screen_x = right_intensity - left_intensity;
+    const float pan_screen_y = bottom_intensity - top_intensity;
+    const float pan_magnitude = std::sqrt(pan_screen_x * pan_screen_x + pan_screen_y * pan_screen_y);
+    if (pan_magnitude <= 1e-4f) {
+        return false;
+    }
+
+    constexpr float kFallbackDtSeconds = 1.0f / 60.0f;
+    const float dt_seconds = kFallbackDtSeconds;
+
+    const SDL_Point before_center = cam.get_screen_center();
+    const int bottom_sample_y = std::clamp(
+        static_cast<int>(std::lround(static_cast<double>(screen_h_ - 1) * kShiftEdgePanBottomSampleInset)),
+        0,
+        std::max(0, screen_h_ - 1));
+
+    const SDL_FPoint bottom_center_world = cam.screen_to_map(SDL_Point{screen_w_ / 2, bottom_sample_y});
+    const SDL_FPoint bottom_offset_world = cam.screen_to_map(SDL_Point{
+        std::clamp(static_cast<int>(std::lround(static_cast<float>(screen_w_) * 0.55f)), 0, std::max(0, screen_w_ - 1)),
+        bottom_sample_y});
+
+    const double bottom_world_dx = static_cast<double>(bottom_offset_world.x) - static_cast<double>(bottom_center_world.x);
+    const double bottom_world_dy = static_cast<double>(bottom_offset_world.y) - static_cast<double>(bottom_center_world.y);
+    const double bottom_world_dist = std::hypot(bottom_world_dx, bottom_world_dy);
+    if (!std::isfinite(bottom_world_dist) || bottom_world_dist <= 1e-6) {
+        return false;
+    }
+
+    const double normalized_pan_x = static_cast<double>(pan_screen_x) / static_cast<double>(pan_magnitude);
+    const double normalized_pan_y = static_cast<double>(pan_screen_y) / static_cast<double>(pan_magnitude);
+
+    const SDL_FPoint near_world = cam.screen_to_map(SDL_Point{
+        std::clamp(static_cast<int>(std::lround(static_cast<float>(screen_w_) * 0.5f + static_cast<float>(normalized_pan_x) * 8.0f)), 0, std::max(0, screen_w_ - 1)),
+        std::clamp(static_cast<int>(std::lround(static_cast<float>(screen_h_) * 0.5f + static_cast<float>(normalized_pan_y) * 8.0f)), 0, std::max(0, screen_h_ - 1))});
+    const SDL_FPoint far_world = cam.screen_to_map(SDL_Point{
+        std::clamp(static_cast<int>(std::lround(static_cast<float>(screen_w_) * 0.5f + static_cast<float>(normalized_pan_x) * 32.0f)), 0, std::max(0, screen_w_ - 1)),
+        std::clamp(static_cast<int>(std::lround(static_cast<float>(screen_h_) * 0.5f + static_cast<float>(normalized_pan_y) * 32.0f)), 0, std::max(0, screen_h_ - 1))});
+    const double dir_world_dx = static_cast<double>(far_world.x) - static_cast<double>(near_world.x);
+    const double dir_world_dy = static_cast<double>(far_world.y) - static_cast<double>(near_world.y);
+    const double dir_world_len = std::hypot(dir_world_dx, dir_world_dy);
+    if (!std::isfinite(dir_world_len) || dir_world_len <= 1e-6) {
+        return false;
+    }
+
+    const double world_dir_x = dir_world_dx / dir_world_len;
+    const double world_dir_y = dir_world_dy / dir_world_len;
+
+    const float eased_magnitude = std::clamp(pan_magnitude, 0.0f, 1.0f);
+    const double desired_world_speed = static_cast<double>(kShiftEdgePanMaxSpeedBottomWorldUnitsPerSecond) * static_cast<double>(eased_magnitude);
+    const double world_step = desired_world_speed * static_cast<double>(dt_seconds);
+
+    SDL_Point target_center = before_center;
+    target_center.x = static_cast<int>(std::lround(static_cast<double>(target_center.x) + world_dir_x * world_step));
+    target_center.y = static_cast<int>(std::lround(static_cast<double>(target_center.y) + world_dir_y * world_step));
+
+    if (target_center.x == before_center.x && target_center.y == before_center.y) {
+        return false;
+    }
+
+    cam.set_focus_override(target_center);
+    cam.set_screen_center(target_center);
+    return true;
+}
+
 void RoomEditor::handle_mouse_input(const Input& input) {
     if (!input_) return;
 
@@ -2571,6 +2675,9 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
     if (!camera_settings_lock_active_) {
         camera_controls_.handle_input(cam, input, pointer_blocks_pan);
+        if (!camera_controls_.is_panning() && !pointer_blocks_pan) {
+            apply_shift_edge_pan(input, cam);
+        }
     }
     if (std::fabs(cam.get_scale() - prev_scale) > 1e-6 ||
         cam.get_screen_center().x != prev_center.x ||

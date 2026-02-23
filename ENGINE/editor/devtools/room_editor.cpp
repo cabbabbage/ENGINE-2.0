@@ -2729,8 +2729,9 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const bool left_released_this_frame = input_->wasReleased(Input::LEFT);
 
     Asset* hit_before_pan = hit_test_asset(screen_pt, nullptr);
-    const bool pointer_blocks_pan = (!shift_down && dragging_) ||
-                                    (shift_down && !dragging_ && hit_before_pan && !hit_before_pan->spawn_id.empty() && (left_down || left_pressed_this_frame));
+    const bool selection_interaction_active = shift_down || !selected_assets_.empty();
+    const bool pointer_blocks_pan = (!selection_interaction_active && dragging_) ||
+                                    (selection_interaction_active && !dragging_ && hit_before_pan && !hit_before_pan->spawn_id.empty() && (left_down || left_pressed_this_frame));
 
     if (shift_down_just_pressed) {
         reset_selection_filter();
@@ -2786,6 +2787,14 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
     Asset* hit = hit_test_asset(screen_pt, nullptr);
 
+    auto is_selected_asset = [this](Asset* asset) {
+        return asset && std::find(selected_assets_.begin(), selected_assets_.end(), asset) != selected_assets_.end();
+    };
+
+    if (!selected_assets_.empty() && !is_selected_asset(hit)) {
+        hit = nullptr;
+    }
+
     auto rebuild_highlight = [this]() {
         highlighted_assets_.clear();
         if (!selected_assets_.empty()) {
@@ -2807,7 +2816,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     static bool       was_dragged    = false;
     static const int  kDragPx        = 4;
 
-    if (!shift_down && !left_down && !dragging_) {
+    if (!shift_down && selected_assets_.empty() && !left_down && !dragging_) {
         pressed_asset = nullptr;
         was_dragged = false;
     }
@@ -2820,9 +2829,18 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         }
     }
 
-    if (shift_down && left_down && !prev_left_down) {
+    if (selection_interaction_active && left_down && !prev_left_down) {
 
-        pressed_asset = hit;
+        Asset* selection_hit = hit_test_asset(screen_pt, nullptr);
+        if (!selection_hit && !selected_assets_.empty()) {
+            selected_assets_.clear();
+            highlighted_assets_.clear();
+            hovered_asset_ = nullptr;
+            sync_spawn_group_panel_with_selection();
+            mark_highlight_dirty();
+        }
+
+        pressed_asset = selection_hit;
         was_dragged   = false;
         press_screen  = screen_pt;
 
@@ -2863,7 +2881,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         const int dy = screen_pt.y - press_screen.y;
         const int dist2 = dx*dx + dy*dy;
 
-        if (!was_dragged && shift_down && dist2 > kDragPx*kDragPx) {
+        if (!was_dragged && selection_interaction_active && dist2 > kDragPx*kDragPx) {
             was_dragged = true;
             dragging_ = true;
             drag_last_world_ = snapped_cursor_world_;
@@ -2893,10 +2911,8 @@ void RoomEditor::handle_mouse_input(const Input& input) {
                 suppress_next_left_click_ = true;
                 click_buffer_frames_      = 3;
 
-                selected_assets_.clear();
-                highlighted_assets_.clear();
-                hovered_asset_ = nullptr;
                 sync_spawn_group_panel_with_selection();
+                rebuild_highlight();
             } else {
 
                 if (hovered_asset_ == pressed_asset) {
@@ -2911,9 +2927,15 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         was_dragged   = false;
     }
 
-    if (!dragging_) {
+    if (!dragging_ && selected_assets_.empty()) {
         if (hovered_asset_ != hit) {
             hovered_asset_ = hit;
+            rebuild_highlight();
+        }
+    } else if (!dragging_ && !selected_assets_.empty()) {
+        Asset* primary = selected_assets_.front();
+        if (hovered_asset_ != primary) {
+            hovered_asset_ = primary;
             rebuild_highlight();
         }
     }
@@ -3559,6 +3581,7 @@ void RoomEditor::handle_click(const Input& input) {
 
         const bool shift_modifier =
             input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+        const bool persistent_selection_active = !selected_assets_.empty();
         auto open_library_at = [&](const SDL_Point& point) {
             pending_spawn_world_pos_ = point;
             open_asset_library();
@@ -3568,7 +3591,7 @@ void RoomEditor::handle_click(const Input& input) {
 };
 
         if (hovered_asset_) {
-            if (shift_modifier) {
+            if (shift_modifier || persistent_selection_active) {
                 open_asset_info_editor_for_asset(hovered_asset_);
             } else {
                 open_library_at(world_mouse);
@@ -3605,11 +3628,26 @@ void RoomEditor::handle_click(const Input& input) {
         return; 
     } 
 
-    const bool alt_modifier = 
-        input.isScancodeDown(SDL_SCANCODE_LALT) || input.isScancodeDown(SDL_SCANCODE_RALT); 
     const bool shift_modifier = 
         input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT); 
     Asset* clicked_asset = hovered_asset_;
+
+    if (clicked_asset && clicked_asset == last_click_asset_) {
+        const Uint32 now = SDL_GetTicks();
+        const Uint32 elapsed = now - last_click_time_ms_;
+        if (elapsed <= static_cast<Uint32>(SDL_DOUBLE_CLICK_TIME)) {
+            const std::string spawn_id = clicked_asset->spawn_id;
+            if (!spawn_id.empty() && delete_spawn_group_internal(spawn_id)) {
+                clear_selection();
+                show_notice("Deleted spawn group");
+                last_click_asset_ = nullptr;
+                last_click_time_ms_ = 0;
+                return;
+            }
+        }
+    }
+    last_click_asset_ = clicked_asset;
+    last_click_time_ms_ = SDL_GetTicks();
 
     // When shift is held, prefer picking by exact grid point so selection works even if
     // the asset's resolution differs from the current grid snap.
@@ -3640,12 +3678,6 @@ void RoomEditor::handle_click(const Input& input) {
             update_hover_state(best);
         }
     }
-    if (alt_modifier && shift_modifier && hovered_asset_) { 
-        const std::string spawn_id = hovered_asset_->spawn_id; 
-        if (!spawn_id.empty() && delete_spawn_group_internal(spawn_id)) { 
-            return; 
-        } 
-    } 
 
     if (hovered_asset_) {
         Asset* nearest = hovered_asset_;
@@ -4263,50 +4295,7 @@ void RoomEditor::refresh_room_config_visibility() {
 }
 
 void RoomEditor::handle_delete_shortcut(const Input& input) {
-    if (!input.wasScancodePressed(SDL_SCANCODE_DELETE)) return;
-    if (!current_room_) return;
-
-    std::vector<std::string> spawn_ids;
-    spawn_ids.reserve(selected_assets_.size() + 1);
-    auto append_spawn_id = [&spawn_ids](Asset* asset) {
-        if (!asset) {
-            return;
-        }
-        const std::string& id = asset->spawn_id;
-        if (id.empty()) {
-            return;
-        }
-        if (std::find(spawn_ids.begin(), spawn_ids.end(), id) == spawn_ids.end()) {
-            spawn_ids.push_back(id);
-        }
-};
-
-    for (Asset* asset : selected_assets_) {
-        append_spawn_id(asset);
-    }
-
-    if (spawn_ids.empty()) {
-        append_spawn_id(hovered_asset_);
-    }
-
-    if (spawn_ids.empty() && active_spawn_group_id_ && !active_spawn_group_id_->empty()) {
-        spawn_ids.push_back(*active_spawn_group_id_);
-    }
-
-    int deleted_count = 0;
-    for (const std::string& id : spawn_ids) {
-        if (delete_spawn_group_internal(id)) {
-            ++deleted_count;
-        }
-    }
-
-    if (deleted_count > 0) {
-        clear_selection();
-        const std::string message = (deleted_count == 1)
-            ? std::string("Deleted 1 spawn group")
-            : std::string("Deleted ") + std::to_string(deleted_count) + " spawn groups";
-        show_notice(message);
-    }
+    (void)input;
 }
 
 void RoomEditor::begin_drag_session(const SDL_Point& world_mouse, bool ctrl_modifier) {

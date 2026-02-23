@@ -363,7 +363,7 @@ int AnimationInspectorPanel::height_for_width(int width) const {
     total += kSectionHeaderHeight;
     total += item_gap;
     total += DMButton::height();
-    if (expanded_section_ == CollapsibleSection::kSource && source_config_) {
+    if (source_section_open_ && source_config_) {
         int source_height = source_config_->preferred_height(content_width);
         if (source_height > 0) {
             total += item_gap;
@@ -468,10 +468,10 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
     {
         ClipScope content_clip(renderer, bounds_);
 
-        draw_section_header(renderer, source_section_header_rect_, "Source", true, expanded_section_ == CollapsibleSection::kSource);
+        draw_section_header(renderer, source_section_header_rect_, "Source", true, source_section_open_);
         if (source_frames_button_) source_frames_button_->render(renderer);
         if (source_animation_button_) source_animation_button_->render(renderer);
-        if (expanded_section_ == CollapsibleSection::kSource && source_config_ && source_rect_.h > 0 && source_rect_.w > 0) {
+        if (source_section_open_ && source_config_ && source_rect_.h > 0 && source_rect_.w > 0) {
             source_config_->render(renderer);
         }
 
@@ -632,6 +632,12 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
                 return false;
             }
 
+            if (section == CollapsibleSection::kSource) {
+                source_section_open_ = !source_section_open_;
+                layout_dirty_ = true;
+                return true;
+            }
+
             CollapsibleSection new_section = (expanded_section_ == section) ? CollapsibleSection::kNone : section;
             if (new_section != expanded_section_) {
                 expanded_section_ = new_section;
@@ -667,7 +673,7 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
         handled = true;
     }
 
-    if (expanded_section_ == CollapsibleSection::kSource && source_config_ && source_config_->handle_event(e)) handled = true;
+    if (source_section_open_ && source_config_ && source_config_->handle_event(e)) handled = true;
     if (expanded_section_ == CollapsibleSection::kAnimationOptions && animation_options_ && animation_options_->handle_event(e)) handled = true;
 
     if (expanded_section_ == CollapsibleSection::kPlayback && playback_settings_ && playback_settings_->handle_event(e)) handled = true;
@@ -941,7 +947,7 @@ void AnimationInspectorPanel::layout_widgets() const {
     self->source_section_rect_ = self->source_section_header_rect_;
     static_cursor.advance(kSectionHeaderHeight);
 
-    if (expanded_section_ == CollapsibleSection::kSource) {
+    if (source_section_open_) {
         static_cursor.advance(item_gap);
         const int selector_height = DMButton::height();
         const int selector_gap = DMSpacing::small_gap();

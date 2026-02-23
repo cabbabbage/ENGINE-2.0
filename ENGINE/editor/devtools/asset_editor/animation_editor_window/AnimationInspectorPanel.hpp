@@ -195,7 +195,8 @@ class AnimationInspectorPanel {
     int focus_index_ = -1;
     FocusTarget current_focus_target_ = FocusTarget::kNone;
     bool source_uses_animation_ = false;
-    CollapsibleSection expanded_section_ = CollapsibleSection::kSource;
+    bool source_section_open_ = true;
+    CollapsibleSection expanded_section_ = CollapsibleSection::kNone;
 
     std::unique_ptr<PreviewTimeline> preview_timeline_;
     std::unique_ptr<DMButton> preview_play_button_;

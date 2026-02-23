@@ -77,6 +77,18 @@ constexpr float kShiftEdgePanThresholdFraction = 0.2f;
 constexpr float kShiftEdgePanExponent = 1.5f;
 constexpr float kShiftEdgePanBottomSampleInset = 0.92f;
 constexpr float kShiftEdgePanMaxSpeedBottomWorldUnitsPerSecond = 1400.0f;
+constexpr Uint32 kDefaultMouseDoubleClickTimeMs = 500;
+
+Uint32 mouse_double_click_time_ms() {
+    static Uint32 cached_value = 0;
+    if (cached_value == 0) {
+        const int default_value = static_cast<int>(kDefaultMouseDoubleClickTimeMs);
+        const int hint_value = SDL_GetHintInteger(SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, default_value);
+        const int sanitized_value = hint_value > 0 ? hint_value : default_value;
+        cached_value = static_cast<Uint32>(sanitized_value);
+    }
+    return cached_value;
+}
 
 SDL_Point snap_world_point_to_overlay_grid(SDL_Point world, int resolution) {
     MapGridSettings settings;
@@ -3637,7 +3649,7 @@ void RoomEditor::handle_click(const Input& input) {
     if (clicked_asset && clicked_asset == last_click_asset_) {
         const Uint32 now = SDL_GetTicks();
         const Uint32 elapsed = now - last_click_time_ms_;
-        if (elapsed <= static_cast<Uint32>(SDL_DOUBLE_CLICK_TIME)) {
+        if (elapsed <= mouse_double_click_time_ms()) {
             const std::string spawn_id = clicked_asset->spawn_id;
             if (!spawn_id.empty() && delete_spawn_group_internal(spawn_id)) {
                 clear_selection();

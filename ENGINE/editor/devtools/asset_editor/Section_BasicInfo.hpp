@@ -288,8 +288,13 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
 inline void Section_BasicInfo::on_scale_slider_value_changed(int new_value) {
     if (!info_) return;
     info_->set_scale_percentage(static_cast<float>(new_value));
-    (void)info_->commit_manifest();
     if (ui_) {
-        ui_->refresh_target_asset_scale();
+        ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                   "Scale",
+                                   [this]() {
+                                       if (ui_) {
+                                           ui_->refresh_target_asset_scale();
+                                       }
+                                   });
     }
 }

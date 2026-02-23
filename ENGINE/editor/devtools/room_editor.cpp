@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cerrno>
 
 #include "assets/Asset.hpp"
 #include "assets/asset_info.hpp"
@@ -79,11 +80,33 @@ constexpr float kShiftEdgePanBottomSampleInset = 0.92f;
 constexpr float kShiftEdgePanMaxSpeedBottomWorldUnitsPerSecond = 1400.0f;
 constexpr Uint32 kDefaultMouseDoubleClickTimeMs = 500;
 
+int get_sdl_hint_integer(const char* name, int default_value) {
+    const char* hint = SDL_GetHint(name);
+    if (!hint || *hint == '\0') {
+        return default_value;
+    }
+
+    char* end = nullptr;
+    errno = 0;
+    const long parsed = std::strtol(hint, &end, 10);
+    if (end == hint || errno == ERANGE) {
+        return default_value;
+    }
+
+    if (parsed > std::numeric_limits<int>::max()) {
+        return std::numeric_limits<int>::max();
+    }
+    if (parsed < std::numeric_limits<int>::min()) {
+        return std::numeric_limits<int>::min();
+    }
+    return static_cast<int>(parsed);
+}
+
 Uint32 mouse_double_click_time_ms() {
     static Uint32 cached_value = 0;
     if (cached_value == 0) {
         const int default_value = static_cast<int>(kDefaultMouseDoubleClickTimeMs);
-        const int hint_value = SDL_GetHintInteger(SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, default_value);
+        const int hint_value = get_sdl_hint_integer(SDL_HINT_MOUSE_DOUBLE_CLICK_TIME, default_value);
         const int sanitized_value = hint_value > 0 ? hint_value : default_value;
         cached_value = static_cast<Uint32>(sanitized_value);
     }

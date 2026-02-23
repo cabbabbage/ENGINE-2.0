@@ -1729,9 +1729,46 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
 
         draft = payload;
     }
-    bool committed = finalize ? manifest_transaction_.finalize() : manifest_transaction_.save();
+
+    auto commit_fn = [this, finalize]() -> bool {
+        if (!manifest_transaction_) {
+            return false;
+        }
+        bool ok = finalize ? manifest_transaction_.finalize() : manifest_transaction_.save();
+        if (ok && finalize) {
+            manifest_transaction_ = {};
+            manifest_asset_key_.clear();
+            using_manifest_store_ = false;
+        }
+        return ok;
+    };
+
+    auto on_success = [this, finalize]() {
+        handle_document_saved();
+        set_status_message(finalize ? "Animations saved." : "Animations updated.", finalize ? 200 : 120);
+    };
+
+    const auto priority = finalize
+        ? devmode::core::DevSaveCoordinator::Priority::Immediate
+        : devmode::core::DevSaveCoordinator::Priority::Debounced;
+
+    if (save_coordinator_) {
+        save_coordinator_->enqueue_custom(devmode::core::DevSaveCoordinator::IntentKind::ManifestAsset,
+                                          std::string("asset:") + manifest_asset_key_,
+                                          [commit_fn](devmode::core::ManifestStore&) { return commit_fn(); },
+                                          priority,
+                                          "Animation manifest",
+                                          on_success);
+        if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
+            save_coordinator_->flush_now("Animation save");
+        }
+        return true;
+    }
+
+    bool committed = commit_fn();
     if (committed) {
         manifest_store_->flush();
+        on_success();
     }
     return committed;
 }

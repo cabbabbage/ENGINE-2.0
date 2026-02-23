@@ -20,9 +20,9 @@ constexpr int kFooterGroupGap = 18;
 constexpr int kFooterButtonSpacing = 12;
 constexpr int kFooterButtonMinWidth = 110;
 constexpr int kFooterHideButtonWidth = 32;
-constexpr Uint64 kFooterSlideDurationMs = 72;
+constexpr Uint64 kFooterSlideDurationMs = 88;
 constexpr Uint64 kFooterZoneDebounceMs = 36;
-constexpr float kFooterShowZoneRatio = 0.95f;
+constexpr float kFooterShowZoneRatio = 0.90f;
 constexpr float kFooterUnlockZoneRatio = 0.80f;
 
 const DMButtonStyle* button_style_for(const DevFooterBar::Button& btn) {

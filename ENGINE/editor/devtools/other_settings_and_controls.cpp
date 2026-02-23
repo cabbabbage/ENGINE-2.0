@@ -49,9 +49,9 @@ constexpr const char* kAdvancedFiltersTitle = "Asset & Spawn Filters";
 constexpr const char* kGridResolutionTitle = "Tile Resolution";
 constexpr const char* kStatsTitle = "Runtime Stats";
 constexpr Uint64 kStatsRefreshMs = 7000;
-constexpr Uint64 kHeaderSlideDurationMs = 72;
+constexpr Uint64 kHeaderSlideDurationMs = 88;
 constexpr Uint64 kHeaderZoneDebounceMs = 36;
-constexpr float kHeaderShowZoneRatio = 0.05f;
+constexpr float kHeaderShowZoneRatio = 0.10f;
 constexpr float kHeaderUnlockZoneRatio = 0.20f;
 
 constexpr const char* kSettingsInitializedKey = "dev.asset_filter.initialized";
@@ -511,6 +511,8 @@ void OtherSettingsAndControls::set_filters_expanded(bool expanded) {
         auto_hidden_ = false;
         layout_offset_y_ = 0;
         ensure_layout();
+    } else {
+        auto_hidden_ = true;
     }
     if (!filters_expanded_) {
         stats_.last_sample_ms = 0;
@@ -774,96 +776,7 @@ void OtherSettingsAndControls::rebuild_layout() {
         merge_bounds(filters_rect_);
     }
 
-    const int shown_offset = 0;
-    const int hidden_offset = hidden_offset_y();
-    if (slide_active_) {
-        slide_start_y_ = std::clamp(slide_start_y_, hidden_offset, shown_offset);
-        slide_target_y_ = std::clamp(slide_target_y_, hidden_offset, shown_offset);
-        layout_offset_y_ = std::clamp(layout_offset_y_, hidden_offset, shown_offset);
-    } else {
-        layout_offset_y_ = auto_hidden_ ? hidden_offset : shown_offset;
-    }
-
-    const int dy = layout_offset_y_;
-    if (dy == 0) {
-        return;
-    }
-
-    auto shift_rect = [dy](SDL_Rect& rect) {
-        if (rect.w <= 0 && rect.h <= 0) {
-            return;
-        }
-        rect.y += dy;
-    };
-    auto shift_button = [dy](DMButton* button) {
-        if (!button) {
-            return;
-        }
-        SDL_Rect rect = button->rect();
-        if (rect.w <= 0 && rect.h <= 0) {
-            return;
-        }
-        rect.y += dy;
-        button->set_rect(rect);
-    };
-    auto shift_checkbox = [dy](DMCheckbox* checkbox) {
-        if (!checkbox) {
-            return;
-        }
-        SDL_Rect rect = checkbox->rect();
-        if (rect.w <= 0 && rect.h <= 0) {
-            return;
-        }
-        rect.y += dy;
-        checkbox->set_rect(rect);
-    };
-    auto shift_stepper = [dy](DMNumericStepper* stepper) {
-        if (!stepper) {
-            return;
-        }
-        SDL_Rect rect = stepper->rect();
-        if (rect.w <= 0 && rect.h <= 0) {
-            return;
-        }
-        rect.y += dy;
-        stepper->set_rect(rect);
-    };
-
-    shift_rect(layout_bounds_);
-    shift_rect(mode_bar_rect_);
-    shift_rect(header_rect_);
-    shift_rect(hide_button_rect_);
-    shift_rect(settings_rect_);
-    shift_rect(settings_heading_rect_);
-    shift_rect(grid_section_label_rect_);
-    shift_rect(debug_section_label_rect_);
-    shift_rect(overlay_section_label_rect_);
-    shift_rect(filters_heading_rect_);
-    shift_rect(primary_filters_heading_rect_);
-    shift_rect(advanced_filters_heading_rect_);
-    shift_rect(grid_resolution_label_rect_);
-    shift_rect(filters_rect_);
-    shift_rect(stats_rect_);
-    shift_rect(stats_heading_rect_);
-    shift_rect(extra_panel_rect_);
-    for (SDL_Rect& rect : stats_line_rects_) {
-        shift_rect(rect);
-    }
-
-    shift_button(filter_toggle_button_.get());
-    shift_button(hide_button_.get());
-    for (auto& entry : mode_buttons_) {
-        shift_button(entry.button.get());
-    }
-    for (auto& entry : entries_) {
-        shift_checkbox(entry.checkbox.get());
-    }
-    shift_checkbox(overlay_grid_checkbox_.get());
-    shift_checkbox(snap_to_grid_checkbox_.get());
-    shift_checkbox(movement_debug_checkbox_.get());
-    shift_checkbox(depth_effects_checkbox_.get());
-    shift_stepper(overlay_grid_stepper_.get());
-    shift_stepper(grid_resolution_stepper_.get());
+    shift_all_by(layout_offset_y_);
 }
 
 int OtherSettingsAndControls::hidden_offset_y() const {
@@ -893,9 +806,9 @@ void OtherSettingsAndControls::update_slide(Uint64 now_ms) {
     if (elapsed >= kHeaderSlideDurationMs) {
         slide_active_ = false;
         if (layout_offset_y_ != slide_target_y_) {
+            const int delta = slide_target_y_ - layout_offset_y_;
             layout_offset_y_ = slide_target_y_;
-            layout_dirty_ = true;
-            ensure_layout();
+            shift_all_by(delta);
         }
         return;
     }
@@ -906,9 +819,9 @@ void OtherSettingsAndControls::update_slide(Uint64 now_ms) {
         (static_cast<float>(slide_target_y_ - slide_start_y_) * eased);
     const int next_y = static_cast<int>(std::lround(y));
     if (next_y != layout_offset_y_) {
+        const int delta = next_y - layout_offset_y_;
         layout_offset_y_ = next_y;
-        layout_dirty_ = true;
-        ensure_layout();
+        shift_all_by(delta);
     }
 }
 
@@ -1742,6 +1655,88 @@ void OtherSettingsAndControls::layout_filter_checkboxes() {
 
     y += margin_y;
     filters_rect_.h = y - filters_rect_.y;
+}
+
+void OtherSettingsAndControls::shift_all_by(int dy) {
+    if (dy == 0) {
+        return;
+    }
+
+    auto shift_rect = [dy](SDL_Rect& rect) {
+        if (rect.w <= 0 && rect.h <= 0) {
+            return;
+        }
+        rect.y += dy;
+    };
+    auto shift_button = [dy](DMButton* button) {
+        if (!button) {
+            return;
+        }
+        SDL_Rect rect = button->rect();
+        if (rect.w <= 0 && rect.h <= 0) {
+            return;
+        }
+        rect.y += dy;
+        button->set_rect(rect);
+    };
+    auto shift_checkbox = [dy](DMCheckbox* checkbox) {
+        if (!checkbox) {
+            return;
+        }
+        SDL_Rect rect = checkbox->rect();
+        if (rect.w <= 0 && rect.h <= 0) {
+            return;
+        }
+        rect.y += dy;
+        checkbox->set_rect(rect);
+    };
+    auto shift_stepper = [dy](DMNumericStepper* stepper) {
+        if (!stepper) {
+            return;
+        }
+        SDL_Rect rect = stepper->rect();
+        if (rect.w <= 0 && rect.h <= 0) {
+            return;
+        }
+        rect.y += dy;
+        stepper->set_rect(rect);
+    };
+
+    shift_rect(layout_bounds_);
+    shift_rect(mode_bar_rect_);
+    shift_rect(header_rect_);
+    shift_rect(hide_button_rect_);
+    shift_rect(settings_rect_);
+    shift_rect(settings_heading_rect_);
+    shift_rect(grid_section_label_rect_);
+    shift_rect(debug_section_label_rect_);
+    shift_rect(overlay_section_label_rect_);
+    shift_rect(filters_heading_rect_);
+    shift_rect(primary_filters_heading_rect_);
+    shift_rect(advanced_filters_heading_rect_);
+    shift_rect(grid_resolution_label_rect_);
+    shift_rect(filters_rect_);
+    shift_rect(stats_rect_);
+    shift_rect(stats_heading_rect_);
+    shift_rect(extra_panel_rect_);
+    for (SDL_Rect& rect : stats_line_rects_) {
+        shift_rect(rect);
+    }
+
+    shift_button(filter_toggle_button_.get());
+    shift_button(hide_button_.get());
+    for (auto& entry : mode_buttons_) {
+        shift_button(entry.button.get());
+    }
+    for (auto& entry : entries_) {
+        shift_checkbox(entry.checkbox.get());
+    }
+    shift_checkbox(overlay_grid_checkbox_.get());
+    shift_checkbox(snap_to_grid_checkbox_.get());
+    shift_checkbox(movement_debug_checkbox_.get());
+    shift_checkbox(depth_effects_checkbox_.get());
+    shift_stepper(overlay_grid_stepper_.get());
+    shift_stepper(grid_resolution_stepper_.get());
 }
 
 void OtherSettingsAndControls::layout_stats_panel() {

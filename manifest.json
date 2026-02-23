@@ -752,8 +752,8 @@
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 877,
-                "texture_y": 477
+                "texture_x": 221,
+                "texture_y": 117
               }
             ]
           ],
@@ -1018,9 +1018,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,
@@ -1252,16 +1252,16 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -216,
-              "dy": -496,
+              "dx": -164,
+              "dy": -700,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 2928,
-              "origional_width": 3184,
+              "origional_height": 3480,
+              "origional_width": 3480,
               "position": "Exact",
               "priority": 7,
               "resolution": 3,

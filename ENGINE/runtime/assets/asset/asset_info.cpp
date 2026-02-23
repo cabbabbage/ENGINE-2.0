@@ -649,6 +649,17 @@ bool AssetInfo::has_tag(const std::string &tag) const {
     return tag_lookup_.find(tag) != tag_lookup_.end();
 }
 
+nlohmann::json AssetInfo::manifest_payload() const {
+        nlohmann::json payload = info_json_;
+        if (!payload.is_object()) {
+                payload = nlohmann::json::object();
+        }
+        if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {
+                payload["asset_name"] = name;
+        }
+        return payload;
+}
+
 bool AssetInfo::commit_manifest() {
         nlohmann::json payload = info_json_;
         if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {

@@ -103,6 +103,14 @@ void MapModeUI::set_manifest_store(devmode::core::ManifestStore* store) {
     manifest_store_ = store;
     if (layers_controller_) {
         layers_controller_->set_manifest_store(manifest_store_, map_id_);
+        layers_controller_->set_save_coordinator(save_coordinator_);
+    }
+}
+
+void MapModeUI::set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) {
+    save_coordinator_ = coordinator;
+    if (layers_controller_) {
+        layers_controller_->set_save_coordinator(save_coordinator_);
     }
 }
 
@@ -506,6 +514,7 @@ void MapModeUI::ensure_panels() {
     }
     if (layers_controller_) {
         layers_controller_->set_manifest_store(manifest_store_, map_id_);
+        layers_controller_->set_save_coordinator(save_coordinator_);
     }
     if (!layers_panel_) {
         layers_panel_ = std::make_unique<MapLayersPanel>();
@@ -844,7 +853,9 @@ void MapModeUI::sync_panel_map_info() {
         layer_controls_display_->refresh();
     }
     if (fog_settings_panel_) {
-        fog_settings_panel_->set_map_info(map_info_, [this]() { return this->save_map_info_to_disk(); });
+        fog_settings_panel_->set_map_info(map_info_, [this]() {
+            return this->save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        });
     }
 }
 
@@ -1328,7 +1339,7 @@ bool MapModeUI::is_fog_panel_visible() const {
     return fog_settings_panel_ && fog_settings_panel_->is_visible();
 }
 
-bool MapModeUI::save_map_info_to_disk() const {
+bool MapModeUI::save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority priority) const {
     if (!map_info_) return false;
     if (!manifest_store_) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapModeUI] Cannot save map info: manifest store is not available.");
@@ -1338,7 +1349,16 @@ bool MapModeUI::save_map_info_to_disk() const {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapModeUI] Cannot save map info: map identifier is empty.");
         return false;
     }
-    if (!devmode::persist_map_manifest_entry(*manifest_store_, map_id_, *map_info_, std::cerr)) {
+    nlohmann::json payload = *map_info_;
+    const std::string label = std::string("Map ") + map_id_;
+    if (save_coordinator_) {
+        save_coordinator_->enqueue_map_entry(map_id_, std::move(payload), priority, label);
+        if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
+            save_coordinator_->flush_now(label);
+        }
+        return true;
+    }
+    if (!devmode::persist_map_manifest_entry(*manifest_store_, map_id_, payload, std::cerr)) {
         return false;
     }
     manifest_store_->flush();
@@ -1348,10 +1368,10 @@ bool MapModeUI::save_map_info_to_disk() const {
 bool MapModeUI::auto_save_layers_data() {
     bool saved = false;
     if (layers_controller_) {
-        saved = layers_controller_->save();
+        saved = layers_controller_->save(devmode::core::DevSaveCoordinator::Priority::Debounced);
     }
     if (!saved) {
-        saved = save_map_info_to_disk();
+        saved = save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority::Debounced);
     }
     if (rooms_display_) {
         rooms_display_->refresh();

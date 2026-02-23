@@ -18,6 +18,7 @@
 #include "other_settings_and_controls.hpp"
 #include "trail_editor_suite.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include "map_assets_modals.hpp"
 
 class Asset;
@@ -102,6 +103,8 @@ public:
 
     [[nodiscard]] devmode::core::ManifestStore& manifest_store();
     [[nodiscard]] const devmode::core::ManifestStore& manifest_store() const;
+    [[nodiscard]] devmode::core::DevSaveCoordinator& save_coordinator();
+    [[nodiscard]] const devmode::core::DevSaveCoordinator& save_coordinator() const;
 
     void toggle_room_config();
     void close_room_config();
@@ -246,6 +249,7 @@ public:
     void nudge_overlay_grid_resolution(int delta);
     void push_grid_resolution_toast(int resolution);
     void render_grid_resolution_toast(SDL_Renderer* renderer);
+    void render_room_geometry_overlay(SDL_Renderer* renderer);
     void restore_filter_hidden_assets() const;
     void mark_layout_dirty();
     void rebuild_layout_state();
@@ -359,6 +363,7 @@ private:
     std::unique_ptr<TrailEditorSuite> trail_suite_;
     std::unique_ptr<Room> pending_trail_template_;
     devmode::core::ManifestStore manifest_store_;
+    devmode::core::DevSaveCoordinator save_coordinator_;
     OtherSettingsAndControls other_settings_;
 
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;

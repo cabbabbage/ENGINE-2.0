@@ -101,6 +101,7 @@ class AssetInfo {
 	public:
     void loadAnimations(SDL_Renderer* renderer);
     bool commit_manifest();
+    nlohmann::json manifest_payload() const;
     void set_asset_type(const std::string &t);
     void set_min_same_type_distance(int d);
     void set_min_distance_all(int d);

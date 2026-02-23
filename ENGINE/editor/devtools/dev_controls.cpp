@@ -35,6 +35,7 @@
 #include "devtools/map_editor.hpp"
 #include "devtools/room_editor.hpp"
 #include "devtools/map_mode_ui.hpp"
+#include "devtools/room_overlay_renderer.hpp"
 #include "devtools/frame_editor_session.hpp"
 #include "FloatingDockableManager.hpp"
 #include "FloatingPanelLayoutManager.hpp"
@@ -173,6 +174,16 @@ constexpr const char* kGridSnapEnabledKey    = "dev.grid.snap.enabled";
 constexpr const char* kGridCellSizePxKey     = "dev.grid.cell_size_px";
 constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
 constexpr const char* kMovementDebugEnabledKey = "dev.movement.debug.enabled";
+
+void persist_dev_bool(const char* key, bool value) {
+    devmode::ui_settings::save_bool(key, value);
+    devmode::ui_settings::flush_if_dirty();
+}
+
+void persist_dev_number(const char* key, double value) {
+    devmode::ui_settings::save_number(key, value);
+    devmode::ui_settings::flush_if_dirty();
+}
 
 struct SimpleLabelCacheKey {
     std::string font_path;
@@ -701,6 +712,13 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     const char* ctor_start = "[DevControls] ctor start";
     std::cout << ctor_start << "\n";
 
+    save_coordinator_.set_manifest_store(&manifest_store_);
+    save_coordinator_.set_notice_sink([this](bool success, const std::string& message) {
+        if (assets_) {
+            assets_->show_dev_notice(message, success ? 1200u : 2000u);
+        }
+    });
+
     grid_overlay_enabled_ = devmode::ui_settings::load_bool(kGridOverlayEnabledKey, false);
     snap_to_grid_enabled_ = devmode::ui_settings::load_bool(kGridSnapEnabledKey, true);
     const int saved_overlay_r = static_cast<int>(devmode::ui_settings::load_number(kGridOverlayResolutionKey, -1));
@@ -715,6 +733,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
     if (room_editor_) {
         room_editor_->set_manifest_store(&manifest_store_);
+        room_editor_->set_save_coordinator(&save_coordinator_);
 
         room_editor_->set_header_visibility_callback([this](bool visible) {
             sliding_headers_hidden_ = visible;
@@ -757,6 +776,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     map_mode_ui_ = std::make_unique<MapModeUI>(assets_);
     if (map_mode_ui_) {
         map_mode_ui_->set_manifest_store(&manifest_store_);
+        map_mode_ui_->set_save_coordinator(&save_coordinator_);
     }
     map_grid_regen_cb_ = [this]() { this->regenerate_map_grid_assets(); };
     apply_header_suppression();
@@ -832,7 +852,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             footer->set_grid_controls_callbacks(
                 [this](bool enabled) {
                     grid_overlay_enabled_ = enabled;
-                    devmode::ui_settings::save_bool(kGridOverlayEnabledKey, enabled);
+                    persist_dev_bool(kGridOverlayEnabledKey, enabled);
                     other_settings_.set_show_grid_enabled(enabled);
                 },
                 [this](int resolution, bool from_user) {
@@ -846,7 +866,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             footer->set_movement_debug_enabled(movement_debug_enabled_);
             footer->set_movement_debug_callback([this](bool enabled) {
                 movement_debug_enabled_ = enabled;
-                devmode::ui_settings::save_bool(kMovementDebugEnabledKey, enabled);
+                persist_dev_bool(kMovementDebugEnabledKey, enabled);
                 other_settings_.set_movement_debug_enabled(enabled);
                 if (assets_) {
                     assets_->set_movement_debug_enabled(enabled);
@@ -915,7 +935,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     other_settings_.set_dev_mode_settings_callbacks(
         [this](bool enabled) {
             grid_overlay_enabled_ = enabled;
-            devmode::ui_settings::save_bool(kGridOverlayEnabledKey, enabled);
+            persist_dev_bool(kGridOverlayEnabledKey, enabled);
             if (map_mode_ui_) {
                 if (auto* footer = map_mode_ui_->get_footer_bar()) {
                     footer->set_grid_overlay_enabled(enabled);
@@ -927,7 +947,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         },
         [this](bool enabled) {
             snap_to_grid_enabled_ = enabled;
-            devmode::ui_settings::save_bool(kGridSnapEnabledKey, enabled);
+            persist_dev_bool(kGridSnapEnabledKey, enabled);
             if (room_editor_) {
                 room_editor_->set_snap_to_grid_enabled(enabled);
                 room_editor_->refresh_cursor_snap();
@@ -935,7 +955,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         },
         [this](bool enabled) {
             movement_debug_enabled_ = enabled;
-            devmode::ui_settings::save_bool(kMovementDebugEnabledKey, enabled);
+            persist_dev_bool(kMovementDebugEnabledKey, enabled);
             if (assets_) {
                 assets_->set_movement_debug_enabled(enabled);
             }
@@ -974,6 +994,14 @@ devmode::core::ManifestStore& DevControls::manifest_store() {
 
 const devmode::core::ManifestStore& DevControls::manifest_store() const {
     return manifest_store_;
+}
+
+devmode::core::DevSaveCoordinator& DevControls::save_coordinator() {
+    return save_coordinator_;
+}
+
+const devmode::core::DevSaveCoordinator& DevControls::save_coordinator() const {
+    return save_coordinator_;
 }
 
 void DevControls::set_input(Input* input) {
@@ -1015,8 +1043,8 @@ void DevControls::apply_overlay_grid_resolution(int resolution, bool user_overri
     grid_cell_size_px_ = layer_spacing(clamped);
     if (user_override) {
         grid_overlay_resolution_user_override_ = true;
-        devmode::ui_settings::save_number(kGridOverlayResolutionKey, clamped);
-        devmode::ui_settings::save_number(kGridCellSizePxKey, grid_cell_size_px_);
+        persist_dev_number(kGridOverlayResolutionKey, clamped);
+        persist_dev_number(kGridCellSizePxKey, grid_cell_size_px_);
     }
     if (update_stepper) {
         other_settings_.set_overlay_resolution_value(clamped);
@@ -1391,6 +1419,7 @@ void DevControls::sync_camera_tilt_override() {
 }
 
 void DevControls::update(const Input& input) {
+    save_coordinator_.begin_frame();
     if (!enabled_) return;
     const bool ctrl = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
     if (ctrl) {
@@ -1502,6 +1531,8 @@ void DevControls::update(const Input& input) {
             render_suppression_in_progress_ = false;
         }
     }
+
+    save_coordinator_.tick();
 }
 
 void DevControls::update_ui(const Input& input) {
@@ -4545,14 +4576,21 @@ bool DevControls::persist_map_info_to_disk() {
         return false;
     }
     const std::string map_id = assets_->map_id();
-    const bool map_saved = devmode::persist_map_manifest_entry( manifest_store_, map_id, assets_->map_info_json(), std::cerr);
+    if (map_id.empty()) {
+        std::cerr << "[DevControls] Cannot persist map info: map id empty\n";
+        return false;
+    }
+    nlohmann::json payload = assets_->map_info_json();
+    if (&save_coordinator_) {
+        save_coordinator_.enqueue_map_entry(map_id, std::move(payload),
+                                            devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                            "Manual map save");
+        save_coordinator_.flush_now("Manual map save");
+        return true;
+    }
+    const bool map_saved = devmode::persist_map_manifest_entry(manifest_store_, map_id, payload, std::cerr);
     if (map_saved) {
         manifest_store_.flush();
-        if (assets_) {
-            assets_->show_dev_notice("Map manifest saved", 1200);
-        }
-    } else if (assets_) {
-        assets_->show_dev_notice("Failed to save map manifest", 2000);
     }
     return map_saved;
 }
@@ -4596,6 +4634,32 @@ void DevControls::render_grid_resolution_toast(SDL_Renderer* renderer) {
     simple_label_cache().draw(renderer, style, toast.text, x, y);
 }
 
+void DevControls::render_room_geometry_overlay(SDL_Renderer* renderer) {
+    if (!renderer || !assets_) {
+        return;
+    }
+
+    const auto& rooms = assets_->rooms();
+    if (rooms.empty()) {
+        return;
+    }
+
+    const WarpedScreenGrid& cam = assets_->getView();
+    for (const Room* room : rooms) {
+        if (!room) {
+            continue;
+        }
+        const Area* area = room->room_area.get();
+        if (!area) {
+            continue;
+        }
+
+        const SDL_Color base_color = room->display_color();
+        const dm_draw::RoomBoundsOverlayStyle style = dm_draw::ResolveRoomBoundsOverlayStyle(base_color);
+        dm_draw::RenderRoomBoundsOverlay(renderer, cam, *area, style);
+    }
+}
+
 void DevControls::render_grid_overlay() {
     if (!assets_) {
         return;
@@ -4605,6 +4669,8 @@ void DevControls::render_grid_overlay() {
     if (!renderer) {
         return;
     }
+
+    render_room_geometry_overlay(renderer);
 
     if (grid_overlay_enabled_) {
         const WarpedScreenGrid* cam = &assets_->getView();

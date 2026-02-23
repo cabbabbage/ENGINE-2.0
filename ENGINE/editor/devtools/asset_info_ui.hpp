@@ -34,6 +34,7 @@ class AnimationDocument;
 
 namespace devmode::core {
 class ManifestStore;
+class DevSaveCoordinator;
 }
 
 class AssetInfoUI {
@@ -58,6 +59,8 @@ class AssetInfoUI {
     void set_assets(Assets* a);
     Assets* assets() const { return assets_; }
     void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
+    devmode::core::DevSaveCoordinator* save_coordinator() const { return save_coordinator_; }
     devmode::core::ManifestStore* manifest_store() const { return manifest_store_; }
     void set_target_asset(class Asset* a);
     class Asset* get_target_asset() const { return target_asset_; }
@@ -76,6 +79,9 @@ class AssetInfoUI {
 
     void begin_color_sampling(const utils::color::RangedColor& current, std::function<void(SDL_Color)> on_sample, std::function<void()> on_cancel);
     void cancel_color_sampling(bool silent);
+    bool enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority priority,
+                               const std::string& label,
+                               std::function<void()> on_success = {});
 
   private:
     void rebuild_default_sections();
@@ -126,6 +132,7 @@ class AssetInfoUI {
     bool pending_animation_editor_open_ = false;
     bool forcing_high_quality_rendering_ = false;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
+    devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
     Section_SpawnGroups* spawn_groups_section_ = nullptr;
 
     std::unique_ptr<class DMButton> duplicate_btn_;

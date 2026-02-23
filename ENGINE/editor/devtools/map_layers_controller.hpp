@@ -7,6 +7,8 @@
 
 #include <nlohmann/json_fwd.hpp>
 
+#include "devtools/core/dev_save_coordinator.hpp"
+
 namespace devmode::core {
 class ManifestStore;
 }
@@ -20,12 +22,14 @@ public:
 
     void bind(nlohmann::json* map_info, std::string map_path);
     void set_manifest_store(devmode::core::ManifestStore* store, std::string map_id);
+    void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
 
     ListenerId add_listener(Listener cb);
     void remove_listener(ListenerId id);
     void clear_listeners();
 
-    bool save();
+    bool save(devmode::core::DevSaveCoordinator::Priority priority =
+              devmode::core::DevSaveCoordinator::Priority::Debounced);
     bool reload();
 
     bool dirty() const { return dirty_; }
@@ -73,6 +77,7 @@ private:
     nlohmann::json* map_info_ = nullptr;
     std::string map_id_;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
+    devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
     bool dirty_ = false;
     ListenerId next_listener_id_ = 1;
     std::vector<ListenerEntry> listeners_;

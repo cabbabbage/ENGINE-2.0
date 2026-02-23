@@ -12,6 +12,7 @@
 
 #include "utils/ranged_color.hpp"
 #include "fog_settings_panel.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 
 class Assets;
 namespace devmode::core {
@@ -52,6 +53,7 @@ public:
     void set_sliding_area_bounds(const SDL_Rect& bounds);
 
     void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
 
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
@@ -89,7 +91,8 @@ public:
 private:
     void ensure_panels();
     void sync_panel_map_info();
-    bool save_map_info_to_disk() const;
+    bool save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority priority =
+                                   devmode::core::DevSaveCoordinator::Priority::Debounced) const;
     bool auto_save_layers_data();
     void create_room_from_layers_controls();
     void configure_footer_buttons();
@@ -139,6 +142,7 @@ private:
     SDL_Rect sliding_area_bounds_{0, 0, 0, 0};
 
     devmode::core::ManifestStore* manifest_store_ = nullptr;
+    devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
     std::unique_ptr<MapLayersPreviewPanel> layers_preview_panel_;
     std::shared_ptr<MapLayersController> layers_controller_;
     std::unique_ptr<SlidingWindowContainer> room_config_container_;

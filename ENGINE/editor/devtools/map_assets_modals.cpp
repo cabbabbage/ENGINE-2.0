@@ -489,6 +489,9 @@ public:
         ownership_color_ = ownership_color;
         save_callback_ = std::move(on_save);
         regen_callback_ = std::move(on_regen);
+        pending_rebuild_ = false;
+        pending_sync_ = false;
+        in_pie_callback_ = false;
 
         if (!ownership_label_.empty()) {
             if (!ownership_label_widget_) ownership_label_widget_ = std::make_unique<LabelWidget>();
@@ -533,7 +536,13 @@ public:
         if (!section_) return;
         bool sanitized = sanitize_groups();
         if (save_callback_) save_callback_();
-        if (force_rebuild || sanitized) {
+        const bool needs_rebuild = force_rebuild || sanitized;
+        if (in_pie_callback_) {
+            pending_rebuild_ = pending_rebuild_ || needs_rebuild;
+            pending_sync_ = pending_sync_ || (!needs_rebuild);
+            return;
+        }
+        if (needs_rebuild) {
             rebuild_rows(false);
         } else {
             sync_group_widgets();
@@ -558,6 +567,7 @@ public:
                 group.pie_widget->update_search(input);
             }
         }
+        apply_pending_refresh();
     }
 
 protected:
@@ -577,6 +587,14 @@ private:
         std::unique_ptr<DMButton> remove_button{};
         std::unique_ptr<ButtonWidget> remove_button_widget{};
         std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
+    };
+
+    struct PieCallbackGuard {
+        explicit PieCallbackGuard(BoundaryCandidateListPanelImpl* owner) : owner_(owner) {
+            owner_->in_pie_callback_ = true;
+        }
+        ~PieCallbackGuard() { owner_->in_pie_callback_ = false; }
+        BoundaryCandidateListPanelImpl* owner_;
     };
 
     json& ensure_candidate_selectors() {
@@ -881,6 +899,7 @@ private:
     }
 
     void adjust_candidate_weight(const std::string& spawn_id, int index, double delta) {
+        PieCallbackGuard guard(this);
         if (std::abs(delta) < 1e-9) return;
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry) return;
@@ -898,20 +917,22 @@ private:
         } else {
             candidate["chance"] = next;
         }
-        notify_save(true);
+        notify_save(false);
     }
 
     void remove_candidate(const std::string& spawn_id, int index) {
+        PieCallbackGuard guard(this);
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry || index < 0) return;
         auto& candidates = (*entry)["candidates"];
         if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) return;
         auto it = candidates.begin() + static_cast<json::difference_type>(index);
         candidates.erase(it);
-        notify_save(true);
+        notify_save(false);
     }
 
     void add_candidate_from_search(const std::string& spawn_id, const std::string& label) {
+        PieCallbackGuard guard(this);
         if (label.empty()) return;
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry) return;
@@ -937,7 +958,7 @@ private:
         }
 
         candidates.push_back(std::move(candidate));
-        notify_save(true);
+        notify_save(false);
     }
 
     void handle_global_regen() {
@@ -995,6 +1016,22 @@ private:
     std::unique_ptr<DMButton> add_button_{};
     std::unique_ptr<ButtonWidget> add_button_widget_{};
     std::vector<GroupWidgets> group_widgets_{};
+    bool in_pie_callback_ = false;
+    bool pending_rebuild_ = false;
+    bool pending_sync_ = false;
+
+    void apply_pending_refresh() {
+        if (pending_rebuild_) {
+            pending_rebuild_ = false;
+            pending_sync_ = false;
+            rebuild_rows(false);
+            return;
+        }
+        if (pending_sync_) {
+            pending_sync_ = false;
+            sync_group_widgets();
+        }
+    }
 };
 
 }

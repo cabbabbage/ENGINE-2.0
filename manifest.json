@@ -922,7 +922,7 @@
                 "name": "null"
               },
               {
-                "chance": 46,
+                "chance": 14,
                 "name": "tree"
               }
             ],
@@ -1018,9 +1018,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 100,
@@ -1078,16 +1078,16 @@
                 }
               ],
               "display_name": "tailor",
-              "dx": 357,
-              "dy": 373,
+              "dx": 324,
+              "dy": 564,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3256,
-              "origional_width": 3352,
+              "origional_height": 3480,
+              "origional_width": 3480,
               "position": "Exact",
               "priority": 1,
               "resolution": 3,
@@ -1136,16 +1136,16 @@
                 }
               ],
               "display_name": "grave_4",
-              "dx": -800,
-              "dy": -164,
+              "dx": -484,
+              "dy": 756,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 3128,
-              "origional_width": 3360,
+              "origional_height": 3480,
+              "origional_width": 3480,
               "position": "Exact",
               "priority": 3,
               "resolution": 3,

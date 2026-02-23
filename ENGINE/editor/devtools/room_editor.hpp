@@ -40,6 +40,7 @@ class DevControls;
 
 namespace devmode::core {
 class ManifestStore;
+class DevSaveCoordinator;
 }
 
 class RoomEditor {
@@ -59,6 +60,7 @@ public:
     void set_map_assets_panel_callback(std::function<void()> cb);
     void set_boundary_assets_panel_callback(std::function<void()> cb);
     void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
 
     void set_enabled(bool enabled, bool preserve_camera_state = false);
     bool is_enabled() const { return enabled_; }
@@ -378,6 +380,7 @@ private:
     double drag_edge_inset_percent_ = 100.0;
 
     devmode::core::ManifestStore* manifest_store_ = nullptr;
+    devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
     int drag_perimeter_curr_h_ = 0;
     bool drag_moved_ = false;
     std::string drag_spawn_id_;

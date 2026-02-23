@@ -179,18 +179,23 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
         select_frame(frame);
     });
     frame_navigator_->set_on_before_change([this](int, int) {
-        persist_pending_changes();
+        if (context_.on_save_and_update) {
+            context_.on_save_and_update();
+        }
         return true;
     });
     frame_navigator_->set_preview_source(context_.preview, context_.animation_id);
     frame_navigator_->set_on_apply_next([this]() { apply_hit_to_next_frame(); });
     frame_navigator_->set_on_apply_animation([this]() { apply_hit_to_animation(); });
     frame_navigator_->set_on_apply_all([this]() { (void)apply_hit_to_all_animations(); });
-    btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
+    frame_navigator_->set_on_save_and_exit([this]() {
+        if (context_.on_end) {
+            context_.on_end();
+        }
+    });
     btn_add_remove_ = std::make_unique<DMButton>("Add Hit Box", &DMStyles::AccentButton(), 150, DMButton::height());
 
     tool_panel_ = std::make_unique<FrameToolPanel>("Hit Geometry Tool Panel", "frame_editor_tool_panel_hit");
-    back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() { wants_close_ = true; });
     hitbox_type_widget_ = std::make_unique<DropdownWidget>(dd_hitbox_type_.get());
     add_remove_widget_ = std::make_unique<ButtonWidget>(btn_add_remove_.get(), [this]() {
         auto* box = current_hit_box();
@@ -204,7 +209,6 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
         refresh_hitbox_form();
     });
     DockableCollapsible::Rows rows{
-        {back_widget_.get()},
         {hitbox_type_widget_.get()},
         {add_remove_widget_.get()},
     };
@@ -224,12 +228,10 @@ void HitGeoFrameEditor::end() {
     }
     point_3d_editor_ = nullptr;
     tool_panel_.reset();
-    back_widget_.reset();
     hitbox_type_widget_.reset();
     add_remove_widget_.reset();
     dd_hitbox_type_.reset();
     frame_navigator_.reset();
-    btn_back_.reset();
     btn_add_remove_.reset();
     wants_close_ = false;
 }
@@ -383,9 +385,6 @@ void HitGeoFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 }
 
 void HitGeoFrameEditor::select_frame(int index) {
-    // Save changes before changing frames
-    persist_pending_changes();
-
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
 
     // Deselect point when changing frames

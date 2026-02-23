@@ -108,22 +108,30 @@ void AnchorEditor::begin(const frame_editors::FrameEditorContext& context) {
     frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
     frame_navigator_->set_current_frame(0);
     frame_navigator_->set_on_frame_changed([this](int i){ select_frame(i); });
+    frame_navigator_->set_on_before_change([this](int, int){
+        if (context_.on_save_and_update) {
+            context_.on_save_and_update();
+        }
+        return true;
+    });
     frame_navigator_->set_on_apply_next([this](){ apply_to_next_frame(); });
     frame_navigator_->set_on_apply_animation([this](){ (void)apply_to_selected_animations(); });
     frame_navigator_->set_on_apply_all([this](){ (void)apply_to_all_animations(); });
+    frame_navigator_->set_on_save_and_exit([this](){
+        if (context_.on_end) {
+            context_.on_end();
+        }
+    });
     frame_navigator_->set_preview_source(context.preview, context.animation_id);
 
-    btn_back_ = std::make_unique<DMButton>("Exit & Save", &DMStyles::DeleteButton(), 140, DMButton::height());
     btn_add_ = std::make_unique<DMButton>("Add Anchor", &DMStyles::AccentButton(), 140, DMButton::height());
     btn_delete_ = std::make_unique<DMButton>("Delete Anchor", &DMStyles::DeleteButton(), 140, DMButton::height());
-    btn_save_ = std::make_unique<DMButton>("Save", &DMStyles::AccentButton(), 140, DMButton::height());
     tb_name_ = std::make_unique<DMTextBox>("Name", "");
     tb_tex_x_ = std::make_unique<DMTextBox>("Texture X (px)", "0");
     tb_tex_y_ = std::make_unique<DMTextBox>("Texture Y (px)", "0");
     cb_in_front_ = std::make_unique<DMCheckbox>("In Front", true);
 
     tool_panel_ = std::make_unique<frame_editors::FrameToolPanel>("Anchor Editor", "anchor_editor_tool_panel");
-    back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this](){ request_close(); });
     add_widget_ = std::make_unique<ButtonWidget>(btn_add_.get(), [this](){ add_anchor(); });
     delete_widget_ = std::make_unique<ButtonWidget>(btn_delete_.get(), [this](){
         auto& list = frames_[static_cast<std::size_t>(selected_frame_)].anchors;
@@ -134,7 +142,6 @@ void AnchorEditor::begin(const frame_editors::FrameEditorContext& context) {
             refresh_form();
         }
     });
-    save_widget_ = std::make_unique<ButtonWidget>(btn_save_.get(), [this](){ persist_changes(); persist_pending_changes(); });
     anchor_list_widget_.reset(new AnchorListWidget(&frames_, &selected_frame_, &selected_anchor_, [this](int i){ select_anchor(i); }));
     name_widget_ = std::make_unique<TextBoxWidget>(tb_name_.get(), true);
     tex_x_widget_ = std::make_unique<TextBoxWidget>(tb_tex_x_.get(), true);
@@ -162,10 +169,9 @@ void AnchorEditor::begin(const frame_editors::FrameEditorContext& context) {
     manifest_txn_.set_apply_callback([this]() { persist_changes(); return true; });
 }
 
-void AnchorEditor::end() { persist_pending_changes(); }
+void AnchorEditor::end() {}
 
 bool AnchorEditor::handle_event(const SDL_Event& e) {
-    if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE) { request_close(); return true; }
     bool handled = false;
     if (tool_panel_ && tool_panel_->handle_event(e)) { if (apply_form_to_anchor()) dirty_ = true; handled = true; }
     if (frame_navigator_ && frame_navigator_->handle_event(e)) handled = true;
@@ -282,14 +288,9 @@ void AnchorEditor::persist_pending_changes() {
 }
 
 void AnchorEditor::request_close() {
-    if (apply_form_to_anchor()) dirty_ = true;
-    // Ensure last edits are written before closing.
-    persist_changes();
-    if (manifest_txn_.active()) {
-        manifest_txn_.commit(true);
-        dirty_ = false;
+    if (context_.on_end) {
+        context_.on_end();
     }
-    wants_close_ = true;
 }
 
 void AnchorEditor::prime_textures() const {
@@ -318,10 +319,9 @@ void AnchorEditor::layout_ui(SDL_Renderer* renderer) const {
 
 void AnchorEditor::rebuild_tool_panel_layout() {
     DockableCollapsible::Rows rows;
-    rows.push_back({back_widget_.get()});
     rows.push_back({anchor_list_widget_.get()});
     rows.push_back({add_widget_.get(), delete_widget_.get()});
-    if (selected_anchor_ >= 0) rows.push_back({name_widget_.get()}), rows.push_back({save_widget_.get()}), rows.push_back({tex_x_widget_.get()}), rows.push_back({tex_y_widget_.get()}), rows.push_back({in_front_widget_.get()});
+    if (selected_anchor_ >= 0) rows.push_back({name_widget_.get()}), rows.push_back({tex_x_widget_.get()}), rows.push_back({tex_y_widget_.get()}), rows.push_back({in_front_widget_.get()});
     if (tool_panel_) tool_panel_->set_rows(rows);
 }
 

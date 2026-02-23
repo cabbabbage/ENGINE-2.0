@@ -21,6 +21,7 @@ constexpr int kBadgeHeight = 16;
 constexpr int kBadgePadding = 4;
 const int kApplyButtonGap = DMSpacing::small_gap();
 constexpr int kApplyButtonWidth = 140;
+constexpr int kSaveExitButtonWidth = 180;
 
 SDL_FRect ToFRect(const SDL_Rect& rect) {
     return SDL_FRect{
@@ -44,6 +45,7 @@ FrameNavigator::FrameNavigator() {
     btn_apply_next_ = std::make_unique<DMButton>("Apply To Next", &DMStyles::HeaderButton(), kApplyButtonWidth, kThumbSize);
     btn_apply_animation_ = std::make_unique<DMButton>("Apply To Selected", &DMStyles::HeaderButton(), kApplyButtonWidth + 20, kThumbSize);
     btn_apply_all_ = std::make_unique<DMButton>("Apply To All", &DMStyles::HeaderButton(), kApplyButtonWidth, kThumbSize);
+    btn_save_exit_ = std::make_unique<DMButton>("Save and Exit", &DMStyles::DeleteButton(), kSaveExitButtonWidth, kThumbSize);
     update_button_states();
 }
 
@@ -88,6 +90,10 @@ void FrameNavigator::set_on_apply_animation(std::function<void()> callback) {
 
 void FrameNavigator::set_on_apply_all(std::function<void()> callback) {
     on_apply_all_ = std::move(callback);
+}
+
+void FrameNavigator::set_on_save_and_exit(std::function<void()> callback) {
+    on_save_and_exit_ = std::move(callback);
 }
 
 void FrameNavigator::set_confirmation_handler(std::function<bool(const std::string&, const std::string&)> callback) {
@@ -152,6 +158,12 @@ void FrameNavigator::set_rect(const SDL_Rect& rect) {
         kThumbSize
     };
 
+    if (btn_save_exit_) {
+        const int save_y = top_y + kThumbSize + kBarPadding;
+        const int save_x = rect_.x + rect_.w - kBarPadding - btn_save_exit_->rect().w;
+        btn_save_exit_->set_rect(SDL_Rect{save_x, save_y, btn_save_exit_->rect().w, kThumbSize});
+    }
+
     clamp_scroll();
     ensure_frame_visible(current_frame_);
 }
@@ -161,7 +173,7 @@ const SDL_Rect& FrameNavigator::get_rect() const {
 }
 
 SDL_Rect FrameNavigator::get_preferred_rect() const {
-    return SDL_Rect{0, 0, 0, kThumbSize + kBarPadding * 2};
+    return SDL_Rect{0, 0, 0, kThumbSize * 2 + kBarPadding * 3};
 }
 
 bool FrameNavigator::handle_event(const SDL_Event& e) {
@@ -188,6 +200,10 @@ bool FrameNavigator::handle_event(const SDL_Event& e) {
     }
     if (btn_apply_all_ && btn_apply_all_->handle_event(e)) {
         handle_apply_all();
+        consumed = true;
+    }
+    if (btn_save_exit_ && btn_save_exit_->handle_event(e)) {
+        handle_save_and_exit();
         consumed = true;
     }
 
@@ -243,6 +259,7 @@ void FrameNavigator::render(SDL_Renderer* renderer) {
     if (btn_apply_next_) btn_apply_next_->render(renderer);
     if (btn_apply_animation_) btn_apply_animation_->render(renderer);
     if (btn_apply_all_) btn_apply_all_->render(renderer);
+    if (btn_save_exit_) btn_save_exit_->render(renderer);
 }
 
 void FrameNavigator::request_frame_change(int frame) {
@@ -475,6 +492,12 @@ void FrameNavigator::handle_apply_all() {
             return;
         }
         on_apply_all_();
+    }
+}
+
+void FrameNavigator::handle_save_and_exit() {
+    if (on_save_and_exit_) {
+        on_save_and_exit_();
     }
 }
 

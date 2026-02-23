@@ -26,6 +26,7 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr double kTwoPi = 6.28318530717958647692;
 constexpr double kStartAngle = -1.5707963267948966;
 constexpr int kSearchPanelHeight = 320;
+constexpr double kArrowKeyDelta = 0.5;
 
 double clamp_positive(double value) {
     return value < 0.0 ? 0.0 : value;
@@ -240,18 +241,26 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             }
 
             if (steps != 0) {
-                if (defer_adjust_until_release_) {
-                    pending_delta_ += steps;
-                    apply_live_delta(active_index_, steps);
-                } else {
-                    on_adjust_(active_index_, steps);
-                }
+                submit_adjustment(static_cast<double>(steps));
                 return true;
             }
 
             if (delta_value != 0.0) {
                 return true;
             }
+        }
+    } else if (e.type == SDL_EVENT_KEY_DOWN) {
+        double delta = 0.0;
+        if (active_index_ >= 0 && on_adjust_) {
+            if (e.key.key == SDLK_UP) {
+                delta = kArrowKeyDelta;
+            } else if (e.key.key == SDLK_DOWN) {
+                delta = -kArrowKeyDelta;
+            }
+        }
+        if (delta != 0.0) {
+            submit_adjustment(delta);
+            return true;
         }
     }
 
@@ -540,10 +549,23 @@ void CandidateEditorPieGraphWidget::update_search(const Input& input) {
 }
 
 void CandidateEditorPieGraphWidget::flush_pending_adjustment() {
-    if (defer_adjust_until_release_ && pending_delta_ != 0 && active_index_ >= 0 && on_adjust_) {
+    if (defer_adjust_until_release_ && std::abs(pending_delta_) >= 1e-9 && active_index_ >= 0 && on_adjust_) {
         on_adjust_(active_index_, pending_delta_);
     }
-    pending_delta_ = 0;
+    pending_delta_ = 0.0;
+}
+
+bool CandidateEditorPieGraphWidget::submit_adjustment(double delta) {
+    if (active_index_ < 0 || !on_adjust_ || std::abs(delta) < 1e-9) {
+        return false;
+    }
+    if (defer_adjust_until_release_) {
+        pending_delta_ += delta;
+        apply_live_delta(active_index_, delta);
+    } else {
+        on_adjust_(active_index_, delta);
+    }
+    return true;
 }
 
 CandidateEditorPieGraphWidget::Layout CandidateEditorPieGraphWidget::compute_layout() const {
@@ -1037,12 +1059,12 @@ bool CandidateEditorPieGraphWidget::search_visible() const {
     return search_assets_ && search_assets_->visible();
 }
 
-void CandidateEditorPieGraphWidget::apply_live_delta(int index, int delta) {
-    if (index < 0 || index >= static_cast<int>(candidates_.size()) || delta == 0) {
+void CandidateEditorPieGraphWidget::apply_live_delta(int index, double delta) {
+    if (index < 0 || index >= static_cast<int>(candidates_.size()) || std::abs(delta) < 1e-9) {
         return;
     }
     auto& candidate = candidates_[index];
-    candidate.weight = std::max(0.0, candidate.weight + static_cast<double>(delta));
+    candidate.weight = std::max(0.0, candidate.weight + delta);
 }
 
 

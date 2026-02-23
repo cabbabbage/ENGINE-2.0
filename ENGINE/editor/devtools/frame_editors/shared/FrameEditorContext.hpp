@@ -31,6 +31,7 @@ struct FrameEditorContext {
     FrameEditorLaunchMode launch_mode = FrameEditorLaunchMode::Movement;
     std::function<void(const std::string&)> on_host_closed;
     std::function<void()> on_end;
+    std::function<void()> on_save_and_update;
     WarpedScreenGrid* camera = nullptr;
     int snap_resolution = 0;
     bool snap_override = false;

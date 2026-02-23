@@ -100,7 +100,8 @@ void FrameEditorSession::begin(Assets* assets,
     editor_context_.animation_id = animation_id_;
     editor_context_.launch_mode = launch_mode_;
     editor_context_.on_host_closed = on_host_closed_;
-    editor_context_.on_end = on_end_;
+    editor_context_.on_end = [this]() { request_exit(); };
+    editor_context_.on_save_and_update = [this]() { save_and_update(); };
     editor_context_.camera = assets_ ? &assets_->getView() : nullptr;
     editor_context_.snap_resolution = snap_resolution_r_;
     editor_context_.snap_override = snap_resolution_override_;
@@ -123,6 +124,7 @@ void FrameEditorSession::begin(Assets* assets,
     camera_controls_.set_height_scale_factor(1.1);
     capture_camera_state();
     active_ = true;
+    exit_requested_ = false;
     create_and_begin_editor();
 }
 
@@ -154,6 +156,7 @@ void FrameEditorSession::end() {
     prev_asset_hidden_ = false;
     snap_resolution_override_ = false;
     snap_resolution_r_ = 0;
+    exit_requested_ = false;
     selection_state_.reset();
     editor_context_ = {};
     camera_lock_state_.valid = false;
@@ -188,7 +191,7 @@ void FrameEditorSession::update(const Input& input) {
         camera_controls_.handle_input(cam, input, false);
     }
     active_editor_->update(input, 0.0f);
-    if (active_editor_ && active_editor_->wants_close()) {
+    if (exit_requested_) {
         end();
         return;
     }
@@ -199,7 +202,7 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
         return false;
     }
     const bool handled = active_editor_->handle_event(e);
-    if (active_editor_ && active_editor_->wants_close()) {
+    if (exit_requested_) {
         end();
         return true;
     }
@@ -244,7 +247,8 @@ void FrameEditorSession::create_and_begin_editor() {
     editor_context_.animation_id = animation_id_;
     editor_context_.camera = assets_ ? &assets_->getView() : nullptr;
     editor_context_.on_host_closed = on_host_closed_;
-    editor_context_.on_end = on_end_;
+    editor_context_.on_end = [this]() { request_exit(); };
+    editor_context_.on_save_and_update = [this]() { save_and_update(); };
     editor_context_.assets = assets_;
     editor_context_.target = target_;
     editor_context_.document = document_;
@@ -273,6 +277,19 @@ void FrameEditorSession::create_and_begin_editor() {
         frame_camera_for_editor_entry();
         active_editor_->begin(editor_context_);
     }
+}
+
+
+void FrameEditorSession::save_and_update() {
+    if (!active_editor_) {
+        return;
+    }
+    active_editor_->persist_pending_changes();
+}
+
+void FrameEditorSession::request_exit() {
+    save_and_update();
+    exit_requested_ = true;
 }
 
 void FrameEditorSession::frame_camera_for_editor_entry() {

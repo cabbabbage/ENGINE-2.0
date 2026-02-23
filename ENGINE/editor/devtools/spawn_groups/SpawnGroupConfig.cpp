@@ -1238,7 +1238,7 @@ private:
             });
             graph->set_candidates_from_json(entry_view());
             graph->set_defer_adjust_until_release(false);
-            graph->set_on_adjust([this](int index, int delta){
+            graph->set_on_adjust([this](int index, double delta){
                 if (!editable_) return;
                 if (index < 0) return;
                 if (auto* entry = mutable_entry()) {
@@ -1246,7 +1246,7 @@ private:
                     auto& arr = (*entry)["candidates"];
                     if (!arr.is_array() || index >= static_cast<int>(arr.size())) return;
                     double curr = safe_double(arr.at(index), "chance", safe_double(arr.at(index), "weight", 0.0));
-                    double next = std::max(0.0, curr + static_cast<double>(delta));
+                    double next = std::max(0.0, curr + delta);
                     arr.at(index)["chance"] = next;
                     update_candidate_graph();
                     notify_change(false, false, true);

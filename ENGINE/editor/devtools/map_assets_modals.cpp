@@ -225,7 +225,7 @@ public:
         pie_widget_->set_on_request_layout([this]() { this->layout(); });
         // Regular modal writes directly to the section; apply immediately
         pie_widget_->set_defer_adjust_until_release(false);
-        pie_widget_->set_on_adjust([this](int index, int delta) { adjust_candidate_weight(index, delta); });
+        pie_widget_->set_on_adjust([this](int index, double delta) { adjust_candidate_weight(index, delta); });
         pie_widget_->set_on_delete([this](int index) { remove_candidate(index); });
         if (regen_callback_) {
             pie_widget_->set_on_regenerate([this]() { this->handle_regen(); });
@@ -356,8 +356,8 @@ private:
         set_rows(rows);
     }
 
-    void adjust_candidate_weight(int index, int delta) {
-        if (!entry_ || delta == 0) return;
+    void adjust_candidate_weight(int index, double delta) {
+        if (!entry_ || std::abs(delta) < 1e-9) return;
         devmode::spawn::ensure_spawn_group_entry_defaults(*entry_, default_display_name_);
         auto& candidates = (*entry_)["candidates"];
         if (!candidates.is_array() || index < 0 || index >= static_cast<int>(candidates.size())) return;
@@ -366,7 +366,7 @@ private:
             candidate = json::object();
         }
         double current = read_candidate_weight(candidate);
-        double next = std::max(0.0, current + static_cast<double>(delta));
+        double next = std::max(0.0, current + delta);
         if (is_integral(next)) {
             candidate["chance"] = static_cast<int>(std::llround(next));
         } else {
@@ -763,7 +763,7 @@ private:
             group.pie_widget->set_on_request_layout([this]() { this->layout(); });
             // Boundary edits immediately rebuild geometry; defer weight application until the slice is deselected
             group.pie_widget->set_defer_adjust_until_release(true);
-            group.pie_widget->set_on_adjust([this, spawn_id = group.spawn_id](int idx, int delta) {
+            group.pie_widget->set_on_adjust([this, spawn_id = group.spawn_id](int idx, double delta) {
                 this->adjust_candidate_weight(spawn_id, idx, delta);
             });
             group.pie_widget->set_on_delete([this, spawn_id = group.spawn_id](int idx) {
@@ -880,8 +880,8 @@ private:
         }
     }
 
-    void adjust_candidate_weight(const std::string& spawn_id, int index, int delta) {
-        if (delta == 0) return;
+    void adjust_candidate_weight(const std::string& spawn_id, int index, double delta) {
+        if (std::abs(delta) < 1e-9) return;
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry) return;
         devmode::spawn::ensure_spawn_group_entry_defaults(*entry, default_display_name_);
@@ -892,7 +892,7 @@ private:
             candidate = json::object();
         }
         double current = read_candidate_weight(candidate);
-        double next = std::max(0.0, current + static_cast<double>(delta));
+        double next = std::max(0.0, current + delta);
         if (is_integral(next)) {
             candidate["chance"] = static_cast<int>(std::llround(next));
         } else {

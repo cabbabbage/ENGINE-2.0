@@ -251,6 +251,7 @@ set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/TESTS")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
 add_executable(engine_tests
 
+    ENGINE/tests/engine_tests_main.cpp
     ENGINE/runtime/assets/asset/animation.cpp
     ENGINE/runtime/assets/asset/surface_utils.cpp
     ENGINE/runtime/assets/asset/animation_cloner.cpp

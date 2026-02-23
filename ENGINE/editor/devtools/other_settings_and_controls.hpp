@@ -19,6 +19,7 @@ class DMCheckbox;
 class DMNumericStepper;
 class Room;
 class Assets;
+class Input;
 
 class OtherSettingsAndControls {
 public:
@@ -67,9 +68,10 @@ public:
     void set_movement_debug_enabled(bool enabled);
     void set_depth_effects_enabled(bool enabled);
 
-    void set_header_suppressed(bool suppressed) { header_suppressed_ = suppressed; }
+    void set_header_suppressed(bool suppressed);
     bool header_suppressed() const { return header_suppressed_; }
 
+    void update(const Input& input);
     void refresh_layout();
     void ensure_layout();
 
@@ -146,6 +148,10 @@ private:
     void layout_stats_panel();
     void maybe_refresh_stats(SDL_Renderer* renderer);
     void render_stats(SDL_Renderer* renderer) const;
+    int hidden_offset_y() const;
+    void begin_slide(bool hidden, Uint64 now_ms);
+    void update_slide(Uint64 now_ms);
+    void request_hidden_state(bool hidden, Uint64 now_ms, bool bypass_debounce);
 
     static FilterState& persistent_state();
     static bool& persistent_state_initialized_flag();
@@ -190,8 +196,20 @@ private:
     std::vector<ModeButtonEntry> mode_buttons_;
     std::function<void(const std::string&)> on_mode_selected_{};
     std::unique_ptr<class DMButton> filter_toggle_button_;
+    std::unique_ptr<class DMButton> hide_button_;
+    SDL_Rect hide_button_rect_{0, 0, 0, 0};
     bool filters_expanded_ = false;
     bool header_suppressed_ = false;
+    bool auto_hidden_ = true;
+    bool manual_hidden_lock_ = false;
+    bool slide_active_ = false;
+    int layout_offset_y_ = 0;
+    int slide_start_y_ = 0;
+    int slide_target_y_ = 0;
+    Uint64 slide_started_ms_ = 0;
+    bool debounce_pending_ = false;
+    bool debounce_hidden_target_ = true;
+    Uint64 debounce_started_ms_ = 0;
     int right_accessory_width_ = 0;
     int extra_panel_height_ = 0;
     SDL_Rect extra_panel_rect_{0,0,0,0};

@@ -126,6 +126,16 @@ class AnimationInspectorPanel {
         kSourceAnimation,
 };
 
+    enum class CollapsibleSection {
+        kNone = -1,
+        kSource = 0,
+        kAnimationOptions,
+        kPlayback,
+        kMovement,
+        kOnEnd,
+        kAudio,
+    };
+
     std::vector<FocusTarget> focus_order() const;
     void set_focus(FocusTarget target);
     void announce_focus(FocusTarget target) const;
@@ -149,7 +159,19 @@ class AnimationInspectorPanel {
     SDL_Rect bounds_{0, 0, 0, 0};
     mutable SDL_Rect header_rect_{0, 0, 0, 0};
     mutable SDL_Rect source_selector_rect_{0, 0, 0, 0};
-    mutable SDL_Rect source_summary_rect_{0, 0, 0, 0};
+    mutable SDL_Rect preview_section_rect_{0, 0, 0, 0};
+    mutable SDL_Rect source_section_rect_{0, 0, 0, 0};
+    mutable SDL_Rect source_section_header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect animation_options_section_rect_{0, 0, 0, 0};
+    mutable SDL_Rect animation_options_header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect playback_section_rect_{0, 0, 0, 0};
+    mutable SDL_Rect playback_header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect movement_section_rect_{0, 0, 0, 0};
+    mutable SDL_Rect movement_header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect on_end_section_rect_{0, 0, 0, 0};
+    mutable SDL_Rect on_end_header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect audio_section_rect_{0, 0, 0, 0};
+    mutable SDL_Rect audio_header_rect_{0, 0, 0, 0};
     mutable SDL_Rect preview_rect_{0, 0, 0, 0};
     mutable SDL_Rect source_rect_{0, 0, 0, 0};
     mutable SDL_Rect playback_rect_{0, 0, 0, 0};
@@ -167,12 +189,12 @@ class AnimationInspectorPanel {
     mutable bool preview_flip_y_ = false;
     mutable bool preview_flip_movement_x_ = false;
     mutable bool preview_flip_movement_y_ = false;
-    mutable std::vector<std::string> preview_modifier_badges_;
     bool rename_pending_ = false;
     bool is_start_animation_ = false;
     int focus_index_ = -1;
     FocusTarget current_focus_target_ = FocusTarget::kNone;
     bool source_uses_animation_ = false;
+    CollapsibleSection expanded_section_ = CollapsibleSection::kSource;
 
     std::unique_ptr<PreviewTimeline> preview_timeline_;
     std::unique_ptr<DMButton> preview_play_button_;
@@ -208,4 +230,3 @@ class AnimationInspectorPanel {
 };
 
 }
-

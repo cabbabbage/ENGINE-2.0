@@ -13,10 +13,12 @@
 #include "devtools/draw_utils.hpp"
 #include "devtools/widgets.hpp"
 #include "devtools/font_cache.hpp"
+#include "utils/input.hpp"
 #include "gameplay/map_generation/room.hpp"
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstring>
 #include <cstdint>
 #include <iomanip>
@@ -34,6 +36,7 @@
 
 namespace {
 constexpr int kToggleButtonMinWidth = 36;
+constexpr int kHideButtonMinWidth = 36;
 constexpr int kPanelOutlineThickness = 1;
 constexpr int kSectionHeaderSpacing = 4;
 constexpr const char* kDevSettingsTitle = "Dev Mode Settings";
@@ -46,6 +49,10 @@ constexpr const char* kAdvancedFiltersTitle = "Asset & Spawn Filters";
 constexpr const char* kGridResolutionTitle = "Tile Resolution";
 constexpr const char* kStatsTitle = "Runtime Stats";
 constexpr Uint64 kStatsRefreshMs = 7000;
+constexpr Uint64 kHeaderSlideDurationMs = 72;
+constexpr Uint64 kHeaderZoneDebounceMs = 36;
+constexpr float kHeaderShowZoneRatio = 0.05f;
+constexpr float kHeaderUnlockZoneRatio = 0.20f;
 
 constexpr const char* kSettingsInitializedKey = "dev.asset_filter.initialized";
 constexpr const char* kSettingsMapAssetsKey = "dev.asset_filter.map_assets";
@@ -184,6 +191,11 @@ std::string renderer_description(SDL_Renderer* renderer) {
         return std::string(driver);
     }
     return {};
+}
+
+float smoothstep(float t) {
+    const float clamped = std::clamp(t, 0.0f, 1.0f);
+    return clamped * clamped * (3.0f - (2.0f * clamped));
 }
 
 }
@@ -405,6 +417,7 @@ void OtherSettingsAndControls::initialize() {
         filters_expanded_ = false;
     }
     filter_toggle_button_ = std::make_unique<DMButton>(std::string(DMIcons::CollapseExpanded()), &DMStyles::HeaderButton(), std::max(DMButton::height(), kToggleButtonMinWidth), DMButton::height());
+    hide_button_ = std::make_unique<DMButton>("^", &DMStyles::HeaderButton(), std::max(DMButton::height(), kHideButtonMinWidth), DMButton::height());
     update_filter_toggle_label();
     ensure_dev_settings_controls();
     sync_state_from_ui();
@@ -573,6 +586,46 @@ void OtherSettingsAndControls::set_depth_effects_enabled(bool enabled) {
     }
 }
 
+void OtherSettingsAndControls::set_header_suppressed(bool suppressed) {
+    if (header_suppressed_ == suppressed) {
+        return;
+    }
+    header_suppressed_ = suppressed;
+    if (header_suppressed_) {
+        slide_active_ = false;
+        debounce_pending_ = false;
+    }
+    layout_dirty_ = true;
+}
+
+void OtherSettingsAndControls::update(const Input& input) {
+    if (!enabled_ || header_suppressed_ || screen_h_ <= 0) {
+        return;
+    }
+
+    ensure_layout();
+
+    const Uint64 now_ms = SDL_GetTicks();
+    const float cursor_ratio = static_cast<float>(input.getY()) / static_cast<float>(std::max(1, screen_h_));
+    const bool in_show_zone = cursor_ratio <= kHeaderShowZoneRatio;
+    const bool below_unlock_zone = cursor_ratio > kHeaderUnlockZoneRatio;
+
+    if (manual_hidden_lock_) {
+        if (below_unlock_zone) {
+            manual_hidden_lock_ = false;
+        } else {
+            request_hidden_state(true, now_ms, true);
+        }
+    }
+
+    if (!manual_hidden_lock_) {
+        const bool should_hide = !in_show_zone;
+        request_hidden_state(should_hide, now_ms, false);
+    }
+
+    update_slide(now_ms);
+}
+
 void OtherSettingsAndControls::refresh_layout() {
     layout_dirty_ = true;
     ensure_layout();
@@ -590,6 +643,7 @@ void OtherSettingsAndControls::rebuild_layout() {
     layout_bounds_ = SDL_Rect{0, 0, 0, 0};
     mode_bar_rect_ = SDL_Rect{0, 0, 0, 0};
     header_rect_ = SDL_Rect{0, 0, 0, 0};
+    hide_button_rect_ = SDL_Rect{0, 0, 0, 0};
     settings_rect_ = SDL_Rect{0, 0, 0, 0};
     settings_heading_rect_ = SDL_Rect{0, 0, 0, 0};
     filters_heading_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -627,6 +681,18 @@ void OtherSettingsAndControls::rebuild_layout() {
         : std::max(DMButton::height(), kToggleButtonMinWidth);
     header_rect_ = SDL_Rect{0, 0, available_width, header_height};
 
+    if (hide_button_) {
+        const int button_width = std::max(hide_button_->preferred_width(), kHideButtonMinWidth);
+        const int button_height = DMButton::height();
+        const int button_x = header_rect_.x + DMSpacing::item_gap();
+        int button_y = header_rect_.y + (header_rect_.h - button_height) / 2;
+        if (button_y < header_rect_.y) {
+            button_y = header_rect_.y;
+        }
+        hide_button_->set_rect(SDL_Rect{button_x, button_y, button_width, button_height});
+        hide_button_rect_ = hide_button_->rect();
+    }
+
     if (filter_toggle_button_) {
         const int button_height = DMButton::height();
         int button_x = header_rect_.x + header_rect_.w - toggle_button_width - DMSpacing::item_gap();
@@ -642,6 +708,12 @@ void OtherSettingsAndControls::rebuild_layout() {
     }
 
     mode_bar_rect_ = header_rect_;
+    if (hide_button_ && hide_button_rect_.w > 0) {
+        const int right = mode_bar_rect_.x + mode_bar_rect_.w;
+        const int left = hide_button_rect_.x + hide_button_rect_.w + DMSpacing::item_gap();
+        mode_bar_rect_.x = std::min(right, left);
+        mode_bar_rect_.w = std::max(0, right - mode_bar_rect_.x);
+    }
     if (filter_toggle_button_) {
         const SDL_Rect& toggle_rect = filter_toggle_button_->rect();
         if (toggle_rect.w > 0) {
@@ -682,10 +754,172 @@ void OtherSettingsAndControls::rebuild_layout() {
         filters_rect_.h += top_gap + extra_panel_height_;
     }
     merge_bounds(filters_rect_);
+
+    const int shown_offset = 0;
+    const int hidden_offset = hidden_offset_y();
+    if (slide_active_) {
+        slide_start_y_ = std::clamp(slide_start_y_, hidden_offset, shown_offset);
+        slide_target_y_ = std::clamp(slide_target_y_, hidden_offset, shown_offset);
+        layout_offset_y_ = std::clamp(layout_offset_y_, hidden_offset, shown_offset);
+    } else {
+        layout_offset_y_ = auto_hidden_ ? hidden_offset : shown_offset;
+    }
+
+    const int dy = layout_offset_y_;
+    if (dy == 0) {
+        return;
+    }
+
+    auto shift_rect = [dy](SDL_Rect& rect) {
+        if (rect.w <= 0 && rect.h <= 0) {
+            return;
+        }
+        rect.y += dy;
+    };
+    auto shift_button = [dy](DMButton* button) {
+        if (!button) {
+            return;
+        }
+        SDL_Rect rect = button->rect();
+        if (rect.w <= 0 && rect.h <= 0) {
+            return;
+        }
+        rect.y += dy;
+        button->set_rect(rect);
+    };
+    auto shift_checkbox = [dy](DMCheckbox* checkbox) {
+        if (!checkbox) {
+            return;
+        }
+        SDL_Rect rect = checkbox->rect();
+        if (rect.w <= 0 && rect.h <= 0) {
+            return;
+        }
+        rect.y += dy;
+        checkbox->set_rect(rect);
+    };
+    auto shift_stepper = [dy](DMNumericStepper* stepper) {
+        if (!stepper) {
+            return;
+        }
+        SDL_Rect rect = stepper->rect();
+        if (rect.w <= 0 && rect.h <= 0) {
+            return;
+        }
+        rect.y += dy;
+        stepper->set_rect(rect);
+    };
+
+    shift_rect(layout_bounds_);
+    shift_rect(mode_bar_rect_);
+    shift_rect(header_rect_);
+    shift_rect(hide_button_rect_);
+    shift_rect(settings_rect_);
+    shift_rect(settings_heading_rect_);
+    shift_rect(grid_section_label_rect_);
+    shift_rect(debug_section_label_rect_);
+    shift_rect(overlay_section_label_rect_);
+    shift_rect(filters_heading_rect_);
+    shift_rect(primary_filters_heading_rect_);
+    shift_rect(advanced_filters_heading_rect_);
+    shift_rect(grid_resolution_label_rect_);
+    shift_rect(filters_rect_);
+    shift_rect(stats_rect_);
+    shift_rect(stats_heading_rect_);
+    shift_rect(extra_panel_rect_);
+    for (SDL_Rect& rect : stats_line_rects_) {
+        shift_rect(rect);
+    }
+
+    shift_button(filter_toggle_button_.get());
+    shift_button(hide_button_.get());
+    for (auto& entry : mode_buttons_) {
+        shift_button(entry.button.get());
+    }
+    for (auto& entry : entries_) {
+        shift_checkbox(entry.checkbox.get());
+    }
+    shift_checkbox(overlay_grid_checkbox_.get());
+    shift_checkbox(snap_to_grid_checkbox_.get());
+    shift_checkbox(movement_debug_checkbox_.get());
+    shift_checkbox(depth_effects_checkbox_.get());
+    shift_stepper(overlay_grid_stepper_.get());
+    shift_stepper(grid_resolution_stepper_.get());
+}
+
+int OtherSettingsAndControls::hidden_offset_y() const {
+    const int layout_height = (layout_bounds_.h > 0) ? layout_bounds_.h : header_rect_.h;
+    return -std::max(1, layout_height);
+}
+
+void OtherSettingsAndControls::begin_slide(bool hidden, Uint64 now_ms) {
+    auto_hidden_ = hidden;
+    const int target = hidden ? hidden_offset_y() : 0;
+    if (layout_offset_y_ == target) {
+        slide_active_ = false;
+        return;
+    }
+    slide_active_ = true;
+    slide_start_y_ = layout_offset_y_;
+    slide_target_y_ = target;
+    slide_started_ms_ = now_ms;
+}
+
+void OtherSettingsAndControls::update_slide(Uint64 now_ms) {
+    if (!slide_active_) {
+        return;
+    }
+
+    const Uint64 elapsed = now_ms - slide_started_ms_;
+    if (elapsed >= kHeaderSlideDurationMs) {
+        slide_active_ = false;
+        if (layout_offset_y_ != slide_target_y_) {
+            layout_offset_y_ = slide_target_y_;
+            layout_dirty_ = true;
+            ensure_layout();
+        }
+        return;
+    }
+
+    const float t = static_cast<float>(elapsed) / static_cast<float>(kHeaderSlideDurationMs);
+    const float eased = smoothstep(t);
+    const float y = static_cast<float>(slide_start_y_) +
+        (static_cast<float>(slide_target_y_ - slide_start_y_) * eased);
+    const int next_y = static_cast<int>(std::lround(y));
+    if (next_y != layout_offset_y_) {
+        layout_offset_y_ = next_y;
+        layout_dirty_ = true;
+        ensure_layout();
+    }
+}
+
+void OtherSettingsAndControls::request_hidden_state(bool hidden, Uint64 now_ms, bool bypass_debounce) {
+    if (hidden == auto_hidden_) {
+        debounce_pending_ = false;
+        return;
+    }
+
+    if (bypass_debounce) {
+        debounce_pending_ = false;
+        begin_slide(hidden, now_ms);
+        return;
+    }
+
+    if (!debounce_pending_ || debounce_hidden_target_ != hidden) {
+        debounce_pending_ = true;
+        debounce_hidden_target_ = hidden;
+        debounce_started_ms_ = now_ms;
+        return;
+    }
+
+    if (now_ms - debounce_started_ms_ >= kHeaderZoneDebounceMs) {
+        debounce_pending_ = false;
+        begin_slide(hidden, now_ms);
+    }
 }
 
 void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
-    if (!enabled_ || !renderer) {
+    if (!enabled_ || !renderer || header_suppressed_) {
         return;
     }
     const_cast<OtherSettingsAndControls*>(this)->ensure_layout();
@@ -708,6 +942,10 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
     if (header_rect_.w > 0 && header_rect_.h > 0) {
         SDL_SetRenderDrawColor(renderer, header_bg.r, header_bg.g, header_bg.b, 240);
         sdl_render::FillRect(renderer, &header_rect_);
+    }
+
+    if (hide_button_) {
+        hide_button_->render(renderer);
     }
 
     if (filter_toggle_button_) {
@@ -807,6 +1045,14 @@ bool OtherSettingsAndControls::handle_event(const SDL_Event& event) {
     }
     ensure_layout();
     bool used = false;
+    if (hide_button_ && hide_button_->handle_event(event)) {
+        used = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            manual_hidden_lock_ = true;
+            request_hidden_state(true, SDL_GetTicks(), true);
+        }
+    }
+
     auto handle_button = [&](ModeButtonEntry& entry) {
         if (!entry.button) {
             return;
@@ -904,7 +1150,7 @@ bool OtherSettingsAndControls::handle_event(const SDL_Event& event) {
 }
 
 bool OtherSettingsAndControls::contains_point(int x, int y) const {
-    if (!enabled_) {
+    if (!enabled_ || header_suppressed_) {
         return false;
     }
     const_cast<OtherSettingsAndControls*>(this)->ensure_layout();

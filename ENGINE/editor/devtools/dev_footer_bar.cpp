@@ -449,6 +449,7 @@ void DevFooterBar::layout_hide_button() {
     const int y = rect_.y + (rect_.h - DMButton::height()) / 2;
     hide_button_rect_ = SDL_Rect{x, y, kFooterHideButtonWidth, DMButton::height()};
     hide_button_->set_rect(hide_button_rect_);
+    hide_button_rect_ = hide_button_->rect();
 }
 
 void DevFooterBar::layout_title_region() {

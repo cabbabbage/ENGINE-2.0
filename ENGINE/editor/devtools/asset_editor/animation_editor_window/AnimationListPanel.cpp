@@ -340,34 +340,6 @@ void AnimationListPanel::render(SDL_Renderer* renderer) const {
         int delete_text_y = delete_rect.y + (delete_rect.h - delete_size.y) / 2;
         DMFontCache::instance().draw_text(renderer, delete_label_style, delete_text, delete_text_x, delete_text_y);
 
-        std::vector<std::pair<const DMButtonStyle*, std::string>> badges;
-        if (row.missing_source) {
-            badges.emplace_back(&DMStyles::DeleteButton(), std::string{"(missing source)"});
-        }
-        if (start_animation_id_ && *start_animation_id_ == row.id) {
-            badges.emplace_back(&DMStyles::AccentButton(), std::string{"START"});
-        }
-
-        int badge_x = rect.x + rect.w - row_padding;
-        const int badge_padding = std::max(1, static_cast<int>(std::round(DMSpacing::small_gap() * size_factor)));
-        for (auto it = badges.rbegin(); it != badges.rend(); ++it) {
-            const DMButtonStyle* badge_style = it->first;
-            DMLabelStyle badge_label = badge_style->label;
-            badge_label.font_size = std::max(1, static_cast<int>(std::round(std::max(1, badge_label.font_size - 2) * size_factor)));
-            SDL_Point badge_size = DMFontCache::instance().measure_text(badge_label, it->second);
-            int badge_width = badge_size.x + badge_padding * 2;
-            int badge_height = badge_size.y + badge_padding * 2;
-            badge_x -= badge_width;
-            int min_badge_x = content_x + badge_padding;
-            if (badge_x < min_badge_x) {
-                badge_x = min_badge_x;
-            }
-            SDL_Rect badge_rect{badge_x, rect.y + std::max(0, (rect.h - badge_height) / 2), badge_width, badge_height};
-            dm_draw::DrawBeveledRect(renderer, badge_rect, DMStyles::CornerRadius(), DMStyles::BevelDepth(), badge_style->bg, DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-            dm_draw::DrawRoundedOutline(renderer, badge_rect, DMStyles::CornerRadius(), 1, badge_style->border);
-            DMFontCache::instance().draw_text(renderer, badge_label, it->second, badge_rect.x + badge_padding, badge_rect.y + (badge_rect.h - badge_size.y) / 2);
-            badge_x -= badge_padding;
-        }
     }
 
     SDL_SetRenderClipRect(renderer, nullptr);

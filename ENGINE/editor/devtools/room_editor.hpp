@@ -187,6 +187,9 @@ private:
     bool handle_camera_settings_mouse_controls(const Input& input);
     bool apply_scroll_size_adjustment(const Input& input);
     void apply_asset_scale_live_update(Asset* asset, int scale_percent);
+    bool select_asset_or_group(Asset* asset);
+    Asset* selected_asset_within_interaction_radius(SDL_Point screen_point) const;
+    bool delete_selected_asset_or_group();
     Asset* hit_test_asset(SDL_Point screen_point, SDL_Renderer* renderer) const;
     void update_hover_state(Asset* hit);
     void handle_click(const Input& input);

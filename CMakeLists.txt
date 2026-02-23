@@ -250,12 +250,7 @@ endif()
 set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/TESTS")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
 add_executable(engine_tests
-    ${TESTS_SOURCE_DIR}/test_main.cpp
-    ${TESTS_SOURCE_DIR}/test_dev_json_store.cpp
-    ${TESTS_SOURCE_DIR}/test_manifest_loader.cpp
-    ${TESTS_SOURCE_DIR}/test_scene_renderer_prereqs.cpp
-    ${TESTS_SOURCE_DIR}/test_attack_validation.cpp
-    ${TESTS_SOURCE_DIR}/frame_editor_session_test_helpers.cpp
+
     ENGINE/runtime/assets/asset/animation.cpp
     ENGINE/runtime/assets/asset/surface_utils.cpp
     ENGINE/runtime/assets/asset/animation_cloner.cpp

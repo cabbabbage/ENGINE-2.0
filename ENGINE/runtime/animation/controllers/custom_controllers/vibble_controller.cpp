@@ -282,7 +282,7 @@ void vibble_controller::spawn_eyes_follower() {
     binding.source = player_;
     binding.anchor_name = "eyes";
 
-    if (auto follower_info = assets->library().get("Vibble_eyes"); follower_info && follower_info->follower_binding.has_value()) {
+    if (auto follower_info = assets->library().get("vibble_eyes"); follower_info && follower_info->follower_binding.has_value()) {
         const auto& spec = follower_info->follower_binding.value();
         binding.source = nullptr;
         binding.controller_asset_id = spec.controller_asset_id;

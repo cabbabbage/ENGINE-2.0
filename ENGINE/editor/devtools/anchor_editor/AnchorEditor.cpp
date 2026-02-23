@@ -102,8 +102,6 @@ void AnchorEditor::begin(const frame_editors::FrameEditorContext& context) {
             }
         }
     }
-    // Force fresh preview textures in case a stale cache is empty.
-    prime_textures();
     if (frames_.empty()) frames_.emplace_back();
 
     frame_navigator_ = std::make_unique<frame_editors::FrameNavigator>();
@@ -151,6 +149,13 @@ void AnchorEditor::begin(const frame_editors::FrameEditorContext& context) {
     if (!frames_[0].anchors.empty()) selected_anchor_ = 0;
     refresh_form();
     center_view();
+
+    // Prime textures after all preview/navigation wiring is in place so the
+    // first frame is visible as soon as the editor opens.
+    prime_textures();
+    if (SDL_Renderer* renderer = context_.assets ? context_.assets->renderer() : nullptr) {
+        (void)resolve_frame_texture(renderer, 0);
+    }
 
     manifest_txn_.begin(context_);
     manifest_txn_.set_immediate_persist(false);

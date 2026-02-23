@@ -504,6 +504,14 @@ void OtherSettingsAndControls::set_filters_expanded(bool expanded) {
     update_filter_toggle_label();
     persist_filters_expanded();
     layout_dirty_ = true;
+    if (filters_expanded_) {
+        manual_hidden_lock_ = false;
+        debounce_pending_ = false;
+        slide_active_ = false;
+        auto_hidden_ = false;
+        layout_offset_y_ = 0;
+        ensure_layout();
+    }
     if (!filters_expanded_) {
         stats_.last_sample_ms = 0;
         last_cpu_sample_ms_ = 0;
@@ -609,6 +617,19 @@ void OtherSettingsAndControls::update(const Input& input) {
     const float cursor_ratio = static_cast<float>(input.getY()) / static_cast<float>(std::max(1, screen_h_));
     const bool in_show_zone = cursor_ratio <= kHeaderShowZoneRatio;
     const bool below_unlock_zone = cursor_ratio > kHeaderUnlockZoneRatio;
+
+    if (filters_expanded_) {
+        manual_hidden_lock_ = false;
+        debounce_pending_ = false;
+        slide_active_ = false;
+        auto_hidden_ = false;
+        if (layout_offset_y_ != 0) {
+            layout_offset_y_ = 0;
+            layout_dirty_ = true;
+            ensure_layout();
+        }
+        return;
+    }
 
     if (manual_hidden_lock_) {
         if (below_unlock_zone) {

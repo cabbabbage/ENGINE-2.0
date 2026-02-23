@@ -57,7 +57,6 @@
 #include "search_assets.hpp"
 #include "draw_utils.hpp"
 #include <SDL3_ttf/SDL_ttf.h>
-#include "devtools/manifest_spawn_group_utils.hpp"
 #include "devtools/manifest_asset_utils.hpp"
 #include "devtools/asset_paths.hpp"
 
@@ -1380,8 +1379,8 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
             target_key = *resolved;
         }
 
-        auto apply_fn = [this, section_id, source, target_key]() -> bool {
-            auto session = manifest_store_->begin_asset_edit(target_key, false);
+        auto apply_fn = [this, section_id, source, target_key](devmode::core::ManifestStore& store) -> bool {
+            auto session = store.begin_asset_edit(target_key, false);
             if (!session) {
                 SDL_Log("Failed to open manifest session for '%s'", target_key.c_str());
                 return false;
@@ -1420,7 +1419,7 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
             continue;
         }
 
-        if (!apply_fn()) {
+        if (!apply_fn(*manifest_store_)) {
             all_success = false;
         } else {
             any_written = true;
@@ -1520,20 +1519,6 @@ void AssetInfoUI::sync_target_basic_render_settings(bool type_changed) {
             assets_->refresh_active_asset_lists();
         }
     }
-}
-
-void AssetInfoUI::notify_spawn_group_entry_changed(const nlohmann::json& entry) {
-    if (!assets_) {
-        return;
-    }
-    assets_->notify_spawn_group_config_changed(entry);
-}
-
-void AssetInfoUI::notify_spawn_group_removed(const std::string& spawn_id) {
-    if (!assets_) {
-        return;
-    }
-    assets_->notify_spawn_group_removed(spawn_id);
 }
 
 const char* AssetInfoUI::section_display_name(AssetInfoSectionId section_id) {
@@ -1923,37 +1908,6 @@ void AssetInfoUI::confirm_delete_request() {
 
     if (!asset_name.empty() && manifest_store_ && manifest_entry_removed) {
         manifest_flush_required = manifest_flush_required || manifest_store_->dirty();
-        const nlohmann::json& manifest = manifest_store_->manifest_json();
-        auto maps_it = manifest.find("maps");
-        if (maps_it != manifest.end() && maps_it->is_object()) {
-            for (auto it = maps_it->begin(); it != maps_it->end(); ++it) {
-                nlohmann::json map_entry = *it;
-                if (devmode::manifest_utils::remove_asset_from_spawn_groups(map_entry, asset_name)) {
-                    if (!manifest_store_->update_map_entry(it.key(), map_entry)) {
-                        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to update manifest map entry '%s' while removing '%s'", it.key().c_str(), asset_name.c_str());
-                    } else {
-                        manifest_flush_required = true;
-                    }
-                }
-            }
-        }
-
-        auto assets_it = manifest.find("assets");
-        if (assets_it != manifest.end() && assets_it->is_object()) {
-            for (auto it = assets_it->begin(); it != assets_it->end(); ++it) {
-                const std::string& referenced_asset = it.key();
-                if (referenced_asset == asset_name) continue;
-                auto transaction = manifest_store_->begin_asset_transaction(referenced_asset);
-                if (!transaction) continue;
-                if (devmode::manifest_utils::remove_asset_from_spawn_groups(transaction.data(), asset_name)) {
-                    if (!transaction.finalize()) {
-                        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to update manifest asset entry '%s' while removing '%s'", referenced_asset.c_str(), asset_name.c_str());
-                    } else {
-                        manifest_flush_required = true;
-                    }
-                }
-            }
-        }
     }
 
     if (manifest_store_ && manifest_flush_required) {

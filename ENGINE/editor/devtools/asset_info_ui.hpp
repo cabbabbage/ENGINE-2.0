@@ -27,7 +27,6 @@ class Area;
 class Assets;
 class Section_BasicInfo;
 class SearchAssets;
-class Section_SpawnGroups;
 namespace animation_editor {
 class AnimationEditorWindow;
 class AnimationDocument;
@@ -72,8 +71,6 @@ class AssetInfoUI {
     void request_apply_section(AssetInfoSectionId section_id);
     void set_header_visibility_callback(std::function<void(bool)> cb);
     void mark_target_asset_composite_dirty();
-    void notify_spawn_group_entry_changed(const nlohmann::json& entry);
-    void notify_spawn_group_removed(const std::string& spawn_id);
     void sync_target_spacing_settings();
     void sync_target_tags();
     void sync_target_basic_render_settings(bool type_changed);
@@ -134,8 +131,6 @@ class AssetInfoUI {
     bool forcing_high_quality_rendering_ = false;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
-    Section_SpawnGroups* spawn_groups_section_ = nullptr;
-
     std::unique_ptr<class DMButton> duplicate_btn_;
     std::unique_ptr<class ButtonWidget> duplicate_btn_widget_;
     std::unique_ptr<class DMButton> delete_btn_;

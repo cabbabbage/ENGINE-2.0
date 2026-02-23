@@ -1018,9 +1018,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,
@@ -1078,8 +1078,8 @@
                 }
               ],
               "display_name": "tailor",
-              "dx": 324,
-              "dy": 564,
+              "dx": -356,
+              "dy": 724,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1136,8 +1136,8 @@
                 }
               ],
               "display_name": "grave_4",
-              "dx": -484,
-              "dy": 756,
+              "dx": -868,
+              "dy": 324,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

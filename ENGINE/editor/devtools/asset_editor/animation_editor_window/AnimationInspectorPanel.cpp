@@ -624,21 +624,25 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
 
     if (!handled && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-        auto try_expand = [&](const SDL_Rect& rect, CollapsibleSection section) {
-            if (SDL_PointInRect(&p, &rect)) {
-                expanded_section_ = section;
-                layout_dirty_ = true;
-                return true;
+        auto toggle_section = [&](const SDL_Rect& rect, CollapsibleSection section) {
+            if (!SDL_PointInRect(&p, &rect)) {
+                return false;
             }
-            return false;
+
+            CollapsibleSection new_section = (expanded_section_ == section) ? CollapsibleSection::kNone : section;
+            if (new_section != expanded_section_) {
+                expanded_section_ = new_section;
+                layout_dirty_ = true;
+            }
+            return true;
         };
 
-        handled = try_expand(source_section_header_rect_, CollapsibleSection::kSource) ||
-                  try_expand(animation_options_header_rect_, CollapsibleSection::kAnimationOptions) ||
-                  try_expand(playback_header_rect_, CollapsibleSection::kPlayback) ||
-                  try_expand(movement_header_rect_, CollapsibleSection::kMovement) ||
-                  try_expand(on_end_header_rect_, CollapsibleSection::kOnEnd) ||
-                  try_expand(audio_header_rect_, CollapsibleSection::kAudio);
+        handled = toggle_section(source_section_header_rect_, CollapsibleSection::kSource) ||
+                  toggle_section(animation_options_header_rect_, CollapsibleSection::kAnimationOptions) ||
+                  toggle_section(playback_header_rect_, CollapsibleSection::kPlayback) ||
+                  toggle_section(movement_header_rect_, CollapsibleSection::kMovement) ||
+                  toggle_section(on_end_header_rect_, CollapsibleSection::kOnEnd) ||
+                  toggle_section(audio_header_rect_, CollapsibleSection::kAudio);
     }
 
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {

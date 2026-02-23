@@ -731,29 +731,27 @@ void OtherSettingsAndControls::rebuild_layout() {
 
     layout_mode_buttons();
 
-    if (!filters_expanded_) {
-        return;
+    if (filters_expanded_) {
+        int current_y = header_rect_.y + header_rect_.h;
+        settings_rect_ = SDL_Rect{0, current_y, available_width, 0};
+        layout_dev_settings();
+        merge_bounds(settings_rect_);
+        current_y = settings_rect_.y + settings_rect_.h;
+
+        filters_rect_ = SDL_Rect{0, current_y, available_width, 0};
+        layout_filter_checkboxes();
+        layout_stats_panel();
+
+        extra_panel_rect_ = SDL_Rect{0,0,0,0};
+        if (extra_panel_height_ > 0) {
+            const int top_gap = DMSpacing::item_gap();
+            const int extra_y = filters_rect_.y + filters_rect_.h + top_gap;
+            extra_panel_rect_ = SDL_Rect{ filters_rect_.x, extra_y, filters_rect_.w, extra_panel_height_ };
+
+            filters_rect_.h += top_gap + extra_panel_height_;
+        }
+        merge_bounds(filters_rect_);
     }
-
-    int current_y = header_rect_.y + header_rect_.h;
-    settings_rect_ = SDL_Rect{0, current_y, available_width, 0};
-    layout_dev_settings();
-    merge_bounds(settings_rect_);
-    current_y = settings_rect_.y + settings_rect_.h;
-
-    filters_rect_ = SDL_Rect{0, current_y, available_width, 0};
-    layout_filter_checkboxes();
-    layout_stats_panel();
-
-    extra_panel_rect_ = SDL_Rect{0,0,0,0};
-    if (extra_panel_height_ > 0) {
-        const int top_gap = DMSpacing::item_gap();
-        const int extra_y = filters_rect_.y + filters_rect_.h + top_gap;
-        extra_panel_rect_ = SDL_Rect{ filters_rect_.x, extra_y, filters_rect_.w, extra_panel_height_ };
-
-        filters_rect_.h += top_gap + extra_panel_height_;
-    }
-    merge_bounds(filters_rect_);
 
     const int shown_offset = 0;
     const int hidden_offset = hidden_offset_y();

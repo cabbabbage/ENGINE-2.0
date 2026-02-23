@@ -2560,62 +2560,58 @@ bool RoomEditor::apply_shift_edge_pan(const Input& input, WarpedScreenGrid& cam)
         return false;
     }
 
-    const float left_intensity = edge_pan_intensity(screen_pt.x, screen_w_, kShiftEdgePanThresholdFraction);
-    const float right_intensity = edge_pan_intensity(screen_w_ - 1 - screen_pt.x, screen_w_, kShiftEdgePanThresholdFraction);
-    const float top_intensity = edge_pan_intensity(screen_pt.y, screen_h_, kShiftEdgePanThresholdFraction);
-    const float bottom_intensity = edge_pan_intensity(screen_h_ - 1 - screen_pt.y, screen_h_, kShiftEdgePanThresholdFraction);
-
-    const float pan_screen_x = right_intensity - left_intensity;
-    const float pan_screen_y = bottom_intensity - top_intensity;
-    const float pan_magnitude = std::sqrt(pan_screen_x * pan_screen_x + pan_screen_y * pan_screen_y);
-    if (pan_magnitude <= 1e-4f) {
+    // Project the screen center and cursor onto the warped floor so the threshold
+    // respects world-space distances instead of raw screen pixels.
+    const SDL_Point screen_center{ screen_w_ / 2, screen_h_ / 2 };
+    const SDL_FPoint center_world = cam.screen_to_map(screen_center);
+    const SDL_FPoint cursor_world = cam.screen_to_map(screen_pt);
+    if (!std::isfinite(center_world.x) || !std::isfinite(center_world.y) ||
+        !std::isfinite(cursor_world.x) || !std::isfinite(cursor_world.y)) {
         return false;
     }
 
-    constexpr float kFallbackDtSeconds = 1.0f / 60.0f;
-    const float dt_seconds = kFallbackDtSeconds;
-
-    const SDL_Point before_center = cam.get_screen_center();
+    // Use the distance from the screen center to a point near the bottom of the screen
+    // to define the outer (max) half-extent of the panning square.
     const int bottom_sample_y = std::clamp(
         static_cast<int>(std::lround(static_cast<double>(screen_h_ - 1) * kShiftEdgePanBottomSampleInset)),
         0,
         std::max(0, screen_h_ - 1));
-
-    const SDL_FPoint bottom_center_world = cam.screen_to_map(SDL_Point{screen_w_ / 2, bottom_sample_y});
-    const SDL_FPoint bottom_offset_world = cam.screen_to_map(SDL_Point{
-        std::clamp(static_cast<int>(std::lround(static_cast<float>(screen_w_) * 0.55f)), 0, std::max(0, screen_w_ - 1)),
-        bottom_sample_y});
-
-    const double bottom_world_dx = static_cast<double>(bottom_offset_world.x) - static_cast<double>(bottom_center_world.x);
-    const double bottom_world_dy = static_cast<double>(bottom_offset_world.y) - static_cast<double>(bottom_center_world.y);
-    const double bottom_world_dist = std::hypot(bottom_world_dx, bottom_world_dy);
-    if (!std::isfinite(bottom_world_dist) || bottom_world_dist <= 1e-6) {
+    const SDL_FPoint bottom_world = cam.screen_to_map(SDL_Point{ screen_w_ / 2, bottom_sample_y });
+    const double outer_half_extent = std::hypot(
+        static_cast<double>(bottom_world.x) - static_cast<double>(center_world.x),
+        static_cast<double>(bottom_world.y) - static_cast<double>(center_world.y));
+    if (!std::isfinite(outer_half_extent) || outer_half_extent <= 1e-6) {
         return false;
     }
 
-    const double normalized_pan_x = static_cast<double>(pan_screen_x) / static_cast<double>(pan_magnitude);
-    const double normalized_pan_y = static_cast<double>(pan_screen_y) / static_cast<double>(pan_magnitude);
+    const double inner_half_extent = outer_half_extent * 0.95; // 95% sized inner square
 
-    const SDL_FPoint near_world = cam.screen_to_map(SDL_Point{
-        std::clamp(static_cast<int>(std::lround(static_cast<float>(screen_w_) * 0.5f + static_cast<float>(normalized_pan_x) * 8.0f)), 0, std::max(0, screen_w_ - 1)),
-        std::clamp(static_cast<int>(std::lround(static_cast<float>(screen_h_) * 0.5f + static_cast<float>(normalized_pan_y) * 8.0f)), 0, std::max(0, screen_h_ - 1))});
-    const SDL_FPoint far_world = cam.screen_to_map(SDL_Point{
-        std::clamp(static_cast<int>(std::lround(static_cast<float>(screen_w_) * 0.5f + static_cast<float>(normalized_pan_x) * 32.0f)), 0, std::max(0, screen_w_ - 1)),
-        std::clamp(static_cast<int>(std::lround(static_cast<float>(screen_h_) * 0.5f + static_cast<float>(normalized_pan_y) * 32.0f)), 0, std::max(0, screen_h_ - 1))});
-    const double dir_world_dx = static_cast<double>(far_world.x) - static_cast<double>(near_world.x);
-    const double dir_world_dy = static_cast<double>(far_world.y) - static_cast<double>(near_world.y);
-    const double dir_world_len = std::hypot(dir_world_dx, dir_world_dy);
-    if (!std::isfinite(dir_world_len) || dir_world_len <= 1e-6) {
+    // Chebyshev distance gives us a square region (max(|dx|, |dy|)).
+    const double offset_x = static_cast<double>(cursor_world.x) - static_cast<double>(center_world.x);
+    const double offset_y = static_cast<double>(cursor_world.y) - static_cast<double>(center_world.y);
+    const double cheb_dist = std::max(std::abs(offset_x), std::abs(offset_y));
+
+    const double ramp_den = std::max(outer_half_extent - inner_half_extent, 1e-9);
+    double intensity = (cheb_dist - inner_half_extent) / ramp_den;
+    intensity = std::clamp(intensity, 0.0, 1.0);
+    if (intensity <= 0.0) {
         return false;
     }
 
-    const double world_dir_x = dir_world_dx / dir_world_len;
-    const double world_dir_y = dir_world_dy / dir_world_len;
+    const double dir_len = std::hypot(offset_x, offset_y);
+    if (!std::isfinite(dir_len) || dir_len <= 1e-6) {
+        return false;
+    }
 
-    const float eased_magnitude = std::clamp(pan_magnitude, 0.0f, 1.0f);
-    const double desired_world_speed = static_cast<double>(kShiftEdgePanMaxSpeedBottomWorldUnitsPerSecond) * static_cast<double>(eased_magnitude);
-    const double world_step = desired_world_speed * static_cast<double>(dt_seconds);
+    const double world_dir_x = offset_x / dir_len;
+    const double world_dir_y = offset_y / dir_len;
 
+    constexpr float kFallbackDtSeconds = 1.0f / 60.0f;
+    const double world_step = static_cast<double>(kShiftEdgePanMaxSpeedBottomWorldUnitsPerSecond) *
+                              intensity *
+                              static_cast<double>(kFallbackDtSeconds);
+
+    const SDL_Point before_center = cam.get_screen_center();
     SDL_Point target_center = before_center;
     target_center.x = static_cast<int>(std::lround(static_cast<double>(target_center.x) + world_dir_x * world_step));
     target_center.y = static_cast<int>(std::lround(static_cast<double>(target_center.y) + world_dir_y * world_step));

@@ -9,6 +9,7 @@
 #include "devtools/spawn_groups/SpawnGroupConfig.hpp"
 #include "devtools/spawn_groups/spawn_group_utils.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/widgets.hpp"
 #include "assets/asset_info.hpp"

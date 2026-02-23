@@ -1787,23 +1787,10 @@ void Assets::schedule_removal(Asset* a) {
     removal_queue.push_back(a);
 }
 
-bool Assets::process_removals() {
-    std::vector<Asset*> pending_removals;
-    {
-        std::lock_guard<std::mutex> lock(removal_queue_mutex_);
-        if (removal_queue.empty()) {
-            return false;
-        }
-        pending_removals.swap(removal_queue);
-    }
-
-    if (pending_removals.empty()) {
-        return false;
-    }
-
+std::vector<Asset*> Assets::collect_removal_closure(const std::vector<Asset*>& roots) const {
     std::unordered_set<Asset*> removal_set;
-    removal_set.reserve(pending_removals.size());
-    for (Asset* asset : pending_removals) {
+    removal_set.reserve(roots.size());
+    for (Asset* asset : roots) {
         if (asset) {
             removal_set.insert(asset);
         }
@@ -1835,17 +1822,40 @@ bool Assets::process_removals() {
         }
     }
 
-    std::vector<Asset*> grid_removals;
-    grid_removals.reserve(removal_set.size());
-    for (Asset* asset : removal_set) {
-        if (!asset) {
-            continue;
+    std::vector<Asset*> ordered;
+    ordered.reserve(removal_set.size());
+    for (Asset* asset : roots) {
+        if (asset && removal_set.erase(asset) > 0) {
+            ordered.push_back(asset);
         }
-        grid_removals.push_back(asset);
+    }
+    for (Asset* asset : removal_set) {
+        if (asset) {
+            ordered.push_back(asset);
+        }
+    }
+    return ordered;
+}
+
+std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_delete) {
+    const std::vector<Asset*> ordered_removals = collect_removal_closure(assets_to_delete);
+    if (ordered_removals.empty()) {
+        return 0;
     }
 
-    for (Asset* asset : grid_removals) {
-        if (!asset) {
+    std::unordered_set<Asset*> unique_removals;
+    unique_removals.reserve(ordered_removals.size());
+    for (Asset* asset : ordered_removals) {
+        if (asset) {
+            unique_removals.insert(asset);
+        }
+    }
+    if (unique_removals.empty()) {
+        return 0;
+    }
+
+    for (Asset* asset : ordered_removals) {
+        if (!asset || unique_removals.find(asset) == unique_removals.end()) {
             continue;
         }
         remove_asset_dimension_cache(asset);
@@ -1872,11 +1882,53 @@ bool Assets::process_removals() {
         asset_dimension_update_lookup_.clear();
     }
 
-    return true;
+    return unique_removals.size();
+}
+
+bool Assets::process_removals() {
+    std::vector<Asset*> pending_removals;
+    {
+        std::lock_guard<std::mutex> lock(removal_queue_mutex_);
+        if (removal_queue.empty()) {
+            return false;
+        }
+        pending_removals.swap(removal_queue);
+    }
+
+    return delete_assets_runtime(pending_removals) > 0;
 }
 
 bool Assets::process_pending_removals() {
     return process_removals();
+}
+
+std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
+    if (spawn_id.empty()) {
+        return 0;
+    }
+
+    std::vector<Asset*> to_remove;
+    to_remove.reserve(all.size());
+    for (Asset* asset : all) {
+        if (!asset || asset->dead) {
+            continue;
+        }
+        if (asset == player) {
+            continue;
+        }
+        if (asset->spawn_id == spawn_id) {
+            to_remove.push_back(asset);
+        }
+    }
+
+    for (Asset* asset : to_remove) {
+        if (asset) {
+            asset->dead = true;
+            asset->active = false;
+        }
+    }
+
+    return delete_assets_runtime(to_remove);
 }
 
 void Assets::render_overlays(SDL_Renderer* renderer) {

@@ -479,34 +479,37 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
         render_preview_controls(renderer);
         render_preview(renderer);
 
-        if (animation_options_) {
-            draw_section_header(renderer, animation_options_header_rect_, "Animation", true, expanded_section_ == CollapsibleSection::kAnimationOptions);
-            if (expanded_section_ == CollapsibleSection::kAnimationOptions) {
-                animation_options_->render(renderer);
+        {
+            ClipScope scroll_clip(renderer, scrollable_bounds_);
+            if (animation_options_) {
+                draw_section_header(renderer, animation_options_header_rect_, "Animation", true, expanded_section_ == CollapsibleSection::kAnimationOptions);
+                if (expanded_section_ == CollapsibleSection::kAnimationOptions) {
+                    animation_options_->render(renderer);
+                }
             }
-        }
-        if (playback_settings_) {
-            draw_section_header(renderer, playback_header_rect_, "Playback", true, expanded_section_ == CollapsibleSection::kPlayback);
-            if (expanded_section_ == CollapsibleSection::kPlayback) {
-                playback_settings_->render(renderer);
+            if (playback_settings_) {
+                draw_section_header(renderer, playback_header_rect_, "Playback", true, expanded_section_ == CollapsibleSection::kPlayback);
+                if (expanded_section_ == CollapsibleSection::kPlayback) {
+                    playback_settings_->render(renderer);
+                }
             }
-        }
-        if (movement_summary_) {
-            draw_section_header(renderer, movement_header_rect_, "Geometry", true, expanded_section_ == CollapsibleSection::kMovement);
-            if (expanded_section_ == CollapsibleSection::kMovement) {
-                movement_summary_->render(renderer);
+            if (movement_summary_) {
+                draw_section_header(renderer, movement_header_rect_, "Geometry", true, expanded_section_ == CollapsibleSection::kMovement);
+                if (expanded_section_ == CollapsibleSection::kMovement) {
+                    movement_summary_->render(renderer);
+                }
             }
-        }
-        if (on_end_selector_) {
-            draw_section_header(renderer, on_end_header_rect_, "On End", true, expanded_section_ == CollapsibleSection::kOnEnd);
-            if (expanded_section_ == CollapsibleSection::kOnEnd) {
-                on_end_selector_->render(renderer);
+            if (on_end_selector_) {
+                draw_section_header(renderer, on_end_header_rect_, "On End", true, expanded_section_ == CollapsibleSection::kOnEnd);
+                if (expanded_section_ == CollapsibleSection::kOnEnd) {
+                    on_end_selector_->render(renderer);
+                }
             }
-        }
-        if (audio_panel_) {
-            draw_section_header(renderer, audio_header_rect_, "Audio", true, expanded_section_ == CollapsibleSection::kAudio);
-            if (expanded_section_ == CollapsibleSection::kAudio) {
-                audio_panel_->render(renderer);
+            if (audio_panel_) {
+                draw_section_header(renderer, audio_header_rect_, "Audio", true, expanded_section_ == CollapsibleSection::kAudio);
+                if (expanded_section_ == CollapsibleSection::kAudio) {
+                    audio_panel_->render(renderer);
+                }
             }
         }
     }
@@ -905,7 +908,6 @@ void AnimationInspectorPanel::layout_widgets() const {
 
     const int width = std::max(0, bounds_.w - padding * 2);
     const int x = bounds_.x + padding;
-    const int scroll = scroll_controller_.scroll();
 
     const int button_height = DMButton::height();
     int action_width = start_button_ ? std::min(kHeaderButtonWidth, width) : 0;
@@ -933,61 +935,59 @@ void AnimationInspectorPanel::layout_widgets() const {
     const int header_total_height = header_content_height + padding;
     self->header_rect_ = SDL_Rect{bounds_.x, bounds_.y, bounds_.w, header_total_height};
 
-    LayoutCursor cursor(bounds_.y + padding + header_content_height + section_gap, scroll);
+    LayoutCursor static_cursor(bounds_.y + padding + header_content_height + section_gap, 0);
 
-    auto reset_rect = [&](SDL_Rect& rect) { rect = SDL_Rect{x, cursor.visual_y(), width, 0}; };
-
-    self->source_section_header_rect_ = SDL_Rect{x, cursor.visual_y(), width, kSectionHeaderHeight};
+    self->source_section_header_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, kSectionHeaderHeight};
     self->source_section_rect_ = self->source_section_header_rect_;
-    cursor.advance(kSectionHeaderHeight);
+    static_cursor.advance(kSectionHeaderHeight);
 
     if (expanded_section_ == CollapsibleSection::kSource) {
-        cursor.advance(item_gap);
+        static_cursor.advance(item_gap);
         const int selector_height = DMButton::height();
         const int selector_gap = DMSpacing::small_gap();
-        self->source_selector_rect_ = SDL_Rect{x, cursor.visual_y(), width, selector_height};
+        self->source_selector_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, selector_height};
         int frames_width = std::max(0, (width - selector_gap) / 2);
         int animation_width = std::max(0, width - frames_width - selector_gap);
         if (source_frames_button_) {
-            SDL_Rect rect{x, cursor.visual_y(), frames_width, selector_height};
+            SDL_Rect rect{x, static_cursor.visual_y(), frames_width, selector_height};
             source_frames_button_->set_rect(rect);
         }
         if (source_animation_button_) {
-            SDL_Rect rect{x + frames_width + selector_gap, cursor.visual_y(), animation_width, selector_height};
+            SDL_Rect rect{x + frames_width + selector_gap, static_cursor.visual_y(), animation_width, selector_height};
             source_animation_button_->set_rect(rect);
         }
-        cursor.advance(selector_height);
+        static_cursor.advance(selector_height);
 
         int source_height = source_config_ ? source_config_->preferred_height(width) : 0;
         if (source_height > 0) {
-            cursor.advance(item_gap);
-            self->source_rect_ = SDL_Rect{x, cursor.visual_y(), width, source_height};
+            static_cursor.advance(item_gap);
+            self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, source_height};
             if (source_config_) {
                 source_config_->set_bounds(self->source_rect_);
             }
-            cursor.advance(source_height);
+            static_cursor.advance(source_height);
         } else {
-            self->source_rect_ = SDL_Rect{x, cursor.visual_y(), width, 0};
+            self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, 0};
             if (source_config_) {
                 source_config_->set_bounds(self->source_rect_);
             }
         }
     } else {
-        self->source_selector_rect_ = SDL_Rect{x, cursor.visual_y(), width, 0};
-        self->source_rect_ = SDL_Rect{x, cursor.visual_y(), width, 0};
+        self->source_selector_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, 0};
+        self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, 0};
         if (source_config_) {
             source_config_->set_bounds(self->source_rect_);
         }
     }
-    self->source_section_rect_.h = std::max(0, cursor.visual_y() - self->source_section_rect_.y);
+    self->source_section_rect_.h = std::max(0, static_cursor.visual_y() - self->source_section_rect_.y);
 
-    cursor.advance(section_gap);
-    self->preview_section_rect_ = SDL_Rect{x, cursor.visual_y(), width, kSectionHeaderHeight};
-    cursor.advance(kSectionHeaderHeight);
-    cursor.advance(item_gap);
+    static_cursor.advance(section_gap);
+    self->preview_section_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, kSectionHeaderHeight};
+    static_cursor.advance(kSectionHeaderHeight);
+    static_cursor.advance(item_gap);
 
     const int controls_height = preview_controls_height();
-    self->preview_controls_rect_ = SDL_Rect{x, cursor.visual_y(), width, controls_height};
+    self->preview_controls_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, controls_height};
     SDL_Rect slider_rect{self->preview_controls_rect_.x, self->preview_controls_rect_.y, self->preview_controls_rect_.w, controls_height};
     if (preview_play_button_) {
         int button_width = std::min(kPreviewControlsButtonWidth, self->preview_controls_rect_.w);
@@ -1004,11 +1004,19 @@ void AnimationInspectorPanel::layout_widgets() const {
     if (preview_scrub_slider_) {
         preview_scrub_slider_->set_rect(slider_rect);
     }
-    cursor.advance(controls_height);
-    cursor.advance(item_gap);
+    static_cursor.advance(controls_height);
+    static_cursor.advance(item_gap);
 
-    self->preview_rect_ = SDL_Rect{x, cursor.visual_y(), width, kPreviewHeight};
-    cursor.advance(kPreviewHeight);
+    self->preview_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, kPreviewHeight};
+    static_cursor.advance(kPreviewHeight);
+
+    const int scroll_start = static_cursor.logical_y;
+    const int scroll_height = std::max(0, bounds_.y + bounds_.h - scroll_start);
+    SDL_Rect scroll_bounds{x, scroll_start, width, scroll_height};
+    self->scrollable_bounds_ = scroll_bounds;
+    self->scroll_controller_.set_bounds(scroll_bounds);
+    int scroll = self->scroll_controller_.scroll();
+    LayoutCursor scroll_cursor(scroll_start, scroll);
 
     auto place_collapsible_section = [&](auto* widget,
                                          CollapsibleSection section,
@@ -1016,34 +1024,35 @@ void AnimationInspectorPanel::layout_widgets() const {
                                          SDL_Rect& content_rect,
                                          SDL_Rect& section_rect) {
         if (!widget) {
+            auto reset_rect = [&](SDL_Rect& rect) { rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0}; };
             reset_rect(header_rect);
             reset_rect(content_rect);
             reset_rect(section_rect);
             return;
         }
 
-        cursor.advance(section_gap);
-        section_rect = SDL_Rect{x, cursor.visual_y(), width, 0};
-        header_rect = SDL_Rect{x, cursor.visual_y(), width, kSectionHeaderHeight};
-        cursor.advance(kSectionHeaderHeight);
+        scroll_cursor.advance(section_gap);
+        section_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
+        header_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, kSectionHeaderHeight};
+        scroll_cursor.advance(kSectionHeaderHeight);
 
         if (expanded_section_ == section) {
             int content_height = widget->preferred_height(width);
             if (content_height > 0) {
-                cursor.advance(item_gap);
-                content_rect = SDL_Rect{x, cursor.visual_y(), width, content_height};
+                scroll_cursor.advance(item_gap);
+                content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, content_height};
                 widget->set_bounds(content_rect);
-                cursor.advance(content_height);
+                scroll_cursor.advance(content_height);
             } else {
-                content_rect = SDL_Rect{x, cursor.visual_y(), width, 0};
+                content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
                 widget->set_bounds(content_rect);
             }
         } else {
-            content_rect = SDL_Rect{x, cursor.visual_y(), width, 0};
+            content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
             widget->set_bounds(content_rect);
         }
 
-        section_rect.h = std::max(0, cursor.visual_y() - section_rect.y);
+        section_rect.h = std::max(0, scroll_cursor.visual_y() - section_rect.y);
     };
 
     place_collapsible_section(animation_options_.get(), CollapsibleSection::kAnimationOptions, self->animation_options_header_rect_, self->animation_options_rect_, self->animation_options_section_rect_);
@@ -1052,7 +1061,7 @@ void AnimationInspectorPanel::layout_widgets() const {
     place_collapsible_section(on_end_selector_.get(), CollapsibleSection::kOnEnd, self->on_end_header_rect_, self->on_end_rect_, self->on_end_section_rect_);
     place_collapsible_section(audio_panel_.get(), CollapsibleSection::kAudio, self->audio_header_rect_, self->audio_rect_, self->audio_section_rect_);
 
-    self->content_height_ = cursor.logical_y + padding - bounds_.y;
+    self->content_height_ = scroll_cursor.logical_y + padding - scroll_start;
     const int previous_scroll = scroll;
     self->scroll_controller_.set_content_height(self->content_height_);
     if (self->scroll_controller_.scroll() != previous_scroll) {
@@ -1232,24 +1241,24 @@ void AnimationInspectorPanel::update_scrollbar_geometry() const {
     self->scrollbar_track_ = SDL_Rect{0, 0, 0, 0};
     self->scrollbar_thumb_ = SDL_Rect{0, 0, 0, 0};
 
-    if (bounds_.h <= 0) {
+    if (scrollable_bounds_.h <= 0) {
         return;
     }
-    const int max_scroll = std::max(0, content_height_ - bounds_.h);
+    const int max_scroll = std::max(0, content_height_ - scrollable_bounds_.h);
     if (max_scroll <= 0) {
         return;
     }
 
     const int inset = DMSpacing::small_gap();
     SDL_Rect track{bounds_.x + bounds_.w - kScrollbarWidth - inset,
-                   bounds_.y + inset,
+                   scrollable_bounds_.y + inset,
                    kScrollbarWidth,
-                   std::max(0, bounds_.h - inset * 2)};
+                   std::max(0, scrollable_bounds_.h - inset * 2)};
     if (track.h <= 0 || track.w <= 0) {
         return;
     }
 
-    float visible_ratio = static_cast<float>(bounds_.h) / static_cast<float>(content_height_);
+    float visible_ratio = static_cast<float>(scrollable_bounds_.h) / static_cast<float>(content_height_);
     visible_ratio = std::clamp(visible_ratio, 0.05f, 1.0f);
     int thumb_h = std::max(kScrollbarMinThumbHeight, static_cast<int>(std::round(track.h * visible_ratio)));
     thumb_h = std::min(thumb_h, track.h);
@@ -1294,6 +1303,9 @@ void AnimationInspectorPanel::render_overlays(SDL_Renderer* renderer) const {
 
 bool AnimationInspectorPanel::handle_scroll_wheel(const SDL_Event& e) {
     if (e.type != SDL_EVENT_MOUSE_WHEEL) {
+        return false;
+    }
+    if (scrollable_bounds_.h <= 0) {
         return false;
     }
     int mx = 0;

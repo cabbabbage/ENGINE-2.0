@@ -158,6 +158,7 @@ class AnimationInspectorPanel {
     std::string animation_id_;
     SDL_Rect bounds_{0, 0, 0, 0};
     mutable SDL_Rect header_rect_{0, 0, 0, 0};
+    mutable SDL_Rect scrollable_bounds_{0, 0, 0, 0};
     mutable SDL_Rect source_selector_rect_{0, 0, 0, 0};
     mutable SDL_Rect preview_section_rect_{0, 0, 0, 0};
     mutable SDL_Rect source_section_rect_{0, 0, 0, 0};

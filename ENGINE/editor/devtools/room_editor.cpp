@@ -2584,7 +2584,7 @@ bool RoomEditor::apply_shift_edge_pan(const Input& input, WarpedScreenGrid& cam)
         return false;
     }
 
-    const double inner_half_extent = outer_half_extent * 0.95; // 95% sized inner square
+    const double inner_half_extent = outer_half_extent * 0.98; // 95% sized inner square
 
     // Chebyshev distance gives us a square region (max(|dx|, |dy|)).
     const double offset_x = static_cast<double>(cursor_world.x) - static_cast<double>(center_world.x);
@@ -2659,8 +2659,8 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     const bool left_released_this_frame = input_->wasReleased(Input::LEFT);
 
     Asset* hit_before_pan = hit_test_asset(screen_pt, nullptr);
-    const bool pointer_blocks_pan = dragging_ ||
-                                    (shift_down && hit_before_pan && !hit_before_pan->spawn_id.empty() && (left_down || left_pressed_this_frame));
+    const bool pointer_blocks_pan = (!shift_down && dragging_) ||
+                                    (shift_down && !dragging_ && hit_before_pan && !hit_before_pan->spawn_id.empty() && (left_down || left_pressed_this_frame));
 
     if (shift_down_just_pressed) {
         reset_selection_filter();
@@ -5836,22 +5836,7 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
     std::string spawn_id = entry.value("spawn_id", std::string{});
     if (spawn_id.empty()) return;
 
-    std::vector<Asset*> to_remove;
-    for (Asset* asset : assets_->all) {
-        if (!asset || asset->dead) continue;
-        if (!asset_belongs_to_room(asset)) continue;
-        if (asset == player_) continue;
-        if (asset->spawn_id == spawn_id) {
-            to_remove.push_back(asset);
-        }
-    }
-    for (Asset* asset : to_remove) {
-        purge_asset(asset);
-        if (asset) {
-            asset->Delete();
-        }
-    }
-    assets_->process_pending_removals();
+    assets_->delete_assets_for_spawn_group(spawn_id);
     assets_->rebuild_from_grid_state();
     assets_->refresh_active_asset_lists();
 

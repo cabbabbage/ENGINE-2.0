@@ -387,6 +387,7 @@ private:
     Asset* frame_editor_asset_for_reopen_ = nullptr;
 
     bool render_suppression_in_progress_ = false;
+    bool shift_block_headers_footers_ = false;
 
     std::uint32_t dirty_flags_ = kDirtyLayout;
     LayoutCache layout_cache_;

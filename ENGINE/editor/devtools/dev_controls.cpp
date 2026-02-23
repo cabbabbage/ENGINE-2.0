@@ -1423,6 +1423,13 @@ void DevControls::update(const Input& input) {
     save_coordinator_.begin_frame();
     if (!enabled_) return;
     const bool ctrl = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
+    const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+    const bool shift_blocks_headers = shift_down && mode_ == Mode::RoomEditor;
+    if (shift_block_headers_footers_ != shift_blocks_headers) {
+        shift_block_headers_footers_ = shift_blocks_headers;
+        apply_header_suppression();
+        mark_layout_dirty();
+    }
     if (ctrl) {
         if (input.wasScancodePressed(SDL_SCANCODE_UP)) {
             nudge_overlay_grid_resolution(1);
@@ -2479,7 +2486,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool modal_hide_pre = is_modal_blocking_panels();
     const bool layers_panel_open_pre = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
-    const bool hide_headers_pre = modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre || frame_editor_active;
+    const bool hide_headers_pre = modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre || frame_editor_active || shift_block_headers_footers_;
     header_rect = hide_headers_pre ? SDL_Rect{0, 0, 0, 0} : other_settings_.header_rect();
     SDL_Rect usable_rect = FloatingPanelLayoutManager::instance().computeUsableRect(
         SDL_Rect{0, 0, screen_w_, screen_h_},
@@ -2503,7 +2510,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool modal_hide = is_modal_blocking_panels();
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     modal_headers_hidden_ = modal_hide;
-    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || frame_editor_active;
+    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || frame_editor_active || shift_block_headers_footers_;
     other_settings_.set_enabled(enabled_);
     other_settings_.set_header_suppressed(hide_headers);
     apply_header_suppression();
@@ -3624,11 +3631,13 @@ void DevControls::apply_header_suppression() {
 
         const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
         const bool modal_hide = is_modal_blocking_panels() || frame_editor_active;
-        map_mode_ui_->set_headers_suppressed(modal_hide);
+        const bool header_block = modal_hide || shift_block_headers_footers_;
+        map_mode_ui_->set_headers_suppressed(header_block);
         map_mode_ui_->set_dev_sliding_headers_hidden(sliding_headers_hidden_);
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            footer->set_visible(!frame_editor_active);
-            footer->set_input_enabled(!frame_editor_active);
+            const bool footer_enabled = !frame_editor_active && !shift_block_headers_footers_;
+            footer->set_visible(footer_enabled);
+            footer->set_input_enabled(footer_enabled);
         }
     }
 }
@@ -3655,7 +3664,7 @@ void DevControls::update_header_and_footer_bounds() {
     const bool modal_hide = is_modal_blocking_panels() || frame_editor_active;
     modal_headers_hidden_ = modal_hide;
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
-    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open;
+    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || shift_block_headers_footers_;
     if (hide_headers) {
         last_header_rect_ = SDL_Rect{0, 0, 0, 0};
     } else {
@@ -3663,7 +3672,7 @@ void DevControls::update_header_and_footer_bounds() {
     }
     if (map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible()) {
+            if (footer->visible() && !shift_block_headers_footers_) {
                 last_footer_rect_ = footer->rect();
             } else {
                 last_footer_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -3753,26 +3762,7 @@ void DevControls::remove_spawn_group_assets(const std::string& spawn_id) {
     if (!assets_ || spawn_id.empty()) {
         return;
     }
-    std::vector<Asset*> to_remove;
-    to_remove.reserve(assets_->all.size());
-    for (Asset* asset : assets_->all) {
-        if (!asset || asset->dead) {
-            continue;
-        }
-        if (asset == assets_->player) {
-            continue;
-        }
-        if (asset->spawn_id == spawn_id) {
-            to_remove.push_back(asset);
-        }
-    }
-    for (Asset* asset : to_remove) {
-        purge_asset(asset);
-        if (asset) {
-            asset->Delete();
-        }
-    }
-    assets_->process_pending_removals();
+    assets_->delete_assets_for_spawn_group(spawn_id);
     assets_->rebuild_from_grid_state();
     assets_->refresh_active_asset_lists();
 }

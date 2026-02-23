@@ -215,6 +215,7 @@ public:
     bool should_step_dev_frame(const Input& input) const;
     void touch_last_frame_counter();
     bool process_pending_removals();
+    std::size_t delete_assets_for_spawn_group(const std::string& spawn_id);
 
 private:
     void save_map_info_json();
@@ -222,6 +223,8 @@ private:
     void load_camera_settings_from_json();
     void write_camera_settings_to_json();
     void schedule_removal(Asset* a);
+    std::vector<Asset*> collect_removal_closure(const std::vector<Asset*>& roots) const;
+    std::size_t delete_assets_runtime(const std::vector<Asset*>& assets_to_delete);
 
     bool process_removals();
     void addAsset(const std::string& name, SDL_Point g);

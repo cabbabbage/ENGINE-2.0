@@ -3,6 +3,7 @@
 #include "../DockableCollapsible.hpp"
 #include "widgets.hpp"
 #include "devtools/asset_info_sections.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include <algorithm>
 #include <memory>
 #include <string>

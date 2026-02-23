@@ -104,9 +104,11 @@ void AnchorEditor::begin(const frame_editors::FrameEditorContext& context) {
     }
     if (frames_.empty()) frames_.emplace_back();
 
+    const int initial_frame_index = determine_initial_frame_index();
+
     frame_navigator_ = std::make_unique<frame_editors::FrameNavigator>();
     frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
-    frame_navigator_->set_current_frame(0);
+    frame_navigator_->set_current_frame(initial_frame_index);
     frame_navigator_->set_on_frame_changed([this](int i){ select_frame(i); });
     frame_navigator_->set_on_before_change([this](int, int){
         if (context_.on_save_and_update) {
@@ -140,6 +142,7 @@ void AnchorEditor::begin(const frame_editors::FrameEditorContext& context) {
             selected_anchor_ = std::clamp(selected_anchor_, 0, static_cast<int>(list.size()) - 1);
             dirty_ = true;
             refresh_form();
+            propagate_live_anchor_updates();
         }
     });
     anchor_list_widget_.reset(new AnchorListWidget(&frames_, &selected_frame_, &selected_anchor_, [this](int i){ select_anchor(i); }));
@@ -153,16 +156,19 @@ void AnchorEditor::begin(const frame_editors::FrameEditorContext& context) {
     if (frame_navigator_) {
         frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
     }
-    if (!frames_[0].anchors.empty()) selected_anchor_ = 0;
+    selected_frame_ = std::clamp(initial_frame_index, 0, static_cast<int>(frames_.size()) - 1);
+    if (!frames_[static_cast<std::size_t>(selected_frame_)].anchors.empty()) selected_anchor_ = 0;
     refresh_form();
     center_view();
 
     // Prime textures after all preview/navigation wiring is in place so the
-    // first frame is visible as soon as the editor opens.
+    // active frame is visible as soon as the editor opens.
     prime_textures();
     if (SDL_Renderer* renderer = context_.assets ? context_.assets->renderer() : nullptr) {
-        (void)resolve_frame_texture(renderer, 0);
+        (void)resolve_frame_texture(renderer, selected_frame_);
     }
+
+    propagate_live_anchor_updates();
 
     manifest_txn_.begin(context_);
     manifest_txn_.set_immediate_persist(false);
@@ -173,7 +179,7 @@ void AnchorEditor::end() {}
 
 bool AnchorEditor::handle_event(const SDL_Event& e) {
     bool handled = false;
-    if (tool_panel_ && tool_panel_->handle_event(e)) { if (apply_form_to_anchor()) dirty_ = true; handled = true; }
+    if (tool_panel_ && tool_panel_->handle_event(e)) { if (apply_form_to_anchor()) { dirty_ = true; propagate_live_anchor_updates(); } handled = true; }
     if (frame_navigator_ && frame_navigator_->handle_event(e)) handled = true;
 
     if (e.type == SDL_EVENT_MOUSE_WHEEL) {
@@ -208,7 +214,7 @@ bool AnchorEditor::handle_event(const SDL_Event& e) {
                 if (selected_anchor_ >= 0 && selected_anchor_ < static_cast<int>(frame.anchors.size())) {
                     auto& a = frame.anchors[static_cast<std::size_t>(selected_anchor_)];
                     a.texture_x = tx; a.texture_y = ty;
-                    dirty_ = true; refresh_form(); refresh_selection_state();
+                    dirty_ = true; refresh_form(); refresh_selection_state(); propagate_live_anchor_updates();
                     is_dragging_anchor_ = true;
                 }
                 return true;
@@ -348,12 +354,34 @@ bool AnchorEditor::apply_form_to_anchor() {
     return changed;
 }
 
-void AnchorEditor::select_frame(int index) { if (apply_form_to_anchor()) dirty_ = true; selected_frame_ = std::clamp(index, 0, static_cast<int>(frames_.size()) - 1); if (!frames_[selected_frame_].anchors.empty()) selected_anchor_ = std::clamp(selected_anchor_, 0, static_cast<int>(frames_[selected_frame_].anchors.size()) - 1); else selected_anchor_ = -1; refresh_form(); }
-void AnchorEditor::select_anchor(int index) { selected_anchor_ = index; refresh_form(); rebuild_tool_panel_layout(); }
-void AnchorEditor::add_anchor() { auto& list = frames_[selected_frame_].anchors; frame_editors::FrameAnchorPoint p; p.name = "anchor_" + std::to_string(list.size()); list.push_back(p); select_anchor(static_cast<int>(list.size()) - 1); dirty_ = true; }
+void AnchorEditor::select_frame(int index) {
+    if (frames_.empty()) {
+        return;
+    }
+
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+        propagate_live_anchor_updates();
+    }
+
+    selected_frame_ = std::clamp(index, 0, static_cast<int>(frames_.size()) - 1);
+    auto& anchors = frames_[static_cast<std::size_t>(selected_frame_)].anchors;
+    if (!anchors.empty()) {
+        selected_anchor_ = std::clamp(selected_anchor_, 0, static_cast<int>(anchors.size()) - 1);
+    } else {
+        selected_anchor_ = -1;
+    }
+
+    texture_primed_ = false;
+    preview_refreshed_ = false;
+    refresh_form();
+    refresh_selection_state();
+}
+void AnchorEditor::select_anchor(int index) { selected_anchor_ = index; refresh_form(); rebuild_tool_panel_layout(); refresh_selection_state(); }
+void AnchorEditor::add_anchor() { auto& list = frames_[selected_frame_].anchors; frame_editors::FrameAnchorPoint p; p.name = "anchor_" + std::to_string(list.size()); list.push_back(p); select_anchor(static_cast<int>(list.size()) - 1); dirty_ = true; propagate_live_anchor_updates(); }
 void AnchorEditor::apply_to_all_frames() { for (auto& f : frames_) f = frames_[selected_frame_]; dirty_ = true; }
-void AnchorEditor::apply_to_next_frame() { if (frames_.empty()) return; frames_[(selected_frame_ + 1) % static_cast<int>(frames_.size())] = frames_[selected_frame_]; dirty_ = true; persist_changes(); }
-void AnchorEditor::apply_to_animation() { apply_to_all_frames(); persist_changes(); }
+void AnchorEditor::apply_to_next_frame() { if (frames_.empty()) return; frames_[(selected_frame_ + 1) % static_cast<int>(frames_.size())] = frames_[selected_frame_]; dirty_ = true; persist_changes(); propagate_live_anchor_updates(); }
+void AnchorEditor::apply_to_animation() { apply_to_all_frames(); persist_changes(); propagate_live_anchor_updates(); }
 
 bool AnchorEditor::apply_to_selected_animations() {
     if (!context_.document) return false;
@@ -389,15 +417,26 @@ bool AnchorEditor::apply_to_all_animations() { if (!context_.document) return fa
 
 void AnchorEditor::persist_changes() {
     if (!context_.document) return;
-    apply_form_to_anchor();
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+    }
     auto payload = context_.document->animation_payload_json(context_.animation_id).value_or(nlohmann::json::object());
     context_.document->update_animation_payload(context_.animation_id, frame_editors::build_payload_with_anchors(frames_, payload));
     sync_runtime_animation_anchors(context_.animation_id, frames_);
     invalidate_preview();
+    texture_primed_ = false;
+    preview_refreshed_ = false;
     prime_textures();
 }
 
 void AnchorEditor::invalidate_preview() const { if (context_.preview) context_.preview->invalidate(context_.animation_id); }
+
+void AnchorEditor::propagate_live_anchor_updates() {
+    sync_runtime_animation_anchors(context_.animation_id, frames_);
+    invalidate_preview();
+    texture_primed_ = false;
+    preview_refreshed_ = false;
+}
 
 void AnchorEditor::refresh_selection_state() {
     if (!selection_state_) return;
@@ -567,6 +606,20 @@ AnchorEditor::FrameTextureInfo AnchorEditor::resolve_frame_texture(SDL_Renderer*
     return info;
 }
 
+int AnchorEditor::determine_initial_frame_index() const {
+    if (frames_.empty()) {
+        return 0;
+    }
+    if (context_.target && context_.target->info) {
+        auto anim_it = context_.target->info->animations.find(context_.animation_id);
+        if (anim_it != context_.target->info->animations.end() && context_.target->current_frame) {
+            const int runtime_frame_index = context_.target->current_frame->frame_index;
+            return std::clamp(runtime_frame_index, 0, static_cast<int>(frames_.size()) - 1);
+        }
+    }
+    return 0;
+}
+
 bool AnchorEditor::point_in_viewport(const SDL_Point& p) const { return SDL_PointInRect(&p, &viewport_rect_); }
 
 SDL_FPoint AnchorEditor::texture_to_screen(int tx, int ty) const {
@@ -603,7 +656,7 @@ void AnchorEditor::update_drag_pick(const SDL_Point& p) {
     auto& list = frames_[selected_frame_].anchors;
     if (selected_anchor_ < 0 || selected_anchor_ >= static_cast<int>(list.size())) return;
     auto& a = list[static_cast<std::size_t>(selected_anchor_)];
-    if (a.texture_x != tx || a.texture_y != ty) { a.texture_x = tx; a.texture_y = ty; dirty_ = true; refresh_form(); }
+    if (a.texture_x != tx || a.texture_y != ty) { a.texture_x = tx; a.texture_y = ty; dirty_ = true; refresh_form(); propagate_live_anchor_updates(); }
 }
 
 SDL_Texture* AnchorEditor::current_frame_texture() const {

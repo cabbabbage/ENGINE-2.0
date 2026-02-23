@@ -46,9 +46,11 @@ private:
     bool apply_to_all_animations();
     void persist_changes();
     void invalidate_preview() const;
+    void propagate_live_anchor_updates();
     void refresh_selection_state();
     void request_close();
     void prime_textures() const;
+    int determine_initial_frame_index() const;
     bool ui_contains_point(const SDL_Point& p) const;
     std::pair<int, int> frame_dimensions_for_index(std::size_t frame_index) const;
     std::pair<int, int> current_frame_dimensions() const;

@@ -2429,6 +2429,71 @@ void RoomEditor::set_height_scale_factor(double factor) {
     camera_controls_.set_height_scale_factor(height_scale_factor_);
 }
 
+void RoomEditor::apply_asset_scale_live_update(Asset* asset, int scale_percent) {
+    if (!asset || !asset->info) {
+        return;
+    }
+
+    const int clamped_percent = std::clamp(scale_percent, 1, 400);
+    asset->info->set_scale_percentage(static_cast<float>(clamped_percent));
+    asset->on_scale_factor_changed();
+
+    if (save_coordinator_ && manifest_store_) {
+        nlohmann::json payload = asset->info->manifest_payload();
+        save_coordinator_->enqueue_manifest_asset(asset->info->name,
+                                                  std::move(payload),
+                                                  devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                                  "Scale",
+                                                  [this]() {
+                                                      if (assets_) {
+                                                          assets_->mark_active_assets_dirty();
+                                                      }
+                                                  });
+    } else if (manifest_store_) {
+        auto session = manifest_store_->begin_asset_edit(asset->info->name, true);
+        if (!session) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[RoomEditor] Failed to open manifest session for '%s'",
+                        asset->info->name.c_str());
+            return;
+        }
+        session.data() = asset->info->manifest_payload();
+        if (!session.commit()) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[RoomEditor] Failed to commit manifest for '%s'",
+                        asset->info->name.c_str());
+            return;
+        }
+        manifest_store_->flush();
+        if (assets_) {
+            assets_->mark_active_assets_dirty();
+        }
+    }
+}
+
+bool RoomEditor::apply_scroll_size_adjustment(const Input& input) {
+    const int scroll_y = input.getScrollY();
+    if (scroll_y == 0) {
+        return false;
+    }
+
+    Asset* primary = selected_assets_.empty() ? nullptr : selected_assets_.front();
+    if (!primary || !primary->info) {
+        return false;
+    }
+
+    const int ticks = std::abs(scroll_y);
+    if (ticks <= 0) {
+        return false;
+    }
+
+    const int direction = (scroll_y < 0) ? 1 : -1;
+    const int current_percent = std::max(1, static_cast<int>(std::lround(primary->info->scale_factor * 100.0f)));
+    const int next_percent = current_percent + (direction * ticks);
+    apply_asset_scale_live_update(primary, next_percent);
+    return true;
+}
+
 bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
     if (!camera_settings_lock_active_ || !room_cfg_ui_ || !room_cfg_ui_->camera_controls_enabled()) {
         return false;
@@ -2642,7 +2707,12 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         return;
     }
 
-    const int scroll_y = input.getScrollY();
+    const bool consumed_scroll_for_scale = apply_scroll_size_adjustment(input);
+    if (consumed_scroll_for_scale && input_) {
+        input_->consumeScroll();
+    }
+
+    const int scroll_y = consumed_scroll_for_scale ? 0 : input.getScrollY();
     const bool camera_scroll_event = (scroll_y != 0);
     if (camera_scroll_event && assets_) {
         assets_->notify_camera_activity(true);
@@ -2830,11 +2900,6 @@ void RoomEditor::handle_mouse_input(const Input& input) {
             } else {
 
                 if (hovered_asset_ == pressed_asset) {
-                    open_room_config_for(pressed_asset);
-
-                    suppress_next_left_click_ = true;
-                    click_buffer_frames_      = 3;
-
                     hovered_asset_ = pressed_asset;
                     rebuild_highlight();
                 }

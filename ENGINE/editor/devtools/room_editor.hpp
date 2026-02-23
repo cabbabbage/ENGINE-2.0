@@ -185,6 +185,8 @@ private:
     bool apply_shift_edge_pan(const Input& input, WarpedScreenGrid& cam);
     static float edge_pan_intensity(int value, int max_value, float threshold_fraction);
     bool handle_camera_settings_mouse_controls(const Input& input);
+    bool apply_scroll_size_adjustment(const Input& input);
+    void apply_asset_scale_live_update(Asset* asset, int scale_percent);
     Asset* hit_test_asset(SDL_Point screen_point, SDL_Renderer* renderer) const;
     void update_hover_state(Asset* hit);
     void handle_click(const Input& input);

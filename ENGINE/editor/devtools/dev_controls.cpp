@@ -982,6 +982,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
 
 DevControls::~DevControls() {
     restore_filter_hidden_assets();
+    save_coordinator_.flush_now("shutdown");
     manifest_store_.flush();
     devmode::ui_settings::flush_if_dirty();
     AssetInfo::set_manifest_store_provider({});
@@ -4581,18 +4582,11 @@ bool DevControls::persist_map_info_to_disk() {
         return false;
     }
     nlohmann::json payload = assets_->map_info_json();
-    if (&save_coordinator_) {
-        save_coordinator_.enqueue_map_entry(map_id, std::move(payload),
-                                            devmode::core::DevSaveCoordinator::Priority::Immediate,
-                                            "Manual map save");
-        save_coordinator_.flush_now("Manual map save");
-        return true;
-    }
-    const bool map_saved = devmode::persist_map_manifest_entry(manifest_store_, map_id, payload, std::cerr);
-    if (map_saved) {
-        manifest_store_.flush();
-    }
-    return map_saved;
+    save_coordinator_.enqueue_map_entry(map_id, std::move(payload),
+                                        devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                        "Manual map save");
+    save_coordinator_.flush_now("Manual map save");
+    return true;
 }
 
 void DevControls::render_grid_resolution_toast(SDL_Renderer* renderer) {

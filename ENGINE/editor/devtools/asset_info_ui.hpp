@@ -12,6 +12,7 @@
 #include "devtools/SlidingWindowContainer.hpp"
 #include "devtools/asset_info_sections.hpp"
 #include "utils/ranged_color.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 
 class AssetInfo;
 class DockableCollapsible;

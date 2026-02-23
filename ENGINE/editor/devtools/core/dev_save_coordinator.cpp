@@ -186,6 +186,7 @@ bool DevSaveCoordinator::process(bool force, const std::string& reason) {
     bool success = true;
     std::vector<std::string> labels;
     labels.reserve(batch.size());
+    bool notify = force;
 
     for (auto& intent : batch) {
         if (!force && intent.priority == Priority::Debounced) {
@@ -201,6 +202,7 @@ bool DevSaveCoordinator::process(bool force, const std::string& reason) {
             }
         }
 
+        notify = notify || intent.priority == Priority::Immediate;
         const bool applied = intent.apply ? intent.apply(*store_) : false;
         success = success && applied;
         if (applied) {
@@ -220,7 +222,9 @@ bool DevSaveCoordinator::process(bool force, const std::string& reason) {
         ++telemetry_.flush_count;
     }
 
-    publish_notice(success && writes > 0, writes, labels, reason);
+    if (notify) {
+        publish_notice(success && writes > 0, writes, labels, reason);
+    }
 
     processing_ = false;
     return success;
@@ -230,15 +234,22 @@ void DevSaveCoordinator::publish_notice(bool success,
                                         std::size_t writes,
                                         const std::vector<std::string>& labels,
                                         const std::string& reason) {
-    if (!notice_sink_ || writes == 0) {
+    if (!notice_sink_) {
         return;
     }
     std::string summary = summarize_labels(labels);
     std::ostringstream oss;
     if (success) {
-        oss << "Saved " << writes << (writes == 1 ? " change" : " changes");
+        if (writes > 0) {
+            oss << "Saved " << writes << (writes == 1 ? " change" : " changes");
+        } else {
+            oss << "No changes to save";
+        }
     } else {
-        oss << "Save failed (" << writes << " change" << (writes == 1 ? "" : "s") << ")";
+        oss << "Save failed";
+        if (writes > 0) {
+            oss << " (" << writes << " change" << (writes == 1 ? "" : "s") << ")";
+        }
     }
     if (!summary.empty()) {
         oss << ": " << summary;

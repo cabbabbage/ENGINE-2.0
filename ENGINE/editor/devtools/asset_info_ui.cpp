@@ -1428,6 +1428,10 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
         }
     }
 
+    if (save_coordinator_ && any_written) {
+        save_coordinator_->flush_now("Apply section");
+    }
+
     if (any_written) {
         if (!save_coordinator_) {
             if (section_id == AssetInfoSectionId::Tags && !*tags_notified) {

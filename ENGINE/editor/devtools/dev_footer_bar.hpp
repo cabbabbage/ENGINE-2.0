@@ -39,7 +39,7 @@ public:
     void set_bounds(int width, int height);
     void set_height(int height);
 
-    void set_visible(bool visible) { visible_ = visible; }
+    void set_visible(bool visible);
     bool visible() const { return visible_; }
     void set_input_enabled(bool enabled) { input_enabled_ = enabled; }
     bool input_enabled() const { return input_enabled_; }
@@ -74,10 +74,19 @@ public:
 
 private:
     void layout();
+    void layout_content();
+    void layout_hide_button();
     void layout_buttons();
     void layout_grid_controls();
     void layout_title_region();
     void update_title_width();
+    int content_start_x() const;
+    int shown_y() const;
+    int hidden_y() const;
+    void begin_slide(bool hidden, Uint64 now_ms);
+    void update_slide(Uint64 now_ms);
+    void request_hidden_state(bool hidden, Uint64 now_ms, bool bypass_debounce);
+    void apply_rect_y(int y);
 
     std::string title_;
     int screen_w_ = 0;
@@ -93,6 +102,19 @@ private:
     SDL_Rect title_bounds_{0, 0, 0, 0};
 
     std::vector<Button> buttons_;
+
+    std::unique_ptr<DMButton> hide_button_;
+    SDL_Rect hide_button_rect_{0, 0, 0, 0};
+
+    bool auto_hidden_ = true;
+    bool manual_hidden_lock_ = false;
+    bool slide_active_ = false;
+    int slide_start_y_ = 0;
+    int slide_target_y_ = 0;
+    Uint64 slide_started_ms_ = 0;
+    bool debounce_pending_ = false;
+    bool debounce_hidden_target_ = true;
+    Uint64 debounce_started_ms_ = 0;
 
     bool grid_overlay_enabled_ = false;
     int grid_resolution_ = 0;

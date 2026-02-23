@@ -3332,6 +3332,17 @@ void DevControls::purge_asset(Asset* asset) {
     room_editor_->purge_asset(asset);
 }
 
+void DevControls::set_world_mutation_in_progress(bool in_progress) {
+    world_mutation_in_progress_ = in_progress;
+    if (!room_editor_) {
+        return;
+    }
+    room_editor_->set_pointer_queries_suspended(in_progress);
+    if (!in_progress) {
+        pending_selection_sync_refresh_ = true;
+    }
+}
+
 void DevControls::notify_spawn_group_config_changed(const nlohmann::json& entry) {
     if (room_editor_) {
         room_editor_->handle_spawn_config_change(entry);
@@ -3346,18 +3357,18 @@ void DevControls::notify_spawn_group_removed(const std::string& spawn_id) {
 
 const std::vector<Asset*>& DevControls::get_selected_assets() const {
     static std::vector<Asset*> empty;
-    if (!can_use_room_editor_ui()) return empty;
+    if (world_mutation_in_progress_ || !can_use_room_editor_ui()) return empty;
     return room_editor_->get_selected_assets();
 }
 
 const std::vector<Asset*>& DevControls::get_highlighted_assets() const {
     static std::vector<Asset*> empty;
-    if (!can_use_room_editor_ui()) return empty;
+    if (world_mutation_in_progress_ || !can_use_room_editor_ui()) return empty;
     return room_editor_->get_highlighted_assets();
 }
 
 Asset* DevControls::get_hovered_asset() const {
-    if (!can_use_room_editor_ui()) return nullptr;
+    if (world_mutation_in_progress_ || !can_use_room_editor_ui()) return nullptr;
     return room_editor_->get_hovered_asset();
 }
 
@@ -3762,9 +3773,43 @@ void DevControls::remove_spawn_group_assets(const std::string& spawn_id) {
     if (!assets_ || spawn_id.empty()) {
         return;
     }
-    assets_->delete_assets_for_spawn_group(spawn_id);
-    assets_->rebuild_from_grid_state();
-    assets_->refresh_active_asset_lists();
+
+    auto batch = assets_->begin_world_mutation_batch();
+    std::vector<Asset*> candidates;
+    candidates.reserve(assets_->all.size());
+    for (Asset* asset : assets_->all) {
+        if (!asset || asset->dead || asset == assets_->player) {
+            continue;
+        }
+        if (asset->spawn_id != spawn_id) {
+            continue;
+        }
+        candidates.push_back(asset);
+    }
+
+    for (Asset* asset : candidates) {
+        purge_asset(asset);
+        batch.mark_for_deletion(asset);
+    }
+
+    batch.set_pre_commit_save([this]() {
+        if (!persist_map_info_to_disk()) {
+            assets_->show_dev_notice("Save failed; world changes were not applied.");
+            return false;
+        }
+        return true;
+    });
+
+    const bool committed = batch.commit();
+    if (!committed) {
+        return;
+    }
+    if (pending_selection_sync_refresh_) {
+        pending_selection_sync_refresh_ = false;
+        if (room_editor_) {
+            room_editor_->clear_highlighted_assets();
+        }
+    }
 }
 
 void DevControls::integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& spawned) {

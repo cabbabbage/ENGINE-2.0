@@ -795,7 +795,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 20.0
+        "scale_percentage": 21.0
       },
       "start": "default",
       "tags": [],
@@ -1018,9 +1018,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,
@@ -1078,8 +1078,8 @@
                 }
               ],
               "display_name": "tailor",
-              "dx": -1380,
-              "dy": 428,
+              "dx": -1700,
+              "dy": -1868,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1194,8 +1194,8 @@
                 }
               ],
               "display_name": "booze_2",
-              "dx": -380,
-              "dy": 916,
+              "dx": -460,
+              "dy": 1028,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1948,8 +1948,8 @@
                 }
               ],
               "display_name": "grave_4 (Copy 25)",
-              "dx": -1132,
-              "dy": -436,
+              "dx": -836,
+              "dy": 324,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2035,8 +2035,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -484,
-              "dy": 292,
+              "dx": -868,
+              "dy": 596,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

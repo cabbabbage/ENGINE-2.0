@@ -1837,6 +1837,59 @@ std::vector<Asset*> Assets::collect_removal_closure(const std::vector<Asset*>& r
     return ordered;
 }
 
+void Assets::WorldMutationBatch::mark_for_deletion(Asset* asset) {
+    if (!asset || staged_lookup_.find(asset) != staged_lookup_.end()) {
+        return;
+    }
+    staged_lookup_.insert(asset);
+    staged_removals_.push_back(asset);
+}
+
+bool Assets::WorldMutationBatch::commit() {
+    if (!owner_) {
+        return false;
+    }
+    return owner_->apply_world_mutation_batch(*this);
+}
+
+Assets::WorldMutationBatch Assets::begin_world_mutation_batch() {
+    return WorldMutationBatch(this);
+}
+
+bool Assets::apply_world_mutation_batch(WorldMutationBatch& batch) {
+    if (!batch.has_mutations()) {
+        return true;
+    }
+
+    if (batch.pre_commit_save_ && !batch.pre_commit_save_()) {
+        return false;
+    }
+
+    if (dev_controls_ && dev_controls_->is_enabled()) {
+        dev_controls_->set_world_mutation_in_progress(true);
+    }
+
+    for (Asset* asset : batch.staged_removals_) {
+        if (!asset) {
+            continue;
+        }
+        asset->dead = true;
+        asset->active = false;
+        schedule_removal(asset);
+    }
+
+    const bool removed_any = process_pending_removals();
+    if (removed_any) {
+        rebuild_from_grid_state();
+        refresh_active_asset_lists();
+    }
+
+    if (dev_controls_ && dev_controls_->is_enabled()) {
+        dev_controls_->set_world_mutation_in_progress(false);
+    }
+    return removed_any;
+}
+
 std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_delete) {
     const std::vector<Asset*> ordered_removals = collect_removal_closure(assets_to_delete);
     if (ordered_removals.empty()) {
@@ -1907,28 +1960,26 @@ std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
         return 0;
     }
 
-    std::vector<Asset*> to_remove;
-    to_remove.reserve(all.size());
+    auto batch = begin_world_mutation_batch();
+    std::size_t count = 0;
     for (Asset* asset : all) {
-        if (!asset || asset->dead) {
-            continue;
-        }
-        if (asset == player) {
+        if (!asset || asset->dead || asset == player) {
             continue;
         }
         if (asset->spawn_id == spawn_id) {
-            to_remove.push_back(asset);
+            batch.mark_for_deletion(asset);
+            ++count;
         }
     }
 
-    for (Asset* asset : to_remove) {
-        if (asset) {
-            asset->dead = true;
-            asset->active = false;
-        }
+    if (count == 0) {
+        return 0;
     }
 
-    return delete_assets_runtime(to_remove);
+    if (!batch.commit()) {
+        return 0;
+    }
+    return count;
 }
 
 void Assets::render_overlays(SDL_Renderer* renderer) {

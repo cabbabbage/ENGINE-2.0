@@ -47,6 +47,23 @@ enum class FrameEditorLaunchMode {
 
 class Assets {
 public:
+    class WorldMutationBatch {
+    public:
+        explicit WorldMutationBatch(Assets* owner = nullptr) : owner_(owner) {}
+
+        void mark_for_deletion(Asset* asset);
+        void set_pre_commit_save(std::function<bool()> save_cb) { pre_commit_save_ = std::move(save_cb); }
+        bool commit();
+        bool has_mutations() const { return !staged_removals_.empty(); }
+
+    private:
+        friend class Assets;
+        Assets* owner_ = nullptr;
+        std::vector<Asset*> staged_removals_;
+        std::unordered_set<Asset*> staged_lookup_;
+        std::function<bool()> pre_commit_save_;
+    };
+
     Assets(AssetLibrary& library,
            Asset*,
            std::vector<Room*> rooms,
@@ -216,6 +233,7 @@ public:
     void touch_last_frame_counter();
     bool process_pending_removals();
     std::size_t delete_assets_for_spawn_group(const std::string& spawn_id);
+    WorldMutationBatch begin_world_mutation_batch();
 
 private:
     void save_map_info_json();
@@ -227,6 +245,7 @@ private:
     std::size_t delete_assets_runtime(const std::vector<Asset*>& assets_to_delete);
 
     bool process_removals();
+    bool apply_world_mutation_batch(WorldMutationBatch& batch);
     void addAsset(const std::string& name, SDL_Point g);
     void update_filtered_active_assets();
     void ensure_dev_controls();

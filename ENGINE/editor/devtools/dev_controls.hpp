@@ -116,6 +116,7 @@ public:
     void reset_click_state();
     void clear_selection();
     void purge_asset(Asset* asset);
+    void set_world_mutation_in_progress(bool in_progress);
 
     void notify_spawn_group_config_changed(const nlohmann::json& entry);
     void notify_spawn_group_removed(const std::string& spawn_id);
@@ -358,6 +359,8 @@ private:
     bool pointer_over_image_effect_panel_ = false;
     bool modal_headers_hidden_ = false;
     bool sliding_headers_hidden_ = false;
+    bool world_mutation_in_progress_ = false;
+    bool pending_selection_sync_refresh_ = false;
     mutable std::unordered_map<Asset*, bool> filter_hidden_assets_;
     mutable std::unordered_set<Asset*> previous_filtered_membership_;
     std::unique_ptr<TrailEditorSuite> trail_suite_;

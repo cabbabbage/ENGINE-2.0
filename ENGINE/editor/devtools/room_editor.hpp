@@ -113,6 +113,7 @@ public:
     void clear_selection();
     void clear_highlighted_assets();
     void purge_asset(Asset* asset);
+    void set_pointer_queries_suspended(bool suspended);
 
     const std::vector<Asset*>& get_selected_assets() const { return selected_assets_; }
     const std::vector<Asset*>& get_highlighted_assets() const { return highlighted_assets_; }
@@ -274,7 +275,7 @@ private:
     void open_spawn_group_editor_by_id(const std::string& spawn_id);
     void reopen_room_configurator();
     void notify_room_assets_saved();
-    void save_current_room_assets_json();
+    bool save_current_room_assets_json();
     void copy_selected_spawn_group();
     void paste_spawn_group_from_clipboard();
     std::optional<std::string> selected_spawn_group_id() const;
@@ -358,6 +359,7 @@ private:
     std::array<bool, static_cast<size_t>(BlockingPanel::Count)> blocking_panel_visible_{};
 
     Asset* hovered_asset_ = nullptr;
+    bool pointer_queries_suspended_ = false;
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;
     bool highlight_dirty_ = true;

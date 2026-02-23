@@ -357,20 +357,21 @@ void RoomEditor::notify_room_assets_saved() {
     }
 }
 
-void RoomEditor::save_current_room_assets_json() {
+bool RoomEditor::save_current_room_assets_json() {
     if (!current_room_) {
-        return;
+        return false;
     }
     if (info_ui_ && info_ui_->is_locked()) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Asset info panel is locked; save skipped.");
-        return;
+        return false;
     }
     if (room_cfg_ui_ && room_cfg_ui_->is_locked()) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; save skipped.");
-        return;
+        return false;
     }
     current_room_->save_assets_json();
     notify_room_assets_saved();
+    return true;
 }
 
 void RoomEditor::copy_selected_spawn_group() {
@@ -2435,6 +2436,19 @@ void RoomEditor::purge_asset(Asset* asset) {
     }
 }
 
+
+void RoomEditor::set_pointer_queries_suspended(bool suspended) {
+    if (pointer_queries_suspended_ == suspended) {
+        return;
+    }
+    pointer_queries_suspended_ = suspended;
+    if (suspended) {
+        hovered_asset_ = nullptr;
+        hover_miss_frames_ = 3;
+    }
+    mark_highlight_dirty();
+}
+
 void RoomEditor::set_height_scale_factor(double factor) {
     height_scale_factor_ = (factor > 0.0) ? factor : 1.0;
     camera_controls_.set_height_scale_factor(height_scale_factor_);
@@ -3528,6 +3542,15 @@ Asset* RoomEditor::hit_test_asset_fallback(const WarpedScreenGrid& cam, SDL_Poin
 }
 
 void RoomEditor::update_hover_state(Asset* hit) {
+    if (pointer_queries_suspended_) {
+        if (hovered_asset_) {
+            hovered_asset_ = nullptr;
+            hover_miss_frames_ = 3;
+            mark_highlight_dirty();
+        }
+        return;
+    }
+
     Asset* previous = hovered_asset_;
     if (hit) {
         hovered_asset_ = hit;
@@ -5596,10 +5619,21 @@ bool RoomEditor::delete_spawn_group_internal(const std::string& spawn_id) {
         spawn_group_panel_->clear_binding();
     }
 
+    if (!current_room_) {
+        return false;
+    }
+    nlohmann::json snapshot = current_room_->assets_data();
     if (!remove_spawn_group_by_id(spawn_id)) {
         return false;
     }
-    save_current_room_assets_json();
+    if (!save_current_room_assets_json()) {
+        current_room_->assets_data() = std::move(snapshot);
+        rebuild_room_spawn_id_cache();
+        refresh_spawn_group_config_ui();
+        reopen_room_configurator();
+        show_notice("Failed to save room assets; spawn group deletion canceled.");
+        return false;
+    }
     if (assets_) {
         assets_->notify_spawn_group_removed(spawn_id);
     }

@@ -11,6 +11,7 @@ if "%~1"=="__RUN__" (
     goto :main
 )
 
+powershell -NoProfile -Command "if(Test-Path '%LOG_FILE%'){Remove-Item -Force '%LOG_FILE%' -ErrorAction SilentlyContinue}"
 cmd /v:on /c call "%SCRIPT_PATH%" __RUN__ 2>&1 | powershell -NoProfile -Command ^
   "$input | Tee-Object -FilePath '%LOG_FILE%'; exit $LASTEXITCODE"
 
@@ -198,8 +199,8 @@ if defined CMAKE_CMD (
 exit /b 0
 
 :non_compile_fail
-echo [compile_and_run.bat] Non compilation error detected. Running setup.bat...
-call "%REPO_ROOT%\setup.bat"
+echo [compile_and_run.bat] Non-compilation failure (configure/environment/setup check).
+echo [compile_and_run.bat] Failing fast to preserve the current toolchain and build artifacts.
 goto :fail
 
 :fail

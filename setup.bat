@@ -33,36 +33,7 @@ call :EnsureCMake        || goto :fail
 call :EnsureNinja        || goto :fail
 
 set "LOCAL_VCPKG=%REPO_ROOT%\vcpkg"
-
-if exist "%LOCAL_VCPKG%" (
-    echo [setup.bat] Nuking local vcpkg folder at "%LOCAL_VCPKG%"...
-
-    tasklist /fi "IMAGENAME eq vcpkg.exe" | find /I "vcpkg.exe" >nul 2>&1
-    if not errorlevel 1 (
-        echo [setup.bat] Detected running vcpkg.exe. Attempting to terminate...
-        taskkill /F /IM vcpkg.exe >nul 2>&1
-    )
-
-    rmdir /s /q "%LOCAL_VCPKG%"
-)
-
-echo [setup.bat] Cloning fresh vcpkg...
-git clone --depth 1 https://github.com/microsoft/vcpkg.git "%LOCAL_VCPKG%"
-if errorlevel 1 (
-    echo [ERROR] Failed to clone vcpkg repository.
-    goto :fail
-)
-
-echo [setup.bat] Bootstrapping vcpkg...
-pushd "%LOCAL_VCPKG%" >nul
-call bootstrap-vcpkg.bat -disableMetrics
-if errorlevel 1 (
-    popd >nul
-    echo [ERROR] vcpkg bootstrap failed.
-    goto :fail
-)
-popd >nul
-
+call :EnsureLocalVcpkg || goto :fail
 set "VCPKG_ROOT=%LOCAL_VCPKG%"
 
 if not exist "%LOCAL_VCPKG%\LICENSE.txt" (
@@ -77,56 +48,23 @@ if not exist "%LOCAL_VCPKG%\LICENSE.txt" (
 )
 
 if exist "%REPO_ROOT%\vcpkg.json" (
-    echo [setup.bat] Updating vcpkg baseline...
-
-    "%LOCAL_VCPKG%\vcpkg.exe" x-update-baseline
-    if errorlevel 1 (
-        echo [setup.bat] x-update-baseline failed, falling back to manual baseline update...
-
-        pushd "%LOCAL_VCPKG%" >nul
-        for /f "delims=" %%H in ('git rev-parse HEAD') do set "NEW_BASELINE=%%H"
-        popd >nul
-
-        if not defined NEW_BASELINE (
-            echo [ERROR] Could not resolve vcpkg HEAD commit. Baseline not updated.
-            goto :fail
-        )
-
-        powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-          "$p = 'vcpkg.json';" ^
-          "$baseline = $env:NEW_BASELINE;" ^
-          "if (-not $baseline -or $baseline.Length -ne 40 -or ($baseline -notmatch '^[0-9a-fA-F]{40}$')) { throw 'Invalid baseline in env:NEW_BASELINE' }" ^
-          "$json = $null; try { $json = Get-Content $p -Raw | ConvertFrom-Json } catch {}" ^
-          "if ($null -eq $json) { $json = [ordered]@{} }" ^
-          "$json.'builtin-baseline' = $baseline;" ^
-          "$out = $json | ConvertTo-Json -Depth 100;" ^
-          "Set-Content -Path $p -Value $out -NoNewline;"
-
-        if errorlevel 1 (
-            echo [ERROR] Failed to write builtin-baseline into vcpkg.json
-            goto :fail
-        )
-
-        for /f "usebackq delims=" %%S in (`
-          powershell -NoProfile -Command "(Get-Content 'vcpkg.json' -Raw | ConvertFrom-Json).'builtin-baseline'"
-        ) do set "CHECK_BASELINE=%%S"
-
-        if not defined CHECK_BASELINE (
-            echo [ERROR] builtin-baseline missing after write.
-            goto :fail
-        )
-
-        echo [setup.bat] builtin-baseline set to !CHECK_BASELINE!
-    ) else (
-        echo [setup.bat] x-update-baseline succeeded.
-    )
-
     powershell -NoProfile -Command ^
       "$b=(Get-Content 'vcpkg.json' -Raw | ConvertFrom-Json).'builtin-baseline';" ^
       "if($b -and $b -match '^[0-9a-fA-F]{40}$'){exit 0}else{Write-Host '[ERROR] builtin-baseline invalid:' $b; exit 1}"
     if errorlevel 1 (
         echo [ERROR] builtin-baseline is not a 40-hex SHA. Aborting.
         goto :fail
+    )
+
+    if /I "%VIBBLE_UPDATE_BASELINE%"=="1" (
+        echo [setup.bat] Updating vcpkg baseline because VIBBLE_UPDATE_BASELINE=1...
+        "%LOCAL_VCPKG%\vcpkg.exe" x-update-baseline
+        if errorlevel 1 (
+            echo [ERROR] vcpkg baseline update failed.
+            goto :fail
+        )
+    ) else (
+        echo [setup.bat] Keeping existing vcpkg baseline (set VIBBLE_UPDATE_BASELINE=1 to update).
     )
 ) else (
     echo [setup.bat] vcpkg.json not found, skipping baseline update.
@@ -250,6 +188,40 @@ where ninja >nul 2>&1 && ( echo [setup.bat] Ninja is installed. & exit /b 0 )
 echo [setup.bat] Installing Ninja via winget...
 winget install -e --id Ninja-build.Ninja --source winget --silent || (echo [ERROR] Ninja install failed. & exit /b 1)
 echo [setup.bat] Ninja installed.
+exit /b 0
+
+
+:EnsureLocalVcpkg
+if exist "%LOCAL_VCPKG%\vcpkg.exe" if exist "%LOCAL_VCPKG%\scripts\buildsystems\vcpkg.cmake" (
+    echo [setup.bat] Reusing existing local vcpkg at "%LOCAL_VCPKG%".
+    exit /b 0
+)
+
+if exist "%LOCAL_VCPKG%" (
+    echo [setup.bat] Existing vcpkg directory is incomplete. Repairing in place...
+) else (
+    echo [setup.bat] Cloning local vcpkg...
+    git clone --depth 1 https://github.com/microsoft/vcpkg.git "%LOCAL_VCPKG%"
+    if errorlevel 1 (
+        echo [ERROR] Failed to clone vcpkg repository.
+        exit /b 1
+    )
+)
+
+if not exist "%LOCAL_VCPKG%\bootstrap-vcpkg.bat" (
+    echo [ERROR] bootstrap-vcpkg.bat not found in "%LOCAL_VCPKG%".
+    exit /b 1
+)
+
+echo [setup.bat] Bootstrapping vcpkg...
+pushd "%LOCAL_VCPKG%" >nul
+call bootstrap-vcpkg.bat -disableMetrics
+if errorlevel 1 (
+    popd >nul
+    echo [ERROR] vcpkg bootstrap failed.
+    exit /b 1
+)
+popd >nul
 exit /b 0
 
 :DownloadVSBootstrapper

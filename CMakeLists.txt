@@ -247,7 +247,7 @@ endif()
 # ------------------------------------------
 # Unit tests (doctest-based)
 # ------------------------------------------
-set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/TESTS")
+set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/tests")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
 add_executable(engine_tests
 
@@ -319,19 +319,32 @@ endif()
 # ------------------------------------------
 # Isolated WorldGrid tests (lightweight target)
 # ------------------------------------------
-if (EXISTS "${TESTS_SOURCE_DIR}")
+set(ENGINE_WORLD_TEST_SOURCES
+    ${TESTS_SOURCE_DIR}/test_main.cpp
+    ${TESTS_SOURCE_DIR}/test_world_grid_same_chunk_move.cpp
+    ENGINE/runtime/gameplay/world/world_grid.cpp
+    ENGINE/runtime/gameplay/world/grid_point.cpp
+    ENGINE/runtime/gameplay/world/chunk_manager.cpp
+    ENGINE/runtime/utils/utils/grid_math.cpp
+    ENGINE/runtime/utils/utils/FramePointResolver.cpp
+    ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
+    ENGINE/runtime/utils/utils/log.cpp
+    ${TESTS_SOURCE_DIR}/stubs/asset/Asset_world_tests_stubs.cpp
+    ${TESTS_SOURCE_DIR}/stubs/chunk_stubs.cpp
+)
+
+set(ENGINE_WORLD_TESTS_READY TRUE)
+foreach(_world_test_src IN LISTS ENGINE_WORLD_TEST_SOURCES)
+    if (NOT EXISTS "${_world_test_src}")
+        message(STATUS "Skipping engine_world_tests: missing source ${_world_test_src}")
+        set(ENGINE_WORLD_TESTS_READY FALSE)
+        break()
+    endif()
+endforeach()
+
+if (ENGINE_WORLD_TESTS_READY)
     add_executable(engine_world_tests
-        ${TESTS_SOURCE_DIR}/test_main.cpp
-        ${TESTS_SOURCE_DIR}/test_world_grid_same_chunk_move.cpp
-        ENGINE/runtime/gameplay/world/world_grid.cpp
-        ENGINE/runtime/gameplay/world/grid_point.cpp
-        ENGINE/runtime/gameplay/world/chunk_manager.cpp
-        ENGINE/runtime/utils/utils/grid_math.cpp
-        ENGINE/runtime/utils/utils/FramePointResolver.cpp
-        ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
-        ENGINE/runtime/utils/utils/log.cpp
-        ENGINE/TESTS/stubs/asset/Asset_world_tests_stubs.cpp
-        ${TESTS_SOURCE_DIR}/stubs/chunk_stubs.cpp
+        ${ENGINE_WORLD_TEST_SOURCES}
     )
 
     target_include_directories(engine_world_tests
@@ -365,7 +378,7 @@ if (EXISTS "${TESTS_SOURCE_DIR}")
         target_link_directories(engine_world_tests PRIVATE "${MSVC_LIB_DIR}")
     endif()
 else()
-    message(STATUS "Skipping engine_world_tests: ${TESTS_SOURCE_DIR} not found.")
+    message(STATUS "Skipping engine_world_tests target.")
 endif()
 
 # ------------------------------------------

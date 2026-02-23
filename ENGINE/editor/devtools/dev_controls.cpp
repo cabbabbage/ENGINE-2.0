@@ -753,7 +753,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             const SDL_Rect header = other_settings_.header_rect();
             if (header.h > 0) {
                 const int safe_top = header.y + header.h;
-                if (safe_top < area.y + area.h) {
+                if (safe_top > area.y && safe_top < area.y + area.h) {
                     area.h = std::max(0, (area.y + area.h) - safe_top);
                     area.y = safe_top;
                 }
@@ -1484,6 +1484,7 @@ void DevControls::update(const Input& input) {
     }
     other_settings_.set_enabled(enabled_);
     apply_header_suppression();
+    other_settings_.update(input);
     if (map_mode_ui_) {
         map_mode_ui_->update(input);
     }

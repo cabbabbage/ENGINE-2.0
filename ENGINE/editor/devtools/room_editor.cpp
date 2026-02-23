@@ -51,6 +51,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <optional>
 #include <iostream>
@@ -62,6 +63,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <fstream>
+#include <SDL3/SDL_hints.h>
 #include <SDL3/SDL_log.h>
 
 namespace {

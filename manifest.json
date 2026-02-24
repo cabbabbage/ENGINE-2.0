@@ -1235,7 +1235,7 @@
               "origional_width": 3160,
               "position": "Exact",
               "priority": 6,
-              "resolution": 6,
+              "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-2e2f274c3de3"
@@ -2035,8 +2035,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -868,
-              "dy": 596,
+              "dx": -1100,
+              "dy": 84,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

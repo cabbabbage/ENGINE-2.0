@@ -79,6 +79,12 @@ public:
                     std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
                     EntryCallbacks callbacks = {},
                     ConfigureEntryCallback configure_entry = {});
+    void bind_entry_by_id(std::string spawn_id,
+                          std::function<nlohmann::json*()> resolver,
+                          std::function<void()> on_change,
+                          std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
+                          EntryCallbacks callbacks = {},
+                          ConfigureEntryCallback configure_entry = {});
 
     void load(const nlohmann::json& groups);
 
@@ -150,6 +156,8 @@ private:
     std::vector<std::unique_ptr<Entry>> entries_;
     nlohmann::json* bound_array_ = nullptr;
     nlohmann::json* bound_entry_ = nullptr;
+    std::string bound_entry_id_{};
+    std::function<nlohmann::json*()> bound_entry_resolver_{};
     nlohmann::json single_entry_shadow_{};
     nlohmann::json readonly_snapshot_{};
 

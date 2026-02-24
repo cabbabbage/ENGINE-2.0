@@ -1730,9 +1730,28 @@ void SpawnGroupConfig::bind_entry(nlohmann::json& entry,
     load_impl(nullptr, &entry, std::move(on_change), std::move(relay), std::move(configure_entry));
 }
 
+void SpawnGroupConfig::bind_entry_by_id(std::string spawn_id,
+                                       std::function<nlohmann::json*()> resolver,
+                                       std::function<void()> on_change,
+                                       std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
+                                       EntryCallbacks callbacks,
+                                       ConfigureEntryCallback configure_entry) {
+    bound_entry_id_ = std::move(spawn_id);
+    bound_entry_resolver_ = std::move(resolver);
+    nlohmann::json* resolved = bound_entry_resolver_ ? bound_entry_resolver_() : nullptr;
+    if (!resolved) {
+        clear_binding();
+        return;
+    }
+    bind_entry(*resolved, std::move(on_change), std::move(on_entry_change), std::move(callbacks), std::move(configure_entry));
+}
+
+
 void SpawnGroupConfig::load(const nlohmann::json& groups) {
     bound_array_ = nullptr;
     bound_entry_ = nullptr;
+    bound_entry_id_.clear();
+    bound_entry_resolver_ = {};
     entry_callbacks_ = {};
     on_change_ = {};
     on_entry_change_ = {};
@@ -1757,6 +1776,10 @@ void SpawnGroupConfig::load_impl(nlohmann::json* array,
                                  ConfigureEntryCallback configure_entry) {
     bound_array_ = array;
     bound_entry_ = entry;
+    if (!bound_entry_) {
+        bound_entry_id_.clear();
+        bound_entry_resolver_ = {};
+    }
     single_entry_mode_ = (bound_entry_ != nullptr);
     if (bound_entry_) {
         devmode::spawn::ensure_spawn_group_entry_defaults(*bound_entry_, default_display_name_for(*bound_entry_), default_resolution_);
@@ -1788,6 +1811,8 @@ void SpawnGroupConfig::load_impl(nlohmann::json* array,
 void SpawnGroupConfig::clear_binding() {
     bound_array_ = nullptr;
     bound_entry_ = nullptr;
+    bound_entry_id_.clear();
+    bound_entry_resolver_ = {};
     single_entry_mode_ = false;
     single_entry_shadow_.clear();
     readonly_snapshot_.clear();
@@ -2333,6 +2358,14 @@ void SpawnGroupConfig::nudge_priority(Entry& entry, int delta) {
 }
 
 void SpawnGroupConfig::rebuild_rows() {
+    if (bound_entry_resolver_) {
+        nlohmann::json* resolved = bound_entry_resolver_();
+        if (!resolved) {
+            clear_binding();
+            return;
+        }
+        bound_entry_ = resolved;
+    }
     if (bound_entry_) {
         if (!single_entry_shadow_.is_array()) {
             single_entry_shadow_ = nlohmann::json::array();

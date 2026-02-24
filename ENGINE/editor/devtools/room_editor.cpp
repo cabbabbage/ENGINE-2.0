@@ -17,6 +17,8 @@
 #include "map_layers_common.hpp"
 #include "devtools/asset_library_ui.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "devtools/core/dev_edit_transaction.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include "devtools/DockableCollapsible.hpp"
 #include "devtools/draw_utils.hpp"
 #include "dev_mode_color_utils.hpp"
@@ -357,6 +359,40 @@ void RoomEditor::notify_room_assets_saved() {
     }
 }
 
+bool RoomEditor::enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority priority) {
+    if (!current_room_) {
+        return false;
+    }
+
+    const nlohmann::json payload = current_room_->build_room_payload_for_save();
+
+    if (save_coordinator_ && manifest_store_ && assets_) {
+        const std::string label = std::string("Room ") + current_room_->room_name;
+        Room* room = current_room_;
+        save_coordinator_->enqueue_custom(
+            devmode::core::DevSaveCoordinator::IntentKind::Custom,
+            std::string("room:") + current_room_->room_name,
+            [room, payload](devmode::core::ManifestStore&) {
+                return room ? room->apply_room_payload_for_save(payload) : false;
+            },
+            priority,
+            label,
+            [this]() { notify_room_assets_saved(); });
+        if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
+            save_coordinator_->flush_now(label);
+            if (current_room_->has_pending_assets_save()) {
+                show_notice("Save failed; room changes remain dirty and will be retried.");
+                return false;
+            }
+        }
+        return true;
+    }
+
+    current_room_->save_assets_json();
+    notify_room_assets_saved();
+    return true;
+}
+
 bool RoomEditor::save_current_room_assets_json() {
     if (!current_room_) {
         return false;
@@ -369,9 +405,94 @@ bool RoomEditor::save_current_room_assets_json() {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Room configurator is locked; save skipped.");
         return false;
     }
+
+    if (save_coordinator_ && assets_) {
+        bool committed = false;
+        save_coordinator_->enqueue_map_entry(assets_->map_id(),
+                                             assets_->map_info_json(),
+                                             devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                             "Room assets",
+                                             [this, &committed]() {
+                                                 notify_room_assets_saved();
+                                                 committed = true;
+                                             });
+        return committed;
+    }
+
     current_room_->save_assets_json();
     notify_room_assets_saved();
     return true;
+}
+
+bool RoomEditor::validate_room_edit_invariants(std::string* error) {
+    if (!current_room_) {
+        if (error) *error = "no active room";
+        return false;
+    }
+
+    auto& root = current_room_->assets_data();
+    auto& groups = ensure_spawn_groups_array(root);
+    std::unordered_set<std::string> seen_ids;
+    for (const auto& entry : groups) {
+        if (!entry.is_object()) continue;
+        const std::string id = entry.value("spawn_id", std::string{});
+        if (id.empty()) {
+            if (error) *error = "spawn group missing spawn_id";
+            return false;
+        }
+        if (!seen_ids.insert(id).second) {
+            if (error) *error = std::string("duplicate spawn_id: ") + id;
+            return false;
+        }
+        if (!entry.contains("display_name") || !entry["display_name"].is_string()) {
+            if (error) *error = std::string("spawn group missing display_name: ") + id;
+            return false;
+        }
+    }
+
+    if (active_spawn_group_id_ && !is_room_spawn_id(*active_spawn_group_id_)) {
+        if (error) *error = "active selection points to missing spawn group";
+        return false;
+    }
+
+    return true;
+}
+
+bool RoomEditor::commit_room_edit_transaction(const std::function<bool()>& mutate,
+                                              const std::string& action_label,
+                                              bool refresh_ui_on_success) {
+    if (!current_room_) {
+        return false;
+    }
+
+    const auto selection_before = active_spawn_group_id_;
+    devmode::core::DevEditTransaction tx(current_room_->assets_data(), room_assets_edit_version_, action_label);
+    devmode::core::DevEditTransaction::Hooks hooks;
+    hooks.mutate = mutate;
+    hooks.validate = [this](const nlohmann::json&) {
+        std::string error;
+        const bool valid = validate_room_edit_invariants(&error);
+        if (!valid) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[RoomEditor] Invariant failed: %s", error.c_str());
+        }
+        return valid;
+    };
+    hooks.commit = [this]() { return save_current_room_assets_json(); };
+    hooks.on_commit_success = [this, refresh_ui_on_success]() {
+        rebuild_room_spawn_id_cache();
+        if (refresh_ui_on_success) {
+            refresh_spawn_group_config_ui();
+            reopen_room_configurator();
+        }
+    };
+    hooks.on_rollback = [this, selection_before, action_label]() {
+        active_spawn_group_id_ = selection_before;
+        rebuild_room_spawn_id_cache();
+        refresh_spawn_group_config_ui();
+        reopen_room_configurator();
+        show_notice("Failed to save room assets; " + action_label + " canceled.");
+    };
+    return tx.run(hooks);
 }
 
 void RoomEditor::copy_selected_spawn_group() {
@@ -1135,7 +1256,7 @@ if (auto selected = library_ui_->consume_selection()) {
                             dst_root["areas"] = nlohmann::json::array();
                         }
                         dst_root["areas"].push_back(copy);
-                        current_room_->save_assets_json();
+                        enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority::Debounced);
 
                         ensure_area_anchor_spawn_entry(current_room_, candidate);
                     }
@@ -3898,7 +4019,7 @@ void RoomEditor::finalize_area_drag_session() {
         (*area_entry)["anchor_relative_to_center"] = true;
         (*area_entry)["anchor"] = nlohmann::json::object({ {"x", dx}, {"y", dy} });
 
-        current_room_->save_assets_json();
+        enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority::Debounced);
     }
 
     nlohmann::json& root = current_room_->assets_data();
@@ -4067,8 +4188,7 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         room_data["camera_tilt_deg"] = tilt_deg;
         room_data["camera_zoom_percent"] = zoom_percent;
 
-        current_room_->save_assets_json();
-        notify_room_assets_saved();
+        enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority::Immediate);
 
         if (room_cfg_ui_) {
             room_cfg_ui_->reload_camera_state_from_room();
@@ -4086,6 +4206,11 @@ void RoomEditor::ensure_room_configurator() {
     }
     if (room_cfg_ui_) {
         room_cfg_ui_->set_manifest_store(manifest_store_);
+        room_cfg_ui_->set_room_save_callback([this](bool immediate) {
+            return enqueue_current_room_save(immediate
+                ? devmode::core::DevSaveCoordinator::Priority::Immediate
+                : devmode::core::DevSaveCoordinator::Priority::Debounced);
+        });
         room_cfg_ui_->set_header_visibility_controller([this](bool visible) {
             room_config_panel_visible_ = visible;
             if (header_visibility_callback_) {
@@ -5159,9 +5284,7 @@ void RoomEditor::refresh_spawn_group_config_ui() {
         if (!current_room_) {
             return;
         }
-        save_current_room_assets_json();
-        rebuild_room_spawn_id_cache();
-        reopen_room_configurator();
+        commit_room_edit_transaction([]() { return true; }, "spawn group update", false);
 };
 
     auto on_entry_change = [this](const nlohmann::json& entry, const SpawnGroupConfig::ChangeSummary& summary) {
@@ -5169,18 +5292,18 @@ void RoomEditor::refresh_spawn_group_config_ui() {
             return;
         }
         bool sanitized = false;
-        if (entry.is_object()) {
-            const std::string id = entry.value("spawn_id", std::string{});
-            SpawnEntryResolution current = locate_spawn_entry(id);
-            if (current.owner_array) {
-                sanitized = sanitize_perimeter_spawn_groups(*current.owner_array);
+        const bool committed = commit_room_edit_transaction([&sanitized, this, &entry]() {
+            if (entry.is_object()) {
+                const std::string id = entry.value("spawn_id", std::string{});
+                SpawnEntryResolution current = locate_spawn_entry(id);
+                if (current.owner_array) {
+                    sanitized = sanitize_perimeter_spawn_groups(*current.owner_array);
+                }
             }
-        }
-        save_current_room_assets_json();
-        rebuild_room_spawn_id_cache();
-        reopen_room_configurator();
-        if (sanitized || summary.method_changed || summary.quantity_changed || summary.candidates_changed ||
-            summary.resolution_changed) {
+            return true;
+        }, "spawn group update", false);
+        if (committed && (sanitized || summary.method_changed || summary.quantity_changed || summary.candidates_changed ||
+            summary.resolution_changed)) {
             respawn_spawn_group(entry);
         }
 };
@@ -5236,11 +5359,16 @@ void RoomEditor::refresh_spawn_group_config_ui() {
 
     if (resolved.valid()) {
         if (resolved.source == SpawnEntryResolution::Source::Room) {
-            spawn_group_panel_->bind_entry(*resolved.entry,
-                                           on_change,
-                                           on_entry_change,
-                                           SpawnGroupConfig::EntryCallbacks{},
-                                           configure_entry);
+            const std::string spawn_id = *active_spawn_group_id_;
+            spawn_group_panel_->bind_entry_by_id(spawn_id,
+                                                 [this, spawn_id]() -> nlohmann::json* {
+                                                     SpawnEntryResolution lookup = locate_spawn_entry(spawn_id);
+                                                     return lookup.source == SpawnEntryResolution::Source::Room ? lookup.entry : nullptr;
+                                                 },
+                                                 on_change,
+                                                 on_entry_change,
+                                                 SpawnGroupConfig::EntryCallbacks{},
+                                                 configure_entry);
         } else {
             spawn_group_panel_->bind_entry(*resolved.entry,
                                            map_on_change,
@@ -5589,61 +5717,48 @@ std::optional<std::vector<SDL_Point>> RoomEditor::compute_edge_path_for_spawn(co
 
 void RoomEditor::add_spawn_group_internal() {
     if (!current_room_) return;
-    auto& root = current_room_->assets_data();
-    auto& arr = ensure_spawn_groups_array(root);
-    nlohmann::json entry;
-    const std::string new_spawn_id = generate_spawn_id();
-    entry["spawn_id"] = new_spawn_id;
-    const int add_default_resolution = current_grid_resolution();
-    devmode::spawn::ensure_spawn_group_entry_defaults(entry, "New Spawn", add_default_resolution);
-    arr.push_back(entry);
 
-    for (size_t i = 0; i < arr.size(); ++i) {
-        if (arr[i].is_object()) arr[i]["priority"] = static_cast<int>(i);
+    const std::string new_spawn_id = generate_spawn_id();
+    const bool committed = commit_room_edit_transaction([this, &new_spawn_id]() {
+        auto& root = current_room_->assets_data();
+        auto& arr = ensure_spawn_groups_array(root);
+        nlohmann::json entry;
+        entry["spawn_id"] = new_spawn_id;
+        const int add_default_resolution = current_grid_resolution();
+        devmode::spawn::ensure_spawn_group_entry_defaults(entry, "New Spawn", add_default_resolution);
+        arr.push_back(entry);
+        for (size_t i = 0; i < arr.size(); ++i) {
+            if (arr[i].is_object()) arr[i]["priority"] = static_cast<int>(i);
+        }
+        sanitize_perimeter_spawn_groups(arr);
+        active_spawn_group_id_ = new_spawn_id;
+        return true;
+    }, "spawn group add");
+    if (committed) {
+        open_spawn_group_editor_by_id(new_spawn_id);
     }
-    sanitize_perimeter_spawn_groups(arr);
-    save_current_room_assets_json();
-    rebuild_room_spawn_id_cache();
-    active_spawn_group_id_ = new_spawn_id;
-    refresh_spawn_group_config_ui();
-    reopen_room_configurator();
-    open_spawn_group_editor_by_id(new_spawn_id);
 }
 
 bool RoomEditor::delete_spawn_group_internal(const std::string& spawn_id) {
-    const bool panel_bound_to_target =
-        spawn_group_panel_ && active_spawn_group_id_ && *active_spawn_group_id_ == spawn_id;
-    if (panel_bound_to_target) {
-        // Drop any direct binding to the soon-to-be-deleted JSON entry to avoid
-        // dangling pointers inside the spawn group config panel during removal.
-        spawn_group_panel_->clear_binding();
-    }
-
     if (!current_room_) {
         return false;
     }
-    nlohmann::json snapshot = current_room_->assets_data();
-    if (!remove_spawn_group_by_id(spawn_id)) {
+
+    const bool deleted = commit_room_edit_transaction([this, &spawn_id]() {
+        if (!remove_spawn_group_by_id(spawn_id)) {
+            return false;
+        }
+        if (active_spawn_group_id_ && *active_spawn_group_id_ == spawn_id) {
+            clear_active_spawn_group_target();
+        }
+        return true;
+    }, "spawn group deletion");
+    if (!deleted) {
         return false;
     }
-    if (!save_current_room_assets_json()) {
-        current_room_->assets_data() = std::move(snapshot);
-        rebuild_room_spawn_id_cache();
-        refresh_spawn_group_config_ui();
-        reopen_room_configurator();
-        show_notice("Failed to save room assets; spawn group deletion canceled.");
-        return false;
-    }
+
     if (assets_) {
         assets_->notify_spawn_group_removed(spawn_id);
-    }
-    if (active_spawn_group_id_ && *active_spawn_group_id_ == spawn_id) {
-        clear_active_spawn_group_target();
-    }
-    rebuild_room_spawn_id_cache();
-    refresh_spawn_group_config_ui();
-    reopen_room_configurator();
-    if (assets_) {
         assets_->refresh_active_asset_lists();
         mark_highlight_dirty();
     }
@@ -5674,38 +5789,38 @@ bool RoomEditor::remove_spawn_group_by_id(const std::string& spawn_id) {
 
 void RoomEditor::reorder_spawn_group_internal(const std::string& spawn_id, size_t target_index) {
     if (!current_room_ || spawn_id.empty()) return;
-    auto& root = current_room_->assets_data();
-    auto& arr = ensure_spawn_groups_array(root);
-    if (!arr.is_array() || arr.empty()) return;
 
-    size_t current_index = arr.size();
-    for (size_t i = 0; i < arr.size(); ++i) {
-        const auto& entry = arr[i];
-        if (!entry.is_object()) continue;
-        if (entry.contains("spawn_id") && entry["spawn_id"].is_string() && entry["spawn_id"].get<std::string>() == spawn_id) {
-            current_index = i;
-            break;
+    commit_room_edit_transaction([this, &spawn_id, target_index]() {
+        auto& root = current_room_->assets_data();
+        auto& arr = ensure_spawn_groups_array(root);
+        if (!arr.is_array() || arr.empty()) return false;
+
+        size_t current_index = arr.size();
+        for (size_t i = 0; i < arr.size(); ++i) {
+            const auto& entry = arr[i];
+            if (!entry.is_object()) continue;
+            if (entry.contains("spawn_id") && entry["spawn_id"].is_string() && entry["spawn_id"].get<std::string>() == spawn_id) {
+                current_index = i;
+                break;
+            }
         }
-    }
-    if (current_index >= arr.size()) return;
+        if (current_index >= arr.size()) return false;
 
-    const size_t bounded_index = std::min(target_index, arr.size() - 1);
-    if (current_index == bounded_index) return;
+        const size_t bounded_index = std::min(target_index, arr.size() - 1);
+        if (current_index == bounded_index) return true;
 
-    nlohmann::json entry = std::move(arr[current_index]);
-    const auto erase_pos = arr.begin() + static_cast<nlohmann::json::difference_type>(current_index);
-    arr.erase(erase_pos);
-    size_t insert_index = std::min(bounded_index, arr.size());
-    const auto insert_pos = arr.begin() + static_cast<nlohmann::json::difference_type>(insert_index);
-    arr.insert(insert_pos, std::move(entry));
+        nlohmann::json entry = std::move(arr[current_index]);
+        const auto erase_pos = arr.begin() + static_cast<nlohmann::json::difference_type>(current_index);
+        arr.erase(erase_pos);
+        size_t insert_index = std::min(bounded_index, arr.size());
+        const auto insert_pos = arr.begin() + static_cast<nlohmann::json::difference_type>(insert_index);
+        arr.insert(insert_pos, std::move(entry));
 
-    for (size_t i = 0; i < arr.size(); ++i) {
-        if (arr[i].is_object()) arr[i]["priority"] = static_cast<int>(i);
-    }
-    save_current_room_assets_json();
-    rebuild_room_spawn_id_cache();
-    refresh_spawn_group_config_ui();
-    reopen_room_configurator();
+        for (size_t i = 0; i < arr.size(); ++i) {
+            if (arr[i].is_object()) arr[i]["priority"] = static_cast<int>(i);
+        }
+        return true;
+    }, "spawn group reorder");
 }
 
 void RoomEditor::open_spawn_group_editor_by_id(const std::string& spawn_id) {

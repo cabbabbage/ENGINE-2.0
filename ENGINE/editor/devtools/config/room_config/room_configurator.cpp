@@ -914,7 +914,7 @@ void RoomConfigurator::set_base_panel_expanded(const std::string& key, bool expa
 
 void RoomConfigurator::persist_spawn_group_changes() {
     if (room_) {
-        room_->save_assets_json();
+        if (room_save_callback_) { room_save_callback_(false); } else { room_->save_assets_json(); }
     } else if (on_external_spawn_change_) {
         on_external_spawn_change_();
     }
@@ -2171,7 +2171,7 @@ bool RoomConfigurator::sync_state_from_widgets() {
             room_->camera_height_px = state_->camera_height_px;
             room_->camera_tilt_deg = state_->camera_tilt_deg;
             room_->camera_zoom_percent = state_->camera_zoom_percent;
-            room_->save_assets_json();
+            if (room_save_callback_) { room_save_callback_(false); } else { room_->save_assets_json(); }
             if (tags_changed) {
                 tag_utils::notify_tags_changed();
             }
@@ -2504,7 +2504,7 @@ void RoomConfigurator::request_camera_live_update() {
         room_->camera_zoom_percent = state_->camera_zoom_percent;
 
         state_->apply_to_json(room_->assets_data(), true);
-        room_->save_assets_json();
+        if (room_save_callback_) { room_save_callback_(false); } else { room_->save_assets_json(); }
         if (on_camera_changed_) on_camera_changed_(room_);
     } else if (external_room_json_) {
         state_->apply_to_json(*external_room_json_, true);

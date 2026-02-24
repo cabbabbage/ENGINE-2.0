@@ -59,6 +59,7 @@ public:
     void open(Room* room);
 
     void set_manifest_store(class devmode::core::ManifestStore* store);
+    void set_room_save_callback(std::function<bool(bool immediate)> cb) { room_save_callback_ = std::move(cb); }
 
     bool refresh_spawn_groups(const nlohmann::json& room_data);
     bool refresh_spawn_groups(nlohmann::json& room_data);
@@ -245,6 +246,7 @@ private:
     std::function<void(const std::string&, const std::string&)> on_spawn_area_open_;
     std::string spawn_area_stack_key_;
     std::function<void()> on_external_spawn_change_;
+    std::function<bool(bool immediate)> room_save_callback_;
     std::function<void(const nlohmann::json&, const SpawnGroupConfig::ChangeSummary&)> on_external_spawn_entry_change_;
     SpawnGroupConfig::ConfigureEntryCallback external_configure_entry_;
     std::function<std::string(const std::string&, const std::string&)> on_room_renamed_;

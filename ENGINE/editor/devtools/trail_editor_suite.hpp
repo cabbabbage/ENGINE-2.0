@@ -8,6 +8,8 @@
 #include <nlohmann/json_fwd.hpp>
 #include <string>
 
+#include "devtools/core/dev_save_coordinator.hpp"
+
 class Input;
 class Room;
 class SDL_Renderer;
@@ -33,6 +35,7 @@ public:
 
     void set_on_open_area(std::function<void(const std::string&, const std::string&)> cb,
                           std::string stack_key = {});
+    void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
 
 private:
     void ensure_ui();
@@ -41,6 +44,7 @@ private:
     void add_spawn_group();
     void reorder_spawn_group(const std::string& id, size_t new_index);
     nlohmann::json* find_spawn_entry(const std::string& id);
+    bool enqueue_active_trail_save(devmode::core::DevSaveCoordinator::Priority priority);
 
     int screen_w_ = 0;
     int screen_h_ = 0;
@@ -50,6 +54,7 @@ private:
     std::unique_ptr<RoomConfigurator> configurator_;
     std::function<void(const std::string&, const std::string&)> on_open_area_{};
     std::string open_area_stack_key_{};
+    devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
 };
 
 

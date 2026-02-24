@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "devtools/dev_camera_controls.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include "utils/input.hpp"
 
 class Asset;
@@ -40,7 +41,6 @@ class DevControls;
 
 namespace devmode::core {
 class ManifestStore;
-class DevSaveCoordinator;
 }
 
 class RoomEditor {
@@ -275,7 +275,12 @@ private:
     void open_spawn_group_editor_by_id(const std::string& spawn_id);
     void reopen_room_configurator();
     void notify_room_assets_saved();
+    bool enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority priority);
     bool save_current_room_assets_json();
+    bool validate_room_edit_invariants(std::string* error = nullptr);
+    bool commit_room_edit_transaction(const std::function<bool()>& mutate,
+                                      const std::string& action_label,
+                                      bool refresh_ui_on_success = true);
     void copy_selected_spawn_group();
     void paste_spawn_group_from_clipboard();
     std::optional<std::string> selected_spawn_group_id() const;
@@ -405,6 +410,7 @@ private:
     Uint32 last_click_time_ms_ = 0;
     std::optional<SDL_Point> pending_spawn_world_pos_{};
     std::optional<std::string> active_spawn_group_id_{};
+    std::uint64_t room_assets_edit_version_ = 0;
     bool suppress_spawn_group_close_clear_ = false;
     std::unique_ptr<SpawnGroupConfig> spawn_group_panel_{};
 

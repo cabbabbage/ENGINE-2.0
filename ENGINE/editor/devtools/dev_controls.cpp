@@ -885,6 +885,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     trail_suite_ = std::make_unique<TrailEditorSuite>();
     if (trail_suite_) {
         trail_suite_->set_screen_dimensions(screen_w_, screen_h_);
+        trail_suite_->set_save_coordinator(&save_coordinator_);
     }
     other_settings_.initialize();
     other_settings_.set_assets_context(assets_);

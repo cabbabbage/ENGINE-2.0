@@ -971,61 +971,63 @@ void Room::set_manifest_store(devmode::core::ManifestStore* store,
         }
 }
 
-void Room::save_assets_json() const {
-
+nlohmann::json Room::build_room_payload_for_save() const {
+        assets_save_dirty_ = true;
         const_cast<Room*>(this)->load_named_areas_from_json();
 
         const_cast<Room*>(this)->assets_json["camera_height_px"] = camera_height_px;
         const_cast<Room*>(this)->assets_json["camera_tilt_deg"] = camera_tilt_deg;
         const_cast<Room*>(this)->assets_json["camera_zoom_percent"] = camera_zoom_percent;
 
+        nlohmann::json payload;
+        if (map_info_root_) {
+                payload = *map_info_root_;
+        } else if (manifest_store_ && !manifest_map_id_.empty()) {
+                if (const nlohmann::json* entry = manifest_store_->find_map_entry(manifest_map_id_)) {
+                        payload = *entry;
+                }
+        }
+
+        if (!payload.is_object()) {
+                payload = nlohmann::json::object();
+        }
+        nlohmann::json& section = payload[data_section_];
+        if (!section.is_object()) {
+                section = nlohmann::json::object();
+        }
+        section[room_name] = assets_json;
+        return payload;
+}
+
+bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
+        if (!payload.is_object()) {
+                return false;
+        }
         if (room_data_ptr_) {
                 *room_data_ptr_ = assets_json;
         }
-        if (map_info_root_ && map_info_root_->is_object()) {
-                nlohmann::json& section = (*map_info_root_)[data_section_];
-                if (!section.is_object()) {
-                        section = nlohmann::json::object();
-                }
-                section[room_name] = assets_json;
+        if (map_info_root_) {
+                *map_info_root_ = payload;
         }
+
+        bool success = true;
         if (manifest_store_ && !manifest_map_id_.empty()) {
-                nlohmann::json payload;
-                if (map_info_root_) {
-                        payload = *map_info_root_;
-                } else if (const nlohmann::json* entry = manifest_store_->find_map_entry(manifest_map_id_)) {
-                        payload = *entry;
-                }
-                if (!payload.is_object()) {
-                        payload = nlohmann::json::object();
-                }
-                nlohmann::json& section = payload[data_section_];
-                if (!section.is_object()) {
-                        section = nlohmann::json::object();
-                }
-                section[room_name] = assets_json;
-                if (devmode::persist_map_manifest_entry(*manifest_store_, manifest_map_id_, payload, std::cerr)) {
+                success = devmode::persist_map_manifest_entry(*manifest_store_, manifest_map_id_, payload, std::cerr);
+                if (success) {
                         manifest_store_->flush();
                 }
-                return;
-        }
-        if (manifest_writer_ && !manifest_map_id_.empty()) {
-                nlohmann::json payload = nlohmann::json::object();
-                if (map_info_root_) {
-                        payload = *map_info_root_;
-                }
-                if (!payload.is_object()) {
-                        payload = nlohmann::json::object();
-                }
-                nlohmann::json& section = payload[data_section_];
-                if (!section.is_object()) {
-                        section = nlohmann::json::object();
-                }
-                section[room_name] = assets_json;
+        } else if (manifest_writer_ && !manifest_map_id_.empty()) {
                 manifest_writer_(manifest_map_id_, payload);
         }
-        try {
-                std::cout << "[Room] Autosaved assets for room: " << room_name << "\n";
-        } catch (...) {
+
+        if (success) {
+                assets_save_dirty_ = false;
         }
+        return success;
+}
+
+void Room::save_assets_json() const {
+        assets_save_dirty_ = true;
+        const nlohmann::json payload = build_room_payload_for_save();
+        apply_room_payload_for_save(payload);
 }

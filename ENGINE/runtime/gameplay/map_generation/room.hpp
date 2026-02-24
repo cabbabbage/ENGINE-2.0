@@ -94,6 +94,9 @@ class Room {
     nlohmann::json create_static_room_json(std::string name);
     nlohmann::json& assets_data();
     const nlohmann::json& assets_data() const;
+    nlohmann::json build_room_payload_for_save() const;
+    bool apply_room_payload_for_save(const nlohmann::json& payload) const;
+    bool has_pending_assets_save() const { return assets_save_dirty_; }
     void save_assets_json() const;
     bool is_spawn_room() const;
     SDL_Color display_color() const;
@@ -139,6 +142,7 @@ class Room {
     std::string manifest_map_id_;
     nlohmann::json* map_info_root_ = nullptr;
     ManifestWriter manifest_writer_{};
+    mutable bool assets_save_dirty_ = false;
     int clamp_int(int v, int lo, int hi) const;
     void bounds_to_size(const std::tuple<int,int,int,int>& b, int& w, int& h) const;
     std::pair<int, int> current_room_dimensions() const;

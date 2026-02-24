@@ -382,6 +382,7 @@ private:
     std::optional<GridResolutionToast> grid_resolution_toast_;
     int  grid_resolution_r_ = -1;
     bool movement_debug_enabled_ = false;
+    bool anchor_point_debug_enabled_ = false;
 
     std::unique_ptr<class FrameEditorSession> frame_editor_session_;
     bool frame_editor_prev_grid_overlay_ = false;

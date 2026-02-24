@@ -141,6 +141,8 @@ public:
     bool movement_debug_enabled() const { return movement_debug_enabled_; }
     void set_movement_debug_visible(bool visible);
     bool movement_debug_visible() const { return movement_debug_visible_; }
+    void set_anchor_point_debug_enabled(bool enabled);
+    bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     bool fog_visible() const;
     bool boundary_assets_visible() const;
     // Force the camera to refresh from current room settings on next update.
@@ -288,6 +290,7 @@ private:
     bool depth_effects_enabled_ = true;
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
+    bool anchor_point_debug_enabled_ = false;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
     std::vector<world::GridPoint*> active_points_;

@@ -36,6 +36,7 @@ public:
         bool show_grid = false;
         bool snap_to_grid = true;
         bool movement_debug = false;
+        bool anchor_point_debug = false;
         bool depth_effects = true;
         int overlay_resolution = 0;
 };
@@ -61,11 +62,13 @@ public:
                                          std::function<void(int)> on_overlay_resolution_change,
                                          std::function<void(bool)> on_snap_to_grid,
                                          std::function<void(bool)> on_movement_debug,
+                                         std::function<void(bool)> on_anchor_point_debug,
                                          std::function<void(bool)> on_depth_effects);
     void set_show_grid_enabled(bool enabled);
     void set_overlay_resolution_value(int resolution);
     void set_snap_to_grid_enabled(bool enabled);
     void set_movement_debug_enabled(bool enabled);
+    void set_anchor_point_debug_enabled(bool enabled);
     void set_depth_effects_enabled(bool enabled);
 
     void set_header_suppressed(bool suppressed);
@@ -221,12 +224,14 @@ private:
     std::unique_ptr<DMNumericStepper> overlay_grid_stepper_;
     std::unique_ptr<DMCheckbox> snap_to_grid_checkbox_;
     std::unique_ptr<DMCheckbox> movement_debug_checkbox_;
+    std::unique_ptr<DMCheckbox> anchor_point_debug_checkbox_;
     std::unique_ptr<DMCheckbox> depth_effects_checkbox_;
     DevModeSettings dev_mode_settings_{};
     std::function<void(bool)> on_show_grid_toggle_;
     std::function<void(int)> on_overlay_resolution_change_;
     std::function<void(bool)> on_snap_to_grid_toggle_;
     std::function<void(bool)> on_movement_debug_toggle_;
+    std::function<void(bool)> on_anchor_point_debug_toggle_;
     std::function<void(bool)> on_depth_effects_toggle_;
     std::function<void(int)> on_grid_resolution_changed_;
     int grid_resolution_min_ = 0;

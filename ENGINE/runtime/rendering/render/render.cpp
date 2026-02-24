@@ -30,6 +30,7 @@
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "assets/animation.hpp"
 #include "assets/animation_frame.hpp"
+#include "utils/AnchorPointResolver.hpp"
 #include "utils/log.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/world_grid.hpp"
@@ -738,6 +739,10 @@ void SceneRenderer::set_movement_debug_visible(bool visible) {
     movement_debug_visible_ = visible;
 }
 
+void SceneRenderer::set_anchor_point_debug_enabled(bool enabled) {
+    anchor_point_debug_enabled_ = enabled;
+}
+
 void SceneRenderer::invalidate_dynamic_boundary_system() {
     if (dynamic_boundary_system_) {
         dynamic_boundary_system_->invalidate_config();
@@ -1012,6 +1017,49 @@ void SceneRenderer::render() {
     // Flush all batched geometry
     if (geometry_batcher_) {
         geometry_batcher_->flush();
+    }
+
+    if (anchor_point_debug_enabled_) {
+        SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
+        for (const auto& entry : render_traversal) {
+            Asset* asset = entry.asset;
+            if (!asset || asset->is_hidden() || asset->is_anchor_hidden() || !asset->info || !asset->current_frame) {
+                continue;
+            }
+            const auto& anchors = asset->current_frame->anchor_points;
+            if (anchors.empty()) {
+                continue;
+            }
+            for (const auto& anchor : anchors) {
+                if (!anchor.is_valid()) {
+                    continue;
+                }
+                const auto sample = anchor_points::resolve_frame_anchor_sample(
+                    *asset,
+                    anchor,
+                    anchor.in_front ? anchor_points::AnchorDepthPolicy::InFront : anchor_points::AnchorDepthPolicy::Behind,
+                    anchor_points::GridMaterialization::None);
+                if (sample.resolved.missing || !std::isfinite(sample.screen_px.x) || !std::isfinite(sample.screen_px.y)) {
+                    continue;
+                }
+
+                const int cx = static_cast<int>(std::lround(sample.screen_px.x));
+                const int cy = static_cast<int>(std::lround(sample.screen_px.y));
+                const SDL_Color fill = anchor.in_front ? SDL_Color{255, 220, 0, 235} : SDL_Color{120, 200, 255, 235};
+                const SDL_Color outline = SDL_Color{20, 20, 20, 235};
+
+                SDL_SetRenderDrawColor(renderer_, outline.r, outline.g, outline.b, outline.a);
+                SDL_Rect outline_rect{cx - 3, cy - 3, 6, 6};
+                sdl_render::FillRect(renderer_, &outline_rect);
+                SDL_SetRenderDrawColor(renderer_, fill.r, fill.g, fill.b, fill.a);
+                SDL_Rect fill_rect{cx - 2, cy - 2, 4, 4};
+                sdl_render::FillRect(renderer_, &fill_rect);
+
+                SDL_SetRenderDrawColor(renderer_, outline.r, outline.g, outline.b, outline.a);
+                SDL_RenderLine(renderer_, cx - 6, cy, cx + 6, cy);
+                SDL_RenderLine(renderer_, cx, cy - 6, cx, cy + 6);
+            }
+        }
     }
 
     if (debug_auto_paths_ && movement_debug_visible_) {

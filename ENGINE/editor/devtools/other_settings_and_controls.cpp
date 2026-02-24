@@ -537,6 +537,9 @@ void OtherSettingsAndControls::set_dev_mode_settings(const DevModeSettings& sett
     if (movement_debug_checkbox_) {
         movement_debug_checkbox_->set_value(dev_mode_settings_.movement_debug);
     }
+    if (anchor_point_debug_checkbox_) {
+        anchor_point_debug_checkbox_->set_value(dev_mode_settings_.anchor_point_debug);
+    }
     if (depth_effects_checkbox_) {
         depth_effects_checkbox_->set_value(dev_mode_settings_.depth_effects);
     }
@@ -547,11 +550,13 @@ void OtherSettingsAndControls::set_dev_mode_settings_callbacks(std::function<voi
                                                                std::function<void(int)> on_overlay_resolution_change,
                                                                std::function<void(bool)> on_snap_to_grid,
                                                                std::function<void(bool)> on_movement_debug,
+                                                               std::function<void(bool)> on_anchor_point_debug,
                                                                std::function<void(bool)> on_depth_effects) {
     on_show_grid_toggle_ = std::move(on_show_grid);
     on_overlay_resolution_change_ = std::move(on_overlay_resolution_change);
     on_snap_to_grid_toggle_ = std::move(on_snap_to_grid);
     on_movement_debug_toggle_ = std::move(on_movement_debug);
+    on_anchor_point_debug_toggle_ = std::move(on_anchor_point_debug);
     on_depth_effects_toggle_ = std::move(on_depth_effects);
 }
 
@@ -588,6 +593,14 @@ void OtherSettingsAndControls::set_movement_debug_enabled(bool enabled) {
     }
 }
 
+
+void OtherSettingsAndControls::set_anchor_point_debug_enabled(bool enabled) {
+    dev_mode_settings_.anchor_point_debug = enabled;
+    ensure_dev_settings_controls();
+    if (anchor_point_debug_checkbox_) {
+        anchor_point_debug_checkbox_->set_value(enabled);
+    }
+}
 void OtherSettingsAndControls::set_depth_effects_enabled(bool enabled) {
     dev_mode_settings_.depth_effects = enabled;
     ensure_dev_settings_controls();
@@ -924,6 +937,9 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
     if (movement_debug_checkbox_) {
         movement_debug_checkbox_->render(renderer);
     }
+    if (anchor_point_debug_checkbox_) {
+        anchor_point_debug_checkbox_->render(renderer);
+    }
     if (depth_effects_checkbox_) {
         depth_effects_checkbox_->render(renderer);
     }
@@ -1050,6 +1066,7 @@ bool OtherSettingsAndControls::handle_event(const SDL_Event& event) {
     handle_setting_checkbox(overlay_grid_checkbox_.get(), on_show_grid_toggle_, &dev_mode_settings_.show_grid);
     handle_setting_checkbox(snap_to_grid_checkbox_.get(), on_snap_to_grid_toggle_, &dev_mode_settings_.snap_to_grid);
     handle_setting_checkbox(movement_debug_checkbox_.get(), on_movement_debug_toggle_, &dev_mode_settings_.movement_debug);
+    handle_setting_checkbox(anchor_point_debug_checkbox_.get(), on_anchor_point_debug_toggle_, &dev_mode_settings_.anchor_point_debug);
     handle_setting_checkbox(depth_effects_checkbox_.get(), on_depth_effects_toggle_, &dev_mode_settings_.depth_effects);
     handle_overlay_stepper(overlay_grid_stepper_.get(), on_overlay_resolution_change_, &dev_mode_settings_.overlay_resolution);
 
@@ -1271,6 +1288,9 @@ void OtherSettingsAndControls::clear_checkbox_rects() {
     if (movement_debug_checkbox_) {
         movement_debug_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
+    if (anchor_point_debug_checkbox_) {
+        anchor_point_debug_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+    }
     if (depth_effects_checkbox_) {
         depth_effects_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
@@ -1434,28 +1454,17 @@ void OtherSettingsAndControls::layout_dev_settings() {
 
     debug_section_label_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
     y += debug_section_label_rect_.h + row_gap;
-    bool debug_row_started = false;
     if (movement_debug_checkbox_) {
-        movement_debug_checkbox_->set_rect(SDL_Rect{left_column, y, column_width, control_height});
-        debug_row_started = true;
-    }
-    const bool debug_two_column = wide_mode && movement_debug_checkbox_ && depth_effects_checkbox_;
-    if (depth_effects_checkbox_) {
-        if (debug_two_column) {
-            depth_effects_checkbox_->set_rect(SDL_Rect{right_column, y, column_width, control_height});
-            y += control_height + row_gap;
-            debug_row_started = false;
-        } else {
-            if (debug_row_started) {
-                y += control_height;
-            }
-            depth_effects_checkbox_->set_rect(SDL_Rect{left_column, y, column_width, control_height});
-            y += control_height + row_gap;
-            debug_row_started = false;
-        }
-    } else if (debug_row_started) {
+        movement_debug_checkbox_->set_rect(SDL_Rect{left_column, y, max_content_width, control_height});
         y += control_height + row_gap;
-        debug_row_started = false;
+    }
+    if (anchor_point_debug_checkbox_) {
+        anchor_point_debug_checkbox_->set_rect(SDL_Rect{left_column, y, max_content_width, control_height});
+        y += control_height + row_gap;
+    }
+    if (depth_effects_checkbox_) {
+        depth_effects_checkbox_->set_rect(SDL_Rect{left_column, y, max_content_width, control_height});
+        y += control_height + row_gap;
     }
     y += section_gap;
 
@@ -1734,6 +1743,7 @@ void OtherSettingsAndControls::shift_all_by(int dy) {
     shift_checkbox(overlay_grid_checkbox_.get());
     shift_checkbox(snap_to_grid_checkbox_.get());
     shift_checkbox(movement_debug_checkbox_.get());
+    shift_checkbox(anchor_point_debug_checkbox_.get());
     shift_checkbox(depth_effects_checkbox_.get());
     shift_stepper(overlay_grid_stepper_.get());
     shift_stepper(grid_resolution_stepper_.get());
@@ -2065,6 +2075,12 @@ void OtherSettingsAndControls::ensure_dev_settings_controls() {
         movement_debug_checkbox_ = std::make_unique<DMCheckbox>("Debug Movement", dev_mode_settings_.movement_debug);
     } else {
         movement_debug_checkbox_->set_value(dev_mode_settings_.movement_debug);
+    }
+
+    if (!anchor_point_debug_checkbox_) {
+        anchor_point_debug_checkbox_ = std::make_unique<DMCheckbox>("Debug Anchor Points", dev_mode_settings_.anchor_point_debug);
+    } else {
+        anchor_point_debug_checkbox_->set_value(dev_mode_settings_.anchor_point_debug);
     }
 
     if (!depth_effects_checkbox_) {

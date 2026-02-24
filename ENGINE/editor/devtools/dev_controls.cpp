@@ -174,6 +174,7 @@ constexpr const char* kGridSnapEnabledKey    = "dev.grid.snap.enabled";
 constexpr const char* kGridCellSizePxKey     = "dev.grid.cell_size_px";
 constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
 constexpr const char* kMovementDebugEnabledKey = "dev.movement.debug.enabled";
+constexpr const char* kAnchorPointDebugEnabledKey = "dev.anchor_points.debug.enabled";
 
 void persist_dev_bool(const char* key, bool value) {
     devmode::ui_settings::save_bool(key, value);
@@ -730,6 +731,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     }
     grid_cell_size_px_ = layer_spacing(grid_overlay_resolution_r_);
     movement_debug_enabled_ = devmode::ui_settings::load_bool(kMovementDebugEnabledKey, false);
+    anchor_point_debug_enabled_ = devmode::ui_settings::load_bool(kAnchorPointDebugEnabledKey, false);
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
     if (room_editor_) {
         room_editor_->set_manifest_store(&manifest_store_);
@@ -876,6 +878,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     }
     if (assets_) {
         assets_->set_movement_debug_enabled(movement_debug_enabled_);
+        assets_->set_anchor_point_debug_enabled(anchor_point_debug_enabled_);
     }
     update_movement_debug_visibility();
     configure_header_button_sets();
@@ -930,6 +933,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     dev_settings.overlay_resolution = grid_overlay_resolution_r_;
     dev_settings.snap_to_grid = snap_to_grid_enabled_;
     dev_settings.movement_debug = movement_debug_enabled_;
+    dev_settings.anchor_point_debug = anchor_point_debug_enabled_;
     dev_settings.depth_effects = assets_ ? assets_->depth_effects_enabled() : true;
     other_settings_.set_dev_mode_settings(dev_settings);
     other_settings_.set_dev_mode_settings_callbacks(
@@ -958,6 +962,13 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             persist_dev_bool(kMovementDebugEnabledKey, enabled);
             if (assets_) {
                 assets_->set_movement_debug_enabled(enabled);
+            }
+        },
+        [this](bool enabled) {
+            anchor_point_debug_enabled_ = enabled;
+            persist_dev_bool(kAnchorPointDebugEnabledKey, enabled);
+            if (assets_) {
+                assets_->set_anchor_point_debug_enabled(enabled);
             }
         },
         [this](bool enabled) {

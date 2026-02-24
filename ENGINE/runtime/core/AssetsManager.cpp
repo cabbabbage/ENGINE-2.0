@@ -291,6 +291,7 @@ Assets::Assets(AssetLibrary& library,
     }
     if (scene) {
         scene->set_movement_debug_enabled(movement_debug_enabled_);
+        scene->set_anchor_point_debug_enabled(anchor_point_debug_enabled_);
     }
     apply_map_grid_settings(map_grid_settings_, false);
 
@@ -553,6 +554,16 @@ void Assets::set_movement_debug_enabled(bool enabled) {
     }
 }
 
+
+void Assets::set_anchor_point_debug_enabled(bool enabled) {
+    if (anchor_point_debug_enabled_ == enabled) {
+        return;
+    }
+    anchor_point_debug_enabled_ = enabled;
+    if (scene) {
+        scene->set_anchor_point_debug_enabled(enabled);
+    }
+}
 void Assets::set_movement_debug_visible(bool visible) {
     if (movement_debug_visible_ == visible) {
         return;

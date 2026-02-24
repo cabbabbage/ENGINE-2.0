@@ -494,10 +494,8 @@ void Asset::set_current_animation(const std::string& name)
 void Asset::update() {
     if (!info) return;
 
-
-    const int previous_x = world_x();
-    const int previous_y = world_y();
-    const int previous_z = world_z();
+    // Detect external transform/frame changes before we do any work so bound children can react immediately.
+    const bool external_world_changed = update_anchor_basis_if_needed();
 
     apply_anchor_follow_target();
 
@@ -514,15 +512,6 @@ void Asset::update() {
     }
 
     apply_anchor_follow_target();
-
-    const int current_x = world_x();
-    const int current_y = world_y();
-    const int current_z = world_z();
-    const bool moved = (current_x != previous_x || current_y != previous_y || current_z != previous_z);
-
-    if (moved) {
-        mark_anchors_dirty();
-    }
 
     update_scale_values();
 
@@ -568,12 +557,17 @@ void Asset::update() {
         anim_runtime_->update();
     }
 
-    if (info->moving_asset && moved) {
+    // Re-check anchor basis after any movement/animation/scale changes we just applied.
+    const bool post_world_changed = update_anchor_basis_if_needed();
+
+    if (info->moving_asset && (external_world_changed || post_world_changed)) {
         update_neighbor_lists(true);
     }
 
     const float alpha_target = hidden ? 0.0f : 1.0f;
     alpha_smoothing_.reset(alpha_target);
+
+    refresh_bound_children_anchor_follows();
 }
 
 std::string Asset::get_current_animation() const { return current_animation; }
@@ -920,13 +914,51 @@ void Asset::mark_anchors_dirty() {
         for (auto& handle : anchor_handles_) {
                 handle.dirty = true;
         }
+        ++anchor_world_revision_;
+}
+
+void Asset::capture_anchor_basis_snapshot() {
+        last_anchor_basis_world_ = SDL_Point{world_x(), world_y()};
+        last_anchor_basis_world_z_ = world_z();
+        last_anchor_basis_frame_index_ = current_frame ? current_frame->frame_index : std::numeric_limits<int>::min();
+        last_anchor_basis_variant_index_ = current_variant_index;
+        last_anchor_basis_flipped_ = flipped;
+        anchor_basis_initialized_ = true;
+}
+
+bool Asset::update_anchor_basis_if_needed() {
+        const int wx = world_x();
+        const int wy = world_y();
+        const int wz = world_z();
+        const int frame_index = current_frame ? current_frame->frame_index : std::numeric_limits<int>::min();
+        const int variant_index = current_variant_index;
+        const bool flipped_state = flipped;
+
+        const bool world_changed = !anchor_basis_initialized_ ||
+                                   wx != last_anchor_basis_world_.x ||
+                                   wy != last_anchor_basis_world_.y ||
+                                   wz != last_anchor_basis_world_z_;
+
+        const bool changed = world_changed ||
+                             frame_index != last_anchor_basis_frame_index_ ||
+                             variant_index != last_anchor_basis_variant_index_ ||
+                             flipped_state != last_anchor_basis_flipped_;
+        if (!changed) {
+                return false;
+        }
+
+        capture_anchor_basis_snapshot();
+        mark_anchors_dirty();
+        return world_changed;
 }
 
 void Asset::set_anchor_follow_target(std::optional<AnchorFollowTarget> follow) {
         follow_anchor_ = std::move(follow);
         follow_initialized_ = false;
+        follow_missing_ = false;
         last_follow_world_ = SDL_Point{0, 0};
         last_follow_world_z_ = 0;
+        last_follow_source_revision_ = 0;
         if (follow_anchor_) {
                 apply_anchor_follow_target();
         } else {
@@ -944,6 +976,7 @@ void Asset::bind_child_to_anchor(Asset* child, const std::string& anchor_name) {
         follow.source = this;
         follow.anchor_name = anchor_name;
         child->set_anchor_follow_target(std::move(follow));
+        child->last_follow_source_revision_ = this->anchor_world_revision();
         mark_anchors_dirty();
         if (std::find(bound_children_.begin(), bound_children_.end(), child) == bound_children_.end()) {
                 bound_children_.push_back(child);
@@ -957,6 +990,23 @@ void Asset::unbind_child_from_anchor(Asset* child) {
         bound_children_.erase(std::remove(bound_children_.begin(), bound_children_.end(), child), bound_children_.end());
 }
 
+void Asset::refresh_bound_children_anchor_follows() {
+        if (bound_children_.empty()) {
+                return;
+        }
+
+        for (Asset* child : bound_children_) {
+                if (!child || child->dead) {
+                        continue;
+                }
+                const auto& follow = child->anchor_follow_target();
+                if (!follow.has_value() || follow->source != this) {
+                        continue;
+                }
+                child->apply_anchor_follow_target();
+        }
+}
+
 void Asset::apply_anchor_follow_target() {
         if (!follow_anchor_ || !follow_anchor_->valid()) {
                 return;
@@ -967,13 +1017,22 @@ void Asset::apply_anchor_follow_target() {
                 throw std::runtime_error("Anchor follow failed: missing controller source for anchor '" + follow.anchor_name + "'");
         }
 
+        const std::uint64_t source_anchor_revision = source->anchor_world_revision();
+        if (source_anchor_revision == last_follow_source_revision_ && (follow_initialized_ || follow_missing_)) {
+                return;
+        }
+
         auto resolved = source->anchor_state(follow.anchor_name, anchor_points::GridMaterialization::Ensure, follow.depth_policy);
         if (!resolved.has_value() || resolved->missing) {
                 follow_initialized_ = false;
+                follow_missing_ = true;
                 set_anchor_hidden(true);
+                last_follow_source_revision_ = source_anchor_revision;
+                ++anchor_world_revision_;
                 return;
         }
         follow_error_reported_ = false;
+        follow_missing_ = false;
         set_anchor_hidden(false);
 
         SDL_Point target_px = resolved->world_px;
@@ -999,21 +1058,32 @@ void Asset::apply_anchor_follow_target() {
 
         grid_resolution = target_layer;
 
-        last_follow_world_ = target_px;
-        last_follow_world_z_ = target_z;
-        follow_initialized_ = true;
+        const bool had_follow_position = follow_initialized_;
+        const SDL_Point previous_follow_world = last_follow_world_;
+        const int previous_follow_world_z = last_follow_world_z_;
 
-        if (!assets_) {
-                initial_world_pos_ = target_px;
-                return;
-        }
-
-        const bool unchanged = follow_initialized_ &&
+        const bool unchanged = had_follow_position &&
+                               previous_follow_world.x == target_px.x &&
+                               previous_follow_world.y == target_px.y &&
+                               previous_follow_world_z == target_z &&
                                world_x() == target_px.x &&
                                world_y() == target_px.y &&
                                world_z() == target_z &&
                                (!pos_ || pos_->resolution_layer() == target_layer);
+
+        last_follow_world_ = target_px;
+        last_follow_world_z_ = target_z;
+        follow_initialized_ = true;
+        last_follow_source_revision_ = source_anchor_revision;
+
         if (unchanged) {
+                return;
+        }
+
+        ++anchor_world_revision_;
+
+        if (!assets_) {
+                initial_world_pos_ = target_px;
                 return;
         }
 

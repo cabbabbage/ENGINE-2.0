@@ -237,6 +237,11 @@ Asset* WorldGrid::remove_asset(Asset* a) {
 
     prune_empty_points();
 
+    // Ensure anchor-following children react immediately to controller movement.
+    if (a) {
+        a->mark_anchors_dirty();
+    }
+
     return a;
 }
 

@@ -297,10 +297,13 @@ class Asset {
                                                anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None,
                                                std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
     void mark_anchors_dirty();
+    bool update_anchor_basis_if_needed();
+    void capture_anchor_basis_snapshot();
     void set_anchor_follow_target(std::optional<AnchorFollowTarget> follow);
     void bind_child_to_anchor(Asset* child, const std::string& anchor_name);
     void unbind_child_from_anchor(Asset* child);
     const std::optional<AnchorFollowTarget>& anchor_follow_target() const { return follow_anchor_; }
+    std::uint64_t anchor_world_revision() const { return anchor_world_revision_; }
 
 public:
     static void SetFlipOverrideForSpawnId(const std::string& spawn_id, bool enabled, bool flipped);
@@ -387,8 +390,18 @@ private:
     SDL_Point last_follow_world_{0, 0};
     int last_follow_world_z_ = 0;
     bool follow_initialized_ = false;
+    bool follow_missing_ = false;
     bool follow_error_reported_ = false;
+    std::uint64_t last_follow_source_revision_ = 0;
+    std::uint64_t anchor_world_revision_ = 1;
+    SDL_Point last_anchor_basis_world_{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min() };
+    int last_anchor_basis_world_z_ = std::numeric_limits<int>::min();
+    int last_anchor_basis_frame_index_ = std::numeric_limits<int>::min();
+    int last_anchor_basis_variant_index_ = std::numeric_limits<int>::min();
+    bool last_anchor_basis_flipped_ = false;
+    bool anchor_basis_initialized_ = false;
     void apply_anchor_follow_target();
+    void refresh_bound_children_anchor_follows();
 
     void refresh_filter_tags();
 

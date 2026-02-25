@@ -750,10 +750,10 @@
           "anchor_points": [
             [
               {
-                "in_front": true,
                 "name": "eyes",
                 "texture_x": 221,
-                "texture_y": 117
+                "texture_y": 117,
+                "in_front": true
               }
             ]
           ],
@@ -790,7 +790,17 @@
           "source": {
             "kind": "folder",
             "path": "forward"
-          }
+          },
+          "anchor_points": [
+            [
+              {
+                "name": "eyes",
+                "texture_x": 221,
+                "texture_y": 117,
+                "in_front": true
+              }
+            ]
+          ]
         },
         "left": {
           "locked": false,
@@ -798,7 +808,17 @@
           "source": {
             "kind": "folder",
             "path": "left"
-          }
+          },
+          "anchor_points": [
+            [
+              {
+                "name": "eyes",
+                "texture_x": 221,
+                "texture_y": 117,
+                "in_front": true
+              }
+            ]
+          ]
         }
       },
       "anti_tags": [],

@@ -321,10 +321,17 @@ endif()
 # ------------------------------------------
 set(ENGINE_WORLD_TEST_SOURCES
     ${TESTS_SOURCE_DIR}/test_main.cpp
-    ${TESTS_SOURCE_DIR}/test_world_grid_same_chunk_move.cpp
+    ${TESTS_SOURCE_DIR}/test_terrain_determinism.cpp
     ENGINE/runtime/gameplay/world/world_grid.cpp
     ENGINE/runtime/gameplay/world/grid_point.cpp
     ENGINE/runtime/gameplay/world/chunk_manager.cpp
+    ENGINE/runtime/rendering/render/terrain_runtime_state.cpp
+    ENGINE/runtime/rendering/render/terrain_field.cpp
+    ENGINE/runtime/rendering/render/warped_screen_grid.cpp
+    ENGINE/runtime/rendering/render/camera_controller.cpp
+    ENGINE/runtime/rendering/render/image_effect_settings.cpp
+    ENGINE/runtime/utils/utils/area.cpp
+    ENGINE/runtime/utils/utils/grid.cpp
     ENGINE/runtime/utils/utils/grid_math.cpp
     ENGINE/runtime/utils/utils/FramePointResolver.cpp
     ENGINE/runtime/utils/utils/AnchorPointResolver.cpp

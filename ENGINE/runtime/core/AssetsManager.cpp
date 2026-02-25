@@ -1733,7 +1733,9 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
     }
 
     std::string owning_room = map_id_;
-    if (current_room_) {
+    if (anchor_owner && !anchor_owner->owning_room_name().empty()) {
+        owning_room = anchor_owner->owning_room_name();
+    } else if (current_room_) {
         owning_room = current_room_->room_name;
     }
 

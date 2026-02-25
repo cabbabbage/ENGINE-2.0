@@ -752,8 +752,8 @@
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 221,
-                "texture_y": 117
+                "texture_x": 899,
+                "texture_y": 493
               }
             ]
           ],
@@ -790,8 +790,8 @@
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 221,
-                "texture_y": 117
+                "texture_x": 899,
+                "texture_y": 493
               }
             ]
           ],
@@ -808,8 +808,8 @@
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 221,
-                "texture_y": 117
+                "texture_x": 899,
+                "texture_y": 493
               }
             ]
           ],
@@ -1054,9 +1054,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 100,
@@ -1114,8 +1114,8 @@
                 }
               ],
               "display_name": "tailor",
-              "dx": -1700,
-              "dy": -1868,
+              "dx": -1207,
+              "dy": -95,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2090,6 +2090,30 @@
             }
           ]
         }
+      },
+      "terrain_settings": {
+        "blend_strength": 0.6,
+        "edge_falloff_distance_world": 360.0,
+        "enabled": true,
+        "light": {
+          "base_seed": 123456,
+          "contrast": 1.3,
+          "direction_world": [
+            -0.52,
+            -0.85
+          ],
+          "light_strength": 1.2,
+          "lock_seed_to_world": true,
+          "position_world": [
+            0.0,
+            -1200.0
+          ]
+        },
+        "max_elevation_world": 520.0,
+        "noise_variation": 1.1,
+        "resolution_density_scale": 0.85,
+        "roughness": 0.78,
+        "smoothness": 0.9
       },
       "trails_data": {
         "basic": {

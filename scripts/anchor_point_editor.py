@@ -618,9 +618,11 @@ class AnchorEditorApp:
             anchors = _normalize_anchor_points(payload)
             if len(anchors) < frame_count:
                 anchors.extend([[] for _ in range(frame_count - len(anchors))])
-            if self.current_frame >= len(anchors):
-                anchors.extend([[] for _ in range(self.current_frame - len(anchors) + 1)])
-            anchors[self.current_frame] = copy.deepcopy(source)
+            # Apply the current frame's anchor data to every frame in this animation.
+            for idx in range(frame_count):
+                if idx >= len(anchors):
+                    anchors.append([])
+                anchors[idx] = copy.deepcopy(source)
             payload["anchor_points"] = anchors
             if anim_id == self.animation_id:
                 self.frames = anchors

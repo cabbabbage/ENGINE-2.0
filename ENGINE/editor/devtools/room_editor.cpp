@@ -406,22 +406,7 @@ bool RoomEditor::save_current_room_assets_json() {
         return false;
     }
 
-    if (save_coordinator_ && assets_) {
-        bool committed = false;
-        save_coordinator_->enqueue_map_entry(assets_->map_id(),
-                                             assets_->map_info_json(),
-                                             devmode::core::DevSaveCoordinator::Priority::Immediate,
-                                             "Room assets",
-                                             [this, &committed]() {
-                                                 notify_room_assets_saved();
-                                                 committed = true;
-                                             });
-        return committed;
-    }
-
-    current_room_->save_assets_json();
-    notify_room_assets_saved();
-    return true;
+    return enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority::Immediate);
 }
 
 bool RoomEditor::validate_room_edit_invariants(std::string* error) {

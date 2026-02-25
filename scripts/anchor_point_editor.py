@@ -100,6 +100,7 @@ def _normalize_unique_anchor_name(desired_name, existing_names):
 
 
 def _infer_frame_count(payload):
+    """Infer frame count from manifest fields that already describe the animation."""
     if not isinstance(payload, dict):
         return 1
     counts = [1]
@@ -110,6 +111,49 @@ def _infer_frame_count(payload):
         if isinstance(value, list):
             counts.append(len(value))
     return max(1, max(counts))
+
+
+def _frame_count_from_source(manifest_root: Path, asset, asset_key, payload):
+    """
+    Try to infer the frame count from the on-disk sprite sheet folder.
+    Looks for PNG files named with zero-based numeric stems (0.png, 1.png, ...).
+    """
+    if not isinstance(payload, dict):
+        return None
+    source = payload.get("source")
+    if not isinstance(source, dict) or source.get("kind") != "folder":
+        return None
+    path_value = str(source.get("path") or "").strip()
+    asset_dir_value = asset.get("asset_directory") if isinstance(asset, dict) else None
+    if asset_dir_value:
+        base = Path(asset_dir_value)
+        if not base.is_absolute():
+            base = manifest_root / base
+    else:
+        base = manifest_root / "resources" / "assets" / str(asset_key or "")
+    folder = base / path_value if path_value else base
+    try:
+        if not folder.exists() or not folder.is_dir():
+            return None
+        max_index = -1
+        for child in folder.iterdir():
+            if child.is_file() and child.suffix.lower() == ".png" and child.stem.isdigit():
+                max_index = max(max_index, int(child.stem))
+        return max_index + 1 if max_index >= 0 else None
+    except Exception:
+        # Fallback to manifest-derived counts on any unexpected filesystem issue.
+        return None
+
+
+def _frame_count_with_disk(payload, manifest_root=None, asset=None, asset_key=None):
+    """Combine manifest-derived frame count with an on-disk probe, preferring the larger value."""
+    manifest_count = _infer_frame_count(payload)
+    disk_count = None
+    if manifest_root is not None and asset is not None:
+        disk_count = _frame_count_from_source(manifest_root, asset, asset_key, payload)
+    if disk_count is not None:
+        return max(manifest_count, disk_count)
+    return manifest_count
 
 
 def _normalize_anchor(anchor, fallback_name=None):
@@ -128,8 +172,9 @@ def _normalize_anchor(anchor, fallback_name=None):
     }
 
 
-def _normalize_anchor_points(payload):
-    frame_count = _infer_frame_count(payload)
+def _normalize_anchor_points(payload, frame_count_override=None):
+    inferred = _infer_frame_count(payload)
+    frame_count = max(frame_count_override or 0, inferred)
     source = payload.get("anchor_points") if isinstance(payload, dict) else None
     out = [[] for _ in range(frame_count)]
     if isinstance(source, list):
@@ -180,8 +225,10 @@ class AnchorEditorApp:
         if not isinstance(self.payload, dict):
             self.payload = {}
             self.animations[self.animation_id] = self.payload
-        self.frames = _normalize_anchor_points(self.payload)
+        frame_count = _frame_count_with_disk(self.payload, self.manifest_root, self.asset, self.asset_key)
+        self.frames = _normalize_anchor_points(self.payload, frame_count_override=frame_count)
         self.payload["anchor_points"] = self.frames
+        self.payload["number_of_frames"] = len(self.frames)
 
         self.root.title(f"Anchor Point Editor - {self.asset_key}:{self.animation_id}")
         self.root.geometry("860x520")
@@ -552,6 +599,7 @@ class AnchorEditorApp:
 
     def _save_manifest(self):
         self.payload["anchor_points"] = self.frames
+        self.payload["number_of_frames"] = self._frame_count()
         with self.manifest_path.open("w", encoding="utf-8") as fh:
             json.dump(self.manifest, fh, indent=2)
             fh.write("\n")
@@ -684,8 +732,8 @@ class AnchorEditorApp:
         for anim_id, payload in self.animations.items():
             if not isinstance(payload, dict):
                 continue
-            frame_count = _infer_frame_count(payload)
-            anchors = _normalize_anchor_points(payload)
+            frame_count = _frame_count_with_disk(payload, self.manifest_root, self.asset, self.asset_key)
+            anchors = _normalize_anchor_points(payload, frame_count_override=frame_count)
             if len(anchors) < frame_count:
                 anchors.extend([[] for _ in range(frame_count - len(anchors))])
             # Apply the current frame's anchor data to every frame in this animation.
@@ -694,6 +742,7 @@ class AnchorEditorApp:
                     anchors.append([])
                 anchors[idx] = copy.deepcopy(source)
             payload["anchor_points"] = anchors
+            payload["number_of_frames"] = frame_count
             if anim_id == self.animation_id:
                 self.frames = anchors
         self._refresh_frame_ui()

@@ -127,11 +127,40 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
     return true;
 }
 
-SDL_FPoint compute_anchor_uv(const DisplacedAssetAnchorPoint& anchor, const FrameDimensions& dims) {
+SDL_FPoint compute_anchor_uv(const Asset& asset,
+                             const DisplacedAssetAnchorPoint& anchor,
+                             const FrameDimensions& dims) {
     // Texture origin is top-left; +X right, +Y down. The canonical anchor lives at the center of
     // the named pixel (x+0.5, y+0.5). Horizontal flips mirror U after the pixel-center conversion.
     // Keep this in lockstep with the editor preview math.
-    return anchor_points::anchor_pixel_to_uv(SDL_Point{anchor.texture_x, anchor.texture_y},
+    //
+    // Scale variants: active textures may be pre-scaled copies of the canonical sprite. Anchors in
+    // the manifest are expressed in canonical pixel space, so scale them into the active variant
+    // before converting to UVs. This keeps anchors glued to the same relative pixel regardless of
+    // which variant (and thus which mode: dev or game) is selected.
+
+    const float variant_scale = (std::isfinite(asset.current_nearest_variant_scale) &&
+                                 asset.current_nearest_variant_scale > 0.0f)
+                                    ? asset.current_nearest_variant_scale
+                                    : 1.0f;
+
+    const float scaled_x_f = static_cast<float>(anchor.texture_x) * variant_scale;
+    const float scaled_y_f = static_cast<float>(anchor.texture_y) * variant_scale;
+
+    SDL_Point scaled_px{
+        static_cast<int>(std::lround(scaled_x_f)),
+        static_cast<int>(std::lround(scaled_y_f))
+    };
+
+    // Clamp after rounding to avoid sampling outside the active frame.
+    if (dims.frame_w > 0) {
+        scaled_px.x = std::clamp(scaled_px.x, 0, dims.frame_w - 1);
+    }
+    if (dims.frame_h > 0) {
+        scaled_px.y = std::clamp(scaled_px.y, 0, dims.frame_h - 1);
+    }
+
+    return anchor_points::anchor_pixel_to_uv(scaled_px,
                                              dims.frame_w,
                                              dims.frame_h,
                                              dims.flip);
@@ -243,7 +272,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
 
     assert_anchor_is_canonical_texture_pixel(anchor);
 
-    const SDL_FPoint uv = compute_anchor_uv(anchor, dims);
+    const SDL_FPoint uv = compute_anchor_uv(asset, anchor, dims);
     sample.uv = uv;
 
     const world::GridPoint* owner_gp = asset.grid_point();

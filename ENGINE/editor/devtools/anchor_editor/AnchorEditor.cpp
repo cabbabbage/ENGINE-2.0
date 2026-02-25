@@ -378,13 +378,63 @@ void AnchorEditor::select_frame(int index) {
     refresh_selection_state();
 }
 void AnchorEditor::select_anchor(int index) { selected_anchor_ = index; refresh_form(); rebuild_tool_panel_layout(); refresh_selection_state(); }
-void AnchorEditor::add_anchor() { auto& list = frames_[selected_frame_].anchors; frame_editors::FrameAnchorPoint p; p.name = "anchor_" + std::to_string(list.size()); list.push_back(p); select_anchor(static_cast<int>(list.size()) - 1); dirty_ = true; propagate_live_anchor_updates(); }
-void AnchorEditor::apply_to_all_frames() { for (auto& f : frames_) f = frames_[selected_frame_]; dirty_ = true; }
-void AnchorEditor::apply_to_next_frame() { if (frames_.empty()) return; frames_[(selected_frame_ + 1) % static_cast<int>(frames_.size())] = frames_[selected_frame_]; dirty_ = true; persist_changes(); propagate_live_anchor_updates(); }
-void AnchorEditor::apply_to_animation() { apply_to_all_frames(); persist_changes(); propagate_live_anchor_updates(); }
+
+void AnchorEditor::add_anchor() {
+    if (frames_.empty()) {
+        return;
+    }
+    const int frame_index = std::clamp(selected_frame_, 0, static_cast<int>(frames_.size()) - 1);
+    auto& list = frames_[static_cast<std::size_t>(frame_index)].anchors;
+    frame_editors::FrameAnchorPoint anchor;
+    anchor.name = "anchor_" + std::to_string(list.size());
+    list.push_back(anchor);
+    select_anchor(static_cast<int>(list.size()) - 1);
+    dirty_ = true;
+    propagate_live_anchor_updates();
+}
+
+void AnchorEditor::apply_to_all_frames() {
+    if (frames_.empty()) {
+        return;
+    }
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+    }
+    const int frame_index = std::clamp(selected_frame_, 0, static_cast<int>(frames_.size()) - 1);
+    const auto source = frames_[static_cast<std::size_t>(frame_index)];
+    for (auto& frame : frames_) {
+        frame = source;
+    }
+    dirty_ = true;
+}
+
+void AnchorEditor::apply_to_next_frame() {
+    if (frames_.empty()) {
+        return;
+    }
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+    }
+    const int frame_index = std::clamp(selected_frame_, 0, static_cast<int>(frames_.size()) - 1);
+    const int next_index = (frame_index + 1) % static_cast<int>(frames_.size());
+    frames_[static_cast<std::size_t>(next_index)] = frames_[static_cast<std::size_t>(frame_index)];
+    dirty_ = true;
+    persist_changes();
+    propagate_live_anchor_updates();
+}
+
+void AnchorEditor::apply_to_animation() {
+    apply_to_all_frames();
+    persist_changes();
+    propagate_live_anchor_updates();
+}
 
 bool AnchorEditor::apply_to_selected_animations() {
-    if (!context_.document) return false;
+    if (!context_.document || frames_.empty()) return false;
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+    }
+
     std::vector<std::string> ids;
     if (context_.selected_animation_ids_provider) {
         ids = context_.selected_animation_ids_provider();
@@ -394,26 +444,101 @@ bool AnchorEditor::apply_to_selected_animations() {
     }
     if (ids.empty()) return false;
 
-    auto source = frames_[selected_frame_];
-    bool changed = false;
-    for (const auto& id : ids) {
-        auto payload = context_.document->animation_payload_json(id).value_or(nlohmann::json::object());
-        auto frames = frame_editors::parse_anchor_frames_from_payload(payload);
-        if (frames.empty()) frames.emplace_back();
-        for (auto& f : frames) {
-            frame_editors::apply_anchor_scope(f, source, frame_editors::AnchorConflictPolicy::SyncExact);
-        }
-        context_.document->update_animation_payload(id, frame_editors::build_payload_with_anchors(frames, payload));
-        sync_runtime_animation_anchors(id, frames);
-        changed = true;
-    }
-    if (changed) {
-        context_.document->save_to_file_checked(true);
-    }
-    return changed;
+    std::sort(ids.begin(), ids.end());
+    ids.erase(std::unique(ids.begin(), ids.end()), ids.end());
+
+    const int frame_index = std::clamp(selected_frame_, 0, static_cast<int>(frames_.size()) - 1);
+    const auto source = frames_[static_cast<std::size_t>(frame_index)];
+    return apply_source_to_animation_ids(ids, source);
 }
 
-bool AnchorEditor::apply_to_all_animations() { if (!context_.document) return false; auto source = frames_[selected_frame_]; for (const auto& id : context_.document->animation_ids()) { auto payload = context_.document->animation_payload_json(id).value_or(nlohmann::json::object()); auto frames = frame_editors::parse_anchor_frames_from_payload(payload); if (frames.empty()) frames.emplace_back(); for (auto& f : frames) frame_editors::apply_anchor_scope(f, source, frame_editors::AnchorConflictPolicy::SyncExact); context_.document->update_animation_payload(id, frame_editors::build_payload_with_anchors(frames, payload)); sync_runtime_animation_anchors(id, frames);} context_.document->save_to_file_checked(true); return true; }
+bool AnchorEditor::apply_to_all_animations() {
+    if (!context_.document || frames_.empty()) return false;
+    if (apply_form_to_anchor()) {
+        dirty_ = true;
+    }
+    const auto ids = context_.document->animation_ids();
+    if (ids.empty()) {
+        return false;
+    }
+    const int frame_index = std::clamp(selected_frame_, 0, static_cast<int>(frames_.size()) - 1);
+    const auto source = frames_[static_cast<std::size_t>(frame_index)];
+    return apply_source_to_animation_ids(ids, source);
+}
+
+bool AnchorEditor::apply_source_to_animation_ids(const std::vector<std::string>& animation_ids,
+                                                 const frame_editors::AnchorFrame& source) {
+    if (!context_.document || animation_ids.empty()) {
+        return false;
+    }
+
+    bool applied_any = false;
+    bool applied_to_current_animation = false;
+    for (const auto& id : animation_ids) {
+        if (id.empty()) {
+            continue;
+        }
+
+        auto payload = context_.document->animation_payload_json(id).value_or(nlohmann::json::object());
+        auto animation_frames = frame_editors::parse_anchor_frames_from_payload(payload);
+        if (animation_frames.empty()) {
+            animation_frames.emplace_back();
+        }
+        for (auto& frame : animation_frames) {
+            frame_editors::apply_anchor_scope(frame, source, frame_editors::AnchorConflictPolicy::SyncExact);
+        }
+
+        const auto updated_payload = frame_editors::build_payload_with_anchors(animation_frames, payload);
+        context_.document->update_animation_payload(id, updated_payload);
+        sync_runtime_animation_anchors(id, animation_frames);
+        if (context_.preview) {
+            context_.preview->invalidate(id);
+        }
+
+        if (id == context_.animation_id) {
+            sync_local_frames_after_scope_apply(animation_frames);
+            applied_to_current_animation = true;
+        }
+
+        applied_any = true;
+    }
+
+    if (applied_any) {
+        context_.document->save_to_file_checked(true);
+    }
+
+    if (applied_to_current_animation) {
+        dirty_ = false;
+        texture_primed_ = false;
+        preview_refreshed_ = false;
+    }
+
+    return applied_any;
+}
+
+void AnchorEditor::sync_local_frames_after_scope_apply(const std::vector<frame_editors::AnchorFrame>& frames) {
+    frames_ = frames;
+    if (frames_.empty()) {
+        frames_.emplace_back();
+    }
+    selected_frame_ = std::clamp(selected_frame_, 0, static_cast<int>(frames_.size()) - 1);
+
+    const auto& anchors = frames_[static_cast<std::size_t>(selected_frame_)].anchors;
+    if (anchors.empty()) {
+        selected_anchor_ = -1;
+    } else {
+        selected_anchor_ = std::clamp(selected_anchor_, 0, static_cast<int>(anchors.size()) - 1);
+    }
+
+    if (frame_navigator_) {
+        frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
+        frame_navigator_->set_current_frame(selected_frame_);
+    }
+
+    refresh_form();
+    rebuild_tool_panel_layout();
+    refresh_selection_state();
+}
 
 void AnchorEditor::persist_changes() {
     if (!context_.document) return;

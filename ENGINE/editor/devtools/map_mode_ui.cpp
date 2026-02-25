@@ -709,6 +709,7 @@ void MapModeUI::configure_footer_buttons() {
             extra.label = config.label;
             extra.active = config.active;
             extra.momentary = config.momentary;
+            extra.group = config.group;
             extra.style_override = config.style_override;
             extra.active_style_override = config.active_style_override;
             auto* cfg_ptr = &config;
@@ -740,7 +741,8 @@ void MapModeUI::configure_footer_buttons() {
             DevFooterBar::Button layers_btn;
             layers_btn.id = "layers";
             layers_btn.label = "Layers";
-            layers_btn.style_override = &DMStyles::WarnButton();
+            layers_btn.group = FooterButtonGroup::Primary;
+            layers_btn.style_override = &DMStyles::HeaderButton();
             layers_btn.active_style_override = &DMStyles::AccentButton();
             layers_btn.on_toggle = [this](bool active) {
                 if (active) {
@@ -755,6 +757,7 @@ void MapModeUI::configure_footer_buttons() {
         DevFooterBar::Button fog_btn;
         fog_btn.id = "fog";
         fog_btn.label = "Fog";
+        fog_btn.group = FooterButtonGroup::Primary;
         fog_btn.style_override = &DMStyles::HeaderButton();
         fog_btn.active_style_override = &DMStyles::AccentButton();
         fog_btn.on_toggle = [this](bool active) {

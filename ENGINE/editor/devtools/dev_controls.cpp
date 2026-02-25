@@ -3401,7 +3401,8 @@ void DevControls::configure_header_button_sets() {
         camera_btn.id = "camera";
         camera_btn.label = "Camera";
         camera_btn.active = camera_panel_ && camera_panel_->is_visible();
-        camera_btn.style_override = &DMStyles::WarnButton();
+        camera_btn.group = FooterButtonGroup::Primary;
+        camera_btn.style_override = &DMStyles::HeaderButton();
         camera_btn.active_style_override = &DMStyles::AccentButton();
         camera_btn.on_toggle = [this](bool active) {
             if (room_editor_) {
@@ -3427,7 +3428,8 @@ void DevControls::configure_header_button_sets() {
         layers_btn.label = "Layers";
         const bool layers_visible = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
         layers_btn.active = layers_visible;
-        layers_btn.style_override = &DMStyles::WarnButton();
+        layers_btn.group = FooterButtonGroup::Primary;
+        layers_btn.style_override = &DMStyles::HeaderButton();
         layers_btn.active_style_override = &DMStyles::AccentButton();
         layers_btn.on_toggle = [this](bool active) {
             if (room_editor_) {
@@ -3468,6 +3470,9 @@ void DevControls::configure_header_button_sets() {
         map_assets_btn.id = "map_assets";
         map_assets_btn.label = "Map Assets";
         map_assets_btn.active = (map_assets_modal_ && map_assets_modal_->visible());
+        map_assets_btn.group = FooterButtonGroup::Panels;
+        map_assets_btn.style_override = &DMStyles::ListButton();
+        map_assets_btn.active_style_override = &DMStyles::AccentButton();
         map_assets_btn.on_toggle = [this](bool active) {
             if (active) {
                 toggle_map_assets_modal();
@@ -3485,6 +3490,9 @@ void DevControls::configure_header_button_sets() {
         boundary_btn.id = "map_boundary";
         boundary_btn.label = "Boundary Assets";
         boundary_btn.active = (boundary_assets_modal_ && boundary_assets_modal_->visible());
+        boundary_btn.group = FooterButtonGroup::Panels;
+        boundary_btn.style_override = &DMStyles::ListButton();
+        boundary_btn.active_style_override = &DMStyles::AccentButton();
         boundary_btn.on_toggle = [this](bool active) {
             if (active) {
                 toggle_boundary_assets_modal();
@@ -3503,6 +3511,8 @@ void DevControls::configure_header_button_sets() {
         trail_btn.label = "New Trail";
         trail_btn.momentary = true;
         trail_btn.style_override = &DMStyles::CreateButton();
+        trail_btn.group = FooterButtonGroup::Actions;
+        trail_btn.active_style_override = &DMStyles::AccentButton();
         trail_btn.on_toggle = [this](bool) {
             this->create_trail_template();
 };
@@ -3516,6 +3526,9 @@ void DevControls::configure_header_button_sets() {
     room_config_btn.id = "room_config";
     room_config_btn.label = "Room Config";
     room_config_btn.active = room_editor_ && room_editor_->is_room_config_open();
+    room_config_btn.group = FooterButtonGroup::Panels;
+    room_config_btn.style_override = &DMStyles::ListButton();
+    room_config_btn.active_style_override = &DMStyles::AccentButton();
     room_config_btn.on_toggle = [this](bool active) {
         if (!room_editor_) return;
         room_editor_->set_room_config_visible(active);
@@ -3527,6 +3540,9 @@ void DevControls::configure_header_button_sets() {
     library_btn.id = "asset_library";
     library_btn.label = "Asset Library";
     library_btn.active = room_editor_ && room_editor_->is_asset_library_open();
+    library_btn.group = FooterButtonGroup::Panels;
+    library_btn.style_override = &DMStyles::ListButton();
+    library_btn.active_style_override = &DMStyles::AccentButton();
     library_btn.on_toggle = [this](bool active) {
         if (!room_editor_) return;
         room_editor_->close_room_config();
@@ -3544,6 +3560,8 @@ void DevControls::configure_header_button_sets() {
     regenerate_btn.label = "regen";
     regenerate_btn.momentary = true;
     regenerate_btn.style_override = &DMStyles::DeleteButton();
+    regenerate_btn.group = FooterButtonGroup::Actions;
+    regenerate_btn.active_style_override = &DMStyles::AccentButton();
     regenerate_btn.on_toggle = [this](bool) {
         if (!room_editor_) {
             sync_header_button_states();
@@ -3564,6 +3582,9 @@ void DevControls::configure_header_button_sets() {
     explorer_btn.id = "open_explorer";
     explorer_btn.label = "Open Explorer";
     explorer_btn.momentary = true;
+    explorer_btn.group = FooterButtonGroup::Utilities;
+    explorer_btn.style_override = &DMStyles::SecondaryButton();
+    explorer_btn.active_style_override = &DMStyles::AccentButton();
     explorer_btn.on_toggle = [this](bool) {
         open_repo_root_in_file_explorer();
         sync_header_button_states();

@@ -10,14 +10,15 @@
 #include <SDL3_ttf/SDL_ttf.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 namespace {
-constexpr int kDefaultFooterHeight = 40;
-constexpr int kFooterHorizontalPadding = 20;
-constexpr int kFooterVerticalPadding = 6;
-constexpr int kFooterGroupGap = 18;
-constexpr int kFooterButtonSpacing = 12;
+constexpr int kDefaultFooterHeight = 48;
+constexpr int kFooterHorizontalPadding = 24;
+constexpr int kFooterVerticalPadding = 8;
+constexpr int kFooterGroupGap = 24;
+constexpr int kFooterButtonSpacing = 14;
 constexpr int kFooterButtonMinWidth = 110;
 constexpr int kFooterHideButtonWidth = 32;
 constexpr Uint64 kFooterSlideDurationMs = 88;
@@ -25,20 +26,41 @@ constexpr Uint64 kFooterZoneDebounceMs = 36;
 constexpr float kFooterShowZoneRatio = 0.90f;
 constexpr float kFooterUnlockZoneRatio = 0.80f;
 
+const DMButtonStyle* default_group_style(FooterButtonGroup group) {
+    switch (group) {
+        case FooterButtonGroup::Primary:
+            return &DMStyles::HeaderButton();
+        case FooterButtonGroup::Panels:
+            return &DMStyles::ListButton();
+        case FooterButtonGroup::Actions:
+            return &DMStyles::SecondaryButton();
+        case FooterButtonGroup::Utilities:
+            return &DMStyles::SecondaryButton();
+        default:
+            return &DMStyles::HeaderButton();
+    }
+}
+
+const DMButtonStyle* default_group_active_style(FooterButtonGroup group) {
+    switch (group) {
+        case FooterButtonGroup::Primary:
+        case FooterButtonGroup::Panels:
+        case FooterButtonGroup::Actions:
+        case FooterButtonGroup::Utilities:
+            return &DMStyles::AccentButton();
+        default:
+            return &DMStyles::AccentButton();
+    }
+}
+
 const DMButtonStyle* button_style_for(const DevFooterBar::Button& btn) {
+    const DMButtonStyle* base_style = btn.style_override ? btn.style_override : default_group_style(btn.group);
+    const DMButtonStyle* active_style =
+        btn.active_style_override ? btn.active_style_override : default_group_active_style(btn.group);
     if (btn.active) {
-        if (btn.active_style_override) {
-            return btn.active_style_override;
-        }
-        if (btn.style_override) {
-            return btn.style_override;
-        }
-        return &DMStyles::AccentButton();
+        return active_style ? active_style : base_style;
     }
-    if (btn.style_override) {
-        return btn.style_override;
-    }
-    return &DMStyles::HeaderButton();
+    return base_style ? base_style : &DMStyles::HeaderButton();
 }
 
 void draw_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
@@ -351,6 +373,17 @@ void DevFooterBar::render(SDL_Renderer* renderer) const {
         SDL_RenderLine(renderer, separator_x, rect_.y + kFooterVerticalPadding, separator_x, rect_.y + rect_.h - kFooterVerticalPadding);
     }
 
+    if (!button_group_dividers_.empty()) {
+        SDL_Color divider = DMStyles::Border();
+        divider.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(divider.a * 0.5f), 0, 255));
+        SDL_SetRenderDrawColor(renderer, divider.r, divider.g, divider.b, divider.a);
+        const int divider_top = rect_.y + kFooterVerticalPadding;
+        const int divider_bottom = rect_.y + rect_.h - kFooterVerticalPadding;
+        for (int x_pos : button_group_dividers_) {
+            SDL_RenderLine(renderer, x_pos, divider_top, x_pos, divider_bottom);
+        }
+    }
+
     if (settings_controls_visible_) {
         if (depth_effects_checkbox_) {
             depth_effects_checkbox_->render(renderer);
@@ -473,6 +506,13 @@ void DevFooterBar::layout_title_region() {
 }
 
 void DevFooterBar::layout_buttons() {
+    button_group_dividers_.clear();
+    for (auto& btn : buttons_) {
+        if (btn.widget) {
+            btn.widget->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+    }
+
     int button_start = content_start_x();
     if (settings_controls_visible_ && grid_checkbox_ && grid_stepper_) {
         button_start = std::max(button_start, grid_controls_right_ + kFooterGroupGap);
@@ -482,69 +522,125 @@ void DevFooterBar::layout_buttons() {
     }
 
     const int right_limit = rect_.x + rect_.w - kFooterHorizontalPadding;
-    const int span = right_limit - button_start;
-    const int button_gap = kFooterButtonSpacing;
-
-    if (span <= 0) {
-        for (auto& btn : buttons_) {
-            if (btn.widget) {
-                btn.widget->set_rect(SDL_Rect{0, 0, 0, 0});
-            }
-        }
+    const int available_width = right_limit - button_start;
+    if (available_width <= 0) {
         return;
     }
 
     struct ButtonLayoutInfo {
         DMButton* widget = nullptr;
         int width = 0;
-};
+    };
 
-    std::vector<ButtonLayoutInfo> visible;
-    visible.reserve(buttons_.size());
-    int total_width = 0;
-    int count = 0;
-    bool out_of_space = false;
-
+    std::array<std::vector<ButtonLayoutInfo>, 4> grouped;
     for (auto& btn : buttons_) {
         if (!btn.widget) continue;
-
-        if (out_of_space) {
-            btn.widget->set_rect(SDL_Rect{0, 0, 0, 0});
-            continue;
-        }
-
-        int width = std::max(btn.widget->preferred_width(), kFooterButtonMinWidth);
-
-        const int projected_total = total_width + width;
-        const int projected_count = count + 1;
-        const int projected_block = projected_total + button_gap * std::max(0, projected_count - 1);
-
-        if (projected_block > span) {
-            btn.widget->set_rect(SDL_Rect{0, 0, 0, 0});
-            out_of_space = true;
-            continue;
-        }
-
-        visible.push_back({btn.widget.get(), width});
-        total_width = projected_total;
-        count = projected_count;
+        const int width = std::max(btn.widget->preferred_width(), kFooterButtonMinWidth);
+        const int group_index = std::clamp(static_cast<int>(btn.group),
+                                           static_cast<int>(FooterButtonGroup::Primary),
+                                           static_cast<int>(FooterButtonGroup::Utilities));
+        grouped[static_cast<size_t>(group_index)].push_back({btn.widget.get(), width});
     }
 
-    if (visible.empty()) {
+    constexpr std::array<FooterButtonGroup, 4> display_order = {
+        FooterButtonGroup::Primary,
+        FooterButtonGroup::Panels,
+        FooterButtonGroup::Actions,
+        FooterButtonGroup::Utilities,
+    };
+
+    std::vector<FooterButtonGroup> active_groups;
+    std::array<int, 4> group_total_widths{};
+    for (auto group : display_order) {
+        const auto& layout = grouped[static_cast<size_t>(group)];
+        if (layout.empty()) {
+            group_total_widths[static_cast<size_t>(group)] = 0;
+            continue;
+        }
+        int width = 0;
+        for (const auto& info : layout) {
+            width += info.width;
+        }
+        width += kFooterButtonSpacing * std::max(0, static_cast<int>(layout.size()) - 1);
+        group_total_widths[static_cast<size_t>(group)] = width;
+        active_groups.push_back(group);
+    }
+
+    if (active_groups.empty()) {
+        return;
+    }
+
+    const auto compute_total_width = [&](const std::vector<FooterButtonGroup>& groups) {
+        int width = 0;
+        for (auto group : groups) {
+            width += group_total_widths[static_cast<size_t>(group)];
+        }
+        if (groups.size() > 1) {
+            width += kFooterGroupGap * (static_cast<int>(groups.size()) - 1);
+        }
+        return width;
+    };
+
+    constexpr std::array<FooterButtonGroup, 4> removal_priority = {
+        FooterButtonGroup::Utilities,
+        FooterButtonGroup::Actions,
+        FooterButtonGroup::Panels,
+        FooterButtonGroup::Primary,
+    };
+
+    int total_width = compute_total_width(active_groups);
+    while (!active_groups.empty() && total_width > available_width) {
+        bool removed = false;
+        for (auto group : removal_priority) {
+            auto it = std::find(active_groups.begin(), active_groups.end(), group);
+            if (it != active_groups.end()) {
+                active_groups.erase(it);
+                removed = true;
+                break;
+            }
+        }
+        if (!removed) {
+            break;
+        }
+        total_width = compute_total_width(active_groups);
+    }
+
+    if (active_groups.empty()) {
         return;
     }
 
     const int y = rect_.y + (rect_.h - DMButton::height()) / 2;
-    const int block_width = total_width + button_gap * std::max(0, count - 1);
-    int current_x = std::max(button_start, right_limit - block_width);
-
-    for (size_t i = 0; i < visible.size(); ++i) {
-        auto& info = visible[i];
-        info.widget->set_rect(SDL_Rect{current_x, y, info.width, DMButton::height()});
-        current_x += info.width;
-        if (i + 1 < visible.size()) {
-            current_x += button_gap;
+    int current_right = right_limit;
+    for (int group_index = static_cast<int>(active_groups.size()) - 1; group_index >= 0; --group_index) {
+        const auto group = active_groups[group_index];
+        const auto& layout = grouped[static_cast<size_t>(group)];
+        if (layout.empty()) {
+            continue;
         }
+        const int group_width = group_total_widths[static_cast<size_t>(group)];
+        const int group_start = current_right - group_width;
+        int x = group_start;
+        for (size_t i = 0; i < layout.size(); ++i) {
+            const auto& info = layout[i];
+            info.widget->set_rect(SDL_Rect{x, y, info.width, DMButton::height()});
+            x += info.width;
+            if (i + 1 < layout.size()) {
+                x += kFooterButtonSpacing;
+            }
+        }
+        if (group_index > 0 && kFooterGroupGap > 0) {
+            const int divider_x = group_start - (kFooterGroupGap / 2);
+            if (divider_x > rect_.x) {
+                button_group_dividers_.push_back(divider_x);
+            }
+            current_right = group_start - kFooterGroupGap;
+        } else {
+            current_right = group_start;
+        }
+    }
+
+    if (!button_group_dividers_.empty()) {
+        std::sort(button_group_dividers_.begin(), button_group_dividers_.end());
     }
 }
 

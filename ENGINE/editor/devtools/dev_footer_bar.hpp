@@ -137,5 +137,6 @@ private:
     std::function<void(bool)> on_movement_debug_toggle_;
     std::function<void(int, bool)> on_grid_resolution_change_;
     int grid_controls_right_ = 0;
+    std::vector<int> button_group_dividers_;
 };
 

@@ -29,6 +29,7 @@
 #include <atomic>
 #include <algorithm>
 #include <cmath>
+#include <cctype>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
@@ -106,6 +107,46 @@ const DisplacedAssetAnchorPoint* find_anchor_with_frame_fallback(const Asset& as
         }
 
         return best;
+}
+
+std::string normalize_controller_binding_id(const std::string& value) {
+        std::string out;
+        out.reserve(value.size());
+        for (char ch : value) {
+                const unsigned char uch = static_cast<unsigned char>(ch);
+                if (std::isalnum(uch)) {
+                        out.push_back(static_cast<char>(std::tolower(uch)));
+                } else if (ch == '_' || ch == '-' || std::isspace(uch)) {
+                        if (!out.empty() && out.back() != '_') {
+                                out.push_back('_');
+                        }
+                }
+        }
+        while (!out.empty() && out.back() == '_') {
+                out.pop_back();
+        }
+        return out;
+}
+
+Asset* resolve_follow_source_by_controller_id(Assets* assets, const std::string& controller_asset_id) {
+        if (!assets) {
+                return nullptr;
+        }
+        const std::string wanted = normalize_controller_binding_id(controller_asset_id);
+        if (wanted.empty()) {
+                return nullptr;
+        }
+
+        for (Asset* candidate : assets->all) {
+                if (!candidate || candidate->dead || !candidate->info) {
+                        continue;
+                }
+                if (normalize_controller_binding_id(candidate->info->custom_controller_key) == wanted ||
+                    normalize_controller_binding_id(candidate->info->name) == wanted) {
+                        return candidate;
+                }
+        }
+        return nullptr;
 }
 
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
@@ -1089,8 +1130,21 @@ void Asset::apply_anchor_follow_target() {
         }
         AnchorFollowTarget& follow = *follow_anchor_;
         Asset* source = follow.source;
-        if (!source) {
-                throw std::runtime_error("Anchor follow failed: missing controller source for anchor '" + follow.anchor_name + "'");
+        if ((!source || source->dead) && !follow.controller_asset_id.empty()) {
+                source = resolve_follow_source_by_controller_id(assets_, follow.controller_asset_id);
+                if (source) {
+                        follow.source = source;
+                        if (assets_) {
+                                assets_->world_grid().update_asset_parent(this, source);
+                        }
+                }
+        }
+        if (!source || source == this || source->dead) {
+                follow_initialized_ = false;
+                follow_missing_ = true;
+                set_anchor_hidden(true);
+                last_follow_source_revision_ = 0;
+                return;
         }
 
         const std::uint64_t source_anchor_revision = source->anchor_world_revision();
@@ -1304,11 +1358,11 @@ void Asset::set_composite_texture(SDL_Texture* tex) {
 }
 
 float Asset::smoothed_translation_x() const {
-    return pos_ ? static_cast<float>(pos_->world_x()) : 0.0f;
+    return pos_ ? static_cast<float>(pos_->world_x()) : static_cast<float>(initial_world_pos_.x);
 }
 
 float Asset::smoothed_translation_y() const {
-    return pos_ ? static_cast<float>(pos_->world_y()) : 0.0f;
+    return pos_ ? static_cast<float>(pos_->world_y()) : static_cast<float>(initial_world_pos_.y);
 }
 
 float Asset::smoothed_scale() const {

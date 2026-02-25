@@ -783,6 +783,22 @@
             "path": "default"
           },
           "speed_multiplier": 1.0
+        },
+        "forward": {
+          "locked": false,
+          "loop": true,
+          "source": {
+            "kind": "folder",
+            "path": "forward"
+          }
+        },
+        "left": {
+          "locked": false,
+          "loop": true,
+          "source": {
+            "kind": "folder",
+            "path": "left"
+          }
         }
       },
       "anti_tags": [],
@@ -795,7 +811,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 21.0
+        "scale_percentage": 13.0
       },
       "start": "default",
       "tags": [],
@@ -1018,9 +1034,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 100,

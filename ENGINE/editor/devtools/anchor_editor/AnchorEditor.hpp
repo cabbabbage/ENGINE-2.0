@@ -44,6 +44,9 @@ private:
     void apply_to_animation();
     bool apply_to_selected_animations();
     bool apply_to_all_animations();
+    bool apply_source_to_animation_ids(const std::vector<std::string>& animation_ids,
+                                       const frame_editors::AnchorFrame& source);
+    void sync_local_frames_after_scope_apply(const std::vector<frame_editors::AnchorFrame>& frames);
     void persist_changes();
     void invalidate_preview() const;
     void propagate_live_anchor_updates();

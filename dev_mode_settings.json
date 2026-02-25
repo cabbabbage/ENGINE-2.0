@@ -39,7 +39,7 @@
                 "r": 3.0
             },
             "snap": {
-                "enabled": true
+                "enabled": false
             }
         },
         "movement": {

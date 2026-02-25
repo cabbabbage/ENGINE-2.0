@@ -13,6 +13,7 @@
 #include "utils/ranged_color.hpp"
 #include "fog_settings_panel.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "dev_footer_bar.hpp"
 
 class Assets;
 namespace devmode::core {
@@ -25,7 +26,6 @@ class MapLayerControlsDisplay;
 class MapLayersController;
 class RoomConfigurator;
 class SlidingWindowContainer;
-class DevFooterBar;
 class DockableCollapsible;
 struct DMButtonStyle;
 struct SDL_Renderer;
@@ -40,6 +40,7 @@ public:
         std::string label;
         bool active = false;
         bool momentary = false;
+        FooterButtonGroup group = FooterButtonGroup::Utilities;
         const DMButtonStyle* style_override = nullptr;
         const DMButtonStyle* active_style_override = nullptr;
         std::function<void(bool)> on_toggle;

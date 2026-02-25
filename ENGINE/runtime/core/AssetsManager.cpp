@@ -766,7 +766,7 @@ void Assets::propagate_anchor_follows() {
             continue;
         }
         const auto& follow = asset->anchor_follow_target();
-        if (follow.has_value() && follow->source) {
+        if (follow.has_value() && follow->valid()) {
             followers.push_back(asset);
         }
     }
@@ -815,12 +815,12 @@ void Assets::propagate_anchor_follows() {
             continue;
         }
         const auto& follow = asset->anchor_follow_target();
-        if (!follow.has_value() || !follow->source) {
+        if (!follow.has_value() || !follow->valid()) {
             continue;
         }
 
 #ifndef NDEBUG
-        {
+        if (follow->source) {
             const auto children = world_grid_.children_of(follow->source);
             SDL_assert(std::count(children.begin(), children.end(), asset) == 1);
         }
@@ -1199,6 +1199,10 @@ void Assets::update(const Input& input)
     if (process_removals()) {
         mark_active_assets_dirty();
     }
+
+    // Final follower pass after late-frame editor/runtime mutations so attachments
+    // are correct before grid rebuild/render, even when parent edits happen post-update.
+    propagate_anchor_follows();
 
     maybe_rebuild_world_grid();
 

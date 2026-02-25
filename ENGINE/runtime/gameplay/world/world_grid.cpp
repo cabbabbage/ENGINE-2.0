@@ -910,6 +910,17 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
 
     if (point_changed) {
         a->mark_anchors_dirty();
+
+        auto children_it = parent_to_children_.find(a);
+        if (children_it != parent_to_children_.end()) {
+            const auto children = children_it->second; // copy: child moves can mutate parent map
+            for (Asset* child : children) {
+                if (!child || child->dead) {
+                    continue;
+                }
+                child->apply_anchor_follow_target();
+            }
+        }
     }
 
     return a;

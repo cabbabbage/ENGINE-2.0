@@ -32,22 +32,21 @@ animation_update::CombatantSnapshot snapshot_from_asset(const Asset& asset) {
     return snapshot;
 }
 
+constexpr const char* kEyesAnchorName  = "eyes";
+constexpr const char* kEyesFollowerId  = "vibble_eyes";
+
 }
 
 vibble_controller::vibble_controller(Asset* player)
     : player_(player) {
     if (player_) {
-        anchor_helper_ = std::make_unique<AnchorBoundAssetHelper>(player_);
+        binding_helper_ = std::make_unique<AnchorBoundAssetHelper>(player_);
+        binding_helper_->bind(kEyesFollowerId, kEyesAnchorName);
     }
-    spawn_eyes_follower();
 }
 
 
-vibble_controller::~vibble_controller() {
-    if (anchor_helper_) {
-        anchor_helper_->cleanup_all();
-    }
-}
+vibble_controller::~vibble_controller() = default;
 int vibble_controller::get_dx() const { return dx_; }
 int vibble_controller::get_dy() const { return dy_; }
 
@@ -148,10 +147,6 @@ float vibble_controller::frame_dt() const {
 void vibble_controller::update(const Input& input) {
     using namespace std::chrono;
     auto now = steady_clock::now();
-
-    // Ensure the follower exists and the binding tracks runtime state.
-    spawn_eyes_follower();
-    sync_eyes_follower_binding();
 
     if (isDashing && now >= dashEndTime) {
         isDashing = false;
@@ -278,55 +273,4 @@ void vibble_controller::process_pending_attacks(Asset& self) {
 }
 
 
-void vibble_controller::sync_eyes_follower_binding() {
-    if (!player_ || !eyes_follower_.valid()) {
-        return;
-    }
 
-    Asset* eyes = eyes_follower_.asset;
-    if (!eyes || eyes->dead) {
-        eyes_follower_ = {};
-        return;
-    }
-
-    if (eyes->flipped != player_->flipped) {
-        eyes->flipped = player_->flipped;
-        eyes->mark_anchors_dirty();
-    }
-
-    if (eyes->current_scale != player_->current_scale) {
-        eyes->current_scale = player_->current_scale;
-        eyes->current_nearest_variant_scale = player_->current_nearest_variant_scale;
-        eyes->current_remaining_scale_adjustment = player_->current_remaining_scale_adjustment;
-        eyes->mark_anchors_dirty();
-    }
-
-    // Keep runtime animation frame data fresh so the follower anchor stays canonical.
-    eyes->refresh_frame_texture_bindings();
-}
-
-void vibble_controller::spawn_eyes_follower() {
-    if (eyes_follower_.valid() || !player_ || !anchor_helper_) {
-        return;
-    }
-
-    Assets* assets = player_->get_assets();
-    if (!assets) {
-        return;
-    }
-
-    std::string anchor_name = "eyes";
-    std::string follower_anchor_name = "eyes";
-    constexpr const char* kFollowerAssetName = "vibble_eyes";
-    if (auto follower_info = assets->library().get(kFollowerAssetName); follower_info && follower_info->follower_binding.has_value()) {
-        const auto& spec = follower_info->follower_binding.value();
-        if (!spec.anchor_name.empty()) {
-            anchor_name = spec.anchor_name;
-        }
-        if (!spec.follower_anchor_name.empty()) {
-            follower_anchor_name = spec.follower_anchor_name;
-        }
-    }
-
-    eyes_follower_ = anchor_helper_->bind_follower(anchor_name, kFollowerAssetName, follower_anchor_name);
-}

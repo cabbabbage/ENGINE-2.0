@@ -82,6 +82,16 @@ std::string normalize_controller_binding_id(const std::string& value) {
         while (!out.empty() && out.back() == '_') {
                 out.pop_back();
         }
+
+        constexpr const char* kSuffix = "_controller";
+        constexpr std::size_t kSuffixLen = 11;
+        if (out.size() > kSuffixLen &&
+            out.compare(out.size() - kSuffixLen, kSuffixLen, kSuffix) == 0) {
+                out.resize(out.size() - kSuffixLen);
+                while (!out.empty() && out.back() == '_') {
+                        out.pop_back();
+                }
+        }
         return out;
 }
 
@@ -130,7 +140,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , spawn_id(spawn_id_)
 , spawn_method(spawn_method_)
 , owning_room_name_(spawn_area.get_name())
-, follow_anchor_(std::move(anchor_follow))
+, follow_anchor_(std::nullopt)
 {
 	set_flip();
 
@@ -1025,66 +1035,24 @@ bool Asset::update_anchor_basis_if_needed() {
 }
 
 void Asset::set_anchor_follow_target(std::optional<AnchorFollowTarget> follow) {
-        follow_anchor_ = std::move(follow);
+        if (follow.has_value()) {
+                vibble::log::warn("[Asset] Anchor follow is deprecated; request ignored.");
+        }
+        follow_anchor_.reset();
         follow_initialized_ = false;
         follow_missing_ = false;
         last_follow_world_ = SDL_Point{0, 0};
         last_follow_world_z_ = 0;
         last_follow_source_revision_ = 0;
-        if (follow_anchor_) {
-                apply_anchor_follow_target();
-        } else {
-                set_anchor_hidden(false);
-        }
+        set_anchor_hidden(false);
 }
 
 void Asset::bind_child_to_anchor(Asset* child, const std::string& anchor_name) {
-        if (!child || anchor_name.empty()) {
-                throw std::runtime_error("bind_child_to_anchor requires non-null child and non-empty anchor name");
-        }
-
-        Assets* owner_assets = assets_ ? assets_ : child->assets_;
-        if (!owner_assets) {
-                throw std::runtime_error("bind_child_to_anchor requires Assets owner to update binding graph");
-        }
-        world::WorldGrid& grid = owner_assets->world_grid();
-
-        child->set_anchor_hidden(false);
-        AnchorFollowTarget follow = child->anchor_follow_target().value_or(AnchorFollowTarget{});
-        follow.source = this;
-        follow.anchor_name = anchor_name;
-        child->set_anchor_follow_target(std::move(follow));
-        child->last_follow_source_revision_ = this->anchor_world_revision();
-        mark_anchors_dirty();
-#ifndef NDEBUG
-        {
-                const auto before = grid.children_of(this);
-                SDL_assert(std::count(before.begin(), before.end(), child) == 0);
-        }
-#endif
-        grid.update_asset_parent(child, this);
-#ifndef NDEBUG
-        {
-                const auto after = grid.children_of(this);
-                SDL_assert(std::count(after.begin(), after.end(), child) == 1);
-        }
-#endif
+        throw std::runtime_error("bind_child_to_anchor is removed. Use AnchorBoundAssetHelper.");
 }
 
 void Asset::unbind_child_from_anchor(Asset* child) {
-        if (!child) {
-                return;
-        }
-        Assets* owner_assets = assets_ ? assets_ : child->assets_;
-        if (owner_assets) {
-                owner_assets->world_grid().unbind_child(child);
-#ifndef NDEBUG
-                SDL_assert(owner_assets->world_grid().parent_of(child) == nullptr);
-#endif
-        } else {
-                child->parent = nullptr;
-                child->set_anchor_follow_target(std::nullopt);
-        }
+        throw std::runtime_error("unbind_child_from_anchor is removed. Use AnchorBoundAssetHelper.");
 }
 
 void Asset::refresh_bound_children_anchor_follows() {

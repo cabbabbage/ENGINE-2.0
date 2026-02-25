@@ -84,6 +84,11 @@ public:
     const GridPoint* point_for_id(GridId id) const;
     GridPoint* point_for_asset(const Asset* asset);
     const GridPoint* point_for_asset(const Asset* asset) const;
+
+    // Detach/attach helpers for suspending and reactivating assets without destroying them.
+    std::unique_ptr<Asset> extract_asset(Asset* a);
+    Asset* attach_asset(std::unique_ptr<Asset> a, int world_z = 0, int resolution_layer = -1);
+
     GridPoint* find_grid_point(const GridKey& key);
     const GridPoint* find_grid_point(const GridKey& key) const;
     GridPoint* find_grid_point_strict(const GridKey& key);

@@ -93,7 +93,7 @@ class AssetInfo {
         std::optional<std::string> layer_policy;
 
         bool is_valid() const {
-            return !controller_asset_id.empty() && !anchor_name.empty();
+            return !anchor_name.empty();
         }
     };
     std::string custom_controller_key;

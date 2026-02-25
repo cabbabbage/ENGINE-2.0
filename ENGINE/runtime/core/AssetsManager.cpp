@@ -13,6 +13,7 @@
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
 #include "devtools/depth_cue_settings.hpp"
+#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "rendering/render/render.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -129,6 +130,16 @@ std::string normalize_controller_id(const std::string& value) {
     }
     while (!out.empty() && out.back() == '_') {
         out.pop_back();
+    }
+
+    constexpr const char* kSuffix = "_controller";
+    constexpr std::size_t kSuffixLen = 11;
+    if (out.size() > kSuffixLen &&
+        out.compare(out.size() - kSuffixLen, kSuffixLen, kSuffix) == 0) {
+        out.resize(out.size() - kSuffixLen);
+        while (!out.empty() && out.back() == '_') {
+            out.pop_back();
+        }
     }
     return out;
 }
@@ -252,9 +263,21 @@ Asset::AnchorFollowTarget apply_follower_binding_defaults(Asset* controller_asse
         binding.anchor_name = anchor_override;
     }
 
-    if (controller_asset) {
-        binding.source = controller_asset;
-        binding.controller_asset_id.clear();
+    if (binding.source == nullptr && controller_asset) {
+        const std::string controller_key   = controller_asset->info ? controller_asset->info->custom_controller_key : std::string{};
+        const std::string controller_name  = controller_asset->info ? controller_asset->info->name                 : std::string{};
+        const std::string normalized_wanted = normalize_controller_id(binding.controller_asset_id);
+        const bool matches_controller =
+            binding.controller_asset_id.empty() ||
+            normalize_controller_id(controller_key) == normalized_wanted ||
+            normalize_controller_id(controller_name) == normalized_wanted;
+
+        if (matches_controller) {
+            binding.source = controller_asset;
+            if (binding.controller_asset_id.empty() && controller_asset->info) {
+                binding.controller_asset_id = controller_asset->info->name;
+            }
+        }
     }
 
     return binding;
@@ -1092,6 +1115,13 @@ void Assets::update(const Input& input)
 
     }
 
+    // Service binding helpers (handles anchor-based positioning and timed unbinds).
+    for (auto* helper : binding_helpers_) {
+        if (helper) {
+            helper->update();
+        }
+    }
+
     if (ctrl_down && input.wasScancodePressed(SDL_SCANCODE_B)) {
         asset_boundary_box_display_enabled_ = !asset_boundary_box_display_enabled_;
         std::cout << "[Assets] Asset boundary box display "
@@ -1688,102 +1718,37 @@ void Assets::mark_active_assets_dirty() {
 Asset* Assets::spawn_asset_attached(const std::string& name,
                                     Asset* anchor_owner,
                                     const std::string& anchor_name) {
-    Asset::AnchorFollowTarget binding{};
-    binding.source = anchor_owner;
-    binding.anchor_name = anchor_name;
-    return spawn_asset_attached(name, binding);
+    throw std::runtime_error("spawn_asset_attached is deprecated. Use AnchorBoundAssetHelper::bind instead.");
 }
 
 Asset* Assets::spawn_asset_attached(const std::string& name,
                                     const Asset::AnchorFollowTarget& binding) {
+    throw std::runtime_error("spawn_asset_attached is deprecated. Use AnchorBoundAssetHelper::bind instead.");
+}
 
-    if (!binding.valid()) {
-        throw std::runtime_error("spawn_asset_attached requires a valid anchor follow binding spec");
+std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
+    if (!asset) {
+        return nullptr;
     }
+    return world_grid_.extract_asset(asset);
+}
 
-    std::shared_ptr<AssetInfo> info = library_.get(name);
-    if (!info) {
+Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resolution_layer) {
+    if (!asset) {
         return nullptr;
     }
 
-    Asset* anchor_owner = binding.source;
-    if (!anchor_owner && !binding.controller_asset_id.empty()) {
-        anchor_owner = resolve_controller_for_binding(active_assets, binding.controller_asset_id);
-        if (!anchor_owner) {
-            anchor_owner = resolve_controller_for_binding(all, binding.controller_asset_id);
-        }
-    }
+    Asset* raw = asset.get();
+    // Avoid double insertion in all vector.
+    const bool already_tracked = std::find(all.begin(), all.end(), raw) != all.end();
 
-    if (!anchor_owner) {
-        throw std::runtime_error("spawn_asset_attached failed: controller asset '" + binding.controller_asset_id + "' was not found");
-    }
-
-    auto resolved_anchor = anchor_owner->anchor_state(binding.anchor_name,
-                                                       anchor_points::GridMaterialization::Ensure,
-                                                       binding.depth_policy);
-
-    const bool anchor_available = resolved_anchor.has_value() &&
-                                  !resolved_anchor->missing &&
-                                  resolved_anchor->has_canonical_texture_source;
-    if (!anchor_available && anchor_follow_debug_logging_) {
-        const int frame_idx = anchor_owner->current_frame ? anchor_owner->current_frame->frame_index : -1;
-        vibble::log::info("[AnchorDebug] spawn_asset_attached: anchor '" + binding.anchor_name + "' missing/invalid on frame " +
-                          std::to_string(frame_idx) + " for controller '" + asset_label(anchor_owner) +
-                          "'. Follower '" + name + "' will spawn hidden until the anchor exists on the current frame.");
-    }
-
-    std::string owning_room = map_id_;
-    if (anchor_owner && !anchor_owner->owning_room_name().empty()) {
-        owning_room = anchor_owner->owning_room_name();
-    } else if (current_room_) {
-        owning_room = current_room_->room_name;
-    }
-
-    SDL_Point spawn_pos = anchor_owner->world_point();
-    int spawn_z = anchor_owner->world_z();
-    int resolved_layer = anchor_owner->grid_resolution;
-    if (auto* owner_gp = anchor_owner->grid_point()) {
-        resolved_layer = owner_gp->resolution_layer();
-    }
-    if (anchor_available) {
-        spawn_pos = resolved_anchor->world_px;
-        spawn_z = resolved_anchor->world_z;
-        resolved_layer = resolved_anchor->resolution_layer;
-    }
-    if (binding.layer_policy.has_value() &&
-        binding.layer_policy.value() == Asset::AnchorFollowTarget::LayerPolicy::MatchControllerAsset) {
-        if (auto* owner_gp = anchor_owner->grid_point()) {
-            resolved_layer = owner_gp->resolution_layer();
-        } else {
-            resolved_layer = anchor_owner->grid_resolution;
-        }
-    }
-
-    Area spawn_area(owning_room,  0);
-
-    int depth = 0;
-    auto uptr = std::make_unique<Asset>(info,
-                                        spawn_area,
-                                        spawn_pos,
-                                        depth,
-                                        nullptr,
-                                        std::string{},
-                                        std::string{},
-                                        resolved_layer,
-                                        binding);
-    Asset* raw = uptr.get();
+    raw = world_grid_.attach_asset(std::move(asset), world_z, resolution_layer);
     if (!raw) {
         return nullptr;
     }
-    raw->set_assets(this);
-    raw->set_camera(&camera_);
-    raw->finalize_setup();
 
-    raw = world_grid_.create_asset_at_point(std::move(uptr), spawn_z, resolved_layer);
-    all.push_back(raw);
-
-    if (raw) {
-        anchor_owner->bind_child_to_anchor(raw, binding.anchor_name);
+    if (!already_tracked) {
+        all.push_back(raw);
     }
 
     queue_asset_dimension_update(raw);
@@ -1794,89 +1759,43 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
     return raw;
 }
 
+void Assets::register_binding_helper(AnchorBoundAssetHelper* helper) {
+    if (!helper) return;
+    if (std::find(binding_helpers_.begin(), binding_helpers_.end(), helper) == binding_helpers_.end()) {
+        binding_helpers_.push_back(helper);
+    }
+}
+
+void Assets::unregister_binding_helper(AnchorBoundAssetHelper* helper) {
+    if (!helper) return;
+    auto it = std::remove(binding_helpers_.begin(), binding_helpers_.end(), helper);
+    binding_helpers_.erase(it, binding_helpers_.end());
+}
+
 Asset* Assets::bind_follower(Asset* controller_asset,
                              const std::string& follower_asset_id,
                              const std::string& anchor_name) {
-    Asset::AnchorFollowTarget binding{};
-    binding.anchor_name = anchor_name;
-    return bind_follower(controller_asset, follower_asset_id, binding);
+    throw std::runtime_error("bind_follower is deprecated. Use AnchorBoundAssetHelper::bind instead.");
 }
 
 Asset* Assets::bind_follower(Asset* controller_asset,
                              const std::string& follower_asset_id,
                              const Asset::AnchorFollowTarget& binding_spec) {
-    if (!controller_asset) {
-        vibble::log::warn("[Assets] bind_follower failed: controller asset is null for follower '" + follower_asset_id + "'.");
-        return nullptr;
-    }
-    if (follower_asset_id.empty()) {
-        vibble::log::warn("[Assets] bind_follower failed: follower asset id is empty for controller '" + asset_label(controller_asset) + "'.");
-        return nullptr;
-    }
-
-    std::shared_ptr<AssetInfo> info = library_.get(follower_asset_id);
-    if (!info) {
-        vibble::log::warn("[Assets] bind_follower failed: follower asset '" + follower_asset_id + "' not found in library.");
-        return nullptr;
-    }
-
-    Asset::AnchorFollowTarget binding = apply_follower_binding_defaults(controller_asset,
-                                                                        *info,
-                                                                        binding_spec,
-                                                                        binding_spec.anchor_name);
-
-    if (binding.anchor_name.empty()) {
-        vibble::log::warn("[Assets] bind_follower failed: no anchor specified for follower '" + follower_asset_id +
-                          "' on controller '" + asset_label(controller_asset) + "'.");
-        return nullptr;
-    }
-
-    if (!binding.source && binding.controller_asset_id.empty()) {
-        binding.source = controller_asset;
-    }
-
-    if (!binding.valid()) {
-        vibble::log::warn("[Assets] bind_follower failed: invalid binding specification for follower '" +
-                          follower_asset_id + "' on controller '" + asset_label(controller_asset) + "'.");
-        return nullptr;
-    }
-
-    return spawn_asset_attached(follower_asset_id, binding);
+    throw std::runtime_error("bind_follower is deprecated. Use AnchorBoundAssetHelper::bind instead.");
 }
 
 bool Assets::unbind_follower(Asset* controller_asset, Asset* follower_asset) {
-    if (!follower_asset) {
-        return false;
-    }
-
-    Asset* previous_parent = world_grid_.parent_of(follower_asset);
-    const std::string follower_label = asset_label(follower_asset);
-    const std::string controller_label = asset_label(controller_asset);
-
-    world_grid_.unbind_child(follower_asset);
-
-#ifndef NDEBUG
-    if (controller_asset && previous_parent) {
-        SDL_assert(previous_parent == controller_asset);
-    }
-    assert_follow_parent_consistency(world_grid_, follower_asset);
-#endif
-
-    follower_asset->Delete();
-
-    vibble::log::debug("[Assets] Unbound follower '" + follower_label +
-                       "' from controller '" + controller_label + "'.");
-    return true;
+    throw std::runtime_error("unbind_follower is deprecated. Use AnchorBoundAssetHelper::unbind instead.");
 }
 
 Asset* Assets::create_asset_and_bind_to_anchor(Asset* controller_asset,
                                                 const std::string& anchor_name,
                                                 const std::string& asset_name) {
-    return bind_follower(controller_asset, asset_name, anchor_name);
+    throw std::runtime_error("create_asset_and_bind_to_anchor is deprecated. Use AnchorBoundAssetHelper instead.");
 }
 
 bool Assets::unbind_and_delete_created(Asset* controller_asset, Asset* created_asset) {
-    return unbind_follower(controller_asset, created_asset);
+    throw std::runtime_error("unbind_and_delete_created is deprecated. Use AnchorBoundAssetHelper instead.");
 }
 
 Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
@@ -1884,10 +1803,6 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     std::shared_ptr<AssetInfo> info = library_.get(name);
     if (!info) {
         return nullptr;
-    }
-
-    if (auto binding = make_binding_from_follower_spec(*info); binding.has_value()) {
-        return spawn_asset_attached(name, binding.value());
     }
 
     std::string owning_room = map_id_;
@@ -1916,6 +1831,37 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     mark_non_player_update_buffer_dirty();
 
     return raw;
+}
+
+std::unique_ptr<Asset> Assets::create_unattached_asset(const std::string& name, SDL_Point world_pos) {
+    std::shared_ptr<AssetInfo> info = library_.get(name);
+    if (!info) {
+        return nullptr;
+    }
+
+    std::string owning_room = map_id_;
+    if (current_room_) {
+        owning_room = current_room_->room_name;
+    }
+
+    Area spawn_area(owning_room, 0);
+    int depth = 0;
+    auto uptr = std::make_unique<Asset>(info,
+                                        spawn_area,
+                                        world_pos,
+                                        depth,
+                                        nullptr,
+                                        std::string{},
+                                        std::string{},
+                                        map_grid_settings_.spacing());
+    if (!uptr) {
+        return nullptr;
+    }
+
+    uptr->set_assets(this);
+    uptr->set_camera(&camera_);
+    uptr->finalize_setup();
+    return uptr;
 }
 
 void Assets::rebuild_from_grid_state() {

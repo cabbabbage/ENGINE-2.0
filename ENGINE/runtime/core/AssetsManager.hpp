@@ -192,6 +192,13 @@ public:
     world::WorldGrid& world_grid() { return world_grid_; }
     const world::WorldGrid& world_grid() const { return world_grid_; }
 
+    // Suspend/reactivate assets outside the grid for shared binding helper.
+    std::unique_ptr<Asset> extract_asset(Asset* asset);
+    Asset* attach_asset(std::unique_ptr<Asset> asset, int world_z = 0, int resolution_layer = -1);
+    std::unique_ptr<Asset> create_unattached_asset(const std::string& name, SDL_Point world_pos);
+    void register_binding_helper(class AnchorBoundAssetHelper* helper);
+    void unregister_binding_helper(class AnchorBoundAssetHelper* helper);
+
     void persist_map_info_json();
 
     AssetLibrary& library();
@@ -386,6 +393,8 @@ private:
 
     TerrainField* terrain_field_source_ = nullptr; // non-owning; owned by SceneRenderer
     std::optional<TerrainRuntimeState> terrain_runtime_state_;
+
+    std::vector<class AnchorBoundAssetHelper*> binding_helpers_;
 
     void rebuild_non_player_update_buffer_if_needed();
     void propagate_anchor_follows();

@@ -211,6 +211,38 @@ const GridPoint* WorldGrid::point_for_asset(const Asset* asset) const {
     return find_grid_point_strict(key_it->second);
 }
 
+std::unique_ptr<Asset> WorldGrid::extract_asset(Asset* a) {
+    if (!a) {
+        return nullptr;
+    }
+
+    auto key_it = asset_to_key_.find(a);
+    if (key_it == asset_to_key_.end()) {
+        return nullptr;
+    }
+
+    GridPoint* gp = find_grid_point_strict(key_it->second);
+    if (!gp) {
+        return nullptr;
+    }
+
+    auto resid_it = residency_.find(a);
+    Chunk* chunk = (resid_it != residency_.end()) ? resid_it->second : nullptr;
+
+    detach_parent_links(a);
+    std::unique_ptr<Asset> owned = detach_asset_from_grid_point(a, *gp, true);
+    if (chunk) {
+        remove_from_chunk(a, chunk);
+    }
+    residency_.erase(a);
+    prune_empty_points();
+    return owned;
+}
+
+Asset* WorldGrid::attach_asset(std::unique_ptr<Asset> a, int world_z, int resolution_layer) {
+    return register_asset(std::move(a), world_z, resolution_layer);
+}
+
 Asset* WorldGrid::create_asset_at_point(std::unique_ptr<Asset> a, int world_z, int resolution_layer) {
     return register_asset(std::move(a), world_z, resolution_layer);
 }

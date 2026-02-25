@@ -1114,8 +1114,8 @@
                 }
               ],
               "display_name": "tailor",
-              "dx": -1207,
-              "dy": -95,
+              "dx": -115,
+              "dy": -269,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

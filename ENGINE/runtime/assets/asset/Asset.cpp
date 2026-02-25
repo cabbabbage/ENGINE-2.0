@@ -1106,13 +1106,11 @@ void Asset::apply_anchor_follow_target() {
 
         const std::uint64_t source_anchor_revision = source->anchor_world_revision();
 
-        // Force a fresh anchor resolution when the parent revision hasn't advanced.
-        // This guarantees followers stay locked even if the parent's revision tracking
-        // misses an update (e.g., unusual animation/frame counts or external movement).
-        if (source_anchor_revision == last_follow_source_revision_) {
-                auto& handle = source->get_anchor_point(follow.anchor_name);
-                handle.dirty = true;
-        }
+        // Always resolve against the parent's latest anchor sample. In game mode
+        // the parent revision can occasionally skip an increment, which leaves the
+        // cached anchor stale. Marking the handle dirty keeps followers glued each frame.
+        auto& handle = source->get_anchor_point(follow.anchor_name);
+        handle.dirty = true;
 
         auto resolved = source->anchor_state(follow.anchor_name, anchor_points::GridMaterialization::Ensure, follow.depth_policy);
         const bool missing_anchor = !resolved.has_value() || resolved->missing || !resolved->has_canonical_texture_source;

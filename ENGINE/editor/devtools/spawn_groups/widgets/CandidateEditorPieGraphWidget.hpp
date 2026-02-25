@@ -13,6 +13,8 @@
 #include "devtools/search_assets.hpp"
 
 class Input;
+class Assets;
+namespace devmode::core { class ManifestStore; }
 class CandidateEditorPieGraphWidget : public Widget {
 public:
     CandidateEditorPieGraphWidget();
@@ -25,6 +27,8 @@ public:
     bool wants_full_row() const override { return true; }
 
     void set_screen_dimensions(int width, int height);
+    void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_assets(Assets* assets);
     void set_on_request_layout(std::function<void()> cb) { on_request_layout_ = std::move(cb); }
     void set_weights(std::vector<float> weights);
     void set_candidates_from_json(const nlohmann::json& entry);
@@ -92,6 +96,8 @@ private:
     double wheel_scroll_accumulator_ = 0.0;
     double pending_delta_ = 0.0;
     bool defer_adjust_until_release_ = false;
+    devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
     mutable std::vector<SDL_Rect> legend_row_rects_{};
     mutable int legend_row_height_ = 0;
     std::unique_ptr<DMButton> regen_button_{};

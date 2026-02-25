@@ -540,6 +540,8 @@ struct SpawnGroupConfig::Entry {
             });
             if (owner_) {
                 candidate_graph_->set_screen_dimensions(owner_->screen_w_, owner_->screen_h_);
+                candidate_graph_->set_manifest_store(owner_->manifest_store_);
+                candidate_graph_->set_assets(owner_->assets_);
             }
         }
 
@@ -1706,6 +1708,26 @@ void SpawnGroupConfig::set_screen_dimensions(int width, int height) {
         if (!entry) continue;
         if (auto* graph = entry->candidate_editor_widget()) {
             graph->set_screen_dimensions(width, height);
+        }
+    }
+}
+
+void SpawnGroupConfig::set_manifest_store(devmode::core::ManifestStore* store) {
+    manifest_store_ = store;
+    for (auto& entry : entries_) {
+        if (!entry) continue;
+        if (auto* graph = entry->candidate_editor_widget()) {
+            graph->set_manifest_store(store);
+        }
+    }
+}
+
+void SpawnGroupConfig::set_assets(Assets* assets) {
+    assets_ = assets;
+    for (auto& entry : entries_) {
+        if (!entry) continue;
+        if (auto* graph = entry->candidate_editor_widget()) {
+            graph->set_assets(assets_);
         }
     }
 }

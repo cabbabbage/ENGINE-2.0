@@ -469,6 +469,20 @@ void CandidateEditorPieGraphWidget::set_screen_dimensions(int width, int height)
     }
 }
 
+void CandidateEditorPieGraphWidget::set_manifest_store(devmode::core::ManifestStore* store) {
+    manifest_store_ = store;
+    if (search_assets_) {
+        search_assets_->set_manifest_store(store);
+    }
+}
+
+void CandidateEditorPieGraphWidget::set_assets(Assets* assets) {
+    assets_ = assets;
+    if (search_assets_) {
+        search_assets_->set_assets(assets_);
+    }
+}
+
 void CandidateEditorPieGraphWidget::set_on_regenerate(std::function<void()> cb) {
     on_regenerate_ = std::move(cb);
     update_internal_layout();
@@ -1012,6 +1026,8 @@ void CandidateEditorPieGraphWidget::ensure_search_created() {
         search_assets_ = std::make_unique<SearchAssets>();
         search_assets_->set_embedded_mode(true);
         search_assets_->set_screen_dimensions(screen_w_, screen_h_);
+        search_assets_->set_manifest_store(manifest_store_);
+        search_assets_->set_assets(assets_);
         search_assets_->set_extra_results_provider(search_extra_results_provider_);
     }
 }

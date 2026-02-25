@@ -4331,6 +4331,7 @@ void RoomEditor::ensure_spawn_group_config_ui() {
     }
 
     spawn_group_panel_->set_manifest_store(manifest_store_);
+    spawn_group_panel_->set_assets(assets_);
     spawn_group_panel_->set_show_header(true);
     spawn_group_panel_->set_close_button_enabled(true);
     spawn_group_panel_->set_scroll_enabled(true);
@@ -5469,9 +5470,6 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         close_spawn_group_panel();
         clear_active_spawn_group_target();
         close_room_config_preserving_selection();
-        if (open_boundary_assets_panel_callback_) {
-            open_boundary_assets_panel_callback_();
-        }
         return;
     }
 

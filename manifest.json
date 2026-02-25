@@ -740,7 +740,79 @@
         "scale_percentage": 58.999996185302734
       },
       "start": "default",
-      "tags": [],
+      "tags": [
+        "tree"
+      ],
+      "tillable": false,
+      "update_radius": 0
+    },
+    "tree_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/tree_2",
+      "asset_name": "tree_2",
+      "asset_type": "boundary",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [
+        "tree"
+      ],
+      "tillable": false,
+      "update_radius": 0
+    },
+    "tree_darker": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/tree_darker",
+      "asset_name": "tree_darker",
+      "asset_type": "boundary",
+      "can_invert": true,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [
+        "tree"
+      ],
       "tillable": false,
       "update_radius": 0
     },
@@ -1070,10 +1142,6 @@
               {
                 "chance": 100,
                 "name": "null"
-              },
-              {
-                "chance": 50,
-                "name": "tree"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -1091,6 +1159,28 @@
             "resolve_geometry_to_room_size": false,
             "resolve_quantity_to_room_size": false,
             "spawn_id": "spn-Forrest-map_boundary"
+          },
+          {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              }
+            ],
+            "display_name": "batch_map_boundary",
+            "enforce_spacing": false,
+            "explicit_flip": false,
+            "force_flipped": false,
+            "grid_resolution": 5,
+            "jitter": 0,
+            "locked": false,
+            "max_number": 1,
+            "min_number": 1,
+            "position": "Random",
+            "resolution": 0,
+            "resolve_geometry_to_room_size": false,
+            "resolve_quantity_to_room_size": false,
+            "spawn_id": "spn-f85c50f88900"
           }
         ],
         "inherits_map_assets": false
@@ -1634,8 +1724,8 @@
                 }
               ],
               "display_name": "grave_4 (Copy 10)",
-              "dx": -324,
-              "dy": -108,
+              "dx": -1274,
+              "dy": 702,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2172,6 +2262,93 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-58ad1e3d3405"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree_darker"
+                }
+              ],
+              "display_name": "tree_darker",
+              "dx": -2484,
+              "dy": -658,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 34,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-a54b3ebd5f50"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree_2"
+                }
+              ],
+              "display_name": "tree_2",
+              "dx": -3102,
+              "dy": -1147,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 35,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-f0e02f8a997a"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree_2"
+                }
+              ],
+              "display_name": "tree_2",
+              "dx": -444,
+              "dy": 249,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 36,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-a3e3bec3ae05"
             }
           ]
         }

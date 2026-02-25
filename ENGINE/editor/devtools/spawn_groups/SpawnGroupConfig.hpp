@@ -16,6 +16,7 @@
 
 class Input;
 class SpawnGroupLabelWidget;
+class Assets;
 namespace devmode::core { class ManifestStore; }
 namespace devmode::core { class ManifestStore; }
 
@@ -96,7 +97,8 @@ public:
     void set_embedded_mode(bool embedded);
 
     void set_default_resolution(int resolution);
-    void set_manifest_store(class devmode::core::ManifestStore* store) { manifest_store_ = store; }
+    void set_manifest_store(class devmode::core::ManifestStore* store);
+    void set_assets(class Assets* assets);
     // Detach from any bound JSON so external callers can safely mutate/delete
     // the underlying spawn group data without leaving dangling pointers inside
     // the config panel.
@@ -186,6 +188,7 @@ private:
     DragState drag_state_{};
     Entry* current_entry_ = nullptr;
     class devmode::core::ManifestStore* manifest_store_ = nullptr;
+    class Assets* assets_ = nullptr;
 
     Entry* find_entry_by_id(const std::string& id);
     void begin_drag(size_t index, int pointer_y);

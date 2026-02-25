@@ -118,7 +118,7 @@ private:
     void remove_from_chunk(Asset* a, Chunk* c);
     void invalidate_active_cache();
     std::uint64_t next_traversal_stamp() const;
-    GridId make_point_id(int i, int j) const;
+    GridId make_point_id(int i, int j, int world_z, int resolution_layer, std::uint32_t salt = 0) const;
     void remove_asset_from_point(Asset* a, GridPoint& point);
     std::unique_ptr<Asset> detach_asset_from_grid_point(Asset* a, GridPoint& point, bool clear_mapping);
     void attach_asset_to_grid_point(std::unique_ptr<Asset> owned, Asset* raw, GridPoint& point);

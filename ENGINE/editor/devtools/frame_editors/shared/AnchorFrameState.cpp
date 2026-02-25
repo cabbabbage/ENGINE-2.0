@@ -87,6 +87,7 @@ std::vector<AnchorFrame> parse_anchor_frames_from_payload(const nlohmann::json& 
     }
 
     const auto& anchor_json = payload["anchor_points"];
+
     const std::size_t limit = std::min<std::size_t>(frame_count, anchor_json.size());
     for (std::size_t i = 0; i < limit; ++i) {
         const auto& entry = anchor_json[i];
@@ -135,6 +136,7 @@ nlohmann::json build_payload_with_anchors(const std::vector<AnchorFrame>& frames
     }
 
     payload["anchor_points"] = std::move(anchor_points);
+
     return payload;
 }
 

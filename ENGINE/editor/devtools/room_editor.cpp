@@ -2960,7 +2960,9 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         hit_before_pan = nullptr;
     }
     const bool selection_interaction_active = shift_down || !selected_assets_.empty();
-    const bool pointer_blocks_pan = (!selection_interaction_active && dragging_) ||
+    const bool selection_blocks_camera_pan = !selected_assets_.empty();
+    const bool pointer_blocks_pan = selection_blocks_camera_pan ||
+                                    (!selection_interaction_active && dragging_) ||
                                     (selection_interaction_active && !dragging_ && hit_before_pan && (left_down || left_pressed_this_frame));
 
     if (shift_down_just_pressed) {
@@ -2968,6 +2970,11 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     }
     if (shift_space_just_pressed) {
         cycle_selection_filter();
+    }
+
+    if (selection_blocks_camera_pan && camera_controls_.is_panning()) {
+        // Stop any in-progress camera drag as soon as a selection exists so asset dragging has priority.
+        camera_controls_.cancel(cam);
     }
 
     if (!camera_settings_lock_active_) {

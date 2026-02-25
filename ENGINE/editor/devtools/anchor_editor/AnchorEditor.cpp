@@ -117,7 +117,7 @@ void AnchorEditor::begin(const frame_editors::FrameEditorContext& context) {
         return true;
     });
     frame_navigator_->set_on_apply_next([this](){ apply_to_next_frame(); });
-    frame_navigator_->set_on_apply_animation([this](){ (void)apply_to_selected_animations(); });
+    frame_navigator_->set_on_apply_animation([this](){ apply_to_animation(); });
     frame_navigator_->set_on_apply_all([this](){ (void)apply_to_all_animations(); });
     frame_navigator_->set_on_save_and_exit([this](){
         if (context_.on_end) {
@@ -415,17 +415,20 @@ void AnchorEditor::apply_to_next_frame() {
     if (apply_form_to_anchor()) {
         dirty_ = true;
     }
-    const int frame_index = std::clamp(selected_frame_, 0, static_cast<int>(frames_.size()) - 1);
-    const int next_index = (frame_index + 1) % static_cast<int>(frames_.size());
+    const int count = static_cast<int>(frames_.size());
+    const int frame_index = std::clamp(selected_frame_, 0, count - 1);
+    const int next_index = (frame_index + 1) % count;
     frames_[static_cast<std::size_t>(next_index)] = frames_[static_cast<std::size_t>(frame_index)];
     dirty_ = true;
     persist_changes();
+    persist_pending_changes();
     propagate_live_anchor_updates();
 }
 
 void AnchorEditor::apply_to_animation() {
     apply_to_all_frames();
     persist_changes();
+    persist_pending_changes();
     propagate_live_anchor_updates();
 }
 
@@ -449,7 +452,7 @@ bool AnchorEditor::apply_to_selected_animations() {
 
     const int frame_index = std::clamp(selected_frame_, 0, static_cast<int>(frames_.size()) - 1);
     const auto source = frames_[static_cast<std::size_t>(frame_index)];
-    return apply_source_to_animation_ids(ids, source);
+    return apply_source_to_animation_ids(ids, source, false);
 }
 
 bool AnchorEditor::apply_to_all_animations() {
@@ -463,11 +466,12 @@ bool AnchorEditor::apply_to_all_animations() {
     }
     const int frame_index = std::clamp(selected_frame_, 0, static_cast<int>(frames_.size()) - 1);
     const auto source = frames_[static_cast<std::size_t>(frame_index)];
-    return apply_source_to_animation_ids(ids, source);
+    return apply_source_to_animation_ids(ids, source, false);
 }
 
 bool AnchorEditor::apply_source_to_animation_ids(const std::vector<std::string>& animation_ids,
-                                                 const frame_editors::AnchorFrame& source) {
+                                                 const frame_editors::AnchorFrame& source,
+                                                 bool current_frame_only) {
     if (!context_.document || animation_ids.empty()) {
         return false;
     }
@@ -484,8 +488,15 @@ bool AnchorEditor::apply_source_to_animation_ids(const std::vector<std::string>&
         if (animation_frames.empty()) {
             animation_frames.emplace_back();
         }
-        for (auto& frame : animation_frames) {
-            frame_editors::apply_anchor_scope(frame, source, frame_editors::AnchorConflictPolicy::SyncExact);
+        if (current_frame_only) {
+            const int frame_index = std::clamp(selected_frame_, 0, static_cast<int>(animation_frames.size()) - 1);
+            frame_editors::apply_anchor_scope(animation_frames[static_cast<std::size_t>(frame_index)],
+                                              source,
+                                              frame_editors::AnchorConflictPolicy::SyncExact);
+        } else {
+            for (auto& frame : animation_frames) {
+                frame_editors::apply_anchor_scope(frame, source, frame_editors::AnchorConflictPolicy::SyncExact);
+            }
         }
 
         const auto updated_payload = frame_editors::build_payload_with_anchors(animation_frames, payload);
@@ -503,7 +514,13 @@ bool AnchorEditor::apply_source_to_animation_ids(const std::vector<std::string>&
         applied_any = true;
     }
 
-    if (applied_any) {
+    if (!applied_any) {
+        return false;
+    }
+
+    if (context_.on_save_and_update) {
+        context_.on_save_and_update();
+    } else if (context_.document) {
         context_.document->save_to_file_checked(true);
     }
 
@@ -513,7 +530,8 @@ bool AnchorEditor::apply_source_to_animation_ids(const std::vector<std::string>&
         preview_refreshed_ = false;
     }
 
-    return applied_any;
+    propagate_live_anchor_updates();
+    return true;
 }
 
 void AnchorEditor::sync_local_frames_after_scope_apply(const std::vector<frame_editors::AnchorFrame>& frames) {
@@ -602,7 +620,7 @@ void AnchorEditor::hydrate_anchor_pixels_from_target() {
         const AnimationFrame* frame = anim.frames[i];
         if (!frame || frame->anchor_points.empty()) continue;
         auto& dest = frames_[i].anchors;
-        if (!dest.empty()) continue;
+        dest.clear();
         dest.reserve(frame->anchor_points.size());
         for (const auto& a : frame->anchor_points) {
             if (a.name.empty()) continue;
@@ -655,19 +673,36 @@ AnchorEditor::FrameTextureInfo AnchorEditor::resolve_frame_texture(SDL_Renderer*
             if (clamped_index >= 0 && clamped_index < static_cast<int>(anim.frames.size())) {
                 AnimationFrame* frame = anim.frames[static_cast<std::size_t>(clamped_index)];
                 if (frame && !frame->variants.empty()) {
-                    const int idx = std::clamp(context_.target->current_variant_index, 0,
-                                               static_cast<int>(frame->variants.size()) - 1);
-                    const auto& variant = frame->variants[static_cast<std::size_t>(idx)];
-                    info.texture = variant.get_base_texture();
-                    if (info.texture) {
-                        if (variant.uses_atlas) {
-                            info.src_rect = variant.source_rect;
-                            info.has_src_rect = true;
-                        } else {
-                            float w = 0, h = 0;
-                            SDL_GetTextureSize(info.texture, &w, &h);
-                            info.src_rect = SDL_Rect{0, 0, static_cast<int>(w), static_cast<int>(h)};
-                            info.has_src_rect = true;
+                    const auto preferred_variant_index = [this](const AnimationFrame& f) {
+                        const int active_idx = context_.target ? context_.target->current_variant_index : 0;
+                        if (active_idx >= 0 && active_idx < static_cast<int>(f.variants.size())) {
+                            const auto& active_variant = f.variants[static_cast<std::size_t>(active_idx)];
+                            if (active_variant.get_base_texture() != nullptr) {
+                                return active_idx;
+                            }
+                        }
+                        for (std::size_t i = 0; i < f.variants.size(); ++i) {
+                            if (f.variants[i].get_base_texture() != nullptr) {
+                                return static_cast<int>(i);
+                            }
+                        }
+                        return 0;
+                    };
+
+                    const int idx = preferred_variant_index(*frame);
+                    if (idx >= 0 && idx < static_cast<int>(frame->variants.size())) {
+                        const auto& variant = frame->variants[static_cast<std::size_t>(idx)];
+                        info.texture = variant.get_base_texture();
+                        if (info.texture) {
+                            if (variant.uses_atlas) {
+                                info.src_rect = variant.source_rect;
+                                info.has_src_rect = true;
+                            } else {
+                                float w = 0, h = 0;
+                                SDL_GetTextureSize(info.texture, &w, &h);
+                                info.src_rect = SDL_Rect{0, 0, static_cast<int>(w), static_cast<int>(h)};
+                                info.has_src_rect = true;
+                            }
                         }
                     }
                 }
@@ -713,17 +748,36 @@ AnchorEditor::FrameTextureInfo AnchorEditor::resolve_frame_texture(SDL_Renderer*
     // Final fallback: show the asset's current frame even if animation lookup failed.
     if (!info.texture && context_.target && context_.target->current_frame) {
         const AnimationFrame* frame = context_.target->current_frame;
-        const int variant_idx = std::clamp(context_.target->current_variant_index,
-                                           0,
-                                           static_cast<int>(frame->variants.size()) - 1);
+        auto preferred_variant_index = [this](const AnimationFrame& f) {
+            const int active_idx = context_.target ? context_.target->current_variant_index : 0;
+            if (active_idx >= 0 && active_idx < static_cast<int>(f.variants.size())) {
+                const auto& active_variant = f.variants[static_cast<std::size_t>(active_idx)];
+                if (active_variant.get_base_texture() != nullptr) {
+                    return active_idx;
+                }
+            }
+            for (std::size_t i = 0; i < f.variants.size(); ++i) {
+                if (f.variants[i].get_base_texture() != nullptr) {
+                    return static_cast<int>(i);
+                }
+            }
+            return 0;
+        };
+
+        const int variant_idx = preferred_variant_index(*frame);
         if (variant_idx >= 0 && variant_idx < static_cast<int>(frame->variants.size())) {
             const auto& variant = frame->variants[static_cast<std::size_t>(variant_idx)];
             info.texture = variant.get_base_texture();
             if (info.texture) {
-                float w = 0, h = 0;
-                SDL_GetTextureSize(info.texture, &w, &h);
-                info.src_rect = SDL_Rect{0, 0, static_cast<int>(w), static_cast<int>(h)};
-                info.has_src_rect = true;
+                if (variant.uses_atlas) {
+                    info.src_rect = variant.source_rect;
+                    info.has_src_rect = true;
+                } else {
+                    float w = 0, h = 0;
+                    SDL_GetTextureSize(info.texture, &w, &h);
+                    info.src_rect = SDL_Rect{0, 0, static_cast<int>(w), static_cast<int>(h)};
+                    info.has_src_rect = true;
+                }
             }
         }
     }

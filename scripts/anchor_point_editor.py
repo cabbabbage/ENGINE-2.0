@@ -88,6 +88,16 @@ def _read_int(value, default=0):
     except Exception:
         return default
 
+def _normalize_unique_anchor_name(desired_name, existing_names):
+    """Return a unique anchor name using deterministic numeric suffixing."""
+    base = str(desired_name or "").strip() or "anchor"
+    candidate = base
+    suffix = 2
+    while candidate in existing_names:
+        candidate = f"{base}_{suffix}"
+        suffix += 1
+    return candidate
+
 
 def _infer_frame_count(payload):
     if not isinstance(payload, dict):
@@ -102,10 +112,12 @@ def _infer_frame_count(payload):
     return max(1, max(counts))
 
 
-def _normalize_anchor(anchor):
+def _normalize_anchor(anchor, fallback_name=None):
     if not isinstance(anchor, dict):
         return None
     name = str(anchor.get("name", "")).strip()
+    if not name:
+        name = str(fallback_name or "").strip()
     if not name:
         return None
     return {
@@ -125,13 +137,18 @@ def _normalize_anchor_points(payload):
             frame = source[idx]
             if not isinstance(frame, list):
                 continue
-            dedupe = set()
-            for anchor in frame:
-                normalized = _normalize_anchor(anchor)
-                if not normalized or normalized["name"] in dedupe:
+            used_names = set()
+            normalized_frame = []
+            for anchor_idx, anchor in enumerate(frame):
+                fallback_name = f"anchor_{anchor_idx + 1}"
+                normalized = _normalize_anchor(anchor, fallback_name=fallback_name)
+                if not normalized:
                     continue
-                dedupe.add(normalized["name"])
-                out[idx].append(normalized)
+                normalized_name = _normalize_unique_anchor_name(normalized["name"], used_names)
+                used_names.add(normalized_name)
+                normalized["name"] = normalized_name
+                normalized_frame.append(normalized)
+            out[idx] = normalized_frame
     return out
 
 
@@ -149,6 +166,7 @@ class AnchorEditorApp:
         self._preview_photo = None
         self._preview_scale = 1.0
         self._preview_offset = (0, 0)
+        self._preview_flip = (False, False)
         self._preview_canvas_size = (0, 0)
         self._frame_image_size = (0, 0)
         self._dragging_anchor = False
@@ -304,6 +322,13 @@ class AnchorEditorApp:
             candidate = self.manifest_root / "resources" / "assets" / self.asset_key
         return candidate / path_value if path_value else candidate
 
+    def _preview_flip_flags(self):
+        if not isinstance(self.payload, dict):
+            return (False, False)
+        flip_x = bool(self.payload.get("flipped_source")) or bool(self.payload.get("flip_movement_horizontal"))
+        flip_y = bool(self.payload.get("flip_vertical_source")) or bool(self.payload.get("flip_movement_vertical"))
+        return (flip_x, flip_y)
+
     def _get_frame_image_path(self, frame_index):
         folder = self._get_source_folder()
         if not folder:
@@ -337,6 +362,7 @@ class AnchorEditorApp:
         self.preview_canvas.delete("image")
         self.preview_canvas.delete("anchor")
         self.preview_canvas.delete("placeholder")
+        self._preview_flip = self._preview_flip_flags()
         if not self._frame_pil_image:
             message = "Image preview unavailable"
             if Image is None:
@@ -358,6 +384,12 @@ class AnchorEditorApp:
         image = self._frame_pil_image
         if scale != 1:
             image = image.resize((display_w, display_h), Image.LANCZOS)
+        flip_x, flip_y = self._preview_flip
+        transpose_enum = getattr(Image, "Transpose", None)
+        if flip_x:
+            image = image.transpose(transpose_enum.FLIP_LEFT_RIGHT if transpose_enum else Image.FLIP_LEFT_RIGHT)
+        if flip_y:
+            image = image.transpose(transpose_enum.FLIP_TOP_BOTTOM if transpose_enum else Image.FLIP_TOP_BOTTOM)
         self._preview_photo = ImageTk.PhotoImage(image)
         offset_x = (width - display_w) // 2
         offset_y = (height - display_h) // 2
@@ -394,22 +426,45 @@ class AnchorEditorApp:
                 tags=("anchor",),
             )
 
+    # Keep mapping in sync with runtime anchor_pixel_to_uv semantics (pixel centers, then optional flip).
     def _texture_to_canvas(self, texture_x, texture_y):
         scale = self._preview_scale or 1.0
         offset_x, offset_y = self._preview_offset
-        return offset_x + texture_x * scale, offset_y + texture_y * scale
+        width, height = self._frame_image_size
+        flip_x, flip_y = self._preview_flip
+        w = width if width > 0 else 1
+        h = height if height > 0 else 1
+        u = (float(texture_x) + 0.5) / float(w)
+        v = (float(texture_y) + 0.5) / float(h)
+        if flip_x:
+            u = 1.0 - u
+        if flip_y:
+            v = 1.0 - v
+        return offset_x + u * float(w) * scale, offset_y + v * float(h) * scale
 
     def _canvas_to_texture(self, canvas_x, canvas_y, clamp=True):
         scale = self._preview_scale or 1.0
         offset_x, offset_y = self._preview_offset
-        tx = (canvas_x - offset_x) / scale
-        ty = (canvas_y - offset_y) / scale
+        width, height = self._frame_image_size
+        w = width if width > 0 else 1
+        h = height if height > 0 else 1
+        u = (canvas_x - offset_x) / (scale * float(w))
+        v = (canvas_y - offset_y) / (scale * float(h))
         if clamp:
-            width, height = self._frame_image_size
+            u = max(0.0, min(u, 1.0))
+            v = max(0.0, min(v, 1.0))
+        flip_x, flip_y = self._preview_flip
+        if flip_x:
+            u = 1.0 - u
+        if flip_y:
+            v = 1.0 - v
+        tx = u * float(w) - 0.5
+        ty = v * float(h) - 0.5
+        if clamp:
             if width > 0:
-                tx = max(0, min(tx, width - 1))
+                tx = max(0.0, min(tx, float(width - 1)))
             if height > 0:
-                ty = max(0, min(ty, height - 1))
+                ty = max(0.0, min(ty, float(height - 1)))
         return tx, ty
 
     def _find_anchor_near(self, canvas_x, canvas_y):
@@ -477,6 +532,11 @@ class AnchorEditorApp:
         self.anchor_name_var.trace_add("write", lambda *_: self._on_value_change())
         self.anchor_x_var.trace_add("write", lambda *_: self._on_value_change())
         self.anchor_y_var.trace_add("write", lambda *_: self._on_value_change())
+
+    def _unique_name_for_current_frame(self, desired_name, skip_index=None):
+        frame = self.frames[self.current_frame] if self.frames else []
+        existing = {anchor["name"] for idx, anchor in enumerate(frame) if idx != skip_index}
+        return _normalize_unique_anchor_name(desired_name, existing)
 
     def _resolve_asset(self):
         assets = self.manifest.setdefault("assets", {})
@@ -548,21 +608,31 @@ class AnchorEditorApp:
         frame = self.frames[self.current_frame]
         if self.current_anchor >= len(frame):
             return
+        desired_name = (self.anchor_name_var.get() or "").strip()
+        fallback_name = f"anchor_{self.current_anchor + 1}"
+        desired_name = desired_name or fallback_name
+        unique_name = self._unique_name_for_current_frame(desired_name, skip_index=self.current_anchor)
+        if unique_name != self.anchor_name_var.get():
+            prev_loading = self.loading
+            self.loading = True
+            self.anchor_name_var.set(unique_name)
+            self.loading = prev_loading
         anchor = frame[self.current_anchor]
-        anchor["name"] = self.anchor_name_var.get().strip() or f"anchor_{self.current_anchor + 1}"
+        anchor["name"] = unique_name
         anchor["texture_x"] = max(0, _read_int(self.anchor_x_var.get(), anchor.get("texture_x", 0)))
         anchor["texture_y"] = max(0, _read_int(self.anchor_y_var.get(), anchor.get("texture_y", 0)))
         anchor["in_front"] = bool(self.anchor_in_front_var.get())
         self.anchor_list.delete(self.current_anchor)
         self.anchor_list.insert(self.current_anchor, f"{self.current_anchor + 1}. {anchor['name']}")
         self.anchor_list.selection_set(self.current_anchor)
+        self.anchor_list.see(self.current_anchor)
         self._render_preview()
         self._save_manifest()
 
     def _add_anchor(self):
         frame = self.frames[self.current_frame]
         new_anchor = {
-            "name": f"anchor_{len(frame) + 1}",
+            "name": self._unique_name_for_current_frame(f"anchor_{len(frame) + 1}"),
             "texture_x": 0,
             "texture_y": 0,
             "in_front": True,

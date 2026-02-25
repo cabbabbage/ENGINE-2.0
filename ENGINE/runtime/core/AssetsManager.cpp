@@ -1715,6 +1715,16 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
                                                        anchor_points::GridMaterialization::Ensure,
                                                        binding.depth_policy);
 
+    const bool anchor_available = resolved_anchor.has_value() &&
+                                  !resolved_anchor->missing &&
+                                  resolved_anchor->has_canonical_texture_source;
+    if (!anchor_available && anchor_follow_debug_logging_) {
+        const int frame_idx = anchor_owner->current_frame ? anchor_owner->current_frame->frame_index : -1;
+        vibble::log::info("[AnchorDebug] spawn_asset_attached: anchor '" + binding.anchor_name + "' missing/invalid on frame " +
+                          std::to_string(frame_idx) + " for controller '" + asset_label(anchor_owner) +
+                          "'. Follower '" + name + "' will spawn hidden until the anchor exists on the current frame.");
+    }
+
     std::string owning_room = map_id_;
     if (current_room_) {
         owning_room = current_room_->room_name;
@@ -1726,7 +1736,7 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
     if (auto* owner_gp = anchor_owner->grid_point()) {
         resolved_layer = owner_gp->resolution_layer();
     }
-    if (resolved_anchor.has_value() && !resolved_anchor->missing) {
+    if (anchor_available) {
         spawn_pos = resolved_anchor->world_px;
         spawn_z = resolved_anchor->world_z;
         resolved_layer = resolved_anchor->resolution_layer;

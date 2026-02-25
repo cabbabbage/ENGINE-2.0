@@ -34,6 +34,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <stdexcept>
+#include <exception>
 #include <cassert>
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
@@ -63,50 +64,6 @@ static std::mutex& asset_rng_mutex()
 {
         static std::mutex mutex;
         return mutex;
-}
-
-
-const DisplacedAssetAnchorPoint* find_anchor_with_frame_fallback(const Asset& asset,
-                                                                  const AnimationFrame* current_frame,
-                                                                  const std::string& name) {
-        if (current_frame) {
-                if (const auto* direct = current_frame->find_anchor(name)) {
-                        return direct;
-                }
-        }
-
-        if (!asset.info) {
-                return nullptr;
-        }
-        auto anim_it = asset.info->animations.find(asset.current_animation);
-        if (anim_it == asset.info->animations.end()) {
-                return nullptr;
-        }
-
-        const Animation& anim = anim_it->second;
-        const int current_index = current_frame ? current_frame->frame_index : 0;
-
-        const DisplacedAssetAnchorPoint* best = nullptr;
-        int best_distance = std::numeric_limits<int>::max();
-        for (const AnimationFrame* frame : anim.frames) {
-                if (!frame) {
-                        continue;
-                }
-                const auto* candidate = frame->find_anchor(name);
-                if (!candidate) {
-                        continue;
-                }
-                const int distance = std::abs(frame->frame_index - current_index);
-                if (!best || distance < best_distance) {
-                        best = candidate;
-                        best_distance = distance;
-                        if (distance == 0) {
-                                break;
-                        }
-                }
-        }
-
-        return best;
 }
 
 std::string normalize_controller_binding_id(const std::string& value) {
@@ -1158,17 +1115,25 @@ void Asset::apply_anchor_follow_target() {
         }
 
         auto resolved = source->anchor_state(follow.anchor_name, anchor_points::GridMaterialization::Ensure, follow.depth_policy);
-        if (!resolved.has_value() || resolved->missing) {
-                // No anchor on this frame. Keep previous transform when initialized so followers
-                // don't pop to origin; otherwise hide until an anchor becomes available.
+        const bool missing_anchor = !resolved.has_value() || resolved->missing || !resolved->has_canonical_texture_source;
+        if (missing_anchor) {
                 follow_missing_ = true;
-                last_follow_source_revision_ = source_anchor_revision;
-                mark_anchors_dirty();
-                if (follow_initialized_) {
-                        return;
-                }
                 follow_initialized_ = false;
+                last_follow_source_revision_ = source_anchor_revision;
+                last_follow_world_ = SDL_Point{0, 0};
+                last_follow_world_z_ = 0;
+                mark_anchors_dirty();
                 set_anchor_hidden(true);
+                if (assets_ && assets_->anchor_follow_debug_logging_) {
+                        const int frame_idx = source->current_frame ? source->current_frame->frame_index : -1;
+                        const std::string source_name = (source->info && !source->info->name.empty())
+                                ? source->info->name
+                                : std::string("<unnamed>");
+                        const std::string follower_name = (info && !info->name.empty()) ? info->name : std::string("<unnamed>");
+                        vibble::log::info("[AnchorDebug] follow anchor '" + follow.anchor_name + "' missing/invalid on frame " +
+                                          std::to_string(frame_idx) + " for follower '" + follower_name +
+                                          "' from source '" + source_name + "'.");
+                }
                 return;
         }
         follow_error_reported_ = false;
@@ -1268,8 +1233,16 @@ std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name,
         resolved.grid_point  = handle.grid;
         resolved.missing     = handle.missing;
         resolved.in_front    = handle.in_front;
-        if (!resolved.missing && !resolved.has_canonical_texture_source) {
-                throw std::runtime_error("Anchor invariant failure: resolved anchor missing canonical texture source");
+        if (!resolved.has_canonical_texture_source && !resolved.missing) {
+                resolved.missing = true;
+                resolved.grid_point = nullptr;
+                if (assets_ && assets_->anchor_follow_debug_logging_) {
+                        const int frame_idx = current_frame ? current_frame->frame_index : -1;
+                        const std::string asset_name = (info && !info->name.empty()) ? info->name : std::string("<unnamed>");
+                        vibble::log::info("[AnchorDebug] anchor '" + name + "' for asset '" + asset_name +
+                                          "' treated as missing on frame " + std::to_string(frame_idx) +
+                                          " due to invalid canonical texture source.");
+                }
         }
         return resolved;
 }
@@ -1299,9 +1272,7 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 return;
         }
         const AnimationFrame* frame = owner->current_frame;
-        const DisplacedAssetAnchorPoint* anchor = find_anchor_with_frame_fallback(*owner, frame, name);
-
-        if (!anchor) {
+        auto mark_missing = [&](const std::string& reason) {
                 grid = nullptr;
                 world_px = SDL_Point{0, 0};
                 world_z = 0;
@@ -1311,29 +1282,62 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 source_texture_px = SDL_Point{0, 0};
                 has_canonical_texture_source = false;
                 dirty = false;
+                Assets* assets_owner = owner ? owner->assets_ : nullptr;
+                if (assets_owner && assets_owner->anchor_follow_debug_logging_) {
+                        const int frame_idx = frame ? frame->frame_index : -1;
+                        const std::string asset_name = (owner && owner->info) ? owner->info->name : std::string("<unnamed>");
+                        vibble::log::info("[AnchorDebug] missing anchor '" + name + "' on frame " +
+                                          std::to_string(frame_idx) + " for asset '" + asset_name + "': " + reason);
+                }
+        };
+
+        if (!frame) {
+                mark_missing("no current frame");
+                return;
+        }
+
+        const DisplacedAssetAnchorPoint* anchor = frame->find_anchor(name);
+
+        if (!anchor) {
+                mark_missing("anchor not present on current frame");
+                return;
+        }
+
+        if (!anchor->is_valid()) {
+                mark_missing("anchor data invalid");
                 return;
         }
 
         const anchor_points::AnchorDepthPolicy resolved_depth = depth_policy.value_or(
                 anchor->in_front ? anchor_points::AnchorDepthPolicy::InFront : anchor_points::AnchorDepthPolicy::Behind);
 
-        const auto resolved = anchor_points::resolve_frame_anchor_sample(
-                *owner,
-                *anchor,
-                resolved_depth,
-                grid_policy);
-
-        grid = resolved.resolved.grid_point;
-        world_px = resolved.resolved.world_px;
-        world_z = resolved.resolved.world_z;
-        resolution_layer = resolved.resolved.resolution_layer;
-        missing = resolved.resolved.missing;
-        in_front = resolved.resolved.in_front;
-        source_texture_px = resolved.resolved.source_texture_px;
-        has_canonical_texture_source = resolved.resolved.has_canonical_texture_source;
-        if (!missing && !resolved.resolved.has_canonical_texture_source) {
-                throw std::runtime_error("Anchor invariant failure: resolved anchor missing canonical texture source");
+        anchor_points::FrameAnchorSample resolved_sample{};
+        try {
+                resolved_sample = anchor_points::resolve_frame_anchor_sample(
+                        *owner,
+                        *anchor,
+                        resolved_depth,
+                        grid_policy);
+        } catch (const std::exception& ex) {
+                mark_missing(std::string("invalid anchor data: ") + ex.what());
+                return;
         }
+
+        if (resolved_sample.resolved.missing || !resolved_sample.resolved.has_canonical_texture_source) {
+                mark_missing(resolved_sample.resolved.missing
+                        ? std::string("resolver marked anchor missing")
+                        : std::string("missing canonical texture source"));
+                return;
+        }
+
+        grid = resolved_sample.resolved.grid_point;
+        world_px = resolved_sample.resolved.world_px;
+        world_z = resolved_sample.resolved.world_z;
+        resolution_layer = resolved_sample.resolved.resolution_layer;
+        missing = resolved_sample.resolved.missing;
+        in_front = resolved_sample.resolved.in_front;
+        source_texture_px = resolved_sample.resolved.source_texture_px;
+        has_canonical_texture_source = resolved_sample.resolved.has_canonical_texture_source;
         dirty = false;
 }
 

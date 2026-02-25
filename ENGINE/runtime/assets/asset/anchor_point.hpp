@@ -1,10 +1,17 @@
 #pragma once
 
 #include <SDL3/SDL.h>
+#include <algorithm>
 #include <string>
 
 namespace world { struct GridPoint; }
 
+// Canonical anchor contract:
+// - texture_x/texture_y name an integer pixel in the un-flipped source texture.
+// - The anchor refers to the *center* of that pixel: (x + 0.5, y + 0.5).
+// - +X goes right, +Y goes down in texture space; Z is derived at runtime.
+// - Horizontal flips are applied after converting to UV: u = 1 - u when flipped.
+// - The same contract is consumed by runtime projection and the editor preview.
 struct DisplacedAssetAnchorPoint {
     std::string name;
     int         texture_x = 0;   // Pixel coordinate on the sprite texture (X axis)
@@ -43,5 +50,22 @@ enum class GridMaterialization {
     None,
     Ensure
 };
+
+// Convert a canonical anchor pixel to normalized UV, applying optional horizontal flip.
+inline SDL_FPoint anchor_pixel_to_uv(SDL_Point texture_px,
+                                     int texture_w,
+                                     int texture_h,
+                                     SDL_FlipMode flip = SDL_FLIP_NONE) {
+    auto to_unit = [](int pixel, int dimension) {
+        if (dimension <= 0) {
+            return 0.5f;
+        }
+        return std::clamp((static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension), 0.0f, 1.0f);
+    };
+    const float frame_u = to_unit(texture_px.x, texture_w);
+    const float frame_v = to_unit(texture_px.y, texture_h);
+    const bool flip_h = (flip & SDL_FLIP_HORIZONTAL) != 0;
+    return SDL_FPoint{flip_h ? (1.0f - frame_u) : frame_u, frame_v};
+}
 
 }

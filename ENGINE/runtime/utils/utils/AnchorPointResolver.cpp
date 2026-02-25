@@ -127,18 +127,14 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
     return true;
 }
 
-float anchor_to_unit(int pixel, int dimension) {
-    if (dimension <= 0) {
-        return 0.5f;
-    }
-    return std::clamp((static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension), 0.0f, 1.0f);
-}
-
 SDL_FPoint compute_anchor_uv(const DisplacedAssetAnchorPoint& anchor, const FrameDimensions& dims) {
-    const float frame_u = anchor_to_unit(anchor.texture_x, dims.frame_w);
-    const float frame_v = anchor_to_unit(anchor.texture_y, dims.frame_h);
-    const float render_u = ((dims.flip & SDL_FLIP_HORIZONTAL) != 0) ? (1.0f - frame_u) : frame_u;
-    return SDL_FPoint{render_u, frame_v};
+    // Texture origin is top-left; +X right, +Y down. The canonical anchor lives at the center of
+    // the named pixel (x+0.5, y+0.5). Horizontal flips mirror U after the pixel-center conversion.
+    // Keep this in lockstep with the editor preview math.
+    return anchor_points::anchor_pixel_to_uv(SDL_Point{anchor.texture_x, anchor.texture_y},
+                                             dims.frame_w,
+                                             dims.frame_h,
+                                             dims.flip);
 }
 
 SDL_FPoint compute_anchor_screen_from_mesh(const Asset& asset,

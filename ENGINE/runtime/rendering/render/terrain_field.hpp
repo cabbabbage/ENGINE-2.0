@@ -40,6 +40,20 @@ public:
 
     std::uint64_t runtime_revision() const { return runtime_revision_; }
 
+    struct CacheMetrics {
+        std::size_t frame_cache_entries = 0;
+        std::size_t region_index_cells = 0;
+        std::uint64_t last_frame_id = 0;
+        std::uint64_t runtime_revision = 0;
+        std::uint64_t cache_resets = 0;
+    };
+
+    CacheMetrics cache_metrics() const;
+    std::size_t frame_cache_size() const { return frame_cache_.size(); }
+
+    // Unit-test hook to allow seeding regions without constructing full Room objects.
+    friend struct TerrainFieldTestHook;
+
 private:
     struct RegionArea {
         const Area* area = nullptr;
@@ -89,5 +103,13 @@ private:
     std::uint64_t last_frame_id_ = 0;
     std::uint64_t base_seed_ = 0;
     TerrainSettings cached_settings_{};
+    std::uint64_t cache_reset_count_ = 0;
     bool has_runtime_state_ = false;
+
+    void log_cache_reset(const char* reason,
+                         std::size_t previous_size,
+                         std::uint64_t prev_frame,
+                         std::uint64_t new_frame,
+                         std::uint64_t prev_revision,
+                         std::uint64_t new_revision) const;
 };

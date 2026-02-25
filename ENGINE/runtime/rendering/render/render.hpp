@@ -84,6 +84,9 @@ private:
     std::unordered_map<SDL_Texture*, SDL_FPoint> texture_size_cache_;
     TerrainField* terrain_field_ = nullptr; // non-owning
     const TerrainRuntimeState* terrain_state_ = nullptr; // non-owning
+    std::size_t terrain_vertices_last_frame_ = 0;
+    std::size_t terrain_tiles_last_frame_ = 0;
+    std::uint64_t last_logged_revision_ = 0;
 };
 
 class SceneRenderer {

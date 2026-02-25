@@ -4,12 +4,14 @@
 #include "gameplay/world/world_grid.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "utils/area.hpp"
+#include "utils/log.hpp"
 
 #include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <limits>
 #include <tuple>
+#include <string>
 
 namespace {
 inline std::uint64_t mix_uint64(std::uint64_t seed, std::uint64_t value) {
@@ -82,17 +84,60 @@ std::size_t TerrainField::CellKeyHash::operator()(const CellKey& key) const noex
     return static_cast<std::size_t>(combined);
 }
 
+TerrainField::CacheMetrics TerrainField::cache_metrics() const {
+    CacheMetrics metrics{};
+    metrics.frame_cache_entries = frame_cache_.size();
+    metrics.region_index_cells = region_index_.size();
+    metrics.last_frame_id = last_frame_id_;
+    metrics.runtime_revision = runtime_revision_;
+    metrics.cache_resets = cache_reset_count_;
+    return metrics;
+}
+
+void TerrainField::log_cache_reset(const char* reason,
+                                   std::size_t previous_size,
+                                   std::uint64_t prev_frame,
+                                   std::uint64_t new_frame,
+                                   std::uint64_t prev_revision,
+                                   std::uint64_t new_revision) const {
+    vibble::log::debug("[TerrainField] cache reset reason=" + std::string(reason) +
+                       " prev_entries=" + std::to_string(previous_size) +
+                       " frame_id=" + std::to_string(new_frame) +
+                       " prev_frame=" + std::to_string(prev_frame) +
+                       " revision=" + std::to_string(new_revision) +
+                       " prev_revision=" + std::to_string(prev_revision) +
+                       " resets_total=" + std::to_string(cache_reset_count_));
+}
+
 void TerrainField::reset_cache_if_needed(std::uint64_t frame_id) {
-    if (frame_id != last_frame_id_ || cached_revision_ != runtime_revision_) {
+    const bool frame_changed = frame_id != last_frame_id_;
+    const bool revision_changed = cached_revision_ != runtime_revision_;
+    if (frame_changed || revision_changed) {
+        const std::size_t previous_size = frame_cache_.size();
+        const std::uint64_t prev_frame = last_frame_id_;
+        const std::uint64_t prev_revision = cached_revision_;
         frame_cache_.clear();
         last_frame_id_ = frame_id;
         cached_revision_ = runtime_revision_;
+        ++cache_reset_count_;
+        const char* reason = frame_changed && revision_changed
+            ? "frame+revision"
+            : (frame_changed ? "frame" : "revision");
+        log_cache_reset(reason,
+                       previous_size,
+                       prev_frame,
+                       last_frame_id_,
+                       prev_revision,
+                       cached_revision_);
     }
 }
 
 void TerrainField::sync_runtime_state(const TerrainRuntimeState& runtime_state,
                                       const std::vector<Room*>& rooms) {
     if (!has_runtime_state_ || runtime_state.revision != runtime_revision_) {
+        const std::size_t previous_cache_entries = frame_cache_.size();
+        const std::uint64_t prev_frame = last_frame_id_;
+        const std::uint64_t prev_revision = runtime_revision_;
         cached_settings_ = runtime_state.settings;
         cached_settings_.clamp();
         base_seed_ = runtime_state.session_seed;
@@ -103,6 +148,13 @@ void TerrainField::sync_runtime_state(const TerrainRuntimeState& runtime_state,
         region_index_.clear();
         region_index_hash_ = 0;
         has_runtime_state_ = true;
+        ++cache_reset_count_;
+        log_cache_reset("runtime_state_changed",
+                        previous_cache_entries,
+                        prev_frame,
+                        last_frame_id_,
+                        prev_revision,
+                        runtime_revision_);
     }
     ensure_region_index(rooms);
 }
@@ -126,6 +178,9 @@ void TerrainField::ensure_region_index(const std::vector<Room*>& rooms) {
     }
     region_index_hash_ = hash;
     region_index_.clear();
+    const std::size_t previous_cache_entries = frame_cache_.size();
+    const std::uint64_t prev_frame = last_frame_id_;
+    const std::uint64_t prev_revision = cached_revision_;
 
     for (const Room* room : rooms) {
         if (!room) {
@@ -144,6 +199,15 @@ void TerrainField::ensure_region_index(const std::vector<Room*>& rooms) {
         }
     }
     frame_cache_.clear();
+    if (previous_cache_entries > 0) {
+        ++cache_reset_count_;
+        log_cache_reset("rooms_changed",
+                        previous_cache_entries,
+                        prev_frame,
+                        last_frame_id_,
+                        prev_revision,
+                        cached_revision_);
+    }
 }
 
 void TerrainField::add_indexed_area(const Area* area, const Room* owner, bool is_trail) {

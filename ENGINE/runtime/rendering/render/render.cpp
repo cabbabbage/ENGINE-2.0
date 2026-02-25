@@ -209,6 +209,9 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
 void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid, GeometryBatcher* batcher) {
     if (!renderer) return;
 
+    terrain_vertices_last_frame_ = 0;
+    terrain_tiles_last_frame_ = 0;
+
     const auto& chunks = grid.active_chunks();
     if (chunks.empty()) return;
 
@@ -328,6 +331,11 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
             const float tx1 = 1.0f - padding_x;
             const float ty1 = 1.0f - padding_y;
 
+            if (terrain_enabled) {
+                terrain_vertices_last_frame_ += 4;
+                ++terrain_tiles_last_frame_;
+            }
+
             SDL_Vertex vertices[4]{};
             vertices[0].position = SDL_FPoint{ screen_tl.x, screen_tl.y };
             vertices[1].position = SDL_FPoint{ screen_tr.x, screen_tr.y };
@@ -371,6 +379,18 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
                 SDL_RenderGeometry(renderer, tile.texture, vertices, 4, indices, 6);
             }
         }
+    }
+
+    if (terrain_enabled && runtime_state) {
+        const std::uint64_t revision = runtime_state->revision;
+        if (revision != last_logged_revision_) {
+            vibble::log::info("[GridTileRenderer] terrain revision=" + std::to_string(revision) +
+                              " vertices=" + std::to_string(terrain_vertices_last_frame_) +
+                              " tiles=" + std::to_string(terrain_tiles_last_frame_));
+            last_logged_revision_ = revision;
+        }
+    } else {
+        last_logged_revision_ = 0;
     }
 }
 

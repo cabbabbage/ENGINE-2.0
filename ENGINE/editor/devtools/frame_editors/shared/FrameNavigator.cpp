@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "devtools/asset_editor/animation_editor_window/PreviewProvider.hpp"
+#include "devtools/dm_icons.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
 #include "devtools/font_cache.hpp"
@@ -24,45 +25,6 @@ constexpr int kBottomButtonHeight = 40;
 constexpr int kSaveExitButtonWidth = 150;
 const int kNavigatorGap = DMSpacing::small_gap();
 
-const DMLabelStyle kArrowLabel = {dm::FONT_PATH, 28, dm::rgba(248, 250, 252, 255)};
-const DMLabelStyle kApplyLabel = {dm::FONT_PATH, 15, dm::rgba(248, 250, 252, 255)};
-
-const DMButtonStyle kArrowButtonStyle{
-    kArrowLabel,
-    dm::rgba(30, 41, 59, 220),
-    dm::rgba(59, 130, 246, 200),
-    dm::rgba(15, 23, 42, 255),
-    dm::rgba(94, 109, 248, 180),
-    dm::rgba(248, 250, 252, 255)
-};
-
-const DMButtonStyle kApplyNextStyle{
-    kApplyLabel,
-    dm::rgba(37, 99, 235, 220),
-    dm::rgba(59, 130, 246, 240),
-    dm::rgba(29, 78, 216, 255),
-    dm::rgba(29, 78, 216, 220),
-    dm::rgba(248, 250, 252, 255)
-};
-
-const DMButtonStyle kApplyAnimationStyle{
-    kApplyLabel,
-    dm::rgba(129, 140, 248, 220),
-    dm::rgba(147, 197, 253, 240),
-    dm::rgba(99, 102, 241, 255),
-    dm::rgba(79, 70, 229, 220),
-    dm::rgba(248, 250, 252, 255)
-};
-
-const DMButtonStyle kApplyAllStyle{
-    kApplyLabel,
-    dm::rgba(16, 185, 129, 220),
-    dm::rgba(52, 211, 153, 245),
-    dm::rgba(5, 150, 105, 255),
-    dm::rgba(5, 150, 105, 220),
-    dm::rgba(248, 250, 252, 255)
-};
-
 SDL_FRect ToFRect(const SDL_Rect& rect) {
     return SDL_FRect{
         static_cast<float>(rect.x),
@@ -80,11 +42,13 @@ float content_width(int frame_count) {
 }  // namespace
 
 FrameNavigator::FrameNavigator() {
-    btn_prev_ = std::make_unique<DMButton>("<", &kArrowButtonStyle, kThumbSize, kThumbSize);
-    btn_next_ = std::make_unique<DMButton>(">", &kArrowButtonStyle, kThumbSize, kThumbSize);
-    btn_apply_next_ = std::make_unique<DMButton>("Apply To Next", &kApplyNextStyle, kBottomButtonHeight * 3, kBottomButtonHeight);
-    btn_apply_animation_ = std::make_unique<DMButton>("Apply To Selected", &kApplyAnimationStyle, kBottomButtonHeight * 3, kBottomButtonHeight);
-    btn_apply_all_ = std::make_unique<DMButton>("Apply To All", &kApplyAllStyle, kBottomButtonHeight * 3, kBottomButtonHeight);
+    const DMButtonStyle* nav_style = &DMStyles::IconButton();
+    const DMButtonStyle* apply_style = &DMStyles::AccentButton();
+    btn_prev_ = std::make_unique<DMButton>(std::string(DMIcons::NavLeft()), nav_style, kThumbSize, kThumbSize);
+    btn_next_ = std::make_unique<DMButton>(std::string(DMIcons::NavRight()), nav_style, kThumbSize, kThumbSize);
+    btn_apply_next_ = std::make_unique<DMButton>("Apply To Next", apply_style, kBottomButtonHeight * 3, kBottomButtonHeight);
+    btn_apply_animation_ = std::make_unique<DMButton>("Apply To Selected", apply_style, kBottomButtonHeight * 3, kBottomButtonHeight);
+    btn_apply_all_ = std::make_unique<DMButton>("Apply To All", apply_style, kBottomButtonHeight * 3, kBottomButtonHeight);
     btn_save_exit_ = std::make_unique<DMButton>("Save and Exit", &DMStyles::DeleteButton(), kSaveExitButtonWidth, kBottomButtonHeight);
     update_button_states();
 }
@@ -564,13 +528,13 @@ void FrameNavigator::update_button_states() {
     next_enabled_ = enabled_ && frame_count_ > 0 && current_frame_ < frame_count_ - 1;
 
     if (btn_prev_) {
-        btn_prev_->set_text("<");
-        btn_prev_->set_style(prev_enabled_ ? &kArrowButtonStyle : &DMStyles::ListButton());
+        btn_prev_->set_text(std::string(DMIcons::NavLeft()));
+        btn_prev_->set_style(prev_enabled_ ? &DMStyles::IconButton() : &DMStyles::ListButton());
     }
 
     if (btn_next_) {
-        btn_next_->set_text(">");
-        btn_next_->set_style(next_enabled_ ? &kArrowButtonStyle : &DMStyles::ListButton());
+        btn_next_->set_text(std::string(DMIcons::NavRight()));
+        btn_next_->set_style(next_enabled_ ? &DMStyles::IconButton() : &DMStyles::ListButton());
     }
 }
 

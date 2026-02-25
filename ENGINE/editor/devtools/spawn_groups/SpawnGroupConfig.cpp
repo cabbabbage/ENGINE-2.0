@@ -118,7 +118,7 @@ SDL_Color dim_color(SDL_Color color, float factor) {
 
 const DMButtonStyle& disabled_priority_button_style() {
     static const DMButtonStyle style = [] {
-        const DMButtonStyle& base = DMStyles::ListButton();
+        const DMButtonStyle& base = DMStyles::IconButton();
         DMButtonStyle disabled{
             {base.label.font_path, base.label.font_size, dim_color(base.label.color, 0.55f)},
             dim_color(base.bg, 0.45f), dim_color(base.hover_bg, 0.45f), dim_color(base.press_bg, 0.45f), dim_color(base.border, 0.55f), dim_color(base.text, 0.55f)};
@@ -161,7 +161,7 @@ public:
         enabled_ = enabled;
         if (!button_) return;
         if (enabled_) {
-            button_->set_style(&DMStyles::ListButton());
+            button_->set_style(&DMStyles::IconButton());
         } else {
             button_->set_style(&disabled_priority_button_style());
         }
@@ -543,7 +543,8 @@ struct SpawnGroupConfig::Entry {
             }
         }
 
-        toggle_button_ = std::make_unique<DMButton>("▶", &DMStyles::ListButton(), 28, DMButton::height());
+        const DMButtonStyle* icon_style = &DMStyles::IconButton();
+        toggle_button_ = std::make_unique<DMButton>(std::string(DMIcons::CollapseCollapsed()), icon_style, 28, DMButton::height());
         toggle_widget_ = std::make_unique<ButtonWidget>(toggle_button_.get(), [this]() {
             expanded_state_ = !expanded_state_;
             if (expanded_state_) owner_->expand_group(spawn_id());
@@ -566,13 +567,13 @@ struct SpawnGroupConfig::Entry {
             });
         });
 
-        priority_up_button_ = std::make_unique<DMButton>(u8"?", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
+        priority_up_button_ = std::make_unique<DMButton>(std::string(DMIcons::NavUp()), icon_style, DMButton::height(), DMButton::height());
         priority_up_widget_ = std::make_unique<PriorityButtonWidget>(priority_up_button_.get(), [this]() {
             if (!owner_) return;
             owner_->nudge_priority(*this, -1);
         });
 
-        priority_down_button_ = std::make_unique<DMButton>(u8"?", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
+        priority_down_button_ = std::make_unique<DMButton>(std::string(DMIcons::NavDown()), icon_style, DMButton::height(), DMButton::height());
         priority_down_widget_ = std::make_unique<PriorityButtonWidget>(priority_down_button_.get(), [this]() {
             if (!owner_) return;
             owner_->nudge_priority(*this, 1);
@@ -1172,7 +1173,12 @@ private:
         });
     }
 
-    void update_toggle_label() {}
+    void update_toggle_label() {
+        if (!toggle_button_) return;
+        std::string label = expanded_state_ ? std::string(DMIcons::CollapseExpanded()) : std::string(DMIcons::CollapseCollapsed());
+        toggle_button_->set_text(label);
+        toggle_button_->set_style(&DMStyles::IconButton());
+    }
 
     void update_candidates_toggle_label() {
         if (!candidates_toggle_btn_) return;

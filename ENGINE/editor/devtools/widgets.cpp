@@ -385,31 +385,34 @@ void DMButton::render(SDL_Renderer* r) const {
     const int corner_radius = DMStyles::CornerRadius();
 
     const SDL_Color base = pressed_ ? style_->press_bg : (hovered_ ? style_->hover_bg : style_->bg);
-    const float top_bias = pressed_ ? 0.02f : 0.12f;
-    const float bottom_bias = pressed_ ? 0.18f : 0.1f;
+    const float top_bias = hovered_ ? 0.06f : 0.04f;
+    const float bottom_bias = pressed_ ? 0.16f : 0.10f;
     const SDL_Color top_color = dm_draw::LightenColor(base, top_bias);
     const SDL_Color bottom_color = dm_draw::DarkenColor(base, bottom_bias);
 
     SDL_Rect shadow_rect = button_rect;
-    shadow_rect.y += 2;
+    shadow_rect.y += 1;
     SDL_Color shadow_color = DMStyles::ShadowColor();
-    shadow_color.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(shadow_color.a * 0.45f), 0, 255));
+    shadow_color.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(shadow_color.a * 0.22f), 0, 255));
     dm_draw::DrawRoundedSolidRect(r, shadow_rect, corner_radius, shadow_color);
 
-    if (hovered_ && !pressed_) {
+    if (hovered_) {
         SDL_Rect glow_rect = button_rect;
         glow_rect.x -= 1;
         glow_rect.y -= 1;
         glow_rect.w += 2;
         glow_rect.h += 2;
         SDL_Color glow = DMStyles::HighlightColor();
-        glow.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(glow.a * 0.3f), 0, 255));
+        glow.a = static_cast<Uint8>(std::clamp<int>(static_cast<int>(glow.a * (pressed_ ? 0.12f : 0.22f)), 0, 255));
         dm_draw::DrawRoundedSolidRect(r, glow_rect, corner_radius + 2, glow);
     }
 
     dm_draw::DrawRoundedGradientRect(r, button_rect, corner_radius, top_color, bottom_color);
 
-    SDL_Color border = (hovered_ || pressed_) ? DMStyles::ButtonFocusOutline() : style_->border;
+    SDL_Color border = style_->border;
+    if (hovered_ || pressed_) {
+        border = DMStyles::ButtonFocusOutline();
+    }
     dm_draw::DrawRoundedOutline(r, button_rect, corner_radius, kControlOutlineThickness, border);
 
     draw_label(r, style_->text);
@@ -2541,7 +2544,12 @@ void DMDropdown::render(SDL_Renderer* r) const {
     }
     dm_draw::DrawRoundedOutline( r, box_rect_, DMStyles::CornerRadius(), kControlOutlineThickness, border);
     DMLabelStyle labelStyle{ st.label.font_path, st.label.font_size, st.text };
-    int arrow_space = box_rect_.w > 0 ? std::max(12, box_rect_.h / 2) : 0;
+
+    const DMButtonStyle& arrow_style = DMStyles::IconButton();
+    DMLabelStyle arrow_label{arrow_style.label.font_path, arrow_style.label.font_size, arrow_style.text};
+    const std::string arrow_icon = std::string(DMIcons::NavDown());
+    const SDL_Point arrow_size = DMFontCache::instance().measure_text(arrow_label, arrow_icon);
+    int arrow_space = box_rect_.w > 0 ? std::max({arrow_size.x + 12, box_rect_.h / 2, 24}) : 0;
     arrow_space = std::min(arrow_space, std::max(12, box_rect_.w / 2));
     arrow_space = std::min(arrow_space, box_rect_.w);
     TTF_Font* f = TTF_OpenFont(labelStyle.font_path.c_str(), labelStyle.font_size);
@@ -2572,15 +2580,18 @@ void DMDropdown::render(SDL_Renderer* r) const {
     }
 
     if (arrow_space > 0) {
-        const int arrow_center_x = box_rect_.x + box_rect_.w - arrow_space / 2;
-        const int arrow_center_y = box_rect_.y + box_rect_.h / 2;
-        const int arrow_half_width = std::max(3, arrow_space / 4);
-        const int arrow_half_height = std::max(2, arrow_space / 6);
-        SDL_Color arrow_color = border;
-        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(r, arrow_color.r, arrow_color.g, arrow_color.b, arrow_color.a);
-        SDL_RenderLine(r, arrow_center_x - arrow_half_width, arrow_center_y - arrow_half_height, arrow_center_x, arrow_center_y + arrow_half_height);
-        SDL_RenderLine(r, arrow_center_x + arrow_half_width, arrow_center_y - arrow_half_height, arrow_center_x, arrow_center_y + arrow_half_height);
+        arrow_label.color = arrow_style.text;
+        if (has_focus) {
+            arrow_label.color = DMStyles::ButtonFocusOutline();
+        } else if (hovered_) {
+            arrow_label.color = dm_draw::LightenColor(arrow_label.color, 0.08f);
+        } else {
+            arrow_label.color = dm_draw::DarkenColor(arrow_label.color, 0.05f);
+        }
+        SDL_Point rendered_size = DMFontCache::instance().measure_text(arrow_label, arrow_icon);
+        const int arrow_x = box_rect_.x + box_rect_.w - arrow_space + std::max(0, (arrow_space - rendered_size.x) / 2);
+        const int arrow_y = box_rect_.y + (box_rect_.h - rendered_size.y) / 2;
+        DMFontCache::instance().draw_text(r, arrow_label, arrow_icon, arrow_x, arrow_y);
     }
     if (tooltip_state_) {
         DMWidgetTooltipRender(r, rect_, *tooltip_state_);

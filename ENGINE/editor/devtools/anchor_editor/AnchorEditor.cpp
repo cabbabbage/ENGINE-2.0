@@ -290,7 +290,30 @@ void AnchorEditor::render_overlays(SDL_Renderer* renderer) const {
 }
 
 void AnchorEditor::persist_pending_changes() {
-    if (manifest_txn_.active() && dirty_ && manifest_txn_.commit(true)) dirty_ = false;
+    if (!manifest_txn_.active()) {
+        return;
+    }
+
+    // If the document was dirtied by a multi-animation apply (without touching the
+    // local dirty flag), make sure we still flush it.
+    if (!dirty_ && context_.document && context_.document->consume_dirty_flag()) {
+        dirty_ = true;
+    }
+
+    if (!dirty_) {
+        return;
+    }
+
+    // Try the normal manifest transaction path first.
+    if (manifest_txn_.commit(true)) {
+        dirty_ = false;
+        return;
+    }
+
+    // Fallback: attempt a direct save so edits aren't lost if the manifest store fails.
+    if (context_.document && context_.document->save_to_file_checked(true)) {
+        dirty_ = false;
+    }
 }
 
 void AnchorEditor::request_close() {
@@ -516,6 +539,10 @@ bool AnchorEditor::apply_source_to_animation_ids(const std::vector<std::string>&
 
     if (!applied_any) {
         return false;
+    }
+
+    if (applied_any) {
+        dirty_ = true;
     }
 
     if (context_.on_save_and_update) {

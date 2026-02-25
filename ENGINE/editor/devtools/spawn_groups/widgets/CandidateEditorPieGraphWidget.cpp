@@ -39,7 +39,7 @@ CandidateEditorPieGraphWidget::CandidateEditorPieGraphWidget() {
     regen_button_ = std::make_unique<DMButton>("Regen", &DMStyles::AccentButton(), 0, DMButton::height());
     add_button_ = std::make_unique<DMButton>("Add Candidate", &DMStyles::CreateButton(), 0, DMButton::height());
     collapse_button_ =
-        std::make_unique<DMButton>(std::string(DMIcons::CollapseExpanded()), &DMStyles::ListButton(), DMButton::height(), DMButton::height());
+        std::make_unique<DMButton>(std::string(DMIcons::CollapseExpanded()), &DMStyles::IconButton(), DMButton::height(), DMButton::height());
     update_collapse_button();
     update_internal_layout();
 }

@@ -20,9 +20,12 @@ inline constexpr std::array<LineSegment, 4> CollapsibleHandleSegments() noexcept
 };
 }
 
-inline constexpr std::string_view CollapseExpanded() noexcept { return u8"\u25B2"; }
-inline constexpr std::string_view CollapseCollapsed() noexcept { return u8"\u25BC"; }
-inline constexpr std::string_view Close() noexcept { return "X"; }
+inline constexpr std::string_view CollapseExpanded() noexcept { return u8"\u25B4"; }
+inline constexpr std::string_view CollapseCollapsed() noexcept { return u8"\u25BE"; }
+inline constexpr std::string_view NavLeft() noexcept { return u8"\u2039"; }
+inline constexpr std::string_view NavRight() noexcept { return u8"\u203A"; }
+inline constexpr std::string_view NavUp() noexcept { return u8"\u25B2"; }
+inline constexpr std::string_view NavDown() noexcept { return u8"\u25BC"; }
+inline constexpr std::string_view Close() noexcept { return u8"\u2715"; }
 inline constexpr std::string_view Info() noexcept { return u8"\u24D8"; }
 }
-

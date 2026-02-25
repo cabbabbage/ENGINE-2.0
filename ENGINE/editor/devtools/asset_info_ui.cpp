@@ -198,6 +198,7 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
                 target.erase("size_settings");
                 changed = true;
             }
+            changed |= copy_key("starting_health");
             changed |= copy_key("can_invert");
 
             changed |= copy_key("tileable");
@@ -211,6 +212,7 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
         case AssetInfoSectionId::Spacing:
             changed |= copy_key("min_same_type_distance");
             changed |= copy_key("min_distance_all");
+            changed |= copy_key("neighbor_search_distance");
             break;
     }
     return changed;
@@ -452,9 +454,19 @@ void AssetInfoUI::set_info(const std::shared_ptr<AssetInfo>& info) {
         try {
             animation_editor_window_->set_manifest_store(manifest_store_);
             animation_editor_window_->set_on_animation_properties_changed([this](const std::string& animation_id, const nlohmann::json& properties) {
-                if (info_ && info_->update_animation_properties(animation_id, properties)) {
+                if (!info_) {
+                    return;
+                }
+                if (!info_->update_animation_properties(animation_id, properties)) {
+                    return;
+                }
 
-                    refresh_loaded_asset_instances();
+                auto refresh = [this]() { this->refresh_loaded_asset_instances(); };
+                if (!enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                           "Animation properties",
+                                           refresh)) {
+                    // Even if persistence fails, keep the runtime view in sync.
+                    refresh();
                 }
             });
             animation_editor_window_->set_info(info_);
@@ -1140,6 +1152,33 @@ void AssetInfoUI::cancel_color_sampling(bool silent) {
     }
 }
 
+bool AssetInfoUI::persist_asset_bundle(const char* reason) {
+    if (!info_) {
+        return false;
+    }
+    try {
+        PrimaryAssetCache cache(assets_ ? assets_->renderer() : nullptr);
+        if (!cache.save_current(*info_)) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[AssetInfoUI] Failed to persist bundle for %s%s",
+                        info_->name.c_str(),
+                        reason ? reason : "");
+            return false;
+        }
+        return true;
+    } catch (const std::exception& ex) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AssetInfoUI] Exception while persisting bundle for %s: %s",
+                    info_->name.c_str(),
+                    ex.what());
+    } catch (...) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                    "[AssetInfoUI] Unknown failure while persisting bundle for %s",
+                    info_->name.c_str());
+    }
+    return false;
+}
+
 bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority priority,
                                         const std::string& label,
                                         std::function<void()> on_success) {
@@ -1147,10 +1186,26 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] No asset selected; save skipped.");
         return false;
     }
+
+    auto run_after_save = [this, cb = std::move(on_success)](bool bundle_already_persisted) mutable {
+        if (!bundle_already_persisted) {
+            persist_asset_bundle(" (manifest save)");
+        }
+        if (cb) {
+            cb();
+            cb = nullptr;
+        }
+    };
+
     if (save_coordinator_ && manifest_store_) {
         nlohmann::json payload = info_->manifest_payload();
         const std::string intent_label = label.empty() ? std::string("Asset ") + info_->name : label;
-        save_coordinator_->enqueue_manifest_asset(info_->name, std::move(payload), priority, intent_label, std::move(on_success));
+        save_coordinator_->enqueue_manifest_asset(
+            info_->name,
+            std::move(payload),
+            priority,
+            intent_label,
+            [run_after_save]() mutable { run_after_save(false); });
         if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
             save_coordinator_->flush_now(intent_label);
         }
@@ -1158,8 +1213,26 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
     }
 
     if (!manifest_store_) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Manifest store unavailable; direct save skipped.");
-        return false;
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Manifest store unavailable; falling back to direct commit for '%s'", info_->name.c_str());
+        bool committed = false;
+        try {
+            committed = info_->commit_manifest();
+        } catch (const std::exception& ex) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[AssetInfoUI] Failed to commit manifest for '%s': %s",
+                        info_->name.c_str(),
+                        ex.what());
+            return false;
+        } catch (...) {
+            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
+                        "[AssetInfoUI] Unknown failure committing manifest for '%s'",
+                        info_->name.c_str());
+            return false;
+        }
+        if (committed) {
+            run_after_save(true);
+        }
+        return committed;
     }
 
     nlohmann::json payload = info_->manifest_payload();
@@ -1174,9 +1247,7 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
         return false;
     }
     manifest_store_->flush();
-    if (on_success) {
-        on_success();
-    }
+    run_after_save(false);
     return true;
 }
 

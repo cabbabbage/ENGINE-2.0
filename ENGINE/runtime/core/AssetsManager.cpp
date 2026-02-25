@@ -759,11 +759,61 @@ void Assets::refresh_active_asset_lists() {
 }
 
 void Assets::propagate_anchor_follows() {
+    std::vector<Asset*> followers;
+    followers.reserve(all.size());
     for (Asset* asset : all) {
         if (!asset || asset->dead) {
             continue;
         }
+        const auto& follow = asset->anchor_follow_target();
+        if (follow.has_value() && follow->source) {
+            followers.push_back(asset);
+        }
+    }
+    if (followers.empty()) {
+        return;
+    }
 
+    std::unordered_map<const Asset*, int> depth_cache;
+    std::unordered_set<const Asset*> visiting;
+    std::function<int(const Asset*)> follow_depth = [&](const Asset* asset) -> int {
+        if (!asset) {
+            return 0;
+        }
+        auto cached = depth_cache.find(asset);
+        if (cached != depth_cache.end()) {
+            return cached->second;
+        }
+        if (!visiting.insert(asset).second) {
+            depth_cache[asset] = 0;
+            return 0;
+        }
+
+        int depth = 0;
+        const auto& follow = asset->anchor_follow_target();
+        if (follow.has_value() && follow->source) {
+            depth = 1 + follow_depth(follow->source);
+        }
+
+        visiting.erase(asset);
+        depth_cache[asset] = depth;
+        return depth;
+    };
+
+    std::stable_sort(followers.begin(), followers.end(),
+                     [&](const Asset* a, const Asset* b) {
+                         const int depth_a = follow_depth(a);
+                         const int depth_b = follow_depth(b);
+                         if (depth_a != depth_b) {
+                             return depth_a < depth_b;
+                         }
+                         return a < b;
+                     });
+
+    for (Asset* asset : followers) {
+        if (!asset || asset->dead) {
+            continue;
+        }
         const auto& follow = asset->anchor_follow_target();
         if (!follow.has_value() || !follow->source) {
             continue;
@@ -1116,13 +1166,15 @@ void Assets::update(const Input& input)
             mark_grid_dirty();
         }
 
-        // Invariant: all parent transforms/animation resolved first, then all bound children snapped.
-        propagate_anchor_follows();
     } else {
         movement_commands_buffer_.clear();
         moving_assets_for_grid_.clear();
         grid_registration_buffer_.clear();
     }
+
+    // Invariant: all parent transforms/animation resolved first, then all bound children snapped.
+    // Run even in dev-mode paused runtime so manual transform edits keep followers attached.
+    propagate_anchor_follows();
 
     const bool height_animation_active = false;
     const bool camera_refresh_needed = room_changed || player_moved || height_animation_active || camera_settings_dirty_;

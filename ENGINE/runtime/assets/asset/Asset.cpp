@@ -1094,8 +1094,13 @@ void Asset::apply_anchor_follow_target() {
         }
 
         const std::uint64_t source_anchor_revision = source->anchor_world_revision();
-        if (source_anchor_revision == last_follow_source_revision_ && (follow_initialized_ || follow_missing_)) {
-                return;
+
+        // Force a fresh anchor resolution when the parent revision hasn't advanced.
+        // This guarantees followers stay locked even if the parent's revision tracking
+        // misses an update (e.g., unusual animation/frame counts or external movement).
+        if (source_anchor_revision == last_follow_source_revision_) {
+                auto& handle = source->get_anchor_point(follow.anchor_name);
+                handle.dirty = true;
         }
 
         auto resolved = source->anchor_state(follow.anchor_name, anchor_points::GridMaterialization::Ensure, follow.depth_policy);

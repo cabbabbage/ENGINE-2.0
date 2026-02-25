@@ -2,6 +2,7 @@
 #include "utils/sdl_render_conversions.hpp"
 
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_gpu.h>
 
 #include "assets/Asset.hpp"
 #include "assets/asset_filter_tags.hpp"
@@ -182,8 +183,24 @@ std::string fallback_cpu_label() {
 
 std::string renderer_description(SDL_Renderer* renderer) {
     if (renderer) {
-        if (const char* driver = SDL_GetCurrentVideoDriver()) {
-            return std::string(driver);
+        if (SDL_PropertiesID props = SDL_GetRendererProperties(renderer)) {
+            if (auto* gpu_device = static_cast<SDL_GPUDevice*>(
+                    SDL_GetPointerProperty(props, SDL_PROP_RENDERER_GPU_DEVICE_POINTER, nullptr))) {
+                if (SDL_PropertiesID gpu_props = SDL_GetGPUDeviceProperties(gpu_device)) {
+                    if (const char* gpu_name = SDL_GetStringProperty(gpu_props, SDL_PROP_GPU_DEVICE_NAME_STRING, nullptr)) {
+                        return std::string(gpu_name);
+                    }
+                    if (const char* gpu_driver = SDL_GetStringProperty(gpu_props, SDL_PROP_GPU_DEVICE_DRIVER_NAME_STRING, nullptr)) {
+                        return std::string(gpu_driver);
+                    }
+                }
+            }
+            if (const char* renderer_name = SDL_GetStringProperty(props, SDL_PROP_RENDERER_NAME_STRING, nullptr)) {
+                return std::string(renderer_name);
+            }
+        }
+        if (const char* renderer_name = SDL_GetRendererName(renderer)) {
+            return std::string(renderer_name);
         }
     }
     const char* driver = SDL_GetCurrentVideoDriver();

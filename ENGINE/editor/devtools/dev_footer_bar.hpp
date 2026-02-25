@@ -12,6 +12,13 @@
 #include "dm_styles.hpp"
 #include "widgets.hpp"
 
+enum class FooterButtonGroup {
+    Primary = 0,
+    Panels = 1,
+    Actions = 2,
+    Utilities = 3,
+};
+
 class Input;
 
 class DevFooterBar {
@@ -25,6 +32,7 @@ public:
 
         const DMButtonStyle* style_override = nullptr;
         const DMButtonStyle* active_style_override = nullptr;
+        FooterButtonGroup group = FooterButtonGroup::Primary;
         std::unique_ptr<DMButton> widget;
 };
 

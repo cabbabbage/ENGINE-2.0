@@ -879,7 +879,10 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     }
 
     std::unique_ptr<Asset> owned;
-    const bool point_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_y() != new_pos.world_y());
+    const bool xy_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_y() != new_pos.world_y());
+    const bool point_changed = xy_changed ||
+                               (old_pos.world_z() != new_pos.world_z()) ||
+                               (old_pos.resolution_layer() != new_pos.resolution_layer());
     if (point_changed) {
         if (GridPoint* existing_point = point_for_asset(a)) {
             owned = detach_asset_from_grid_point(a, *existing_point, true);
@@ -905,9 +908,7 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     }
     prune_empty_points();
 
-    if (point_changed ||
-        old_pos.world_z() != new_pos.world_z() ||
-        old_pos.resolution_layer() != new_pos.resolution_layer()) {
+    if (point_changed) {
         a->mark_anchors_dirty();
     }
 

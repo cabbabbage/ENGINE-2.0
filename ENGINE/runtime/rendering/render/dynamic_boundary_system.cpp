@@ -544,6 +544,27 @@ void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate)
 
     auto info = asset_library_->get(candidate.asset_name);
     if (!info) {
+        auto normalize = [](std::string value) {
+            std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+            return value;
+        };
+        const std::string wanted = normalize(candidate.asset_name);
+        for (const auto& [asset_key, asset_info] : asset_library_->all()) {
+            if (!asset_info) {
+                continue;
+            }
+            const std::string key_name = normalize(asset_key);
+            const std::string display_name = normalize(asset_info->name);
+            if (wanted == key_name || (!display_name.empty() && wanted == display_name)) {
+                info = asset_info;
+                candidate.asset_name = asset_key;
+                break;
+            }
+        }
+    }
+    if (!info) {
         candidate.is_null = true;
         return;
     }

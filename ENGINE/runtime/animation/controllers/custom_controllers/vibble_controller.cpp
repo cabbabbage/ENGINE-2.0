@@ -149,8 +149,9 @@ void vibble_controller::update(const Input& input) {
     using namespace std::chrono;
     auto now = steady_clock::now();
 
-    // Ensure the follower exists and stays attached; no respawns after creation.
+    // Ensure the follower exists and the binding tracks runtime state.
     spawn_eyes_follower();
+    sync_eyes_follower_binding();
 
     if (isDashing && now >= dashEndTime) {
         isDashing = false;
@@ -274,6 +275,34 @@ void vibble_controller::process_pending_attacks(Asset& self) {
 
     // Process any attacks that were sent to self
     self.process_pending_attacks();
+}
+
+
+void vibble_controller::sync_eyes_follower_binding() {
+    if (!player_ || !eyes_follower_.valid()) {
+        return;
+    }
+
+    Asset* eyes = eyes_follower_.asset;
+    if (!eyes || eyes->dead) {
+        eyes_follower_ = {};
+        return;
+    }
+
+    if (eyes->flipped != player_->flipped) {
+        eyes->flipped = player_->flipped;
+        eyes->mark_anchors_dirty();
+    }
+
+    if (eyes->current_scale != player_->current_scale) {
+        eyes->current_scale = player_->current_scale;
+        eyes->current_nearest_variant_scale = player_->current_nearest_variant_scale;
+        eyes->current_remaining_scale_adjustment = player_->current_remaining_scale_adjustment;
+        eyes->mark_anchors_dirty();
+    }
+
+    // Keep runtime animation frame data fresh so the follower anchor stays canonical.
+    eyes->refresh_frame_texture_bindings();
 }
 
 void vibble_controller::spawn_eyes_follower() {

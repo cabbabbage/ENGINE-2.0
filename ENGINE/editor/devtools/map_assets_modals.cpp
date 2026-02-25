@@ -957,7 +957,37 @@ private:
             candidate["chance"] = new_weight;
         }
 
-        candidates.push_back(std::move(candidate));
+        auto candidate_name = [](const json& value) -> std::string {
+            if (value.is_object()) {
+                auto it = value.find("name");
+                if (it != value.end() && it->is_string()) {
+                    return it->get<std::string>();
+                }
+            } else if (value.is_string()) {
+                return value.get<std::string>();
+            }
+            return std::string{};
+        };
+
+        bool has_non_null_candidate = false;
+        std::vector<size_t> null_indices;
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            std::string name = candidate_name(candidates[i]);
+            if (name == "null") {
+                null_indices.push_back(i);
+            } else if (!name.empty()) {
+                has_non_null_candidate = true;
+            }
+        }
+
+        if (!has_non_null_candidate && !null_indices.empty()) {
+            candidates[null_indices.front()] = candidate;
+            for (size_t i = 1; i < null_indices.size(); ++i) {
+                candidates[null_indices[i]] = json::object({{"name", "null"}, {"chance", 0}});
+            }
+        } else {
+            candidates.push_back(std::move(candidate));
+        }
         notify_save(false);
     }
 

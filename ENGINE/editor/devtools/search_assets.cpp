@@ -731,7 +731,8 @@ void SearchAssets::filter_assets() {
         }
         Result res;
         res.label = a.name;
-        res.value = a.name;
+        // Return the canonical manifest/library key so saved candidate JSON stays resolvable.
+        res.value = !a.manifest_name.empty() ? a.manifest_name : a.name;
         res.manifest_name = a.manifest_name;
         res.tags = a.tags;
         res.is_tag = false;

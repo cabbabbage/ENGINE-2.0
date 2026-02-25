@@ -224,6 +224,7 @@ class Asset {
     bool is_mesh_dirty() const { return mesh_dirty_; }
     void mark_mesh_dirty() { mesh_dirty_ = true; }
     void clear_mesh_dirty() { mesh_dirty_ = false; }
+    void refresh_frame_texture_bindings();
 
 
     float smoothed_translation_x() const;

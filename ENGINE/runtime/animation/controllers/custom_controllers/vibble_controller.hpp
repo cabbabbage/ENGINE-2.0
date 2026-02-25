@@ -29,6 +29,7 @@ private:
     std::string animation_for_direction(int raw_x, int raw_y) const;
     void Dash();
     void spawn_eyes_follower();
+    void sync_eyes_follower_binding();
 
     static constexpr float kWalkSpeed        = 300.0f;
     static constexpr float kSprintMultiplier = 2.0f;

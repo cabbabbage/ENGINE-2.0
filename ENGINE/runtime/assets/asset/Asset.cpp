@@ -877,6 +877,17 @@ void Asset::refresh_cached_dimensions() {
         cached_h = (height > 0) ? height : 0;
 }
 
+void Asset::refresh_frame_texture_bindings() {
+        if (!current_frame) {
+                last_rendered_frame_ = nullptr;
+                return;
+        }
+        current_frame->rebuild_anchor_lookup();
+        last_rendered_frame_ = current_frame;
+        mark_mesh_dirty();
+        mark_anchors_dirty();
+}
+
 float Asset::runtime_height_px() const {
         const float base_height = static_cast<float>(height());
         if (!(base_height > 0.0f)) {

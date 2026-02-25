@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rendering/render/warped_screen_grid.hpp"
+#include "rendering/render/terrain_runtime_state.hpp"
 #include "assets/asset_library.hpp"
 #include "core/popup_manager.hpp"
 #include <SDL3/SDL.h>
@@ -28,6 +29,7 @@ class Room;
 class Input;
 class DevControls;
 class AssetInfo;
+class TerrainField;
 
 class QuickTaskPopup;
 namespace animation_editor {
@@ -171,6 +173,12 @@ public:
 
     void set_dev_grid_overlay_callback(std::function<void()> cb) { dev_grid_overlay_callback_ = cb; }
 
+    void set_terrain_sources(TerrainField* field, const TerrainRuntimeState& state);
+    const TerrainRuntimeState* terrain_runtime_state() const {
+        return terrain_runtime_state_ ? &*terrain_runtime_state_ : nullptr;
+    }
+    TerrainField* terrain_field_source() const { return terrain_field_source_; }
+
     void set_editor_current_room(Room* room);
 
     Room* current_room() { return current_room_; }
@@ -298,6 +306,7 @@ private:
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
     bool anchor_point_debug_enabled_ = false;
+    bool anchor_follow_debug_logging_ = false;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
     std::vector<world::GridPoint*> active_points_;
@@ -375,8 +384,14 @@ private:
 
     std::function<void()> dev_grid_overlay_callback_;
 
+    TerrainField* terrain_field_source_ = nullptr; // non-owning; owned by SceneRenderer
+    std::optional<TerrainRuntimeState> terrain_runtime_state_;
+
     void rebuild_non_player_update_buffer_if_needed();
     void propagate_anchor_follows();
+    // Force anchor basis/signature refresh for all live assets so anchor world transforms
+    // stay in lockstep with the latest camera/grid state (used after grid rebuild).
+    void refresh_anchor_bases_for_active_assets();
     void update_active_assets(const world::GridPoint& center);
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();

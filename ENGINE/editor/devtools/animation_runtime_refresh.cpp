@@ -4,7 +4,7 @@
 #include <string>
 
 #include "assets/Asset.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "core/AssetsManager.hpp"
 
 namespace devmode {

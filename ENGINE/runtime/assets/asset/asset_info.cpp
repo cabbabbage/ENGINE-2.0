@@ -1,6 +1,6 @@
 #include "asset_info.hpp"
 
-#include "assets/asset_types.hpp"
+#include "asset_types.hpp"
 #include "assets/animation_loader.hpp"
 #include "utils/cache_manager.hpp"
 #include "assets/asset/primary_asset_cache.hpp"

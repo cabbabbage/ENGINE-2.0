@@ -9,7 +9,7 @@
 #include "utils/area.hpp"
 #include "assets/Asset.hpp"
 #include "gameplay/map_generation/room.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "assets/asset_library.hpp"
 #include "asset_spawn_planner.hpp"
 #include "check.hpp"

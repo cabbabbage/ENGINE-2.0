@@ -49,6 +49,8 @@ struct CameraState {
 class Asset;
 class Room;
 class CurrentRoomFinder;
+class TerrainField;
+struct TerrainRuntimeState;
 namespace world {
     class WorldGrid;
     struct GridPoint;
@@ -172,7 +174,12 @@ public:
 
     void clear_grid_state();
     void rebuild_grid_bounds();
-    void rebuild_grid(world::WorldGrid& world_grid, float dt_seconds);
+    void rebuild_grid(world::WorldGrid& world_grid,
+                      float dt_seconds,
+                      std::uint64_t frame_id,
+                      TerrainField* terrain_field,
+                      const TerrainRuntimeState* terrain_state,
+                      const std::vector<Room*>* rooms);
     void project_to_screen(world::GridPoint& point) const;
     world::GridPoint* grid_point_for_asset(const Asset* asset);
     const world::GridPoint* grid_point_for_asset(const Asset* asset) const;

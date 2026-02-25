@@ -143,6 +143,7 @@ void AnchorEditor::begin(const frame_editors::FrameEditorContext& context) {
             dirty_ = true;
             refresh_form();
             propagate_live_anchor_updates();
+            autosave_now();
         }
     });
     anchor_list_widget_.reset(new AnchorListWidget(&frames_, &selected_frame_, &selected_anchor_, [this](int i){ select_anchor(i); }));
@@ -179,7 +180,7 @@ void AnchorEditor::end() {}
 
 bool AnchorEditor::handle_event(const SDL_Event& e) {
     bool handled = false;
-    if (tool_panel_ && tool_panel_->handle_event(e)) { if (apply_form_to_anchor()) { dirty_ = true; propagate_live_anchor_updates(); } handled = true; }
+    if (tool_panel_ && tool_panel_->handle_event(e)) { if (apply_form_to_anchor()) { dirty_ = true; propagate_live_anchor_updates(); autosave_now(); } handled = true; }
     if (frame_navigator_ && frame_navigator_->handle_event(e)) handled = true;
 
     if (e.type == SDL_EVENT_MOUSE_WHEEL) {
@@ -214,7 +215,7 @@ bool AnchorEditor::handle_event(const SDL_Event& e) {
                 if (selected_anchor_ >= 0 && selected_anchor_ < static_cast<int>(frame.anchors.size())) {
                     auto& a = frame.anchors[static_cast<std::size_t>(selected_anchor_)];
                     a.texture_x = tx; a.texture_y = ty;
-                    dirty_ = true; refresh_form(); refresh_selection_state(); propagate_live_anchor_updates();
+                    dirty_ = true; refresh_form(); refresh_selection_state(); propagate_live_anchor_updates(); autosave_now();
                     is_dragging_anchor_ = true;
                 }
                 return true;
@@ -316,6 +317,12 @@ void AnchorEditor::persist_pending_changes() {
     }
 }
 
+void AnchorEditor::autosave_now() {
+    // Ensure mutations are flushed to both the document and runtime immediately.
+    dirty_ = true;
+    persist_pending_changes();
+}
+
 void AnchorEditor::request_close() {
     if (context_.on_end) {
         context_.on_end();
@@ -385,6 +392,7 @@ void AnchorEditor::select_frame(int index) {
     if (apply_form_to_anchor()) {
         dirty_ = true;
         propagate_live_anchor_updates();
+        autosave_now();
     }
 
     selected_frame_ = std::clamp(index, 0, static_cast<int>(frames_.size()) - 1);
@@ -414,6 +422,7 @@ void AnchorEditor::add_anchor() {
     select_anchor(static_cast<int>(list.size()) - 1);
     dirty_ = true;
     propagate_live_anchor_updates();
+    autosave_now();
 }
 
 void AnchorEditor::apply_to_all_frames() {
@@ -429,6 +438,8 @@ void AnchorEditor::apply_to_all_frames() {
         frame = source;
     }
     dirty_ = true;
+    propagate_live_anchor_updates();
+    autosave_now();
 }
 
 void AnchorEditor::apply_to_next_frame() {
@@ -862,7 +873,7 @@ void AnchorEditor::update_drag_pick(const SDL_Point& p) {
     auto& list = frames_[selected_frame_].anchors;
     if (selected_anchor_ < 0 || selected_anchor_ >= static_cast<int>(list.size())) return;
     auto& a = list[static_cast<std::size_t>(selected_anchor_)];
-    if (a.texture_x != tx || a.texture_y != ty) { a.texture_x = tx; a.texture_y = ty; dirty_ = true; refresh_form(); propagate_live_anchor_updates(); }
+    if (a.texture_x != tx || a.texture_y != ty) { a.texture_x = tx; a.texture_y = ty; dirty_ = true; refresh_form(); propagate_live_anchor_updates(); autosave_now(); }
 }
 
 SDL_Texture* AnchorEditor::current_frame_texture() const {

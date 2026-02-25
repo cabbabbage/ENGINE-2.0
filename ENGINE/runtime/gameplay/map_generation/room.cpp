@@ -1,6 +1,6 @@
 #include "room.hpp"
 #include "gameplay/spawn/asset_spawner.hpp"
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/dev_controls_persistence.hpp"
 #include <nlohmann/json.hpp>

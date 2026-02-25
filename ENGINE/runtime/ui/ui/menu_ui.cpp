@@ -4,7 +4,7 @@
 
 #include "ui/tinyfiledialogs.h"
 #include "asset_loader.hpp"
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "AssetsManager.hpp"
 #include "input.hpp"
 #include "gameplay/world/world_grid.hpp"

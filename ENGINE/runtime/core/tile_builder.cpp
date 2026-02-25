@@ -11,7 +11,7 @@
 #include <SDL3/SDL.h>
 
 #include "assets/Asset.hpp"
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "gameplay/world/chunk.hpp"

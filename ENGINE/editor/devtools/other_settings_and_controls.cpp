@@ -6,7 +6,7 @@
 
 #include "assets/Asset.hpp"
 #include "assets/asset_filter_tags.hpp"
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/dev_ui_settings.hpp"
 #include "devtools/dm_icons.hpp"

@@ -14,7 +14,7 @@
 #include "utils/input.hpp"
 #include "utils/string_utils.hpp"
 #include "assets/asset_library.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "assets/animation.hpp"
 #include "assets/Asset.hpp"
 #include "dm_styles.hpp"

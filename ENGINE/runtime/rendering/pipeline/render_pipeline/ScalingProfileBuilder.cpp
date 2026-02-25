@@ -1,7 +1,7 @@
 #include "rendering/render/render.hpp"
 
 #include "assets/asset_library.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "core/manifest/manifest_loader.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/log.hpp"

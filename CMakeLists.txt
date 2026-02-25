@@ -385,77 +385,37 @@ endif()
 # C++ Cache Tools (ENGINE/tools)
 # ------------------------------------------
 
+# Helper for CLI tools that share includes, definitions, and libs.
+function(add_cli_tool target_name entry_point)
+    add_executable(${target_name}
+        ENGINE/tools/cli/${entry_point}
+        ENGINE/tools/cli/image_cache_generator.cpp
+    )
+    target_include_directories(${target_name} PRIVATE
+        ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
+        ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+        ${CMAKE_SOURCE_DIR}/external
+    )
+    target_compile_definitions(${target_name} PRIVATE
+        IMGCACHE_STB_IMAGE_IMPL=1
+        IMGCACHE_STB_IMAGE_WRITE_IMPL=1
+    )
+    target_link_libraries(${target_name} PRIVATE
+        nlohmann_json::nlohmann_json
+    )
+endfunction()
+
 # Asset Tool CLI - main cache generator
-add_executable(asset_tool_cli
-    ENGINE/tools/cli/asset_tool_cli.cpp
-    ENGINE/tools/cli/image_cache_generator.cpp
-)
-target_include_directories(asset_tool_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
-    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-    ${CMAKE_SOURCE_DIR}/external
-)
-target_compile_definitions(asset_tool_cli PRIVATE
-    IMGCACHE_STB_IMAGE_IMPL=1
-    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
-)
-target_link_libraries(asset_tool_cli PRIVATE
-    nlohmann_json::nlohmann_json
-)
+add_cli_tool(asset_tool_cli asset_tool_cli.cpp)
 
 # Set Rebuild Values CLI - manifest manipulation
-add_executable(set_rebuild_cli
-    ENGINE/tools/cli/set_rebuild_cli.cpp
-    ENGINE/tools/cli/image_cache_generator.cpp
-)
-target_include_directories(set_rebuild_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
-    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-    ${CMAKE_SOURCE_DIR}/external
-)
-target_compile_definitions(set_rebuild_cli PRIVATE
-    IMGCACHE_STB_IMAGE_IMPL=1
-    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
-)
-target_link_libraries(set_rebuild_cli PRIVATE
-    nlohmann_json::nlohmann_json
-)
+add_cli_tool(set_rebuild_cli set_rebuild_cli.cpp)
 
 # Cache Validator CLI - cache integrity validation
-add_executable(cache_validator_cli
-    ENGINE/tools/cli/cache_validator_cli.cpp
-    ENGINE/tools/cli/image_cache_generator.cpp
-)
-target_include_directories(cache_validator_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
-    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-    ${CMAKE_SOURCE_DIR}/external
-)
-target_compile_definitions(cache_validator_cli PRIVATE
-    IMGCACHE_STB_IMAGE_IMPL=1
-    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
-)
-target_link_libraries(cache_validator_cli PRIVATE
-    nlohmann_json::nlohmann_json
-)
+add_cli_tool(cache_validator_cli cache_validator_cli.cpp)
 
 # Apply Effects CLI - effect preview generation
-add_executable(apply_effects_cli
-    ENGINE/tools/cli/apply_effects_cli.cpp
-    ENGINE/tools/cli/image_cache_generator.cpp
-)
-target_include_directories(apply_effects_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
-    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-    ${CMAKE_SOURCE_DIR}/external
-)
-target_compile_definitions(apply_effects_cli PRIVATE
-    IMGCACHE_STB_IMAGE_IMPL=1
-    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
-)
-target_link_libraries(apply_effects_cli PRIVATE
-    nlohmann_json::nlohmann_json
-)
+add_cli_tool(apply_effects_cli apply_effects_cli.cpp)
 
 # Output all tools to ENGINE/tools directory
 foreach(tool_target asset_tool_cli set_rebuild_cli cache_validator_cli apply_effects_cli)

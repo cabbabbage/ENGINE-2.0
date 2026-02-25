@@ -11,7 +11,7 @@
 #include "spawn_info.hpp"
 #include "check.hpp"
 #include "asset_spawn_planner.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "utils/area.hpp"
 #include "utils/grid.hpp"
 

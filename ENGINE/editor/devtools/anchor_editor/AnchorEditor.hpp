@@ -62,6 +62,7 @@ private:
     DisplacedAssetAnchorPoint to_runtime_anchor(const frame_editors::FrameAnchorPoint& anchor) const;
     void sync_runtime_animation_anchors(const std::string& animation_id,
                                         const std::vector<frame_editors::AnchorFrame>& frames);
+    void autosave_now();
 
     struct FrameTextureInfo {
         SDL_Texture* texture = nullptr;

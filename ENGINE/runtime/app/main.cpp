@@ -7,7 +7,7 @@
 #include "ui/loading_screen.hpp"
 #include "core/manifest/manifest_loader.hpp"
 #include "asset_loader.hpp"
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "assets/asset_library.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/engine_renderer.hpp"

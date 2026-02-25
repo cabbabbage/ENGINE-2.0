@@ -5,7 +5,7 @@
 #include <cmath>
 #include <utility>
 
-#include "assets/asset_info.hpp"
+#include "asset_info.hpp"
 
 namespace {
 

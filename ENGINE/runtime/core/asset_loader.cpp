@@ -18,7 +18,7 @@
 #include <SDL3/SDL.h>
 #include "assets/Asset.hpp"
 #include "assets/asset_library.hpp"
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "audio/audio_engine.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "utils/area.hpp"

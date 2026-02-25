@@ -17,7 +17,7 @@
 #include "animation/animation_update.hpp"
 #include "utils/area_helpers.hpp"
 #include "assets/asset_filter_tags.hpp"
-#include "assets/asset_types.hpp"
+#include "asset_types.hpp"
 #include "utils/grid.hpp"
 #include "utils/transform_smoothing_settings.hpp"
 #include "utils/log.hpp"
@@ -1159,11 +1159,16 @@ void Asset::apply_anchor_follow_target() {
 
         auto resolved = source->anchor_state(follow.anchor_name, anchor_points::GridMaterialization::Ensure, follow.depth_policy);
         if (!resolved.has_value() || resolved->missing) {
-                follow_initialized_ = false;
+                // No anchor on this frame. Keep previous transform when initialized so followers
+                // don't pop to origin; otherwise hide until an anchor becomes available.
                 follow_missing_ = true;
-                set_anchor_hidden(true);
                 last_follow_source_revision_ = source_anchor_revision;
-                ++anchor_world_revision_;
+                mark_anchors_dirty();
+                if (follow_initialized_) {
+                        return;
+                }
+                follow_initialized_ = false;
+                set_anchor_hidden(true);
                 return;
         }
         follow_error_reported_ = false;

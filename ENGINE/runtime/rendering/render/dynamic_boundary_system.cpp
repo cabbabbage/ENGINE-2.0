@@ -2,7 +2,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "assets/asset_library.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "rendering/render/scaling_logic.hpp"
 #include "assets/animation.hpp"
 #include "core/AssetsManager.hpp"

@@ -8,7 +8,7 @@
 
 #include <SDL3/SDL.h>
 #include "utils/area.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 
 struct SpawnCandidate {
     std::string name;

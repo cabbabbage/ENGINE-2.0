@@ -10,7 +10,7 @@
 #include <SDL3/SDL.h>
 #include "assets/Asset.hpp"
 #include "utils/area.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "gameplay/spawn/check.hpp"
 #include "utils/grid.hpp"
 #include "utils/grid_occupancy.hpp"

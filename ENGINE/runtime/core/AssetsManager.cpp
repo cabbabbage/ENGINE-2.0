@@ -6,9 +6,9 @@
 
 #include "find_current_room.hpp"
 #include "assets/Asset.hpp"
-#include "assets/asset_info.hpp"
-#include "assets/asset_utils.hpp"
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_info.hpp"
+#include "assets/asset/asset_utils.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "animation/animation_runtime.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
@@ -45,6 +45,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <array>
+#include <sstream>
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
@@ -825,7 +826,48 @@ void Assets::propagate_anchor_follows() {
             SDL_assert(std::count(children.begin(), children.end(), asset) == 1);
         }
 #endif
+        const SDL_Point before_world{asset->world_x(), asset->world_y()};
+        const int before_z = asset->world_z();
+        std::optional<ResolvedAnchor> resolved;
+        if (anchor_follow_debug_logging_ && follow->source) {
+            resolved = follow->source->anchor_state(follow->anchor_name,
+                                                    anchor_points::GridMaterialization::None,
+                                                    follow->depth_policy);
+        }
         asset->apply_anchor_follow_target();
+
+        if (anchor_follow_debug_logging_) {
+            std::ostringstream oss;
+            oss << "[AnchorDebug] frame=" << frame_id_
+                << " follower=" << asset_label(asset)
+                << " source=" << asset_label(follow->source)
+                << " anchor=" << follow->anchor_name;
+            if (resolved && !resolved->missing) {
+                oss << " resolved=(" << resolved->world_px.x << "," << resolved->world_px.y
+                    << "," << resolved->world_z << "|L" << resolved->resolution_layer << ")";
+            } else {
+                oss << " resolved=missing";
+            }
+            oss << " world=(" << asset->world_x() << "," << asset->world_y()
+                << "," << asset->world_z() << "|L" << asset->grid_resolution << ")";
+            if (before_world.x != asset->world_x() || before_world.y != asset->world_y() || before_z != asset->world_z()) {
+                oss << " moved";
+            } else {
+                oss << " unchanged";
+            }
+            oss << " src_revision=" << (follow->source ? follow->source->anchor_world_revision() : 0);
+            vibble::log::info(oss.str());
+        }
+    }
+}
+
+void Assets::refresh_anchor_bases_for_active_assets() {
+    // Keep anchor basis signatures aligned with the freshest grid/camera data.
+    for (Asset* asset : all) {
+        if (!asset || asset->dead) {
+            continue;
+        }
+        asset->update_anchor_basis_if_needed();
     }
 }
 
@@ -1038,6 +1080,7 @@ void Assets::update(const Input& input)
     last_frame_dt_seconds_ = dt;
 
     const bool ctrl_down = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
+    const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     if (scene && ctrl_down && input.wasScancodePressed(SDL_SCANCODE_Q)) {
 
     }
@@ -1056,6 +1099,19 @@ void Assets::update(const Input& input)
         }
         std::cout << "[Assets] Quick Task popup "
                   << (quick_task_popup_->is_open() ? "opened" : "closed") << " (Ctrl+T).\n";
+    }
+
+    if (ctrl_down && shift_down && input.wasScancodePressed(SDL_SCANCODE_A)) {
+        anchor_follow_debug_logging_ = !anchor_follow_debug_logging_;
+        std::cout << "[Assets] Anchor follow debug logging "
+                  << (anchor_follow_debug_logging_ ? "enabled" : "disabled") << " (Ctrl+Shift+A).\n";
+    }
+
+    if (ctrl_down && shift_down && input.wasScancodePressed(SDL_SCANCODE_P)) {
+        const bool enable = !anchor_point_debug_enabled_;
+        set_anchor_point_debug_enabled(enable);
+        std::cout << "[Assets] Anchor point overlay "
+                  << (enable ? "enabled" : "disabled") << " (Ctrl+Shift+P).\n";
     }
 
     if (quick_task_popup_) {
@@ -1200,11 +1256,11 @@ void Assets::update(const Input& input)
         mark_active_assets_dirty();
     }
 
-    // Final follower pass after late-frame editor/runtime mutations so attachments
-    // are correct before grid rebuild/render, even when parent edits happen post-update.
-    propagate_anchor_follows();
-
     maybe_rebuild_world_grid();
+
+    // Ensure anchor bases pick up the freshly rebuilt grid/camera state and sync followers once more.
+    refresh_anchor_bases_for_active_assets();
+    propagate_anchor_follows();
 
     update_audio_camera_metrics();
 
@@ -1915,7 +1971,12 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                                                   double current_scale,
                                                   double current_pitch) {
     last_grid_rebuild_frame_ = frame_id_;
-    camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_);
+    camera_.rebuild_grid(world_grid_,
+                         last_frame_dt_seconds_,
+                         frame_id_,
+                         terrain_field_source_,
+                         terrain_runtime_state(),
+                         &rooms_);
     world_grid_.update_active_chunks(screen_world_rect(), 0);
     rebuild_active_from_screen_grid();
 
@@ -2641,6 +2702,13 @@ void Assets::invalidate_dynamic_boundary_system() {
     if (scene) {
         scene->invalidate_dynamic_boundary_system();
     }
+}
+
+void Assets::set_terrain_sources(TerrainField* field, const TerrainRuntimeState& state) {
+    terrain_field_source_ = field;
+    terrain_runtime_state_ = state;
+    mark_grid_dirty();
+    camera_view_dirty_ = true;
 }
 
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {

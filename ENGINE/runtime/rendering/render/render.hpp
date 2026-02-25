@@ -11,6 +11,7 @@
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include "rendering/render/TextureLoadQueue.hpp"
+#include "rendering/render/terrain_runtime_state.hpp"
 #include <SDL3/SDL.h>
 
 #include <nlohmann/json.hpp>
@@ -19,6 +20,7 @@ class Assets;
 class WarpedScreenGrid;
 class AssetLibrary;
 namespace world { class WorldGrid; }
+class TerrainField;
 
 // Geometry batching system for reducing draw calls
 class GeometryBatcher {
@@ -70,12 +72,18 @@ public:
 
     // Call when tile textures are rebuilt or assets are reloaded
     void invalidate_texture_cache();
+    void set_terrain_sources(TerrainField* field, const TerrainRuntimeState* state) {
+        terrain_field_ = field;
+        terrain_state_ = state;
+    }
 
 private:
     bool fetch_texture_size(SDL_Texture* texture, SDL_FPoint& out_size);
 
     Assets* assets_ = nullptr;
     std::unordered_map<SDL_Texture*, SDL_FPoint> texture_size_cache_;
+    TerrainField* terrain_field_ = nullptr; // non-owning
+    const TerrainRuntimeState* terrain_state_ = nullptr; // non-owning
 };
 
 class SceneRenderer {
@@ -143,6 +151,7 @@ private:
     CompositeAssetRenderer composite_renderer_;
     std::unique_ptr<DynamicFogSystem> dynamic_fog_system_;
     std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
+    std::unique_ptr<TerrainField> terrain_field_;
 
     std::uint32_t depthcue_warmup_frames_ = 8;
 
@@ -155,5 +164,7 @@ private:
     int                   sky_texture_width_ = 0;
     int                   sky_texture_height_ = 0;
     bool                  sky_texture_failed_ = false;
-
+    TerrainRuntimeState   terrain_runtime_state_{};
+    std::uint64_t         terrain_settings_revision_seen_ = 0;
+    bool                  terrain_randomize_session_seed_ = false;
 };

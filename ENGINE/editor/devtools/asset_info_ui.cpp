@@ -22,7 +22,7 @@
 #include <nlohmann/json.hpp>
 #include <functional>
 
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "utils/input.hpp"
 #include "utils/area.hpp"
 #include "utils/string_utils.hpp"

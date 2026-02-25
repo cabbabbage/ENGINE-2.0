@@ -50,7 +50,7 @@
 #endif
 #include "utils/input.hpp"
 
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
@@ -2117,7 +2117,7 @@ void AnimationEditorWindow::add_controller() {
                 << "\n"
                 << "#include \"assets/Asset.hpp\"\n"
                 << "#include \"assets/animation.hpp\"\n"
-                << "#include \"assets/asset_info.hpp\"\n"
+                << "#include \"assets/asset/asset_info.hpp\"\n"
                 << "#include \"animation/animation_update.hpp\"\n"
                 << "#include \"utils/input.hpp\"\n"
                 << "#include <string>\n"

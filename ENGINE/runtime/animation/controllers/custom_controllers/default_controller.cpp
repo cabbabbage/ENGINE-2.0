@@ -1,7 +1,7 @@
 #include "default_controller.hpp"
 #include "assets/Asset.hpp"
 #include "assets/animation.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "animation/animation_update.hpp"
 
 #include <string>

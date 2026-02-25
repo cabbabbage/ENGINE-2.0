@@ -4,7 +4,7 @@
 #include <cmath>
 
 #include "assets/Asset.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "animation_update.hpp"
 #include "core/asset_list.hpp"
 #include "utils/area.hpp"

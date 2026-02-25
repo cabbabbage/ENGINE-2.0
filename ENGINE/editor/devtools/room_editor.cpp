@@ -7,9 +7,9 @@
 #include <cmath>
 
 #include "assets/Asset.hpp"
-#include "assets/asset_info.hpp"
-#include "assets/asset_types.hpp"
-#include "assets/asset_utils.hpp"
+#include "assets/asset/asset_info.hpp"
+#include "assets/asset/asset_types.hpp"
+#include "assets/asset/asset_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/room_editor_map_info.hpp"
 #include "devtools/asset_info_ui.hpp"

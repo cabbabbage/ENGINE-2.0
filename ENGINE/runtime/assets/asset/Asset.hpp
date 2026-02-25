@@ -209,7 +209,7 @@ class Asset {
     void set_grid_id(std::uint64_t id);
     std::uint64_t grid_id() const { return grid_id_; }
     void clear_grid_id();
-    void set_world_z_offset(float z) { world_z_offset_ = z; }
+    void set_world_z_offset(float z) { if (world_z_offset_ != z) { world_z_offset_ = z; mark_anchors_dirty(); } }
     float world_z_offset() const { return world_z_offset_; }
 
     SDL_Texture* composite_texture() const { return composite_texture_; }
@@ -287,9 +287,40 @@ class Asset {
         bool            missing = false;
         bool            in_front = true;
         Asset*          owner = nullptr;
+        struct UpdateKey {
+                anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None;
+                std::optional<anchor_points::AnchorDepthPolicy> depth_policy{};
+                bool initialized = false;
+
+                bool matches(anchor_points::GridMaterialization grid,
+                             const std::optional<anchor_points::AnchorDepthPolicy>& depth) const {
+                        return initialized && grid_policy == grid && depth_policy == depth;
+                }
+
+                void set(anchor_points::GridMaterialization grid,
+                         std::optional<anchor_points::AnchorDepthPolicy> depth) {
+                        grid_policy = grid;
+                        depth_policy = depth;
+                        initialized = true;
+                }
+        } last_update_key_;
 
         void update(anchor_points::GridMaterialization grid_policy,
                     std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
+    };
+
+    // A single source of truth for all inputs that influence resolved anchor world position.
+    struct AnchorBasisSignature {
+        int   world_x = 0;
+        int   world_y = 0;
+        int   world_z = 0;
+        int   frame_index = 0;
+        int   variant_index = 0;
+        bool  flipped = false;
+        float remainder_scale = 1.0f;       // runtime scale applied to rendered frame geometry
+        float perspective_scale = 1.0f;     // depth-based scaling from the grid/camera
+        float world_z_offset = 0.0f;        // vertical offset fed into anchor projection
+        int   resolution_layer = 0;         // grid resolution used for anchor materialization
     };
 
     AnchorHandle& get_anchor_point(const std::string& name);
@@ -298,7 +329,8 @@ class Asset {
                                                std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
     void mark_anchors_dirty();
     bool update_anchor_basis_if_needed();
-    void capture_anchor_basis_snapshot();
+    AnchorBasisSignature compute_anchor_basis_signature() const;
+    void capture_anchor_basis_snapshot(const AnchorBasisSignature& signature);
     void set_anchor_follow_target(std::optional<AnchorFollowTarget> follow);
     void bind_child_to_anchor(Asset* child, const std::string& anchor_name);
     void unbind_child_from_anchor(Asset* child);
@@ -384,7 +416,6 @@ private:
 
     std::vector<AnchorHandle> anchor_handles_;
     std::unordered_map<std::string, std::size_t> anchor_lookup_;
-    std::vector<Asset*> bound_children_;
 
     std::optional<AnchorFollowTarget> follow_anchor_{};
     SDL_Point last_follow_world_{0, 0};
@@ -394,11 +425,7 @@ private:
     bool follow_error_reported_ = false;
     std::uint64_t last_follow_source_revision_ = 0;
     std::uint64_t anchor_world_revision_ = 1;
-    SDL_Point last_anchor_basis_world_{ std::numeric_limits<int>::min(), std::numeric_limits<int>::min() };
-    int last_anchor_basis_world_z_ = std::numeric_limits<int>::min();
-    int last_anchor_basis_frame_index_ = std::numeric_limits<int>::min();
-    int last_anchor_basis_variant_index_ = std::numeric_limits<int>::min();
-    bool last_anchor_basis_flipped_ = false;
+    AnchorBasisSignature last_anchor_basis_signature_{};
     bool anchor_basis_initialized_ = false;
     void apply_anchor_follow_target();
     void refresh_bound_children_anchor_follows();

@@ -5,15 +5,10 @@
 #include "assets/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
-#include "utils/AnchorPointResolver.hpp"
-#include "utils/log.hpp"
 #include <algorithm>
 #include <cmath>
 
 namespace {
-
-// Toggle verbose vibble controller + anchor diagnostics.
-constexpr bool kVibbleControllerDebug = true;
 
 float sanitize_scale(float value) {
     return (std::isfinite(value) && value > 0.0f) ? value : 1.0f;
@@ -282,71 +277,23 @@ void vibble_controller::process_pending_attacks(Asset& self) {
 }
 
 void vibble_controller::spawn_eyes_follower() {
-    if (eyes_follower_.valid()) {
-        return;
-    }
-
-    auto log_failure_once = [&](const std::string& reason) {
-        if (kVibbleControllerDebug && eyes_spawn_last_failure_ != reason) {
-            vibble::log::warn("[VibbleController] " + reason);
-            eyes_spawn_last_failure_ = reason;
-        }
-    };
-
-    auto controller_label = [&]() -> std::string {
-        if (!player_) return "<null-controller>";
-        if (!player_->spawn_id.empty()) return player_->spawn_id;
-        if (player_->info) return player_->info->name;
-        return "<unnamed-controller>";
-    };
-
-    if (!player_) {
-        log_failure_once("Cannot spawn child asset 'vibble_eyes': controller asset missing.");
-        return;
-    }
-    if (!anchor_helper_) {
-        log_failure_once("Cannot spawn child asset 'vibble_eyes' for '" + controller_label() + "': anchor helper not initialized.");
+    if (eyes_follower_.valid() || !player_ || !anchor_helper_) {
         return;
     }
 
     Assets* assets = player_->get_assets();
     if (!assets) {
-        log_failure_once("Cannot spawn child asset 'vibble_eyes' for '" + controller_label() + "': Assets service unavailable.");
         return;
     }
 
     std::string anchor_name = "eyes";
-    std::string follower_asset_name = "vibble_eyes";
-    if (auto follower_info = assets->library().get("vibble_eyes"); follower_info && follower_info->follower_binding.has_value()) {
+    constexpr const char* kFollowerAssetName = "vibble_eyes";
+    if (auto follower_info = assets->library().get(kFollowerAssetName); follower_info && follower_info->follower_binding.has_value()) {
         const auto& spec = follower_info->follower_binding.value();
         if (!spec.anchor_name.empty()) {
             anchor_name = spec.anchor_name;
         }
     }
 
-    bool anchor_missing = false;
-    try {
-        if (auto resolved = player_->anchor_state(anchor_name, anchor_points::GridMaterialization::None)) {
-            anchor_missing = resolved->missing;
-        }
-    } catch (const std::exception& ex) {
-        log_failure_once("Anchor probe for '" + anchor_name + "' on controller '" + controller_label() + "' threw: " + ex.what());
-    }
-
-    if (anchor_missing) {
-        log_failure_once("Anchor '" + anchor_name + "' missing on controller '" + controller_label() + "'; attempting spawn anyway.");
-    }
-
-    eyes_follower_ = anchor_helper_->create_asset_and_bind_to_anchor(anchor_name, follower_asset_name);
-    if (eyes_follower_.valid()) {
-        if (!eyes_spawn_success_logged_ && kVibbleControllerDebug) {
-            vibble::log::info("[VibbleController] Spawned child asset '" + follower_asset_name +
-                              "' at anchor '" + anchor_name + "' on controller '" + controller_label() + "'.");
-            eyes_spawn_success_logged_ = true;
-        }
-        eyes_spawn_last_failure_.clear();
-    } else {
-        log_failure_once("Failed to spawn child asset '" + follower_asset_name + "' at anchor '" +
-                         anchor_name + "' on controller '" + controller_label() + "'.");
-    }
+    eyes_follower_ = anchor_helper_->bind_follower(anchor_name, kFollowerAssetName);
 }

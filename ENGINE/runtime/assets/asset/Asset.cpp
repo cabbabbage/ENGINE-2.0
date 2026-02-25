@@ -26,15 +26,32 @@
 #include <iostream>
 #include <random>
 #include <mutex>
+#include <atomic>
 #include <algorithm>
 #include <cmath>
 #include <limits>
 #include <unordered_map>
 #include <unordered_set>
 #include <stdexcept>
+#include <cassert>
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
 #include "utils/AnchorPointResolver.hpp"
+
+#if !defined(NDEBUG)
+namespace {
+struct AnchorUpdateCounters {
+        std::atomic<std::uint64_t> calls{0};
+        std::atomic<std::uint64_t> cache_hits{0};
+        std::atomic<std::uint64_t> recomputes{0};
+};
+
+AnchorUpdateCounters& anchor_update_counters() {
+        static AnchorUpdateCounters counters{};
+        return counters;
+}
+} // namespace
+#endif
 static std::mt19937& asset_rng()
 {
         static std::mt19937 rng{ std::random_device{}() };
@@ -494,6 +511,13 @@ void Asset::set_current_animation(const std::string& name)
 void Asset::update() {
     if (!info) return;
 
+#if !defined(NDEBUG)
+    const SDL_Point anchor_debug_start_world{world_x(), world_y()};
+    const int anchor_debug_start_world_z = world_z();
+    const int anchor_debug_start_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+    const std::uint64_t anchor_debug_start_revision = anchor_world_revision_;
+#endif
+
     // Detect external transform/frame changes before we do any work so bound children can react immediately.
     const bool external_world_changed = update_anchor_basis_if_needed();
 
@@ -567,7 +591,18 @@ void Asset::update() {
     const float alpha_target = hidden ? 0.0f : 1.0f;
     alpha_smoothing_.reset(alpha_target);
 
-    refresh_bound_children_anchor_follows();
+#if !defined(NDEBUG)
+    const bool anchor_debug_world_changed =
+        anchor_debug_start_world.x != world_x() ||
+        anchor_debug_start_world.y != world_y() ||
+        anchor_debug_start_world_z != world_z() ||
+        anchor_debug_start_layer != (pos_ ? pos_->resolution_layer() : grid_resolution);
+    if (anchor_debug_world_changed && anchor_world_revision_ == anchor_debug_start_revision) {
+        vibble::log::warn("[Asset] anchor_world_revision did not advance after world transform change for asset '" +
+                          (info ? info->name : std::string{"<unknown>"}) + "'");
+        assert(anchor_world_revision_ != anchor_debug_start_revision);
+    }
+#endif
 }
 
 std::string Asset::get_current_animation() const { return current_animation; }
@@ -917,37 +952,65 @@ void Asset::mark_anchors_dirty() {
         ++anchor_world_revision_;
 }
 
-void Asset::capture_anchor_basis_snapshot() {
-        last_anchor_basis_world_ = SDL_Point{world_x(), world_y()};
-        last_anchor_basis_world_z_ = world_z();
-        last_anchor_basis_frame_index_ = current_frame ? current_frame->frame_index : std::numeric_limits<int>::min();
-        last_anchor_basis_variant_index_ = current_variant_index;
-        last_anchor_basis_flipped_ = flipped;
+Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
+        AnchorBasisSignature sig{};
+        sig.world_x = world_x();
+        sig.world_y = world_y();
+        sig.world_z = world_z();
+        sig.frame_index = current_frame ? current_frame->frame_index : std::numeric_limits<int>::min();
+        sig.variant_index = current_variant_index;
+        sig.flipped = flipped;
+
+        float remainder = current_remaining_scale_adjustment;
+        if (!std::isfinite(remainder) || remainder <= 0.0f) {
+                remainder = 1.0f;
+        }
+        sig.remainder_scale = remainder;
+
+        const bool has_pos = (pos_ != nullptr);
+        const float perspective = (has_pos && pos_->perspective_scale > 0.0001f)
+                ? pos_->perspective_scale
+                : (last_scale_perspective_input_ > 0.0001f ? last_scale_perspective_input_ : 1.0f);
+        sig.perspective_scale = perspective;
+
+        sig.world_z_offset = world_z_offset_;
+        sig.resolution_layer = has_pos ? pos_->resolution_layer() : grid_resolution;
+        return sig;
+}
+
+void Asset::capture_anchor_basis_snapshot(const AnchorBasisSignature& signature) {
+        last_anchor_basis_signature_ = signature;
         anchor_basis_initialized_ = true;
 }
 
 bool Asset::update_anchor_basis_if_needed() {
-        const int wx = world_x();
-        const int wy = world_y();
-        const int wz = world_z();
-        const int frame_index = current_frame ? current_frame->frame_index : std::numeric_limits<int>::min();
-        const int variant_index = current_variant_index;
-        const bool flipped_state = flipped;
+        const AnchorBasisSignature signature = compute_anchor_basis_signature();
+
+        const auto almost_equal = [](float a, float b) {
+                constexpr float kEpsilon = 1e-4f;
+                return std::fabs(a - b) < kEpsilon;
+        };
 
         const bool world_changed = !anchor_basis_initialized_ ||
-                                   wx != last_anchor_basis_world_.x ||
-                                   wy != last_anchor_basis_world_.y ||
-                                   wz != last_anchor_basis_world_z_;
+                                   signature.world_x != last_anchor_basis_signature_.world_x ||
+                                   signature.world_y != last_anchor_basis_signature_.world_y ||
+                                   signature.world_z != last_anchor_basis_signature_.world_z;
 
-        const bool changed = world_changed ||
-                             frame_index != last_anchor_basis_frame_index_ ||
-                             variant_index != last_anchor_basis_variant_index_ ||
-                             flipped_state != last_anchor_basis_flipped_;
-        if (!changed) {
+        const bool signature_changed =
+                world_changed ||
+                signature.frame_index != last_anchor_basis_signature_.frame_index ||
+                signature.variant_index != last_anchor_basis_signature_.variant_index ||
+                signature.flipped != last_anchor_basis_signature_.flipped ||
+                signature.resolution_layer != last_anchor_basis_signature_.resolution_layer ||
+                !almost_equal(signature.remainder_scale, last_anchor_basis_signature_.remainder_scale) ||
+                !almost_equal(signature.perspective_scale, last_anchor_basis_signature_.perspective_scale) ||
+                !almost_equal(signature.world_z_offset, last_anchor_basis_signature_.world_z_offset);
+
+        if (!signature_changed) {
                 return false;
         }
 
-        capture_anchor_basis_snapshot();
+        capture_anchor_basis_snapshot(signature);
         mark_anchors_dirty();
         return world_changed;
 }
@@ -971,6 +1034,12 @@ void Asset::bind_child_to_anchor(Asset* child, const std::string& anchor_name) {
                 throw std::runtime_error("bind_child_to_anchor requires non-null child and non-empty anchor name");
         }
 
+        Assets* owner_assets = assets_ ? assets_ : child->assets_;
+        if (!owner_assets) {
+                throw std::runtime_error("bind_child_to_anchor requires Assets owner to update binding graph");
+        }
+        world::WorldGrid& grid = owner_assets->world_grid();
+
         child->set_anchor_hidden(false);
         AnchorFollowTarget follow = child->anchor_follow_target().value_or(AnchorFollowTarget{});
         follow.source = this;
@@ -978,33 +1047,40 @@ void Asset::bind_child_to_anchor(Asset* child, const std::string& anchor_name) {
         child->set_anchor_follow_target(std::move(follow));
         child->last_follow_source_revision_ = this->anchor_world_revision();
         mark_anchors_dirty();
-        if (std::find(bound_children_.begin(), bound_children_.end(), child) == bound_children_.end()) {
-                bound_children_.push_back(child);
+#ifndef NDEBUG
+        {
+                const auto before = grid.children_of(this);
+                SDL_assert(std::count(before.begin(), before.end(), child) == 0);
         }
+#endif
+        grid.update_asset_parent(child, this);
+#ifndef NDEBUG
+        {
+                const auto after = grid.children_of(this);
+                SDL_assert(std::count(after.begin(), after.end(), child) == 1);
+        }
+#endif
 }
 
 void Asset::unbind_child_from_anchor(Asset* child) {
         if (!child) {
                 return;
         }
-        bound_children_.erase(std::remove(bound_children_.begin(), bound_children_.end(), child), bound_children_.end());
+        Assets* owner_assets = assets_ ? assets_ : child->assets_;
+        if (owner_assets) {
+                owner_assets->world_grid().unbind_child(child);
+#ifndef NDEBUG
+                SDL_assert(owner_assets->world_grid().parent_of(child) == nullptr);
+#endif
+        } else {
+                child->parent = nullptr;
+                child->set_anchor_follow_target(std::nullopt);
+        }
 }
 
 void Asset::refresh_bound_children_anchor_follows() {
-        if (bound_children_.empty()) {
-                return;
-        }
-
-        for (Asset* child : bound_children_) {
-                if (!child || child->dead) {
-                        continue;
-                }
-                const auto& follow = child->anchor_follow_target();
-                if (!follow.has_value() || follow->source != this) {
-                        continue;
-                }
-                child->apply_anchor_follow_target();
-        }
+        // Anchor-follow propagation now runs in a global Assets update phase.
+        // Keep this helper for compatibility with existing call sites.
 }
 
 void Asset::apply_anchor_follow_target() {
@@ -1136,6 +1212,24 @@ std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name,
 
 void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                                  std::optional<anchor_points::AnchorDepthPolicy> depth_policy) {
+#if !defined(NDEBUG)
+        auto& counters = anchor_update_counters();
+        ++counters.calls;
+#endif
+
+        const bool cache_hit = !dirty && last_update_key_.matches(grid_policy, depth_policy);
+        if (cache_hit) {
+#if !defined(NDEBUG)
+                ++counters.cache_hits;
+#endif
+                return;
+        }
+
+#if !defined(NDEBUG)
+        ++counters.recomputes;
+#endif
+        last_update_key_.set(grid_policy, depth_policy);
+
         if (!owner) {
                 dirty = false;
                 return;

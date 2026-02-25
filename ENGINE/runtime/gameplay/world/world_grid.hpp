@@ -44,6 +44,8 @@ public:
     Asset* register_asset(std::unique_ptr<Asset> a, int world_z = 0, int resolution_layer = -1);
     Asset* register_asset(Asset* a, int world_z = 0, int resolution_layer = -1);
     void   update_asset_parent(Asset* child, Asset* new_parent);
+    Asset* parent_of(const Asset* child) const;
+    bool   unbind_child(Asset* child);
     Chunk* ensure_chunk_from_world(const GridPoint& world_px);
     Chunk* chunk_from_world(const GridPoint& world_px) const;
     Chunk* get_or_create_chunk_ij(int i, int j);

@@ -17,9 +17,9 @@ public:
     explicit AnchorBoundAssetHelper(Asset* controller_asset)
         : controller_asset_(controller_asset) {}
 
-    Handle create_asset_and_bind_to_anchor(const std::string& anchor_name,
-                                           const std::string& asset_name_to_bind);
-    bool unbind_and_delete_created(const Handle& handle);
+    Handle bind_follower(const std::string& anchor_name,
+                         const std::string& follower_asset_id);
+    bool unbind_and_delete(const Handle& handle);
     void cleanup_all();
 
 private:

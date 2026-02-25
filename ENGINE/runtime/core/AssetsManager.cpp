@@ -148,6 +148,110 @@ Asset* resolve_controller_for_binding(const std::vector<Asset*>& assets, const s
     return nullptr;
 }
 
+std::string asset_label(const Asset* asset) {
+    if (!asset) return std::string{"<null-asset>"};
+    if (!asset->spawn_id.empty()) return asset->spawn_id;
+    if (asset->info) return asset->info->name;
+    return std::string{"<unnamed-asset>"};
+}
+
+#if !defined(NDEBUG)
+void assert_follow_parent_consistency(const world::WorldGrid& grid, const Asset* asset) {
+    if (!asset) {
+        return;
+    }
+
+    Asset* mapped_parent = grid.parent_of(asset);
+    const auto follow = asset->anchor_follow_target();
+
+    if (mapped_parent) {
+        SDL_assert(follow.has_value());
+        SDL_assert(follow->source == mapped_parent);
+    }
+
+    if (follow.has_value() && follow->source) {
+        SDL_assert(grid.parent_of(asset) == follow->source);
+    } else {
+        SDL_assert(mapped_parent == nullptr);
+    }
+}
+#endif
+
+Asset::AnchorFollowTarget apply_follower_binding_defaults(Asset* controller_asset,
+                                                          const AssetInfo& follower_info,
+                                                          const std::optional<Asset::AnchorFollowTarget>& explicit_binding,
+                                                          const std::string& anchor_override) {
+    Asset::AnchorFollowTarget binding = explicit_binding.value_or(Asset::AnchorFollowTarget{});
+
+    if (auto default_binding = make_binding_from_follower_spec(follower_info)) {
+        if (binding.anchor_name.empty()) {
+            binding.anchor_name = default_binding->anchor_name;
+        }
+        if (!binding.depth_policy.has_value() && default_binding->depth_policy.has_value()) {
+            binding.depth_policy = default_binding->depth_policy;
+        }
+        if (!binding.layer_policy.has_value() && default_binding->layer_policy.has_value()) {
+            binding.layer_policy = default_binding->layer_policy;
+        }
+        if (binding.controller_asset_id.empty() && !default_binding->controller_asset_id.empty()) {
+            binding.controller_asset_id = default_binding->controller_asset_id;
+        }
+    }
+
+    if (follower_info.follower_binding.has_value()) {
+        const auto& spec = follower_info.follower_binding.value();
+        const auto parse_depth = [](const std::string& value) -> std::optional<anchor_points::AnchorDepthPolicy> {
+            if (value == "match_owner") {
+                return anchor_points::AnchorDepthPolicy::MatchOwner;
+            }
+            if (value == "behind") {
+                return anchor_points::AnchorDepthPolicy::Behind;
+            }
+            if (value == "in_front") {
+                return anchor_points::AnchorDepthPolicy::InFront;
+            }
+            return anchor_points::AnchorDepthPolicy::InFront;
+        };
+        const auto parse_layer = [](const std::string& value) -> std::optional<Asset::AnchorFollowTarget::LayerPolicy> {
+            if (value == "match_controller_asset") {
+                return Asset::AnchorFollowTarget::LayerPolicy::MatchControllerAsset;
+            }
+            if (value == "match_resolved_anchor") {
+                return Asset::AnchorFollowTarget::LayerPolicy::MatchResolvedAnchor;
+            }
+            return Asset::AnchorFollowTarget::LayerPolicy::MatchResolvedAnchor;
+        };
+
+        if (binding.anchor_name.empty() && !spec.anchor_name.empty()) {
+            binding.anchor_name = spec.anchor_name;
+        }
+        if (!binding.depth_policy.has_value() && spec.depth_policy.has_value()) {
+            if (auto parsed = parse_depth(spec.depth_policy.value())) {
+                binding.depth_policy = parsed;
+            }
+        }
+        if (!binding.layer_policy.has_value() && spec.layer_policy.has_value()) {
+            if (auto parsed = parse_layer(spec.layer_policy.value())) {
+                binding.layer_policy = parsed;
+            }
+        }
+        if (binding.controller_asset_id.empty() && !spec.controller_asset_id.empty()) {
+            binding.controller_asset_id = spec.controller_asset_id;
+        }
+    }
+
+    if (!anchor_override.empty()) {
+        binding.anchor_name = anchor_override;
+    }
+
+    if (controller_asset) {
+        binding.source = controller_asset;
+        binding.controller_asset_id.clear();
+    }
+
+    return binding;
+}
+
 struct AssetWorldBounds {
     float left = 0.0f;
     float right = 0.0f;
@@ -654,6 +758,27 @@ void Assets::refresh_active_asset_lists() {
     update_filtered_active_assets();
 }
 
+void Assets::propagate_anchor_follows() {
+    for (Asset* asset : all) {
+        if (!asset || asset->dead) {
+            continue;
+        }
+
+        const auto& follow = asset->anchor_follow_target();
+        if (!follow.has_value() || !follow->source) {
+            continue;
+        }
+
+#ifndef NDEBUG
+        {
+            const auto children = world_grid_.children_of(follow->source);
+            SDL_assert(std::count(children.begin(), children.end(), asset) == 1);
+        }
+#endif
+        asset->apply_anchor_follow_target();
+    }
+}
+
 void Assets::update_audio_camera_metrics() {
 
     SDL_Point camera_focus = camera_.get_screen_center();
@@ -990,6 +1115,9 @@ void Assets::update(const Input& input)
             touch_dev_active_state_version();
             mark_grid_dirty();
         }
+
+        // Invariant: all parent transforms/animation resolved first, then all bound children snapped.
+        propagate_anchor_follows();
     } else {
         movement_commands_buffer_.clear();
         moving_assets_for_grid_.clear();
@@ -1535,32 +1663,89 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
     return raw;
 }
 
+Asset* Assets::bind_follower(Asset* controller_asset,
+                             const std::string& follower_asset_id,
+                             const std::string& anchor_name) {
+    Asset::AnchorFollowTarget binding{};
+    binding.anchor_name = anchor_name;
+    return bind_follower(controller_asset, follower_asset_id, binding);
+}
+
+Asset* Assets::bind_follower(Asset* controller_asset,
+                             const std::string& follower_asset_id,
+                             const Asset::AnchorFollowTarget& binding_spec) {
+    if (!controller_asset) {
+        vibble::log::warn("[Assets] bind_follower failed: controller asset is null for follower '" + follower_asset_id + "'.");
+        return nullptr;
+    }
+    if (follower_asset_id.empty()) {
+        vibble::log::warn("[Assets] bind_follower failed: follower asset id is empty for controller '" + asset_label(controller_asset) + "'.");
+        return nullptr;
+    }
+
+    std::shared_ptr<AssetInfo> info = library_.get(follower_asset_id);
+    if (!info) {
+        vibble::log::warn("[Assets] bind_follower failed: follower asset '" + follower_asset_id + "' not found in library.");
+        return nullptr;
+    }
+
+    Asset::AnchorFollowTarget binding = apply_follower_binding_defaults(controller_asset,
+                                                                        *info,
+                                                                        binding_spec,
+                                                                        binding_spec.anchor_name);
+
+    if (binding.anchor_name.empty()) {
+        vibble::log::warn("[Assets] bind_follower failed: no anchor specified for follower '" + follower_asset_id +
+                          "' on controller '" + asset_label(controller_asset) + "'.");
+        return nullptr;
+    }
+
+    if (!binding.source && binding.controller_asset_id.empty()) {
+        binding.source = controller_asset;
+    }
+
+    if (!binding.valid()) {
+        vibble::log::warn("[Assets] bind_follower failed: invalid binding specification for follower '" +
+                          follower_asset_id + "' on controller '" + asset_label(controller_asset) + "'.");
+        return nullptr;
+    }
+
+    return spawn_asset_attached(follower_asset_id, binding);
+}
+
+bool Assets::unbind_follower(Asset* controller_asset, Asset* follower_asset) {
+    if (!follower_asset) {
+        return false;
+    }
+
+    Asset* previous_parent = world_grid_.parent_of(follower_asset);
+    const std::string follower_label = asset_label(follower_asset);
+    const std::string controller_label = asset_label(controller_asset);
+
+    world_grid_.unbind_child(follower_asset);
+
+#ifndef NDEBUG
+    if (controller_asset && previous_parent) {
+        SDL_assert(previous_parent == controller_asset);
+    }
+    assert_follow_parent_consistency(world_grid_, follower_asset);
+#endif
+
+    follower_asset->Delete();
+
+    vibble::log::debug("[Assets] Unbound follower '" + follower_label +
+                       "' from controller '" + controller_label + "'.");
+    return true;
+}
 
 Asset* Assets::create_asset_and_bind_to_anchor(Asset* controller_asset,
                                                 const std::string& anchor_name,
                                                 const std::string& asset_name) {
-    if (!controller_asset || anchor_name.empty() || asset_name.empty()) {
-        return nullptr;
-    }
-
-    Asset::AnchorFollowTarget binding{};
-    binding.source = controller_asset;
-    binding.anchor_name = anchor_name;
-    return spawn_asset_attached(asset_name, binding);
+    return bind_follower(controller_asset, asset_name, anchor_name);
 }
 
 bool Assets::unbind_and_delete_created(Asset* controller_asset, Asset* created_asset) {
-    if (!created_asset) {
-        return false;
-    }
-
-    if (controller_asset) {
-        controller_asset->unbind_child_from_anchor(created_asset);
-    }
-
-    created_asset->set_anchor_follow_target(std::nullopt);
-    created_asset->Delete();
-    return true;
+    return unbind_follower(controller_asset, created_asset);
 }
 
 Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
@@ -1954,13 +2139,26 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
         if (!asset || unique_removals.find(asset) == unique_removals.end()) {
             continue;
         }
-        if (auto follow = asset->anchor_follow_target(); follow.has_value() && follow->source) {
-            follow->source->unbind_child_from_anchor(asset);
-        }
+        world_grid_.unbind_child(asset);
         remove_asset_dimension_cache(asset);
         asset->clear_grid_residency_cache();
         (void)world_grid_.remove_asset(asset);
     }
+
+#ifndef NDEBUG
+    {
+        const auto survivors = world_grid_.all_assets();
+        for (Asset* asset : survivors) {
+            if (!asset) {
+                continue;
+            }
+            const auto follow = asset->anchor_follow_target();
+            if (follow.has_value() && follow->source) {
+                SDL_assert(unique_removals.find(follow->source) == unique_removals.end());
+            }
+        }
+    }
+#endif
 
     rebuild_all_assets_from_grid();
     active_assets.clear();
@@ -1980,6 +2178,15 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
         asset_dimension_update_queue_.clear();
         asset_dimension_update_lookup_.clear();
     }
+
+#ifndef NDEBUG
+    {
+        const auto survivors = world_grid_.all_assets();
+        for (Asset* asset : survivors) {
+            assert_follow_parent_consistency(world_grid_, asset);
+        }
+    }
+#endif
 
     return unique_removals.size();
 }

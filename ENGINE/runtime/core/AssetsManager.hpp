@@ -225,6 +225,13 @@ public:
     Asset* spawn_asset(const std::string& name, SDL_Point world_pos);
     Asset* spawn_asset_attached(const std::string& name, Asset* anchor_owner, const std::string& anchor_name);
     Asset* spawn_asset_attached(const std::string& name, const Asset::AnchorFollowTarget& binding);
+    Asset* bind_follower(Asset* controller_asset,
+                         const std::string& follower_asset_id,
+                         const std::string& anchor_name);
+    Asset* bind_follower(Asset* controller_asset,
+                         const std::string& follower_asset_id,
+                         const Asset::AnchorFollowTarget& binding);
+    bool unbind_follower(Asset* controller_asset, Asset* follower_asset);
     Asset* create_asset_and_bind_to_anchor(Asset* controller_asset, const std::string& anchor_name, const std::string& asset_name);
     bool unbind_and_delete_created(Asset* controller_asset, Asset* created_asset);
 
@@ -369,6 +376,7 @@ private:
     std::function<void()> dev_grid_overlay_callback_;
 
     void rebuild_non_player_update_buffer_if_needed();
+    void propagate_anchor_follows();
     void update_active_assets(const world::GridPoint& center);
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();

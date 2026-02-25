@@ -277,6 +277,7 @@ void WorldGrid::update_asset_parent(Asset* child, Asset* new_parent) {
     }
 
     if (old_parent == new_parent) {
+        child->parent = new_parent;
         return;
     }
 
@@ -299,6 +300,53 @@ void WorldGrid::update_asset_parent(Asset* child, Asset* new_parent) {
         }
         child_to_parent_[child] = new_parent;
     }
+
+    child->parent = new_parent;
+}
+
+Asset* WorldGrid::parent_of(const Asset* child) const {
+    if (!child) {
+        return nullptr;
+    }
+    auto it = child_to_parent_.find(const_cast<Asset*>(child));
+    if (it == child_to_parent_.end()) {
+        return nullptr;
+    }
+    return it->second;
+}
+
+bool WorldGrid::unbind_child(Asset* child) {
+    if (!child) {
+        return false;
+    }
+
+    Asset* parent = parent_of(child);
+    const bool had_parent = parent != nullptr;
+
+    if (parent) {
+        auto pit = parent_to_children_.find(parent);
+        if (pit != parent_to_children_.end()) {
+            auto& vec = pit->second;
+            vec.erase(std::remove(vec.begin(), vec.end(), child), vec.end());
+            if (vec.empty()) {
+                parent_to_children_.erase(pit);
+            }
+        }
+    }
+
+    child_to_parent_.erase(child);
+    child->parent = nullptr;
+    child->set_anchor_follow_target(std::nullopt);
+
+#ifndef NDEBUG
+    SDL_assert(parent_of(child) == nullptr);
+    if (had_parent) {
+        // If the child still claims a follow source, it must not contradict the map.
+        const auto follow = child->anchor_follow_target();
+        SDL_assert(!follow.has_value() || follow->source == nullptr);
+    }
+#endif
+    return had_parent;
 }
 
 void WorldGrid::detach_parent_links(Asset* asset) {
@@ -310,10 +358,9 @@ void WorldGrid::detach_parent_links(Asset* asset) {
 
     auto it = parent_to_children_.find(asset);
     if (it != parent_to_children_.end()) {
-        for (Asset* child : it->second) {
-            if (child) {
-                child_to_parent_.erase(child);
-            }
+        const auto children = it->second; // copy to allow mutation during unbind
+        for (Asset* child : children) {
+            (void)unbind_child(child);
         }
         parent_to_children_.erase(it);
     }
@@ -857,6 +904,12 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
         point.invalidate_screen_data();
     }
     prune_empty_points();
+
+    if (point_changed ||
+        old_pos.world_z() != new_pos.world_z() ||
+        old_pos.resolution_layer() != new_pos.resolution_layer()) {
+        a->mark_anchors_dirty();
+    }
 
     return a;
 }

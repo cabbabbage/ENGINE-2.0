@@ -36,8 +36,6 @@ private:
     Asset* player_ = nullptr;
     AnchorBoundAssetHelper::Handle eyes_follower_{};
     std::unique_ptr<AnchorBoundAssetHelper> anchor_helper_;
-    std::string eyes_spawn_last_failure_;
-    bool eyes_spawn_success_logged_ = false;
     int    dx_ = 0;
     int    dy_ = 0;
 

@@ -7,7 +7,7 @@
 
 #include "assets/Asset.hpp"
 #include "devtools/asset_editor/animation_editor_window/PreviewProvider.hpp"
-#include "runtime/core/manifest/manifest_loader.hpp"
+#include "core/manifest/manifest_loader.hpp"
 
 namespace devmode::anchor_editor {
 

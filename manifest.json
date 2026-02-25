@@ -750,10 +750,10 @@
           "anchor_points": [
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 221,
-                "texture_y": 117,
-                "in_front": true
+                "texture_y": 117
               }
             ]
           ],
@@ -785,40 +785,40 @@
           "speed_multiplier": 1.0
         },
         "forward": {
+          "anchor_points": [
+            [
+              {
+                "in_front": true,
+                "name": "eyes",
+                "texture_x": 221,
+                "texture_y": 117
+              }
+            ]
+          ],
           "locked": false,
           "loop": true,
           "source": {
             "kind": "folder",
             "path": "forward"
-          },
+          }
+        },
+        "left": {
           "anchor_points": [
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 221,
-                "texture_y": 117,
-                "in_front": true
+                "texture_y": 117
               }
             ]
-          ]
-        },
-        "left": {
+          ],
           "locked": false,
           "loop": true,
           "source": {
             "kind": "folder",
             "path": "left"
-          },
-          "anchor_points": [
-            [
-              {
-                "name": "eyes",
-                "texture_x": 221,
-                "texture_y": 117,
-                "in_front": true
-              }
-            ]
-          ]
+          }
         }
       },
       "anti_tags": [],
@@ -1054,9 +1054,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,

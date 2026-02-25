@@ -552,6 +552,9 @@ void AssetInfoUI::close() {
 
         forcing_high_quality_rendering_ = false;
     }
+    if (save_coordinator_) {
+        save_coordinator_->flush_now("AssetInfoUI close");
+    }
 }
 void AssetInfoUI::toggle(){
     if (visible_) {
@@ -808,6 +811,11 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
     }
     if (showing_duplicate_popup_) {
         SDL_StartTextInput(SDL_GetKeyboardFocus());
+    }
+
+    // Ensure debounced saves still flush even if the global coordinator tick is skipped.
+    if (save_coordinator_) {
+        save_coordinator_->tick();
     }
 }
 

@@ -18,7 +18,8 @@ public:
         : controller_asset_(controller_asset) {}
 
     Handle bind_follower(const std::string& anchor_name,
-                         const std::string& follower_asset_id);
+                         const std::string& follower_asset_id,
+                         const std::string& follower_anchor_name = {});
     bool unbind_and_delete(const Handle& handle);
     void cleanup_all();
 

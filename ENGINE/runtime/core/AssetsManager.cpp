@@ -89,6 +89,7 @@ std::optional<Asset::AnchorFollowTarget> make_binding_from_follower_spec(const A
     Asset::AnchorFollowTarget binding{};
     binding.controller_asset_id = spec.controller_asset_id;
     binding.anchor_name = spec.anchor_name;
+    binding.follower_anchor_name = spec.follower_anchor_name;
 
     if (spec.depth_policy.has_value()) {
         const std::string policy = spec.depth_policy.value();
@@ -188,6 +189,9 @@ Asset::AnchorFollowTarget apply_follower_binding_defaults(Asset* controller_asse
         if (binding.anchor_name.empty()) {
             binding.anchor_name = default_binding->anchor_name;
         }
+        if (binding.follower_anchor_name.empty()) {
+            binding.follower_anchor_name = default_binding->follower_anchor_name;
+        }
         if (!binding.depth_policy.has_value() && default_binding->depth_policy.has_value()) {
             binding.depth_policy = default_binding->depth_policy;
         }
@@ -225,6 +229,9 @@ Asset::AnchorFollowTarget apply_follower_binding_defaults(Asset* controller_asse
 
         if (binding.anchor_name.empty() && !spec.anchor_name.empty()) {
             binding.anchor_name = spec.anchor_name;
+        }
+        if (binding.follower_anchor_name.empty() && !spec.follower_anchor_name.empty()) {
+            binding.follower_anchor_name = spec.follower_anchor_name;
         }
         if (!binding.depth_policy.has_value() && spec.depth_policy.has_value()) {
             if (auto parsed = parse_depth(spec.depth_policy.value())) {

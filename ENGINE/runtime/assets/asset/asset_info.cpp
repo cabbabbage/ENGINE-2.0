@@ -1108,6 +1108,9 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                         if (binding.contains("anchor_name") && binding["anchor_name"].is_string()) {
                                 spec.anchor_name = binding["anchor_name"].get<std::string>();
                         }
+                        if (binding.contains("follower_anchor_name") && binding["follower_anchor_name"].is_string()) {
+                                spec.follower_anchor_name = binding["follower_anchor_name"].get<std::string>();
+                        }
                         if (binding.contains("depth_policy") && binding["depth_policy"].is_string()) {
                                 spec.depth_policy = binding["depth_policy"].get<std::string>();
                         }

@@ -82,6 +82,7 @@ class Asset {
         Asset*       source = nullptr;
         std::string  controller_asset_id;
         std::string  anchor_name;
+        std::string  follower_anchor_name;
         std::optional<anchor_points::AnchorDepthPolicy> depth_policy;
         enum class LayerPolicy {
             MatchResolvedAnchor,

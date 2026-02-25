@@ -1027,6 +1027,16 @@
     "vibble_eyes": {
       "animations": {
         "default": {
+          "anchor_points": [
+            [
+              {
+                "in_front": true,
+                "name": "eyes",
+                "texture_x": 899,
+                "texture_y": 493
+              }
+            ]
+          ],
           "flipped_source": false,
           "locked": false,
           "loop": true,
@@ -1045,6 +1055,13 @@
       "asset_name": "vibble_eyes",
       "asset_type": "object",
       "can_invert": false,
+      "follower_binding": {
+        "anchor_name": "eyes",
+        "controller_asset_id": "vibble",
+        "depth_policy": "match_owner",
+        "follower_anchor_name": "eyes",
+        "layer_policy": "match_controller_asset"
+      },
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,

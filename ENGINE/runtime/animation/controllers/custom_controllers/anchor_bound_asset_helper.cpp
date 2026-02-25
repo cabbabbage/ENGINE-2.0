@@ -7,7 +7,8 @@
 
 AnchorBoundAssetHelper::Handle AnchorBoundAssetHelper::bind_follower(
         const std::string& anchor_name,
-        const std::string& follower_asset_id) {
+        const std::string& follower_asset_id,
+        const std::string& follower_anchor_name) {
     if (!controller_asset_) {
         return {};
     }
@@ -17,7 +18,13 @@ AnchorBoundAssetHelper::Handle AnchorBoundAssetHelper::bind_follower(
         return {};
     }
 
-    Asset* created = assets->bind_follower(controller_asset_, follower_asset_id, anchor_name);
+    Asset::AnchorFollowTarget binding{};
+    binding.anchor_name = anchor_name;
+    if (!follower_anchor_name.empty()) {
+        binding.follower_anchor_name = follower_anchor_name;
+    }
+
+    Asset* created = assets->bind_follower(controller_asset_, follower_asset_id, binding);
     if (!created) {
         return {};
     }

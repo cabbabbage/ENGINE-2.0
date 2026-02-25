@@ -1142,6 +1142,25 @@ void Asset::apply_anchor_follow_target() {
         int target_z = resolved->world_z;
         int target_layer = resolved->resolution_layer;
 
+        // Optional anchor-to-anchor alignment: keep a specific follower anchor glued to the source anchor.
+        if (!follow.follower_anchor_name.empty() && current_frame) {
+                if (current_frame->find_anchor(follow.follower_anchor_name) != nullptr) {
+                        auto follower_anchor = anchor_state(follow.follower_anchor_name,
+                                                            anchor_points::GridMaterialization::None,
+                                                            anchor_points::AnchorDepthPolicy::MatchOwner);
+                        if (follower_anchor.has_value() &&
+                            !follower_anchor->missing &&
+                            follower_anchor->has_canonical_texture_source) {
+                                const int offset_x = follower_anchor->world_px.x - world_x();
+                                const int offset_y = follower_anchor->world_px.y - world_y();
+                                const int offset_z = follower_anchor->world_z - world_z();
+                                target_px.x -= offset_x;
+                                target_px.y -= offset_y;
+                                target_z -= offset_z;
+                        }
+                }
+        }
+
         if (follow.layer_policy.has_value() &&
             follow.layer_policy.value() == AnchorFollowTarget::LayerPolicy::MatchControllerAsset) {
                 if (auto* source_gp = source->grid_point()) {

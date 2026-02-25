@@ -88,6 +88,7 @@ class AssetInfo {
     struct FollowerBindingSpec {
         std::string controller_asset_id;
         std::string anchor_name;
+        std::string follower_anchor_name;
         std::optional<std::string> depth_policy;
         std::optional<std::string> layer_policy;
 

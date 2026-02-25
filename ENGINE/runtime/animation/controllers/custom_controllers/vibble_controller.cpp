@@ -287,13 +287,17 @@ void vibble_controller::spawn_eyes_follower() {
     }
 
     std::string anchor_name = "eyes";
+    std::string follower_anchor_name = "eyes";
     constexpr const char* kFollowerAssetName = "vibble_eyes";
     if (auto follower_info = assets->library().get(kFollowerAssetName); follower_info && follower_info->follower_binding.has_value()) {
         const auto& spec = follower_info->follower_binding.value();
         if (!spec.anchor_name.empty()) {
             anchor_name = spec.anchor_name;
         }
+        if (!spec.follower_anchor_name.empty()) {
+            follower_anchor_name = spec.follower_anchor_name;
+        }
     }
 
-    eyes_follower_ = anchor_helper_->bind_follower(anchor_name, kFollowerAssetName);
+    eyes_follower_ = anchor_helper_->bind_follower(anchor_name, kFollowerAssetName, follower_anchor_name);
 }

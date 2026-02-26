@@ -64,6 +64,8 @@ private:
     void destroy_editor(bool persist_changes);
     std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(Mode mode);
     void frame_camera_for_editor_entry();
+    void save_and_update();
+    void request_exit();
 
     void capture_camera_state();
     void restore_camera_state();
@@ -82,6 +84,7 @@ private:
     Mode mode_ = Mode::Movement;
     int snap_resolution_r_ = 0;
     bool snap_resolution_override_ = false;
+    bool exit_requested_ = false;
     bool prev_asset_hidden_ = false;
 
     std::unique_ptr<devmode::frame_editors::FrameEditorBase> active_editor_;

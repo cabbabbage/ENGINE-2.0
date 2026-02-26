@@ -1,5 +1,7 @@
 #include "AnimationDocument.hpp"
 
+#include "devtools/core/dev_json_store.hpp"
+
 #include <SDL3/SDL_log.h>
 
 #include <algorithm>
@@ -10,8 +12,8 @@
 #include <optional>
 #include <nlohmann/json.hpp>
 
-#include "devtools/core/dev_json_store.hpp"
 #include "assets/animation.hpp"
+#include "string_utils.hpp"
 
 namespace {
 
@@ -312,6 +314,11 @@ nlohmann::json parse_payload(const std::string& payload_dump, const std::string&
     return coerce_payload(animation_id, parsed);
 }
 
+std::string normalize_animation_id(std::string value) {
+    std::string trimmed = animation_editor::strings::trim_copy(value);
+    return animation_editor::strings::to_lower_copy(trimmed);
+}
+
 }
 
 namespace animation_editor {
@@ -516,7 +523,7 @@ bool AnimationDocument::consume_dirty_flag() const {
 }
 
 void AnimationDocument::create_animation(const std::string& animation_id) {
-    std::string base = animation_id.empty() ? std::string{"animation"} : animation_id;
+    std::string base = normalize_animation_id(animation_id.empty() ? std::string{"animation"} : animation_id);
     std::string candidate = base;
     int suffix = 2;
     while (animations_.count(candidate) != 0) {
@@ -530,6 +537,7 @@ void AnimationDocument::create_animation(const std::string& animation_id) {
                                                                     {"name", nullptr},
                                                                 })},
                                                 }));
+    payload["crop_frames"] = true;
     animations_[candidate] = serialize_payload(payload);
     if (!start_animation_.has_value() || start_animation_->empty()) {
         start_animation_ = candidate;
@@ -589,11 +597,13 @@ void AnimationDocument::set_start_animation(const std::string& animation_id) {
 }
 
 void AnimationDocument::rename_animation(const std::string& old_id, const std::string& new_id) {
-    if (old_id.empty() || new_id.empty() || old_id == new_id) return;
+    if (old_id.empty() || new_id.empty()) return;
+    std::string normalized = normalize_animation_id(new_id);
+    if (normalized.empty() || normalized == old_id) return;
     auto it = animations_.find(old_id);
     if (it == animations_.end()) return;
 
-    std::string base = new_id;
+    std::string base = normalized;
     std::string candidate = base;
     int suffix = 2;
     while (animations_.count(candidate) != 0 && candidate != old_id) {
@@ -783,6 +793,7 @@ void AnimationDocument::ensure_document_initialized() {
                                                                                        {"path", "default"},
                                                                                        {"name", ""}}},
                                                        }));
+        payload["crop_frames"] = true;
         animations_["default"] = serialize_payload(payload);
         ids.push_back("default");
         start_animation_ = std::string{"default"};

@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 #include <optional>
+#include <stdexcept>
 
 #include "animation/animation_update.hpp"
 #include "assets/Asset.hpp"
@@ -23,20 +23,38 @@ float anchor_height_px(const Asset& asset) {
     return asset.runtime_height_px();
 }
 
-PixelLockedAnchor resolve_pixel_locked_anchor(const Asset& asset,
+FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
+                                              AnchorDepthPolicy,
                                               GridMaterialization) {
-    PixelLockedAnchor result{};
-    result.resolved.world_px = asset.world_point();
-    result.resolved.world_z = asset.world_z();
-    result.screen_px = SDL_FPoint{static_cast<float>(asset.world_x()), static_cast<float>(asset.world_y())};
-    result.resolved.in_front = anchor.in_front;
-    result.resolved.missing = false;
-    return result;
+    FrameAnchorSample sample{};
+    sample.resolved.world_px = asset.world_point();
+    sample.resolved.world_z = asset.world_z();
+    sample.screen_px = SDL_FPoint{static_cast<float>(asset.world_x()), static_cast<float>(asset.world_y())};
+    sample.resolved.in_front = anchor.in_front;
+    sample.resolved.source_texture_px = SDL_Point{anchor.texture_x, anchor.texture_y};
+    sample.resolved.has_canonical_texture_source = true;
+    sample.resolved.missing = false;
+    return sample;
 }
 
-ResolvedAnchor resolve_anchor_point(const Asset&, const DisplacedAssetAnchorPoint&, GridMaterialization) {
-    return ResolvedAnchor{};
+PixelLockedAnchor resolve_pixel_locked_anchor(const Asset& asset,
+                                              const DisplacedAssetAnchorPoint& anchor,
+                                              GridMaterialization grid_policy) {
+    const auto sample = resolve_frame_anchor_sample(asset,
+                                                    anchor,
+                                                    anchor.in_front ? AnchorDepthPolicy::InFront : AnchorDepthPolicy::Behind,
+                                                    grid_policy);
+    return PixelLockedAnchor{sample.resolved, sample.screen_px};
+}
+
+ResolvedAnchor resolve_anchor_point(const Asset& asset,
+                                    const DisplacedAssetAnchorPoint& anchor,
+                                    GridMaterialization grid_policy) {
+    return resolve_frame_anchor_sample(asset,
+                                       anchor,
+                                       anchor.in_front ? AnchorDepthPolicy::InFront : AnchorDepthPolicy::Behind,
+                                       grid_policy).resolved;
 }
 
 }
@@ -44,19 +62,19 @@ ResolvedAnchor resolve_anchor_point(const Asset&, const DisplacedAssetAnchorPoin
 #else
 
 struct FrameDimensions {
-    int frame_w = 0;      // Unscaled frame width (texture space)
-    int frame_h = 0;      // Unscaled frame height (texture space)
-    int final_w = 0;      // Scaled dimensions used for world quad (pre-perspective)
+    int frame_w = 0;
+    int frame_h = 0;
+    int final_w = 0;
     int final_h = 0;
     SDL_FlipMode flip = SDL_FLIP_NONE;
+    float world_z_offset = 0.0f;
 };
 
-struct SpriteQuad {
-    SDL_FPoint tl{};
-    SDL_FPoint tr{};
-    SDL_FPoint br{};
-    SDL_FPoint bl{};
-};
+void assert_anchor_is_canonical_texture_pixel(const DisplacedAssetAnchorPoint& anchor) {
+    if (anchor.texture_x < 0 || anchor.texture_y < 0) {
+        throw std::runtime_error("Anchor resolver invariant failure: canonical texture pixel coordinates must be non-negative");
+    }
+}
 
 float safe_remainder_scale(const Asset& asset) {
     float remainder = asset.current_remaining_scale_adjustment;
@@ -100,43 +118,76 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
     }
 
     const float remainder = safe_remainder_scale(asset);
-    const int final_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_w) * remainder)));
-    const int final_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_h) * remainder)));
-
     out.frame_w = frame_w;
     out.frame_h = frame_h;
-    out.final_w = final_w;
-    out.final_h = final_h;
+    out.final_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_w) * remainder)));
+    out.final_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_h) * remainder)));
     out.flip = asset.flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
+    out.world_z_offset = asset.world_z_offset();
     return true;
 }
 
-std::optional<SpriteQuad> compute_sprite_quad(const Asset& asset,
-                                              const FrameDimensions& dims,
-                                              const WarpedScreenGrid& cam,
-                                              float perspective_scale) {
-    if (dims.final_w <= 0 || dims.final_h <= 0) {
-        return std::nullopt;
+SDL_FPoint compute_anchor_uv(const Asset& asset,
+                             const DisplacedAssetAnchorPoint& anchor,
+                             const FrameDimensions& dims) {
+    // Texture origin is top-left; +X right, +Y down. The canonical anchor lives at the center of
+    // the named pixel (x+0.5, y+0.5). Horizontal flips mirror U after the pixel-center conversion.
+    // Keep this in lockstep with the editor preview math.
+    //
+    // Scale variants: active textures may be pre-scaled copies of the canonical sprite. Anchors in
+    // the manifest are expressed in canonical pixel space, so scale them into the active variant
+    // before converting to UVs. This keeps anchors glued to the same relative pixel regardless of
+    // which variant (and thus which mode: dev or game) is selected.
+
+    const float variant_scale = (std::isfinite(asset.current_nearest_variant_scale) &&
+                                 asset.current_nearest_variant_scale > 0.0f)
+                                    ? asset.current_nearest_variant_scale
+                                    : 1.0f;
+
+    const float scaled_x_f = static_cast<float>(anchor.texture_x) * variant_scale;
+    const float scaled_y_f = static_cast<float>(anchor.texture_y) * variant_scale;
+
+    SDL_Point scaled_px{
+        static_cast<int>(std::lround(scaled_x_f)),
+        static_cast<int>(std::lround(scaled_y_f))
+    };
+
+    // Clamp after rounding to avoid sampling outside the active frame.
+    if (dims.frame_w > 0) {
+        scaled_px.x = std::clamp(scaled_px.x, 0, dims.frame_w - 1);
+    }
+    if (dims.frame_h > 0) {
+        scaled_px.y = std::clamp(scaled_px.y, 0, dims.frame_h - 1);
     }
 
-    const float half_width = static_cast<float>(dims.final_w) * 0.5f / perspective_scale;
-    const float height = static_cast<float>(dims.final_h) / perspective_scale;
+    return anchor_points::anchor_pixel_to_uv(scaled_px,
+                                             dims.frame_w,
+                                             dims.frame_h,
+                                             dims.flip);
+}
+
+SDL_FPoint compute_anchor_screen_from_mesh(const Asset& asset,
+                                           const FrameDimensions& dims,
+                                           const SDL_FPoint& uv,
+                                           const WarpedScreenGrid& cam,
+                                           float perspective_scale) {
     const float world_x = asset.smoothed_translation_x();
     const float world_y = asset.smoothed_translation_y();
-    const float base_z = asset.world_z_offset();
+    const float safe_perspective = (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
+    const float world_width = static_cast<float>(dims.final_w) / safe_perspective;
+    const float world_height = static_cast<float>(dims.final_h) / safe_perspective;
+    const float half_width = world_width * 0.5f;
 
     SDL_FPoint screen_bl{};
     SDL_FPoint screen_br{};
-    if (!cam.project_world_point(SDL_FPoint{world_x - half_width, world_y}, base_z, screen_bl) ||
-        !cam.project_world_point(SDL_FPoint{world_x + half_width, world_y}, base_z, screen_br)) {
-        return std::nullopt;
-    }
+    cam.project_world_point(SDL_FPoint{world_x - half_width, world_y}, dims.world_z_offset, screen_bl);
+    cam.project_world_point(SDL_FPoint{world_x + half_width, world_y}, dims.world_z_offset, screen_br);
 
     const float bottom_dx = screen_br.x - screen_bl.x;
     const float bottom_dy = screen_br.y - screen_bl.y;
     const float bottom_len = std::hypot(bottom_dx, bottom_dy);
     if (bottom_len < 1e-5f) {
-        return std::nullopt;
+        return screen_bl;
     }
 
     const float aspect = (dims.frame_w > 0 && dims.frame_h > 0)
@@ -145,9 +196,6 @@ std::optional<SpriteQuad> compute_sprite_quad(const Asset& asset,
     float screen_height = bottom_len * aspect;
     if (!std::isfinite(screen_height) || screen_height <= 0.0f) {
         screen_height = std::abs(screen_height);
-        if (screen_height <= 0.0f) {
-            screen_height = height;
-        }
     }
 
     const float nx = -bottom_dy / bottom_len;
@@ -162,71 +210,32 @@ std::optional<SpriteQuad> compute_sprite_quad(const Asset& asset,
     const float avg_top_a = 0.5f * (cand_tl_a.y + cand_tr_a.y);
     const float avg_top_b = 0.5f * (cand_tl_b.y + cand_tr_b.y);
 
-    SpriteQuad quad{};
-    if ((avg_top_a < avg_bottom_y && avg_top_a <= avg_top_b) ||
-        (avg_top_a <= avg_top_b && !(avg_top_b < avg_bottom_y))) {
-        quad.tl = cand_tl_a;
-        quad.tr = cand_tr_a;
+    SDL_FPoint screen_tl{};
+    SDL_FPoint screen_tr{};
+    if (avg_top_a <= avg_top_b) {
+        screen_tl = cand_tl_a;
+        screen_tr = cand_tr_a;
     } else {
-        quad.tl = cand_tl_b;
-        quad.tr = cand_tr_b;
+        screen_tl = cand_tl_b;
+        screen_tr = cand_tr_b;
     }
-    quad.bl = screen_bl;
-    quad.br = screen_br;
-    return quad;
-}
-
-SDL_FPoint lerp_point(const SDL_FPoint& a, const SDL_FPoint& b, float t) {
-    return SDL_FPoint{a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t};
-}
-
-std::optional<std::pair<SDL_FPoint, double>> unproject_to_world_y(const SDL_FPoint& screen,
-                                                                  double target_world_y,
-                                                                  const WarpedScreenGrid& cam) {
-    const world::CameraProjectionParams params = cam.projection_params();
-    if (params.screen_width <= 0 || params.screen_height <= 0) {
-        return std::nullopt;
+    if ((avg_top_a < avg_bottom_y) != (avg_top_b < avg_bottom_y)) {
+        if (avg_top_a < avg_bottom_y) {
+            screen_tl = cand_tl_a;
+            screen_tr = cand_tr_a;
+        } else {
+            screen_tl = cand_tl_b;
+            screen_tr = cand_tr_b;
+        }
     }
 
-    const double zoom = std::max(1e-6, params.screen_zoom);
-    const double ndc_x = (static_cast<double>(screen.x) / static_cast<double>(params.screen_width) * 2.0 - 1.0) / zoom;
-    const double ndc_y = (1.0 - (static_cast<double>(screen.y) - params.screen_pan_y_px) / static_cast<double>(params.screen_height) * 2.0) / zoom;
-
-    const double tan_fov_x = std::max(1e-6, params.tan_half_fov_x);
-    const double tan_fov_y = std::max(1e-6, params.tan_half_fov_y);
-
-    const Vec3 cam_pos{params.position_x, params.position_y, params.position_z};
-    const Vec3 cam_forward{params.forward_x, params.forward_y, params.forward_z};
-    const Vec3 cam_right{params.right_x, params.right_y, params.right_z};
-    const Vec3 cam_up{params.up_x, params.up_y, params.up_z};
-
-    const double denom = cam_forward.y + ndc_x * tan_fov_x * cam_right.y + ndc_y * tan_fov_y * cam_up.y;
-    if (std::abs(denom) <= 1e-9) {
-        return std::nullopt;
-    }
-
-    const double meters_scale = std::max(1e-6, params.meters_scale);
-    const double target_y_meters = (target_world_y - params.anchor_world_y) * meters_scale;
-    const double depth = (target_y_meters - cam_pos.y) / denom;
-    if (!std::isfinite(depth) || depth <= params.near_plane || depth >= params.far_plane) {
-        return std::nullopt;
-    }
-
-    const double cam_x = depth * ndc_x * tan_fov_x;
-    const double cam_z = depth * ndc_y * tan_fov_y;
-    const Vec3 world_meters{
-        cam_pos.x + cam_forward.x * depth + cam_right.x * cam_x + cam_up.x * cam_z,
-        cam_pos.y + cam_forward.y * depth + cam_right.y * cam_x + cam_up.y * cam_z,
-        cam_pos.z + cam_forward.z * depth + cam_right.z * cam_x + cam_up.z * cam_z
-    };
-
-    const double inv_scale = 1.0 / meters_scale;
-    SDL_FPoint world_px{
-        static_cast<float>(world_meters.x * inv_scale + params.anchor_world_x),
-        static_cast<float>(world_meters.y * inv_scale + params.anchor_world_y)
-    };
-    const double world_z = world_meters.z * inv_scale;
-    return std::make_pair(world_px, world_z);
+    const SDL_FPoint top{
+        screen_tl.x + (screen_tr.x - screen_tl.x) * uv.x,
+        screen_tl.y + (screen_tr.y - screen_tl.y) * uv.x};
+    const SDL_FPoint bottom{
+        screen_bl.x + (screen_br.x - screen_bl.x) * uv.x,
+        screen_bl.y + (screen_br.y - screen_bl.y) * uv.x};
+    return SDL_FPoint{top.x + (bottom.x - top.x) * uv.y, top.y + (bottom.y - top.y) * uv.y};
 }
 
 }  // namespace
@@ -242,110 +251,95 @@ float anchor_height_px(const Asset& asset) {
     return (h > 0) ? static_cast<float>(h) : 0.0f;
 }
 
-PixelLockedAnchor resolve_pixel_locked_anchor(const Asset& asset,
+FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
+                                              AnchorDepthPolicy depth_policy,
                                               GridMaterialization grid_policy) {
-    PixelLockedAnchor result{};
-    result.resolved.in_front = anchor.in_front;
-    if (!asset.get_assets()) {
-        result.resolved.missing = true;
-        return result;
+    FrameAnchorSample sample{};
+    sample.resolved.in_front = anchor.in_front;
+
+    Assets* assets_owner = asset.get_assets();
+    if (!assets_owner) {
+        sample.resolved.missing = true;
+        return sample;
     }
 
     FrameDimensions dims{};
     if (!gather_frame_dimensions(asset, dims)) {
-        result.resolved.missing = true;
-        return result;
+        sample.resolved.missing = true;
+        return sample;
     }
 
-    if (!anchor.has_pixel_coords && !anchor.has_normalized_coords) {
-        result.resolved.missing = true;
-        return result;
-    }
+    assert_anchor_is_canonical_texture_pixel(anchor);
 
-    Assets* assets_owner = asset.get_assets();
-    WarpedScreenGrid& cam = assets_owner->getView();
-    world::WorldGrid& grid = assets_owner->world_grid();
+    const SDL_FPoint uv = compute_anchor_uv(asset, anchor, dims);
+    sample.uv = uv;
+
     const world::GridPoint* owner_gp = asset.grid_point();
     const float perspective_scale = owner_gp ? std::max(0.0001f, owner_gp->perspective_scale) : 1.0f;
     const int resolution_layer = owner_gp ? owner_gp->resolution_layer() : asset.grid_resolution;
 
-    auto quad_opt = compute_sprite_quad(asset, dims, cam, perspective_scale);
-    if (!quad_opt.has_value()) {
-        result.resolved.missing = true;
-        return result;
-    }
-    const SpriteQuad& quad = *quad_opt;
+    const float world_x = asset.smoothed_translation_x();
+    const float world_y = asset.smoothed_translation_y();
+    const float safe_perspective = (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
+    const float world_width = static_cast<float>(dims.final_w) / safe_perspective;
+    const float world_height = static_cast<float>(dims.final_h) / safe_perspective;
 
-    auto fraction_from_pixels = [](int pixel, int dimension) -> float {
-        if (dimension <= 0) {
-            return 0.5f;
-        }
-        return (static_cast<float>(pixel) + 0.5f) / static_cast<float>(dimension);
-    };
-    auto fraction_from_normalized = [](float normalized, int dimension) -> std::optional<float> {
-        if (!std::isfinite(normalized) || dimension <= 0) {
-            return std::nullopt;
-        }
-        return std::clamp(normalized, 0.0f, 1.0f);
-    };
+    const float anchor_world_x = world_x + (uv.x - 0.5f) * world_width;
+    const float anchor_world_y = world_y;
+    const float anchor_world_z = dims.world_z_offset + (1.0f - uv.y) * world_height;
 
-    const bool use_normalized = !anchor.has_pixel_coords && anchor.has_normalized_coords;
-    const std::optional<float> norm_x = use_normalized ? fraction_from_normalized(anchor.normalized_x, dims.frame_w) : std::nullopt;
-    const std::optional<float> norm_z = use_normalized ? fraction_from_normalized(anchor.normalized_z, dims.frame_h) : std::nullopt;
-
-    const float fx_raw = norm_x.has_value()
-        ? *norm_x
-        : fraction_from_pixels(anchor.texture_x, dims.frame_w);
-    const float fz_raw = norm_z.has_value()
-        ? *norm_z
-        : fraction_from_pixels(anchor.texture_z, dims.frame_h);
-
-    const float fx = std::clamp(fx_raw, 0.0f, 1.0f);
-    const float fz = std::clamp(fz_raw, 0.0f, 1.0f);
-    const float u = ((dims.flip & SDL_FLIP_HORIZONTAL) != 0) ? (1.0f - fx) : fx;
-
-    const SDL_FPoint bottom = lerp_point(quad.bl, quad.br, u);
-    const SDL_FPoint top = lerp_point(quad.tl, quad.tr, u);
-    const SDL_FPoint screen_anchor = lerp_point(top, bottom, fz);
-    result.screen_px = screen_anchor;
-
-    const int base_world_y = asset.world_y();
-    const int depth_offset = anchor.in_front ? 1 : -1;
-    const double target_world_y = static_cast<double>(base_world_y + depth_offset);
-
-    auto world_opt = unproject_to_world_y(screen_anchor, target_world_y, cam);
-    if (!world_opt.has_value()) {
-        result.resolved.missing = true;
-        return result;
+    int depth_delta = 0;
+    if (depth_policy == AnchorDepthPolicy::InFront) {
+        depth_delta = 1;
+    } else if (depth_policy == AnchorDepthPolicy::Behind) {
+        depth_delta = -1;
     }
 
-    const SDL_FPoint world_px_f = world_opt->first;
-    const int world_x = static_cast<int>(std::lround(world_px_f.x));
-    const int world_y = static_cast<int>(std::lround(world_px_f.y));
-    const int world_z = static_cast<int>(std::lround(world_opt->second));
+    const int resolved_x = static_cast<int>(std::lround(anchor_world_x));
+    const int resolved_y = static_cast<int>(std::lround(anchor_world_y)) + depth_delta;
+    const int resolved_z = static_cast<int>(std::lround(anchor_world_z));
 
-    result.resolved.world_px = SDL_Point{world_x, world_y};
-    result.resolved.world_z = world_z;
-    result.resolved.resolution_layer = resolution_layer;
-    result.resolved.in_front = anchor.in_front;
-    result.resolved.missing = false;
+    sample.resolved.world_px = SDL_Point{resolved_x, resolved_y};
+    sample.resolved.world_z = resolved_z;
+    sample.resolved.resolution_layer = resolution_layer;
+    sample.resolved.source_texture_px = SDL_Point{anchor.texture_x, anchor.texture_y};
+    sample.resolved.has_canonical_texture_source = true;
+    sample.resolved.missing = false;
 
+    world::WorldGrid& grid = assets_owner->world_grid();
+    const world::GridKey key{resolved_x, resolved_y, resolved_z, resolution_layer};
     if (grid_policy == GridMaterialization::Ensure) {
-        const world::GridKey key{world_x, world_y, world_z, resolution_layer};
-        result.resolved.grid_point = &grid.find_or_create_grid_point(key);
+        sample.resolved.grid_point = &grid.find_or_create_grid_point(key);
     } else {
-        const world::GridKey key{world_x, world_y, world_z, resolution_layer};
-        result.resolved.grid_point = grid.find_grid_point_strict(key);
+        sample.resolved.grid_point = grid.find_grid_point_strict(key);
     }
 
-    return result;
+    sample.screen_px = compute_anchor_screen_from_mesh(asset,
+                                                       dims,
+                                                       uv,
+                                                       assets_owner->getView(),
+                                                       perspective_scale);
+    return sample;
+}
+
+PixelLockedAnchor resolve_pixel_locked_anchor(const Asset& asset,
+                                              const DisplacedAssetAnchorPoint& anchor,
+                                              GridMaterialization grid_policy) {
+    const auto sample = resolve_frame_anchor_sample(asset,
+                                                    anchor,
+                                                    anchor.in_front ? AnchorDepthPolicy::InFront : AnchorDepthPolicy::Behind,
+                                                    grid_policy);
+    return PixelLockedAnchor{sample.resolved, sample.screen_px};
 }
 
 ResolvedAnchor resolve_anchor_point(const Asset& asset,
                                     const DisplacedAssetAnchorPoint& anchor,
                                     GridMaterialization grid_policy) {
-    return resolve_pixel_locked_anchor(asset, anchor, grid_policy).resolved;
+    return resolve_frame_anchor_sample(asset,
+                                       anchor,
+                                       anchor.in_front ? AnchorDepthPolicy::InFront : AnchorDepthPolicy::Behind,
+                                       grid_policy).resolved;
 }
 
 }

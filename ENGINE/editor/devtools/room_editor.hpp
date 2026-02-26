@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "devtools/dev_camera_controls.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include "utils/input.hpp"
 
 class Asset;
@@ -59,6 +60,7 @@ public:
     void set_map_assets_panel_callback(std::function<void()> cb);
     void set_boundary_assets_panel_callback(std::function<void()> cb);
     void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
 
     void set_enabled(bool enabled, bool preserve_camera_state = false);
     bool is_enabled() const { return enabled_; }
@@ -111,6 +113,7 @@ public:
     void clear_selection();
     void clear_highlighted_assets();
     void purge_asset(Asset* asset);
+    void set_pointer_queries_suspended(bool suspended);
 
     const std::vector<Asset*>& get_selected_assets() const { return selected_assets_; }
     const std::vector<Asset*>& get_highlighted_assets() const { return highlighted_assets_; }
@@ -180,7 +183,14 @@ private:
         bool active = false;
 };
     void handle_mouse_input(const Input& input);
+    bool apply_shift_edge_pan(const Input& input, WarpedScreenGrid& cam);
+    static float edge_pan_intensity(int value, int max_value, float threshold_fraction);
     bool handle_camera_settings_mouse_controls(const Input& input);
+    bool apply_scroll_size_adjustment(const Input& input);
+    void apply_asset_scale_live_update(Asset* asset, int scale_percent);
+    bool select_asset_or_group(Asset* asset);
+    Asset* selected_asset_within_interaction_radius(SDL_Point screen_point) const;
+    bool delete_selected_asset_or_group();
     Asset* hit_test_asset(SDL_Point screen_point, SDL_Renderer* renderer) const;
     void update_hover_state(Asset* hit);
     void handle_click(const Input& input);
@@ -223,6 +233,8 @@ private:
     SDL_Point spawn_groups_anchor_point() const;
     void clear_active_spawn_group_target();
     void sync_spawn_group_panel_with_selection();
+    void update_grid_resolution_for_selection(Asset* primary);
+    void clear_selection_grid_resolution_override();
     void update_exact_json(nlohmann::json& entry, const Asset& asset, SDL_Point center, int width, int height);
     void update_percent_json(nlohmann::json& entry, const Asset& asset, SDL_Point center, int width, int height);
     void save_perimeter_json(nlohmann::json& entry, int dx, int dy, int orig_w, int orig_h, int radius);
@@ -231,6 +243,7 @@ private:
     double edge_length_along_direction(const Area& area, SDL_Point center, SDL_FPoint direction) const;
     void respawn_spawn_group(const nlohmann::json& entry);
     std::unique_ptr<vibble::grid::Occupancy> build_room_grid(const std::string& ignore_spawn_id) const;
+    bool snap_spawn_group_to_resolution(Asset* anchor, int resolution);
     void render_room_labels(SDL_Renderer* renderer);
     void render_room_label(SDL_Renderer* renderer, Room* room, SDL_FPoint desired_center);
     SDL_Rect label_background_rect(int text_w, int text_h, SDL_FPoint desired_center) const;
@@ -262,7 +275,12 @@ private:
     void open_spawn_group_editor_by_id(const std::string& spawn_id);
     void reopen_room_configurator();
     void notify_room_assets_saved();
-    void save_current_room_assets_json();
+    bool enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority priority);
+    bool save_current_room_assets_json();
+    bool validate_room_edit_invariants(std::string* error = nullptr);
+    bool commit_room_edit_transaction(const std::function<bool()>& mutate,
+                                      const std::string& action_label,
+                                      bool refresh_ui_on_success = true);
     void copy_selected_spawn_group();
     void paste_spawn_group_from_clipboard();
     std::optional<std::string> selected_spawn_group_id() const;
@@ -346,6 +364,7 @@ private:
     std::array<bool, static_cast<size_t>(BlockingPanel::Count)> blocking_panel_visible_{};
 
     Asset* hovered_asset_ = nullptr;
+    bool pointer_queries_suspended_ = false;
     std::vector<Asset*> selected_assets_;
     std::vector<Asset*> highlighted_assets_;
     bool highlight_dirty_ = true;
@@ -375,12 +394,14 @@ private:
     double drag_edge_inset_percent_ = 100.0;
 
     devmode::core::ManifestStore* manifest_store_ = nullptr;
+    devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
     int drag_perimeter_curr_h_ = 0;
     bool drag_moved_ = false;
     std::string drag_spawn_id_;
     bool suppress_next_left_click_ = false;
 
-    std::optional<int> overlay_resolution_before_drag_{};
+    std::optional<int> selection_overlay_resolution_before_override_{};
+    std::optional<int> selection_overlay_resolution_override_{};
 
     int click_buffer_frames_ = 0;
     int rclick_buffer_frames_ = 0;
@@ -389,6 +410,7 @@ private:
     Uint32 last_click_time_ms_ = 0;
     std::optional<SDL_Point> pending_spawn_world_pos_{};
     std::optional<std::string> active_spawn_group_id_{};
+    std::uint64_t room_assets_edit_version_ = 0;
     bool suppress_spawn_group_close_clear_ = false;
     std::unique_ptr<SpawnGroupConfig> spawn_group_panel_{};
 
@@ -458,4 +480,3 @@ private:
     mutable std::unordered_map<Asset*, AssetSpatialEntry> asset_bounds_cache_;
     mutable std::unordered_map<int64_t, std::vector<Asset*>> spatial_grid_;
 };
-

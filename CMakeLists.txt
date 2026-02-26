@@ -247,15 +247,11 @@ endif()
 # ------------------------------------------
 # Unit tests (doctest-based)
 # ------------------------------------------
-set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/TESTS")
+set(TESTS_SOURCE_DIR "${CMAKE_SOURCE_DIR}/ENGINE/tests")
 set(TEST_ROOT "${CMAKE_SOURCE_DIR}/TEST_TMP")
 add_executable(engine_tests
-    ${TESTS_SOURCE_DIR}/test_main.cpp
-    ${TESTS_SOURCE_DIR}/test_dev_json_store.cpp
-    ${TESTS_SOURCE_DIR}/test_manifest_loader.cpp
-    ${TESTS_SOURCE_DIR}/test_scene_renderer_prereqs.cpp
-    ${TESTS_SOURCE_DIR}/test_attack_validation.cpp
-    ${TESTS_SOURCE_DIR}/frame_editor_session_test_helpers.cpp
+
+    ENGINE/tests/engine_tests_main.cpp
     ENGINE/runtime/assets/asset/animation.cpp
     ENGINE/runtime/assets/asset/surface_utils.cpp
     ENGINE/runtime/assets/asset/animation_cloner.cpp
@@ -323,126 +319,110 @@ endif()
 # ------------------------------------------
 # Isolated WorldGrid tests (lightweight target)
 # ------------------------------------------
-add_executable(engine_world_tests
+set(ENGINE_WORLD_TEST_SOURCES
     ${TESTS_SOURCE_DIR}/test_main.cpp
-    ${TESTS_SOURCE_DIR}/test_world_grid_same_chunk_move.cpp
+    ${TESTS_SOURCE_DIR}/test_terrain_determinism.cpp
     ENGINE/runtime/gameplay/world/world_grid.cpp
     ENGINE/runtime/gameplay/world/grid_point.cpp
     ENGINE/runtime/gameplay/world/chunk_manager.cpp
+    ENGINE/runtime/rendering/render/terrain_runtime_state.cpp
+    ENGINE/runtime/rendering/render/terrain_field.cpp
+    ENGINE/runtime/rendering/render/warped_screen_grid.cpp
+    ENGINE/runtime/rendering/render/camera_controller.cpp
+    ENGINE/runtime/rendering/render/image_effect_settings.cpp
+    ENGINE/runtime/utils/utils/area.cpp
+    ENGINE/runtime/utils/utils/grid.cpp
     ENGINE/runtime/utils/utils/grid_math.cpp
     ENGINE/runtime/utils/utils/FramePointResolver.cpp
     ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
     ENGINE/runtime/utils/utils/log.cpp
-    ENGINE/TESTS/stubs/asset/Asset_world_tests_stubs.cpp
+    ${TESTS_SOURCE_DIR}/stubs/asset/Asset_world_tests_stubs.cpp
     ${TESTS_SOURCE_DIR}/stubs/chunk_stubs.cpp
 )
 
-target_include_directories(engine_world_tests
-      PRIVATE
-          ${TESTS_SOURCE_DIR}/stubs
-          ${CMAKE_SOURCE_DIR}/ENGINE/runtime
-          ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-          ${CMAKE_SOURCE_DIR}/ENGINE/editor
-          ${CMAKE_SOURCE_DIR}/external
-)
+set(ENGINE_WORLD_TESTS_READY TRUE)
+foreach(_world_test_src IN LISTS ENGINE_WORLD_TEST_SOURCES)
+    if (NOT EXISTS "${_world_test_src}")
+        message(STATUS "Skipping engine_world_tests: missing source ${_world_test_src}")
+        set(ENGINE_WORLD_TESTS_READY FALSE)
+        break()
+    endif()
+endforeach()
 
-target_compile_definitions(engine_world_tests PRIVATE
-    PROJECT_ROOT="${TEST_ROOT}"
-    DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
-    ENGINE_WORLD_TESTS=1
-)
+if (ENGINE_WORLD_TESTS_READY)
+    add_executable(engine_world_tests
+        ${ENGINE_WORLD_TEST_SOURCES}
+    )
 
-# No heavy libs needed; these sources don't call into SDL functions
-# or OpenGL, they only use SDL types.
-target_link_libraries(engine_world_tests
-    PRIVATE
-        SDL3::SDL3
-)
-if (WINSDK_UM_X64_LIBDIR)
-    target_link_directories(engine_world_tests PRIVATE "${WINSDK_UM_X64_LIBDIR}")
-endif()
-if (WINSDK_UCRT_X64_LIBDIR)
-    target_link_directories(engine_world_tests PRIVATE "${WINSDK_UCRT_X64_LIBDIR}")
-endif()
-if (MSVC_LIB_DIR)
-    target_link_directories(engine_world_tests PRIVATE "${MSVC_LIB_DIR}")
+    target_include_directories(engine_world_tests
+          PRIVATE
+              ${TESTS_SOURCE_DIR}/stubs
+              ${CMAKE_SOURCE_DIR}/ENGINE/runtime
+              ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+              ${CMAKE_SOURCE_DIR}/ENGINE/editor
+              ${CMAKE_SOURCE_DIR}/external
+    )
+
+    target_compile_definitions(engine_world_tests PRIVATE
+        PROJECT_ROOT="${TEST_ROOT}"
+        DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
+        ENGINE_WORLD_TESTS=1
+    )
+
+    # No heavy libs needed; these sources don't call into SDL functions
+    # or OpenGL, they only use SDL types.
+    target_link_libraries(engine_world_tests
+        PRIVATE
+            SDL3::SDL3
+    )
+    if (WINSDK_UM_X64_LIBDIR)
+        target_link_directories(engine_world_tests PRIVATE "${WINSDK_UM_X64_LIBDIR}")
+    endif()
+    if (WINSDK_UCRT_X64_LIBDIR)
+        target_link_directories(engine_world_tests PRIVATE "${WINSDK_UCRT_X64_LIBDIR}")
+    endif()
+    if (MSVC_LIB_DIR)
+        target_link_directories(engine_world_tests PRIVATE "${MSVC_LIB_DIR}")
+    endif()
+else()
+    message(STATUS "Skipping engine_world_tests target.")
 endif()
 
 # ------------------------------------------
 # C++ Cache Tools (ENGINE/tools)
 # ------------------------------------------
 
+# Helper for CLI tools that share includes, definitions, and libs.
+function(add_cli_tool target_name entry_point)
+    add_executable(${target_name}
+        ENGINE/tools/cli/${entry_point}
+        ENGINE/tools/cli/image_cache_generator.cpp
+    )
+    target_include_directories(${target_name} PRIVATE
+        ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
+        ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
+        ${CMAKE_SOURCE_DIR}/external
+    )
+    target_compile_definitions(${target_name} PRIVATE
+        IMGCACHE_STB_IMAGE_IMPL=1
+        IMGCACHE_STB_IMAGE_WRITE_IMPL=1
+    )
+    target_link_libraries(${target_name} PRIVATE
+        nlohmann_json::nlohmann_json
+    )
+endfunction()
+
 # Asset Tool CLI - main cache generator
-add_executable(asset_tool_cli
-    ENGINE/tools/cli/asset_tool_cli.cpp
-    ENGINE/tools/cli/image_cache_generator.cpp
-)
-target_include_directories(asset_tool_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
-    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-    ${CMAKE_SOURCE_DIR}/external
-)
-target_compile_definitions(asset_tool_cli PRIVATE
-    IMGCACHE_STB_IMAGE_IMPL=1
-    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
-)
-target_link_libraries(asset_tool_cli PRIVATE
-    nlohmann_json::nlohmann_json
-)
+add_cli_tool(asset_tool_cli asset_tool_cli.cpp)
 
 # Set Rebuild Values CLI - manifest manipulation
-add_executable(set_rebuild_cli
-    ENGINE/tools/cli/set_rebuild_cli.cpp
-    ENGINE/tools/cli/image_cache_generator.cpp
-)
-target_include_directories(set_rebuild_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
-    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-    ${CMAKE_SOURCE_DIR}/external
-)
-target_compile_definitions(set_rebuild_cli PRIVATE
-    IMGCACHE_STB_IMAGE_IMPL=1
-    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
-)
-target_link_libraries(set_rebuild_cli PRIVATE
-    nlohmann_json::nlohmann_json
-)
+add_cli_tool(set_rebuild_cli set_rebuild_cli.cpp)
 
 # Cache Validator CLI - cache integrity validation
-add_executable(cache_validator_cli
-    ENGINE/tools/cli/cache_validator_cli.cpp
-    ENGINE/tools/cli/image_cache_generator.cpp
-)
-target_include_directories(cache_validator_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
-    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-    ${CMAKE_SOURCE_DIR}/external
-)
-target_compile_definitions(cache_validator_cli PRIVATE
-    IMGCACHE_STB_IMAGE_IMPL=1
-    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
-)
-target_link_libraries(cache_validator_cli PRIVATE
-    nlohmann_json::nlohmann_json
-)
+add_cli_tool(cache_validator_cli cache_validator_cli.cpp)
 
 # Apply Effects CLI - effect preview generation
-add_executable(apply_effects_cli
-    ENGINE/tools/cli/apply_effects_cli.cpp
-    ENGINE/tools/cli/image_cache_generator.cpp
-)
-target_include_directories(apply_effects_cli PRIVATE
-    ${CMAKE_SOURCE_DIR}/ENGINE/tools/cli
-    ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-    ${CMAKE_SOURCE_DIR}/external
-)
-target_compile_definitions(apply_effects_cli PRIVATE
-    IMGCACHE_STB_IMAGE_IMPL=1
-    IMGCACHE_STB_IMAGE_WRITE_IMPL=1
-)
-target_link_libraries(apply_effects_cli PRIVATE
-    nlohmann_json::nlohmann_json
-)
+add_cli_tool(apply_effects_cli apply_effects_cli.cpp)
 
 # Output all tools to ENGINE/tools directory
 foreach(tool_target asset_tool_cli set_rebuild_cli cache_validator_cli apply_effects_cli)

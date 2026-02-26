@@ -91,8 +91,8 @@ WorldGrid::WorldGrid(const GridPoint& origin, int r_chunk)
     , max_resolution_layers_(kDefaultMaxLayers) {
     // Map Grid ownership: all GridPoints created through ensure_point/ensure_child
     // live inside this container. Screen Grid rebuilds receive non-owning pointers
-    // only; do not transfer ownership out of WorldGrid. ChunkManager remains the
-    // legacy compatibility path for tiles during migration.
+    // only; do not transfer ownership out of WorldGrid. ChunkManager remains
+    // responsible for tile containers owned by the active map.
     invalidate_active_cache();
 }
 
@@ -134,10 +134,30 @@ ChunkManager& WorldGrid::chunks() {
     return chunks_;
 }
 
-GridId WorldGrid::make_point_id(int i, int j) const {
-    const std::uint32_t ux = static_cast<std::uint32_t>(i);
-    const std::uint32_t uy = static_cast<std::uint32_t>(j);
-    return (static_cast<GridId>(ux) << 32) | static_cast<GridId>(uy);
+GridId WorldGrid::make_point_id(int i, int j, int world_z, int resolution_layer, std::uint32_t salt) const {
+    auto mix = [](std::uint64_t value) {
+        value ^= value >> 30;
+        value *= 0xbf58476d1ce4e5b9ULL;
+        value ^= value >> 27;
+        value *= 0x94d049bb133111ebULL;
+        value ^= value >> 31;
+        return value;
+    };
+
+    const std::uint64_t ux = static_cast<std::uint32_t>(i);
+    const std::uint64_t uy = static_cast<std::uint32_t>(j);
+    const std::uint64_t uz = static_cast<std::uint32_t>(world_z);
+    const std::uint64_t ul = static_cast<std::uint32_t>(resolution_layer);
+    const std::uint64_t us = static_cast<std::uint64_t>(salt);
+
+    std::uint64_t state = 0x9e3779b97f4a7c15ULL;
+    state ^= mix(ux + 0x100000001b3ULL);
+    state ^= mix((uy << 1) + 0x100000001b3ULL);
+    state ^= mix((uz << 2) + 0x100000001b3ULL);
+    state ^= mix((ul << 3) + 0x100000001b3ULL);
+    state ^= mix((us << 4) + 0x100000001b3ULL);
+    const GridId id = static_cast<GridId>(mix(state));
+    return (id == 0) ? static_cast<GridId>(1) : id;
 }
 
 GridKey WorldGrid::grid_key_from_world(const GridPoint& world, int world_z, int layer) const {
@@ -189,6 +209,37 @@ const GridPoint* WorldGrid::point_for_asset(const Asset* asset) const {
         return nullptr;
     }
     return find_grid_point_strict(key_it->second);
+}
+
+std::unique_ptr<Asset> WorldGrid::extract_asset(Asset* a) {
+    if (!a) {
+        return nullptr;
+    }
+
+    auto key_it = asset_to_key_.find(a);
+    if (key_it == asset_to_key_.end()) {
+        return nullptr;
+    }
+
+    GridPoint* gp = find_grid_point_strict(key_it->second);
+    if (!gp) {
+        return nullptr;
+    }
+
+    auto resid_it = residency_.find(a);
+    Chunk* chunk = (resid_it != residency_.end()) ? resid_it->second : nullptr;
+
+    std::unique_ptr<Asset> owned = detach_asset_from_grid_point(a, *gp, true);
+    if (chunk) {
+        remove_from_chunk(a, chunk);
+    }
+    residency_.erase(a);
+    prune_empty_points();
+    return owned;
+}
+
+Asset* WorldGrid::attach_asset(std::unique_ptr<Asset> a, int world_z, int resolution_layer) {
+    return register_asset(std::move(a), world_z, resolution_layer);
 }
 
 Asset* WorldGrid::create_asset_at_point(std::unique_ptr<Asset> a, int world_z, int resolution_layer) {
@@ -305,12 +356,31 @@ void WorldGrid::attach_asset_to_grid_point(std::unique_ptr<Asset> owned, Asset* 
 }
 
 GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent, int world_z, int resolution_layer_override) {
-    const GridId id = make_point_id(grid_index.x, grid_index.y);
     const int resolution_layer = (resolution_layer_override >= 0) ? resolution_layer_override : default_resolution_layer();
     const int spacing = grid_spacing_for_layer(resolution_layer);
     const int canonical_world_x = origin_.world_x() + grid_index.x * spacing;
     const int canonical_world_y = origin_.world_y() + grid_index.y * spacing;
     const GridKey canonical_key{canonical_world_x, canonical_world_y, world_z, resolution_layer};
+
+    std::uint32_t salt = 0;
+    GridId id = make_point_id(grid_index.x, grid_index.y, world_z, resolution_layer, salt);
+    while (true) {
+        auto existing_it = points_.find(id);
+        if (existing_it == points_.end()) {
+            break;
+        }
+        const GridPoint& existing = existing_it->second;
+        const bool same_identity = existing.world_x() == canonical_world_x &&
+                                   existing.world_y() == canonical_world_y &&
+                                   existing.world_z() == world_z &&
+                                   existing.resolution_layer() == resolution_layer;
+        if (same_identity) {
+            key_to_id_[canonical_key] = id;
+            return existing_it->second;
+        }
+        ++salt;
+        id = make_point_id(grid_index.x, grid_index.y, world_z, resolution_layer, salt);
+    }
 
     auto [it, inserted] = points_.try_emplace(
         id,
@@ -335,7 +405,7 @@ GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, 
 GridPoint& WorldGrid::ensure_child(GridPoint& parent, GridPoint::ChildDirection dir, const GridKey& child_key, Chunk* owning_chunk) {
     GridPoint& child = find_or_create_grid_point(child_key, owning_chunk, &parent);
     if (child.parent() != &parent && child.parent() != nullptr) {
-        vibble::log::warn("[WorldGrid] ensure_child parent mismatch; Map Grid must keep hierarchy links consistent during migration (Phase 2 - 3d_refactor_plan.md).");
+        vibble::log::warn("[WorldGrid] ensure_child parent mismatch; Map Grid hierarchy links are inconsistent.");
     }
     if (child.parent() != &parent) {
         // Re-rooting should be avoided; warn and set only if null.
@@ -397,10 +467,6 @@ GridPoint& WorldGrid::find_or_create_grid_point(const GridKey& key, Chunk* ownin
     }
     GridPoint& point = ensure_point(grid_idx, chunk_idx, owning_chunk, parent, key.z, key.layer);
 
-    const bool identity_mismatch = (point.world_z() != key.z) || (point.resolution_layer() != key.layer);
-    if (identity_mismatch) {
-        vibble::log::warn("[WorldGrid] find_or_create_grid_point created point with legacy identity that differs from requested 3D key; migration path only (Phase 2 - 3d_refactor_plan.md).");
-    }
     key_to_id_[key] = point.id;
     return point;
 }
@@ -759,7 +825,10 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     }
 
     std::unique_ptr<Asset> owned;
-    const bool point_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_y() != new_pos.world_y());
+    const bool xy_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_y() != new_pos.world_y());
+    const bool point_changed = xy_changed ||
+                               (old_pos.world_z() != new_pos.world_z()) ||
+                               (old_pos.resolution_layer() != new_pos.resolution_layer());
     if (point_changed) {
         if (GridPoint* existing_point = point_for_asset(a)) {
             owned = detach_asset_from_grid_point(a, *existing_point, true);
@@ -784,6 +853,10 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
         point.invalidate_screen_data();
     }
     prune_empty_points();
+
+    if (point_changed) {
+        a->mark_anchors_dirty();
+    }
 
     return a;
 }

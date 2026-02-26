@@ -6,13 +6,14 @@
 
 #include "find_current_room.hpp"
 #include "assets/Asset.hpp"
-#include "assets/asset_info.hpp"
-#include "assets/asset_utils.hpp"
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_info.hpp"
+#include "assets/asset/asset_utils.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "animation/animation_runtime.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
 #include "devtools/depth_cue_settings.hpp"
+#include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "rendering/render/render.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -31,6 +32,7 @@
 #include <cstdint>
 #include <cctype>
 #include <exception>
+#include <stdexcept>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -44,21 +46,11 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <array>
+#include <sstream>
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
 
 namespace {
-
-std::uint64_t hash_active_asset_list(const std::vector<Asset*>& list) {
-    std::uint64_t hash = static_cast<std::uint64_t>(list.size());
-    constexpr std::uint64_t prime = 1469598103934665603ull;
-    for (const Asset* asset : list) {
-        auto ptr_value = static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(asset));
-        hash ^= (ptr_value >> 4);
-        hash *= prime;
-    }
-    return hash;
-}
 
 constexpr int kQualityOptions[] = {100, 75, 50, 25, 10};
 constexpr int kMinRenderQuality = kQualityOptions[sizeof(kQualityOptions) / sizeof(kQualityOptions[0]) - 1];
@@ -84,6 +76,7 @@ int halved_render_quality_percent(int percent) {
     const int halved = static_cast<int>(std::lround(percent * 0.5));
     return std::max(kMinRenderQuality, align_render_quality_percent(halved));
 }
+
 
 struct AssetWorldBounds {
     float left = 0.0f;
@@ -228,6 +221,7 @@ Assets::Assets(AssetLibrary& library,
     }
     if (scene) {
         scene->set_movement_debug_enabled(movement_debug_enabled_);
+        scene->set_anchor_point_debug_enabled(anchor_point_debug_enabled_);
     }
     apply_map_grid_settings(map_grid_settings_, false);
 
@@ -490,6 +484,16 @@ void Assets::set_movement_debug_enabled(bool enabled) {
     }
 }
 
+
+void Assets::set_anchor_point_debug_enabled(bool enabled) {
+    if (anchor_point_debug_enabled_ == enabled) {
+        return;
+    }
+    anchor_point_debug_enabled_ = enabled;
+    if (scene) {
+        scene->set_anchor_point_debug_enabled(enabled);
+    }
+}
 void Assets::set_movement_debug_visible(bool visible) {
     if (movement_debug_visible_ == visible) {
         return;
@@ -580,6 +584,16 @@ void Assets::refresh_active_asset_lists() {
     update_filtered_active_assets();
 }
 
+void Assets::refresh_anchor_bases_for_active_assets() {
+    // Keep anchor basis signatures aligned with the freshest grid/camera data.
+    for (Asset* asset : all) {
+        if (!asset || asset->dead) {
+            continue;
+        }
+        asset->update_anchor_basis_if_needed();
+    }
+}
+
 void Assets::update_audio_camera_metrics() {
 
     SDL_Point camera_focus = camera_.get_screen_center();
@@ -606,38 +620,51 @@ void Assets::refresh_filtered_active_assets() {
 }
 
 void Assets::update_filtered_active_assets() {
-    const std::uint64_t previous_hash = filtered_active_assets_hash_;
+    const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
+    const std::uint64_t current_generation = active_assets_generation_;
+    const std::uint64_t filter_version = dev_controls_enabled ? dev_controls_->other_settings_state_version() : 0;
 
-    if (dev_controls_ && dev_controls_->is_enabled()) {
-        const std::uint64_t active_hash = hash_active_asset_list(active_assets);
-        const std::uint64_t filter_version = dev_controls_->other_settings_state_version();
-        if (active_hash == filtered_active_assets_source_hash_ &&
-            filter_version == filtered_active_assets_filter_version_) {
+    if (dev_controls_enabled) {
+        if (filtered_active_assets_source_generation_ == current_generation &&
+            filtered_active_assets_filter_version_ == filter_version) {
             return;
         }
 
-        filtered_active_assets = active_assets;
-        dev_controls_->filter_active_assets(filtered_active_assets);
-        filtered_active_assets_hash_ = hash_active_asset_list(filtered_active_assets);
-        filtered_active_assets_source_hash_ = active_hash;
+        // Snapshot the active size for pre-sizing both the filtered list and membership cache.
+        const std::size_t active_size = active_assets.size();
+        // When DevControls is off, ensure the membership cache is reset so future toggles rebuild reliably.
+        filtered_active_assets.clear();
+        filtered_active_asset_membership_.clear();
+        filtered_active_assets.reserve(active_size);
+        for (Asset* asset : active_assets) {
+            if (!asset) {
+                continue;
+            }
+            if (!dev_controls_->passes_asset_filters(asset)) {
+                continue;
+            }
+            filtered_active_assets.push_back(asset);
+            filtered_active_asset_membership_.insert(asset);
+        }
+
+        filtered_active_assets_source_generation_ = current_generation;
         filtered_active_assets_filter_version_ = filter_version;
+        dev_controls_->filter_active_assets(filtered_active_assets);
     } else {
         if (filtered_active_assets.empty() &&
-            filtered_active_assets_hash_ == 0 &&
-            filtered_active_assets_source_hash_ == 0 &&
+            filtered_active_asset_membership_.empty() &&
+            filtered_active_assets_source_generation_ == current_generation &&
             filtered_active_assets_filter_version_ == 0) {
             return;
         }
 
         filtered_active_assets.clear();
-        filtered_active_assets_hash_ = hash_active_asset_list(filtered_active_assets);
-        filtered_active_assets_source_hash_ = 0;
+        filtered_active_asset_membership_.clear();
+        filtered_active_assets_source_generation_ = current_generation;
         filtered_active_assets_filter_version_ = 0;
     }
 
-    if (filtered_active_assets_hash_ != previous_hash) {
-        touch_dev_active_state_version();
-    }
+    touch_dev_active_state_version();
 }
 
 void Assets::log_asset_movement(Asset* asset, const world::GridPoint& previous, const world::GridPoint& current) {
@@ -776,6 +803,7 @@ void Assets::update(const Input& input)
     last_frame_dt_seconds_ = dt;
 
     const bool ctrl_down = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
+    const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
     if (scene && ctrl_down && input.wasScancodePressed(SDL_SCANCODE_Q)) {
 
     }
@@ -794,6 +822,13 @@ void Assets::update(const Input& input)
         }
         std::cout << "[Assets] Quick Task popup "
                   << (quick_task_popup_->is_open() ? "opened" : "closed") << " (Ctrl+T).\n";
+    }
+
+    if (ctrl_down && shift_down && input.wasScancodePressed(SDL_SCANCODE_P)) {
+        const bool enable = !anchor_point_debug_enabled_;
+        set_anchor_point_debug_enabled(enable);
+        std::cout << "[Assets] Anchor point overlay "
+                  << (enable ? "enabled" : "disabled") << " (Ctrl+Shift+P).\n";
     }
 
     if (quick_task_popup_) {
@@ -903,10 +938,18 @@ void Assets::update(const Input& input)
             touch_dev_active_state_version();
             mark_grid_dirty();
         }
+
     } else {
         movement_commands_buffer_.clear();
         moving_assets_for_grid_.clear();
         grid_registration_buffer_.clear();
+    }
+
+    // Update binding helpers once per frame after controller/world mutations.
+    for (auto* helper : binding_helpers_) {
+        if (helper) {
+            helper->tick_for_frame();
+        }
     }
 
     const bool height_animation_active = false;
@@ -934,6 +977,8 @@ void Assets::update(const Input& input)
     }
 
     maybe_rebuild_world_grid();
+
+    refresh_anchor_bases_for_active_assets();
 
     update_audio_camera_metrics();
 
@@ -1327,12 +1372,16 @@ void Assets::initialize_active_assets(const world::GridPoint& ) {
     active_assets.clear();
     active_assets.reserve(all.size());
     filtered_active_assets.clear();
-    filtered_active_assets_hash_ = 0;
-    filtered_active_assets_source_hash_ = 0;
+    filtered_active_asset_membership_.clear();
+    filtered_active_assets_source_generation_ = 0;
     filtered_active_assets_filter_version_ = 0;
 
     mark_non_player_update_buffer_dirty();
     needs_filtered_active_refresh_ = true;
+    ++active_assets_generation_;
+    if (active_assets_generation_ == 0) {
+        ++active_assets_generation_;
+    }
 }
 
 void Assets::touch_dev_active_state_version() {
@@ -1347,53 +1396,29 @@ void Assets::mark_active_assets_dirty() {
     needs_filtered_active_refresh_ = true;
 }
 
-Asset* Assets::spawn_asset_attached(const std::string& name,
-                                    Asset* anchor_owner,
-                                    const std::string& anchor_name) {
+std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
+    if (!asset) {
+        return nullptr;
+    }
+    return world_grid_.extract_asset(asset);
+}
 
-    if (!anchor_owner || anchor_name.empty()) {
+Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resolution_layer) {
+    if (!asset) {
         return nullptr;
     }
 
-    std::shared_ptr<AssetInfo> info = library_.get(name);
-    if (!info) {
-        return nullptr;
-    }
+    Asset* raw = asset.get();
+    // Avoid double insertion in all vector.
+    const bool already_tracked = std::find(all.begin(), all.end(), raw) != all.end();
 
-    std::string owning_room = map_id_;
-    if (current_room_) {
-        owning_room = current_room_->room_name;
-    }
-
-    auto resolved_anchor = anchor_owner->anchor_state(anchor_name, anchor_points::GridMaterialization::Ensure);
-    SDL_Point spawn_pos = resolved_anchor ? resolved_anchor->world_px : anchor_owner->world_point();
-    const int spawn_z = resolved_anchor ? resolved_anchor->world_z : anchor_owner->world_z();
-    const int resolved_layer = resolved_anchor ? resolved_anchor->resolution_layer : anchor_owner->grid_resolution;
-
-    Area spawn_area(owning_room,  0);
-
-    int depth = 0;
-    auto uptr = std::make_unique<Asset>(info,
-                                        spawn_area,
-                                        spawn_pos,
-                                        depth,
-                                        nullptr,
-                                        std::string{},
-                                        std::string{},
-                                        resolved_layer);
-    Asset* raw = uptr.get();
+    raw = world_grid_.attach_asset(std::move(asset), world_z, resolution_layer);
     if (!raw) {
         return nullptr;
     }
-    raw->set_assets(this);
-    raw->set_camera(&camera_);
-    raw->finalize_setup();
 
-    raw = world_grid_.create_asset_at_point(std::move(uptr), spawn_z, resolved_layer);
-    all.push_back(raw);
-
-    if (raw) {
-        anchor_owner->bind_child_to_anchor(raw, anchor_name);
+    if (!already_tracked) {
+        all.push_back(raw);
     }
 
     queue_asset_dimension_update(raw);
@@ -1404,6 +1429,18 @@ Asset* Assets::spawn_asset_attached(const std::string& name,
     return raw;
 }
 
+void Assets::register_binding_helper(AnchorBoundAssetHelper* helper) {
+    if (!helper) return;
+    if (std::find(binding_helpers_.begin(), binding_helpers_.end(), helper) == binding_helpers_.end()) {
+        binding_helpers_.push_back(helper);
+    }
+}
+
+void Assets::unregister_binding_helper(AnchorBoundAssetHelper* helper) {
+    if (!helper) return;
+    auto it = std::remove(binding_helpers_.begin(), binding_helpers_.end(), helper);
+    binding_helpers_.erase(it, binding_helpers_.end());
+}
 Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
 
     std::shared_ptr<AssetInfo> info = library_.get(name);
@@ -1419,7 +1456,7 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     Area spawn_area(owning_room,  0);
 
     int depth = 0;
-    auto uptr = std::make_unique<Asset>(info, spawn_area, world_pos, depth, nullptr, std::string{}, std::string{}, map_grid_settings_.spacing());
+    auto uptr = std::make_unique<Asset>(info, spawn_area, world_pos, depth, std::string{}, std::string{}, map_grid_settings_.spacing());
     Asset* raw = uptr.get();
     if (!raw) {
         return nullptr;
@@ -1437,6 +1474,36 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     mark_non_player_update_buffer_dirty();
 
     return raw;
+}
+
+std::unique_ptr<Asset> Assets::create_unattached_asset(const std::string& name, SDL_Point world_pos) {
+    std::shared_ptr<AssetInfo> info = library_.get(name);
+    if (!info) {
+        return nullptr;
+    }
+
+    std::string owning_room = map_id_;
+    if (current_room_) {
+        owning_room = current_room_->room_name;
+    }
+
+    Area spawn_area(owning_room, 0);
+    int depth = 0;
+    auto uptr = std::make_unique<Asset>(info,
+                                        spawn_area,
+                                        world_pos,
+                                        depth,
+                                        std::string{},
+                                        std::string{},
+                                        map_grid_settings_.spacing());
+    if (!uptr) {
+        return nullptr;
+    }
+
+    uptr->set_assets(this);
+    uptr->set_camera(&camera_);
+    uptr->finalize_setup();
+    return uptr;
 }
 
 void Assets::rebuild_from_grid_state() {
@@ -1511,7 +1578,12 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                                                   double current_scale,
                                                   double current_pitch) {
     last_grid_rebuild_frame_ = frame_id_;
-    camera_.rebuild_grid(world_grid_, last_frame_dt_seconds_);
+    camera_.rebuild_grid(world_grid_,
+                         last_frame_dt_seconds_,
+                         frame_id_,
+                         terrain_field_source_,
+                         terrain_runtime_state(),
+                         &rooms_);
     world_grid_.update_active_chunks(screen_world_rect(), 0);
     rebuild_active_from_screen_grid();
 
@@ -1667,57 +1739,102 @@ void Assets::schedule_removal(Asset* a) {
     removal_queue.push_back(a);
 }
 
-bool Assets::process_removals() {
-    std::vector<Asset*> pending_removals;
-    {
-        std::lock_guard<std::mutex> lock(removal_queue_mutex_);
-        if (removal_queue.empty()) {
-            return false;
-        }
-        pending_removals.swap(removal_queue);
-    }
-
-    if (pending_removals.empty()) {
-        return false;
-    }
-
+std::vector<Asset*> Assets::collect_removal_closure(const std::vector<Asset*>& roots) const {
     std::unordered_set<Asset*> removal_set;
-    removal_set.reserve(pending_removals.size());
-    for (Asset* asset : pending_removals) {
+    removal_set.reserve(roots.size());
+    for (Asset* asset : roots) {
         if (asset) {
             removal_set.insert(asset);
         }
     }
 
-    if (!removal_set.empty()) {
-        bool added = true;
-        while (added) {
-            added = false;
-            const std::vector<Asset*> all_assets = world_grid_.all_assets();
-            for (Asset* asset : all_assets) {
-                if (!asset || !asset->parent) {
-                    continue;
-                }
-                if (removal_set.find(asset->parent) != removal_set.end()) {
-                    if (removal_set.insert(asset).second) {
-                        added = true;
-                    }
-                }
-            }
+    std::vector<Asset*> ordered;
+    ordered.reserve(removal_set.size());
+    for (Asset* asset : roots) {
+        if (asset && removal_set.erase(asset) > 0) {
+            ordered.push_back(asset);
         }
     }
-
-    std::vector<Asset*> grid_removals;
-    grid_removals.reserve(removal_set.size());
     for (Asset* asset : removal_set) {
+        if (asset) {
+            ordered.push_back(asset);
+        }
+    }
+    return ordered;
+}
+
+void Assets::WorldMutationBatch::mark_for_deletion(Asset* asset) {
+    if (!asset || staged_lookup_.find(asset) != staged_lookup_.end()) {
+        return;
+    }
+    staged_lookup_.insert(asset);
+    staged_removals_.push_back(asset);
+}
+
+bool Assets::WorldMutationBatch::commit() {
+    if (!owner_) {
+        return false;
+    }
+    return owner_->apply_world_mutation_batch(*this);
+}
+
+Assets::WorldMutationBatch Assets::begin_world_mutation_batch() {
+    return WorldMutationBatch(this);
+}
+
+bool Assets::apply_world_mutation_batch(WorldMutationBatch& batch) {
+    if (!batch.has_mutations()) {
+        return true;
+    }
+
+    if (batch.pre_commit_save_ && !batch.pre_commit_save_()) {
+        return false;
+    }
+
+    if (dev_controls_ && dev_controls_->is_enabled()) {
+        dev_controls_->set_world_mutation_in_progress(true);
+    }
+
+    for (Asset* asset : batch.staged_removals_) {
         if (!asset) {
             continue;
         }
-        grid_removals.push_back(asset);
+        asset->dead = true;
+        asset->active = false;
+        schedule_removal(asset);
     }
 
-    for (Asset* asset : grid_removals) {
-        if (!asset) {
+    const bool removed_any = process_pending_removals();
+    if (removed_any) {
+        rebuild_from_grid_state();
+        refresh_active_asset_lists();
+    }
+
+    if (dev_controls_ && dev_controls_->is_enabled()) {
+        dev_controls_->set_world_mutation_in_progress(false);
+    }
+    return removed_any;
+}
+
+std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_delete) {
+    const std::vector<Asset*> ordered_removals = collect_removal_closure(assets_to_delete);
+    if (ordered_removals.empty()) {
+        return 0;
+    }
+
+    std::unordered_set<Asset*> unique_removals;
+    unique_removals.reserve(ordered_removals.size());
+    for (Asset* asset : ordered_removals) {
+        if (asset) {
+            unique_removals.insert(asset);
+        }
+    }
+    if (unique_removals.empty()) {
+        return 0;
+    }
+
+    for (Asset* asset : ordered_removals) {
+        if (!asset || unique_removals.find(asset) == unique_removals.end()) {
             continue;
         }
         remove_asset_dimension_cache(asset);
@@ -1744,11 +1861,58 @@ bool Assets::process_removals() {
         asset_dimension_update_lookup_.clear();
     }
 
-    return true;
+#ifndef NDEBUG
+    {
+        const auto survivors = world_grid_.all_assets();
+        (void)survivors;
+    }
+#endif
+
+    return unique_removals.size();
+}
+
+bool Assets::process_removals() {
+    std::vector<Asset*> pending_removals;
+    {
+        std::lock_guard<std::mutex> lock(removal_queue_mutex_);
+        if (removal_queue.empty()) {
+            return false;
+        }
+        pending_removals.swap(removal_queue);
+    }
+
+    return delete_assets_runtime(pending_removals) > 0;
 }
 
 bool Assets::process_pending_removals() {
     return process_removals();
+}
+
+std::size_t Assets::delete_assets_for_spawn_group(const std::string& spawn_id) {
+    if (spawn_id.empty()) {
+        return 0;
+    }
+
+    auto batch = begin_world_mutation_batch();
+    std::size_t count = 0;
+    for (Asset* asset : all) {
+        if (!asset || asset->dead || asset == player) {
+            continue;
+        }
+        if (asset->spawn_id == spawn_id) {
+            batch.mark_for_deletion(asset);
+            ++count;
+        }
+    }
+
+    if (count == 0) {
+        return 0;
+    }
+
+    if (!batch.commit()) {
+        return 0;
+    }
+    return count;
 }
 
 void Assets::render_overlays(SDL_Renderer* renderer) {
@@ -2103,6 +2267,13 @@ void Assets::invalidate_dynamic_boundary_system() {
     }
 }
 
+void Assets::set_terrain_sources(TerrainField* field, const TerrainRuntimeState& state) {
+    terrain_field_source_ = field;
+    terrain_runtime_state_ = state;
+    mark_grid_dirty();
+    camera_view_dirty_ = true;
+}
+
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {
     popup_manager_.show_toast(message, duration_ms);
 }
@@ -2251,6 +2422,10 @@ void Assets::rebuild_active_from_screen_grid() {
 
     active_assets_dirty_.store(false, std::memory_order_release);
     if (active_changed) {
+        ++active_assets_generation_;
+        if (active_assets_generation_ == 0) {
+            ++active_assets_generation_;
+        }
         mark_non_player_update_buffer_dirty();
         needs_filtered_active_refresh_ = true;
     }

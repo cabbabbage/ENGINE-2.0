@@ -13,6 +13,8 @@
 #include "devtools/search_assets.hpp"
 
 class Input;
+class Assets;
+namespace devmode::core { class ManifestStore; }
 class CandidateEditorPieGraphWidget : public Widget {
 public:
     CandidateEditorPieGraphWidget();
@@ -25,10 +27,13 @@ public:
     bool wants_full_row() const override { return true; }
 
     void set_screen_dimensions(int width, int height);
+    void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_assets(Assets* assets);
     void set_on_request_layout(std::function<void()> cb) { on_request_layout_ = std::move(cb); }
     void set_weights(std::vector<float> weights);
     void set_candidates_from_json(const nlohmann::json& entry);
-    void set_on_adjust(std::function<void(int index, int delta)> cb) { on_adjust_ = std::move(cb); }
+    void set_on_adjust(std::function<void(int index, double delta)> cb) { on_adjust_ = std::move(cb); }
+    void set_defer_adjust_until_release(bool enabled) { defer_adjust_until_release_ = enabled; }
     void set_on_delete(std::function<void(int index)> cb) { on_delete_ = std::move(cb); }
     void set_on_regenerate(std::function<void()> cb);
     void set_on_add_candidate(std::function<void(const std::string&)> cb);
@@ -69,9 +74,12 @@ private:
     static SDL_Color lighten(SDL_Color color, float amount);
     static Uint8 clamp_color(int value);
     int desired_search_panel_height() const;
+    void flush_pending_adjustment();
     void release_scroll_capture();
     void ensure_search_created();
     void position_search_within_bounds();
+    void apply_live_delta(int index, double delta);
+    bool submit_adjustment(double delta);
     void notify_layout_change() const;
     bool search_visible() const;
 
@@ -79,13 +87,17 @@ private:
     std::vector<CandidateInfo> candidates_{};
     int hovered_index_ = -1;
     int active_index_ = -1;
-    std::function<void(int index, int delta)> on_adjust_{};
+    std::function<void(int index, double delta)> on_adjust_{};
     std::function<void(int index)> on_delete_{};
     std::function<void()> on_regenerate_{};
     std::function<void(const std::string&)> on_add_candidate_{};
     std::function<void()> on_request_layout_{};
     bool scroll_capture_active_ = false;
     double wheel_scroll_accumulator_ = 0.0;
+    double pending_delta_ = 0.0;
+    bool defer_adjust_until_release_ = false;
+    devmode::core::ManifestStore* manifest_store_ = nullptr;
+    Assets* assets_ = nullptr;
     mutable std::vector<SDL_Rect> legend_row_rects_{};
     mutable int legend_row_height_ = 0;
     std::unique_ptr<DMButton> regen_button_{};

@@ -3,6 +3,19 @@
 #include "utils/sdl_mouse_utils.hpp"
 #include "utils/ttf_render_utils.hpp"
 
+#ifdef _WIN32
+#    ifndef WIN32_LEAN_AND_MEAN
+#        define WIN32_LEAN_AND_MEAN
+#        define DEV_CONTROLS_DEFINED_WIN32_LEAN_AND_MEAN
+#    endif
+#    include <windows.h>
+#    include <shellapi.h>
+#    ifdef DEV_CONTROLS_DEFINED_WIN32_LEAN_AND_MEAN
+#        undef WIN32_LEAN_AND_MEAN
+#        undef DEV_CONTROLS_DEFINED_WIN32_LEAN_AND_MEAN
+#    endif
+#endif
+
 #include <SDL3/SDL.h>
 #include <fstream>
 #include <sstream>
@@ -11,12 +24,18 @@
 #include <cmath>
 #include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <numeric>
 #include <limits>
+#include <iterator>
+#include <filesystem>
+#include <regex>
+#include <system_error>
 
 #include "devtools/map_editor.hpp"
 #include "devtools/room_editor.hpp"
 #include "devtools/map_mode_ui.hpp"
+#include "devtools/room_overlay_renderer.hpp"
 #include "devtools/frame_editor_session.hpp"
 #include "FloatingDockableManager.hpp"
 #include "FloatingPanelLayoutManager.hpp"
@@ -27,8 +46,10 @@
 #include "devtools/font_cache.hpp"
 #include "devtools/sdl_pointer_utils.hpp"
 #include "devtools/dev_ui_settings.hpp"
+#include "dev_mode_utils.hpp"
+#include "asset_paths.hpp"
 #include "utils/log.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "dm_styles.hpp"
 #include "draw_utils.hpp"
 #include "widgets.hpp"
@@ -37,8 +58,8 @@
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 
 #include "assets/Asset.hpp"
-#include "assets/asset_types.hpp"
-#include "assets/asset_utils.hpp"
+#include "assets/asset/asset_types.hpp"
+#include "assets/asset/asset_utils.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -58,6 +79,8 @@
 #include "utils/grid.hpp"
 #include "utils/grid_occupancy.hpp"
 #include "utils/input.hpp"
+#include "utils/stb_image.h"
+#include "utils/stb_image_write.h"
 #include "utils/string_utils.hpp"
 #include "utils/display_color.hpp"
 
@@ -83,6 +106,53 @@ namespace {
 
 using vibble::strings::to_lower_copy;
 
+std::filesystem::path repo_root_path() {
+#ifdef PROJECT_ROOT
+    return std::filesystem::path(PROJECT_ROOT);
+#else
+    return std::filesystem::current_path();
+#endif
+}
+
+void open_path_in_file_explorer(const std::filesystem::path& path) {
+    if (path.empty()) {
+        return;
+    }
+#if defined(_WIN32)
+    ShellExecuteW(nullptr, L"open", path.wstring().c_str(),  nullptr, nullptr, SW_SHOWDEFAULT);
+#elif defined(__APPLE__)
+    const std::string command = std::string("open \"") + path.u8string() + "\"";
+    std::system(command.c_str());
+#else
+    const std::string command = std::string("xdg-open \"") + path.u8string() + "\"";
+    std::system(command.c_str());
+#endif
+}
+
+void open_repo_root_in_file_explorer() {
+    open_path_in_file_explorer(repo_root_path());
+}
+
+class ImportBusyScope {
+public:
+    ImportBusyScope(DevControls* owner, const std::string& message, bool enabled = true)
+        : owner_(owner), enabled_(enabled) {
+        if (owner_ && enabled_) {
+            owner_->begin_import_busy(message);
+        }
+    }
+    ~ImportBusyScope() {
+        if (owner_ && enabled_) {
+            owner_->end_import_busy();
+        }
+    }
+    ImportBusyScope(const ImportBusyScope&) = delete;
+    ImportBusyScope& operator=(const ImportBusyScope&) = delete;
+private:
+    DevControls* owner_ = nullptr;
+    bool enabled_ = false;
+};
+
 constexpr const char* kModeIdRoom = "room";
 constexpr const char* kModeIdMap = "map";
 constexpr int kPopupOutlineThickness = 1;
@@ -104,6 +174,17 @@ constexpr const char* kGridSnapEnabledKey    = "dev.grid.snap.enabled";
 constexpr const char* kGridCellSizePxKey     = "dev.grid.cell_size_px";
 constexpr const char* kGridOverlayResolutionKey = "dev.grid.overlay.r";
 constexpr const char* kMovementDebugEnabledKey = "dev.movement.debug.enabled";
+constexpr const char* kAnchorPointDebugEnabledKey = "dev.anchor_points.debug.enabled";
+
+void persist_dev_bool(const char* key, bool value) {
+    devmode::ui_settings::save_bool(key, value);
+    devmode::ui_settings::flush_if_dirty();
+}
+
+void persist_dev_number(const char* key, double value) {
+    devmode::ui_settings::save_number(key, value);
+    devmode::ui_settings::flush_if_dirty();
+}
 
 struct SimpleLabelCacheKey {
     std::string font_path;
@@ -209,6 +290,165 @@ private:
 SimpleLabelCache& simple_label_cache() {
     static SimpleLabelCache cache;
     return cache;
+}
+
+using DropKind = DevControls::DropContentKind;
+
+bool has_extension_ci(const std::filesystem::path& path, std::string_view ext) {
+    std::string a = vibble::strings::to_lower_copy(path.extension().string());
+    std::string b = vibble::strings::to_lower_copy(std::string(ext));
+    return a == b;
+}
+
+bool has_any_extension_ci(const std::filesystem::path& path, std::initializer_list<std::string_view> exts) {
+    for (auto ext : exts) {
+        if (has_extension_ci(path, ext)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<std::filesystem::path> normalize_sequence(const std::vector<std::filesystem::path>& files) {
+    std::vector<std::filesystem::path> normalized = files;
+
+    auto numeric_key = [](const std::filesystem::path& p) {
+        std::string stem = p.stem().string();
+        try {
+            return std::make_tuple(0, std::stoi(stem), vibble::strings::to_lower_copy(stem));
+        } catch (...) {
+            std::smatch match;
+            static const std::regex kNumber{"(\\d+)", std::regex::icase};
+            if (std::regex_search(stem, match, kNumber)) {
+                try {
+                    return std::make_tuple(0, std::stoi(match.str(1)), vibble::strings::to_lower_copy(stem));
+                } catch (...) {
+                }
+            }
+        }
+        return std::make_tuple(1, 0, vibble::strings::to_lower_copy(stem));
+    };
+
+    std::sort(normalized.begin(), normalized.end(), [&](const auto& lhs, const auto& rhs) {
+        return numeric_key(lhs) < numeric_key(rhs);
+    });
+    return normalized;
+}
+
+struct DropValidationResult {
+    DropKind kind = DropKind::None;
+    std::vector<std::filesystem::path> files;
+    std::filesystem::path folder;
+    bool valid = false;
+    std::string reason;
+};
+
+std::string sanitize_asset_name_local(const std::string& name) {
+    return devmode::utils::normalize_asset_name(name);
+}
+
+DropValidationResult validate_drop_items(const std::vector<std::filesystem::path>& raw_items) {
+    DropValidationResult result;
+    if (raw_items.empty()) {
+        result.reason = "No items provided";
+        return result;
+    }
+
+    std::vector<std::filesystem::path> items;
+    items.reserve(raw_items.size());
+    for (const auto& path : raw_items) {
+        try {
+            if (std::filesystem::exists(path)) {
+                items.push_back(path);
+            }
+        } catch (...) {
+        }
+    }
+    if (items.empty()) {
+        result.reason = "Dropped items missing";
+        return result;
+    }
+
+    auto is_image = [](const std::filesystem::path& p) {
+        return has_any_extension_ci(p, {".png", ".jpg", ".jpeg", ".bmp", ".webp", ".gif"});
+    };
+
+    if (items.size() == 1) {
+        const auto& only = items.front();
+        std::error_code ec;
+        const bool is_dir = std::filesystem::is_directory(only, ec);
+        if (is_dir && !ec) {
+            std::vector<std::filesystem::path> pngs;
+            try {
+                for (const auto& entry : std::filesystem::directory_iterator(only)) {
+                    if (!entry.is_regular_file()) continue;
+                    if (has_extension_ci(entry.path(), ".png")) {
+                        pngs.push_back(entry.path());
+                    }
+                }
+            } catch (...) {
+            }
+            if (pngs.empty()) {
+                result.reason = "Folder contains no PNG images";
+                return result;
+            }
+            result.kind = DropKind::PngFolder;
+            result.folder = only;
+            result.files = normalize_sequence(pngs);
+            result.valid = true;
+            return result;
+        }
+
+        if (has_extension_ci(only, ".gif")) {
+            result.kind = DropKind::Gif;
+            result.files = {only};
+            result.valid = true;
+            return result;
+        }
+        if (has_extension_ci(only, ".png")) {
+            result.kind = DropKind::SinglePng;
+            result.files = {only};
+            result.valid = true;
+            return result;
+        }
+        if (is_image(only)) {
+            result.reason = "Only PNG or GIF files are accepted";
+            return result;
+        }
+        result.reason = "Unsupported file type";
+        return result;
+    }
+
+    for (const auto& item : items) {
+        std::error_code ec;
+        if (!std::filesystem::is_regular_file(item, ec) || !is_image(item)) {
+            result.reason = "All dropped items must be image files";
+            return result;
+        }
+    }
+    result.kind = DropKind::MultiImages;
+    result.files = normalize_sequence(items);
+    result.valid = true;
+    return result;
+}
+
+std::string suggest_name_from_drop(const DropValidationResult& validation) {
+    auto base_from_path = [] (const std::filesystem::path& p) {
+        std::string stem = p.stem().string();
+        if (stem.empty()) return std::string{};
+        return sanitize_asset_name_local(stem);
+    };
+
+    if (!validation.files.empty()) {
+        if (validation.kind == DropKind::PngFolder && !validation.folder.empty()) {
+            auto stem = validation.folder.filename().string();
+            auto candidate = sanitize_asset_name_local(stem);
+            if (!candidate.empty()) return candidate;
+        }
+        auto candidate = base_from_path(validation.files.front());
+        if (!candidate.empty()) return candidate;
+    }
+    return std::string{"new_asset"};
 }
 
 void draw_simple_label(SDL_Renderer* renderer, const std::string& text, int x, int y) {
@@ -473,6 +713,13 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     const char* ctor_start = "[DevControls] ctor start";
     std::cout << ctor_start << "\n";
 
+    save_coordinator_.set_manifest_store(&manifest_store_);
+    save_coordinator_.set_notice_sink([this](bool success, const std::string& message) {
+        if (assets_) {
+            assets_->show_dev_notice(message, success ? 1200u : 2000u);
+        }
+    });
+
     grid_overlay_enabled_ = devmode::ui_settings::load_bool(kGridOverlayEnabledKey, false);
     snap_to_grid_enabled_ = devmode::ui_settings::load_bool(kGridSnapEnabledKey, true);
     const int saved_overlay_r = static_cast<int>(devmode::ui_settings::load_number(kGridOverlayResolutionKey, -1));
@@ -484,9 +731,11 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     }
     grid_cell_size_px_ = layer_spacing(grid_overlay_resolution_r_);
     movement_debug_enabled_ = devmode::ui_settings::load_bool(kMovementDebugEnabledKey, false);
+    anchor_point_debug_enabled_ = devmode::ui_settings::load_bool(kAnchorPointDebugEnabledKey, false);
     room_editor_ = std::make_unique<RoomEditor>(assets_, screen_w_, screen_h_);
     if (room_editor_) {
         room_editor_->set_manifest_store(&manifest_store_);
+        room_editor_->set_save_coordinator(&save_coordinator_);
 
         room_editor_->set_header_visibility_callback([this](bool visible) {
             sliding_headers_hidden_ = visible;
@@ -506,7 +755,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             const SDL_Rect header = other_settings_.header_rect();
             if (header.h > 0) {
                 const int safe_top = header.y + header.h;
-                if (safe_top < area.y + area.h) {
+                if (safe_top > area.y && safe_top < area.y + area.h) {
                     area.h = std::max(0, (area.y + area.h) - safe_top);
                     area.y = safe_top;
                 }
@@ -529,6 +778,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     map_mode_ui_ = std::make_unique<MapModeUI>(assets_);
     if (map_mode_ui_) {
         map_mode_ui_->set_manifest_store(&manifest_store_);
+        map_mode_ui_->set_save_coordinator(&save_coordinator_);
     }
     map_grid_regen_cb_ = [this]() { this->regenerate_map_grid_assets(); };
     apply_header_suppression();
@@ -604,7 +854,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             footer->set_grid_controls_callbacks(
                 [this](bool enabled) {
                     grid_overlay_enabled_ = enabled;
-                    devmode::ui_settings::save_bool(kGridOverlayEnabledKey, enabled);
+                    persist_dev_bool(kGridOverlayEnabledKey, enabled);
                     other_settings_.set_show_grid_enabled(enabled);
                 },
                 [this](int resolution, bool from_user) {
@@ -618,7 +868,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
             footer->set_movement_debug_enabled(movement_debug_enabled_);
             footer->set_movement_debug_callback([this](bool enabled) {
                 movement_debug_enabled_ = enabled;
-                devmode::ui_settings::save_bool(kMovementDebugEnabledKey, enabled);
+                persist_dev_bool(kMovementDebugEnabledKey, enabled);
                 other_settings_.set_movement_debug_enabled(enabled);
                 if (assets_) {
                     assets_->set_movement_debug_enabled(enabled);
@@ -628,12 +878,14 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     }
     if (assets_) {
         assets_->set_movement_debug_enabled(movement_debug_enabled_);
+        assets_->set_anchor_point_debug_enabled(anchor_point_debug_enabled_);
     }
     update_movement_debug_visibility();
     configure_header_button_sets();
     trail_suite_ = std::make_unique<TrailEditorSuite>();
     if (trail_suite_) {
         trail_suite_->set_screen_dimensions(screen_w_, screen_h_);
+        trail_suite_->set_save_coordinator(&save_coordinator_);
     }
     other_settings_.initialize();
     other_settings_.set_assets_context(assets_);
@@ -682,12 +934,13 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     dev_settings.overlay_resolution = grid_overlay_resolution_r_;
     dev_settings.snap_to_grid = snap_to_grid_enabled_;
     dev_settings.movement_debug = movement_debug_enabled_;
+    dev_settings.anchor_point_debug = anchor_point_debug_enabled_;
     dev_settings.depth_effects = assets_ ? assets_->depth_effects_enabled() : true;
     other_settings_.set_dev_mode_settings(dev_settings);
     other_settings_.set_dev_mode_settings_callbacks(
         [this](bool enabled) {
             grid_overlay_enabled_ = enabled;
-            devmode::ui_settings::save_bool(kGridOverlayEnabledKey, enabled);
+            persist_dev_bool(kGridOverlayEnabledKey, enabled);
             if (map_mode_ui_) {
                 if (auto* footer = map_mode_ui_->get_footer_bar()) {
                     footer->set_grid_overlay_enabled(enabled);
@@ -699,7 +952,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         },
         [this](bool enabled) {
             snap_to_grid_enabled_ = enabled;
-            devmode::ui_settings::save_bool(kGridSnapEnabledKey, enabled);
+            persist_dev_bool(kGridSnapEnabledKey, enabled);
             if (room_editor_) {
                 room_editor_->set_snap_to_grid_enabled(enabled);
                 room_editor_->refresh_cursor_snap();
@@ -707,9 +960,16 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         },
         [this](bool enabled) {
             movement_debug_enabled_ = enabled;
-            devmode::ui_settings::save_bool(kMovementDebugEnabledKey, enabled);
+            persist_dev_bool(kMovementDebugEnabledKey, enabled);
             if (assets_) {
                 assets_->set_movement_debug_enabled(enabled);
+            }
+        },
+        [this](bool enabled) {
+            anchor_point_debug_enabled_ = enabled;
+            persist_dev_bool(kAnchorPointDebugEnabledKey, enabled);
+            if (assets_) {
+                assets_->set_anchor_point_debug_enabled(enabled);
             }
         },
         [this](bool enabled) {
@@ -734,6 +994,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
 
 DevControls::~DevControls() {
     restore_filter_hidden_assets();
+    save_coordinator_.flush_now("shutdown");
     manifest_store_.flush();
     devmode::ui_settings::flush_if_dirty();
     AssetInfo::set_manifest_store_provider({});
@@ -746,6 +1007,14 @@ devmode::core::ManifestStore& DevControls::manifest_store() {
 
 const devmode::core::ManifestStore& DevControls::manifest_store() const {
     return manifest_store_;
+}
+
+devmode::core::DevSaveCoordinator& DevControls::save_coordinator() {
+    return save_coordinator_;
+}
+
+const devmode::core::DevSaveCoordinator& DevControls::save_coordinator() const {
+    return save_coordinator_;
 }
 
 void DevControls::set_input(Input* input) {
@@ -787,8 +1056,8 @@ void DevControls::apply_overlay_grid_resolution(int resolution, bool user_overri
     grid_cell_size_px_ = layer_spacing(clamped);
     if (user_override) {
         grid_overlay_resolution_user_override_ = true;
-        devmode::ui_settings::save_number(kGridOverlayResolutionKey, clamped);
-        devmode::ui_settings::save_number(kGridCellSizePxKey, grid_cell_size_px_);
+        persist_dev_number(kGridOverlayResolutionKey, clamped);
+        persist_dev_number(kGridCellSizePxKey, grid_cell_size_px_);
     }
     if (update_stepper) {
         other_settings_.set_overlay_resolution_value(clamped);
@@ -927,6 +1196,9 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
             vibble::log::debug("[DevControls] set_current_room -> room_editor set_current_room");
         } catch (...) {}
         room_editor_->set_current_room(room);
+        if (map_editor_) {
+            map_editor_->set_current_room(room);
+        }
     }
     other_settings_.set_current_room(room);
     if (map_mode_ui_) {
@@ -1160,8 +1432,16 @@ void DevControls::sync_camera_tilt_override() {
 }
 
 void DevControls::update(const Input& input) {
+    save_coordinator_.begin_frame();
     if (!enabled_) return;
     const bool ctrl = input.isScancodeDown(SDL_SCANCODE_LCTRL) || input.isScancodeDown(SDL_SCANCODE_RCTRL);
+    const bool shift_down = input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
+    const bool shift_blocks_headers = shift_down && mode_ == Mode::RoomEditor;
+    if (shift_block_headers_footers_ != shift_blocks_headers) {
+        shift_block_headers_footers_ = shift_blocks_headers;
+        apply_header_suppression();
+        mark_layout_dirty();
+    }
     if (ctrl) {
         if (input.wasScancodePressed(SDL_SCANCODE_UP)) {
             nudge_overlay_grid_resolution(1);
@@ -1223,6 +1503,7 @@ void DevControls::update(const Input& input) {
     }
     other_settings_.set_enabled(enabled_);
     apply_header_suppression();
+    other_settings_.update(input);
     if (map_mode_ui_) {
         map_mode_ui_->update(input);
     }
@@ -1271,6 +1552,8 @@ void DevControls::update(const Input& input) {
             render_suppression_in_progress_ = false;
         }
     }
+
+    save_coordinator_.tick();
 }
 
 void DevControls::update_ui(const Input& input) {
@@ -1287,8 +1570,913 @@ void DevControls::update_ui(const Input& input) {
     room_editor_->update_ui(input);
 }
 
+void DevControls::reset_drop_preview() {
+    drop_state_ = DropPreviewState{};
+}
+
+void DevControls::reset_drop_modal() {
+    drop_modal_ = DropNameModal{};
+}
+
+void DevControls::reset_drop_choice_modal() {
+    drop_choice_modal_ = DropChoiceModal{};
+}
+
+void DevControls::reset_drop_conflict_modal() {
+    drop_conflict_modal_ = DropConflictModal{};
+}
+
+void DevControls::reset_drop_error_popup() {
+    drop_error_popup_ = DropErrorPopup{};
+}
+
+void DevControls::reset_multi_asset_import() {
+    multi_asset_import_ = MultiAssetImportState{};
+}
+
+void DevControls::begin_import_busy(const std::string& message) {
+    import_busy_.active = true;
+    import_busy_.message = message.empty() ? "Importing assets..." : message;
+    import_busy_.started_ms = SDL_GetTicks();
+}
+
+void DevControls::end_import_busy() {
+    import_busy_ = ImportBusyOverlay{};
+}
+
+bool DevControls::is_import_busy() const {
+    return import_busy_.active;
+}
+
+SDL_Point DevControls::drop_world_from_screen(SDL_Point screen) const {
+    if (!assets_) {
+        return screen;
+    }
+    SDL_FPoint mapped = assets_->getView().screen_to_map(screen);
+    return SDL_Point{static_cast<int>(std::lround(mapped.x)), static_cast<int>(std::lround(mapped.y))};
+}
+
+void DevControls::layout_drop_modal() {
+    if (!drop_modal_.visible) return;
+    const int modal_w = 520;
+    const int modal_h = 220;
+    const int padding = 16;
+    int x = std::max(0, screen_w_ / 2 - modal_w / 2);
+    int y = std::max(0, screen_h_ / 2 - modal_h / 2);
+    drop_modal_.modal_rect = SDL_Rect{x, y, modal_w, modal_h};
+
+    const int textbox_w = modal_w - padding * 2;
+    int textbox_h = DMTextBox::height();
+    if (drop_modal_.name_box) {
+        textbox_h = drop_modal_.name_box->preferred_height(textbox_w);
+        drop_modal_.name_box->set_rect(SDL_Rect{x + padding, y + padding, textbox_w, textbox_h});
+    }
+
+    const int button_gap = 12;
+    const int button_w = 140;
+    const int button_h = DMButton::height();
+    const int buttons_total_w = button_w * 2 + button_gap;
+    const int buttons_x = x + (modal_w - buttons_total_w) / 2;
+    const int buttons_y = y + modal_h - button_h - padding;
+    drop_modal_.create_rect = SDL_Rect{buttons_x, buttons_y, button_w, button_h};
+    drop_modal_.cancel_rect = SDL_Rect{buttons_x + button_w + button_gap, buttons_y, button_w, button_h};
+    if (drop_modal_.create_button) drop_modal_.create_button->set_rect(drop_modal_.create_rect);
+    if (drop_modal_.cancel_button) drop_modal_.cancel_button->set_rect(drop_modal_.cancel_rect);
+}
+
+void DevControls::layout_drop_choice_modal() {
+    if (!drop_choice_modal_.visible) return;
+    const int modal_w = 560;
+    const int modal_h = 250;
+    const int padding = 16;
+    int x = std::max(0, screen_w_ / 2 - modal_w / 2);
+    int y = std::max(0, screen_h_ / 2 - modal_h / 2);
+    drop_choice_modal_.modal_rect = SDL_Rect{x, y, modal_w, modal_h};
+
+    const int button_gap = 12;
+    const int button_w = modal_w - padding * 2;
+    const int button_h = DMButton::height();
+    const int buttons_y = y + 72;
+    drop_choice_modal_.single_rect = SDL_Rect{x + padding, buttons_y, button_w, button_h};
+    drop_choice_modal_.multiple_rect = SDL_Rect{x + padding, buttons_y + button_h + button_gap, button_w, button_h};
+    drop_choice_modal_.cancel_rect = SDL_Rect{x + padding, buttons_y + (button_h + button_gap) * 2, button_w, button_h};
+    if (drop_choice_modal_.single_animation_button) drop_choice_modal_.single_animation_button->set_rect(drop_choice_modal_.single_rect);
+    if (drop_choice_modal_.multiple_assets_button) drop_choice_modal_.multiple_assets_button->set_rect(drop_choice_modal_.multiple_rect);
+    if (drop_choice_modal_.cancel_button) drop_choice_modal_.cancel_button->set_rect(drop_choice_modal_.cancel_rect);
+}
+
+void DevControls::layout_drop_conflict_modal() {
+    if (!drop_conflict_modal_.visible) return;
+    const int modal_w = 560;
+    const int modal_h = 210;
+    const int padding = 16;
+    int x = std::max(0, screen_w_ / 2 - modal_w / 2);
+    int y = std::max(0, screen_h_ / 2 - modal_h / 2);
+    drop_conflict_modal_.modal_rect = SDL_Rect{x, y, modal_w, modal_h};
+
+    const int button_gap = 12;
+    const int button_w = 160;
+    const int button_h = DMButton::height();
+    const int total_w = button_w * 2 + button_gap;
+    const int bx = x + (modal_w - total_w) / 2;
+    const int by = y + modal_h - button_h - padding;
+    drop_conflict_modal_.skip_rect = SDL_Rect{bx, by, button_w, button_h};
+    drop_conflict_modal_.rename_rect = SDL_Rect{bx + button_w + button_gap, by, button_w, button_h};
+    if (drop_conflict_modal_.skip_button) drop_conflict_modal_.skip_button->set_rect(drop_conflict_modal_.skip_rect);
+    if (drop_conflict_modal_.rename_button) drop_conflict_modal_.rename_button->set_rect(drop_conflict_modal_.rename_rect);
+}
+
+void DevControls::layout_drop_error_popup() {
+    if (!drop_error_popup_.visible) return;
+    const int modal_w = 560;
+    const int modal_h = 180;
+    const int padding = 16;
+    int x = std::max(0, screen_w_ / 2 - modal_w / 2);
+    int y = std::max(0, screen_h_ / 2 - modal_h / 2);
+    drop_error_popup_.modal_rect = SDL_Rect{x, y, modal_w, modal_h};
+
+    const int button_w = 140;
+    const int button_h = DMButton::height();
+    const int bx = x + (modal_w - button_w) / 2;
+    const int by = y + modal_h - button_h - padding;
+    drop_error_popup_.ok_rect = SDL_Rect{bx, by, button_w, button_h};
+    if (drop_error_popup_.ok_button) drop_error_popup_.ok_button->set_rect(drop_error_popup_.ok_rect);
+}
+
+void DevControls::open_drop_choice_modal(const DropImportRequest& request) {
+    drop_choice_modal_ = DropChoiceModal{};
+    drop_choice_modal_.visible = true;
+    drop_choice_modal_.request = request;
+    drop_choice_modal_.single_animation_button = std::make_unique<DMButton>("Single Animation (multiple frames)", &DMStyles::CreateButton(), 280, DMButton::height());
+    drop_choice_modal_.multiple_assets_button = std::make_unique<DMButton>("Multiple Assets (one frame each)", &DMStyles::CreateButton(), 280, DMButton::height());
+    drop_choice_modal_.cancel_button = std::make_unique<DMButton>("Cancel", &DMStyles::HeaderButton(), 280, DMButton::height());
+    layout_drop_choice_modal();
+}
+
+void DevControls::open_drop_conflict_modal(const std::string& asset_name) {
+    drop_conflict_modal_ = DropConflictModal{};
+    drop_conflict_modal_.visible = true;
+    drop_conflict_modal_.asset_name = asset_name;
+    drop_conflict_modal_.skip_button = std::make_unique<DMButton>("Skip", &DMStyles::HeaderButton(), 160, DMButton::height());
+    drop_conflict_modal_.rename_button = std::make_unique<DMButton>("Rename", &DMStyles::CreateButton(), 160, DMButton::height());
+    layout_drop_conflict_modal();
+}
+
+void DevControls::open_drop_error_popup(const std::string& message) {
+    drop_error_popup_ = DropErrorPopup{};
+    drop_error_popup_.visible = true;
+    drop_error_popup_.message = message;
+    drop_error_popup_.ok_button = std::make_unique<DMButton>("OK", &DMStyles::CreateButton(), 140, DMButton::height());
+    layout_drop_error_popup();
+}
+
+void DevControls::open_drop_modal(const DropImportRequest& request) {
+    drop_modal_ = DropNameModal{};
+    drop_modal_.visible = true;
+    drop_modal_.request = request;
+    DropValidationResult validation;
+    validation.kind = request.kind;
+    validation.files = request.files;
+    validation.folder = request.folder;
+    validation.valid = true;
+    const std::string suggested = suggest_name_from_drop(validation);
+    drop_modal_.name_box = std::make_unique<DMTextBox>("Animation / Asset Name", suggested);
+    drop_modal_.create_button = std::make_unique<DMButton>("Create", &DMStyles::CreateButton(), 140, DMButton::height());
+    drop_modal_.cancel_button = std::make_unique<DMButton>("Cancel", &DMStyles::HeaderButton(), 140, DMButton::height());
+    layout_drop_modal();
+}
+
+void DevControls::begin_multi_asset_import(const DropImportRequest& request) {
+    multi_asset_import_ = MultiAssetImportState{};
+    multi_asset_import_.active = true;
+    multi_asset_import_.request = request;
+    multi_asset_import_.files = request.files;
+    multi_asset_import_.index = 0;
+    multi_asset_import_.waiting_for_rename = false;
+    process_next_multi_asset_item();
+}
+
+void DevControls::process_next_multi_asset_item() {
+    if (!multi_asset_import_.active || multi_asset_import_.waiting_for_rename) {
+        return;
+    }
+    ImportBusyScope busy(this, "Importing assets...");
+    if (assets_) {
+        if (SDL_Renderer* r = assets_->renderer()) {
+            render_import_busy_overlay(r);
+            SDL_RenderPresent(r);
+        }
+    }
+    while (multi_asset_import_.index < multi_asset_import_.files.size()) {
+        const std::filesystem::path file = multi_asset_import_.files[multi_asset_import_.index];
+        std::string candidate = sanitize_asset_name_local(vibble::strings::to_lower_copy(file.stem().string()));
+        if (candidate.empty()) {
+            open_drop_error_popup("Invalid filename for asset: " + file.filename().string());
+            ++multi_asset_import_.index;
+            return;
+        }
+
+        if (manifest_store_.resolve_asset_name(candidate) || (assets_ && assets_->library().get(candidate))) {
+            open_drop_conflict_modal(candidate);
+            multi_asset_import_.waiting_for_rename = true;
+            return;
+        }
+
+        std::string error;
+        DropImportRequest single_request = multi_asset_import_.request;
+        single_request.kind = DropContentKind::SinglePng;
+        single_request.files = {file};
+        single_request.folder.clear();
+        if (!create_drop_asset(candidate, {file}, single_request, false, error)) {
+            open_drop_error_popup(error.empty() ? "Import failed for " + file.filename().string() : error);
+            ++multi_asset_import_.index;
+            return;
+        }
+        ++multi_asset_import_.index;
+    }
+
+    if (assets_) {
+        assets_->show_dev_notice("Imported dropped PNG assets", 1800);
+    }
+    reset_multi_asset_import();
+}
+
+bool DevControls::handle_drop_event(const SDL_Event& event) {
+    if (!enabled_ || mode_ != Mode::RoomEditor || !room_editor_ || !room_editor_->is_enabled()) {
+        return false;
+    }
+    if (frame_editor_session_ && frame_editor_session_->is_active()) {
+        return false;
+    }
+    if (drop_modal_.visible || drop_choice_modal_.visible || drop_conflict_modal_.visible || drop_error_popup_.visible) {
+        return false;
+    }
+
+    auto drop_point_from_event = [](const SDL_Event& e) -> SDL_Point {
+        return SDL_Point{
+            static_cast<int>(std::lround(e.drop.x)),
+            static_cast<int>(std::lround(e.drop.y))
+        };
+    };
+
+    switch (event.type) {
+    case SDL_EVENT_DROP_BEGIN:
+        reset_drop_preview();
+        drop_state_.active = true;
+        drop_state_.screen = drop_point_from_event(event);
+        return true;
+    case SDL_EVENT_DROP_FILE: {
+        if (!drop_state_.active) {
+            reset_drop_preview();
+            drop_state_.active = true;
+        }
+        drop_state_.screen = drop_point_from_event(event);
+        if (event.drop.data) {
+            std::filesystem::path path = std::filesystem::u8path(event.drop.data);
+            drop_state_.items.push_back(path);
+        }
+        DropValidationResult validation = validate_drop_items(drop_state_.items);
+        drop_state_.valid = validation.valid;
+        return true;
+    }
+    case SDL_EVENT_DROP_COMPLETE: {
+        DropValidationResult validation = validate_drop_items(drop_state_.items);
+        if (validation.valid) {
+    DropImportRequest req;
+    req.kind = validation.kind;
+    req.files = validation.files;
+    req.folder = validation.folder;
+    req.drop_screen = drop_point_from_event(event);
+            if (req.kind == DropContentKind::MultiImages) {
+                bool all_png = !req.files.empty();
+                for (const auto& p : req.files) {
+                    if (!has_extension_ci(p, ".png")) {
+                        all_png = false;
+                        break;
+                    }
+                }
+                if (all_png) {
+                    open_drop_choice_modal(req);
+                } else {
+                    open_drop_modal(req);
+                }
+            } else {
+                open_drop_modal(req);
+            }
+        }
+        reset_drop_preview();
+        return true;
+    }
+    default:
+        break;
+    }
+    return false;
+}
+
+bool DevControls::handle_drop_modal_event(const SDL_Event& event) {
+    if (!drop_modal_.visible) {
+        return false;
+    }
+    layout_drop_modal();
+    bool consumed = false;
+    SDL_Point pointer{0, 0};
+    const bool pointer_event = is_pointer_event(event);
+    if (pointer_event) {
+        pointer = event_point(event);
+    }
+
+    if (drop_modal_.name_box && drop_modal_.name_box->handle_event(event)) {
+        consumed = true;
+    }
+
+    if (drop_modal_.create_button && drop_modal_.create_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            const std::string desired = drop_modal_.name_box ? drop_modal_.name_box->value() : std::string{};
+            if (finalize_drop_creation(desired)) {
+                reset_drop_modal();
+                if (multi_asset_import_.active) {
+                    multi_asset_import_.waiting_for_rename = false;
+                    ++multi_asset_import_.index;
+                    process_next_multi_asset_item();
+                }
+            }
+        }
+    }
+
+    if (drop_modal_.cancel_button && drop_modal_.cancel_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            reset_drop_modal();
+        }
+    }
+
+    if (event.type == SDL_EVENT_KEY_DOWN) {
+        if (event.key.key == SDLK_ESCAPE) {
+            reset_drop_modal();
+            consumed = true;
+        } else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) {
+            const std::string desired = drop_modal_.name_box ? drop_modal_.name_box->value() : std::string{};
+            if (finalize_drop_creation(desired)) {
+                reset_drop_modal();
+                if (multi_asset_import_.active) {
+                    multi_asset_import_.waiting_for_rename = false;
+                    ++multi_asset_import_.index;
+                    process_next_multi_asset_item();
+                }
+            }
+            consumed = true;
+        }
+    }
+    if (event.type == SDL_EVENT_TEXT_INPUT) {
+        consumed = true;
+    }
+
+    const bool pointer_inside = pointer_event && SDL_PointInRect(&pointer, &drop_modal_.modal_rect);
+    return consumed || pointer_inside;
+}
+
+bool DevControls::handle_drop_choice_modal_event(const SDL_Event& event) {
+    if (!drop_choice_modal_.visible) {
+        return false;
+    }
+    layout_drop_choice_modal();
+    bool consumed = false;
+    SDL_Point pointer{0, 0};
+    const bool pointer_event = is_pointer_event(event);
+    if (pointer_event) {
+        pointer = event_point(event);
+    }
+
+    if (drop_choice_modal_.single_animation_button && drop_choice_modal_.single_animation_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            DropImportRequest request = drop_choice_modal_.request;
+            reset_drop_choice_modal();
+            open_drop_modal(request);
+            return true;
+        }
+    }
+    if (drop_choice_modal_.multiple_assets_button && drop_choice_modal_.multiple_assets_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            DropImportRequest request = drop_choice_modal_.request;
+            reset_drop_choice_modal();
+            begin_multi_asset_import(request);
+            return true;
+        }
+    }
+    if (drop_choice_modal_.cancel_button && drop_choice_modal_.cancel_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            reset_drop_choice_modal();
+            reset_multi_asset_import();
+            return true;
+        }
+    }
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
+        reset_drop_choice_modal();
+        reset_multi_asset_import();
+        return true;
+    }
+
+    const bool pointer_inside = pointer_event && SDL_PointInRect(&pointer, &drop_choice_modal_.modal_rect);
+    return consumed || pointer_inside;
+}
+
+bool DevControls::handle_drop_conflict_modal_event(const SDL_Event& event) {
+    if (!drop_conflict_modal_.visible) {
+        return false;
+    }
+    layout_drop_conflict_modal();
+    bool consumed = false;
+    SDL_Point pointer{0, 0};
+    const bool pointer_event = is_pointer_event(event);
+    if (pointer_event) {
+        pointer = event_point(event);
+    }
+
+    if (drop_conflict_modal_.skip_button && drop_conflict_modal_.skip_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            reset_drop_conflict_modal();
+            multi_asset_import_.waiting_for_rename = false;
+            ++multi_asset_import_.index;
+            process_next_multi_asset_item();
+            return true;
+        }
+    }
+    if (drop_conflict_modal_.rename_button && drop_conflict_modal_.rename_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            DropImportRequest request = multi_asset_import_.request;
+            if (multi_asset_import_.index < multi_asset_import_.files.size()) {
+                const auto& file = multi_asset_import_.files[multi_asset_import_.index];
+                request.kind = DropContentKind::SinglePng;
+                request.files = {file};
+                request.folder.clear();
+            }
+            reset_drop_conflict_modal();
+            multi_asset_import_.waiting_for_rename = false;
+            open_drop_modal(request);
+            return true;
+        }
+    }
+
+    if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
+        reset_drop_conflict_modal();
+        multi_asset_import_.waiting_for_rename = false;
+        ++multi_asset_import_.index;
+        process_next_multi_asset_item();
+        return true;
+    }
+
+    const bool pointer_inside = pointer_event && SDL_PointInRect(&pointer, &drop_conflict_modal_.modal_rect);
+    return consumed || pointer_inside;
+}
+
+bool DevControls::handle_drop_error_popup_event(const SDL_Event& event) {
+    if (!drop_error_popup_.visible) {
+        return false;
+    }
+    layout_drop_error_popup();
+    bool consumed = false;
+    SDL_Point pointer{0, 0};
+    const bool pointer_event = is_pointer_event(event);
+    if (pointer_event) {
+        pointer = event_point(event);
+    }
+
+    if (drop_error_popup_.ok_button && drop_error_popup_.ok_button->handle_event(event)) {
+        consumed = true;
+        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP && event.button.button == SDL_BUTTON_LEFT) {
+            reset_drop_error_popup();
+            process_next_multi_asset_item();
+            return true;
+        }
+    }
+    if (event.type == SDL_EVENT_KEY_DOWN &&
+        (event.key.key == SDLK_ESCAPE || event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)) {
+        reset_drop_error_popup();
+        process_next_multi_asset_item();
+        return true;
+    }
+
+    const bool pointer_inside = pointer_event && SDL_PointInRect(&pointer, &drop_error_popup_.modal_rect);
+    return consumed || pointer_inside;
+}
+
+void DevControls::render_drop_overlay(SDL_Renderer* renderer) {
+    if (!renderer) return;
+    if (!drop_state_.active) return;
+    const int thickness = 10;
+    SDL_BlendMode prev = SDL_BLENDMODE_NONE;
+    SDL_GetRenderDrawBlendMode(renderer, &prev);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Color c = drop_state_.valid ? SDL_Color{255, 255, 255, 220} : SDL_Color{230, 40, 40, 220};
+    SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
+    SDL_Rect top{0, 0, screen_w_, thickness};
+    SDL_Rect bottom{0, std::max(0, screen_h_ - thickness), screen_w_, thickness};
+    SDL_Rect left{0, 0, thickness, screen_h_};
+    SDL_Rect right{std::max(0, screen_w_ - thickness), 0, thickness, screen_h_};
+    sdl_render::FillRect(renderer, &top);
+    sdl_render::FillRect(renderer, &bottom);
+    sdl_render::FillRect(renderer, &left);
+    sdl_render::FillRect(renderer, &right);
+    SDL_SetRenderDrawBlendMode(renderer, prev);
+}
+
+void DevControls::render_drop_modal(SDL_Renderer* renderer) {
+    if (!renderer || !drop_modal_.visible) return;
+    layout_drop_modal();
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    dm_draw::DrawBeveledRect(renderer,
+                             drop_modal_.modal_rect,
+                             DMStyles::CornerRadius(),
+                             DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+
+    const int title_x = drop_modal_.modal_rect.x + 16;
+    const int title_y = drop_modal_.modal_rect.y + 8;
+    DrawLabelText(renderer, "Create animation from dropped files", title_x, title_y, DMStyles::Label());
+
+    if (drop_modal_.name_box) drop_modal_.name_box->render(renderer);
+    if (drop_modal_.create_button) drop_modal_.create_button->render(renderer);
+    if (drop_modal_.cancel_button) drop_modal_.cancel_button->render(renderer);
+
+    if (!drop_modal_.error.empty()) {
+        DMLabelStyle warn = DMStyles::Label();
+        warn.color = SDL_Color{220, 60, 60, 255};
+        const int err_x = drop_modal_.modal_rect.x + 16;
+        const int err_y = drop_modal_.modal_rect.y + drop_modal_.modal_rect.h / 2 + 6;
+        DrawLabelText(renderer, drop_modal_.error, err_x, err_y, warn);
+    }
+}
+
+void DevControls::render_drop_choice_modal(SDL_Renderer* renderer) {
+    if (!renderer || !drop_choice_modal_.visible) return;
+    layout_drop_choice_modal();
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    dm_draw::DrawBeveledRect(renderer,
+                             drop_choice_modal_.modal_rect,
+                             DMStyles::CornerRadius(),
+                             DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+    DrawLabelText(renderer,
+                  "Import dropped PNG files",
+                  drop_choice_modal_.modal_rect.x + 16,
+                  drop_choice_modal_.modal_rect.y + 8,
+                  DMStyles::Label());
+    if (drop_choice_modal_.single_animation_button) drop_choice_modal_.single_animation_button->render(renderer);
+    if (drop_choice_modal_.multiple_assets_button) drop_choice_modal_.multiple_assets_button->render(renderer);
+    if (drop_choice_modal_.cancel_button) drop_choice_modal_.cancel_button->render(renderer);
+}
+
+void DevControls::render_drop_conflict_modal(SDL_Renderer* renderer) {
+    if (!renderer || !drop_conflict_modal_.visible) return;
+    layout_drop_conflict_modal();
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    dm_draw::DrawBeveledRect(renderer,
+                             drop_conflict_modal_.modal_rect,
+                             DMStyles::CornerRadius(),
+                             DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+    DrawLabelText(renderer,
+                  "Asset already exists: " + drop_conflict_modal_.asset_name,
+                  drop_conflict_modal_.modal_rect.x + 16,
+                  drop_conflict_modal_.modal_rect.y + 16,
+                  DMStyles::Label());
+    DrawLabelText(renderer,
+                  "Choose Skip or Rename.",
+                  drop_conflict_modal_.modal_rect.x + 16,
+                  drop_conflict_modal_.modal_rect.y + 46,
+                  DMStyles::Label());
+    if (drop_conflict_modal_.skip_button) drop_conflict_modal_.skip_button->render(renderer);
+    if (drop_conflict_modal_.rename_button) drop_conflict_modal_.rename_button->render(renderer);
+}
+
+void DevControls::render_drop_error_popup(SDL_Renderer* renderer) {
+    if (!renderer || !drop_error_popup_.visible) return;
+    layout_drop_error_popup();
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    dm_draw::DrawBeveledRect(renderer,
+                             drop_error_popup_.modal_rect,
+                             DMStyles::CornerRadius(),
+                             DMStyles::BevelDepth(),
+                             DMStyles::PanelBG(),
+                             DMStyles::HighlightColor(),
+                             DMStyles::ShadowColor(),
+                             false,
+                             DMStyles::HighlightIntensity(),
+                             DMStyles::ShadowIntensity());
+    DrawLabelText(renderer,
+                  drop_error_popup_.message,
+                  drop_error_popup_.modal_rect.x + 16,
+                  drop_error_popup_.modal_rect.y + 24,
+                  DMStyles::Label());
+    if (drop_error_popup_.ok_button) drop_error_popup_.ok_button->render(renderer);
+}
+
+void DevControls::render_import_busy_overlay(SDL_Renderer* renderer) {
+    if (!renderer || !import_busy_.active) return;
+    SDL_BlendMode prev = SDL_BLENDMODE_NONE;
+    SDL_GetRenderDrawBlendMode(renderer, &prev);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Color bg{15, 15, 20, 180};
+    SDL_SetRenderDrawColor(renderer, bg.r, bg.g, bg.b, bg.a);
+    SDL_Rect full{0, 0, screen_w_, screen_h_};
+    sdl_render::FillRect(renderer, &full);
+
+    const int spinner_size = 42;
+    const int center_x = screen_w_ / 2;
+    const int center_y = screen_h_ / 2;
+    const Uint64 elapsed = SDL_GetTicks() - import_busy_.started_ms;
+    constexpr double kTwoPi = 6.28318530717958647692;
+    const double angle = static_cast<double>(elapsed % 2000) / 2000.0 * kTwoPi;
+    SDL_Color fg{255, 255, 255, 235};
+    SDL_SetRenderDrawColor(renderer, fg.r, fg.g, fg.b, fg.a);
+    const int line_len = spinner_size;
+    int x2 = center_x + static_cast<int>(std::lround(std::cos(angle) * line_len));
+    int y2 = center_y + static_cast<int>(std::lround(std::sin(angle) * line_len));
+    SDL_RenderLine(renderer, center_x, center_y, x2, y2);
+
+    DrawLabelText(renderer,
+                  import_busy_.message,
+                  center_x - 140,
+                  center_y + spinner_size + 12,
+                  DMStyles::Label());
+
+    SDL_SetRenderDrawBlendMode(renderer, prev);
+}
+
+bool DevControls::create_drop_asset(const std::string& asset_name,
+                                   const std::vector<std::filesystem::path>& files,
+                                   const DropImportRequest& request,
+                                   bool open_editor_and_spawn,
+                                   std::string& error_out) {
+    ImportBusyScope busy(this, "Importing assets...");
+    if (assets_) {
+        if (SDL_Renderer* r = assets_->renderer()) {
+            render_import_busy_overlay(r);
+            SDL_RenderPresent(r);
+        }
+    }
+
+    error_out.clear();
+    const std::string sanitized = sanitize_asset_name_local(devmode::utils::trim_whitespace_copy(asset_name));
+    if (sanitized.empty()) {
+        error_out = "Please enter a name (letters, numbers, underscore).";
+        return false;
+    }
+    if (manifest_store_.resolve_asset_name(sanitized) || (assets_ && assets_->library().get(sanitized))) {
+        error_out = "An asset with that name already exists.";
+        return false;
+    }
+
+    std::vector<std::filesystem::path> validate_targets;
+    if (request.kind == DropContentKind::PngFolder && !request.folder.empty()) {
+        validate_targets.push_back(request.folder);
+    } else {
+        validate_targets = files;
+    }
+    DropValidationResult validation = validate_drop_items(validate_targets);
+    if (!validation.valid) {
+        error_out = validation.reason.empty() ? "Dropped content is invalid." : validation.reason;
+        return false;
+    }
+
+    const std::filesystem::path asset_dir = devmode::asset_paths::asset_folder_path(sanitized);
+    if (std::filesystem::exists(asset_dir)) {
+        error_out = "Asset folder already exists on disk.";
+        return false;
+    }
+    const std::filesystem::path default_dir = asset_dir / "default";
+
+    auto cleanup_on_failure = [&]() {
+        std::error_code ec;
+        std::filesystem::remove_all(asset_dir, ec);
+    };
+
+    try {
+        std::filesystem::create_directories(default_dir);
+    } catch (const std::exception& ex) {
+        error_out = std::string("Failed to create asset folder: ") + ex.what();
+        return false;
+    }
+
+    int frames_written = 0;
+    auto copy_sequence = [&](const std::vector<std::filesystem::path>& seq_files) {
+        for (size_t i = 0; i < seq_files.size(); ++i) {
+            std::filesystem::path dst = default_dir / (std::to_string(i) + ".png");
+            try {
+                std::filesystem::copy_file(seq_files[i], dst, std::filesystem::copy_options::overwrite_existing);
+                ++frames_written;
+            } catch (const std::exception& ex) {
+                SDL_Log("[DevControls] Failed to copy %s -> %s: %s",
+                        seq_files[i].string().c_str(), dst.string().c_str(), ex.what());
+            }
+        }
+    };
+
+    switch (validation.kind) {
+    case DropContentKind::SinglePng:
+    case DropContentKind::MultiImages:
+    case DropContentKind::PngFolder:
+        copy_sequence(validation.files);
+        break;
+    case DropContentKind::Gif: {
+        const std::filesystem::path gif_path = !validation.files.empty() ? validation.files.front() : std::filesystem::path{};
+        std::vector<unsigned char> bytes;
+        try {
+            std::ifstream in(gif_path, std::ios::binary);
+            in.unsetf(std::ios::skipws);
+            bytes.insert(bytes.begin(), std::istream_iterator<unsigned char>(in), std::istream_iterator<unsigned char>());
+        } catch (...) {
+            bytes.clear();
+        }
+        if (bytes.empty()) {
+            error_out = "Failed to read GIF file.";
+            cleanup_on_failure();
+            return false;
+        }
+        int x = 0, y = 0, z = 0, comp = 0;
+        int* delays = nullptr;
+        stbi_uc* data = stbi_load_gif_from_memory(bytes.data(), static_cast<int>(bytes.size()), &delays, &x, &y, &z, &comp, STBI_rgb_alpha);
+        if (!data || x <= 0 || y <= 0 || z <= 0) {
+            if (data) stbi_image_free(data);
+            if (delays) stbi_image_free(delays);
+            error_out = "Failed to decode GIF frames.";
+            cleanup_on_failure();
+            return false;
+        }
+        const int channels = 4;
+        const int stride = x * channels;
+        for (int i = 0; i < z; ++i) {
+            std::filesystem::path dst = default_dir / (std::to_string(i) + ".png");
+            const stbi_uc* frame = data + static_cast<std::size_t>(i) * static_cast<std::size_t>(x) * static_cast<std::size_t>(y) * channels;
+            int ok = 0;
+            try {
+                ok = stbi_write_png(dst.string().c_str(), x, y, channels, frame, stride);
+            } catch (...) {
+                ok = 0;
+            }
+            if (ok) {
+                ++frames_written;
+            }
+        }
+        stbi_image_free(data);
+        if (delays) stbi_image_free(delays);
+        break;
+    }
+    default:
+        break;
+    }
+
+    if (frames_written <= 0) {
+        error_out = "No frames were imported.";
+        cleanup_on_failure();
+        return false;
+    }
+
+    nlohmann::json default_anim = {
+        {"loop", true},
+        {"locked", false},
+        {"reverse_source", false},
+        {"flipped_source", false},
+        {"rnd_start", false},
+        {"source", nlohmann::json{{"kind", "folder"}, {"path", "default"}, {"name", ""}}},
+        {"number_of_frames", frames_written}
+    };
+
+    nlohmann::json manifest_entry = {
+        {"asset_name", sanitized},
+        {"asset_type", "Object"},
+        {"animations", nlohmann::json{{"default", default_anim}}},
+        {"start", "default"},
+        {"asset_directory", asset_dir.lexically_normal().generic_string()}
+    };
+    manifest_entry["tags"] = nlohmann::json::array();
+    manifest_entry["anti_tags"] = nlohmann::json::array();
+    manifest_entry["neighbor_search_distance"] = 500;
+    manifest_entry["render_radius"] = 0;
+    manifest_entry["update_radius"] = 0;
+    manifest_entry["min_same_type_distance"] = 0;
+    manifest_entry["min_distance_all"] = 0;
+    manifest_entry["can_invert"] = false;
+    manifest_entry["size_settings"] = {{"scale_percentage", 100.0}};
+
+    auto session = manifest_store_.begin_asset_edit(sanitized, true);
+    if (!session || !session.is_new_asset()) {
+        error_out = "Manifest entry already exists.";
+        cleanup_on_failure();
+        return false;
+    }
+    session.data() = manifest_entry;
+    if (!session.commit()) {
+        error_out = "Failed to write manifest entry.";
+        cleanup_on_failure();
+        return false;
+    }
+    manifest_store_.flush();
+
+    std::shared_ptr<AssetInfo> info;
+    if (assets_) {
+        auto& lib = assets_->library();
+        lib.add_asset(sanitized, manifest_entry);
+        if (SDL_Renderer* r = assets_->renderer()) {
+            lib.loadAnimationsFor(r, std::unordered_set<std::string>{sanitized});
+        }
+        info = lib.get(sanitized);
+    }
+
+    if (open_editor_and_spawn && assets_ && info) {
+        Asset* spawned = nullptr;
+        SDL_Point world = drop_world_from_screen(request.drop_screen);
+        spawned = assets_->spawn_asset(sanitized, world);
+        if (room_editor_ && spawned) {
+            room_editor_->finalize_asset_drag(spawned, info);
+        }
+        assets_->open_asset_info_editor(info);
+        assets_->open_animation_editor_for_asset(info);
+        assets_->show_dev_notice("Created asset '" + sanitized + "'", 1800);
+    }
+
+    return true;
+}
+
+bool DevControls::finalize_drop_creation(const std::string& desired_name) {
+    std::string error;
+    if (!create_drop_asset(desired_name, drop_modal_.request.files, drop_modal_.request, true, error)) {
+        drop_modal_.error = error;
+        return false;
+    }
+    return true;
+}
+
 void DevControls::handle_sdl_event(const SDL_Event& event) {
     if (!enabled_) return;
+
+    if (import_busy_.active &&
+        !drop_modal_.visible &&
+        !drop_choice_modal_.visible &&
+        !drop_conflict_modal_.visible &&
+        !drop_error_popup_.visible) {
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
+
+    if (drop_error_popup_.visible) {
+        handle_drop_error_popup_event(event);
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
+
+    if (drop_conflict_modal_.visible) {
+        handle_drop_conflict_modal_event(event);
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
+
+    if (drop_choice_modal_.visible) {
+        handle_drop_choice_modal_event(event);
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
+
+    if (drop_modal_.visible) {
+        handle_drop_modal_event(event);
+        if (input_) {
+            input_->consumeEvent(event);
+        }
+        return;
+    }
+
+    if (handle_drop_event(event)) {
+        return;
+    }
 
     other_settings_.ensure_layout();
     SDL_Rect header_rect{0, 0, 0, 0};
@@ -1310,7 +2498,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool modal_hide_pre = is_modal_blocking_panels();
     const bool layers_panel_open_pre = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
-    const bool hide_headers_pre = modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre || frame_editor_active;
+    const bool hide_headers_pre = modal_hide_pre || sliding_headers_hidden_ || layers_panel_open_pre || frame_editor_active || shift_block_headers_footers_;
     header_rect = hide_headers_pre ? SDL_Rect{0, 0, 0, 0} : other_settings_.header_rect();
     SDL_Rect usable_rect = FloatingPanelLayoutManager::instance().computeUsableRect(
         SDL_Rect{0, 0, screen_w_, screen_h_},
@@ -1334,7 +2522,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
     const bool modal_hide = is_modal_blocking_panels();
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
     modal_headers_hidden_ = modal_hide;
-    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || frame_editor_active;
+    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || frame_editor_active || shift_block_headers_footers_;
     other_settings_.set_enabled(enabled_);
     other_settings_.set_header_suppressed(hide_headers);
     apply_header_suppression();
@@ -1966,6 +3154,13 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         other_settings_.set_right_accessory_width(0);
         other_settings_.render(renderer);
     }
+
+    render_drop_overlay(renderer);
+    render_import_busy_overlay(renderer);
+    render_drop_modal(renderer);
+    render_drop_choice_modal(renderer);
+    render_drop_conflict_modal(renderer);
+    render_drop_error_popup(renderer);
 }
 
 void DevControls::begin_frame_editor_session(Asset* asset,
@@ -2149,6 +3344,17 @@ void DevControls::purge_asset(Asset* asset) {
     room_editor_->purge_asset(asset);
 }
 
+void DevControls::set_world_mutation_in_progress(bool in_progress) {
+    world_mutation_in_progress_ = in_progress;
+    if (!room_editor_) {
+        return;
+    }
+    room_editor_->set_pointer_queries_suspended(in_progress);
+    if (!in_progress) {
+        pending_selection_sync_refresh_ = true;
+    }
+}
+
 void DevControls::notify_spawn_group_config_changed(const nlohmann::json& entry) {
     if (room_editor_) {
         room_editor_->handle_spawn_config_change(entry);
@@ -2163,18 +3369,18 @@ void DevControls::notify_spawn_group_removed(const std::string& spawn_id) {
 
 const std::vector<Asset*>& DevControls::get_selected_assets() const {
     static std::vector<Asset*> empty;
-    if (!can_use_room_editor_ui()) return empty;
+    if (world_mutation_in_progress_ || !can_use_room_editor_ui()) return empty;
     return room_editor_->get_selected_assets();
 }
 
 const std::vector<Asset*>& DevControls::get_highlighted_assets() const {
     static std::vector<Asset*> empty;
-    if (!can_use_room_editor_ui()) return empty;
+    if (world_mutation_in_progress_ || !can_use_room_editor_ui()) return empty;
     return room_editor_->get_highlighted_assets();
 }
 
 Asset* DevControls::get_hovered_asset() const {
-    if (!can_use_room_editor_ui()) return nullptr;
+    if (world_mutation_in_progress_ || !can_use_room_editor_ui()) return nullptr;
     return room_editor_->get_hovered_asset();
 }
 
@@ -2195,7 +3401,8 @@ void DevControls::configure_header_button_sets() {
         camera_btn.id = "camera";
         camera_btn.label = "Camera";
         camera_btn.active = camera_panel_ && camera_panel_->is_visible();
-        camera_btn.style_override = &DMStyles::WarnButton();
+        camera_btn.group = FooterButtonGroup::Primary;
+        camera_btn.style_override = &DMStyles::HeaderButton();
         camera_btn.active_style_override = &DMStyles::AccentButton();
         camera_btn.on_toggle = [this](bool active) {
             if (room_editor_) {
@@ -2221,7 +3428,8 @@ void DevControls::configure_header_button_sets() {
         layers_btn.label = "Layers";
         const bool layers_visible = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
         layers_btn.active = layers_visible;
-        layers_btn.style_override = &DMStyles::WarnButton();
+        layers_btn.group = FooterButtonGroup::Primary;
+        layers_btn.style_override = &DMStyles::HeaderButton();
         layers_btn.active_style_override = &DMStyles::AccentButton();
         layers_btn.on_toggle = [this](bool active) {
             if (room_editor_) {
@@ -2262,6 +3470,9 @@ void DevControls::configure_header_button_sets() {
         map_assets_btn.id = "map_assets";
         map_assets_btn.label = "Map Assets";
         map_assets_btn.active = (map_assets_modal_ && map_assets_modal_->visible());
+        map_assets_btn.group = FooterButtonGroup::Panels;
+        map_assets_btn.style_override = &DMStyles::ListButton();
+        map_assets_btn.active_style_override = &DMStyles::AccentButton();
         map_assets_btn.on_toggle = [this](bool active) {
             if (active) {
                 toggle_map_assets_modal();
@@ -2279,6 +3490,9 @@ void DevControls::configure_header_button_sets() {
         boundary_btn.id = "map_boundary";
         boundary_btn.label = "Boundary Assets";
         boundary_btn.active = (boundary_assets_modal_ && boundary_assets_modal_->visible());
+        boundary_btn.group = FooterButtonGroup::Panels;
+        boundary_btn.style_override = &DMStyles::ListButton();
+        boundary_btn.active_style_override = &DMStyles::AccentButton();
         boundary_btn.on_toggle = [this](bool active) {
             if (active) {
                 toggle_boundary_assets_modal();
@@ -2297,6 +3511,8 @@ void DevControls::configure_header_button_sets() {
         trail_btn.label = "New Trail";
         trail_btn.momentary = true;
         trail_btn.style_override = &DMStyles::CreateButton();
+        trail_btn.group = FooterButtonGroup::Actions;
+        trail_btn.active_style_override = &DMStyles::AccentButton();
         trail_btn.on_toggle = [this](bool) {
             this->create_trail_template();
 };
@@ -2310,6 +3526,9 @@ void DevControls::configure_header_button_sets() {
     room_config_btn.id = "room_config";
     room_config_btn.label = "Room Config";
     room_config_btn.active = room_editor_ && room_editor_->is_room_config_open();
+    room_config_btn.group = FooterButtonGroup::Panels;
+    room_config_btn.style_override = &DMStyles::ListButton();
+    room_config_btn.active_style_override = &DMStyles::AccentButton();
     room_config_btn.on_toggle = [this](bool active) {
         if (!room_editor_) return;
         room_editor_->set_room_config_visible(active);
@@ -2321,6 +3540,9 @@ void DevControls::configure_header_button_sets() {
     library_btn.id = "asset_library";
     library_btn.label = "Asset Library";
     library_btn.active = room_editor_ && room_editor_->is_asset_library_open();
+    library_btn.group = FooterButtonGroup::Panels;
+    library_btn.style_override = &DMStyles::ListButton();
+    library_btn.active_style_override = &DMStyles::AccentButton();
     library_btn.on_toggle = [this](bool active) {
         if (!room_editor_) return;
         room_editor_->close_room_config();
@@ -2338,6 +3560,8 @@ void DevControls::configure_header_button_sets() {
     regenerate_btn.label = "regen";
     regenerate_btn.momentary = true;
     regenerate_btn.style_override = &DMStyles::DeleteButton();
+    regenerate_btn.group = FooterButtonGroup::Actions;
+    regenerate_btn.active_style_override = &DMStyles::AccentButton();
     regenerate_btn.on_toggle = [this](bool) {
         if (!room_editor_) {
             sync_header_button_states();
@@ -2353,6 +3577,19 @@ void DevControls::configure_header_button_sets() {
         sync_header_button_states();
 };
     room_buttons.push_back(std::move(regenerate_btn));
+
+    MapModeUI::HeaderButtonConfig explorer_btn;
+    explorer_btn.id = "open_explorer";
+    explorer_btn.label = "Open Explorer";
+    explorer_btn.momentary = true;
+    explorer_btn.group = FooterButtonGroup::Utilities;
+    explorer_btn.style_override = &DMStyles::SecondaryButton();
+    explorer_btn.active_style_override = &DMStyles::AccentButton();
+    explorer_btn.on_toggle = [this](bool) {
+        open_repo_root_in_file_explorer();
+        sync_header_button_states();
+    };
+    room_buttons.push_back(std::move(explorer_btn));
 
     map_mode_ui_->set_mode_button_sets(std::move(map_buttons), std::move(room_buttons));
     other_settings_.ensure_layout();
@@ -2438,11 +3675,13 @@ void DevControls::apply_header_suppression() {
 
         const bool frame_editor_active = frame_editor_session_ && frame_editor_session_->is_active();
         const bool modal_hide = is_modal_blocking_panels() || frame_editor_active;
-        map_mode_ui_->set_headers_suppressed(modal_hide);
+        const bool header_block = modal_hide || shift_block_headers_footers_;
+        map_mode_ui_->set_headers_suppressed(header_block);
         map_mode_ui_->set_dev_sliding_headers_hidden(sliding_headers_hidden_);
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            footer->set_visible(!frame_editor_active);
-            footer->set_input_enabled(!frame_editor_active);
+            const bool footer_enabled = !frame_editor_active && !shift_block_headers_footers_;
+            footer->set_visible(footer_enabled);
+            footer->set_input_enabled(footer_enabled);
         }
     }
 }
@@ -2469,7 +3708,7 @@ void DevControls::update_header_and_footer_bounds() {
     const bool modal_hide = is_modal_blocking_panels() || frame_editor_active;
     modal_headers_hidden_ = modal_hide;
     const bool layers_panel_open = map_mode_ui_ && map_mode_ui_->is_layers_panel_visible();
-    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open;
+    const bool hide_headers = modal_hide || sliding_headers_hidden_ || layers_panel_open || shift_block_headers_footers_;
     if (hide_headers) {
         last_header_rect_ = SDL_Rect{0, 0, 0, 0};
     } else {
@@ -2477,7 +3716,7 @@ void DevControls::update_header_and_footer_bounds() {
     }
     if (map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            if (footer->visible()) {
+            if (footer->visible() && !shift_block_headers_footers_) {
                 last_footer_rect_ = footer->rect();
             } else {
                 last_footer_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -2567,28 +3806,43 @@ void DevControls::remove_spawn_group_assets(const std::string& spawn_id) {
     if (!assets_ || spawn_id.empty()) {
         return;
     }
-    std::vector<Asset*> to_remove;
-    to_remove.reserve(assets_->all.size());
+
+    auto batch = assets_->begin_world_mutation_batch();
+    std::vector<Asset*> candidates;
+    candidates.reserve(assets_->all.size());
     for (Asset* asset : assets_->all) {
-        if (!asset || asset->dead) {
+        if (!asset || asset->dead || asset == assets_->player) {
             continue;
         }
-        if (asset == assets_->player) {
+        if (asset->spawn_id != spawn_id) {
             continue;
         }
-        if (asset->spawn_id == spawn_id) {
-            to_remove.push_back(asset);
-        }
+        candidates.push_back(asset);
     }
-    for (Asset* asset : to_remove) {
+
+    for (Asset* asset : candidates) {
         purge_asset(asset);
-        if (asset) {
-            asset->Delete();
+        batch.mark_for_deletion(asset);
+    }
+
+    batch.set_pre_commit_save([this]() {
+        if (!persist_map_info_to_disk()) {
+            assets_->show_dev_notice("Save failed; world changes were not applied.");
+            return false;
+        }
+        return true;
+    });
+
+    const bool committed = batch.commit();
+    if (!committed) {
+        return;
+    }
+    if (pending_selection_sync_refresh_) {
+        pending_selection_sync_refresh_ = false;
+        if (room_editor_) {
+            room_editor_->clear_highlighted_assets();
         }
     }
-    assets_->process_pending_removals();
-    assets_->rebuild_from_grid_state();
-    assets_->refresh_active_asset_lists();
 }
 
 void DevControls::integrate_spawned_assets(std::vector<std::unique_ptr<Asset>>& spawned) {
@@ -2758,7 +4012,7 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
                             attempt_weights[idx] = 0.0;
                             continue;
                         }
-                        auto* result = ctx.spawnAsset(candidate.name, candidate.info, *area_ptr, spawn_pos, 0, nullptr, info.spawn_id, info.position);
+                        auto* result = ctx.spawnAsset(candidate.name, candidate.info, *area_ptr, spawn_pos, 0, info.spawn_id, info.position);
                         if (!result) {
                             attempt_weights[idx] = 0.0;
                             continue;
@@ -2913,6 +4167,7 @@ void DevControls::restore_filter_hidden_assets() const {
         }
     }
     filter_hidden_assets_.clear();
+    previous_filtered_membership_.clear();
 }
 
 void DevControls::ensure_boundary_assets_modal_open() {
@@ -3011,15 +4266,15 @@ void DevControls::create_trail_template() {
     const MapGridSettings grid_settings = assets_->map_grid_settings();
     const std::string manifest_context = assets_->map_id();
 
-    pending_trail_template_ = std::make_unique<Room>(Room::Point{0, 0},
-                                                     "trail",
-                                                     key,
-                                                     nullptr,
-                                                     manifest_context,
-                                                     &assets_->library(),
-                                                     nullptr,
-                                                     &inserted,
-                                                     map_assets_section,
+    pending_trail_template_ = std::make_unique<Room>(Room::Point{0, 0},          // origin
+                                                     "trail",                    // type
+                                                     key,                        // room_def_name
+                                                     nullptr,                    // parent
+                                                     manifest_context,           // manifest_context
+                                                     &assets_->library(),        // asset_lib
+                                                     nullptr,                    // precomputed_area
+                                                     &inserted,                  // room_data
+                                                     map_assets_section,         // map_assets_data
                                                      grid_settings,
                                                      static_cast<double>(map_radius_or_default()),
                                                      "trails_data",
@@ -3196,6 +4451,9 @@ void DevControls::exit_map_editor_mode(bool focus_player, bool restore_previous_
     if (room_editor_ && enabled_) {
         room_editor_->set_enabled(true, true);
         room_editor_->set_current_room(current_room_);
+        if (map_editor_) {
+            map_editor_->set_current_room(current_room_);
+        }
     }
     if (camera_was_visible && camera_panel_) {
         camera_panel_->open();
@@ -3272,57 +4530,63 @@ Room* DevControls::choose_room(Room* preferred) const {
     return nullptr;
 }
 
-void DevControls::filter_active_assets(std::vector<Asset*>& assets) const {
+void DevControls::filter_active_assets(std::vector<Asset*>& /*assets*/) const {
     if (!enabled_) {
         restore_filter_hidden_assets();
         return;
     }
+    if (!assets_) {
+        return;
+    }
 
-    std::vector<Asset*> filtered_out;
-    filtered_out.reserve(assets.size());
-    assets.erase(std::remove_if(assets.begin(), assets.end(),
-                                [this, &filtered_out](Asset* asset) {
-                                    if (!asset) {
-                                        return true;
-                                    }
-                                    if (!passes_asset_filters(asset)) {
-                                        filtered_out.push_back(asset);
-                                        return true;
-                                    }
-                                    return false;
-                                }),
-                 assets.end());
+    // Visible set as computed by Assets::update_filtered_active_assets().
+    const auto& visible = assets_->filtered_active_asset_membership();
+    const auto& all_assets = assets_->getActive();
 
-    std::unordered_map<Asset*, bool> next_hidden;
-    next_hidden.reserve(filtered_out.size());
+    std::unordered_set<Asset*> active_set;
+    active_set.reserve(all_assets.size());
+    std::unordered_set<Asset*> to_hide;
+    to_hide.reserve(all_assets.size());
 
-    for (Asset* asset : filtered_out) {
+    for (Asset* asset : all_assets) {
         if (!asset) {
             continue;
         }
-        bool original_hidden = asset->is_hidden();
-        auto it = filter_hidden_assets_.find(asset);
-        if (it != filter_hidden_assets_.end()) {
-            original_hidden = it->second;
+        active_set.insert(asset);
+        if (visible.find(asset) == visible.end()) {
+            to_hide.insert(asset);
         }
+    }
+
+    // Restore anything we previously hid that is now visible (or no longer active).
+    for (auto it = filter_hidden_assets_.begin(); it != filter_hidden_assets_.end();) {
+        Asset* asset = it->first;
+        const bool still_active = active_set.find(asset) != active_set.end();
+        const bool should_hide = to_hide.find(asset) != to_hide.end();
+        if (!still_active || !should_hide) {
+            if (asset && still_active) {
+                asset->set_hidden(it->second);
+            }
+            it = filter_hidden_assets_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+
+    // Hide assets that failed the filters and make sure they cannot be interacted with.
+    for (Asset* asset : to_hide) {
+        if (!asset) {
+            continue;
+        }
+        auto [entry, inserted] = filter_hidden_assets_.emplace(asset, asset->is_hidden());
         asset->set_hidden(true);
         asset->set_highlighted(false);
         asset->set_selected(false);
-        next_hidden.emplace(asset, original_hidden);
+        (void)inserted;
     }
 
-    for (auto& kv : filter_hidden_assets_) {
-        Asset* asset = kv.first;
-        if (!asset) {
-            continue;
-        }
-        if (next_hidden.find(asset) != next_hidden.end()) {
-            continue;
-        }
-        asset->set_hidden(kv.second);
-    }
-
-    filter_hidden_assets_ = std::move(next_hidden);
+    // Track the currently hidden set so we can compare on the next update.
+    previous_filtered_membership_ = std::move(to_hide);
 }
 
 void DevControls::refresh_active_asset_filters() {
@@ -3334,16 +4598,6 @@ void DevControls::refresh_active_asset_filters() {
     set_active_assets(filtered, assets_->dev_active_state_version());
     if (room_editor_) {
         room_editor_->clear_highlighted_assets();
-    }
-    const auto& active = assets_->getActive();
-    for (Asset* asset : active) {
-        if (!asset) {
-            continue;
-        }
-        if (!passes_asset_filters(asset)) {
-            asset->set_highlighted(false);
-            asset->set_selected(false);
-        }
     }
 }
 
@@ -3392,16 +4646,16 @@ bool DevControls::persist_map_info_to_disk() {
         return false;
     }
     const std::string map_id = assets_->map_id();
-    const bool map_saved = devmode::persist_map_manifest_entry( manifest_store_, map_id, assets_->map_info_json(), std::cerr);
-    if (map_saved) {
-        manifest_store_.flush();
-        if (assets_) {
-            assets_->show_dev_notice("Map manifest saved", 1200);
-        }
-    } else if (assets_) {
-        assets_->show_dev_notice("Failed to save map manifest", 2000);
+    if (map_id.empty()) {
+        std::cerr << "[DevControls] Cannot persist map info: map id empty\n";
+        return false;
     }
-    return map_saved;
+    nlohmann::json payload = assets_->map_info_json();
+    save_coordinator_.enqueue_map_entry(map_id, std::move(payload),
+                                        devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                        "Manual map save");
+    save_coordinator_.flush_now("Manual map save");
+    return true;
 }
 
 void DevControls::render_grid_resolution_toast(SDL_Renderer* renderer) {
@@ -3443,6 +4697,32 @@ void DevControls::render_grid_resolution_toast(SDL_Renderer* renderer) {
     simple_label_cache().draw(renderer, style, toast.text, x, y);
 }
 
+void DevControls::render_room_geometry_overlay(SDL_Renderer* renderer) {
+    if (!renderer || !assets_) {
+        return;
+    }
+
+    const auto& rooms = assets_->rooms();
+    if (rooms.empty()) {
+        return;
+    }
+
+    const WarpedScreenGrid& cam = assets_->getView();
+    for (const Room* room : rooms) {
+        if (!room) {
+            continue;
+        }
+        const Area* area = room->room_area.get();
+        if (!area) {
+            continue;
+        }
+
+        const SDL_Color base_color = room->display_color();
+        const dm_draw::RoomBoundsOverlayStyle style = dm_draw::ResolveRoomBoundsOverlayStyle(base_color);
+        dm_draw::RenderRoomBoundsOverlay(renderer, cam, *area, style);
+    }
+}
+
 void DevControls::render_grid_overlay() {
     if (!assets_) {
         return;
@@ -3453,214 +4733,143 @@ void DevControls::render_grid_overlay() {
         return;
     }
 
+    const WarpedScreenGrid* cam = assets_ ? &assets_->getView() : nullptr;
+
+    render_room_geometry_overlay(renderer);
+
+    if (cam) {
+        const auto& telem = cam->terrain_telemetry();
+        DMLabelStyle style = DMStyles::Label();
+        DMLabelStyle shadow = style;
+        shadow.color = SDL_Color{0, 0, 0, 180};
+        int info_x = 10;
+        int info_y = 10;
+        auto draw_line = [&](const std::string& text) {
+            simple_label_cache().draw(renderer, shadow, text, info_x + 1, info_y + 1);
+            simple_label_cache().draw(renderer, style, text, info_x, info_y);
+            info_y += style.font_size + 2;
+        };
+        if (telem.frame_id != 0 || telem.cache_before != 0 || telem.cache_after != 0 ||
+            telem.sampled_points != 0 || telem.visible_points != 0) {
+            draw_line("terrain cache " + std::to_string(telem.cache_before) + " -> " +
+                      std::to_string(telem.cache_after) +
+                      " resets " + std::to_string(telem.cache_resets_total));
+            draw_line("samples " + std::to_string(telem.sampled_points) +
+                      " neighbor " + std::to_string(telem.neighbor_samples) +
+                      " visible " + std::to_string(telem.visible_points));
+            const double ratio = telem.sample_to_visible_ratio;
+            const double allowed = telem.allowed_ratio;
+            draw_line("ratio " + std::to_string(ratio) + " / " + std::to_string(allowed) +
+                      (telem.sample_ratio_warning ? " (!)":""));
+            if (telem.projected_points != 0 || telem.revision_reprojects != 0 || telem.simulated_revision_failures != 0) {
+                draw_line("proj " + std::to_string(telem.projected_points) +
+                          " rev " + std::to_string(telem.revision_reprojects) +
+                          " sim_fail " + std::to_string(telem.simulated_revision_failures));
+            }
+        }
+    }
+
     if (grid_overlay_enabled_) {
-        const WarpedScreenGrid* cam = &assets_->getView();
         if (!cam) {
             render_grid_resolution_toast(renderer);
             return;
         }
 
-        const bool show_depth_guides = false; // We only want grid here
-        const bool show_grid_overlay = grid_overlay_enabled_;
-        std::optional<float> horizon_screen_y;
-        std::optional<std::string> parallax_probe_label;
-        std::optional<WarpedScreenGrid::FloorDepthParams> floor_depth_params;
-        if (cam) {
-            floor_depth_params = cam->compute_floor_depth_params();
+        const WarpedScreenGrid& view_cam = *cam;
+        SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
+        Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
+        SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
+        SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+        SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
+
+        const int cell = std::max(1, grid_cell_size_px_);
+        const int radius_cells = 11;
+        const float radius_world = static_cast<float>(cell * radius_cells);
+        const float radius_sq = radius_world * radius_world;
+        constexpr int kGridPointSizePx = 2;
+        constexpr int kGridPointHalf = kGridPointSizePx / 2;
+        constexpr int kHighlightPointSizePx = 4;
+        constexpr int kHighlightPointHalf = kHighlightPointSizePx / 2;
+
+        int mouse_x = 0;
+        int mouse_y = 0;
+        sdl_mouse_util::GetMouseState(&mouse_x, &mouse_y);
+        const SDL_FPoint mouse_world = view_cam.screen_to_map(SDL_Point{mouse_x, mouse_y});
+
+        auto snap_axis = [cell](float value) -> int {
+            const long double ratio = static_cast<long double>(value) / static_cast<long double>(cell);
+            const long long snapped = static_cast<long long>(std::llround(ratio)) * static_cast<long long>(cell);
+            return static_cast<int>(std::clamp<long long>(snapped, std::numeric_limits<int>::min(), std::numeric_limits<int>::max()));
+        };
+
+        const SDL_Point center_world{snap_axis(mouse_world.x), snap_axis(mouse_world.y)};
+
+        auto try_floor_warped_screen_position = [&](SDL_Point world_point, SDL_FPoint& out) -> bool {
+            SDL_FPoint linear{};
+            if (!view_cam.project_world_point(
+                    SDL_FPoint{static_cast<float>(world_point.x), static_cast<float>(world_point.y)}, 0.0f, linear)) {
+                return false;
+            }
+            const float warped_y = view_cam.warp_floor_screen_y(static_cast<float>(world_point.y), linear.y);
+            if (!std::isfinite(linear.x) || !std::isfinite(warped_y)) {
+                return false;
+            }
+            out = SDL_FPoint{linear.x, warped_y};
+            return true;
+        };
+
+        const int span = radius_cells;
+        for (int gy = -span; gy <= span; ++gy) {
+            for (int gx = -span; gx <= span; ++gx) {
+                const float dx = static_cast<float>(gx * cell);
+                const float dy = static_cast<float>(gy * cell);
+                const float dist_sq = dx * dx + dy * dy;
+                if (dist_sq > radius_sq) {
+                    continue;
+                }
+
+                const SDL_Point world_point{center_world.x + gx * cell, center_world.y + gy * cell};
+                SDL_FPoint screen_point{};
+                if (!try_floor_warped_screen_position(world_point, screen_point)) {
+                    continue;
+                }
+
+                const float dist = std::sqrt(std::max(0.0f, dist_sq));
+                const float edge_t = std::clamp(dist / radius_world, 0.0f, 1.0f);
+                const float fade = 1.0f - edge_t;
+                const Uint8 alpha = static_cast<Uint8>(std::lround(24.0f + fade * 156.0f));
+
+                const bool is_cursor_intersection = (gx == 0 && gy == 0);
+                if (is_cursor_intersection) {
+                    SDL_SetRenderDrawColor(renderer, 255, 160, 32, 240);
+                } else {
+                    SDL_SetRenderDrawColor(renderer, 255, 255, 255, alpha);
+                }
+
+                const int px = static_cast<int>(std::lround(screen_point.x));
+                const int py = static_cast<int>(std::lround(screen_point.y));
+                if (is_cursor_intersection) {
+                    SDL_FRect highlight_rect{
+                        static_cast<float>(px - kHighlightPointHalf),
+                        static_cast<float>(py - kHighlightPointHalf),
+                        static_cast<float>(kHighlightPointSizePx),
+                        static_cast<float>(kHighlightPointSizePx),
+                    };
+                    SDL_RenderFillRect(renderer, &highlight_rect);
+                } else {
+                    SDL_FRect point_rect{
+                        static_cast<float>(px - kGridPointHalf),
+                        static_cast<float>(py - kGridPointHalf),
+                        static_cast<float>(kGridPointSizePx),
+                        static_cast<float>(kGridPointSizePx),
+                    };
+                    SDL_RenderFillRect(renderer, &point_rect);
+                }
+            }
         }
 
-        const bool need_grid_helpers = cam && (show_grid_overlay || show_depth_guides);
-        if (renderer && need_grid_helpers) {
-            const WarpedScreenGrid& view_cam = *cam;
-            const WarpedScreenGrid::FloorDepthParams& depth_params = *floor_depth_params;
-            world::WorldGrid& grid = assets_->world_grid();
-
-            auto parallax_offset = [&](SDL_Point w) { return 0.0f; };
-
-            SDL_BlendMode prev_mode = SDL_BLENDMODE_NONE;
-            Uint8 pr = 0, pg = 0, pb = 0, pa = 0;
-            if (show_grid_overlay) {
-                SDL_GetRenderDrawBlendMode(renderer, &prev_mode);
-                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                SDL_GetRenderDrawColor(renderer, &pr, &pg, &pb, &pa);
-            }
-
-            SDL_Color minor{0, 255, 255, 48};
-            SDL_Color major{0, 255, 255, 80};
-
-            auto [view_min_x, view_min_y, view_max_x, view_max_y] = view_cam.get_current_view().get_bounds();
-            SDL_FPoint top_left_world{static_cast<float>(view_min_x), static_cast<float>(view_min_y)};
-            SDL_FPoint bottom_right_world{static_cast<float>(view_max_x), static_cast<float>(view_max_y)};
-            const float cam_scale = std::max(0.0001f, static_cast<float>(view_cam.get_scale()));
-
-            int cell = std::max(1, grid_cell_size_px_);
-            if (cell > 0) {
-                const float world_padding = static_cast<float>(cell) * 4.0f;
-                const float depth_world_padding = cam_scale * std::max(0.0f, view_cam.current_depth_offset_px());
-                const float min_world_x = std::min(top_left_world.x, bottom_right_world.x) - world_padding;
-                const float max_world_x = std::max(top_left_world.x, bottom_right_world.x) + world_padding;
-                const float min_world_y = std::min(top_left_world.y, bottom_right_world.y) - world_padding - depth_world_padding * 0.5f;
-                const float max_world_y = std::max(top_left_world.y, bottom_right_world.y) + world_padding + depth_world_padding;
-
-                if (depth_params.enabled) {
-                    horizon_screen_y = static_cast<float>(depth_params.horizon_screen_y);
-                }
-
-                const int major_interval = 8;
-                const int samples_per_line = 32;
-                const float mid_world_x = (min_world_x + max_world_x) * 0.5f;
-
-                auto try_floor_warped_screen_position = [&](const WarpedScreenGrid& c, SDL_Point w, SDL_FPoint& out) -> bool {
-                    SDL_FPoint linear{};
-                    if (!c.project_world_point(SDL_FPoint{static_cast<float>(w.x), static_cast<float>(w.y)}, 0.0f, linear)) {
-                        return false;
-                    }
-                    float warped_y = c.warp_floor_screen_y(static_cast<float>(w.y), linear.y);
-                    if (!std::isfinite(linear.x) || !std::isfinite(warped_y)) {
-                        return false;
-                    }
-                    out = SDL_FPoint{linear.x, warped_y};
-                    return true;
-                };
-
-                float start_x = std::floor(min_world_x / cell) * cell;
-                bool have_horizon_x = false;
-                float best_horizon_x = 0.0f;
-                const float screen_center_x = static_cast<float>(screen_w_) * 0.5f;
-                auto draw_grid_polyline = [&](const std::vector<SDL_Point>& polyline, float line_value) {
-                    if (!show_grid_overlay || polyline.size() < 2) {
-                        return;
-                    }
-                    const bool is_major = (static_cast<long long>(std::llround(line_value)) % (cell * major_interval) == 0);
-                    SDL_Color c = is_major ? major : minor;
-                    SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-                    sdl_render::Lines(renderer, polyline.data(), static_cast<int>(polyline.size()));
-                };
-
-                auto update_horizon_for_polyline = [&](const std::vector<SDL_Point>& polyline) {
-                    if (!depth_params.enabled || !horizon_screen_y || polyline.size() < 2) {
-                        return;
-                    }
-                    const float hy = *horizon_screen_y;
-                    for (size_t i = 1; i < polyline.size(); ++i) {
-                        const float y0 = static_cast<float>(polyline[i - 1].y);
-                        const float y1 = static_cast<float>(polyline[i].y);
-                        if ((y0 <= hy && hy <= y1) || (y1 <= hy && hy <= y0)) {
-                            const float x0 = static_cast<float>(polyline[i - 1].x);
-                            const float x1 = static_cast<float>(polyline[i].x);
-                            if (std::fabs(y1 - y0) > 1e-6f) {
-                                const float t = (hy - y0) / (y1 - y0);
-                                const float ix = x0 + t * (x1 - x0);
-                                const float dist = std::fabs(ix - screen_center_x);
-                                if (!have_horizon_x || dist < std::fabs(best_horizon_x - screen_center_x)) {
-                                    have_horizon_x = true;
-                                    best_horizon_x = ix;
-                                }
-                            }
-                        }
-                    }
-                };
-
-                for (float x = start_x; x <= max_world_x + cell; x += cell) {
-                    std::vector<SDL_Point> polyline;
-                    polyline.reserve(static_cast<std::size_t>(samples_per_line + 1));
-                    auto flush_polyline = [&]() {
-                        draw_grid_polyline(polyline, x);
-                        update_horizon_for_polyline(polyline);
-                        polyline.clear();
-                    };
-
-                    for (int s = 0; s <= samples_per_line; ++s) {
-                        const float t = static_cast<float>(s) / static_cast<float>(samples_per_line);
-                        const float wy = min_world_y + (max_world_y - min_world_y) * t;
-                        SDL_Point world_point{
-                            static_cast<int>(std::lround(x)), static_cast<int>(std::lround(wy)) };
-                        SDL_FPoint screen{};
-                        if (!try_floor_warped_screen_position(view_cam, world_point, screen)) {
-                            flush_polyline();
-                            continue;
-                        }
-                        polyline.push_back(SDL_Point{
-                            static_cast<int>(std::lround(screen.x)),
-                            static_cast<int>(std::lround(screen.y))
-                        });
-                    }
-                    flush_polyline();
-                }
-
-                if (have_horizon_x) {
-                    const int xi = static_cast<int>(std::lround(best_horizon_x));
-                    SDL_BlendMode prev_mode2 = SDL_BLENDMODE_NONE;
-                    SDL_GetRenderDrawBlendMode(renderer, &prev_mode2);
-                    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                    SDL_SetRenderDrawColor(renderer, 255, 140, 0, 220);
-                    SDL_RenderLine(renderer, xi, 0, xi, screen_h_);
-                    SDL_SetRenderDrawBlendMode(renderer, prev_mode2);
-                }
-
-                float start_y = std::floor(max_world_y / cell) * cell;
-                float highest_horizontal_screen_y = std::numeric_limits<float>::infinity();
-                for (float y = start_y; y >= min_world_y - cell; y -= cell) {
-                    SDL_Point sample_world{
-                        static_cast<int>(std::lround(mid_world_x)), static_cast<int>(std::lround(y)) };
-                    SDL_FPoint sample_screen{};
-                    if (try_floor_warped_screen_position(view_cam, sample_world, sample_screen)) {
-                        const float screen_y = sample_screen.y;
-                        if (std::isfinite(screen_y)) {
-                            highest_horizontal_screen_y = std::min(highest_horizontal_screen_y, screen_y);
-                        }
-                    }
-
-                    std::vector<SDL_Point> polyline;
-                    polyline.reserve(static_cast<std::size_t>(samples_per_line + 1));
-                    auto flush_polyline = [&]() {
-                        draw_grid_polyline(polyline, y);
-                        update_horizon_for_polyline(polyline);
-                        polyline.clear();
-                    };
-                    for (int s = 0; s <= samples_per_line; ++s) {
-                        const float t = static_cast<float>(s) / static_cast<float>(samples_per_line);
-                        const float wx = min_world_x + (max_world_x - min_world_x) * t;
-                        SDL_Point world_point{
-                            static_cast<int>(std::lround(wx)), static_cast<int>(std::lround(y)) };
-                        SDL_FPoint screen{};
-                        if (!try_floor_warped_screen_position(view_cam, world_point, screen)) {
-                            flush_polyline();
-                            continue;
-                        }
-                        polyline.push_back(SDL_Point{
-                            static_cast<int>(std::lround(screen.x)),
-                            static_cast<int>(std::lround(screen.y))
-                        });
-                    }
-                    flush_polyline();
-                }
-
-                if (show_grid_overlay && horizon_screen_y) {
-                    const float hy = *horizon_screen_y;
-                    const bool already_at_horizon =
-                        std::isfinite(highest_horizontal_screen_y) && std::fabs(highest_horizontal_screen_y - hy) < 0.5f;
-                    if (!already_at_horizon) {
-                        SDL_Color c = major;
-                        SDL_SetRenderDrawColor(renderer, c.r, c.g, c.b, c.a);
-                        const int yi = static_cast<int>(std::lround(hy));
-                        SDL_RenderLine(renderer, 0, yi, screen_w_, yi);
-                    }
-                }
-
-                if (depth_params.enabled) {
-
-                    horizon_screen_y = static_cast<float>(depth_params.horizon_screen_y);
-                }
-
-
-            }
-
-            if (show_grid_overlay) {
-                SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
-                SDL_SetRenderDrawBlendMode(renderer, prev_mode);
-            }
-        }
+        SDL_SetRenderDrawColor(renderer, pr, pg, pb, pa);
+        SDL_SetRenderDrawBlendMode(renderer, prev_mode);
     }
 
     render_grid_resolution_toast(renderer);

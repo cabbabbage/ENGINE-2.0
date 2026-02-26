@@ -6,7 +6,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "utils/grid.hpp"
 #include "utils/range_util.hpp"
 #include "gameplay/world/grid_point.hpp"

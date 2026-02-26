@@ -14,6 +14,7 @@
 #include "map_rooms_display.hpp"
 #include "config/room_config/room_configurator.hpp"
 #include "fog_settings_panel.hpp"
+#include "terrain_settings_panel.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
 #include "SlidingWindowContainer.hpp"
 #include "core/AssetsManager.hpp"
@@ -103,6 +104,14 @@ void MapModeUI::set_manifest_store(devmode::core::ManifestStore* store) {
     manifest_store_ = store;
     if (layers_controller_) {
         layers_controller_->set_manifest_store(manifest_store_, map_id_);
+        layers_controller_->set_save_coordinator(save_coordinator_);
+    }
+}
+
+void MapModeUI::set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) {
+    save_coordinator_ = coordinator;
+    if (layers_controller_) {
+        layers_controller_->set_save_coordinator(save_coordinator_);
     }
 }
 
@@ -237,6 +246,9 @@ void MapModeUI::apply_sliding_area_bounds() {
     }
     if (fog_settings_panel_) {
         fog_settings_panel_->set_work_area(work_area);
+    }
+    if (terrain_settings_panel_) {
+        terrain_settings_panel_->set_work_area(work_area);
     }
 
     if (room_config_container_) {
@@ -506,6 +518,7 @@ void MapModeUI::ensure_panels() {
     }
     if (layers_controller_) {
         layers_controller_->set_manifest_store(manifest_store_, map_id_);
+        layers_controller_->set_save_coordinator(save_coordinator_);
     }
     if (!layers_panel_) {
         layers_panel_ = std::make_unique<MapLayersPanel>();
@@ -673,6 +686,16 @@ void MapModeUI::ensure_panels() {
         fog_settings_panel_->set_work_area(effective_work_area());
         track_floating_panel(fog_settings_panel_.get());
     }
+    if (!terrain_settings_panel_) {
+        terrain_settings_panel_ = std::make_unique<TerrainSettingsPanel>();
+        terrain_settings_panel_->build();
+        terrain_settings_panel_->set_visible(false);
+        terrain_settings_panel_->set_on_close([this]() { this->sync_footer_button_states(); });
+    }
+    if (terrain_settings_panel_) {
+        terrain_settings_panel_->set_work_area(effective_work_area());
+        track_floating_panel(terrain_settings_panel_.get());
+    }
     if (!footer_bar_) {
         footer_bar_ = std::make_unique<DevFooterBar>("");
         footer_bar_->set_bounds(screen_w_, screen_h_);
@@ -700,6 +723,7 @@ void MapModeUI::configure_footer_buttons() {
             extra.label = config.label;
             extra.active = config.active;
             extra.momentary = config.momentary;
+            extra.group = config.group;
             extra.style_override = config.style_override;
             extra.active_style_override = config.active_style_override;
             auto* cfg_ptr = &config;
@@ -731,7 +755,8 @@ void MapModeUI::configure_footer_buttons() {
             DevFooterBar::Button layers_btn;
             layers_btn.id = "layers";
             layers_btn.label = "Layers";
-            layers_btn.style_override = &DMStyles::WarnButton();
+            layers_btn.group = FooterButtonGroup::Primary;
+            layers_btn.style_override = &DMStyles::HeaderButton();
             layers_btn.active_style_override = &DMStyles::AccentButton();
             layers_btn.on_toggle = [this](bool active) {
                 if (active) {
@@ -746,6 +771,7 @@ void MapModeUI::configure_footer_buttons() {
         DevFooterBar::Button fog_btn;
         fog_btn.id = "fog";
         fog_btn.label = "Fog";
+        fog_btn.group = FooterButtonGroup::Primary;
         fog_btn.style_override = &DMStyles::HeaderButton();
         fog_btn.active_style_override = &DMStyles::AccentButton();
         fog_btn.on_toggle = [this](bool active) {
@@ -756,6 +782,21 @@ void MapModeUI::configure_footer_buttons() {
             }
         };
         buttons.push_back(std::move(fog_btn));
+
+        DevFooterBar::Button terrain_btn;
+        terrain_btn.id = "terrain";
+        terrain_btn.label = "Terrain";
+        terrain_btn.group = FooterButtonGroup::Primary;
+        terrain_btn.style_override = &DMStyles::HeaderButton();
+        terrain_btn.active_style_override = &DMStyles::AccentButton();
+        terrain_btn.on_toggle = [this](bool active) {
+            if (active) {
+                this->open_terrain_panel();
+            } else {
+                this->close_terrain_panel();
+            }
+        };
+        buttons.push_back(std::move(terrain_btn));
 
         append_custom(map_mode_buttons_, HeaderMode::Map);
 
@@ -775,6 +816,8 @@ void MapModeUI::sync_footer_button_states() {
         footer_bar_->set_button_active_state("layers", layers_visible);
         const bool fog_visible = fog_settings_panel_ && fog_settings_panel_->is_visible();
         footer_bar_->set_button_active_state("fog", fog_visible);
+        const bool terrain_visible = terrain_settings_panel_ && terrain_settings_panel_->is_visible();
+        footer_bar_->set_button_active_state("terrain", terrain_visible);
         for (const auto& config : map_mode_buttons_) {
             footer_bar_->set_button_active_state(config.id, config.active);
         }
@@ -842,6 +885,16 @@ void MapModeUI::sync_panel_map_info() {
         layer_controls_display_->set_controller(layers_controller_);
         layer_controls_display_->set_selected_layer(layers_panel_ ? layers_panel_->selected_layer() : -1);
         layer_controls_display_->refresh();
+    }
+    if (fog_settings_panel_) {
+        fog_settings_panel_->set_map_info(map_info_, [this]() {
+            return this->save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        });
+    }
+    if (terrain_settings_panel_) {
+        terrain_settings_panel_->set_map_info(map_info_, [this]() {
+            return this->save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        });
     }
 }
 
@@ -1083,11 +1136,28 @@ void MapModeUI::toggle_fog_panel() {
     }
 }
 
+void MapModeUI::open_terrain_panel() {
+    ensure_panels();
+    if (terrain_settings_panel_) {
+        terrain_settings_panel_->open();
+        bring_panel_to_front(terrain_settings_panel_.get());
+    }
+    sync_footer_button_states();
+}
+
+void MapModeUI::close_terrain_panel() {
+    if (terrain_settings_panel_) {
+        terrain_settings_panel_->close();
+    }
+    sync_footer_button_states();
+}
+
 void MapModeUI::close_all_panels() {
     if (layers_preview_panel_) {
         layers_preview_panel_->close();
     }
     close_fog_panel();
+    close_terrain_panel();
     set_active_panel(PanelType::None);
     close_room_configuration(false);
 }
@@ -1325,7 +1395,11 @@ bool MapModeUI::is_fog_panel_visible() const {
     return fog_settings_panel_ && fog_settings_panel_->is_visible();
 }
 
-bool MapModeUI::save_map_info_to_disk() const {
+bool MapModeUI::is_terrain_panel_visible() const {
+    return terrain_settings_panel_ && terrain_settings_panel_->is_visible();
+}
+
+bool MapModeUI::save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority priority) const {
     if (!map_info_) return false;
     if (!manifest_store_) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapModeUI] Cannot save map info: manifest store is not available.");
@@ -1335,7 +1409,16 @@ bool MapModeUI::save_map_info_to_disk() const {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapModeUI] Cannot save map info: map identifier is empty.");
         return false;
     }
-    if (!devmode::persist_map_manifest_entry(*manifest_store_, map_id_, *map_info_, std::cerr)) {
+    nlohmann::json payload = *map_info_;
+    const std::string label = std::string("Map ") + map_id_;
+    if (save_coordinator_) {
+        save_coordinator_->enqueue_map_entry(map_id_, std::move(payload), priority, label);
+        if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
+            save_coordinator_->flush_now(label);
+        }
+        return true;
+    }
+    if (!devmode::persist_map_manifest_entry(*manifest_store_, map_id_, payload, std::cerr)) {
         return false;
     }
     manifest_store_->flush();
@@ -1345,10 +1428,10 @@ bool MapModeUI::save_map_info_to_disk() const {
 bool MapModeUI::auto_save_layers_data() {
     bool saved = false;
     if (layers_controller_) {
-        saved = layers_controller_->save();
+        saved = layers_controller_->save(devmode::core::DevSaveCoordinator::Priority::Debounced);
     }
     if (!saved) {
-        saved = save_map_info_to_disk();
+        saved = save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority::Debounced);
     }
     if (rooms_display_) {
         rooms_display_->refresh();

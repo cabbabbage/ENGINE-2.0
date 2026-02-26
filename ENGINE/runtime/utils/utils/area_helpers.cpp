@@ -4,7 +4,7 @@
 #include <cmath>
 #include <limits>
 
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 
 namespace area_helpers {
 namespace {

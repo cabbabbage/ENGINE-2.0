@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <vector>
 #include <cmath>
+#include <utility>
 #include <string_view>
 
 namespace {
@@ -78,6 +79,7 @@ class SearchAssets::ResultTileWidget : public Widget {
 public:
     ResultTileWidget(SearchAssets* owner, const SearchAssets::Result& result)
         : owner_(owner), result_(result) {}
+    ~ResultTileWidget() override { clear_label_cache(); }
 
     void set_rect(const SDL_Rect& r) override { rect_ = r; }
     const SDL_Rect& rect() const override { return rect_; }
@@ -174,53 +176,169 @@ public:
         int radius = std::min(corner_radius, std::min(rect_.w, rect_.h) / 2);
         dm_draw::DrawRoundedOutline(r, rect_, radius, 1, palette.outline);
 
-        const DMLabelStyle& label_style = DMStyles::Label();
-        TTF_Font* label_font = devmode::utils::load_font(label_style.font_size > 0 ? label_style.font_size : 16);
-        if (label_font && label_rect.w > 0) {
-            std::string render_label = result_.label.empty() ? "(Unnamed)" : result_.label;
-            int tw = 0;
-            int th = 0;
-            const std::string ellipsis = "...";
-            if (ttf_util::GetStringSize(label_font, render_label, &tw, &th) && tw > label_rect.w) {
-                std::string base = render_label;
-                while (!base.empty()) {
-                    base.pop_back();
-                    std::string candidate = base + ellipsis;
-                    if (ttf_util::GetStringSize(label_font, candidate, &tw, &th) && tw <= label_rect.w) {
-                        render_label = std::move(candidate);
-                        break;
-                    }
-                }
-                if (base.empty()) {
-                    render_label = ellipsis;
-                }
-            }
-            SDL_Surface* surf = ttf_util::RenderTextBlended(label_font, render_label.c_str(), label_style.color);
-            if (surf) {
-                SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-                SDL_DestroySurface(surf);
-                if (tex) {
-                    int dw = 0;
-                    int dh = 0;
-                    texture_size(tex, dw, dh);
-                    SDL_Rect dst{ label_rect.x,
-                                  label_rect.y + std::max(0, (label_rect.h - dh) / 2),
-                                  std::min(dw, label_rect.w),
-                                  dh };
-                    sdl_render::Texture(r, tex, nullptr, &dst);
-                    SDL_DestroyTexture(tex);
-                }
-            }
+        ensure_label_texture(r, label_rect.w);
+        if (label_cache_.texture) {
+            SDL_Rect dst{ label_rect.x,
+                          label_rect.y + std::max(0, (label_rect.h - label_cache_.texture_h) / 2),
+                          std::min(label_cache_.texture_w, label_rect.w),
+                          label_cache_.texture_h };
+            sdl_render::Texture(r, label_cache_.texture, nullptr, &dst);
         }
     }
 
 private:
+    friend class SearchAssets;
+    struct LabelCacheKey {
+        std::string text;
+        std::string font_path;
+        int font_size = 0;
+        SDL_Color color{};
+        int available_width = 0;
+
+        bool operator==(const LabelCacheKey& other) const {
+            return text == other.text &&
+                   font_path == other.font_path &&
+                   font_size == other.font_size &&
+                   available_width == other.available_width &&
+                   color.r == other.color.r &&
+                   color.g == other.color.g &&
+                   color.b == other.color.b &&
+                   color.a == other.color.a;
+        }
+    };
+
+    struct LabelCacheEntry {
+        LabelCacheKey key;
+        SDL_Texture* texture = nullptr;
+        int texture_w = 0;
+        int texture_h = 0;
+        bool valid = false;
+
+        bool matches(const LabelCacheKey& candidate) const {
+            return valid && texture && key == candidate;
+        }
+
+        void update(SDL_Texture* tex, int width, int height, LabelCacheKey candidate) {
+            if (texture) {
+                SDL_DestroyTexture(texture);
+            }
+            texture = tex;
+            texture_w = width;
+            texture_h = height;
+            key = std::move(candidate);
+            valid = texture != nullptr;
+        }
+
+        void clear() {
+            if (texture) {
+                SDL_DestroyTexture(texture);
+                texture = nullptr;
+            }
+            texture_w = 0;
+            texture_h = 0;
+            key = LabelCacheKey{};
+            valid = false;
+        }
+
+        ~LabelCacheEntry() { clear(); }
+    };
+
+    static std::string truncated_label_text(TTF_Font* font, std::string text, int max_width);
+    void ensure_label_texture(SDL_Renderer* renderer, int available_width) const;
+    void clear_label_cache();
+
     SearchAssets* owner_ = nullptr;
     SearchAssets::Result result_;
     SDL_Rect rect_{0, 0, 0, 0};
     bool hovered_ = false;
     bool pressed_ = false;
+    mutable LabelCacheEntry label_cache_;
 };
+
+std::string SearchAssets::ResultTileWidget::truncated_label_text(TTF_Font* font, std::string text, int max_width) {
+    if (!font || max_width <= 0) {
+        return text;
+    }
+    if (text.empty()) {
+        text = "(Unnamed)";
+    }
+    int tw = 0;
+    int th = 0;
+    const std::string ellipsis = "...";
+    if (!ttf_util::GetStringSize(font, text, &tw, &th)) {
+        return text;
+    }
+    if (tw <= max_width) {
+        return text;
+    }
+    std::string base = text;
+    while (!base.empty()) {
+        base.pop_back();
+        std::string candidate = base + ellipsis;
+        if (ttf_util::GetStringSize(font, candidate, &tw, &th) && tw <= max_width) {
+            return candidate;
+        }
+    }
+    return ellipsis;
+}
+
+void SearchAssets::ResultTileWidget::ensure_label_texture(SDL_Renderer* renderer, int available_width) const {
+    if (!renderer || available_width <= 0) {
+        label_cache_.clear();
+        return;
+    }
+    const DMLabelStyle& label_style = DMStyles::Label();
+    LabelCacheKey key;
+    key.text = result_.label.empty() ? "(Unnamed)" : result_.label;
+    key.font_path = label_style.font_path;
+    key.font_size = label_style.font_size > 0 ? label_style.font_size : 16;
+    key.color = label_style.color;
+    key.available_width = available_width;
+
+    if (label_cache_.matches(key)) {
+        return;
+    }
+
+    TTF_Font* font = devmode::utils::load_font(key.font_size);
+    if (!font) {
+        label_cache_.clear();
+        return;
+    }
+
+    std::string render_text = truncated_label_text(font, key.text, available_width);
+    if (render_text.empty()) {
+        label_cache_.clear();
+        return;
+    }
+
+    SDL_Surface* surf = ttf_util::RenderTextBlended(font, render_text, key.color);
+    if (!surf) {
+        label_cache_.clear();
+        return;
+    }
+
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surf);
+    SDL_DestroySurface(surf);
+    if (!texture) {
+        label_cache_.clear();
+        return;
+    }
+
+    int tw = 0;
+    int th = 0;
+    texture_size(texture, tw, th);
+    if (tw <= 0 || th <= 0) {
+        SDL_DestroyTexture(texture);
+        label_cache_.clear();
+        return;
+    }
+
+    label_cache_.update(texture, tw, th, std::move(key));
+}
+
+void SearchAssets::ResultTileWidget::clear_label_cache() {
+    label_cache_.clear();
+}
 
 SearchAssets::SearchAssets(devmode::core::ManifestStore* manifest_store)
     : manifest_store_(manifest_store) {
@@ -613,7 +731,8 @@ void SearchAssets::filter_assets() {
         }
         Result res;
         res.label = a.name;
-        res.value = a.name;
+        // Return the canonical manifest/library key so saved candidate JSON stays resolvable.
+        res.value = !a.manifest_name.empty() ? a.manifest_name : a.name;
         res.manifest_name = a.manifest_name;
         res.tags = a.tags;
         res.is_tag = false;
@@ -683,6 +802,9 @@ void SearchAssets::filter_assets() {
 }
 
 void SearchAssets::rebuild_tiles() {
+    for (auto& tile : tiles_) {
+        tile->clear_label_cache();
+    }
     tiles_.clear();
     tiles_.reserve(results_.size());
     for (const auto& res : results_) {
@@ -692,6 +814,9 @@ void SearchAssets::rebuild_tiles() {
 
 void SearchAssets::rebuild_rows() {
     if (!panel_) return;
+    for (auto& tile : tiles_) {
+        tile->clear_label_cache();
+    }
     DockableCollapsible::Rows rows;
     if (query_widget_) {
         rows.push_back({ query_widget_.get() });

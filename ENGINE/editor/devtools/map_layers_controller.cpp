@@ -54,6 +54,10 @@ void MapLayersController::set_manifest_store(devmode::core::ManifestStore* store
     map_id_ = std::move(map_id);
 }
 
+void MapLayersController::set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) {
+    save_coordinator_ = coordinator;
+}
+
 MapLayersController::ListenerId MapLayersController::add_listener(Listener cb) {
     if (!cb) return 0;
     const ListenerId id = next_listener_id_++;
@@ -75,7 +79,7 @@ void MapLayersController::clear_listeners() {
     next_listener_id_ = 1;
 }
 
-bool MapLayersController::save() {
+bool MapLayersController::save(devmode::core::DevSaveCoordinator::Priority priority) {
     if (!map_info_) return false;
     if (!manifest_store_) {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapLayersController] Cannot save map info: manifest store is not available.");
@@ -85,11 +89,23 @@ bool MapLayersController::save() {
         SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapLayersController] Cannot save map info: map identifier is empty.");
         return false;
     }
-    if (!devmode::persist_map_manifest_entry(*manifest_store_, map_id_, *map_info_, std::cerr)) {
+
+    nlohmann::json payload = *map_info_;
+    auto on_success = [this]() {
+        mark_clean();
+        notify();
+    };
+
+    if (save_coordinator_) {
+        save_coordinator_->enqueue_map_entry(map_id_, std::move(payload), priority, "Map layers", on_success);
+        return true;
+    }
+
+    if (!devmode::persist_map_manifest_entry(*manifest_store_, map_id_, payload, std::cerr)) {
         return false;
     }
     manifest_store_->flush();
-    mark_clean();
+    on_success();
     return true;
 }
 

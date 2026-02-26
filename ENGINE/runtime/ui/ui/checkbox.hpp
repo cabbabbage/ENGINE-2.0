@@ -3,9 +3,10 @@
 #include <SDL3/SDL.h>
 #include <string>
 
-class Checkbox {
+#include "widget_base.hpp"
 
-	public:
+class Checkbox : public WidgetBase {
+public:
     Checkbox(const std::string& label, bool value);
     void set_position(SDL_Point p);
     void set_rect(const SDL_Rect& r);
@@ -19,9 +20,7 @@ class Checkbox {
     static int width();
     static int height();
 
-	private:
-    SDL_Rect rect_{0,0,300,28};
+private:
     std::string label_;
     bool value_ = false;
-    bool hovered_ = false;
 };

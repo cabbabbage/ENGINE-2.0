@@ -80,6 +80,11 @@ public:
     const GridPoint* point_for_id(GridId id) const;
     GridPoint* point_for_asset(const Asset* asset);
     const GridPoint* point_for_asset(const Asset* asset) const;
+
+    // Detach/attach helpers for suspending and reactivating assets without destroying them.
+    std::unique_ptr<Asset> extract_asset(Asset* a);
+    Asset* attach_asset(std::unique_ptr<Asset> a, int world_z = 0, int resolution_layer = -1);
+
     GridPoint* find_grid_point(const GridKey& key);
     const GridPoint* find_grid_point(const GridKey& key) const;
     GridPoint* find_grid_point_strict(const GridKey& key);
@@ -114,7 +119,7 @@ private:
     void remove_from_chunk(Asset* a, Chunk* c);
     void invalidate_active_cache();
     std::uint64_t next_traversal_stamp() const;
-    GridId make_point_id(int i, int j) const;
+    GridId make_point_id(int i, int j, int world_z, int resolution_layer, std::uint32_t salt = 0) const;
     void remove_asset_from_point(Asset* a, GridPoint& point);
     std::unique_ptr<Asset> detach_asset_from_grid_point(Asset* a, GridPoint& point, bool clear_mapping);
     void attach_asset_to_grid_point(std::unique_ptr<Asset> owned, Asset* raw, GridPoint& point);

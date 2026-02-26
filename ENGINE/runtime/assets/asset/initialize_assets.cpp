@@ -26,7 +26,10 @@ void InitializeAssets::initialize(Assets& assets,
         assets.all.reserve(grid_assets.size());
         vibble::log::info("[InitializeAssets] Processing " + std::to_string(grid_assets.size()) + " assets from world grid");
         int processed_count = 0;
-        for (Asset* raw : grid_assets) {
+        const std::size_t total_assets = grid_assets.size();
+        for (std::size_t idx = 0; idx < total_assets; ++idx) {
+                Asset* raw = grid_assets[idx];
+                vibble::log::info("[InitializeAssets] Asset " + std::to_string(idx + 1) + "/" + std::to_string(total_assets) + ": " + (raw && raw->info ? raw->info->name : std::string{"<null>"}));
                 if (!raw) {
                         continue;
                 }

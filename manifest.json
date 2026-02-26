@@ -1,836 +1,26 @@
 {
   "assets": {
-    "Bartender": {
-      "animations": {
-        "back": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 10,
-          "source": {
-            "kind": "folder",
-            "path": "back"
-          }
-        },
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 6,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        },
-        "forward": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 6,
-          "source": {
-            "kind": "folder",
-            "path": "forward"
-          }
-        },
-        "right": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "path": "right"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Bartender",
-      "asset_name": "Bartender",
-      "start": "default"
-    },
-    "Bush_1": {
-      "animation_children": [],
+    "3_candles": {
       "animations": {
         "default": {
-          "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
-          ],
+          "flipped_source": false,
           "locked": false,
           "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
           "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/Bush_1",
-      "asset_name": "Bush_1",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "Candle": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Candle",
-      "asset_name": "Candle",
-      "start": "default"
-    },
-    "Carrie": {
-      "animations": {
-        "back": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 10,
-          "source": {
-            "kind": "folder",
-            "path": "back"
-          }
-        },
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        },
-        "forward": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 6,
-          "source": {
-            "kind": "folder",
-            "path": "forward"
-          }
-        },
-        "right": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "path": "right"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Carrie",
-      "asset_name": "Carrie",
-      "start": "default"
-    },
-    "Casino": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Casino",
-      "asset_name": "Casino",
-      "start": "default"
-    },
-    "Davey": {
-      "animations": {
-        "back": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "path": "back"
-          }
-        },
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 24,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        },
-        "forward": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "path": "forward"
-          }
-        },
-        "right": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "path": "right"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Davey",
-      "asset_name": "Davey",
-      "start": "default"
-    },
-    "Fountain": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Fountain",
-      "asset_name": "Fountain",
-      "start": "default"
-    },
-    "Frog": {
-      "animations": {
-        "Default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "Default"
-          }
-        },
-        "Move Forward": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 6,
-          "source": {
-            "kind": "folder",
-            "path": "Move Forward"
-          }
-        },
-        "Move Left": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "path": "Move Left"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Frog",
-      "asset_name": "Frog",
-      "start": "Default"
-    },
-    "Gary": {
-      "animation_children": [],
-      "animations": {
-        "back": {
-          "attack_geometry": [
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            }
-          ],
-          "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
-          ],
-          "hit_geometry": [
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            }
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              -7
-            ],
-            [
-              0,
-              -7
-            ],
-            [
-              0,
-              -7
-            ],
-            [
-              0,
-              -7
-            ],
-            [
-              0,
-              -7
-            ],
-            [
-              0,
-              -7
-            ],
-            [
-              0,
-              -7
-            ],
-            [
-              0,
-              -7
-            ],
-            [
-              0,
-              -7
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": -63
-          },
-          "number_of_frames": 10,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "back"
-          }
-        },
-        "default": {
-          "attack_geometry": [
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            }
-          ],
-          "frames": [
-            {}
-          ],
-          "hit_geometry": [
-            {
-              "explosion": null,
-              "melee": {
-                "center_x": -1.1640625,
-                "center_y": 127.775390625,
-                "half_height": 89.521484375,
-                "half_width": 40.0,
-                "rotation": 0.0,
-                "type": "melee"
-              },
-              "projectile": null
-            }
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0,
-              false
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        },
-        "forward": {
-          "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              2
-            ],
-            [
-              0,
-              2
-            ],
-            [
-              0,
-              2
-            ],
-            [
-              0,
-              2
-            ],
-            [
-              0,
-              2
-            ],
-            [
-              0,
-              2
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 10
-          },
-          "number_of_frames": 6,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "forward"
-          }
-        },
-        "left": {
-          "derived_modifiers": {
-            "flipMovementX": true,
-            "flipMovementY": false,
-            "flipX": true,
-            "flipY": false,
-            "reverse": false
-          },
-          "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
-          ],
-          "loop": true,
-          "movement": [
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ],
-            [
-              -2,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": -22,
-            "dy": 0
-          },
-          "number_of_frames": 12,
-          "source": {
-            "kind": "animation",
-            "name": "right",
-            "path": ""
-          }
-        },
-        "right": {
-          "attack_geometry": [
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            }
-          ],
-          "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
-          ],
-          "hit_geometry": [
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            }
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ],
-            [
-              2,
-              0,
-              false
-            ]
-          ],
-          "movement_total": {
-            "dx": 22,
-            "dy": 0
-          },
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "right"
           }
         }
       },
       "anti_tags": [],
-      "asset_directory": "resources/assets/Gary",
-      "asset_name": "Gary",
-      "asset_type": "object",
-      "cache_atlas": true,
+      "asset_directory": "resources/assets/3_candles",
+      "asset_name": "3_candles",
+      "asset_type": "Object",
       "can_invert": false,
-      "custom_controller_key": "Gary_controller",
-      "has_shading": false,
-      "lighting_info": [],
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
@@ -842,200 +32,559 @@
       "tags": [],
       "update_radius": 0
     },
-    "Grass_1": {
+    "attack_speed": {
       "animations": {
         "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "anti_tags": [],
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Grass_1",
-      "asset_name": "Grass_1",
-      "neighbor_search_distance": 500,
-      "size_settings": {
-        "scale_percentage": 5.0
-      },
-      "start": "default",
-      "tags": [],
-      "tillable": false
-    },
-    "Grass_2": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 12,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "anti_tags": [],
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Grass_2",
-      "asset_name": "Grass_2",
-      "neighbor_search_distance": 500,
-      "size_settings": {
-        "scale_percentage": 5.0
-      },
-      "start": "default",
-      "tags": [],
-      "tillable": false
-    },
-    "Pub": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Pub",
-      "asset_name": "Pub",
-      "start": "default"
-    },
-    "Town_Hall": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Town_Hall",
-      "asset_name": "Town_Hall",
-      "start": "default"
-    },
-    "Tree_1": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 24,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Tree_1",
-      "asset_name": "Tree_1",
-      "start": "default"
-    },
-    "Tree_2": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Tree_2",
-      "asset_name": "Tree_2",
-      "start": "default"
-    },
-    "Tree_3": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/Tree_3",
-      "asset_name": "Tree_3",
-      "start": "default"
-    },
-    "Vibble": {
-      "animation_children": [
-        "Vibble_eyes",
-        "Vibble_attack_1"
-      ],
-      "animations": {
-        "attack": {
-          "anchor_points": [
-            [
-              {
-                "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
-              }
-            ],
-            [
-              {
-                "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
-              }
-            ],
-            [
-              {
-                "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
-              }
-            ],
-            [
-              {
-                "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
-              }
-            ],
-            [
-              {
-                "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
-              }
-            ],
-            [
-              {
-                "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
-              }
-            ]
-          ],
-          "crop_frames": false,
           "flipped_source": false,
-          "frames": [
-            {}
-          ],
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/attack_speed",
+      "asset_name": "attack_speed",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "axe_in_stump": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/axe_in_stump",
+      "asset_name": "axe_in_stump",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "blue_flower": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/blue_flower",
+      "asset_name": "blue_flower",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "booze_1": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/booze_1",
+      "asset_name": "booze_1",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 4.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "update_radius": 0
+    },
+    "booze_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/booze_2",
+      "asset_name": "booze_2",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 6.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "update_radius": 0
+    },
+    "bow_tie": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/bow_tie",
+      "asset_name": "bow_tie",
+      "asset_type": "object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 17.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "update_radius": 0
+    },
+    "car": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/car",
+      "asset_name": "car",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "grave_1": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/grave_1",
+      "asset_name": "grave_1",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "grave_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/grave_2",
+      "asset_name": "grave_2",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "grave_3": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/grave_3",
+      "asset_name": "grave_3",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "grave_4": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/grave_4",
+      "asset_name": "grave_4",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 13.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "update_radius": 0
+    },
+    "health": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/health",
+      "asset_name": "health",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "health_beer": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/health_beer",
+      "asset_name": "health_beer",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "mana": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/mana",
+      "asset_name": "mana",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "mana_beer": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/mana_beer",
+      "asset_name": "mana_beer",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "movement_speed": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/movement_speed",
+      "asset_name": "movement_speed",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "noose": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/noose",
+      "asset_name": "noose",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "ok": {
+      "animations": {
+        "default": {
+          "crop_frames": true,
+          "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
@@ -1057,156 +606,277 @@
           "source": {
             "kind": "folder",
             "name": "",
-            "path": "attack"
+            "path": "default"
           },
           "speed_multiplier": 1.0
-        },
-        "backward": {
-          "attack_geometry": [
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            }
-          ],
-          "crop_frames": false,
-          "derived_modifiers": {
-            "flipMovementX": false,
-            "flipMovementY": false,
-            "flipX": true,
-            "flipY": false,
-            "reverse": false
-          },
-          "flipped_source": true,
-          "frames": [
-            {}
-          ],
-          "hit_geometry": [
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            }
-          ],
-          "inherit_source_movement": true,
+        }
+      },
+      "asset_directory": "resources/assets/ok",
+      "asset_name": "ok",
+      "start": "default"
+    },
+    "purple_flower": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
           "loop": true,
           "number_of_frames": 1,
-          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
-            "kind": "animation",
-            "name": "forward",
-            "path": ""
-          },
-          "speed_multiplier": 1.0
-        },
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/purple_flower",
+      "asset_name": "purple_flower",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "red_flower": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/red_flower",
+      "asset_name": "red_flower",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "table": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/table",
+      "asset_name": "table",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [],
+      "update_radius": 0
+    },
+    "tailor": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/tailor",
+      "asset_name": "tailor",
+      "asset_type": "object",
+      "can_invert": true,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 85.0
+      },
+      "start": "default",
+      "tags": [],
+      "tillable": false,
+      "update_radius": 0
+    },
+    "tree": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 24,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/tree",
+      "asset_name": "tree",
+      "asset_type": "boundary",
+      "can_invert": true,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 58.999996185302734
+      },
+      "start": "default",
+      "tags": [
+        "tree"
+      ],
+      "tillable": false,
+      "update_radius": 0
+    },
+    "tree_2": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/tree_2",
+      "asset_name": "tree_2",
+      "asset_type": "boundary",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [
+        "tree"
+      ],
+      "tillable": false,
+      "update_radius": 0
+    },
+    "tree_darker": {
+      "animations": {
+        "default": {
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
+          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
+          "source": {
+            "kind": "folder",
+            "name": "",
+            "path": "default"
+          }
+        }
+      },
+      "anti_tags": [],
+      "asset_directory": "resources/assets/tree_darker",
+      "asset_name": "tree_darker",
+      "asset_type": "boundary",
+      "can_invert": true,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
+      },
+      "start": "default",
+      "tags": [
+        "tree"
+      ],
+      "tillable": false,
+      "update_radius": 0
+    },
+    "vibble": {
+      "animations": {
         "default": {
           "anchor_points": [
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 444,
-                "texture_z": 342
+                "texture_x": 899,
+                "texture_y": 493
+              },
+              {
+                "in_front": true,
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604
               }
             ]
           ],
-          "attack_geometry": [
-            []
-          ],
           "crop_frames": false,
           "flipped_source": false,
-          "frames": [
-            {}
-          ],
-          "hit_geometry": [
-            {
-              "boxes": [],
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            }
-          ],
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
           "movement": [
             [
               0,
-              0,
-              0,
-              false
+              0
             ]
           ],
           "movement_total": {
@@ -1229,755 +899,285 @@
           "anchor_points": [
             [
               {
+                "in_front": true,
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 899,
+                "texture_y": 493
+              },
+              {
+                "in_front": true,
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 899,
+                "texture_y": 493
+              },
+              {
+                "in_front": true,
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 899,
+                "texture_y": 493
+              },
+              {
+                "in_front": true,
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 899,
+                "texture_y": 493
+              },
+              {
+                "in_front": true,
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 899,
+                "texture_y": 493
+              },
+              {
+                "in_front": true,
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 899,
+                "texture_y": 493
+              },
+              {
+                "in_front": true,
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 899,
+                "texture_y": 493
+              },
+              {
+                "in_front": true,
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 899,
+                "texture_y": 493
+              },
+              {
+                "in_front": true,
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604
               }
             ]
           ],
-          "attack_geometry": [
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            },
-            {
-              "explosion": [],
-              "melee": [],
-              "projectile": []
-            }
-          ],
-          "crop_frames": false,
-          "flipped_source": false,
-          "frames": [
-            {}
-          ],
-          "hit_geometry": [
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            },
-            {
-              "explosion": null,
-              "melee": null,
-              "projectile": null
-            }
-          ],
-          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
-          "movement": [
-            [
-              0,
-              0,
-              false
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0,
-            "dz": 0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
+          "number_of_frames": 8,
           "source": {
             "kind": "folder",
-            "name": "",
             "path": "forward"
-          },
-          "speed_multiplier": 1.0
+          }
         },
         "left": {
           "anchor_points": [
             [
               {
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 766,
+                "texture_y": 467,
+                "in_front": true
+              },
+              {
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604,
+                "in_front": true
               }
             ],
             [
               {
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 766,
+                "texture_y": 467,
+                "in_front": true
+              },
+              {
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604,
+                "in_front": true
               }
             ],
             [
               {
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 766,
+                "texture_y": 467,
+                "in_front": true
+              },
+              {
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604,
+                "in_front": true
               }
             ],
             [
               {
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 766,
+                "texture_y": 467,
+                "in_front": true
+              },
+              {
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604,
+                "in_front": true
               }
             ],
             [
               {
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 766,
+                "texture_y": 467,
+                "in_front": true
+              },
+              {
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604,
+                "in_front": true
               }
             ],
             [
               {
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 766,
+                "texture_y": 467,
+                "in_front": true
+              },
+              {
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604,
+                "in_front": true
               }
             ],
             [
               {
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 766,
+                "texture_y": 467,
+                "in_front": true
+              },
+              {
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604,
+                "in_front": true
               }
             ],
             [
               {
                 "name": "eyes",
-                "px": 0.5,
-                "py": 0.5,
-                "pz": 0.01,
-                "rotation": 0.0
+                "texture_x": 766,
+                "texture_y": 467,
+                "in_front": true
+              },
+              {
+                "name": "bow_tie_a",
+                "texture_x": 893,
+                "texture_y": 604,
+                "in_front": true
               }
             ]
           ],
-          "attack_geometry": [
-            {
-              "vectors": [
-                {
-                  "control_x": -508.1666564941406,
-                  "control_y": 0.0,
-                  "control_z": 412.74835205078125,
-                  "damage": 0,
-                  "end_x": 0.0,
-                  "end_y": 0.0,
-                  "end_z": 0.0,
-                  "start_x": -448.3371276855469,
-                  "start_y": 0.0,
-                  "start_z": 1441.63525390625
-                }
-              ]
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            }
-          ],
-          "crop_frames": false,
-          "flipped_source": false,
-          "frames": [
-            {}
-          ],
-          "hit_geometry": [
-            {
-              "boxes": [
-                {
-                  "center_x": -14.073272705078125,
-                  "center_y": 0.0,
-                  "center_z": 1230.8443603515625,
-                  "half_height": 702.7274780273438,
-                  "half_width": 287.5209655761719,
-                  "rotation": -178.48147583007813
-                }
-              ]
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            }
-          ],
-          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
-          "movement": [
-            [
-              0,
-              0,
-              false
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0,
-            "dz": 0
-          },
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
+          "number_of_frames": 8,
           "source": {
             "kind": "folder",
-            "name": "",
             "path": "left"
-          },
-          "speed_multiplier": 1.0
-        },
-        "right": {
-          "crop_frames": false,
-          "derived_modifiers": {
-            "flipMovementX": true,
-            "flipMovementY": false,
-            "flipX": true,
-            "flipY": false,
-            "reverse": false
-          },
-          "flipped_source": true,
-          "frames": [
-            {}
-          ],
-          "inherit_source_movement": true,
-          "loop": true,
-          "number_of_frames": 1,
-          "on_end": "default",
-          "reverse_source": false,
-          "rnd_start": false,
-          "source": {
-            "kind": "animation",
-            "name": "left",
-            "path": ""
-          },
-          "speed_multiplier": 1.0
+          }
         }
       },
-      "asset_directory": "resources/assets/Vibble",
-      "asset_name": "Vibble",
+      "anti_tags": [],
+      "asset_directory": "resources/assets/vibble",
+      "asset_name": "vibble",
       "asset_type": "player",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "Vibble_attack_1": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "attack_geometry": [
-            {
-              "vectors": [
-                {
-                  "control_x": 63.7109375,
-                  "control_y": 0.0,
-                  "control_z": 400.51513671875,
-                  "damage": 5,
-                  "end_x": 121.0,
-                  "end_y": 0.0,
-                  "end_z": 151.0,
-                  "start_x": 53.42578125,
-                  "start_y": 0.0,
-                  "start_z": 594.45458984375
-                }
-              ]
-            },
-            {
-              "vectors": [
-                {
-                  "control_x": 180.04443359375,
-                  "control_y": 0.0,
-                  "control_z": 378.88037109375,
-                  "damage": 5,
-                  "end_x": 96.87744140625,
-                  "end_y": 0.0,
-                  "end_z": 64.18994140625,
-                  "start_x": 244.6083984375,
-                  "start_y": 0.0,
-                  "start_z": 479.5732421875
-                }
-              ]
-            },
-            {
-              "vectors": [
-                {
-                  "control_x": 302.0,
-                  "control_y": 0.0,
-                  "control_z": 218.0,
-                  "damage": 5,
-                  "end_x": 121.0,
-                  "end_y": 0.0,
-                  "end_z": 151.0,
-                  "start_x": 503.0,
-                  "start_y": 0.0,
-                  "start_z": 118.0
-                }
-              ]
-            },
-            {
-              "vectors": [
-                {
-                  "control_x": -175.6904296875,
-                  "control_y": 0.0,
-                  "control_z": 375.8388671875,
-                  "damage": 5,
-                  "end_x": 72.06689453125,
-                  "end_y": 0.0,
-                  "end_z": 247.9072265625,
-                  "start_x": -323.462890625,
-                  "start_y": 0.0,
-                  "start_z": 351.935546875
-                }
-              ]
-            },
-            {
-              "vectors": [
-                {
-                  "control_x": -325.84033203125,
-                  "control_y": 0.0,
-                  "control_z": 303.54541015625,
-                  "damage": 5,
-                  "end_x": -507.11669921875,
-                  "end_y": 0.0,
-                  "end_z": 271.22216796875,
-                  "start_x": -216.3349609375,
-                  "start_y": 0.0,
-                  "start_z": 73.88037109375
-                }
-              ]
-            },
-            {
-              "vectors": [
-                {
-                  "control_x": -251.06982421875,
-                  "control_y": 0.0,
-                  "control_z": 292.60888671875,
-                  "damage": 5,
-                  "end_x": -347.90869140625,
-                  "end_y": 0.0,
-                  "end_z": 432.50537109375,
-                  "start_x": -201.2509765625,
-                  "start_y": 0.0,
-                  "start_z": 69.98583984375
-                }
-              ]
-            }
-          ],
-          "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
-          ],
-          "hit_geometry": [
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            }
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "anti_tags": [],
-      "asset_directory": "resources/assets/Vibble_attack_1",
-      "asset_name": "Vibble_attack_1",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "lighting_info": [],
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
-      "shading_opacity_multiplier": 1.0,
-      "shading_parallax_amount": 0.0,
-      "shading_screen_brightness_multiplier": 1.0,
-      "shadow_mask_settings": {
-        "alpha_multiplier": 1.0,
-        "blur_scale": 1.0,
-        "expansion_ratio": 0.800000011920929,
-        "falloff_exponent": 1.0499999523162842,
-        "falloff_start": 0.0
-      },
+      "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 30.0
+        "scale_percentage": 13.0
       },
-      "spawn_groups": [],
       "start": "default",
       "tags": [],
-      "tillable": false
+      "tillable": false,
+      "update_radius": 0
     },
-    "Vibble_eyes": {
-      "animation_children": [],
+    "vibble_eyes": {
       "animations": {
         "default": {
-          "frames": [
-            {}
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
+          "anchor_points": [
             [
-              0,
-              0
+              {
+                "in_front": true,
+                "name": "eyes",
+                "texture_x": 899,
+                "texture_y": 493
+              }
             ]
           ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
+          "flipped_source": false,
+          "locked": false,
+          "loop": true,
           "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/Vibble_eyes",
-      "asset_name": "Vibble_eyes",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "barrel": {
-      "animation_children": [],
-      "animations": {
-        "damaged": {
-          "frames": [
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {},
-            {}
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ],
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 17,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "damaged"
-          }
-        },
-        "default": {
-          "attack_geometry": [
-            {
-              "vectors": []
-            }
-          ],
-          "frames": [
-            {}
-          ],
-          "hit_geometry": [
-            {
-              "boxes": [
-                {
-                  "center_x": 231.9780731201172,
-                  "center_y": 0.0,
-                  "center_z": 5163.4951171875,
-                  "half_height": 1570.3231201171875,
-                  "half_width": 5179.4228515625,
-                  "rotation": -93.25064086914063
-                }
-              ]
-            }
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
@@ -1986,895 +1186,87 @@
         }
       },
       "anti_tags": [],
-      "asset_directory": "resources/assets/barrel",
-      "asset_name": "barrel",
+      "asset_directory": "resources/assets/vibble_eyes",
+      "asset_name": "vibble_eyes",
       "asset_type": "object",
-      "cache_atlas": true,
-      "can_invert": true,
-      "lighting_info": [],
-      "neighbor_search_distance": 500,
-      "shading_opacity_multiplier": 1.0,
-      "shading_parallax_amount": 0.0,
-      "shading_screen_brightness_multiplier": 1.0,
-      "shadow_mask_settings": {
-        "alpha_multiplier": 1.0,
-        "blur_scale": 1.0,
-        "expansion_ratio": 0.800000011920929,
-        "falloff_exponent": 1.0499999523162842,
-        "falloff_start": 0.0
+      "can_invert": false,
+      "follower_binding": {
+        "anchor_name": "eyes",
+        "controller_asset_id": "vibble",
+        "depth_policy": "match_owner",
+        "follower_anchor_name": "eyes",
+        "layer_policy": "match_controller_asset"
       },
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
+      "neighbor_search_distance": 500,
+      "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 16.0
+        "scale_percentage": 14.0
       },
-      "spawn_groups": [],
       "start": "default",
       "tags": [],
-      "tillable": false
+      "tillable": false,
+      "update_radius": 0
     },
-    "bone": {
-      "animation_children": [],
+    "water": {
       "animations": {
         "default": {
+          "flipped_source": false,
           "locked": false,
           "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
           "number_of_frames": 1,
+          "reverse_source": false,
+          "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/bone",
-      "asset_name": "bone",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "bone_2": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/bone_2",
-      "asset_name": "bone_2",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "book_1": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/book_1",
-      "asset_name": "book_1",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "book_2": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/book_2",
-      "asset_name": "book_2",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "book_pile": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/book_pile",
-      "asset_name": "book_pile",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "book_pile_2": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/book_pile_2",
-      "asset_name": "book_pile_2",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "bottle": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/bottle",
-      "asset_name": "bottle",
-      "start": "default"
-    },
-    "box": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/box",
-      "asset_name": "box",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "car": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "frames": [
-            {}
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/car",
-      "asset_name": "car",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "church": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/church",
-      "asset_name": "church",
-      "start": "default"
-    },
-    "flower_red": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/flower_red",
-      "asset_name": "flower_red",
-      "start": "default"
-    },
-    "grass_3": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/grass_3",
-      "asset_name": "grass_3",
-      "start": "default"
-    },
-    "grass_4": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/grass_4",
-      "asset_name": "grass_4",
-      "start": "default"
-    },
-    "grave_1": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/grave_1",
-      "asset_name": "grave_1",
-      "start": "default"
-    },
-    "grave_2": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/grave_2",
-      "asset_name": "grave_2",
-      "start": "default"
-    },
-    "lantern": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/lantern",
-      "asset_name": "lantern",
-      "start": "default"
-    },
-    "latern_left": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/latern_left",
-      "asset_name": "latern_left",
-      "start": "default"
-    },
-    "shop_1": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "frames": [
-            {}
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/shop_1",
-      "asset_name": "shop_1",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "shop_2": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/shop_2",
-      "asset_name": "shop_2",
-      "start": "default"
-    },
-    "skull_1": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/skull_1",
-      "asset_name": "skull_1",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "skull_pile": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/skull_pile",
-      "asset_name": "skull_pile",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "smith": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "frames": [
-            {}
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/smith",
-      "asset_name": "smith",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    },
-    "spider": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "frames": [
-            {}
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        },
-        "down": {
-          "derived_modifiers": {
-            "flipMovementX": false,
-            "flipMovementY": true,
-            "flipX": false,
-            "flipY": false,
-            "reverse": false
-          },
-          "frames": [
-            {}
-          ],
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "animation",
-            "name": "up",
-            "path": ""
-          }
-        },
-        "left": {
-          "attack_geometry": [
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            },
-            {
-              "vectors": []
-            }
-          ],
-          "frames": [
-            {}
-          ],
-          "hit_geometry": [
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            },
-            {
-              "boxes": []
-            }
-          ],
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ],
-            [
-              -90,
-              0
-            ],
-            [
-              -90,
-              0
-            ],
-            [
-              -90,
-              0
-            ],
-            [
-              -90,
-              0
-            ],
-            [
-              -90,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": -450,
-            "dy": 0
-          },
-          "number_of_frames": 6,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "left"
-          }
-        },
-        "right": {
-          "derived_modifiers": {
-            "flipMovementX": true,
-            "flipMovementY": false,
-            "flipX": true,
-            "flipY": false,
-            "reverse": false
-          },
-          "frames": [
-            {}
-          ],
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "animation",
-            "name": "left",
-            "path": ""
-          }
-        },
-        "up": {
-          "derived_modifiers": {
-            "flipMovementX": false,
-            "flipMovementY": false,
-            "flipX": true,
-            "flipY": false,
-            "reverse": false
-          },
-          "frames": [
-            {}
-          ],
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "animation",
-            "name": "left",
-            "path": ""
           }
         }
       },
       "anti_tags": [],
-      "asset_directory": "resources/assets/spider",
-      "asset_name": "spider",
-      "asset_type": "enemy",
-      "cache_atlas": true,
-      "lighting_info": [],
+      "asset_directory": "resources/assets/water",
+      "asset_name": "water",
+      "asset_type": "Object",
+      "can_invert": false,
+      "min_distance_all": 0,
+      "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
-      "shading_opacity_multiplier": 1.0,
-      "shading_parallax_amount": 0.0,
-      "shading_screen_brightness_multiplier": 1.0,
-      "shadow_mask_settings": {
-        "alpha_multiplier": 1.0,
-        "blur_scale": 1.0,
-        "expansion_ratio": 0.800000011920929,
-        "falloff_exponent": 1.0499999523162842,
-        "falloff_start": 0.0
+      "render_radius": 0,
+      "size_settings": {
+        "scale_percentage": 100.0
       },
-      "spawn_groups": [],
       "start": "default",
       "tags": [],
-      "tillable": false
-    },
-    "tex": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/tex",
-      "asset_name": "tex",
-      "start": "default"
-    },
-    "top_hat": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/top_hat",
-      "asset_name": "top_hat",
-      "start": "default"
-    },
-    "trail": {
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "C:/Users/cal_m/OneDrive/Documents/GitHub/ENGINE-2.0/resources/assets/trail",
-      "asset_name": "trail",
-      "start": "default"
-    },
-    "yellow_flower": {
-      "animation_children": [],
-      "animations": {
-        "default": {
-          "locked": false,
-          "loop": true,
-          "movement": [
-            [
-              0,
-              0
-            ]
-          ],
-          "movement_total": {
-            "dx": 0,
-            "dy": 0
-          },
-          "number_of_frames": 1,
-          "source": {
-            "kind": "folder",
-            "name": "",
-            "path": "default"
-          }
-        }
-      },
-      "asset_directory": "resources/assets/yellow_flower",
-      "asset_name": "yellow_flower",
-      "asset_type": "object",
-      "cache_atlas": true,
-      "start": "default"
-    }
-  },
-  "image_effects": {
-    "background": {
-      "blur": 1.950000004768376,
-      "brightness": -0.899999904632568,
-      "contrast": -0.2,
-      "hue": 0.0,
-      "saturation_blue": 0.3,
-      "saturation_green": 0.3,
-      "saturation_red": -0.3
-    },
-    "foreground": {
-      "blur": 0.999999284744262,
-      "brightness": 0.04000004291534424,
-      "contrast": 0.23999998569488526,
-      "hue": 0.0,
-      "saturation_blue": 0.0,
-      "saturation_green": 0.0,
-      "saturation_red": 0.4200000286102295
+      "update_radius": 0
     }
   },
   "maps": {
-    "test": {
+    "Forrest": {
       "audio": {
         "music": {
-          "content_root": "content/test/music",
+          "content_root": "content/Forrest/music",
           "tracks": []
         }
       },
       "camera_settings": {
-        "base_height_px": 1000.0,
-        "extra_cull_margin": 150.0,
-        "meters_per_100_world_px": 0.9999999403953552,
-        "min_visible_screen_ratio": 0.003000000026077032,
-        "near_camera_max_perspective_scale": 4.0,
-        "offscreen_fade_amount_px": 200.0,
-        "render_quality_percent": 100
+        "base_height_px": 720.0,
+        "min_visible_screen_ratio": 0.01,
+        "render_quality_percent": 80,
+        "smooth_motion_height": true
       },
-      "content_root": "content/test",
+      "content_root": "content/Forrest",
+      "fog_settings": {
+        "max_random_jitter": 0
+      },
       "map_assets_data": {
         "spawn_groups": [
           {
             "candidates": [
               {
-                "chance": 189,
+                "chance": 100,
                 "name": "null"
-              },
-              {
-                "chance": 71,
-                "name": "##grass"
-              },
-              {
-                "chance": 99,
-                "name": "Grass_1"
-              },
-              {
-                "chance": 53,
-                "name": "Grass_2"
               }
             ],
             "display_name": "batch_map_assets",
@@ -2882,6 +1274,7 @@
             "explicit_flip": false,
             "force_flipped": false,
             "grid_resolution": 6,
+            "jitter": 0,
             "locked": false,
             "max_number": 1,
             "min_number": 1,
@@ -2890,7 +1283,7 @@
             "resolution": 0,
             "resolve_geometry_to_room_size": false,
             "resolve_quantity_to_room_size": false,
-            "spawn_id": "spn-test-map_assets"
+            "spawn_id": "spn-Forrest-map_assets"
           }
         ]
       },
@@ -2899,27 +1292,24 @@
           {
             "candidates": [
               {
-                "chance": 9,
-                "name": "null"
+                "chance": 40,
+                "name": "tree"
               },
               {
-                "chance": 24,
-                "name": "Tree_1"
+                "chance": 35,
+                "name": "tree_2"
               },
               {
-                "chance": 34,
-                "name": "Tree_2"
-              },
-              {
-                "chance": 29,
-                "name": "Tree_3"
+                "chance": 25,
+                "name": "tree_darker"
               }
             ],
             "display_name": "batch_map_boundary",
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 6,
+            "grid_resolution": 4,
+            "jitter": 79,
             "locked": false,
             "max_number": 1,
             "min_number": 1,
@@ -2928,18 +1318,39 @@
             "resolution": 0,
             "resolve_geometry_to_room_size": false,
             "resolve_quantity_to_room_size": false,
-            "spawn_id": "spn-test-map_boundary"
+            "spawn_id": "spn-Forrest-map_boundary"
+          },
+          {
+            "candidates": [
+              {
+                "chance": 0,
+                "name": "null"
+              }
+            ],
+            "display_name": "batch_map_boundary",
+            "enforce_spacing": false,
+            "explicit_flip": false,
+            "force_flipped": false,
+            "grid_resolution": 5,
+            "jitter": 0,
+            "locked": false,
+            "max_number": 1,
+            "min_number": 1,
+            "position": "Random",
+            "resolution": 0,
+            "resolve_geometry_to_room_size": false,
+            "resolve_quantity_to_room_size": false,
+            "spawn_id": "spn-f85c50f88900"
           }
         ],
-        "inherits_map_assets": false,
-        "regen_seed": 2
+        "inherits_map_assets": false
       },
       "map_grid_settings": {
-        "grid_resolution": 5
+        "grid_resolution": 6
       },
       "map_layers": [
         {
-          "bounding_extent": 3189.0,
+          "bounding_extent": 1739.0,
           "level": 0,
           "max_rooms": 1,
           "min_rooms": 1,
@@ -2953,45 +1364,12 @@
               "required_children": []
             }
           ]
-        },
-        {
-          "bounding_extent": 7071.067811865475,
-          "level": 1,
-          "max_rooms": 1,
-          "min_rooms": 0,
-          "name": "layer_1",
-          "ring_radius": 10461.0,
-          "rooms": [
-            {
-              "max_instances": 1,
-              "min_instances": 0,
-              "name": "yassss",
-              "required_children": []
-            }
-          ]
         }
       ],
       "map_layers_settings": {
         "min_edge_distance": 200
       },
-      "map_name": "test",
-      "reactive_shadows": {
-        "frame_blend_falloff_frames": 15,
-        "opacity_sensitivity_percent": 100.0,
-        "opacity_strength": 1.0,
-        "sampling_weights": {
-          "dynamic_weight": 1.0,
-          "static_weight": 0.0
-        },
-        "shadow_lut": [
-          {
-            "brightness": 0.0,
-            "offset": 0.0,
-            "opacity": 1.0,
-            "scale": 1.0
-          }
-        ]
-      },
+      "map_name": "Forrest",
       "rooms_data": {
         "spawn": {
           "areas": [
@@ -3035,11 +1413,9 @@
               "type": "spawning"
             }
           ],
-          "camera_height_px": 2000,
-          "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 75.0,
-          "camera_y_distance_px": 891,
-          "camera_zoom_percent": 3,
+          "camera_height_px": 1000,
+          "camera_tilt_deg": 60.0,
+          "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
             242,
@@ -3047,165 +1423,20 @@
             36,
             255
           ],
-          "edge_smoothness": 101,
+          "edge_smoothness": 100,
           "geometry": "Circle",
           "inherits_map_assets": true,
           "is_boss": false,
           "is_spawn": true,
-          "max_height": 6378,
-          "max_radius": 3189,
-          "max_width": 6378,
-          "min_height": 6378,
-          "min_radius": 3189,
-          "min_width": 6378,
+          "max_height": 3478,
+          "max_radius": 1739,
+          "max_width": 3478,
+          "min_height": 3478,
+          "min_radius": 1739,
+          "min_width": 3478,
           "name": "spawn",
-          "radius": 3189,
+          "radius": 1739,
           "spawn_groups": [
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "Bartender"
-                }
-              ],
-              "display_name": "Bartender",
-              "dx": 52,
-              "dy": 1108,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 6376,
-              "origional_width": 6376,
-              "position": "Exact",
-              "priority": 0,
-              "resolution": 4,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-847e3df0906f"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "Casino"
-                }
-              ],
-              "display_name": "Casino",
-              "dx": 3939652,
-              "dy": 4530628,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 6376,
-              "origional_width": 6376,
-              "position": "Exact",
-              "priority": 1,
-              "resolution": 2,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-47f5d3b1cff5"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "Bush_1"
-                }
-              ],
-              "display_name": "Bush_1",
-              "dx": -3070,
-              "dy": -721,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 6376,
-              "origional_width": 6376,
-              "position": "Exact",
-              "priority": 2,
-              "resolution": 5,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-04530d224ef6"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "barrel"
-                }
-              ],
-              "display_name": "barrel",
-              "dx": -508,
-              "dy": -668,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 6376,
-              "origional_width": 6376,
-              "position": "Exact",
-              "priority": 3,
-              "resolution": 4,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-37d6c4ad7c3a"
-            },
-            {
-              "candidates": [
-                {
-                  "chance": 0,
-                  "name": "null"
-                },
-                {
-                  "chance": 100,
-                  "name": "spider"
-                }
-              ],
-              "display_name": "spider",
-              "dx": -2324,
-              "dy": -428,
-              "enforce_spacing": false,
-              "explicit_flip": false,
-              "force_flipped": false,
-              "locked": false,
-              "max_number": 1,
-              "min_number": 1,
-              "origional_height": 6376,
-              "origional_width": 6376,
-              "position": "Exact",
-              "priority": 4,
-              "resolution": 5,
-              "resolve_geometry_to_room_size": true,
-              "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-c6162102e00c"
-            },
             {
               "candidates": [
                 {
@@ -3218,50 +1449,1151 @@
                 }
               ],
               "display_name": "Vibble",
-              "dx": -348,
-              "dy": 1348,
+              "dx": 0,
+              "dy": 0,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
               "locked": false,
               "max_number": 1,
               "min_number": 1,
-              "origional_height": 6376,
-              "origional_width": 6376,
+              "origional_height": 3000,
+              "origional_width": 3000,
               "position": "Exact",
-              "priority": 5,
-              "resolution": 2,
+              "priority": 0,
+              "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-c341292a767e"
+              "spawn_id": "spn-Forrest-Vibble"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tailor"
+                }
+              ],
+              "display_name": "tailor",
+              "dx": -115,
+              "dy": -269,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 1,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-61e4c02a6dc9"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 2,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-f22354d044d0"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "booze_1"
+                }
+              ],
+              "display_name": "booze_1",
+              "dx": -96,
+              "dy": -164,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3128,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 3,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-4950e10ceb63"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree"
+                }
+              ],
+              "display_name": "tree",
+              "dx": -800,
+              "dy": -164,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3128,
+              "origional_width": 3360,
+              "position": "Exact",
+              "priority": 4,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-1268b38d8dc9"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "booze_2"
+                }
+              ],
+              "display_name": "booze_2",
+              "dx": -460,
+              "dy": 1028,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 5,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-a9115a2605ca"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 6,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-20fb9933f832"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 2)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 7,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-5d68b4fb7448"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 3)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 8,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-0938aebf26d3"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 4)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 9,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-b2b32af34a7a"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 5)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 10,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-5cc84c9506a8"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 6)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 11,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-dedbcc1763d8"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 7)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 12,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-8bce15758290"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 8)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 13,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-d0b1ebf0c75f"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 9)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 14,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-eaa98ad877ed"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 10)",
+              "dx": -1274,
+              "dy": 702,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 15,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-cf83a689502b"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 11)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 16,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-6c97a3455dee"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 12)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 17,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-9d4060149953"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 13)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 18,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-2c2fb1f5f8a0"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 14)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 19,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-d672c5ac5e82"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 15)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 20,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-bc13e78b6eba"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 16)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 21,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-b453f41290ac"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 17)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 22,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-b5906e3272c3"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 18)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 23,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-02e29b11df2c"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 19)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 24,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-be149ebb2883"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 20)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 25,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-0f411ee87026"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 21)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 26,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-f5d6a98ce63d"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 22)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 27,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-7cebd70bc9cf"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 23)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 28,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-bd3dba664249"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 24)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 29,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-199ee54bd4ea"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 25)",
+              "dx": -836,
+              "dy": 324,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 30,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-dd5170e7aad3"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 26)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 31,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-18e0958faa10"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "grave_4"
+                }
+              ],
+              "display_name": "grave_4 (Copy 27)",
+              "dx": -324,
+              "dy": -108,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 32,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-89b8f9a3a73a"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "vibble"
+                }
+              ],
+              "display_name": "vibble",
+              "dx": -1150,
+              "dy": 324,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 33,
+              "resolution": 3,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-58ad1e3d3405"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree_darker"
+                }
+              ],
+              "display_name": "tree_darker",
+              "dx": -2484,
+              "dy": -658,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 34,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-a54b3ebd5f50"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree_2"
+                }
+              ],
+              "display_name": "tree_2",
+              "dx": -3102,
+              "dy": -1147,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 35,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-f0e02f8a997a"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "tree_2"
+                }
+              ],
+              "display_name": "tree_2",
+              "dx": -444,
+              "dy": 249,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 36,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-a3e3bec3ae05"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "vibble_eyes"
+                }
+              ],
+              "display_name": "vibble_eyes",
+              "dx": -1268,
+              "dy": 340,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 37,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-0c99f500c607"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "bow_tie"
+                }
+              ],
+              "display_name": "bow_tie",
+              "dx": 263,
+              "dy": 357,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 38,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-94b59227bd12"
             }
           ]
-        },
-        "yassss": {
-          "camera_height_px": 20725,
-          "camera_pan_y_percent": 0,
-          "camera_tilt_deg": 60.0,
-          "camera_y_distance_px": 0,
-          "camera_zoom_percent": 0,
-          "curvyness": 2,
-          "display_color": [
-            36,
-            242,
-            242,
-            255
-          ],
-          "edge_smoothness": 2,
-          "geometry": "Square",
-          "inherits_map_assets": false,
-          "is_boss": false,
-          "is_spawn": false,
-          "max_height": 10000,
-          "max_width": 10000,
-          "min_height": 1500,
-          "min_width": 1500,
-          "name": "yassss",
-          "spawn_groups": []
         }
+      },
+      "terrain_settings": {
+        "blend_strength": 0.6,
+        "edge_falloff_distance_world": 360.0,
+        "enabled": true,
+        "light": {
+          "base_seed": 123456,
+          "contrast": 1.3,
+          "direction_world": [
+            -0.52,
+            -0.85
+          ],
+          "light_strength": 1.2,
+          "lock_seed_to_world": true,
+          "position_world": [
+            0.0,
+            -1200.0
+          ]
+        },
+        "max_elevation_world": 520.0,
+        "noise_variation": 1.1,
+        "resolution_density_scale": 0.85,
+        "roughness": 0.78,
+        "smoothness": 0.9
       },
       "trails_data": {
         "basic": {

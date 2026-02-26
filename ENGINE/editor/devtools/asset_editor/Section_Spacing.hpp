@@ -3,6 +3,7 @@
 #include "../DockableCollapsible.hpp"
 #include "widgets.hpp"
 #include "devtools/asset_info_sections.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -89,9 +90,17 @@ class Section_Spacing : public DockableCollapsible {
         changed = true;
       }
       if (changed) {
-        (void)info_->commit_manifest();
+        auto on_success = [this]() {
+          if (ui_) {
+            ui_->sync_target_spacing_settings();
+          }
+        };
         if (ui_) {
-          ui_->sync_target_spacing_settings();
+          ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                     "Spacing",
+                                     on_success);
+        } else {
+          on_success();
         }
       }
       return used || changed;

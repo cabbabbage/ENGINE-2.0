@@ -18,6 +18,33 @@ using namespace devmode::spawn;
 TrailEditorSuite::TrailEditorSuite() = default;
 TrailEditorSuite::~TrailEditorSuite() = default;
 
+bool TrailEditorSuite::enqueue_active_trail_save(devmode::core::DevSaveCoordinator::Priority priority) {
+    if (!active_trail_) {
+        return false;
+    }
+    if (!save_coordinator_) {
+        active_trail_->save_assets_json();
+        return true;
+    }
+
+    const nlohmann::json payload = active_trail_->build_room_payload_for_save();
+    Room* trail = active_trail_;
+    const std::string label = std::string("Trail ") + active_trail_->room_name;
+    save_coordinator_->enqueue_custom(
+        devmode::core::DevSaveCoordinator::IntentKind::Custom,
+        std::string("trail:") + active_trail_->room_name,
+        [trail, payload](devmode::core::ManifestStore&) {
+            return trail ? trail->apply_room_payload_for_save(payload) : false;
+        },
+        priority,
+        label);
+    if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
+        save_coordinator_->flush_now(label);
+        return !active_trail_->has_pending_assets_save();
+    }
+    return true;
+}
+
 void TrailEditorSuite::set_screen_dimensions(int width, int height) {
     screen_w_ = width;
     screen_h_ = height;
@@ -110,6 +137,11 @@ void TrailEditorSuite::ensure_ui() {
             }
             configurator_->set_show_header(true);
             configurator_->set_on_close([this]() { this->close(); });
+            configurator_->set_room_save_callback([this](bool immediate) {
+                return enqueue_active_trail_save(immediate
+                    ? devmode::core::DevSaveCoordinator::Priority::Immediate
+                    : devmode::core::DevSaveCoordinator::Priority::Debounced);
+            });
             configurator_->set_spawn_group_callbacks(
                 {},
                 [this](const std::string& id) { delete_spawn_group(id); },
@@ -162,7 +194,7 @@ void TrailEditorSuite::delete_spawn_group(const std::string& id) {
     }
     groups.erase(it, groups.end());
     sanitize_perimeter_spawn_groups(groups);
-    active_trail_->save_assets_json();
+    enqueue_active_trail_save(devmode::core::DevSaveCoordinator::Priority::Debounced);
 
     if (configurator_) {
         configurator_->refresh_spawn_groups(active_trail_);
@@ -214,7 +246,7 @@ void TrailEditorSuite::reorder_spawn_group(const std::string& id, size_t new_ind
         }
     }
 
-    active_trail_->save_assets_json();
+    enqueue_active_trail_save(devmode::core::DevSaveCoordinator::Priority::Debounced);
     if (configurator_) {
         configurator_->refresh_spawn_groups(active_trail_);
         configurator_->notify_spawn_groups_mutated();
@@ -233,7 +265,7 @@ void TrailEditorSuite::add_spawn_group() {
     devmode::spawn::ensure_spawn_group_entry_defaults(entry, "New Spawn");
     groups.push_back(entry);
     sanitize_perimeter_spawn_groups(groups);
-    active_trail_->save_assets_json();
+    enqueue_active_trail_save(devmode::core::DevSaveCoordinator::Priority::Debounced);
     if (configurator_) {
         configurator_->refresh_spawn_groups(active_trail_);
         configurator_->notify_spawn_groups_mutated();

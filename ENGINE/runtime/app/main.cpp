@@ -7,7 +7,7 @@
 #include "ui/loading_screen.hpp"
 #include "core/manifest/manifest_loader.hpp"
 #include "asset_loader.hpp"
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "assets/asset_library.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/engine_renderer.hpp"
@@ -48,6 +48,41 @@ namespace fs = std::filesystem;
 
 namespace {
 
+struct WindowedPlacement {
+        int x;
+        int y;
+        int w;
+        int h;
+};
+
+WindowedPlacement compute_windowed_fallback(SDL_Window* window) {
+        WindowedPlacement placement{SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 1280, 720};
+
+        if (!window) {
+                return placement;
+        }
+
+        const SDL_DisplayID display = SDL_GetDisplayForWindow(window);
+        if (display != 0) {
+                if (const SDL_DisplayMode* desktop_mode = SDL_GetDesktopDisplayMode(display)) {
+                        const int margin = 120;
+                        const int preferred_w = (desktop_mode->w * 3) / 4;
+                        const int preferred_h = (desktop_mode->h * 3) / 4;
+
+                        const int max_w = std::max(640, desktop_mode->w - margin);
+                        const int max_h = std::max(360, desktop_mode->h - margin);
+
+                        placement.w = std::max(960, preferred_w);
+                        placement.h = std::max(540, preferred_h);
+
+                        placement.w = std::min(placement.w, max_w);
+                        placement.h = std::min(placement.h, max_h);
+                }
+        }
+
+        return placement;
+}
+
 nlohmann::json build_default_map_manifest(const std::string& map_name);
 }
 
@@ -63,14 +98,36 @@ MainApp::MainApp(MapDescriptor map,
                  int screen_w,
                  int screen_h,
                  LoadingScreen* loading_screen,
-                 AssetLibrary* asset_library)
+                 AssetLibrary* asset_library,
+                 SDL_Window* window)
 : map_descriptor_(std::move(map)),
   map_path_(map_descriptor_.id),
   renderer_(renderer),
   screen_w_(screen_w),
   screen_h_(screen_h),
   loading_screen_(loading_screen),
-  asset_library_(asset_library) {}
+  asset_library_(asset_library),
+  window_(window),
+  is_fullscreen_(window_ ? ((SDL_GetWindowFlags(window_) & SDL_WINDOW_FULLSCREEN) != 0) : false) {
+        if (window_) {
+                if (!is_fullscreen_) {
+                        int width = 0;
+                        int height = 0;
+                        SDL_GetWindowSize(window_, &width, &height);
+                        if (width > 0 && height > 0) {
+                                windowed_width_ = width;
+                                windowed_height_ = height;
+                        }
+                        SDL_GetWindowPosition(window_, &windowed_x_, &windowed_y_);
+                } else {
+                        const WindowedPlacement fallback = compute_windowed_fallback(window_);
+                        windowed_x_ = fallback.x;
+                        windowed_y_ = fallback.y;
+                        windowed_width_ = fallback.w;
+                        windowed_height_ = fallback.h;
+                }
+        }
+}
 
 MainApp::~MainApp() {
         // Persist current asset state to primary bundles before tearing down.
@@ -339,6 +396,7 @@ void MainApp::game_loop() {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
 
                 while (SDL_PollEvent(&e)) {
+                        handle_global_shortcuts(e);
                         if (e.type == SDL_EVENT_QUIT) {
                                 quit = true;
                         }
@@ -382,11 +440,89 @@ void MainApp::game_loop() {
                                 (idle_counts_accum * 1000.0) / perf_frequency;
                         const double average_idle_ms =
                                 total_idle_ms / static_cast<double>(idle_frame_counter);
-                        vibble::log::debug( "[MainApp] Idle pacing: total " + std::to_string(total_idle_ms) + "ms over " + std::to_string(idle_frame_counter) + " frame(s); avg " + std::to_string(average_idle_ms) + "ms.");
+                        vibble::log::debug("[MainApp] Idle pacing: total " + std::to_string(total_idle_ms) + "ms over " + std::to_string(idle_frame_counter) + " frame(s); avg " + std::to_string(average_idle_ms) + "ms.");
                         idle_counts_accum = 0.0;
                         idle_frame_counter = 0;
                 }
         }
+}
+
+void MainApp::toggle_fullscreen() {
+        if (!window_) {
+                return;
+        }
+
+        if (is_fullscreen_) {
+                WindowedPlacement target{windowed_x_, windowed_y_, windowed_width_, windowed_height_};
+
+                if (target.w <= 0 || target.h <= 0) {
+                        target = compute_windowed_fallback(window_);
+                } else {
+                        const SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+                        if (display != 0) {
+                                if (const SDL_DisplayMode* desktop_mode = SDL_GetDesktopDisplayMode(display)) {
+                                        if (target.w >= desktop_mode->w - 16 || target.h >= desktop_mode->h - 16) {
+                                                target = compute_windowed_fallback(window_);
+                                        }
+                                }
+                        }
+                }
+
+                const bool result = SDL_SetWindowFullscreen(window_, false);
+                if (!result) {
+                        vibble::log::warn(std::string("[MainApp] Failed to switch to windowed mode: ") + SDL_GetError());
+                        return;
+                }
+
+                SDL_SetWindowResizable(window_, true);
+                SDL_SetWindowBordered(window_, true);
+                SDL_SetWindowSize(window_, target.w, target.h);
+                SDL_SetWindowPosition(window_, target.x, target.y);
+
+                is_fullscreen_ = false;
+                windowed_x_ = target.x;
+                windowed_y_ = target.y;
+                windowed_width_ = target.w;
+                windowed_height_ = target.h;
+                vibble::log::info("[MainApp] Window mode switched to windowed.");
+                return;
+        }
+
+        int current_x = 0;
+        int current_y = 0;
+        int current_width = 0;
+        int current_height = 0;
+        SDL_GetWindowPosition(window_, &current_x, &current_y);
+        SDL_GetWindowSize(window_, &current_width, &current_height);
+        if (current_width > 0 && current_height > 0) {
+                windowed_x_ = current_x;
+                windowed_y_ = current_y;
+                windowed_width_ = current_width;
+                windowed_height_ = current_height;
+        }
+
+        const bool result = SDL_SetWindowFullscreen(window_, true);
+        if (!result) {
+                vibble::log::warn(std::string("[MainApp] Failed to switch to fullscreen mode: ") + SDL_GetError());
+                return;
+        }
+
+        is_fullscreen_ = true;
+        vibble::log::info("[MainApp] Window mode switched to fullscreen.");
+}
+
+void MainApp::handle_global_shortcuts(const SDL_Event& e) {
+        if (e.type != SDL_EVENT_KEY_DOWN || e.key.repeat != 0) {
+                return;
+        }
+        const SDL_Keycode key = e.key.key;
+        if (key != SDLK_RETURN && key != SDLK_KP_ENTER) {
+                return;
+        }
+        if ((e.key.mod & SDL_KMOD_ALT) == 0) {
+                return;
+        }
+        toggle_fullscreen();
 }
 
 namespace {
@@ -405,24 +541,26 @@ std::string trim_copy(const std::string& value) {
     return value.substr(start, end - start);
 }
 
+std::string lowercase_identifier(const std::string& value) {
+    std::string normalized;
+    normalized.reserve(value.size());
+    for (char ch : value) {
+        unsigned char uc = static_cast<unsigned char>(ch);
+        if (std::isalnum(uc) || ch == '_' || ch == '-') {
+            normalized.push_back(static_cast<char>(std::tolower(uc)));
+        } else {
+            return std::string{};
+        }
+    }
+    return normalized;
+}
+
 std::optional<std::string> sanitize_map_name(const std::string& input) {
     std::string trimmed = trim_copy(input);
     if (trimmed.empty()) {
         return std::nullopt;
     }
-    std::string result;
-    result.reserve(trimmed.size());
-    for (char ch : trimmed) {
-        unsigned char uc = static_cast<unsigned char>(ch);
-        if (std::isalnum(uc) || ch == '_' || ch == '-') {
-            result.push_back(ch);
-        } else if (std::isspace(uc)) {
-            return std::nullopt;
-        } else {
-            return std::nullopt;
-        }
-    }
-    return result;
+        return lowercase_identifier(trimmed);
 }
 
 nlohmann::json build_default_map_manifest(const std::string& map_name) {
@@ -477,6 +615,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         group["max_number"] = 0;
         group["enforce_spacing"] = false;
         group["grid_resolution"] = 6;
+        group["jitter"] = 0;
         group["resolution"] = 0;
         group["resolve_geometry_to_room_size"] = false;
         group["resolve_quantity_to_room_size"] = false;
@@ -505,28 +644,14 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
          nlohmann::json::array({ make_batch_spawn_group("map_assets",
                                                         "batch_map_assets") })}
     });
+    map_info["fog_settings"] = nlohmann::json::object({
+        {"max_random_jitter", 0}
+    });
     map_info["map_boundary_data"] = nlohmann::json::object({
         {"inherits_map_assets", false},
         {"candidate_selectors",
          nlohmann::json::array({ make_batch_spawn_group("map_boundary",
                                                         "batch_map_boundary") })}
-    });
-    map_info["reactive_shadows"] = nlohmann::json::object({
-        {"frame_blend_falloff_frames", 15},
-        {"opacity_sensitivity_percent", 100.0},
-        {"opacity_strength", 1.0},
-        {"sampling_weights", nlohmann::json::object({
-            {"dynamic_weight", 1.0},
-            {"static_weight", 0.0}
-        })},
-        {"shadow_lut", nlohmann::json::array({
-            nlohmann::json::object({
-                {"brightness", 0.0},
-                {"offset", 0.0},
-                {"opacity", 1.0},
-                {"scale", 1.0}
-            })
-        })}
     });
     map_info["trails_data"] = nlohmann::json::object({
         {"basic", nlohmann::json::object({
@@ -739,62 +864,90 @@ void run(SDL_Window* window,
     { SDL_Event ev; while (SDL_PollEvent(&ev)) {} }
     vibble::log::info("[Main] Cached asset resources loaded.");
 
+    std::optional<MapDescriptor> autostart_map;
+    if (const char* env = std::getenv("VIBBLE_AUTOSTART_MAP")) {
+        std::string desired = env;
+        if (!desired.empty() && manifest_data.maps.is_object()) {
+            auto it = manifest_data.maps.find(desired);
+            if (it == manifest_data.maps.end() && !manifest_data.maps.empty()) {
+                vibble::log::warn(std::string("[Main] Auto-start map '") + desired + "' not found; using first available map.");
+                it = manifest_data.maps.begin();
+            }
+            if (it != manifest_data.maps.end()) {
+                MapDescriptor descriptor;
+                descriptor.id = it.key();
+                descriptor.data = it.value();
+                autostart_map = std::move(descriptor);
+            } else {
+                vibble::log::warn(std::string("[Main] VIBBLE_AUTOSTART_MAP requested '") + desired + "' but no maps are available.");
+            }
+        }
+    }
+
     while (true) {
-        MainMenu menu(renderer, screen_w, screen_h, manifest_data.maps);
-        vibble::log::info("[Main] Main menu displayed.");
         std::optional<MapDescriptor> chosen_map;
         bool quit_requested = false;
         bool should_show_loading_screen = false;
-        SDL_Event e;
-        bool choosing = true;
-        while (choosing) {
-            while (SDL_PollEvent(&e)) {
-                if (e.type == SDL_EVENT_QUIT) {
-                    quit_requested = true;
-                    choosing = false;
-                    break;
-                }
-                auto result = menu.handle_event(e);
-                if (!result) {
-                    continue;
-                }
-                if (result->id == "QUIT") {
-                    quit_requested = true;
-                    choosing = false;
-                    break;
-                }
-                if (result->id == "CREATE_NEW_MAP") {
-                    auto created = create_new_map_interactively();
-                    if (created) {
-                        chosen_map = std::move(*created);
-                        vibble::log::info(std::string("[Main] New map created and selected: ") + chosen_map->id);
+        std::unique_ptr<MainMenu> menu;
+
+        if (autostart_map) {
+            chosen_map = std::move(autostart_map);
+            should_show_loading_screen = true;
+            vibble::log::info(std::string("[Main] Auto-selecting map via VIBBLE_AUTOSTART_MAP: ") + chosen_map->id);
+        } else {
+            menu = std::make_unique<MainMenu>(renderer, screen_w, screen_h, manifest_data.maps);
+            vibble::log::info("[Main] Main menu displayed.");
+            SDL_Event e;
+            bool choosing = true;
+            while (choosing) {
+                while (SDL_PollEvent(&e)) {
+                    if (e.type == SDL_EVENT_QUIT) {
+                        quit_requested = true;
                         choosing = false;
-                        should_show_loading_screen = true;
+                        break;
                     }
-                    continue;
+                    auto result = menu->handle_event(e);
+                    if (!result) {
+                        continue;
+                    }
+                    if (result->id == "QUIT") {
+                        quit_requested = true;
+                        choosing = false;
+                        break;
+                    }
+                    if (result->id == "CREATE_NEW_MAP") {
+                        auto created = create_new_map_interactively();
+                        if (created) {
+                            chosen_map = std::move(*created);
+                            vibble::log::info(std::string("[Main] New map created and selected: ") + chosen_map->id);
+                            choosing = false;
+                            should_show_loading_screen = true;
+                        }
+                        continue;
+                    }
+                    MapDescriptor descriptor;
+                    descriptor.id   = result->id;
+                    descriptor.data = result->data;
+                    chosen_map = std::move(descriptor);
+                    vibble::log::info(std::string("[Main] Map selected: ") + chosen_map->id);
+                    choosing = false;
+                    should_show_loading_screen = true;
+                    break;
                 }
-                MapDescriptor descriptor;
-                descriptor.id   = result->id;
-                descriptor.data = result->data;
-                chosen_map = std::move(descriptor);
-                vibble::log::info(std::string("[Main] Map selected: ") + chosen_map->id);
-                choosing = false;
-                should_show_loading_screen = true;
-                break;
+                if (!choosing) {
+                    break;
+                }
+                SDL_SetRenderTarget(renderer, nullptr);
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                SDL_RenderClear(renderer);
+                menu->render();
+                SDL_RenderPresent(renderer);
+                SDL_Delay(16);
             }
-            if (!choosing) {
-                break;
-            }
-            SDL_SetRenderTarget(renderer, nullptr);
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-            SDL_RenderClear(renderer);
-            menu.render();
-            SDL_RenderPresent(renderer);
-            SDL_Delay(16);
         }
 
-        if (should_show_loading_screen) {
-            menu.showLoadingScreen();
+        if (should_show_loading_screen && menu) {
+            menu->showLoadingScreen();
         }
         if (quit_requested || !chosen_map) {
             break;
@@ -815,7 +968,7 @@ void run(SDL_Window* window,
             vibble::log::info("[Main] Shared asset library refreshed.");
         }
 
-        MenuUI app(&engine_renderer, screen_w, screen_h, std::move(selected_map), &loading_screen, shared_asset_library.get());
+        MenuUI app(&engine_renderer, screen_w, screen_h, std::move(selected_map), &loading_screen, shared_asset_library.get(), window);
         app.init();
         if (app.wants_return_to_main_menu()) {
             continue;
@@ -878,7 +1031,8 @@ int main(int argc, char* argv[]) {
             !SDL_SetStringProperty(window_props, SDL_PROP_WINDOW_CREATE_TITLE_STRING, "Game Window") ||
             !SDL_SetNumberProperty(window_props, SDL_PROP_WINDOW_CREATE_WIDTH_NUMBER, window_width) ||
             !SDL_SetNumberProperty(window_props, SDL_PROP_WINDOW_CREATE_HEIGHT_NUMBER, window_height) ||
-            !SDL_SetBooleanProperty(window_props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, true)) {
+            !SDL_SetBooleanProperty(window_props, SDL_PROP_WINDOW_CREATE_FULLSCREEN_BOOLEAN, true) ||
+            !SDL_SetBooleanProperty(window_props, SDL_PROP_WINDOW_CREATE_RESIZABLE_BOOLEAN, true)) {
                 vibble::log::error(std::string("SDL_CreateWindow properties failed: ") + SDL_GetError());
                 if (window_props) SDL_DestroyProperties(window_props);
                 TTF_Quit();

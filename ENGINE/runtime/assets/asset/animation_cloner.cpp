@@ -5,7 +5,7 @@
 #include <cmath>
 #include <utility>
 
-#include "assets/asset_info.hpp"
+#include "asset_info.hpp"
 
 namespace {
 
@@ -210,7 +210,7 @@ bool AnimationCloner::Clone(const Animation& source,
                     }
                     if (opts.flip_vertical) {
                         if (frame_h > 0) {
-                            anchor.texture_z = frame_h - 1 - anchor.texture_z;
+                            anchor.texture_y = frame_h - 1 - anchor.texture_y;
                         }
                     }
                     dst_frame.anchor_points.push_back(anchor);

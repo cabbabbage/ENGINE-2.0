@@ -198,6 +198,10 @@ struct GridPoint {
     float      distance_to_camera = 0.0f;
     float      tilt_radians       = 0.0f;
     bool       on_screen          = false;
+    float      terrain_elevation  = 0.0f;
+    float      terrain_slope_x    = 0.0f;
+    float      terrain_slope_y    = 0.0f;
+    std::uint64_t terrain_revision = 0;
 
     mutable std::uint64_t screen_data_frame_updated = 0;
     mutable bool          screen_data_valid         = false;
@@ -205,10 +209,13 @@ struct GridPoint {
     mutable std::uint64_t last_region_query_stamp = 0;
 
     // Smart caching: returns true if projection calculation is needed
-    bool needs_projection_update(std::uint64_t current_frame, std::uint64_t camera_version) const {
+    bool needs_projection_update(std::uint64_t current_frame,
+                                 std::uint64_t camera_version,
+                                 std::uint64_t terrain_rev) const {
         return !screen_data_valid ||
                screen_data_frame_updated != current_frame ||
-               last_camera_state_version_ != camera_version;
+               last_camera_state_version_ != camera_version ||
+               terrain_revision != terrain_rev;
     }
 
     // Self-contained projection: GridPoint calculates its own screen position
@@ -230,6 +237,10 @@ struct GridPoint {
         distance_to_camera = 0.0f;
         tilt_radians       = 0.0f;
         on_screen          = false;
+        terrain_elevation  = 0.0f;
+        terrain_slope_x    = 0.0f;
+        terrain_slope_y    = 0.0f;
+        terrain_revision   = 0;
         screen_data_frame_updated = frame_stamp;
         screen_data_valid  = false;
     }

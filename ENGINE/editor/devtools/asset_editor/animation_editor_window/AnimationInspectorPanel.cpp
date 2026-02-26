@@ -20,6 +20,7 @@
 #include "MovementSummaryWidget.hpp"
 #include "OnEndSelector.hpp"
 #include "PlaybackSettingsPanel.hpp"
+#include "AnimationOptionsPanel.hpp"
 #include "PreviewProvider.hpp"
 #include "PreviewTimeline.hpp"
 #include "SourceConfigPanel.hpp"
@@ -34,9 +35,10 @@ namespace animation_editor {
 
 namespace {
 
-constexpr int kInspectorPadding    = 10;
-constexpr int kInspectorItemGap    = 4;
-constexpr int kInspectorSectionGap = 10;
+constexpr int kInspectorPadding    = 14;
+constexpr int kInspectorItemGap    = 10;
+constexpr int kInspectorSectionGap = 14;
+constexpr int kSectionHeaderHeight = 30;
 
 constexpr int kPreviewHeight = 120;
 constexpr int kHeaderButtonWidth = 160;
@@ -226,48 +228,26 @@ int parse_int_field(const nlohmann::json& payload, const char* key, int fallback
     return parse_int_value(payload.at(key), fallback);
 }
 
-void render_badge(SDL_Renderer* renderer, const SDL_Rect& rect, const DMButtonStyle& style, const std::string& text) {
-    if (!renderer || rect.w <= 0 || rect.h <= 0 || text.empty()) {
+void draw_section_header(SDL_Renderer* renderer,
+                         const SDL_Rect& rect,
+                         const std::string& title,
+                         bool collapsible,
+                         bool expanded) {
+    if (!renderer || rect.w <= 0 || rect.h <= 0) {
         return;
     }
 
-    dm_draw::DrawBeveledRect(renderer, rect, DMStyles::CornerRadius(), DMStyles::BevelDepth(), style.bg, DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
+    dm_draw::DrawBeveledRect(renderer, rect, DMStyles::CornerRadius(), DMStyles::BevelDepth(), DMStyles::PanelHeader(), DMStyles::HighlightColor(), DMStyles::ShadowColor(), false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
 
-    int label_width = text_width(style.label, text);
-    int text_x = rect.x + std::max(0, (rect.w - label_width) / 2);
-    int text_y = rect.y + std::max(0, (rect.h - style.label.font_size) / 2);
-    render_label(renderer, style.label, text, text_x, text_y, style.text);
-}
+    const int text_x = rect.x + DMSpacing::small_gap() * 2;
+    const int text_y = rect.y + std::max(0, (rect.h - DMStyles::Label().font_size) / 2);
+    render_label(renderer, title, text_x, text_y, DMStyles::Label().color);
 
-void render_summary_badges(SDL_Renderer* renderer, const SDL_Rect& bounds, const std::vector<std::string>& badges) {
-    if (!renderer || bounds.w <= 0 || bounds.h <= 0 || badges.empty()) {
-        return;
-    }
-
-    const int gap = DMSpacing::small_gap();
-    int x = bounds.x;
-    const int limit = bounds.x + bounds.w;
-
-    for (size_t i = 0; i < badges.size(); ++i) {
-        const std::string& badge_text = badges[i];
-        if (badge_text.empty()) {
-            continue;
-        }
-        const DMButtonStyle& style = (i == 0) ? DMStyles::AccentButton() : DMStyles::HeaderButton();
-        int text_w = text_width(style.label, badge_text);
-        int badge_w = text_w + gap * 2;
-        if (x + badge_w > limit) {
-            badge_w = limit - x;
-            if (badge_w <= gap) {
-                break;
-            }
-        }
-        SDL_Rect rect{x, bounds.y, badge_w, bounds.h};
-        render_badge(renderer, rect, style, badge_text);
-        x += badge_w + gap;
-        if (x >= limit) {
-            break;
-        }
+    if (collapsible) {
+        const std::string indicator = expanded ? "−" : "+";
+        const int indicator_w = text_width(DMStyles::Label(), indicator);
+        const int indicator_x = rect.x + rect.w - indicator_w - DMSpacing::small_gap() * 2;
+        render_label(renderer, indicator, indicator_x, text_y, DMStyles::AccentButton().text);
     }
 }
 
@@ -371,26 +351,19 @@ void AnimationInspectorPanel::set_manifest_store(devmode::core::ManifestStore* s
 
 int AnimationInspectorPanel::height_for_width(int width) const {
     const int padding = kInspectorPadding;
-    const int section_gap = kInspectorSectionGap;
     const int item_gap = kInspectorItemGap;
+    const int section_gap = kInspectorSectionGap;
     const int header_height = std::max(DMTextBox::height(), DMButton::height());
     const int content_width = std::max(0, width - padding * 2);
 
     int total = padding;
     total += header_height;
-    const int selector_height = DMButton::height();
+    total += section_gap;
+
+    total += kSectionHeaderHeight;
     total += item_gap;
-    total += selector_height;
-
-    refresh_preview_metadata();
-    std::vector<std::string> badges = source_config_ ? source_config_->summary_badges() : std::vector<std::string>{};
-    badges.insert(badges.end(), preview_modifier_badges_.begin(), preview_modifier_badges_.end());
-    if (!badges.empty()) {
-        total += item_gap;
-        total += selector_height;
-    }
-
-    if (source_config_) {
+    total += DMButton::height();
+    if (source_section_open_ && source_config_) {
         int source_height = source_config_->preferred_height(content_width);
         if (source_height > 0) {
             total += item_gap;
@@ -398,28 +371,33 @@ int AnimationInspectorPanel::height_for_width(int width) const {
         }
     }
 
+    total += section_gap;
+    total += kSectionHeaderHeight;
     total += item_gap;
     total += preview_controls_height();
+    total += item_gap;
     total += kPreviewHeight;
 
-    bool added_section = false;
-    auto add_section_height = [&](auto* widget) {
+    auto add_collapsible_section = [&](CollapsibleSection section, auto* widget) {
         if (!widget) {
             return;
         }
-        int height = widget->preferred_height(content_width);
-        if (height <= 0) {
-            return;
+        total += section_gap;
+        total += kSectionHeaderHeight;
+        if (expanded_section_ == section) {
+            int height = widget->preferred_height(content_width);
+            if (height > 0) {
+                total += item_gap;
+                total += height;
+            }
         }
-        total += added_section ? section_gap : item_gap;
-        total += height;
-        added_section = true;
-};
+    };
 
-    add_section_height(playback_settings_.get());
-    add_section_height(movement_summary_.get());
-    add_section_height(on_end_selector_.get());
-    add_section_height(audio_panel_.get());
+    add_collapsible_section(CollapsibleSection::kAnimationOptions, animation_options_.get());
+    add_collapsible_section(CollapsibleSection::kPlayback, playback_settings_.get());
+    add_collapsible_section(CollapsibleSection::kMovement, movement_summary_.get());
+    add_collapsible_section(CollapsibleSection::kOnEnd, on_end_selector_.get());
+    add_collapsible_section(CollapsibleSection::kAudio, audio_panel_.get());
 
     total += padding;
     return total;
@@ -450,6 +428,7 @@ void AnimationInspectorPanel::update() {
 
     update_preview_playback();
 
+    if (animation_options_) animation_options_->update();
     if (playback_settings_) playback_settings_->update();
     if (movement_summary_) movement_summary_->update();
     if (on_end_selector_) on_end_selector_->update();
@@ -486,29 +465,53 @@ void AnimationInspectorPanel::render(SDL_Renderer* renderer) const {
         render_label(renderer, "Start Animation", header_rect_.x + kInspectorPadding, header_rect_.y + header_rect_.h - style.font_size - DMSpacing::small_gap(), accent);
     }
 
-    if (source_frames_button_) source_frames_button_->render(renderer);
-    if (source_animation_button_) source_animation_button_->render(renderer);
-
     {
         ClipScope content_clip(renderer, bounds_);
 
-        if (source_summary_rect_.h > 0) {
-            refresh_preview_metadata();
-            std::vector<std::string> badges = source_config_ ? source_config_->summary_badges() : std::vector<std::string>{};
-            badges.insert(badges.end(), preview_modifier_badges_.begin(), preview_modifier_badges_.end());
-            render_summary_badges(renderer, source_summary_rect_, badges);
-        }
-
-        if (source_config_ && source_rect_.h > 0 && source_rect_.w > 0) {
+        draw_section_header(renderer, source_section_header_rect_, "Source", true, source_section_open_);
+        if (source_frames_button_) source_frames_button_->render(renderer);
+        if (source_animation_button_) source_animation_button_->render(renderer);
+        if (source_section_open_ && source_config_ && source_rect_.h > 0 && source_rect_.w > 0) {
             source_config_->render(renderer);
         }
 
+        draw_section_header(renderer, preview_section_rect_, "Preview", false, true);
         render_preview_controls(renderer);
         render_preview(renderer);
-        if (playback_settings_) playback_settings_->render(renderer);
-        if (movement_summary_) movement_summary_->render(renderer);
-        if (on_end_selector_) on_end_selector_->render(renderer);
-        if (audio_panel_) audio_panel_->render(renderer);
+
+        {
+            ClipScope scroll_clip(renderer, scrollable_bounds_);
+            if (animation_options_) {
+                draw_section_header(renderer, animation_options_header_rect_, "Animation", true, expanded_section_ == CollapsibleSection::kAnimationOptions);
+                if (expanded_section_ == CollapsibleSection::kAnimationOptions) {
+                    animation_options_->render(renderer);
+                }
+            }
+            if (playback_settings_) {
+                draw_section_header(renderer, playback_header_rect_, "Playback", true, expanded_section_ == CollapsibleSection::kPlayback);
+                if (expanded_section_ == CollapsibleSection::kPlayback) {
+                    playback_settings_->render(renderer);
+                }
+            }
+            if (movement_summary_) {
+                draw_section_header(renderer, movement_header_rect_, "Geometry", true, expanded_section_ == CollapsibleSection::kMovement);
+                if (expanded_section_ == CollapsibleSection::kMovement) {
+                    movement_summary_->render(renderer);
+                }
+            }
+            if (on_end_selector_) {
+                draw_section_header(renderer, on_end_header_rect_, "On End", true, expanded_section_ == CollapsibleSection::kOnEnd);
+                if (expanded_section_ == CollapsibleSection::kOnEnd) {
+                    on_end_selector_->render(renderer);
+                }
+            }
+            if (audio_panel_) {
+                draw_section_header(renderer, audio_header_rect_, "Audio", true, expanded_section_ == CollapsibleSection::kAudio);
+                if (expanded_section_ == CollapsibleSection::kAudio) {
+                    audio_panel_->render(renderer);
+                }
+            }
+        }
     }
 
     render_scrollbar(renderer);
@@ -622,6 +625,35 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
         }
     }
 
+    if (!handled && e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
+        SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
+        auto toggle_section = [&](const SDL_Rect& rect, CollapsibleSection section) {
+            if (!SDL_PointInRect(&p, &rect)) {
+                return false;
+            }
+
+            if (section == CollapsibleSection::kSource) {
+                source_section_open_ = !source_section_open_;
+                layout_dirty_ = true;
+                return true;
+            }
+
+            CollapsibleSection new_section = (expanded_section_ == section) ? CollapsibleSection::kNone : section;
+            if (new_section != expanded_section_) {
+                expanded_section_ = new_section;
+                layout_dirty_ = true;
+            }
+            return true;
+        };
+
+        handled = toggle_section(source_section_header_rect_, CollapsibleSection::kSource) ||
+                  toggle_section(animation_options_header_rect_, CollapsibleSection::kAnimationOptions) ||
+                  toggle_section(playback_header_rect_, CollapsibleSection::kPlayback) ||
+                  toggle_section(movement_header_rect_, CollapsibleSection::kMovement) ||
+                  toggle_section(on_end_header_rect_, CollapsibleSection::kOnEnd) ||
+                  toggle_section(audio_header_rect_, CollapsibleSection::kAudio);
+    }
+
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
         SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
         FocusTarget clicked = FocusTarget::kNone;
@@ -641,12 +673,13 @@ bool AnimationInspectorPanel::handle_event(const SDL_Event& e) {
         handled = true;
     }
 
-    if (source_config_ && source_config_->handle_event(e)) handled = true;
+    if (source_section_open_ && source_config_ && source_config_->handle_event(e)) handled = true;
+    if (expanded_section_ == CollapsibleSection::kAnimationOptions && animation_options_ && animation_options_->handle_event(e)) handled = true;
 
-    if (playback_settings_ && playback_settings_->handle_event(e)) handled = true;
-    if (movement_summary_ && movement_summary_->handle_event(e)) handled = true;
-    if (on_end_selector_ && on_end_selector_->handle_event(e)) handled = true;
-    if (audio_panel_ && audio_panel_->handle_event(e)) handled = true;
+    if (expanded_section_ == CollapsibleSection::kPlayback && playback_settings_ && playback_settings_->handle_event(e)) handled = true;
+    if (expanded_section_ == CollapsibleSection::kMovement && movement_summary_ && movement_summary_->handle_event(e)) handled = true;
+    if (expanded_section_ == CollapsibleSection::kOnEnd && on_end_selector_ && on_end_selector_->handle_event(e)) handled = true;
+    if (expanded_section_ == CollapsibleSection::kAudio && audio_panel_ && audio_panel_->handle_event(e)) handled = true;
 
     if (was_editing && name_box_ && !name_box_->is_editing()) {
         rename_pending_ = true;
@@ -823,6 +856,12 @@ void AnimationInspectorPanel::rebuild_widgets() {
         });
     }
 
+    if (!animation_options_) {
+        animation_options_ = std::make_unique<AnimationOptionsPanel>();
+    }
+    animation_options_->set_document(document_);
+    animation_options_->set_animation_id(animation_id_);
+
     if (!playback_settings_) {
         playback_settings_ = std::make_unique<PlaybackSettingsPanel>();
     }
@@ -875,7 +914,6 @@ void AnimationInspectorPanel::layout_widgets() const {
 
     const int width = std::max(0, bounds_.w - padding * 2);
     const int x = bounds_.x + padding;
-    const int scroll = scroll_controller_.scroll();
 
     const int button_height = DMButton::height();
     int action_width = start_button_ ? std::min(kHeaderButtonWidth, width) : 0;
@@ -903,45 +941,59 @@ void AnimationInspectorPanel::layout_widgets() const {
     const int header_total_height = header_content_height + padding;
     self->header_rect_ = SDL_Rect{bounds_.x, bounds_.y, bounds_.w, header_total_height};
 
-    LayoutCursor cursor(bounds_.y + padding + header_content_height + item_gap, scroll);
+    LayoutCursor static_cursor(bounds_.y + padding + header_content_height + section_gap, 0);
 
-    const int selector_height = DMButton::height();
-    const int selector_gap = DMSpacing::small_gap();
-    self->source_selector_rect_ = SDL_Rect{x, cursor.visual_y(), width, selector_height};
-    int frames_width = std::max(0, (width - selector_gap) / 2);
-    int animation_width = std::max(0, width - frames_width - selector_gap);
-    if (source_frames_button_) {
-        SDL_Rect rect{x, cursor.visual_y(), frames_width, selector_height};
-        source_frames_button_->set_rect(rect);
-    }
-    if (source_animation_button_) {
-        SDL_Rect rect{x + frames_width + selector_gap, cursor.visual_y(), animation_width, selector_height};
-        source_animation_button_->set_rect(rect);
-    }
-    cursor.advance(selector_height);
-    cursor.advance(item_gap);
+    self->source_section_header_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, kSectionHeaderHeight};
+    self->source_section_rect_ = self->source_section_header_rect_;
+    static_cursor.advance(kSectionHeaderHeight);
 
-    refresh_preview_metadata();
-    std::vector<std::string> badges = source_config_ ? source_config_->summary_badges() : std::vector<std::string>{};
-    badges.insert(badges.end(), preview_modifier_badges_.begin(), preview_modifier_badges_.end());
-    if (!badges.empty()) {
-        self->source_summary_rect_ = SDL_Rect{x, cursor.visual_y(), width, selector_height};
-        cursor.advance(selector_height);
+    if (source_section_open_) {
+        static_cursor.advance(item_gap);
+        const int selector_height = DMButton::height();
+        const int selector_gap = DMSpacing::small_gap();
+        self->source_selector_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, selector_height};
+        int frames_width = std::max(0, (width - selector_gap) / 2);
+        int animation_width = std::max(0, width - frames_width - selector_gap);
+        if (source_frames_button_) {
+            SDL_Rect rect{x, static_cursor.visual_y(), frames_width, selector_height};
+            source_frames_button_->set_rect(rect);
+        }
+        if (source_animation_button_) {
+            SDL_Rect rect{x + frames_width + selector_gap, static_cursor.visual_y(), animation_width, selector_height};
+            source_animation_button_->set_rect(rect);
+        }
+        static_cursor.advance(selector_height);
+
+        int source_height = source_config_ ? source_config_->preferred_height(width) : 0;
+        if (source_height > 0) {
+            static_cursor.advance(item_gap);
+            self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, source_height};
+            if (source_config_) {
+                source_config_->set_bounds(self->source_rect_);
+            }
+            static_cursor.advance(source_height);
+        } else {
+            self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, 0};
+            if (source_config_) {
+                source_config_->set_bounds(self->source_rect_);
+            }
+        }
     } else {
-        self->source_summary_rect_ = SDL_Rect{x, cursor.visual_y(), width, 0};
+        self->source_selector_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, 0};
+        self->source_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, 0};
+        if (source_config_) {
+            source_config_->set_bounds(self->source_rect_);
+        }
     }
-    cursor.advance(item_gap);
+    self->source_section_rect_.h = std::max(0, static_cursor.visual_y() - self->source_section_rect_.y);
 
-    int source_height = source_config_ ? source_config_->preferred_height(width) : 0;
-    self->source_rect_ = SDL_Rect{x, cursor.visual_y(), width, source_height};
-    if (source_config_) {
-        source_config_->set_bounds(self->source_rect_);
-    }
-    cursor.advance(source_height);
-    cursor.advance(item_gap);
+    static_cursor.advance(section_gap);
+    self->preview_section_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, kSectionHeaderHeight};
+    static_cursor.advance(kSectionHeaderHeight);
+    static_cursor.advance(item_gap);
 
     const int controls_height = preview_controls_height();
-    self->preview_controls_rect_ = SDL_Rect{x, cursor.visual_y(), width, controls_height};
+    self->preview_controls_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, controls_height};
     SDL_Rect slider_rect{self->preview_controls_rect_.x, self->preview_controls_rect_.y, self->preview_controls_rect_.w, controls_height};
     if (preview_play_button_) {
         int button_width = std::min(kPreviewControlsButtonWidth, self->preview_controls_rect_.w);
@@ -958,37 +1010,64 @@ void AnimationInspectorPanel::layout_widgets() const {
     if (preview_scrub_slider_) {
         preview_scrub_slider_->set_rect(slider_rect);
     }
-    cursor.advance(controls_height);
-    cursor.advance(item_gap);
+    static_cursor.advance(controls_height);
+    static_cursor.advance(item_gap);
 
-    self->preview_rect_ = SDL_Rect{x, cursor.visual_y(), width, kPreviewHeight};
-    cursor.advance(kPreviewHeight);
+    self->preview_rect_ = SDL_Rect{x, static_cursor.visual_y(), width, kPreviewHeight};
+    static_cursor.advance(kPreviewHeight);
 
-    bool placed_section = false;
-    auto place_section = [&](auto* widget, SDL_Rect& rect) {
+    const int scroll_start = static_cursor.logical_y;
+    const int scroll_height = std::max(0, bounds_.y + bounds_.h - scroll_start);
+    SDL_Rect scroll_bounds{x, scroll_start, width, scroll_height};
+    self->scrollable_bounds_ = scroll_bounds;
+    self->scroll_controller_.set_bounds(scroll_bounds);
+    int scroll = self->scroll_controller_.scroll();
+    LayoutCursor scroll_cursor(scroll_start, scroll);
+
+    auto place_collapsible_section = [&](auto* widget,
+                                         CollapsibleSection section,
+                                         SDL_Rect& header_rect,
+                                         SDL_Rect& content_rect,
+                                         SDL_Rect& section_rect) {
         if (!widget) {
-            rect = SDL_Rect{x, cursor.visual_y(), width, 0};
+            auto reset_rect = [&](SDL_Rect& rect) { rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0}; };
+            reset_rect(header_rect);
+            reset_rect(content_rect);
+            reset_rect(section_rect);
             return;
         }
-        int section_height = widget->preferred_height(width);
-        if (section_height <= 0) {
-            rect = SDL_Rect{x, cursor.visual_y(), width, 0};
-            widget->set_bounds(rect);
-            return;
+
+        scroll_cursor.advance(section_gap);
+        section_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
+        header_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, kSectionHeaderHeight};
+        scroll_cursor.advance(kSectionHeaderHeight);
+
+        if (expanded_section_ == section) {
+            int content_height = widget->preferred_height(width);
+            if (content_height > 0) {
+                scroll_cursor.advance(item_gap);
+                content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, content_height};
+                widget->set_bounds(content_rect);
+                scroll_cursor.advance(content_height);
+            } else {
+                content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
+                widget->set_bounds(content_rect);
+            }
+        } else {
+            content_rect = SDL_Rect{x, scroll_cursor.visual_y(), width, 0};
+            widget->set_bounds(content_rect);
         }
-        cursor.advance(placed_section ? section_gap : item_gap);
-        rect = SDL_Rect{x, cursor.visual_y(), width, section_height};
-        widget->set_bounds(rect);
-        cursor.advance(section_height);
-        placed_section = true;
-};
 
-    place_section(playback_settings_.get(), playback_rect_);
-    place_section(movement_summary_.get(), movement_rect_);
-    place_section(on_end_selector_.get(), on_end_rect_);
-    place_section(audio_panel_.get(), audio_rect_);
+        section_rect.h = std::max(0, scroll_cursor.visual_y() - section_rect.y);
+    };
 
-    self->content_height_ = cursor.logical_y + padding - bounds_.y;
+    place_collapsible_section(animation_options_.get(), CollapsibleSection::kAnimationOptions, self->animation_options_header_rect_, self->animation_options_rect_, self->animation_options_section_rect_);
+    place_collapsible_section(playback_settings_.get(), CollapsibleSection::kPlayback, self->playback_header_rect_, self->playback_rect_, self->playback_section_rect_);
+    place_collapsible_section(movement_summary_.get(), CollapsibleSection::kMovement, self->movement_header_rect_, self->movement_rect_, self->movement_section_rect_);
+    place_collapsible_section(on_end_selector_.get(), CollapsibleSection::kOnEnd, self->on_end_header_rect_, self->on_end_rect_, self->on_end_section_rect_);
+    place_collapsible_section(audio_panel_.get(), CollapsibleSection::kAudio, self->audio_header_rect_, self->audio_rect_, self->audio_section_rect_);
+
+    self->content_height_ = scroll_cursor.logical_y + padding - scroll_start;
     const int previous_scroll = scroll;
     self->scroll_controller_.set_content_height(self->content_height_);
     if (self->scroll_controller_.scroll() != previous_scroll) {
@@ -1114,11 +1193,6 @@ void AnimationInspectorPanel::render_preview(SDL_Renderer* renderer) const {
             render_label(renderer, text, preview_rect_.x + (preview_rect_.w - label_w) / 2, preview_rect_.y + preview_rect_.h / 2 - style.font_size / 2, color);
         }
 
-        if (!preview_modifier_badges_.empty()) {
-            SDL_Rect badge_rect{preview_rect_.x + DMSpacing::small_gap(),
-                                preview_rect_.y + DMSpacing::small_gap(), std::max(0, preview_rect_.w - DMSpacing::small_gap() * 2), DMButton::height()};
-            render_summary_badges(renderer, badge_rect, preview_modifier_badges_);
-        }
 };
 
     if (preview_clip.w > 0 && preview_clip.h > 0) {
@@ -1173,24 +1247,24 @@ void AnimationInspectorPanel::update_scrollbar_geometry() const {
     self->scrollbar_track_ = SDL_Rect{0, 0, 0, 0};
     self->scrollbar_thumb_ = SDL_Rect{0, 0, 0, 0};
 
-    if (bounds_.h <= 0) {
+    if (scrollable_bounds_.h <= 0) {
         return;
     }
-    const int max_scroll = std::max(0, content_height_ - bounds_.h);
+    const int max_scroll = std::max(0, content_height_ - scrollable_bounds_.h);
     if (max_scroll <= 0) {
         return;
     }
 
     const int inset = DMSpacing::small_gap();
     SDL_Rect track{bounds_.x + bounds_.w - kScrollbarWidth - inset,
-                   bounds_.y + inset,
+                   scrollable_bounds_.y + inset,
                    kScrollbarWidth,
-                   std::max(0, bounds_.h - inset * 2)};
+                   std::max(0, scrollable_bounds_.h - inset * 2)};
     if (track.h <= 0 || track.w <= 0) {
         return;
     }
 
-    float visible_ratio = static_cast<float>(bounds_.h) / static_cast<float>(content_height_);
+    float visible_ratio = static_cast<float>(scrollable_bounds_.h) / static_cast<float>(content_height_);
     visible_ratio = std::clamp(visible_ratio, 0.05f, 1.0f);
     int thumb_h = std::max(kScrollbarMinThumbHeight, static_cast<int>(std::round(track.h * visible_ratio)));
     thumb_h = std::min(thumb_h, track.h);
@@ -1235,6 +1309,9 @@ void AnimationInspectorPanel::render_overlays(SDL_Renderer* renderer) const {
 
 bool AnimationInspectorPanel::handle_scroll_wheel(const SDL_Event& e) {
     if (e.type != SDL_EVENT_MOUSE_WHEEL) {
+        return false;
+    }
+    if (scrollable_bounds_.h <= 0) {
         return false;
     }
     int mx = 0;
@@ -1295,6 +1372,12 @@ void AnimationInspectorPanel::apply_dependencies() {
         });
     }
 
+    if (animation_options_) {
+        animation_options_->set_document(document_);
+        animation_options_->set_animation_id(animation_id_);
+        animation_options_->set_on_animation_properties_changed(on_animation_properties_changed_);
+    }
+
     if (movement_summary_) {
         movement_summary_->set_edit_callback(frame_edit_callback_);
         movement_summary_->set_mode_launch_callback([this](const std::string& id, FrameEditorLaunchMode mode) {
@@ -1326,7 +1409,6 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
     auto* self = const_cast<AnimationInspectorPanel*>(this);
     if (!document_ || animation_id_.empty()) {
         self->preview_signature_.clear();
-        self->preview_modifier_badges_.clear();
         self->preview_reverse_ = false;
         self->preview_flip_x_ = false;
         self->preview_flip_y_ = false;
@@ -1341,7 +1423,6 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
 
     int previous_frame_count = self->frame_count_;
     self->preview_signature_ = signature;
-    self->preview_modifier_badges_.clear();
     self->preview_reverse_ = false;
     self->preview_flip_x_ = false;
     self->preview_flip_y_ = false;
@@ -1404,12 +1485,6 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
         self->preview_slider_max_frame_ = -1;
     }
 
-    auto add_badge = [&](const char* text) { self->preview_modifier_badges_.emplace_back(text); };
-    if (self->preview_reverse_) add_badge("Reverse");
-    if (self->preview_flip_x_) add_badge("Flip X");
-    if (self->preview_flip_y_) add_badge("Flip Y");
-    if (self->preview_flip_movement_x_) add_badge("Flip Movement X");
-    if (self->preview_flip_movement_y_) add_badge("Flip Movement Y");
 }
 
 std::vector<AnimationInspectorPanel::FocusTarget> AnimationInspectorPanel::focus_order() const {

@@ -1,4 +1,4 @@
-#include "assets/surface_utils.hpp"
+#include "surface_utils.hpp"
 
 namespace asset {
 namespace surface_utils {

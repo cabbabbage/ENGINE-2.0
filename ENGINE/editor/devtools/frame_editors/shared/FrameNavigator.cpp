@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "devtools/asset_editor/animation_editor_window/PreviewProvider.hpp"
+#include "devtools/dm_icons.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
 #include "devtools/font_cache.hpp"
@@ -19,8 +20,10 @@ const int kBarPadding = DMSpacing::item_gap();
 constexpr int kThumbCorner = 8;
 constexpr int kBadgeHeight = 16;
 constexpr int kBadgePadding = 4;
-const int kApplyButtonGap = DMSpacing::small_gap();
-constexpr int kApplyButtonWidth = 140;
+const int kApplyButtonGap = DMSpacing::item_gap();
+constexpr int kBottomButtonHeight = 40;
+constexpr int kSaveExitButtonWidth = 150;
+const int kNavigatorGap = DMSpacing::small_gap();
 
 SDL_FRect ToFRect(const SDL_Rect& rect) {
     return SDL_FRect{
@@ -39,11 +42,14 @@ float content_width(int frame_count) {
 }  // namespace
 
 FrameNavigator::FrameNavigator() {
-    btn_prev_ = std::make_unique<DMButton>("<", &DMStyles::AccentButton(), kThumbSize, kThumbSize);
-    btn_next_ = std::make_unique<DMButton>(">", &DMStyles::AccentButton(), kThumbSize, kThumbSize);
-    btn_apply_next_ = std::make_unique<DMButton>("Apply To Next", &DMStyles::HeaderButton(), kApplyButtonWidth, kThumbSize);
-    btn_apply_animation_ = std::make_unique<DMButton>("Apply To Animation", &DMStyles::HeaderButton(), kApplyButtonWidth + 20, kThumbSize);
-    btn_apply_all_ = std::make_unique<DMButton>("Apply To All", &DMStyles::HeaderButton(), kApplyButtonWidth, kThumbSize);
+    const DMButtonStyle* nav_style = &DMStyles::IconButton();
+    const DMButtonStyle* apply_style = &DMStyles::AccentButton();
+    btn_prev_ = std::make_unique<DMButton>(std::string(DMIcons::NavLeft()), nav_style, kThumbSize, kThumbSize);
+    btn_next_ = std::make_unique<DMButton>(std::string(DMIcons::NavRight()), nav_style, kThumbSize, kThumbSize);
+    btn_apply_next_ = std::make_unique<DMButton>("Apply To Next", apply_style, kBottomButtonHeight * 3, kBottomButtonHeight);
+    btn_apply_animation_ = std::make_unique<DMButton>("Apply To Selected", apply_style, kBottomButtonHeight * 3, kBottomButtonHeight);
+    btn_apply_all_ = std::make_unique<DMButton>("Apply To All", apply_style, kBottomButtonHeight * 3, kBottomButtonHeight);
+    btn_save_exit_ = std::make_unique<DMButton>("Save and Exit", &DMStyles::DeleteButton(), kSaveExitButtonWidth, kBottomButtonHeight);
     update_button_states();
 }
 
@@ -90,6 +96,10 @@ void FrameNavigator::set_on_apply_all(std::function<void()> callback) {
     on_apply_all_ = std::move(callback);
 }
 
+void FrameNavigator::set_on_save_and_exit(std::function<void()> callback) {
+    on_save_and_exit_ = std::move(callback);
+}
+
 void FrameNavigator::set_confirmation_handler(std::function<bool(const std::string&, const std::string&)> callback) {
     on_confirm_ = std::move(callback);
 }
@@ -113,44 +123,67 @@ void FrameNavigator::set_rect(const SDL_Rect& rect) {
     rect_.h = std::max(rect_.h, get_preferred_rect().h);
 
     const int top_y = rect_.y + kBarPadding;
+    const int bottom_apply_y = rect_.y + rect_.h - kBarPadding - kBottomButtonHeight;
+    const int save_button_y = bottom_apply_y - DMSpacing::small_gap() - kBottomButtonHeight;
+
     const int left_x = rect_.x + kBarPadding;
     const int right_x = rect_.x + rect_.w - kBarPadding;
+    const int inner_width = std::max(0, rect_.w - 2 * kBarPadding);
+    const int strip_width = std::max(0, inner_width - 2 * kThumbSize - 2 * kNavigatorGap);
+    const int strip_x = left_x + kThumbSize + kNavigatorGap;
 
     if (btn_prev_) {
         btn_prev_->set_rect(SDL_Rect{left_x, top_y, kThumbSize, kThumbSize});
     }
-
-    int apply_x = right_x;
-    if (btn_apply_all_) {
-        apply_x -= btn_apply_all_->rect().w;
-        btn_apply_all_->set_rect(SDL_Rect{apply_x, top_y, btn_apply_all_->rect().w, kThumbSize});
-        apply_x -= kApplyButtonGap;
-    }
-    if (btn_apply_animation_) {
-        apply_x -= btn_apply_animation_->rect().w;
-        btn_apply_animation_->set_rect(SDL_Rect{apply_x, top_y, btn_apply_animation_->rect().w, kThumbSize});
-        apply_x -= kApplyButtonGap;
-    }
-    if (btn_apply_next_) {
-        apply_x -= btn_apply_next_->rect().w;
-        btn_apply_next_->set_rect(SDL_Rect{apply_x, top_y, btn_apply_next_->rect().w, kThumbSize});
-        apply_x -= kApplyButtonGap;
-    }
-
     if (btn_next_) {
-        int next_x = apply_x - kThumbSize;
-        btn_next_->set_rect(SDL_Rect{next_x, top_y, kThumbSize, kThumbSize});
-        apply_x = next_x - kApplyButtonGap;
+        btn_next_->set_rect(SDL_Rect{right_x - kThumbSize, top_y, kThumbSize, kThumbSize});
     }
 
-    const int strip_x = left_x + kThumbSize + kBarPadding;
-    const int strip_right = apply_x;
     strip_rect_ = SDL_Rect{
         strip_x,
         top_y,
-        std::max(0, strip_right - strip_x),
+        strip_width,
         kThumbSize
     };
+
+    if (btn_save_exit_) {
+        btn_save_exit_->set_rect(SDL_Rect{
+            rect_.x + rect_.w - kBarPadding - kSaveExitButtonWidth,
+            save_button_y,
+            kSaveExitButtonWidth,
+            kBottomButtonHeight
+        });
+    }
+
+    DMButton* apply_buttons[3] = {btn_apply_next_.get(), btn_apply_animation_.get(), btn_apply_all_.get()};
+    if (strip_rect_.w > 0) {
+        int actual_gap = kApplyButtonGap;
+        if (strip_rect_.w < kApplyButtonGap * 2) {
+            actual_gap = std::max(0, strip_rect_.w / 4);
+        }
+        const int gap_total = actual_gap * 2;
+        const int available_width = std::max(0, strip_rect_.w - gap_total);
+        const int base_width = available_width / 3;
+        const int remainder = available_width - base_width * 3;
+        int extra[3] = {0, 0, 0};
+        for (int i = 0; i < remainder && i < 3; ++i) {
+            extra[i] = 1;
+        }
+
+        int apply_x = strip_rect_.x;
+        for (int i = 0; i < 3; ++i) {
+            int width = base_width + extra[i];
+            width = std::max(width, 1);
+            if (apply_buttons[i]) {
+                SDL_Rect btn_rect{apply_x, bottom_apply_y, width, kBottomButtonHeight};
+                apply_buttons[i]->set_rect(btn_rect);
+            }
+            apply_x += width;
+            if (i < 2) {
+                apply_x += actual_gap;
+            }
+        }
+    }
 
     clamp_scroll();
     ensure_frame_visible(current_frame_);
@@ -161,7 +194,8 @@ const SDL_Rect& FrameNavigator::get_rect() const {
 }
 
 SDL_Rect FrameNavigator::get_preferred_rect() const {
-    return SDL_Rect{0, 0, 0, kThumbSize + kBarPadding * 2};
+    const int bottom_rows = kBottomButtonHeight * 2 + DMSpacing::small_gap();
+    return SDL_Rect{0, 0, 0, kBarPadding + kThumbSize + bottom_rows + kBarPadding};
 }
 
 bool FrameNavigator::handle_event(const SDL_Event& e) {
@@ -188,6 +222,10 @@ bool FrameNavigator::handle_event(const SDL_Event& e) {
     }
     if (btn_apply_all_ && btn_apply_all_->handle_event(e)) {
         handle_apply_all();
+        consumed = true;
+    }
+    if (btn_save_exit_ && btn_save_exit_->handle_event(e)) {
+        handle_save_and_exit();
         consumed = true;
     }
 
@@ -243,6 +281,7 @@ void FrameNavigator::render(SDL_Renderer* renderer) {
     if (btn_apply_next_) btn_apply_next_->render(renderer);
     if (btn_apply_animation_) btn_apply_animation_->render(renderer);
     if (btn_apply_all_) btn_apply_all_->render(renderer);
+    if (btn_save_exit_) btn_save_exit_->render(renderer);
 }
 
 void FrameNavigator::request_frame_change(int frame) {
@@ -458,8 +497,8 @@ void FrameNavigator::handle_apply_next() {
 
 void FrameNavigator::handle_apply_animation() {
     if (on_apply_animation_) {
-        const std::string title = "Apply To Animation";
-        const std::string msg = "Replace current frame's data across every frame in this animation?";
+        const std::string title = "Apply To Selected Animations";
+        const std::string msg = "Apply current anchor set to every frame in selected animation scope?";
         if (!confirm_action(title, msg)) {
             return;
         }
@@ -470,11 +509,17 @@ void FrameNavigator::handle_apply_animation() {
 void FrameNavigator::handle_apply_all() {
     if (on_apply_all_) {
         const std::string title = "Apply To All Animations";
-        const std::string msg = "Replace this frame's data across every frame of every animation for this asset?";
+        const std::string msg = "Apply current anchor set to every frame in every animation for this asset?";
         if (!confirm_action(title, msg)) {
             return;
         }
         on_apply_all_();
+    }
+}
+
+void FrameNavigator::handle_save_and_exit() {
+    if (on_save_and_exit_) {
+        on_save_and_exit_();
     }
 }
 
@@ -483,13 +528,13 @@ void FrameNavigator::update_button_states() {
     next_enabled_ = enabled_ && frame_count_ > 0 && current_frame_ < frame_count_ - 1;
 
     if (btn_prev_) {
-        btn_prev_->set_text("<");
-        btn_prev_->set_style(prev_enabled_ ? &DMStyles::AccentButton() : &DMStyles::ListButton());
+        btn_prev_->set_text(std::string(DMIcons::NavLeft()));
+        btn_prev_->set_style(prev_enabled_ ? &DMStyles::IconButton() : &DMStyles::ListButton());
     }
 
     if (btn_next_) {
-        btn_next_->set_text(">");
-        btn_next_->set_style(next_enabled_ ? &DMStyles::AccentButton() : &DMStyles::ListButton());
+        btn_next_->set_text(std::string(DMIcons::NavRight()));
+        btn_next_->set_style(next_enabled_ ? &DMStyles::IconButton() : &DMStyles::ListButton());
     }
 }
 

@@ -11,6 +11,7 @@
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include "rendering/render/TextureLoadQueue.hpp"
+#include "rendering/render/terrain_runtime_state.hpp"
 #include <SDL3/SDL.h>
 
 #include <nlohmann/json.hpp>
@@ -19,6 +20,7 @@ class Assets;
 class WarpedScreenGrid;
 class AssetLibrary;
 namespace world { class WorldGrid; }
+class TerrainField;
 
 // Geometry batching system for reducing draw calls
 class GeometryBatcher {
@@ -41,38 +43,15 @@ public:
     size_t getTotalVertices() const { return total_vertices_; }
 
 private:
-    struct QuadData {
-        SDL_Vertex vertices[4];
-        double depth;
-    };
-
-    struct BatchKey {
-        SDL_Texture* texture;
-        SDL_BlendMode blend_mode;
-
-        bool operator==(const BatchKey& other) const {
-            return texture == other.texture && blend_mode == other.blend_mode;
-        }
-    };
-
-    struct BatchKeyHash {
-        size_t operator()(const BatchKey& key) const {
-            return reinterpret_cast<size_t>(key.texture) ^ static_cast<size_t>(key.blend_mode);
-        }
-    };
-
-    struct Batch {
+    struct DrawItem {
         SDL_Texture* texture = nullptr;
         SDL_BlendMode blend_mode = SDL_BLENDMODE_BLEND;
-        std::vector<QuadData> quads;
-
-        void reserve(size_t count) {
-            quads.reserve(count);
-        }
+        SDL_Vertex vertices[4];
+        double depth = 0.0;
     };
 
     SDL_Renderer* renderer_;
-    std::unordered_map<BatchKey, Batch, BatchKeyHash> batches_;
+    std::vector<DrawItem> draw_list_;
     size_t draw_call_count_ = 0;
     size_t total_vertices_ = 0;
 
@@ -91,8 +70,23 @@ public:
 
     void render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid, GeometryBatcher* batcher);
 
+    // Call when tile textures are rebuilt or assets are reloaded
+    void invalidate_texture_cache();
+    void set_terrain_sources(TerrainField* field, const TerrainRuntimeState* state) {
+        terrain_field_ = field;
+        terrain_state_ = state;
+    }
+
 private:
+    bool fetch_texture_size(SDL_Texture* texture, SDL_FPoint& out_size);
+
     Assets* assets_ = nullptr;
+    std::unordered_map<SDL_Texture*, SDL_FPoint> texture_size_cache_;
+    TerrainField* terrain_field_ = nullptr; // non-owning
+    const TerrainRuntimeState* terrain_state_ = nullptr; // non-owning
+    std::size_t terrain_vertices_last_frame_ = 0;
+    std::size_t terrain_tiles_last_frame_ = 0;
+    std::uint64_t last_logged_revision_ = 0;
 };
 
 class SceneRenderer {
@@ -123,6 +117,8 @@ public:
     bool movement_debug_enabled() const { return debug_auto_paths_; }
     void set_movement_debug_visible(bool visible);
     bool movement_debug_visible() const { return movement_debug_visible_; }
+    void set_anchor_point_debug_enabled(bool enabled);
+    bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     void set_map_clear_color(SDL_Color color) { map_clear_color_ = color; }
     SDL_Color map_clear_color() const { return map_clear_color_; }
 
@@ -135,10 +131,6 @@ private:
     bool ensure_sky_texture();
     void destroy_sky_texture();
     void render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled);
-
-    bool ensure_floor_gradient_texture();
-    void destroy_floor_gradient_texture();
-    void render_floor_gradient();
 
     SDL_Renderer*  renderer_;
     Assets*        assets_;
@@ -157,10 +149,12 @@ private:
     SDL_Color    map_clear_color_{0, 128, 0, 255};
     bool         debug_auto_paths_ = true;
     bool         movement_debug_visible_ = true;
+    bool         anchor_point_debug_enabled_ = false;
 
     CompositeAssetRenderer composite_renderer_;
     std::unique_ptr<DynamicFogSystem> dynamic_fog_system_;
     std::unique_ptr<DynamicBoundarySystem> dynamic_boundary_system_;
+    std::unique_ptr<TerrainField> terrain_field_;
 
     std::uint32_t depthcue_warmup_frames_ = 8;
 
@@ -173,10 +167,7 @@ private:
     int                   sky_texture_width_ = 0;
     int                   sky_texture_height_ = 0;
     bool                  sky_texture_failed_ = false;
-
-    std::filesystem::path floor_gradient_path_;
-    SDL_Texture*          floor_gradient_texture_       = nullptr;
-    int                   floor_gradient_width_ = 0;
-    int                   floor_gradient_height_ = 0;
-    bool                  floor_gradient_failed_ = false;
+    TerrainRuntimeState   terrain_runtime_state_{};
+    std::uint64_t         terrain_settings_revision_seen_ = 0;
+    bool                  terrain_randomize_session_seed_ = false;
 };

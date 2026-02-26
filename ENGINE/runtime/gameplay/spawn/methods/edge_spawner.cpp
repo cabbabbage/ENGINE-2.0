@@ -11,7 +11,7 @@
 #include "spawn_info.hpp"
 #include "check.hpp"
 #include "asset_spawn_planner.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "utils/area.hpp"
 #include "utils/grid.hpp"
 
@@ -182,7 +182,6 @@ void EdgeSpawner::spawn(const SpawnInfo& item, const Area* area, SpawnContext& c
                                            *target_area,
                                            spawn_point,
                                            0,
-                                           nullptr,
                                            item.spawn_id,
                                            item.position)) {
             if (ctx.checks_enabled()) {

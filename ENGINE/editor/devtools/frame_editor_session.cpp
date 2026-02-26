@@ -7,13 +7,14 @@
 #include <limits>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "core/AssetsManager.hpp"
 #include "devtools/frame_editors/AttackGeoFrameEditor.hpp"
 #include "devtools/frame_editors/FrameEditorBase.hpp"
 #include "devtools/frame_editors/HitGeoFrameEditor.hpp"
 #include "devtools/frame_editors/MovementFrameEditor.hpp"
-#include "devtools/frame_editors/AnchorFrameEditor.hpp"
+#include "devtools/anchor_editor/AnchorEditor.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
 #include "utils/input.hpp"
@@ -50,7 +51,7 @@ std::unique_ptr<devmode::frame_editors::FrameEditorBase> create_editor(FrameEdit
         case FrameEditorSession::Mode::HitGeometry:
             return std::make_unique<devmode::frame_editors::HitGeoFrameEditor>();
         case FrameEditorSession::Mode::AnchorPoints:
-            return std::make_unique<devmode::frame_editors::AnchorFrameEditor>();
+            return std::make_unique<devmode::anchor_editor::AnchorEditor>();
     }
     return nullptr;
 }
@@ -99,16 +100,25 @@ void FrameEditorSession::begin(Assets* assets,
     editor_context_.animation_id = animation_id_;
     editor_context_.launch_mode = launch_mode_;
     editor_context_.on_host_closed = on_host_closed_;
-    editor_context_.on_end = on_end_;
+    editor_context_.on_end = [this]() { request_exit(); };
+    editor_context_.on_save_and_update = [this]() { save_and_update(); };
     editor_context_.camera = assets_ ? &assets_->getView() : nullptr;
     editor_context_.snap_resolution = snap_resolution_r_;
     editor_context_.snap_override = snap_resolution_override_;
     editor_context_.selection_state = &selection_state_;
+    editor_context_.selected_animation_ids_provider = [this]() {
+        if (!animation_id_.empty()) {
+            return std::vector<std::string>{animation_id_};
+        }
+        return std::vector<std::string>{};
+    };
+    editor_context_.on_undo_checkpoint = [](const std::string&) {};
 
     mode_ = mode_for_launch(launch_mode_);
     camera_controls_.set_height_scale_factor(1.1);
     capture_camera_state();
     active_ = true;
+    exit_requested_ = false;
     create_and_begin_editor();
 }
 
@@ -140,6 +150,7 @@ void FrameEditorSession::end() {
     prev_asset_hidden_ = false;
     snap_resolution_override_ = false;
     snap_resolution_r_ = 0;
+    exit_requested_ = false;
     selection_state_.reset();
     editor_context_ = {};
     camera_lock_state_.valid = false;
@@ -174,7 +185,7 @@ void FrameEditorSession::update(const Input& input) {
         camera_controls_.handle_input(cam, input, false);
     }
     active_editor_->update(input, 0.0f);
-    if (active_editor_ && active_editor_->wants_close()) {
+    if (exit_requested_) {
         end();
         return;
     }
@@ -184,7 +195,12 @@ bool FrameEditorSession::handle_event(const SDL_Event& e) {
     if (!active_editor_) {
         return false;
     }
-    return active_editor_->handle_event(e);
+    const bool handled = active_editor_->handle_event(e);
+    if (exit_requested_) {
+        end();
+        return true;
+    }
+    return handled;
 }
 
 void FrameEditorSession::render(SDL_Renderer* renderer) const {
@@ -209,13 +225,6 @@ bool FrameEditorSession::should_render_asset(const Asset* asset) const {
     if (asset == target_) {
         return true;
     }
-    const Asset* current = asset->parent;
-    while (current) {
-        if (current == target_) {
-            return true;
-        }
-        current = current->parent;
-    }
     return false;
 }
 
@@ -225,7 +234,8 @@ void FrameEditorSession::create_and_begin_editor() {
     editor_context_.animation_id = animation_id_;
     editor_context_.camera = assets_ ? &assets_->getView() : nullptr;
     editor_context_.on_host_closed = on_host_closed_;
-    editor_context_.on_end = on_end_;
+    editor_context_.on_end = [this]() { request_exit(); };
+    editor_context_.on_save_and_update = [this]() { save_and_update(); };
     editor_context_.assets = assets_;
     editor_context_.target = target_;
     editor_context_.document = document_;
@@ -235,12 +245,32 @@ void FrameEditorSession::create_and_begin_editor() {
 
     selection_state_.reset();
     editor_context_.selection_state = &selection_state_;
+    editor_context_.selected_animation_ids_provider = [this]() {
+        if (!animation_id_.empty()) {
+            return std::vector<std::string>{animation_id_};
+        }
+        return std::vector<std::string>{};
+    };
+    editor_context_.on_undo_checkpoint = [](const std::string&) {};
 
     active_editor_ = create_editor(mode_);
     if (active_editor_) {
         frame_camera_for_editor_entry();
         active_editor_->begin(editor_context_);
     }
+}
+
+
+void FrameEditorSession::save_and_update() {
+    if (!active_editor_) {
+        return;
+    }
+    active_editor_->persist_pending_changes();
+}
+
+void FrameEditorSession::request_exit() {
+    save_and_update();
+    exit_requested_ = true;
 }
 
 void FrameEditorSession::frame_camera_for_editor_entry() {

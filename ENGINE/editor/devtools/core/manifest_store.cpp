@@ -21,11 +21,13 @@ std::string to_lower(std::string value) {
 ManifestStore::AssetEditSession::AssetEditSession(ManifestStore* owner,
                                                   std::string name,
                                                   nlohmann::json draft,
-                                                  bool is_new_asset)
+                                                  bool is_new_asset,
+                                                  std::uint64_t generation)
     : owner_(owner),
       name_(std::move(name)),
       draft_(std::move(draft)),
-      is_new_(is_new_asset) {}
+      is_new_(is_new_asset),
+      generation_(generation) {}
 
 bool ManifestStore::AssetEditSession::commit() {
     if (!owner_) {
@@ -33,7 +35,7 @@ bool ManifestStore::AssetEditSession::commit() {
     }
     ManifestStore* owner = owner_;
     owner_ = nullptr;
-    return owner->apply_edit(name_, draft_);
+    return owner->apply_edit(name_, draft_, generation_);
 }
 
 void ManifestStore::AssetEditSession::cancel() {
@@ -43,17 +45,23 @@ void ManifestStore::AssetEditSession::cancel() {
 ManifestStore::AssetTransaction::AssetTransaction(ManifestStore* owner,
                                                   std::string name,
                                                   nlohmann::json draft,
-                                                  bool is_new_asset)
+                                                  bool is_new_asset,
+                                                  std::uint64_t generation)
     : owner_(owner),
       name_(std::move(name)),
       draft_(std::move(draft)),
-      is_new_(is_new_asset) {}
+      is_new_(is_new_asset),
+      generation_(generation) {}
 
 bool ManifestStore::AssetTransaction::save() {
     if (!owner_) {
         return false;
     }
-    return owner_->apply_edit(name_, draft_);
+    if (!owner_->apply_edit(name_, draft_, generation_)) {
+        return false;
+    }
+    generation_ = owner_->cache_generation_;
+    return true;
 }
 
 bool ManifestStore::AssetTransaction::finalize() {
@@ -90,7 +98,7 @@ ManifestStore::ManifestStore(const std::filesystem::path& manifest_path,
     if (!submit_) {
         submit_ = [](const std::filesystem::path& path, const nlohmann::json& data, int indent) {
             DevJsonStore::instance().submit(path, data, indent);
-};
+        };
     }
     if (!flush_) {
         flush_ = []() { DevJsonStore::instance().flush_all(); };
@@ -158,7 +166,8 @@ ManifestStore::AssetEditSession ManifestStore::begin_asset_edit(const std::strin
         existing = *it;
     }
 
-    return AssetEditSession(this, std::move(target_name), std::move(existing), is_new_asset);
+    const std::uint64_t generation = cache_generation_;
+    return AssetEditSession(this, std::move(target_name), std::move(existing), is_new_asset, generation);
 }
 
 ManifestStore::AssetTransaction ManifestStore::begin_asset_transaction(const std::string& name,
@@ -184,7 +193,8 @@ ManifestStore::AssetTransaction ManifestStore::begin_asset_transaction(const std
         existing = *it;
     }
 
-    return AssetTransaction(this, std::move(target_name), std::move(existing), is_new_asset);
+    const std::uint64_t generation = cache_generation_;
+    return AssetTransaction(this, std::move(target_name), std::move(existing), is_new_asset, generation);
 }
 
 bool ManifestStore::remove_asset(const std::string& name) {
@@ -202,7 +212,7 @@ bool ManifestStore::remove_asset(const std::string& name) {
         return false;
     }
 
-    dirty_ = true;
+    mark_dirty();
     if (submit_) {
         submit_(manifest_path_, manifest_cache_, indent_);
     }
@@ -213,15 +223,31 @@ void ManifestStore::reload() {
     loaded_ = false;
     dirty_ = false;
     manifest_cache_ = nlohmann::json::object();
+    state_ = CacheState::Unloaded;
+    pending_reload_version_.reset();
     last_known_tag_version_ = std::numeric_limits<std::uint64_t>::max();
     ensure_loaded();
 }
 
 void ManifestStore::flush() {
-    if (flush_) {
-        flush_();
-        dirty_ = false;
+    if (!flush_) {
+        return;
     }
+
+    if (dirty_) {
+        state_ = CacheState::Flushing;
+    }
+
+    flush_();
+    dirty_ = false;
+
+    if (pending_reload_version_) {
+        state_ = CacheState::Reloadable;
+    } else {
+        state_ = CacheState::Clean;
+    }
+
+    refresh_from_disk_if_safe();
 }
 
 const nlohmann::json& ManifestStore::manifest_json() {
@@ -249,7 +275,8 @@ bool ManifestStore::update_map_entry(const std::string& map_id, const nlohmann::
     }
     ensure_loaded();
     ensure_asset_container();
-    return apply_map_edit(map_id, payload);
+    const std::uint64_t generation = cache_generation_;
+    return apply_map_edit(map_id, payload, generation);
 }
 
 const nlohmann::json* ManifestStore::find_map_entry(const std::string& map_id) const {
@@ -270,10 +297,15 @@ const nlohmann::json* ManifestStore::find_map_entry(const std::string& map_id) c
 }
 
 void ManifestStore::ensure_loaded() {
-    const std::uint64_t current_version = tag_utils::tag_version();
-    if (loaded_ && current_version == last_known_tag_version_) {
+    ensure_loaded_once();
+    refresh_from_disk_if_safe();
+}
+
+void ManifestStore::ensure_loaded_once() {
+    if (loaded_) {
         return;
     }
+
     manifest::ManifestData data = loader_ ? loader_() : manifest::load_manifest();
     manifest_cache_ = data.raw;
     if (!manifest_cache_.is_object()) {
@@ -282,28 +314,101 @@ void ManifestStore::ensure_loaded() {
     ensure_asset_container();
     loaded_ = true;
     dirty_ = false;
-    last_known_tag_version_ = current_version;
+    state_ = CacheState::Clean;
+    ++cache_generation_;
+    last_known_tag_version_ = tag_utils::tag_version();
+    pending_reload_version_.reset();
 }
 
-bool ManifestStore::apply_edit(const std::string& name, const nlohmann::json& payload) {
+void ManifestStore::refresh_from_disk_if_safe() {
+    const std::uint64_t current_version = tag_utils::tag_version();
+    if (current_version != last_known_tag_version_) {
+        pending_reload_version_ = current_version;
+    }
+
+    const bool pending_write = has_pending_manifest_write();
+    if (state_ == CacheState::Dirty || state_ == CacheState::Flushing) {
+        return;
+    }
+
+    if (pending_write) {
+        if (pending_reload_version_ && state_ == CacheState::Clean) {
+            state_ = CacheState::Reloadable;
+        }
+        return;
+    }
+
+    if (!pending_reload_version_) {
+        if (state_ == CacheState::Reloadable) {
+            state_ = CacheState::Clean;
+        }
+        return;
+    }
+
+    manifest::ManifestData data = loader_ ? loader_() : manifest::load_manifest();
+    manifest_cache_ = data.raw;
+    if (!manifest_cache_.is_object()) {
+        manifest_cache_ = nlohmann::json::object();
+    }
+    ensure_asset_container();
+    loaded_ = true;
+    dirty_ = false;
+    state_ = CacheState::Clean;
+    ++cache_generation_;
+    last_known_tag_version_ = *pending_reload_version_;
+    pending_reload_version_.reset();
+}
+
+bool ManifestStore::apply_edit(const std::string& name,
+                               const nlohmann::json& payload,
+                               std::uint64_t expected_generation) {
     ensure_loaded();
     ensure_asset_container();
 
+    if (expected_generation != cache_generation_) {
+        refresh_from_disk_if_safe();
+        if (expected_generation != cache_generation_) {
+            return false;
+        }
+    }
+
     manifest_cache_["assets"][name] = payload;
-    dirty_ = true;
+    mark_dirty();
     if (submit_) {
         submit_(manifest_path_, manifest_cache_, indent_);
     }
     return true;
 }
 
-bool ManifestStore::apply_map_edit(const std::string& name, const nlohmann::json& payload) {
+bool ManifestStore::apply_map_edit(const std::string& name,
+                                   const nlohmann::json& payload,
+                                   std::uint64_t expected_generation) {
+    ensure_loaded();
+    ensure_asset_container();
+
+    if (expected_generation != cache_generation_) {
+        refresh_from_disk_if_safe();
+        if (expected_generation != cache_generation_) {
+            return false;
+        }
+    }
+
     manifest_cache_["maps"][name] = payload;
-    dirty_ = true;
+    mark_dirty();
     if (submit_) {
         submit_(manifest_path_, manifest_cache_, indent_);
     }
     return true;
+}
+
+void ManifestStore::mark_dirty() {
+    dirty_ = true;
+    state_ = CacheState::Dirty;
+    ++cache_generation_;
+}
+
+bool ManifestStore::has_pending_manifest_write() const {
+    return DevJsonStore::instance().has_pending_write(manifest_path_);
 }
 
 void ManifestStore::ensure_asset_container() {

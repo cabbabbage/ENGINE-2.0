@@ -12,6 +12,9 @@
 
 #include "utils/ranged_color.hpp"
 #include "fog_settings_panel.hpp"
+#include "terrain_settings_panel.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
+#include "dev_footer_bar.hpp"
 
 class Assets;
 namespace devmode::core {
@@ -24,7 +27,6 @@ class MapLayerControlsDisplay;
 class MapLayersController;
 class RoomConfigurator;
 class SlidingWindowContainer;
-class DevFooterBar;
 class DockableCollapsible;
 struct DMButtonStyle;
 struct SDL_Renderer;
@@ -39,6 +41,7 @@ public:
         std::string label;
         bool active = false;
         bool momentary = false;
+        FooterButtonGroup group = FooterButtonGroup::Utilities;
         const DMButtonStyle* style_override = nullptr;
         const DMButtonStyle* active_style_override = nullptr;
         std::function<void(bool)> on_toggle;
@@ -52,6 +55,7 @@ public:
     void set_sliding_area_bounds(const SDL_Rect& bounds);
 
     void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
 
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
@@ -84,12 +88,14 @@ public:
     bool is_any_panel_visible() const;
     bool is_layers_panel_visible() const;
     bool is_fog_panel_visible() const;
+    bool is_terrain_panel_visible() const;
     void toggle_fog_panel();
 
 private:
     void ensure_panels();
     void sync_panel_map_info();
-    bool save_map_info_to_disk() const;
+    bool save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority priority =
+                                   devmode::core::DevSaveCoordinator::Priority::Debounced) const;
     bool auto_save_layers_data();
     void create_room_from_layers_controls();
     void configure_footer_buttons();
@@ -115,6 +121,8 @@ private:
     SDL_Rect room_config_bounds() const;
     void open_fog_panel();
     void close_fog_panel();
+    void open_terrain_panel();
+    void close_terrain_panel();
     void show_sliding_panel(SlidingPanel panel, bool preserve_layers_panel = false);
     SDL_Rect sanitize_sliding_area(const SDL_Rect& bounds) const;
     SDL_Rect effective_work_area() const;
@@ -139,6 +147,7 @@ private:
     SDL_Rect sliding_area_bounds_{0, 0, 0, 0};
 
     devmode::core::ManifestStore* manifest_store_ = nullptr;
+    devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
     std::unique_ptr<MapLayersPreviewPanel> layers_preview_panel_;
     std::shared_ptr<MapLayersController> layers_controller_;
     std::unique_ptr<SlidingWindowContainer> room_config_container_;
@@ -148,6 +157,7 @@ private:
     std::unique_ptr<MapRoomsDisplay> rooms_display_;
     std::unique_ptr<MapLayersPanel> layers_panel_;
     std::unique_ptr<FogSettingsPanel> fog_settings_panel_;
+    std::unique_ptr<TerrainSettingsPanel> terrain_settings_panel_;
     std::unique_ptr<DevFooterBar> footer_bar_;
     bool footer_buttons_configured_ = false;
     bool map_mode_active_ = false;

@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include <vector>
 #include <optional>
+#include <filesystem>
 
 #include <nlohmann/json_fwd.hpp>
 
@@ -17,6 +18,7 @@
 #include "other_settings_and_controls.hpp"
 #include "trail_editor_suite.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include "map_assets_modals.hpp"
 
 class Asset;
@@ -37,12 +39,23 @@ class AnimationDocument;
 class PreviewProvider;
 }
 
+class DMButton;
+class DMTextBox;
+
 class DevControls {
 public:
     enum class Mode {
         RoomEditor,
         MapEditor
 };
+
+    enum class DropContentKind {
+        None,
+        SinglePng,
+        Gif,
+        MultiImages,
+        PngFolder
+    };
 
     DevControls(Assets* owner, int screen_w, int screen_h);
     ~DevControls();
@@ -90,6 +103,8 @@ public:
 
     [[nodiscard]] devmode::core::ManifestStore& manifest_store();
     [[nodiscard]] const devmode::core::ManifestStore& manifest_store() const;
+    [[nodiscard]] devmode::core::DevSaveCoordinator& save_coordinator();
+    [[nodiscard]] const devmode::core::DevSaveCoordinator& save_coordinator() const;
 
     void toggle_room_config();
     void close_room_config();
@@ -101,6 +116,7 @@ public:
     void reset_click_state();
     void clear_selection();
     void purge_asset(Asset* asset);
+    void set_world_mutation_in_progress(bool in_progress);
 
     void notify_spawn_group_config_changed(const nlohmann::json& entry);
     void notify_spawn_group_removed(const std::string& spawn_id);
@@ -130,7 +146,72 @@ public:
     bool is_frame_editor_session_active() const;
     const Asset* frame_editor_target() const;
 
-private:
+    struct DropPreviewState {
+        bool active = false;
+        bool valid = false;
+        SDL_Point screen{0, 0};
+        std::vector<std::filesystem::path> items;
+    };
+
+    struct DropImportRequest {
+        DropContentKind kind = DropContentKind::None;
+        std::vector<std::filesystem::path> files;
+        std::filesystem::path folder;
+        SDL_Point drop_screen{0, 0};
+    };
+
+    struct DropNameModal {
+        bool visible = false;
+        DropImportRequest request;
+        std::unique_ptr<DMTextBox> name_box;
+        std::unique_ptr<DMButton> create_button;
+        std::unique_ptr<DMButton> cancel_button;
+        SDL_Rect modal_rect{0, 0, 0, 0};
+        SDL_Rect create_rect{0, 0, 0, 0};
+        SDL_Rect cancel_rect{0, 0, 0, 0};
+        bool create_pressed = false;
+        bool cancel_pressed = false;
+        std::string error;
+    };
+
+    struct DropChoiceModal {
+        bool visible = false;
+        DropImportRequest request;
+        std::unique_ptr<DMButton> single_animation_button;
+        std::unique_ptr<DMButton> multiple_assets_button;
+        std::unique_ptr<DMButton> cancel_button;
+        SDL_Rect modal_rect{0, 0, 0, 0};
+        SDL_Rect single_rect{0, 0, 0, 0};
+        SDL_Rect multiple_rect{0, 0, 0, 0};
+        SDL_Rect cancel_rect{0, 0, 0, 0};
+    };
+
+    struct DropConflictModal {
+        bool visible = false;
+        std::string asset_name;
+        std::unique_ptr<DMButton> skip_button;
+        std::unique_ptr<DMButton> rename_button;
+        SDL_Rect modal_rect{0, 0, 0, 0};
+        SDL_Rect skip_rect{0, 0, 0, 0};
+        SDL_Rect rename_rect{0, 0, 0, 0};
+    };
+
+    struct DropErrorPopup {
+        bool visible = false;
+        std::string message;
+        std::unique_ptr<DMButton> ok_button;
+        SDL_Rect modal_rect{0, 0, 0, 0};
+        SDL_Rect ok_rect{0, 0, 0, 0};
+    };
+
+    struct MultiAssetImportState {
+        bool active = false;
+        DropImportRequest request;
+        std::vector<std::filesystem::path> files;
+        std::size_t index = 0;
+        bool waiting_for_rename = false;
+    };
+
     bool can_use_room_editor_ui() const;
     void enter_map_editor_mode();
     void exit_map_editor_mode(bool focus_player, bool restore_previous_state);
@@ -169,6 +250,7 @@ private:
     void nudge_overlay_grid_resolution(int delta);
     void push_grid_resolution_toast(int resolution);
     void render_grid_resolution_toast(SDL_Renderer* renderer);
+    void render_room_geometry_overlay(SDL_Renderer* renderer);
     void restore_filter_hidden_assets() const;
     void mark_layout_dirty();
     void rebuild_layout_state();
@@ -177,6 +259,44 @@ private:
     void mark_dirty(std::uint32_t flags);
     bool has_dirty(std::uint32_t flags) const;
     void clear_dirty(std::uint32_t flags);
+    bool handle_drop_event(const SDL_Event& event);
+    void reset_drop_preview();
+    void reset_drop_modal();
+    void open_drop_modal(const DropImportRequest& request);
+    bool handle_drop_modal_event(const SDL_Event& event);
+    bool handle_drop_choice_modal_event(const SDL_Event& event);
+    bool handle_drop_conflict_modal_event(const SDL_Event& event);
+    bool handle_drop_error_popup_event(const SDL_Event& event);
+    void render_drop_overlay(SDL_Renderer* renderer);
+    void render_drop_modal(SDL_Renderer* renderer);
+    void render_drop_choice_modal(SDL_Renderer* renderer);
+    void render_drop_conflict_modal(SDL_Renderer* renderer);
+    void render_drop_error_popup(SDL_Renderer* renderer);
+    void render_import_busy_overlay(SDL_Renderer* renderer);
+    void layout_drop_modal();
+    void layout_drop_choice_modal();
+    void layout_drop_conflict_modal();
+    void layout_drop_error_popup();
+    bool finalize_drop_creation(const std::string& desired_name);
+    bool create_drop_asset(const std::string& asset_name,
+                           const std::vector<std::filesystem::path>& files,
+                           const DropImportRequest& request,
+                           bool open_editor_and_spawn,
+                           std::string& error_out);
+    void open_drop_choice_modal(const DropImportRequest& request);
+    void begin_multi_asset_import(const DropImportRequest& request);
+    void process_next_multi_asset_item();
+    void open_drop_conflict_modal(const std::string& asset_name);
+    void open_drop_error_popup(const std::string& message);
+    void reset_drop_choice_modal();
+    void reset_drop_conflict_modal();
+    void reset_drop_error_popup();
+    void reset_multi_asset_import();
+    SDL_Point drop_world_from_screen(SDL_Point screen) const;
+
+    void begin_import_busy(const std::string& message);
+    void end_import_busy();
+    bool is_import_busy() const;
 
 private:
     enum class DirtyFlag : std::uint32_t {
@@ -239,10 +359,14 @@ private:
     bool pointer_over_image_effect_panel_ = false;
     bool modal_headers_hidden_ = false;
     bool sliding_headers_hidden_ = false;
+    bool world_mutation_in_progress_ = false;
+    bool pending_selection_sync_refresh_ = false;
     mutable std::unordered_map<Asset*, bool> filter_hidden_assets_;
+    mutable std::unordered_set<Asset*> previous_filtered_membership_;
     std::unique_ptr<TrailEditorSuite> trail_suite_;
     std::unique_ptr<Room> pending_trail_template_;
     devmode::core::ManifestStore manifest_store_;
+    devmode::core::DevSaveCoordinator save_coordinator_;
     OtherSettingsAndControls other_settings_;
 
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;
@@ -258,6 +382,7 @@ private:
     std::optional<GridResolutionToast> grid_resolution_toast_;
     int  grid_resolution_r_ = -1;
     bool movement_debug_enabled_ = false;
+    bool anchor_point_debug_enabled_ = false;
 
     std::unique_ptr<class FrameEditorSession> frame_editor_session_;
     bool frame_editor_prev_grid_overlay_ = false;
@@ -266,12 +391,24 @@ private:
     Asset* frame_editor_asset_for_reopen_ = nullptr;
 
     bool render_suppression_in_progress_ = false;
+    bool shift_block_headers_footers_ = false;
 
     std::uint32_t dirty_flags_ = kDirtyLayout;
     LayoutCache layout_cache_;
     SDL_Rect last_header_rect_{0, 0, 0, 0};
     SDL_Rect last_footer_rect_{0, 0, 0, 0};
 
+    DropPreviewState drop_state_;
+    DropNameModal drop_modal_;
+    DropChoiceModal drop_choice_modal_;
+    DropConflictModal drop_conflict_modal_;
+    DropErrorPopup drop_error_popup_;
+    struct ImportBusyOverlay {
+        bool active = false;
+        std::string message;
+        Uint64 started_ms = 0;
+    } import_busy_;
+    MultiAssetImportState multi_asset_import_;
+
 
 };
-

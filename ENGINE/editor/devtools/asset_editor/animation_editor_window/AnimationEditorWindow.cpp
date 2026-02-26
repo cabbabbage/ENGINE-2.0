@@ -50,7 +50,7 @@
 #endif
 #include "utils/input.hpp"
 
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
@@ -58,6 +58,7 @@
 #include "core/AssetsManager.hpp"
 #include "devtools/asset_paths.hpp"
 #include "devtools/animation_runtime_refresh.hpp"
+#include "devtools/dev_mode_utils.hpp"
 #include "core/AssetsManager.hpp"
 
 namespace {
@@ -439,11 +440,6 @@ AnimationEditorWindow::AnimationEditorWindow() {
     add_button_ = std::make_unique<DMButton>("Add Animation", &DMStyles::CreateButton(), 160, DMButton::height());
     build_button_ = std::make_unique<DMButton>("Build Now", &DMStyles::CreateButton(), 120, DMButton::height());
     controller_button_ = std::make_unique<DMButton>("Add Controller", &DMStyles::CreateButton(), 140, DMButton::height());
-    const auto speeds = speed_multiplier_options();
-    const std::vector<std::string> speed_labels = {"0.25x", "0.5x", "1.0x", "2.0x", "4.0x"};
-    speed_dropdown_ = std::make_unique<DMDropdown>("Speed Multiplier", speed_labels, 2);
-    crop_checkbox_ = std::make_unique<DMCheckbox>("Crop Frames", false);
-    apply_to_all_checkbox_ = std::make_unique<DMCheckbox>("Apply to All", false);
     layout_dirty_ = true;
 }
 
@@ -676,7 +672,6 @@ void AnimationEditorWindow::set_info(const std::shared_ptr<AssetInfo>& info) {
     }
     auto_save_pending_ = false;
     auto_save_timer_frames_ = 0;
-    sync_header_controls();
 }
 
 void AnimationEditorWindow::clear_info() {
@@ -697,7 +692,6 @@ void AnimationEditorWindow::clear_info() {
     set_status_message("Select an asset to configure animations.", 240);
     auto_save_pending_ = false;
     auto_save_timer_frames_ = 0;
-    sync_header_controls();
 }
 
 void AnimationEditorWindow::layout_children() {
@@ -705,8 +699,7 @@ void AnimationEditorWindow::layout_children() {
     const int padding = DMSpacing::panel_padding();
     const int header_gap = DMSpacing::small_gap();
     const int button_gap = DMSpacing::small_gap();
-    const int header_control_height =
-        std::max({DMButton::height(), DMDropdown::height(), DMCheckbox::height()});
+    const int header_control_height = DMButton::height();
     const int header_height = header_control_height + header_gap * 2;
     header_rect_ = SDL_Rect{bounds_.x, bounds_.y, bounds_.w, header_height};
 
@@ -726,23 +719,6 @@ void AnimationEditorWindow::layout_children() {
     if (controller_button_) {
         controller_button_->set_rect(SDL_Rect{left_x, y, controller_button_->rect().w, DMButton::height()});
         left_x += controller_button_->rect().w + button_gap;
-    }
-
-    if (speed_dropdown_) {
-        const int dropdown_width = 180;
-        speed_dropdown_->set_rect(SDL_Rect{left_x, y, dropdown_width, DMDropdown::height()});
-        left_x += dropdown_width + button_gap;
-    }
-
-    if (crop_checkbox_) {
-        const int checkbox_width = 150;
-        crop_checkbox_->set_rect(SDL_Rect{left_x, y, checkbox_width, DMCheckbox::height()});
-        left_x += checkbox_width + button_gap;
-    }
-
-    if (apply_to_all_checkbox_) {
-        const int checkbox_width = 150;
-        apply_to_all_checkbox_->set_rect(SDL_Rect{left_x, y, checkbox_width, DMCheckbox::height()});
     }
 
     const int status_padding = DMSpacing::panel_padding();
@@ -829,7 +805,7 @@ void AnimationEditorWindow::configure_inspector_panel() {
     inspector_panel_->set_audio_importer(audio_importer_);
     inspector_panel_->set_audio_file_picker([this]() { return this->pick_audio_file(); });
     inspector_panel_->set_manifest_store(manifest_store_);
-    inspector_panel_->set_on_animation_properties_changed(on_animation_properties_changed_);
+    refresh_inspector_animation_callback();
     if (selected_animation_id_) {
         inspector_panel_->set_animation_id(*selected_animation_id_);
     }
@@ -854,7 +830,6 @@ void AnimationEditorWindow::select_animation(const std::optional<std::string>& a
         inspector_panel_->set_animation_id(*selected_animation_id_);
     }
 
-    sync_header_controls();
 
     if (from_user) {
         if (selected_animation_id_) {
@@ -1098,6 +1073,11 @@ void AnimationEditorWindow::focus_animation(const std::string& animation_id) {
     select_animation(std::make_optional(animation_id), true);
 }
 
+std::string AnimationEditorWindow::normalize_animation_name(std::string_view raw) const {
+    std::string normalized = animation_editor::strings::trim_copy(raw);
+    return animation_editor::strings::to_lower_copy(normalized);
+}
+
 void AnimationEditorWindow::prompt_rename_animation(const std::string& animation_id) {
     if (!document_) return;
 
@@ -1107,11 +1087,12 @@ void AnimationEditorWindow::prompt_rename_animation(const std::string& animation
         return;
     }
 
-    std::string desired = animation_editor::strings::trim_copy(input);
+    std::string desired = normalize_animation_name(input);
     if (desired.empty()) {
         set_status_message("Animation name cannot be empty.", 180);
         return;
     }
+    desired = animation_editor::strings::to_lower_copy(desired);
 
     auto before_ids = document_->animation_ids();
     document_->rename_animation(animation_id, desired);
@@ -1204,13 +1185,28 @@ void AnimationEditorWindow::set_on_document_saved(std::function<void()> callback
 }
 
 void AnimationEditorWindow::set_on_animation_properties_changed(std::function<void(const std::string&, const nlohmann::json&)> callback) {
-    on_animation_properties_changed_ = std::move(callback);
+    external_animation_properties_changed_ = std::move(callback);
+    refresh_inspector_animation_callback();
 }
 
 void AnimationEditorWindow::handle_document_saved() {
     if (on_document_saved_) {
         on_document_saved_();
     }
+}
+
+void AnimationEditorWindow::refresh_inspector_animation_callback() {
+    if (!inspector_panel_) {
+        return;
+    }
+    inspector_panel_->set_on_animation_properties_changed([this](const std::string& animation_id, const nlohmann::json& payload) {
+        if (preview_provider_ && !animation_id.empty()) {
+            preview_provider_->invalidate(animation_id);
+        }
+        if (external_animation_properties_changed_) {
+            external_animation_properties_changed_(animation_id, payload);
+        }
+    });
 }
 
 void AnimationEditorWindow::ensure_layout() const {
@@ -1246,9 +1242,6 @@ void AnimationEditorWindow::render_header(SDL_Renderer* renderer) const {
     if (add_button_) add_button_->render(renderer);
     if (build_button_) build_button_->render(renderer);
     if (controller_button_) controller_button_->render(renderer);
-    if (speed_dropdown_) speed_dropdown_->render(renderer);
-    if (crop_checkbox_) crop_checkbox_->render(renderer);
-    if (apply_to_all_checkbox_) apply_to_all_checkbox_->render(renderer);
 
     int label_x = header_rect_.x + DMSpacing::panel_padding();
     if (add_button_) {
@@ -1259,15 +1252,6 @@ void AnimationEditorWindow::render_header(SDL_Renderer* renderer) const {
     }
     if (controller_button_) {
         label_x = std::max(label_x, controller_button_->rect().x + controller_button_->rect().w + DMSpacing::small_gap());
-    }
-    if (speed_dropdown_) {
-        label_x = std::max(label_x, speed_dropdown_->rect().x + speed_dropdown_->rect().w + DMSpacing::small_gap());
-    }
-    if (crop_checkbox_) {
-        label_x = std::max(label_x, crop_checkbox_->rect().x + crop_checkbox_->rect().w + DMSpacing::small_gap());
-    }
-    if (apply_to_all_checkbox_) {
-        label_x = std::max(label_x, apply_to_all_checkbox_->rect().x + apply_to_all_checkbox_->rect().w + DMSpacing::small_gap());
     }
     render_label(renderer, title, label_x, header_rect_.y + DMSpacing::small_gap());
 }
@@ -1362,272 +1346,7 @@ bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
     });
     handle_button(controller_button_, [this]() { handle_controller_button_click(); });
 
-    if (!consumed && speed_dropdown_) {
-        int before = speed_dropdown_->selected();
-        if (speed_dropdown_->handle_event(e)) {
-            consumed = true;
-            if (speed_dropdown_->selected() != before) {
-                apply_speed_multiplier_from_dropdown();
-            }
-        }
-    }
-
-    if (!consumed && crop_checkbox_) {
-        bool before = crop_checkbox_->value();
-        if (crop_checkbox_->handle_event(e)) {
-            consumed = true;
-            if (crop_checkbox_->value() != before) {
-                apply_crop_frames_toggle();
-            }
-        }
-    }
-
-    if (!consumed && apply_to_all_checkbox_) {
-        if (apply_to_all_checkbox_->handle_event(e)) {
-            consumed = true;
-            apply_to_all_mode_enabled_ = apply_to_all_checkbox_->value();
-            sync_header_controls();
-            std::string message = apply_to_all_mode_enabled_
-                                          ? "Header controls now apply to all animations."
-                                          : "Header controls now apply to the selected animation.";
-            set_status_message(message, 180);
-        }
-    }
     return consumed;
-}
-
-std::vector<float> AnimationEditorWindow::speed_multiplier_options() const {
-    return {0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
-}
-
-float AnimationEditorWindow::parse_speed_multiplier(const nlohmann::json& payload) const {
-    float raw = 1.0f;
-    try {
-        if (payload.contains("speed_multiplier") && payload["speed_multiplier"].is_number()) {
-            raw = payload["speed_multiplier"].get<float>();
-        } else if (payload.contains("speed_factor") && payload["speed_factor"].is_number()) {
-            raw = payload["speed_factor"].get<float>();
-        }
-    } catch (...) {
-        raw = 1.0f;
-    }
-    if (!std::isfinite(raw) || raw <= 0.0f) {
-        raw = 1.0f;
-    }
-    const auto options = speed_multiplier_options();
-    float best = options.empty() ? 1.0f : options.front();
-    float best_diff = std::numeric_limits<float>::max();
-    for (float option : options) {
-        float diff = std::fabs(option - raw);
-        if (diff < best_diff) {
-            best_diff = diff;
-            best = option;
-        }
-    }
-    return best;
-}
-
-bool AnimationEditorWindow::parse_crop_frames(const nlohmann::json& payload) const {
-    try {
-        auto it = payload.find("crop_frames");
-        if (it != payload.end()) {
-            if (it->is_boolean()) {
-                return it->get<bool>();
-            }
-            if (it->is_number()) {
-                return it->get<double>() != 0.0;
-            }
-            if (it->is_string()) {
-                std::string text = it->get<std::string>();
-                std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
-                    return static_cast<char>(std::tolower(ch));
-                });
-                return text == "true" || text == "1" || text == "yes" || text == "on";
-            }
-        }
-    } catch (...) {
-    }
-    return false;
-}
-
-void AnimationEditorWindow::persist_header_metadata(float speed_multiplier, bool crop_frames) {
-    if (!document_) {
-        return;
-    }
-
-    std::vector<std::string> targets;
-    if (apply_to_all_mode_enabled_) {
-        targets = document_->animation_ids();
-    } else if (selected_animation_id_) {
-        targets.push_back(*selected_animation_id_);
-    }
-
-    if (targets.empty()) {
-        if (!apply_to_all_mode_enabled_) {
-            set_status_message("No animation selected.", 180);
-        }
-        return;
-    }
-
-    bool did_update = false;
-    for (const auto& animation_id : targets) {
-        if (animation_id.empty()) {
-            continue;
-        }
-        nlohmann::json payload = nlohmann::json::object();
-        if (auto payload_text = document_->animation_payload(animation_id)) {
-            nlohmann::json parsed = nlohmann::json::parse(*payload_text, nullptr, false);
-            if (parsed.is_object()) {
-                payload = parsed;
-            }
-        }
-
-        payload["speed_multiplier"] = speed_multiplier;
-        payload["crop_frames"] = crop_frames;
-        if (!crop_frames) {
-            payload.erase("crop_bounds");
-        }
-        document_->replace_animation_payload(animation_id, payload.dump());
-        nlohmann::json normalized = payload;
-        if (auto updated = document_->animation_payload(animation_id)) {
-            nlohmann::json parsed = nlohmann::json::parse(*updated, nullptr, false);
-            if (parsed.is_object()) {
-                normalized = parsed;
-            }
-        }
-        if (on_animation_properties_changed_) {
-            on_animation_properties_changed_(animation_id, normalized);
-        }
-        did_update = true;
-    }
-
-    if (!did_update) {
-        return;
-    }
-
-    auto_save_pending_ = true;
-    auto_save_timer_frames_ = 0;
-    if (preview_provider_) {
-        if (apply_to_all_mode_enabled_) {
-            preview_provider_->invalidate_all();
-        } else if (selected_animation_id_) {
-            preview_provider_->invalidate(*selected_animation_id_);
-        }
-    }
-    sync_header_controls();
-
-    if (apply_to_all_mode_enabled_) {
-        set_status_message("Updated header settings for all animations.", 240);
-    } else if (selected_animation_id_) {
-        set_status_message("Updated animation '" + *selected_animation_id_ + "'.", 180);
-    }
-}
-
-void AnimationEditorWindow::apply_speed_multiplier_from_dropdown() {
-    if (!speed_dropdown_) {
-        return;
-    }
-    const auto options = speed_multiplier_options();
-    int idx = std::clamp(speed_dropdown_->selected(), 0, static_cast<int>(options.size()) - 1);
-    float speed = options.empty() ? 1.0f : options[idx];
-    bool crop = crop_checkbox_ ? crop_checkbox_->value() : false;
-    persist_header_metadata(speed, crop);
-}
-
-void AnimationEditorWindow::apply_crop_frames_toggle() {
-    const auto options = speed_multiplier_options();
-    float speed = options.size() > 2 ? options[2] : 1.0f;
-    if (speed_dropdown_) {
-        int idx = std::clamp(speed_dropdown_->selected(), 0, static_cast<int>(options.size()) - 1);
-        speed = options.empty() ? 1.0f : options[idx];
-    }
-    bool crop = crop_checkbox_ ? crop_checkbox_->value() : false;
-    persist_header_metadata(speed, crop);
-}
-
-void AnimationEditorWindow::sync_header_controls() {
-    float speed = 1.0f;
-    bool crop = false;
-    bool speed_mixed = false;
-    bool crop_mixed = false;
-    if (document_) {
-        if (apply_to_all_mode_enabled_) {
-            const auto animations = document_->animation_ids();
-            bool first_value = false;
-            for (const auto& animation_id : animations) {
-                if (animation_id.empty()) {
-                    continue;
-                }
-                float candidate_speed = 1.0f;
-                bool candidate_crop = false;
-                if (auto payload_text = document_->animation_payload(animation_id)) {
-                    nlohmann::json parsed = nlohmann::json::parse(*payload_text, nullptr, false);
-                    if (parsed.is_object()) {
-                        candidate_speed = parse_speed_multiplier(parsed);
-                        candidate_crop = parse_crop_frames(parsed);
-                    }
-                }
-                if (!first_value) {
-                    speed = candidate_speed;
-                    crop = candidate_crop;
-                    first_value = true;
-                } else {
-                    if (!speed_mixed && std::fabs(candidate_speed - speed) > 1e-3f) {
-                        speed_mixed = true;
-                    }
-                    if (!crop_mixed && candidate_crop != crop) {
-                        crop_mixed = true;
-                    }
-                }
-            }
-        } else if (selected_animation_id_) {
-            if (auto payload_text = document_->animation_payload(*selected_animation_id_)) {
-                nlohmann::json parsed = nlohmann::json::parse(*payload_text, nullptr, false);
-                if (parsed.is_object()) {
-                    speed = parse_speed_multiplier(parsed);
-                    crop = parse_crop_frames(parsed);
-                }
-            }
-        }
-    }
-
-    const auto options = speed_multiplier_options();
-    int idx = 0;
-    for (std::size_t i = 0; i < options.size(); ++i) {
-        if (std::fabs(options[i] - speed) < 1e-3f) {
-            idx = static_cast<int>(i);
-            break;
-        }
-    }
-
-    if (speed_dropdown_) {
-        speed_dropdown_->set_selected(idx);
-    }
-    if (crop_checkbox_) {
-        crop_checkbox_->set_value(crop);
-    }
-    if (apply_to_all_checkbox_) {
-        apply_to_all_checkbox_->set_value(apply_to_all_mode_enabled_);
-    }
-
-    if (speed_dropdown_) {
-        std::string speed_label = apply_to_all_mode_enabled_ ? "Speed (Global)" : "Speed Multiplier";
-        if (apply_to_all_mode_enabled_ && speed_mixed) {
-            speed_label += " (Mixed)";
-        }
-        speed_dropdown_->set_label(speed_label);
-        speed_dropdown_->set_rect(speed_dropdown_->rect());
-    }
-    if (crop_checkbox_) {
-        std::string crop_label = "Crop Frames";
-        if (apply_to_all_mode_enabled_) {
-            crop_label = "Crop Frames (Global)";
-            if (crop_mixed) {
-                crop_label += " (Mixed)";
-            }
-        }
-        crop_checkbox_->set_label(crop_label);
-    }
 }
 
 bool AnimationEditorWindow::animation_wants_crop(const std::string& animation_id) const {
@@ -1637,7 +1356,22 @@ bool AnimationEditorWindow::animation_wants_crop(const std::string& animation_id
     if (auto payload_text = document_->animation_payload(animation_id)) {
         nlohmann::json parsed = nlohmann::json::parse(*payload_text, nullptr, false);
         if (parsed.is_object()) {
-            return parse_crop_frames(parsed);
+            auto it = parsed.find("crop_frames");
+            if (it != parsed.end()) {
+                if (it->is_boolean()) {
+                    return it->get<bool>();
+                }
+                if (it->is_number()) {
+                    return it->get<double>() != 0.0;
+                }
+                if (it->is_string()) {
+                    std::string text = it->get<std::string>();
+                    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
+                        return static_cast<char>(std::tolower(ch));
+                    });
+                    return text == "true" || text == "1" || text == "yes" || text == "on";
+                }
+            }
         }
     }
     return false;
@@ -1826,7 +1560,7 @@ void AnimationEditorWindow::on_live_frame_editor_closed(const std::string& anima
 void AnimationEditorWindow::create_animation_via_prompt() {
     const char* input = tinyfd_inputBox("Create Animation", "Enter new animation identifier", "animation");
     if (!input) return;
-    std::string name = animation_editor::strings::trim_copy(input);
+    std::string name = normalize_animation_name(input);
 
     if (name.empty()) {
         return;
@@ -1995,9 +1729,46 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
 
         draft = payload;
     }
-    bool committed = finalize ? manifest_transaction_.finalize() : manifest_transaction_.save();
+
+    auto commit_fn = [this, finalize]() -> bool {
+        if (!manifest_transaction_) {
+            return false;
+        }
+        bool ok = finalize ? manifest_transaction_.finalize() : manifest_transaction_.save();
+        if (ok && finalize) {
+            manifest_transaction_ = {};
+            manifest_asset_key_.clear();
+            using_manifest_store_ = false;
+        }
+        return ok;
+    };
+
+    auto on_success = [this, finalize]() {
+        handle_document_saved();
+        set_status_message(finalize ? "Animations saved." : "Animations updated.", finalize ? 200 : 120);
+    };
+
+    const auto priority = finalize
+        ? devmode::core::DevSaveCoordinator::Priority::Immediate
+        : devmode::core::DevSaveCoordinator::Priority::Debounced;
+
+    if (save_coordinator_) {
+        save_coordinator_->enqueue_custom(devmode::core::DevSaveCoordinator::IntentKind::ManifestAsset,
+                                          std::string("asset:") + manifest_asset_key_,
+                                          [commit_fn](devmode::core::ManifestStore&) { return commit_fn(); },
+                                          priority,
+                                          "Animation manifest",
+                                          on_success);
+        if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
+            save_coordinator_->flush_now("Animation save");
+        }
+        return true;
+    }
+
+    bool committed = commit_fn();
     if (committed) {
         manifest_store_->flush();
+        on_success();
     }
     return committed;
 }
@@ -2149,19 +1920,7 @@ bool AnimationEditorWindow::does_controller_exist() const {
 }
 
 std::string AnimationEditorWindow::sanitize_asset_name(const std::string& name) const {
-    if (name.empty()) return "";
-    std::string sanitized;
-    for (char c : name) {
-        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') {
-            sanitized += c;
-        } else {
-            sanitized += '_';
-        }
-    }
-
-    sanitized.erase(0, sanitized.find_first_not_of('_'));
-    sanitized.erase(sanitized.find_last_not_of('_') + 1);
-    return sanitized;
+    return devmode::utils::normalize_asset_name(name);
 }
 
 std::string AnimationEditorWindow::generate_controller_key(const std::string& asset_name) const {
@@ -2170,12 +1929,7 @@ std::string AnimationEditorWindow::generate_controller_key(const std::string& as
 
 std::string AnimationEditorWindow::generate_class_name(const std::string& asset_name) const {
     if (asset_name.empty()) return "";
-    std::string class_name = asset_name;
-
-    if (!class_name.empty()) {
-        class_name[0] = std::toupper(static_cast<unsigned char>(class_name[0]));
-    }
-    return class_name + "Controller";
+    return asset_name + "_controller";
 }
 
 std::vector<std::string> AnimationEditorWindow::collect_available_animation_ids() const {
@@ -2363,7 +2117,7 @@ void AnimationEditorWindow::add_controller() {
                 << "\n"
                 << "#include \"assets/Asset.hpp\"\n"
                 << "#include \"assets/animation.hpp\"\n"
-                << "#include \"assets/asset_info.hpp\"\n"
+                << "#include \"assets/asset/asset_info.hpp\"\n"
                 << "#include \"animation/animation_update.hpp\"\n"
                 << "#include \"utils/input.hpp\"\n"
                 << "#include <string>\n"
@@ -2533,7 +2287,7 @@ bool AnimationEditorWindow::rebuild_all_animations_via_pipeline(const std::share
         return false;
     }
 
-    if (apply_to_all_mode_enabled_ && has_global_crop_frames()) {
+    if (has_global_crop_frames()) {
         apply_global_cropping_to_asset_sources();
     }
 

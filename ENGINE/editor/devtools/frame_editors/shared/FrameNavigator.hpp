@@ -27,6 +27,7 @@ public:
     void set_on_apply_next(std::function<void()> callback);
     void set_on_apply_animation(std::function<void()> callback);
     void set_on_apply_all(std::function<void()> callback);
+    void set_on_save_and_exit(std::function<void()> callback);
     void set_confirmation_handler(std::function<bool(const std::string&, const std::string&)> callback);
     void set_preview_source(std::weak_ptr<animation_editor::PreviewProvider> provider,
                             const std::string& animation_id);
@@ -61,6 +62,7 @@ private:
     void handle_apply_next();
     void handle_apply_animation();
     void handle_apply_all();
+    void handle_save_and_exit();
     void update_button_states();
     void validate_frame_index();
     void notify_frame_changed();
@@ -74,12 +76,14 @@ private:
     std::unique_ptr<DMButton> btn_apply_next_;
     std::unique_ptr<DMButton> btn_apply_animation_;
     std::unique_ptr<DMButton> btn_apply_all_;
+    std::unique_ptr<DMButton> btn_save_exit_;
 
     std::function<void(int)> on_frame_changed_;
     std::function<bool(int, int)> on_before_change_;
     std::function<void()> on_apply_next_;
     std::function<void()> on_apply_animation_;
     std::function<void()> on_apply_all_;
+    std::function<void()> on_save_and_exit_;
     std::function<bool(const std::string&, const std::string&)> on_confirm_;
     std::weak_ptr<animation_editor::PreviewProvider> preview_provider_;
     std::string animation_id_;

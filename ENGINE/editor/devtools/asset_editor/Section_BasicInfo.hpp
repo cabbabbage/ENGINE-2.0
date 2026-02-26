@@ -3,12 +3,13 @@
 #include "../DockableCollapsible.hpp"
 #include "core/AssetsManager.hpp"
 #include "assets/Asset.hpp"
-#include "assets/asset_info.hpp"
-#include "assets/asset_types.hpp"
+#include "assets/asset/asset_info.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/render.hpp"
 #include "widgets.hpp"
 #include "devtools/asset_info_sections.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 #include "dm_styles.hpp"
 #include <algorithm>
 #include <cmath>
@@ -191,10 +192,17 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
     }
 
     if (changed) {
-        (void)info_->commit_manifest();
-        if (ui_) {
-        if (tile_changed) ui_->sync_target_tiling_state();
+        auto on_success = [this, render_settings_changed, type_changed, tile_changed]() {
+            if (!ui_) return;
+            if (tile_changed) ui_->sync_target_tiling_state();
             if (render_settings_changed) ui_->sync_target_basic_render_settings(type_changed);
+        };
+        if (ui_) {
+            ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                       "Basic info",
+                                       on_success);
+        } else {
+            on_success();
         }
     }
     if (rebuild_needed) {
@@ -280,8 +288,13 @@ inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
 inline void Section_BasicInfo::on_scale_slider_value_changed(int new_value) {
     if (!info_) return;
     info_->set_scale_percentage(static_cast<float>(new_value));
-    (void)info_->commit_manifest();
     if (ui_) {
-        ui_->refresh_target_asset_scale();
+        ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                   "Scale",
+                                   [this]() {
+                                       if (ui_) {
+                                           ui_->refresh_target_asset_scale();
+                                       }
+                                   });
     }
 }

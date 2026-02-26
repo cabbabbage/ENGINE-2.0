@@ -16,6 +16,14 @@ namespace devmode::core {
 
 class ManifestStore {
 public:
+    enum class CacheState {
+        Unloaded,
+        Clean,
+        Dirty,
+        Flushing,
+        Reloadable,
+    };
+
     class AssetEditSession {
     public:
         AssetEditSession() = default;
@@ -38,12 +46,17 @@ public:
 
     private:
         friend class ManifestStore;
-        AssetEditSession(ManifestStore* owner, std::string name, nlohmann::json draft, bool is_new_asset);
+        AssetEditSession(ManifestStore* owner,
+                         std::string name,
+                         nlohmann::json draft,
+                         bool is_new_asset,
+                         std::uint64_t generation);
 
         ManifestStore* owner_ = nullptr;
         std::string name_;
         nlohmann::json draft_;
         bool is_new_ = false;
+        std::uint64_t generation_ = 0;
 };
 
     class AssetTransaction {
@@ -66,12 +79,17 @@ public:
 
     private:
         friend class ManifestStore;
-        AssetTransaction(ManifestStore* owner, std::string name, nlohmann::json draft, bool is_new_asset);
+        AssetTransaction(ManifestStore* owner,
+                         std::string name,
+                         nlohmann::json draft,
+                         bool is_new_asset,
+                         std::uint64_t generation);
 
         ManifestStore* owner_ = nullptr;
         std::string name_;
         nlohmann::json draft_;
         bool is_new_ = false;
+        std::uint64_t generation_ = 0;
 };
 
     struct AssetView {
@@ -111,9 +129,18 @@ public:
 
 private:
     void ensure_loaded();
-    bool apply_edit(const std::string& name, const nlohmann::json& payload);
-    bool apply_map_edit(const std::string& name, const nlohmann::json& payload);
+    void ensure_loaded_once();
+    void refresh_from_disk_if_safe();
+
+    bool apply_edit(const std::string& name,
+                    const nlohmann::json& payload,
+                    std::uint64_t expected_generation);
+    bool apply_map_edit(const std::string& name,
+                        const nlohmann::json& payload,
+                        std::uint64_t expected_generation);
     void ensure_asset_container();
+    void mark_dirty();
+    bool has_pending_manifest_write() const;
 
     std::filesystem::path manifest_path_;
     std::function<manifest::ManifestData()> loader_;
@@ -123,8 +150,11 @@ private:
 
     bool loaded_ = false;
     bool dirty_ = false;
+    CacheState state_ = CacheState::Unloaded;
     nlohmann::json manifest_cache_ = nlohmann::json::object();
     std::uint64_t last_known_tag_version_ = std::numeric_limits<std::uint64_t>::max();
+    std::uint64_t cache_generation_ = 0;
+    std::optional<std::uint64_t> pending_reload_version_;
 };
 
 }

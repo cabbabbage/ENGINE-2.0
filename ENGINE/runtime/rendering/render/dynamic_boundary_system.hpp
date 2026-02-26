@@ -12,6 +12,8 @@
 #include <unordered_set>
 #include <vector>
 
+class Room;
+class Area;
 class WarpedScreenGrid;
 class AssetLibrary;
 class Assets;
@@ -65,6 +67,7 @@ public:
         std::string                 spawn_id;
         std::string                 display_name;
         int                         grid_resolution = 5;
+        int                         jitter = 0;
         std::vector<BoundaryCandidate> candidates;
         int                         total_chance = 0;
     };
@@ -125,8 +128,9 @@ private:
     SDL_Renderer* renderer_ = nullptr;
     AssetLibrary* asset_library_ = nullptr;
 
-    nlohmann::json last_boundary_json_;
     std::uint64_t  config_revision_ = 0;
+    std::uint64_t  map_boundary_revision_ = 0;
+    std::size_t    map_boundary_signature_ = 0;
     std::uint64_t  warning_revision_ = 0;
     std::uint64_t  boundary_regen_seed_ = 0;
 
@@ -134,17 +138,128 @@ private:
     std::unordered_map<BoundaryKey, int, BoundaryKeyHash> boundary_assignments_;
     std::unordered_map<BoundaryKey, FrameState, BoundaryKeyHash> animation_states_;
     std::vector<BoundarySprite> active_boundary_sprites_;
-    std::unordered_set<int> dense_type_warnings_;
+    struct StaticCellAssignment {
+        BoundaryKey key;
+        int candidate_index = -1;
+        int boundary_type_index = -1;
+        SDL_FPoint world_pos{0.0f, 0.0f};
+        int world_z = 0;
+    };
+    struct StaticAssignmentFingerprint {
+        std::uint64_t config_revision = 0;
+        std::size_t rooms_hash = 0;
+        int origin_x = 0;
+        int origin_y = 0;
+        int origin_layer = 0;
+        int grid_resolution = 0;
+        int min_grid_x = 0;
+        int max_grid_x = 0;
+        int min_grid_y = 0;
+        int max_grid_y = 0;
+        float spacing_multiplier = kDefaultGridSpacingMultiplier;
 
-    void parse_boundary_config(const nlohmann::json& map_info);
+        bool operator==(const StaticAssignmentFingerprint& other) const noexcept {
+            return config_revision == other.config_revision &&
+                   rooms_hash == other.rooms_hash &&
+                   origin_x == other.origin_x &&
+                   origin_y == other.origin_y &&
+                   origin_layer == other.origin_layer &&
+                   grid_resolution == other.grid_resolution &&
+                   min_grid_x == other.min_grid_x &&
+                   max_grid_x == other.max_grid_x &&
+                   min_grid_y == other.min_grid_y &&
+                   max_grid_y == other.max_grid_y &&
+                   spacing_multiplier == other.spacing_multiplier;
+        }
+        bool operator!=(const StaticAssignmentFingerprint& other) const noexcept {
+            return !(*this == other);
+        }
+    };
+    std::vector<StaticCellAssignment> static_assignments_;
+    StaticAssignmentFingerprint static_assignment_fingerprint_{};
+    std::unordered_set<int> dense_type_warnings_;
+    struct RegionCacheKey {
+        int x = 0;
+        int y = 0;
+        bool operator==(const RegionCacheKey& other) const noexcept {
+            return x == other.x && y == other.y;
+        }
+    };
+    struct RegionCacheKeyHash {
+        std::size_t operator()(const RegionCacheKey& key) const noexcept {
+            const std::uint64_t a = static_cast<std::uint32_t>(key.x);
+            const std::uint64_t b = static_cast<std::uint32_t>(key.y);
+            std::uint64_t combined = (a << 32) | b;
+            combined ^= combined >> 33;
+            combined *= 0xff51afd7ed558ccdULL;
+            combined ^= combined >> 33;
+            return static_cast<std::size_t>(combined);
+        }
+    };
+    enum class RegionKind : int {
+        Boundary = 0,
+        Room,
+        Trail
+    };
+
+    struct RegionCacheEntry {
+        RegionKind region_kind = RegionKind::Boundary;
+        const Room* owner = nullptr;
+        bool blocked = false;
+    };
+    struct RegionCacheFingerprint {
+        std::uint64_t config_revision = 0;
+        std::size_t map_info_hash = 0;
+        std::size_t rooms_hash = 0;
+        int origin_x = 0;
+        int origin_y = 0;
+        int origin_layer = 0;
+        int grid_resolution = 0;
+        float spacing_multiplier = kDefaultGridSpacingMultiplier;
+
+        bool operator==(const RegionCacheFingerprint& other) const noexcept {
+            return config_revision == other.config_revision &&
+                   map_info_hash == other.map_info_hash &&
+                   rooms_hash == other.rooms_hash &&
+                   origin_x == other.origin_x &&
+                   origin_y == other.origin_y &&
+                   origin_layer == other.origin_layer &&
+                   grid_resolution == other.grid_resolution &&
+                   spacing_multiplier == other.spacing_multiplier;
+        }
+        bool operator!=(const RegionCacheFingerprint& other) const noexcept {
+            return !(*this == other);
+        }
+    };
+    std::unordered_map<RegionCacheKey, RegionCacheEntry, RegionCacheKeyHash> region_cache_;
+    struct IndexedArea {
+        const Area* area = nullptr;
+        RegionKind region_kind = RegionKind::Boundary;
+        const Room* owner = nullptr;
+    };
+    static constexpr int kRegionIndexCellSize = 512;
+    std::unordered_map<RegionCacheKey, std::vector<IndexedArea>, RegionCacheKeyHash> region_area_index_;
+    RegionCacheFingerprint region_cache_fingerprint_;
+
+    void parse_boundary_config(const nlohmann::json& boundary_data);
     void build_candidate_frames(BoundaryCandidate& candidate);
-    bool needs_reparse(const nlohmann::json& map_info) const;
+    bool refresh_boundary_config_revision(const nlohmann::json& map_info);
     void clear_runtime_caches();
 
     BoundaryKey  make_key(int group_idx, int resolution_layer, int grid_x, int grid_y, int world_z) const;
     std::uint64_t hash_key(const BoundaryKey& key) const;
     int select_candidate_for_key(const BoundaryKey& key, const BoundaryType& btype);
     SDL_FPoint sample_jitter_offset(const BoundaryKey& key, float max_jitter) const;
+    void ensure_region_cache_valid(const world::WorldGrid& grid,
+                                   const std::vector<Room*>& rooms,
+                                   std::size_t rooms_hash,
+                                   float spacing_multiplier);
+    const RegionCacheEntry& resolve_region_cache(const SDL_Point& world_pt,
+                                                 const std::vector<Room*>& rooms);
+    RegionCacheEntry classify_region_point(const SDL_Point& world_pt) const;
+    void rebuild_region_area_index(const std::vector<Room*>& rooms);
+    void add_indexed_area(const Area* area, RegionKind kind, const Room* owner);
+    std::size_t compute_rooms_topology_hash(const Assets* assets) const;
 
     struct BoundaryConfig {
         float grid_spacing_multiplier = kDefaultGridSpacingMultiplier;

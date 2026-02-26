@@ -8,7 +8,7 @@
 #include "spawn_context.hpp"
 #include "check.hpp"
 #include "asset_spawn_planner.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "utils/area.hpp"
 #include "utils/relative_room_position.hpp"
 
@@ -59,7 +59,7 @@ void PerimeterSpawner::spawn(const SpawnInfo& item, const Area* area, SpawnConte
             continue;
         }
 
-        if (auto* spawned = ctx.spawnAsset(candidate->name, info, *area, pos, 0, nullptr, item.spawn_id, item.position)) {
+        if (auto* spawned = ctx.spawnAsset(candidate->name, info, *area, pos, 0, item.spawn_id, item.position)) {
             if (ctx.checks_enabled()) {
                 const bool track_spacing = ctx.track_spacing_for(spawned->info, enforce_spacing);
                 ctx.checker().register_asset(spawned, enforce_spacing, track_spacing);

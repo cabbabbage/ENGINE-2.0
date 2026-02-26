@@ -58,6 +58,10 @@ GridPoint::GridPoint(const GridPoint& other)
     , distance_to_camera(other.distance_to_camera)
     , tilt_radians(other.tilt_radians)
     , on_screen(other.on_screen)
+    , terrain_elevation(other.terrain_elevation)
+    , terrain_slope_x(other.terrain_slope_x)
+    , terrain_slope_y(other.terrain_slope_y)
+    , terrain_revision(other.terrain_revision)
     , screen_data_frame_updated(other.screen_data_frame_updated)
     , screen_data_valid(other.screen_data_valid)
     , last_camera_state_version_(other.last_camera_state_version_)
@@ -83,10 +87,11 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
 
     // Convert world position to meters
     const double safe_scale = std::max(1e-6, params.meters_scale);
+    const double world_z_total = static_cast<double>(world_z_) + static_cast<double>(terrain_elevation);
     const Vec3 world_meters{
         (static_cast<double>(world_x_) - params.anchor_world_x) * safe_scale,
         (static_cast<double>(world_y_) - params.anchor_world_y) * safe_scale,
-        static_cast<double>(world_z_) * safe_scale
+        world_z_total * safe_scale
     };
 
     // Camera vectors
@@ -255,6 +260,10 @@ GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     distance_to_camera = other.distance_to_camera;
     tilt_radians = other.tilt_radians;
     on_screen = other.on_screen;
+    terrain_elevation = other.terrain_elevation;
+    terrain_slope_x = other.terrain_slope_x;
+    terrain_slope_y = other.terrain_slope_y;
+    terrain_revision = other.terrain_revision;
     screen_data_frame_updated = other.screen_data_frame_updated;
     screen_data_valid = other.screen_data_valid;
     last_camera_state_version_ = other.last_camera_state_version_;
@@ -283,6 +292,10 @@ GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     other.z_child_pos_ = nullptr;
     other.children_with_assets = 0;
     other.active_child_mask = 0;
+    other.terrain_elevation = 0.0f;
+    other.terrain_slope_x = 0.0f;
+    other.terrain_slope_y = 0.0f;
+    other.terrain_revision = 0;
 
     return *this;
 }
@@ -405,6 +418,10 @@ void swap(GridPoint& a, GridPoint& b) noexcept {
     swap(a.region_kind, b.region_kind);
     swap(a.region_owner, b.region_owner);
     swap(a.on_screen, b.on_screen);
+    swap(a.terrain_elevation, b.terrain_elevation);
+    swap(a.terrain_slope_x, b.terrain_slope_x);
+    swap(a.terrain_slope_y, b.terrain_slope_y);
+    swap(a.terrain_revision, b.terrain_revision);
     swap(a.screen_data_frame_updated, b.screen_data_frame_updated);
     swap(a.screen_data_valid, b.screen_data_valid);
     swap(a.last_camera_state_version_, b.last_camera_state_version_);

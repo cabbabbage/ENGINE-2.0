@@ -88,10 +88,7 @@ void CustomControllerService::create_new_controller(const std::string& controlle
         throw std::runtime_error("Asset root has not been configured");
     }
 
-    std::string base_name = sanitize_controller_name(controller_name);
-    if (base_name.empty()) {
-        base_name = default_controller_name();
-    }
+    std::string base_name = normalized_controller_name(controller_name);
 
     if (base_name.empty()) {
         throw std::runtime_error("Unable to determine a controller name");
@@ -103,7 +100,7 @@ void CustomControllerService::create_new_controller(const std::string& controlle
 
     bool header_exists = std::filesystem::exists(header_path, ec);
     bool source_exists = std::filesystem::exists(source_path, ec);
-    std::string class_name = to_pascal_case(base_name);
+    std::string class_name = base_name;
 
     if (!header_exists || !source_exists) {
         write_controller_files(header_path, source_path, base_name, class_name);
@@ -118,11 +115,7 @@ void CustomControllerService::open_existing_controller(const std::string& contro
         throw std::runtime_error("Asset root has not been configured");
     }
 
-    std::string base_name = sanitize_controller_name(controller_name);
-    if (base_name.empty()) {
-        base_name = default_controller_name();
-    }
-
+    std::string base_name = normalized_controller_name(controller_name);
     if (base_name.empty()) {
         throw std::runtime_error("Unable to determine a controller name");
     }
@@ -149,16 +142,12 @@ void CustomControllerService::register_controller_with_animation(const std::stri
         throw std::runtime_error("Asset root has not been configured");
     }
 
-    std::string base_name = sanitize_controller_name(controller_name);
-    if (base_name.empty()) {
-        base_name = default_controller_name();
-    }
-
+    std::string base_name = normalized_controller_name(controller_name);
     if (base_name.empty()) {
         throw std::runtime_error("Unable to determine a controller name");
     }
 
-    update_asset_metadata(base_name, animation_id);
+    update_asset_metadata(base_name, animation_id, controller_name);
 }
 
 std::string CustomControllerService::sanitize_controller_name(const std::string& controller_name) const {
@@ -173,7 +162,7 @@ std::string CustomControllerService::sanitize_controller_name(const std::string&
     for (char ch : trimmed) {
         unsigned char uch = static_cast<unsigned char>(ch);
         if (std::isalnum(uch)) {
-            result.push_back(ch);
+            result.push_back(static_cast<char>(std::tolower(uch)));
             last_was_underscore = false;
         } else if (ch == '_' || ch == '-' || std::isspace(uch)) {
             if (!result.empty() && !last_was_underscore) {
@@ -188,10 +177,18 @@ std::string CustomControllerService::sanitize_controller_name(const std::string&
     }
 
     if (!result.empty() && !std::isalpha(static_cast<unsigned char>(result.front()))) {
-        result = std::string("Controller_") + result;
+        result = std::string("controller_") + result;
     }
 
     return result;
+}
+
+std::string CustomControllerService::normalized_controller_name(const std::string& controller_name) const {
+    std::string normalized = sanitize_controller_name(controller_name);
+    if (normalized.empty()) {
+        normalized = default_controller_name();
+    }
+    return normalized;
 }
 
 std::string CustomControllerService::default_controller_name() const {
@@ -199,30 +196,6 @@ std::string CustomControllerService::default_controller_name() const {
         return std::string();
     }
     return sanitize_controller_name(asset_name_ + "_controller");
-}
-
-std::string CustomControllerService::to_pascal_case(const std::string& base_name) {
-    std::string normalized = base_name;
-    std::replace(normalized.begin(), normalized.end(), '-', '_');
-
-    std::stringstream stream(normalized);
-    std::string part;
-    std::string result;
-    while (std::getline(stream, part, '_')) {
-        if (part.empty()) {
-            continue;
-        }
-        part[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(part[0])));
-        for (std::size_t i = 1; i < part.size(); ++i) {
-            part[i] = static_cast<char>(std::tolower(static_cast<unsigned char>(part[i])));
-        }
-        result += part;
-    }
-
-    if (result.empty()) {
-        result = "CustomController";
-    }
-    return result;
 }
 
 std::string CustomControllerService::build_header_guard(const std::string& base_name) {
@@ -410,7 +383,8 @@ void CustomControllerService::ensure_controller_factory_registration(const std::
 }
 
 void CustomControllerService::update_asset_metadata(const std::string& base_name,
-                                                    const std::string& animation_id) const {
+                                                    const std::string& animation_id,
+                                                    const std::string& binding_reference) const {
     if (!manifest_store_) {
         throw std::runtime_error("Manifest store is not configured for custom controller updates.");
     }
@@ -429,6 +403,15 @@ void CustomControllerService::update_asset_metadata(const std::string& base_name
     }
 
     data["custom_controller_key"] = base_name;
+
+    const std::string trimmed_binding_reference = strings::trim_copy(binding_reference);
+    const std::size_t dot_index = trimmed_binding_reference.find('.');
+    if (dot_index != std::string::npos && dot_index > 0 && dot_index + 1 < trimmed_binding_reference.size()) {
+        nlohmann::json follower_binding = nlohmann::json::object();
+        follower_binding["controller_asset_id"] = sanitize_controller_name(trimmed_binding_reference.substr(0, dot_index));
+        follower_binding["anchor_name"] = strings::trim_copy(trimmed_binding_reference.substr(dot_index + 1));
+        data["follower_binding"] = std::move(follower_binding);
+    }
 
     if (!animation_id.empty()) {
         nlohmann::json* animations_container = nullptr;

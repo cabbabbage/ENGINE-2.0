@@ -16,6 +16,7 @@
 
 class Input;
 class SpawnGroupLabelWidget;
+class Assets;
 namespace devmode::core { class ManifestStore; }
 namespace devmode::core { class ManifestStore; }
 
@@ -79,6 +80,12 @@ public:
                     std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
                     EntryCallbacks callbacks = {},
                     ConfigureEntryCallback configure_entry = {});
+    void bind_entry_by_id(std::string spawn_id,
+                          std::function<nlohmann::json*()> resolver,
+                          std::function<void()> on_change,
+                          std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
+                          EntryCallbacks callbacks = {},
+                          ConfigureEntryCallback configure_entry = {});
 
     void load(const nlohmann::json& groups);
 
@@ -90,7 +97,12 @@ public:
     void set_embedded_mode(bool embedded);
 
     void set_default_resolution(int resolution);
-    void set_manifest_store(class devmode::core::ManifestStore* store) { manifest_store_ = store; }
+    void set_manifest_store(class devmode::core::ManifestStore* store);
+    void set_assets(class Assets* assets);
+    // Detach from any bound JSON so external callers can safely mutate/delete
+    // the underlying spawn group data without leaving dangling pointers inside
+    // the config panel.
+    void clear_binding();
 
     void expand_group(const std::string& id);
     void collapse_group(const std::string& id);
@@ -146,6 +158,8 @@ private:
     std::vector<std::unique_ptr<Entry>> entries_;
     nlohmann::json* bound_array_ = nullptr;
     nlohmann::json* bound_entry_ = nullptr;
+    std::string bound_entry_id_{};
+    std::function<nlohmann::json*()> bound_entry_resolver_{};
     nlohmann::json single_entry_shadow_{};
     nlohmann::json readonly_snapshot_{};
 
@@ -174,6 +188,7 @@ private:
     DragState drag_state_{};
     Entry* current_entry_ = nullptr;
     class devmode::core::ManifestStore* manifest_store_ = nullptr;
+    class Assets* assets_ = nullptr;
 
     Entry* find_entry_by_id(const std::string& id);
     void begin_drag(size_t index, int pointer_y);

@@ -19,6 +19,7 @@
 #include "asset_info.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "anchor_point.hpp"
+#include "utils/AnchorPointResolver.hpp"
 
 #include "utils/transform_smoothing.hpp"
 
@@ -77,13 +78,6 @@ class Asset {
         public:
     RenderCompositePackage render_package;
 
-    struct AnchorFollowTarget {
-        Asset*       source = nullptr;
-        std::string  anchor_name;
-
-        bool valid() const { return source != nullptr && !anchor_name.empty(); }
-    };
-
     struct TilingInfo {
         bool      enabled      = false;
         SDL_Point grid_origin{0, 0};
@@ -102,11 +96,9 @@ class Asset {
           const Area& spawn_area,
           SDL_Point start_pos,
           int depth,
-          Asset* parent = nullptr,
           const std::string& spawn_id = std::string{},
           const std::string& spawn_method = std::string{},
-          int grid_resolution = 0,
-          std::optional<AnchorFollowTarget> anchor_follow = std::nullopt);
+          int grid_resolution = 0);
     Asset(const Asset& other);
     Asset& operator=(const Asset& other);
     Asset(Asset&&) noexcept = default;
@@ -201,7 +193,7 @@ class Asset {
     void set_grid_id(std::uint64_t id);
     std::uint64_t grid_id() const { return grid_id_; }
     void clear_grid_id();
-    void set_world_z_offset(float z) { world_z_offset_ = z; }
+    void set_world_z_offset(float z) { if (world_z_offset_ != z) { world_z_offset_ = z; mark_anchors_dirty(); } }
     float world_z_offset() const { return world_z_offset_; }
 
     SDL_Texture* composite_texture() const { return composite_texture_; }
@@ -215,13 +207,13 @@ class Asset {
     bool is_mesh_dirty() const { return mesh_dirty_; }
     void mark_mesh_dirty() { mesh_dirty_ = true; }
     void clear_mesh_dirty() { mesh_dirty_ = false; }
+    void refresh_frame_texture_bindings();
 
 
     float smoothed_translation_x() const;
     float smoothed_translation_y() const;
     float smoothed_scale() const;
     float smoothed_alpha() const;
-    Asset* parent = nullptr;
     std::shared_ptr<AssetInfo> info;
     std::string current_animation;
     int grid_resolution = 0;
@@ -244,6 +236,8 @@ class Asset {
     std::uint32_t last_active_frame_id = 0;
     std::string spawn_id;
     std::string spawn_method;
+    const std::string& filter_type_tag() const { return filter_type_tag_; }
+    const std::string& filter_method_tag() const { return filter_method_tag_; }
     std::string owning_room_name_;
     std::unique_ptr<AnimationUpdate> anim_;
     std::unique_ptr<class AnimationRuntime> anim_runtime_;
@@ -271,24 +265,56 @@ class Asset {
         SDL_Point       world_px{0, 0};
         int             world_z = 0;
         int             resolution_layer = 0;
+        SDL_Point       source_texture_px{0, 0};
+        bool            has_canonical_texture_source = false;
         bool            dirty = true;
-        int             last_frame_index = -1;
-        std::string     last_anim;
         bool            missing = false;
         bool            in_front = true;
         Asset*          owner = nullptr;
-        std::uint64_t   last_camera_version = 0;
+        struct UpdateKey {
+                anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None;
+                std::optional<anchor_points::AnchorDepthPolicy> depth_policy{};
+                bool initialized = false;
 
-        void update(anchor_points::GridMaterialization grid_policy);
+                bool matches(anchor_points::GridMaterialization grid,
+                             const std::optional<anchor_points::AnchorDepthPolicy>& depth) const {
+                        return initialized && grid_policy == grid && depth_policy == depth;
+                }
+
+                void set(anchor_points::GridMaterialization grid,
+                         std::optional<anchor_points::AnchorDepthPolicy> depth) {
+                        grid_policy = grid;
+                        depth_policy = depth;
+                        initialized = true;
+                }
+        } last_update_key_;
+
+        void update(anchor_points::GridMaterialization grid_policy,
+                    std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
+    };
+
+    // A single source of truth for all inputs that influence resolved anchor world position.
+    struct AnchorBasisSignature {
+        int   world_x = 0;
+        int   world_y = 0;
+        int   world_z = 0;
+        int   frame_index = 0;
+        int   variant_index = 0;
+        bool  flipped = false;
+        float remainder_scale = 1.0f;       // runtime scale applied to rendered frame geometry
+        float perspective_scale = 1.0f;     // depth-based scaling from the grid/camera
+        float world_z_offset = 0.0f;        // vertical offset fed into anchor projection
+        int   resolution_layer = 0;         // grid resolution used for anchor materialization
     };
 
     AnchorHandle& get_anchor_point(const std::string& name);
     std::optional<ResolvedAnchor> anchor_state(const std::string& name,
-                                               anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None);
+                                               anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None,
+                                               std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
     void mark_anchors_dirty();
-    void set_anchor_follow_target(std::optional<AnchorFollowTarget> follow);
-    void bind_child_to_anchor(Asset* child, const std::string& anchor_name);
-    const std::optional<AnchorFollowTarget>& anchor_follow_target() const { return follow_anchor_; }
+    bool update_anchor_basis_if_needed();
+    AnchorBasisSignature compute_anchor_basis_signature() const;
+    void capture_anchor_basis_snapshot(const AnchorBasisSignature& signature);
 
 public:
     static void SetFlipOverrideForSpawnId(const std::string& spawn_id, bool enabled, bool flipped);
@@ -369,14 +395,15 @@ private:
 
     std::vector<AnchorHandle> anchor_handles_;
     std::unordered_map<std::string, std::size_t> anchor_lookup_;
-    std::vector<Asset*> bound_children_;
 
-    std::optional<AnchorFollowTarget> follow_anchor_{};
-    SDL_Point last_follow_world_{0, 0};
-    int last_follow_world_z_ = 0;
-    bool follow_initialized_ = false;
-    void apply_anchor_follow_target();
+    std::uint64_t anchor_world_revision_ = 1;
+    AnchorBasisSignature last_anchor_basis_signature_{};
+    bool anchor_basis_initialized_ = false;
 
+    void refresh_filter_tags();
+
+    std::string filter_type_tag_;
+    std::string filter_method_tag_;
 
 };
 

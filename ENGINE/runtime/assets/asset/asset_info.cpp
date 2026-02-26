@@ -1,6 +1,6 @@
 #include "asset_info.hpp"
 
-#include "assets/asset_types.hpp"
+#include "asset_types.hpp"
 #include "assets/animation_loader.hpp"
 #include "utils/cache_manager.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
@@ -649,6 +649,17 @@ bool AssetInfo::has_tag(const std::string &tag) const {
     return tag_lookup_.find(tag) != tag_lookup_.end();
 }
 
+nlohmann::json AssetInfo::manifest_payload() const {
+        nlohmann::json payload = info_json_;
+        if (!payload.is_object()) {
+                payload = nlohmann::json::object();
+        }
+        if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {
+                payload["asset_name"] = name;
+        }
+        return payload;
+}
+
 bool AssetInfo::commit_manifest() {
         nlohmann::json payload = info_json_;
         if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {
@@ -1085,6 +1096,33 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                 }
         } catch (...) {
                 custom_controller_key.clear();
+        }
+
+        try {
+                if (data.contains("follower_binding") && data["follower_binding"].is_object()) {
+                        const auto& binding = data["follower_binding"];
+                        FollowerBindingSpec spec;
+                        if (binding.contains("controller_asset_id") && binding["controller_asset_id"].is_string()) {
+                                spec.controller_asset_id = binding["controller_asset_id"].get<std::string>();
+                        }
+                        if (binding.contains("anchor_name") && binding["anchor_name"].is_string()) {
+                                spec.anchor_name = binding["anchor_name"].get<std::string>();
+                        }
+                        if (binding.contains("follower_anchor_name") && binding["follower_anchor_name"].is_string()) {
+                                spec.follower_anchor_name = binding["follower_anchor_name"].get<std::string>();
+                        }
+                        if (binding.contains("depth_policy") && binding["depth_policy"].is_string()) {
+                                spec.depth_policy = binding["depth_policy"].get<std::string>();
+                        }
+                        if (binding.contains("layer_policy") && binding["layer_policy"].is_string()) {
+                                spec.layer_policy = binding["layer_policy"].get<std::string>();
+                        }
+                        follower_binding = spec.is_valid() ? std::optional<FollowerBindingSpec>(std::move(spec)) : std::nullopt;
+                } else {
+                        follower_binding.reset();
+                }
+        } catch (...) {
+                follower_binding.reset();
         }
 }
 

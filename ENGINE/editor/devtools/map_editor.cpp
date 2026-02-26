@@ -42,6 +42,10 @@ void MapEditor::set_rooms(std::vector<Room*>* rooms) {
     compute_bounds();
 }
 
+void MapEditor::set_current_room(Room* room) {
+    current_room_ = room;
+}
+
 void MapEditor::set_screen_dimensions(int width, int height) {
     screen_w_ = width;
     screen_h_ = height;
@@ -177,9 +181,39 @@ void MapEditor::render(SDL_Renderer* renderer) {
 
     WarpedScreenGrid& view = assets_->getView();
 
+    const SDL_Color accent_hover = DMStyles::AccentButton().hover_bg;
+    SDL_Color accent_fill = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.18f);
+    accent_fill.a = 110;
+    const SDL_Color accent_outline = DMStyles::AccentButton().border;
+    SDL_Color accent_center = DMStyles::HighlightColor();
+    accent_center.a = 235;
+    SDL_Color accent_glow = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.35f);
+    accent_glow.a = 140;
+    SDL_Color grey_base = dm_draw::LightenColor(DMStyles::Border(), 0.04f);
+    grey_base.a = 255;
+    SDL_Color grey_fill = dm_draw::LightenColor(DMStyles::Border(), 0.08f);
+    grey_fill.a = 35;
+    SDL_Color grey_outline = dm_draw::LightenColor(DMStyles::Border(), 0.08f);
+    grey_outline.a = 180;
+    SDL_Color grey_glow = dm_draw::LightenColor(DMStyles::Border(), 0.24f);
+    grey_glow.a = 70;
+
     for (Room* room : *rooms_) {
         if (!room || !room->room_area) continue;
-        const auto style = dm_draw::ResolveRoomBoundsOverlayStyle(room->display_color());
+        const bool is_current = (room == current_room_);
+        SDL_Color base_color = is_current ? accent_hover : grey_base;
+        auto style = dm_draw::ResolveRoomBoundsOverlayStyle(base_color);
+        if (is_current) {
+            style.fill = accent_fill;
+            style.outline = accent_outline;
+            style.center = accent_center;
+            style.glow = accent_glow;
+        } else {
+            style.fill = grey_fill;
+            style.outline = grey_outline;
+            style.center = SDL_Color{0, 0, 0, 0};
+            style.glow = grey_glow;
+        }
 
         dm_draw::RenderRoomBoundsOverlay( renderer, view, *room->room_area, style);
 

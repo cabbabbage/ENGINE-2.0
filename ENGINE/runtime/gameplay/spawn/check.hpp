@@ -10,7 +10,7 @@
 #include <SDL3/SDL.h>
 
 #include "assets/Asset.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "utils/area.hpp"
 #include "gameplay/world/grid_point.hpp"
 

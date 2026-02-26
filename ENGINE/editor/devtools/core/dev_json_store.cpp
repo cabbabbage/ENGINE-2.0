@@ -191,6 +191,16 @@ struct DevJsonStore::Impl {
         shutdown();
     }
 
+    bool has_pending_write(const std::filesystem::path& path) const {
+#ifdef DEV_MODE_DISABLE_JSON_DEBOUNCE
+        (void)path;
+        return false;
+#else
+        std::lock_guard<std::mutex> lock(mutex_);
+        return pending_writes_.find(path) != pending_writes_.end();
+#endif
+    }
+
     nlohmann::json load(const std::filesystem::path& path) {
         std::error_code ec;
         if (!std::filesystem::exists(path, ec)) {
@@ -511,7 +521,7 @@ struct DevJsonStore::Impl {
     }
 #endif
 
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     std::condition_variable cv_;
     std::unordered_map<std::filesystem::path, DigestEntry, PathHash> digest_cache_;
 #ifndef DEV_MODE_DISABLE_JSON_DEBOUNCE
@@ -545,6 +555,10 @@ void DevJsonStore::submit(const std::filesystem::path& path,
 
 void DevJsonStore::flush_all() {
     impl_->flush_all();
+}
+
+bool DevJsonStore::has_pending_write(const std::filesystem::path& path) const {
+    return impl_->has_pending_write(path);
 }
 
 void DevJsonStore::shutdown() {

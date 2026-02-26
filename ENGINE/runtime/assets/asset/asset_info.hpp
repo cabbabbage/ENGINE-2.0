@@ -84,11 +84,25 @@ class AssetInfo {
     std::vector<NamedArea> areas;
     std::map<std::string, Animation> animations;
     std::map<std::string, Mapping> mappings;
+
+    struct FollowerBindingSpec {
+        std::string controller_asset_id;
+        std::string anchor_name;
+        std::string follower_anchor_name;
+        std::optional<std::string> depth_policy;
+        std::optional<std::string> layer_policy;
+
+        bool is_valid() const {
+            return !anchor_name.empty();
+        }
+    };
     std::string custom_controller_key;
+    std::optional<FollowerBindingSpec> follower_binding;
 
 	public:
     void loadAnimations(SDL_Renderer* renderer);
     bool commit_manifest();
+    nlohmann::json manifest_payload() const;
     void set_asset_type(const std::string &t);
     void set_min_same_type_distance(int d);
     void set_min_distance_all(int d);

@@ -5,9 +5,11 @@
 #include <string>
 #include <vector>
 
-class TextBox {
+#include "widget_base.hpp"
+#include "widget_text_renderer.hpp"
 
-	public:
+class TextBox : public WidgetBase {
+public:
     TextBox(const std::string& label, const std::string& value);
     void set_position(SDL_Point p);
     void set_rect(const SDL_Rect& r);
@@ -23,7 +25,7 @@ class TextBox {
     static int width();
     static int height();
 
-        private:
+private:
     void draw_text(SDL_Renderer* r, const std::string& s, int x, int y, SDL_Color col) const;
     void render_caret(SDL_Renderer* r, int line_height) const;
     size_t caret_index_from_point(int mouse_x, int mouse_y) const;
@@ -32,17 +34,16 @@ class TextBox {
     struct LineInfo {
         size_t start = 0;
         size_t length = 0;
-};
+    };
     std::vector<LineInfo> line_info() const;
     size_t line_index_from_position(size_t pos, const std::vector<LineInfo>& lines) const;
     void update_caret_column();
 
-        private:
-    SDL_Rect rect_{0,0,420,36};
+private:
     int base_height_ = height();
     std::string label_;
     std::string text_;
-    bool hovered_ = false;
+    mutable WidgetTextRenderer text_renderer_;
     bool editing_ = false;
     bool edit_dirty_ = false;
     std::string edit_origin_;

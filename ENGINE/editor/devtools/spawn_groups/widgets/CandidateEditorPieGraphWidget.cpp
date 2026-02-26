@@ -26,6 +26,7 @@ constexpr double kPi = 3.14159265358979323846;
 constexpr double kTwoPi = 6.28318530717958647692;
 constexpr double kStartAngle = -1.5707963267948966;
 constexpr int kSearchPanelHeight = 320;
+constexpr double kArrowKeyDelta = 0.5;
 
 double clamp_positive(double value) {
     return value < 0.0 ? 0.0 : value;
@@ -38,7 +39,7 @@ CandidateEditorPieGraphWidget::CandidateEditorPieGraphWidget() {
     regen_button_ = std::make_unique<DMButton>("Regen", &DMStyles::AccentButton(), 0, DMButton::height());
     add_button_ = std::make_unique<DMButton>("Add Candidate", &DMStyles::CreateButton(), 0, DMButton::height());
     collapse_button_ =
-        std::make_unique<DMButton>(std::string(DMIcons::CollapseExpanded()), &DMStyles::ListButton(), DMButton::height(), DMButton::height());
+        std::make_unique<DMButton>(std::string(DMIcons::CollapseExpanded()), &DMStyles::IconButton(), DMButton::height(), DMButton::height());
     update_collapse_button();
     update_internal_layout();
 }
@@ -104,6 +105,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             if (collapsed_) {
                 hovered_index_ = -1;
                 active_index_ = -1;
+                flush_pending_adjustment();
                 wheel_scroll_accumulator_ = 0.0;
                 hide_search();
                 release_scroll_capture();
@@ -140,6 +142,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
 
     if (candidates_.empty()) {
         hovered_index_ = -1;
+        flush_pending_adjustment();
         release_scroll_capture();
         return false;
     }
@@ -160,11 +163,6 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         bool changed = false;
         if (hovered_index_ != new_hover) {
             hovered_index_ = new_hover;
-            changed = true;
-        }
-        if (active_index_ >= 0 && new_hover != active_index_) {
-            active_index_ = -1;
-            release_scroll_capture();
             changed = true;
         }
         return changed;
@@ -188,6 +186,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             hovered_index_ = target_index;
             if (e.button.clicks >= 2) {
                 if (on_delete_) {
+                    flush_pending_adjustment();
                     on_delete_(target_index);
                 }
                 active_index_ = -1;
@@ -197,6 +196,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             }
 
             if (active_index_ != target_index) {
+                flush_pending_adjustment();
                 active_index_ = target_index;
                 wheel_scroll_accumulator_ = 0.0;
                 if (!scroll_capture_active_) {
@@ -204,6 +204,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
                     scroll_capture_active_ = true;
                 }
             } else {
+                flush_pending_adjustment();
                 active_index_ = -1;
                 wheel_scroll_accumulator_ = 0.0;
                 release_scroll_capture();
@@ -212,6 +213,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         }
 
         if (active_index_ != -1) {
+            flush_pending_adjustment();
             active_index_ = -1;
             wheel_scroll_accumulator_ = 0.0;
             release_scroll_capture();
@@ -239,7 +241,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
             }
 
             if (steps != 0) {
-                on_adjust_(active_index_, steps);
+                submit_adjustment(static_cast<double>(steps));
                 return true;
             }
 
@@ -247,9 +249,23 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
                 return true;
             }
         }
+    } else if (e.type == SDL_EVENT_KEY_DOWN) {
+        double delta = 0.0;
+        if (active_index_ >= 0 && on_adjust_) {
+            if (e.key.key == SDLK_UP) {
+                delta = kArrowKeyDelta;
+            } else if (e.key.key == SDLK_DOWN) {
+                delta = -kArrowKeyDelta;
+            }
+        }
+        if (delta != 0.0) {
+            submit_adjustment(delta);
+            return true;
+        }
     }
 
     if (active_index_ == -1) {
+        flush_pending_adjustment();
         release_scroll_capture();
     }
 
@@ -435,6 +451,7 @@ void CandidateEditorPieGraphWidget::set_candidates_from_json(const nlohmann::jso
     hovered_index_ = -1;
     legend_row_rects_.clear();
     legend_row_height_ = 0;
+    flush_pending_adjustment();
     if (active_index_ >= static_cast<int>(candidates_.size())) {
         active_index_ = -1;
         if (scroll_capture_active_) {
@@ -449,6 +466,20 @@ void CandidateEditorPieGraphWidget::set_screen_dimensions(int width, int height)
     screen_h_ = height;
     if (search_assets_) {
         search_assets_->set_screen_dimensions(screen_w_, screen_h_);
+    }
+}
+
+void CandidateEditorPieGraphWidget::set_manifest_store(devmode::core::ManifestStore* store) {
+    manifest_store_ = store;
+    if (search_assets_) {
+        search_assets_->set_manifest_store(store);
+    }
+}
+
+void CandidateEditorPieGraphWidget::set_assets(Assets* assets) {
+    assets_ = assets;
+    if (search_assets_) {
+        search_assets_->set_assets(assets_);
     }
 }
 
@@ -529,6 +560,26 @@ void CandidateEditorPieGraphWidget::update_search(const Input& input) {
             notify_layout_change();
         }
     }
+}
+
+void CandidateEditorPieGraphWidget::flush_pending_adjustment() {
+    if (defer_adjust_until_release_ && std::abs(pending_delta_) >= 1e-9 && active_index_ >= 0 && on_adjust_) {
+        on_adjust_(active_index_, pending_delta_);
+    }
+    pending_delta_ = 0.0;
+}
+
+bool CandidateEditorPieGraphWidget::submit_adjustment(double delta) {
+    if (active_index_ < 0 || !on_adjust_ || std::abs(delta) < 1e-9) {
+        return false;
+    }
+    if (defer_adjust_until_release_) {
+        pending_delta_ += delta;
+        apply_live_delta(active_index_, delta);
+    } else {
+        on_adjust_(active_index_, delta);
+    }
+    return true;
 }
 
 CandidateEditorPieGraphWidget::Layout CandidateEditorPieGraphWidget::compute_layout() const {
@@ -975,6 +1026,8 @@ void CandidateEditorPieGraphWidget::ensure_search_created() {
         search_assets_ = std::make_unique<SearchAssets>();
         search_assets_->set_embedded_mode(true);
         search_assets_->set_screen_dimensions(screen_w_, screen_h_);
+        search_assets_->set_manifest_store(manifest_store_);
+        search_assets_->set_assets(assets_);
         search_assets_->set_extra_results_provider(search_extra_results_provider_);
     }
 }
@@ -1020,6 +1073,14 @@ void CandidateEditorPieGraphWidget::notify_layout_change() const {
 
 bool CandidateEditorPieGraphWidget::search_visible() const {
     return search_assets_ && search_assets_->visible();
+}
+
+void CandidateEditorPieGraphWidget::apply_live_delta(int index, double delta) {
+    if (index < 0 || index >= static_cast<int>(candidates_.size()) || std::abs(delta) < 1e-9) {
+        return;
+    }
+    auto& candidate = candidates_[index];
+    candidate.weight = std::max(0.0, candidate.weight + delta);
 }
 
 

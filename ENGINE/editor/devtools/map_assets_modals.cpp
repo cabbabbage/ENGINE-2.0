@@ -223,7 +223,9 @@ public:
         }
         pie_widget_->set_screen_dimensions(screen_w_, screen_h_);
         pie_widget_->set_on_request_layout([this]() { this->layout(); });
-        pie_widget_->set_on_adjust([this](int index, int delta) { adjust_candidate_weight(index, delta); });
+        // Regular modal writes directly to the section; apply immediately
+        pie_widget_->set_defer_adjust_until_release(false);
+        pie_widget_->set_on_adjust([this](int index, double delta) { adjust_candidate_weight(index, delta); });
         pie_widget_->set_on_delete([this](int index) { remove_candidate(index); });
         if (regen_callback_) {
             pie_widget_->set_on_regenerate([this]() { this->handle_regen(); });
@@ -354,8 +356,8 @@ private:
         set_rows(rows);
     }
 
-    void adjust_candidate_weight(int index, int delta) {
-        if (!entry_ || delta == 0) return;
+    void adjust_candidate_weight(int index, double delta) {
+        if (!entry_ || std::abs(delta) < 1e-9) return;
         devmode::spawn::ensure_spawn_group_entry_defaults(*entry_, default_display_name_);
         auto& candidates = (*entry_)["candidates"];
         if (!candidates.is_array() || index < 0 || index >= static_cast<int>(candidates.size())) return;
@@ -364,7 +366,7 @@ private:
             candidate = json::object();
         }
         double current = read_candidate_weight(candidate);
-        double next = std::max(0.0, current + static_cast<double>(delta));
+        double next = std::max(0.0, current + delta);
         if (is_integral(next)) {
             candidate["chance"] = static_cast<int>(std::llround(next));
         } else {
@@ -487,6 +489,9 @@ public:
         ownership_color_ = ownership_color;
         save_callback_ = std::move(on_save);
         regen_callback_ = std::move(on_regen);
+        pending_rebuild_ = false;
+        pending_sync_ = false;
+        in_pie_callback_ = false;
 
         if (!ownership_label_.empty()) {
             if (!ownership_label_widget_) ownership_label_widget_ = std::make_unique<LabelWidget>();
@@ -531,7 +536,13 @@ public:
         if (!section_) return;
         bool sanitized = sanitize_groups();
         if (save_callback_) save_callback_();
-        if (force_rebuild || sanitized) {
+        const bool needs_rebuild = force_rebuild || sanitized;
+        if (in_pie_callback_) {
+            pending_rebuild_ = pending_rebuild_ || needs_rebuild;
+            pending_sync_ = pending_sync_ || (!needs_rebuild);
+            return;
+        }
+        if (needs_rebuild) {
             rebuild_rows(false);
         } else {
             sync_group_widgets();
@@ -556,6 +567,7 @@ public:
                 group.pie_widget->update_search(input);
             }
         }
+        apply_pending_refresh();
     }
 
 protected:
@@ -563,14 +575,26 @@ protected:
     std::string_view lock_settings_id() const override { return "boundary_candidates"; }
 
 private:
+    static constexpr int kMaxBoundaryJitter = 500;
+
     struct GroupWidgets {
         std::string spawn_id{};
         std::unique_ptr<LabelWidget> header{};
         std::unique_ptr<DMNumericStepper> resolution_stepper{};
         std::unique_ptr<StepperWidget> resolution_widget{};
+        std::unique_ptr<DMNumericStepper> jitter_stepper{};
+        std::unique_ptr<StepperWidget> jitter_widget{};
         std::unique_ptr<DMButton> remove_button{};
         std::unique_ptr<ButtonWidget> remove_button_widget{};
         std::unique_ptr<CandidateEditorPieGraphWidget> pie_widget{};
+    };
+
+    struct PieCallbackGuard {
+        explicit PieCallbackGuard(BoundaryCandidateListPanelImpl* owner) : owner_(owner) {
+            owner_->in_pie_callback_ = true;
+        }
+        ~PieCallbackGuard() { owner_->in_pie_callback_ = false; }
+        BoundaryCandidateListPanelImpl* owner_;
     };
 
     json& ensure_candidate_selectors() {
@@ -586,6 +610,11 @@ private:
             (*section_)["candidate_selectors"] = json::array();
         }
         return (*section_)["candidate_selectors"];
+    }
+
+    static int clamp_jitter(int value) {
+        if (!std::isfinite(static_cast<double>(value))) return 0;
+        return std::clamp(value, 0, kMaxBoundaryJitter);
     }
 
     json* find_group_by_spawn_id(const std::string& spawn_id) {
@@ -625,6 +654,7 @@ private:
             json entry = json::object();
             devmode::spawn::ensure_spawn_group_entry_defaults(entry, default_display_name_);
             entry["grid_resolution"] = vibble::grid::clamp_resolution(5);
+            entry["jitter"] = 0;
             selectors.push_back(std::move(entry));
             changed = true;
         }
@@ -640,6 +670,13 @@ private:
             if (!entry.contains("grid_resolution") || !entry["grid_resolution"].is_number_integer() ||
                 entry["grid_resolution"].get<int>() != grid_resolution) {
                 entry["grid_resolution"] = grid_resolution;
+                changed = true;
+            }
+
+            int jitter = clamp_jitter(entry.value("jitter", 0));
+            if (!entry.contains("jitter") || !entry["jitter"].is_number_integer() ||
+                entry["jitter"].get<int>() != jitter) {
+                entry["jitter"] = jitter;
                 changed = true;
             }
         }
@@ -720,17 +757,31 @@ private:
             });
             group.resolution_widget = std::make_unique<StepperWidget>(group.resolution_stepper.get());
 
+            const int jitter = clamp_jitter(entry.value("jitter", 0));
+            group.jitter_stepper = std::make_unique<DMNumericStepper>("Jitter (px)",
+                                                                      0,
+                                                                      kMaxBoundaryJitter,
+                                                                      jitter);
+            group.jitter_stepper->set_step(1);
+            group.jitter_stepper->set_on_change([this, spawn_id = group.spawn_id](int value) {
+                this->update_group_jitter(spawn_id, value);
+            });
+            group.jitter_widget = std::make_unique<StepperWidget>(group.jitter_stepper.get());
+
             group.remove_button = std::make_unique<DMButton>("Remove", &DMStyles::WarnButton(), 90, DMButton::height());
             group.remove_button_widget = std::make_unique<ButtonWidget>(
                 group.remove_button.get(),
                 [this, spawn_id = group.spawn_id]() { this->remove_group(spawn_id); });
 
             rows.push_back({group.resolution_widget.get(), group.remove_button_widget.get()});
+            rows.push_back({group.jitter_widget.get()});
 
             group.pie_widget = std::make_unique<CandidateEditorPieGraphWidget>();
             group.pie_widget->set_screen_dimensions(screen_w_, screen_h_);
             group.pie_widget->set_on_request_layout([this]() { this->layout(); });
-            group.pie_widget->set_on_adjust([this, spawn_id = group.spawn_id](int idx, int delta) {
+            // Boundary edits immediately rebuild geometry; defer weight application until the slice is deselected
+            group.pie_widget->set_defer_adjust_until_release(true);
+            group.pie_widget->set_on_adjust([this, spawn_id = group.spawn_id](int idx, double delta) {
                 this->adjust_candidate_weight(spawn_id, idx, delta);
             });
             group.pie_widget->set_on_delete([this, spawn_id = group.spawn_id](int idx) {
@@ -781,6 +832,7 @@ private:
         }
         int resolution = resolve_unique_resolution(entry.value("grid_resolution", 5), used);
         entry["grid_resolution"] = resolution;
+        entry["jitter"] = 0;
 
         selectors.push_back(std::move(entry));
         notify_save(true);
@@ -828,8 +880,27 @@ private:
         }
     }
 
-    void adjust_candidate_weight(const std::string& spawn_id, int index, int delta) {
-        if (delta == 0) return;
+    void update_group_jitter(const std::string& spawn_id, int parsed_value) {
+        json* entry = find_group_by_spawn_id(spawn_id);
+        if (!entry) return;
+        const int clamped = clamp_jitter(parsed_value);
+        (*entry)["jitter"] = clamped;
+        notify_save(false);
+
+        for (auto& group : group_widgets_) {
+            if (group.spawn_id == spawn_id && group.jitter_stepper) {
+                group.jitter_stepper->set_value(clamped);
+                break;
+            }
+        }
+        if (regen_callback_) {
+            regen_callback_(*entry);
+        }
+    }
+
+    void adjust_candidate_weight(const std::string& spawn_id, int index, double delta) {
+        PieCallbackGuard guard(this);
+        if (std::abs(delta) < 1e-9) return;
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry) return;
         devmode::spawn::ensure_spawn_group_entry_defaults(*entry, default_display_name_);
@@ -840,26 +911,28 @@ private:
             candidate = json::object();
         }
         double current = read_candidate_weight(candidate);
-        double next = std::max(0.0, current + static_cast<double>(delta));
+        double next = std::max(0.0, current + delta);
         if (is_integral(next)) {
             candidate["chance"] = static_cast<int>(std::llround(next));
         } else {
             candidate["chance"] = next;
         }
-        notify_save(true);
+        notify_save(false);
     }
 
     void remove_candidate(const std::string& spawn_id, int index) {
+        PieCallbackGuard guard(this);
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry || index < 0) return;
         auto& candidates = (*entry)["candidates"];
         if (!candidates.is_array() || index >= static_cast<int>(candidates.size())) return;
         auto it = candidates.begin() + static_cast<json::difference_type>(index);
         candidates.erase(it);
-        notify_save(true);
+        notify_save(false);
     }
 
     void add_candidate_from_search(const std::string& spawn_id, const std::string& label) {
+        PieCallbackGuard guard(this);
         if (label.empty()) return;
         json* entry = find_group_by_spawn_id(spawn_id);
         if (!entry) return;
@@ -884,8 +957,38 @@ private:
             candidate["chance"] = new_weight;
         }
 
-        candidates.push_back(std::move(candidate));
-        notify_save(true);
+        auto candidate_name = [](const json& value) -> std::string {
+            if (value.is_object()) {
+                auto it = value.find("name");
+                if (it != value.end() && it->is_string()) {
+                    return it->get<std::string>();
+                }
+            } else if (value.is_string()) {
+                return value.get<std::string>();
+            }
+            return std::string{};
+        };
+
+        bool has_non_null_candidate = false;
+        std::vector<size_t> null_indices;
+        for (size_t i = 0; i < candidates.size(); ++i) {
+            std::string name = candidate_name(candidates[i]);
+            if (name == "null") {
+                null_indices.push_back(i);
+            } else if (!name.empty()) {
+                has_non_null_candidate = true;
+            }
+        }
+
+        if (!has_non_null_candidate && !null_indices.empty()) {
+            candidates[null_indices.front()] = candidate;
+            for (size_t i = 1; i < null_indices.size(); ++i) {
+                candidates[null_indices[i]] = json::object({{"name", "null"}, {"chance", 0}});
+            }
+        } else {
+            candidates.push_back(std::move(candidate));
+        }
+        notify_save(false);
     }
 
     void handle_global_regen() {
@@ -943,6 +1046,22 @@ private:
     std::unique_ptr<DMButton> add_button_{};
     std::unique_ptr<ButtonWidget> add_button_widget_{};
     std::vector<GroupWidgets> group_widgets_{};
+    bool in_pie_callback_ = false;
+    bool pending_rebuild_ = false;
+    bool pending_sync_ = false;
+
+    void apply_pending_refresh() {
+        if (pending_rebuild_) {
+            pending_rebuild_ = false;
+            pending_sync_ = false;
+            rebuild_rows(false);
+            return;
+        }
+        if (pending_sync_) {
+            pending_sync_ = false;
+            sync_group_widgets();
+        }
+    }
 };
 
 }

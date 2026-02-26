@@ -1,6 +1,7 @@
 #pragma once
 
 #include "rendering/render/warped_screen_grid.hpp"
+#include "rendering/render/terrain_runtime_state.hpp"
 #include "assets/asset_library.hpp"
 #include "core/popup_manager.hpp"
 #include <SDL3/SDL.h>
@@ -28,6 +29,7 @@ class Room;
 class Input;
 class DevControls;
 class AssetInfo;
+class TerrainField;
 
 class QuickTaskPopup;
 namespace animation_editor {
@@ -47,6 +49,23 @@ enum class FrameEditorLaunchMode {
 
 class Assets {
 public:
+    class WorldMutationBatch {
+    public:
+        explicit WorldMutationBatch(Assets* owner = nullptr) : owner_(owner) {}
+
+        void mark_for_deletion(Asset* asset);
+        void set_pre_commit_save(std::function<bool()> save_cb) { pre_commit_save_ = std::move(save_cb); }
+        bool commit();
+        bool has_mutations() const { return !staged_removals_.empty(); }
+
+    private:
+        friend class Assets;
+        Assets* owner_ = nullptr;
+        std::vector<Asset*> staged_removals_;
+        std::unordered_set<Asset*> staged_lookup_;
+        std::function<bool()> pre_commit_save_;
+    };
+
     Assets(AssetLibrary& library,
            Asset*,
            std::vector<Room*> rooms,
@@ -79,6 +98,7 @@ public:
 
     const std::vector<Asset*>& getActive() const;
     const std::vector<Asset*>& getFilteredActiveAssets() const;
+    const std::unordered_set<Asset*>& filtered_active_asset_membership() const { return filtered_active_asset_membership_; }
     const std::vector<world::GridPoint*>& active_points() const { return active_points_; }
     struct ActiveTraversalEntry {
         Asset* asset = nullptr;
@@ -92,6 +112,7 @@ public:
     const WarpedScreenGrid& getView() const { return camera_; }
 
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
+    std::uint32_t frame_id() const { return frame_id_; }
 
     void render_overlays(SDL_Renderer* renderer);
     SDL_Renderer* renderer() const;
@@ -123,6 +144,8 @@ public:
     bool movement_debug_enabled() const { return movement_debug_enabled_; }
     void set_movement_debug_visible(bool visible);
     bool movement_debug_visible() const { return movement_debug_visible_; }
+    void set_anchor_point_debug_enabled(bool enabled);
+    bool anchor_point_debug_enabled() const { return anchor_point_debug_enabled_; }
     bool fog_visible() const;
     bool boundary_assets_visible() const;
     // Force the camera to refresh from current room settings on next update.
@@ -151,6 +174,12 @@ public:
 
     void set_dev_grid_overlay_callback(std::function<void()> cb) { dev_grid_overlay_callback_ = cb; }
 
+    void set_terrain_sources(TerrainField* field, const TerrainRuntimeState& state);
+    const TerrainRuntimeState* terrain_runtime_state() const {
+        return terrain_runtime_state_ ? &*terrain_runtime_state_ : nullptr;
+    }
+    TerrainField* terrain_field_source() const { return terrain_field_source_; }
+
     void set_editor_current_room(Room* room);
 
     Room* current_room() { return current_room_; }
@@ -163,6 +192,13 @@ public:
     const std::string& map_id() const { return map_id_; }
     world::WorldGrid& world_grid() { return world_grid_; }
     const world::WorldGrid& world_grid() const { return world_grid_; }
+
+    // Suspend/reactivate assets outside the grid for shared binding helper.
+    std::unique_ptr<Asset> extract_asset(Asset* asset);
+    Asset* attach_asset(std::unique_ptr<Asset> asset, int world_z = 0, int resolution_layer = -1);
+    std::unique_ptr<Asset> create_unattached_asset(const std::string& name, SDL_Point world_pos);
+    void register_binding_helper(class AnchorBoundAssetHelper* helper);
+    void unregister_binding_helper(class AnchorBoundAssetHelper* helper);
 
     void persist_map_info_json();
 
@@ -203,7 +239,6 @@ public:
     Asset* player = nullptr;
 
     Asset* spawn_asset(const std::string& name, SDL_Point world_pos);
-    Asset* spawn_asset_attached(const std::string& name, Asset* anchor_owner, const std::string& anchor_name);
 
     void rebuild_from_grid_state();
 
@@ -213,6 +248,8 @@ public:
     bool should_step_dev_frame(const Input& input) const;
     void touch_last_frame_counter();
     bool process_pending_removals();
+    std::size_t delete_assets_for_spawn_group(const std::string& spawn_id);
+    WorldMutationBatch begin_world_mutation_batch();
 
 private:
     void save_map_info_json();
@@ -220,8 +257,11 @@ private:
     void load_camera_settings_from_json();
     void write_camera_settings_to_json();
     void schedule_removal(Asset* a);
+    std::vector<Asset*> collect_removal_closure(const std::vector<Asset*>& roots) const;
+    std::size_t delete_assets_runtime(const std::vector<Asset*>& assets_to_delete);
 
     bool process_removals();
+    bool apply_world_mutation_batch(WorldMutationBatch& batch);
     void addAsset(const std::string& name, SDL_Point g);
     void update_filtered_active_assets();
     void ensure_dev_controls();
@@ -249,6 +289,7 @@ private:
     int dy = 0;
     std::vector<Asset*> active_assets;
     std::vector<Asset*> filtered_active_assets;
+    std::unordered_set<Asset*> filtered_active_asset_membership_;
     std::vector<Room*> rooms_;
     std::size_t rooms_generation_ = 0;
     Room* current_room_ = nullptr;
@@ -261,6 +302,7 @@ private:
     bool depth_effects_enabled_ = true;
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
+    bool anchor_point_debug_enabled_ = false;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
     std::vector<world::GridPoint*> active_points_;
@@ -297,6 +339,7 @@ private:
     Asset* max_asset_height_holder_ = nullptr;
     std::vector<Asset*> visible_candidate_buffer_;
     std::uint64_t active_candidate_generation_ = 0;
+    std::uint64_t active_assets_generation_ = 1;
     std::uint32_t frame_id_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
@@ -334,11 +377,18 @@ private:
     void touch_dev_active_state_version();
 
     std::uint64_t dev_active_state_version_ = 1;
-    std::uint64_t filtered_active_assets_hash_ = 0;
 
     std::function<void()> dev_grid_overlay_callback_;
 
+    TerrainField* terrain_field_source_ = nullptr; // non-owning; owned by SceneRenderer
+    std::optional<TerrainRuntimeState> terrain_runtime_state_;
+
+    std::vector<class AnchorBoundAssetHelper*> binding_helpers_;
+
     void rebuild_non_player_update_buffer_if_needed();
+    // Force anchor basis/signature refresh for all live assets so anchor world transforms
+    // stay in lockstep with the latest camera/grid state (used after grid rebuild).
+    void refresh_anchor_bases_for_active_assets();
     void update_active_assets(const world::GridPoint& center);
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();
@@ -361,7 +411,7 @@ private:
     bool      last_player_pos_valid_ = false;
 
     std::vector<SDL_Rect> culled_debug_rects_;
-    std::uint64_t filtered_active_assets_source_hash_ = 0;
+    std::uint64_t filtered_active_assets_source_generation_ = 0;
     std::uint64_t filtered_active_assets_filter_version_ = 0;
     bool needs_filtered_active_refresh_ = true;
     bool last_dev_controls_enabled_ = false;

@@ -96,7 +96,6 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
 
     cb_smooth_ = std::make_unique<DMCheckbox>("Smooth", smooth_enabled_);
     cb_curve_ = std::make_unique<DMCheckbox>("Curve", curve_enabled_);
-    btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
     frame_navigator_ = std::make_unique<FrameNavigator>();
     frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
     frame_navigator_->set_current_frame(selected_index_);
@@ -104,20 +103,25 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         select_frame(frame);
     });
     frame_navigator_->set_on_before_change([this](int, int) {
-        persist_pending_changes();
+        if (context_.on_save_and_update) {
+            context_.on_save_and_update();
+        }
         return true;
     });
     frame_navigator_->set_preview_source(context_.preview, context_.animation_id);
     frame_navigator_->set_on_apply_next([this]() { apply_movement_to_next_frame(); });
     frame_navigator_->set_on_apply_animation([this]() { apply_movement_to_animation(); });
     frame_navigator_->set_on_apply_all([this]() { (void)apply_movement_to_all_animations(); });
+    frame_navigator_->set_on_save_and_exit([this]() {
+        if (context_.on_end) {
+            context_.on_end();
+        }
+    });
 
     tool_panel_ = std::make_unique<FrameToolPanel>("Movement Tool Panel", "frame_editor_tool_panel_movement");
-    back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() { wants_close_ = true; });
     smooth_widget_ = std::make_unique<CheckboxWidget>(cb_smooth_.get());
     curve_widget_ = std::make_unique<CheckboxWidget>(cb_curve_.get());
     DockableCollapsible::Rows rows{
-        {back_widget_.get()},
         {smooth_widget_.get()},
         {curve_widget_.get()},
     };
@@ -235,12 +239,10 @@ void MovementFrameEditor::end() {
     }
     point_3d_editor_ = nullptr;
     tool_panel_.reset();
-    back_widget_.reset();
     smooth_widget_.reset();
     curve_widget_.reset();
     cb_smooth_.reset();
     cb_curve_.reset();
-    btn_back_.reset();
 }
 
 bool MovementFrameEditor::handle_event(const SDL_Event& e) {
@@ -285,15 +287,6 @@ bool MovementFrameEditor::handle_event(const SDL_Event& e) {
         consumed = true;
         if (selection_state_) selection_state_->reset();
         if (point_3d_editor_) point_3d_editor_->set_selected_point_index(-1);
-    }
-
-    if (e.type == SDL_EVENT_KEY_DOWN) {
-        // ONLY escape key - no arrow key navigation
-        // Use frame navigator buttons/textbox for frame navigation
-        if (e.key.key == SDLK_ESCAPE) {
-            wants_close_ = true;
-            consumed = true;
-        }
     }
 
     if (!context_.assets || !context_.target) {
@@ -425,9 +418,6 @@ void MovementFrameEditor::layout_ui(SDL_Renderer* renderer) const {
 
 
 void MovementFrameEditor::select_frame(int index) {
-    // Save changes before changing frames
-    persist_pending_changes();
-
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
 
     // Don't automatically select/refresh point - that's done explicitly when user clicks or uses arrow keys

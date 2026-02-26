@@ -118,7 +118,7 @@ SDL_Color dim_color(SDL_Color color, float factor) {
 
 const DMButtonStyle& disabled_priority_button_style() {
     static const DMButtonStyle style = [] {
-        const DMButtonStyle& base = DMStyles::ListButton();
+        const DMButtonStyle& base = DMStyles::IconButton();
         DMButtonStyle disabled{
             {base.label.font_path, base.label.font_size, dim_color(base.label.color, 0.55f)},
             dim_color(base.bg, 0.45f), dim_color(base.hover_bg, 0.45f), dim_color(base.press_bg, 0.45f), dim_color(base.border, 0.55f), dim_color(base.text, 0.55f)};
@@ -161,7 +161,7 @@ public:
         enabled_ = enabled;
         if (!button_) return;
         if (enabled_) {
-            button_->set_style(&DMStyles::ListButton());
+            button_->set_style(&DMStyles::IconButton());
         } else {
             button_->set_style(&disabled_priority_button_style());
         }
@@ -540,10 +540,13 @@ struct SpawnGroupConfig::Entry {
             });
             if (owner_) {
                 candidate_graph_->set_screen_dimensions(owner_->screen_w_, owner_->screen_h_);
+                candidate_graph_->set_manifest_store(owner_->manifest_store_);
+                candidate_graph_->set_assets(owner_->assets_);
             }
         }
 
-        toggle_button_ = std::make_unique<DMButton>("▶", &DMStyles::ListButton(), 28, DMButton::height());
+        const DMButtonStyle* icon_style = &DMStyles::IconButton();
+        toggle_button_ = std::make_unique<DMButton>(std::string(DMIcons::CollapseCollapsed()), icon_style, 28, DMButton::height());
         toggle_widget_ = std::make_unique<ButtonWidget>(toggle_button_.get(), [this]() {
             expanded_state_ = !expanded_state_;
             if (expanded_state_) owner_->expand_group(spawn_id());
@@ -566,13 +569,13 @@ struct SpawnGroupConfig::Entry {
             });
         });
 
-        priority_up_button_ = std::make_unique<DMButton>(u8"?", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
+        priority_up_button_ = std::make_unique<DMButton>(std::string(DMIcons::NavUp()), icon_style, DMButton::height(), DMButton::height());
         priority_up_widget_ = std::make_unique<PriorityButtonWidget>(priority_up_button_.get(), [this]() {
             if (!owner_) return;
             owner_->nudge_priority(*this, -1);
         });
 
-        priority_down_button_ = std::make_unique<DMButton>(u8"?", &DMStyles::ListButton(), DMButton::height(), DMButton::height());
+        priority_down_button_ = std::make_unique<DMButton>(std::string(DMIcons::NavDown()), icon_style, DMButton::height(), DMButton::height());
         priority_down_widget_ = std::make_unique<PriorityButtonWidget>(priority_down_button_.get(), [this]() {
             if (!owner_) return;
             owner_->nudge_priority(*this, 1);
@@ -1172,7 +1175,12 @@ private:
         });
     }
 
-    void update_toggle_label() {}
+    void update_toggle_label() {
+        if (!toggle_button_) return;
+        std::string label = expanded_state_ ? std::string(DMIcons::CollapseExpanded()) : std::string(DMIcons::CollapseCollapsed());
+        toggle_button_->set_text(label);
+        toggle_button_->set_style(&DMStyles::IconButton());
+    }
 
     void update_candidates_toggle_label() {
         if (!candidates_toggle_btn_) return;
@@ -1237,7 +1245,8 @@ private:
                 return results;
             });
             graph->set_candidates_from_json(entry_view());
-            graph->set_on_adjust([this](int index, int delta){
+            graph->set_defer_adjust_until_release(false);
+            graph->set_on_adjust([this](int index, double delta){
                 if (!editable_) return;
                 if (index < 0) return;
                 if (auto* entry = mutable_entry()) {
@@ -1245,7 +1254,7 @@ private:
                     auto& arr = (*entry)["candidates"];
                     if (!arr.is_array() || index >= static_cast<int>(arr.size())) return;
                     double curr = safe_double(arr.at(index), "chance", safe_double(arr.at(index), "weight", 0.0));
-                    double next = std::max(0.0, curr + static_cast<double>(delta));
+                    double next = std::max(0.0, curr + delta);
                     arr.at(index)["chance"] = next;
                     update_candidate_graph();
                     notify_change(false, false, true);
@@ -1703,6 +1712,26 @@ void SpawnGroupConfig::set_screen_dimensions(int width, int height) {
     }
 }
 
+void SpawnGroupConfig::set_manifest_store(devmode::core::ManifestStore* store) {
+    manifest_store_ = store;
+    for (auto& entry : entries_) {
+        if (!entry) continue;
+        if (auto* graph = entry->candidate_editor_widget()) {
+            graph->set_manifest_store(store);
+        }
+    }
+}
+
+void SpawnGroupConfig::set_assets(Assets* assets) {
+    assets_ = assets;
+    for (auto& entry : entries_) {
+        if (!entry) continue;
+        if (auto* graph = entry->candidate_editor_widget()) {
+            graph->set_assets(assets_);
+        }
+    }
+}
+
 void SpawnGroupConfig::load(nlohmann::json& groups,
                           std::function<void()> on_change,
                           std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
@@ -1729,9 +1758,28 @@ void SpawnGroupConfig::bind_entry(nlohmann::json& entry,
     load_impl(nullptr, &entry, std::move(on_change), std::move(relay), std::move(configure_entry));
 }
 
+void SpawnGroupConfig::bind_entry_by_id(std::string spawn_id,
+                                       std::function<nlohmann::json*()> resolver,
+                                       std::function<void()> on_change,
+                                       std::function<void(const nlohmann::json&, const ChangeSummary&)> on_entry_change,
+                                       EntryCallbacks callbacks,
+                                       ConfigureEntryCallback configure_entry) {
+    bound_entry_id_ = std::move(spawn_id);
+    bound_entry_resolver_ = std::move(resolver);
+    nlohmann::json* resolved = bound_entry_resolver_ ? bound_entry_resolver_() : nullptr;
+    if (!resolved) {
+        clear_binding();
+        return;
+    }
+    bind_entry(*resolved, std::move(on_change), std::move(on_entry_change), std::move(callbacks), std::move(configure_entry));
+}
+
+
 void SpawnGroupConfig::load(const nlohmann::json& groups) {
     bound_array_ = nullptr;
     bound_entry_ = nullptr;
+    bound_entry_id_.clear();
+    bound_entry_resolver_ = {};
     entry_callbacks_ = {};
     on_change_ = {};
     on_entry_change_ = {};
@@ -1756,6 +1804,10 @@ void SpawnGroupConfig::load_impl(nlohmann::json* array,
                                  ConfigureEntryCallback configure_entry) {
     bound_array_ = array;
     bound_entry_ = entry;
+    if (!bound_entry_) {
+        bound_entry_id_.clear();
+        bound_entry_resolver_ = {};
+    }
     single_entry_mode_ = (bound_entry_ != nullptr);
     if (bound_entry_) {
         devmode::spawn::ensure_spawn_group_entry_defaults(*bound_entry_, default_display_name_for(*bound_entry_), default_resolution_);
@@ -1782,6 +1834,18 @@ void SpawnGroupConfig::load_impl(nlohmann::json* array,
     on_entry_change_ = std::move(on_entry_change);
     configure_entry_ = std::move(configure_entry);
     rebuild_rows();
+}
+
+void SpawnGroupConfig::clear_binding() {
+    bound_array_ = nullptr;
+    bound_entry_ = nullptr;
+    bound_entry_id_.clear();
+    bound_entry_resolver_ = {};
+    single_entry_mode_ = false;
+    single_entry_shadow_.clear();
+    readonly_snapshot_.clear();
+    entries_.clear();
+    mark_layout_dirty();
 }
 
 void SpawnGroupConfig::append_rows(Rows& rows) {
@@ -2322,6 +2386,14 @@ void SpawnGroupConfig::nudge_priority(Entry& entry, int delta) {
 }
 
 void SpawnGroupConfig::rebuild_rows() {
+    if (bound_entry_resolver_) {
+        nlohmann::json* resolved = bound_entry_resolver_();
+        if (!resolved) {
+            clear_binding();
+            return;
+        }
+        bound_entry_ = resolved;
+    }
     if (bound_entry_) {
         if (!single_entry_shadow_.is_array()) {
             single_entry_shadow_ = nlohmann::json::array();

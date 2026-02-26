@@ -44,6 +44,7 @@ public:
     ~EngineRenderer();
 
     SDL_Renderer* raw() const { return renderer_; }
+    SDL_Window* window() const { return window_; }
     const RenderCaps& caps() const { return caps_; }
     RenderQualityTier quality_tier() const { return quality_tier_; }
 
@@ -70,8 +71,8 @@ private:
         std::string failure_reason;
     };
 
-    static AttemptResult try_create_gpu(SDL_Window* window, bool prefer_vsync);
-    static AttemptResult try_create_accelerated(SDL_Window* window, bool prefer_vsync);
+    static AttemptResult try_create_gpu(SDL_Window* window, bool prefer_vsync, const char* gpu_driver_hint);
+    static AttemptResult try_create_accelerated(SDL_Window* window, bool prefer_vsync, const char* renderer_name_hint);
     static AttemptResult try_create_software(SDL_Window* window);
 
     static RenderCaps build_caps(SDL_Renderer* renderer, RenderBackendType backend_type);

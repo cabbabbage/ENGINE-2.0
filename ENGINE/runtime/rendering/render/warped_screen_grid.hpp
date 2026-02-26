@@ -49,6 +49,8 @@ struct CameraState {
 class Asset;
 class Room;
 class CurrentRoomFinder;
+class TerrainField;
+struct TerrainRuntimeState;
 namespace world {
     class WorldGrid;
     struct GridPoint;
@@ -122,7 +124,24 @@ public:
         RenderSmoothingKey() = default;
         RenderSmoothingKey(std::uint64_t id, int frame) : asset_id(id), frame_index(frame) {}
         explicit RenderSmoothingKey(const Asset* asset, int frame = 0);
-};
+    };
+
+    struct TerrainTelemetry {
+        std::uint64_t frame_id = 0;
+        std::uint64_t terrain_revision = 0;
+        std::size_t cache_before = 0;
+        std::size_t cache_after = 0;
+        std::uint64_t cache_resets_total = 0;
+        std::size_t sampled_points = 0;
+        std::size_t neighbor_samples = 0;
+        std::size_t visible_points = 0;
+        double sample_to_visible_ratio = 0.0;
+        double allowed_ratio = 0.0;
+        bool sample_ratio_warning = false;
+        std::size_t projected_points = 0;
+        std::size_t revision_reprojects = 0;
+        std::size_t simulated_revision_failures = 0;
+    };
 
     WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_view);
     ~WarpedScreenGrid();
@@ -172,7 +191,12 @@ public:
 
     void clear_grid_state();
     void rebuild_grid_bounds();
-    void rebuild_grid(world::WorldGrid& world_grid, float dt_seconds);
+    void rebuild_grid(world::WorldGrid& world_grid,
+                      float dt_seconds,
+                      std::uint64_t frame_id,
+                      TerrainField* terrain_field,
+                      const TerrainRuntimeState* terrain_state,
+                      const std::vector<Room*>* rooms);
     void project_to_screen(world::GridPoint& point) const;
     world::GridPoint* grid_point_for_asset(const Asset* asset);
     const world::GridPoint* grid_point_for_asset(const Asset* asset) const;
@@ -225,6 +249,7 @@ public:
     int last_min_world_z() const { return last_min_world_z_; }
     int last_max_world_z() const { return last_max_world_z_; }
     std::uint32_t last_depth_culled() const { return last_depth_culled_; }
+    const TerrainTelemetry& terrain_telemetry() const { return terrain_telemetry_; }
     void set_frustum_padding_world(float padding);
     float frustum_padding_world() const { return frustum_padding_world_; }
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
@@ -280,6 +305,7 @@ private:
     std::uint32_t last_depth_culled_ = 0;
     int last_min_world_z_ = 0;
     int last_max_world_z_ = 0;
+    TerrainTelemetry terrain_telemetry_{};
     SDL_Rect cached_world_rect_{0, 0, 0, 0};
     GridBounds bounds_{};
     float frustum_padding_world_ = 0.0f;

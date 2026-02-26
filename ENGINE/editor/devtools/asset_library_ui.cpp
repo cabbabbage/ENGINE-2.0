@@ -14,7 +14,7 @@
 #include "utils/input.hpp"
 #include "utils/string_utils.hpp"
 #include "assets/asset_library.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "assets/animation.hpp"
 #include "assets/Asset.hpp"
 #include "dm_styles.hpp"
@@ -1828,7 +1828,7 @@ void AssetLibraryUI::clear_search_error() {
 }
 
 AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::string& raw_name) {
-    std::string name = devmode::utils::trim_whitespace_copy(raw_name);
+    std::string name = devmode::utils::normalize_asset_name(raw_name);
     if (name.empty()) {
         return CreateAssetResult::Failed;
     }
@@ -2366,7 +2366,6 @@ void AssetLibraryUI::set_expanded(bool e) {
 bool AssetLibraryUI::is_expanded() const {
     return floating_ && floating_->is_expanded();
 }
-
 
 
 

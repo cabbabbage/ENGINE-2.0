@@ -21,6 +21,7 @@ public:
 
     void set_input(Input* input);
     void set_rooms(std::vector<Room*>* rooms);
+    void set_current_room(Room* room);
     void set_screen_dimensions(int width, int height);
     void set_ui_blocker(std::function<bool(int, int)> blocker);
 
@@ -88,6 +89,7 @@ private:
     TTF_Font* label_font_ = nullptr;
 
     Room* pending_selection_ = nullptr;
+    Room* current_room_ = nullptr;
     DevCameraControls camera_controls_;
     std::vector<std::pair<Room*, SDL_Rect>> label_rects_;
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;

@@ -783,7 +783,7 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
     if (expanded_ && scroll_enabled_ && wheel_event && !slider_capture_active) {
         SDL_Point mouse_point{0, 0};
         sdl_mouse_util::GetMouseState(&mouse_point.x, &mouse_point.y);
-        if (SDL_PointInRect(&mouse_point, &body_viewport_)) {
+        if (SDL_PointInRect(&mouse_point, &rect_)) {
             scroll_ -= e.wheel.integer_y * 40;
             scroll_ = std::max(0, std::min(max_scroll_, scroll_));
             invalidate_layout(true);

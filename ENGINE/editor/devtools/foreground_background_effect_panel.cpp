@@ -1,7 +1,7 @@
 #include "devtools/foreground_background_effect_panel.hpp"
 #include "utils/sdl_render_conversions.hpp"
 
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "assets/animation.hpp"
 #include "core/AssetsManager.hpp"
 #include "core/manifest/manifest_loader.hpp"

@@ -223,7 +223,6 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
         return context_.document->update_animation_payload(context_.animation_id, updated);
     });
 
-    btn_back_ = std::make_unique<DMButton>("Back", &DMStyles::HeaderButton(), 80, DMButton::height());
     frame_navigator_ = std::make_unique<FrameNavigator>();
     frame_navigator_->set_frame_count(static_cast<int>(frames_.size()));
     frame_navigator_->set_current_frame(selected_index_);
@@ -231,18 +230,24 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
         select_frame(frame);
     });
     frame_navigator_->set_on_before_change([this](int, int) {
-        persist_pending_changes();
+        if (context_.on_save_and_update) {
+            context_.on_save_and_update();
+        }
         return true;
     });
     frame_navigator_->set_preview_source(context_.preview, context_.animation_id);
     frame_navigator_->set_on_apply_next([this]() { apply_attack_to_next_frame(); });
     frame_navigator_->set_on_apply_animation([this]() { apply_attack_to_animation(); });
     frame_navigator_->set_on_apply_all([this]() { (void)apply_attack_to_all_animations(); });
+    frame_navigator_->set_on_save_and_exit([this]() {
+        if (context_.on_end) {
+            context_.on_end();
+        }
+    });
     btn_add_remove_ = std::make_unique<DMButton>("Add Attack", &DMStyles::AccentButton(), 150, DMButton::height());
     btn_delete_ = std::make_unique<DMButton>("Delete Attack", &DMStyles::DeleteButton(), 150, DMButton::height());
 
     tool_panel_ = std::make_unique<FrameToolPanel>("Attack Geometry Tool Panel", "frame_editor_tool_panel_attack");
-    back_widget_ = std::make_unique<ButtonWidget>(btn_back_.get(), [this]() { wants_close_ = true; });
     add_remove_widget_ = std::make_unique<ButtonWidget>(btn_add_remove_.get(), [this]() {
         auto* vec = current_attack_vector();
         if (vec) {
@@ -258,7 +263,6 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
         refresh_attack_form();
     });
     DockableCollapsible::Rows rows{
-        {back_widget_.get()},
         {add_remove_widget_.get(), delete_widget_.get()},
     };
     tool_panel_->set_rows(rows);
@@ -278,10 +282,8 @@ void AttackGeoFrameEditor::end() {
     }
     point_3d_editor_ = nullptr;
     tool_panel_.reset();
-    back_widget_.reset();
     add_remove_widget_.reset();
     delete_widget_.reset();
-    btn_back_.reset();
     btn_add_remove_.reset();
     btn_delete_.reset();
     wants_close_ = false;
@@ -552,11 +554,6 @@ void AttackGeoFrameEditor::render_attack_geometry(SDL_Renderer* renderer) const 
 }
 
 void AttackGeoFrameEditor::select_frame(int index) {
-    // Save changes before changing frames - always commit (works for both immediate and deferred)
-    if (!frames_.empty()) {
-        persist_pending_changes();
-    }
-
     selected_index_ = clamp_index(index, static_cast<int>(frames_.size()));
     clamp_attack_selection();
     refresh_attack_form();

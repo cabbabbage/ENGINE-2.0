@@ -5,7 +5,7 @@
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
 
-spiderController::spiderController(Assets* assets, Asset* self)
+spider_controller::spider_controller(Assets* assets, Asset* self)
     : assets_(assets), self_(self) {
     if (self_ && self_->anim_) {
         self_->anim_->set_debug_enabled(false);
@@ -13,7 +13,7 @@ spiderController::spiderController(Assets* assets, Asset* self)
     }
 }
 
-void spiderController::update(const Input&) {
+void spider_controller::update(const Input&) {
     if (!self_ || !self_->anim_ || !assets_) {
         return;
     }
@@ -37,6 +37,6 @@ void spiderController::update(const Input&) {
     attack_helpers::send_attack_if_hit(self_, player);
 }
 
-void spiderController::process_pending_attacks(Asset& self) {
+void spider_controller::process_pending_attacks(Asset& self) {
     (void)self.process_pending_attacks();
 }

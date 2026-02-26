@@ -12,6 +12,7 @@
 #include "devtools/SlidingWindowContainer.hpp"
 #include "devtools/asset_info_sections.hpp"
 #include "utils/ranged_color.hpp"
+#include "devtools/core/dev_save_coordinator.hpp"
 
 class AssetInfo;
 class DockableCollapsible;
@@ -26,7 +27,6 @@ class Area;
 class Assets;
 class Section_BasicInfo;
 class SearchAssets;
-class Section_SpawnGroups;
 namespace animation_editor {
 class AnimationEditorWindow;
 class AnimationDocument;
@@ -34,6 +34,7 @@ class AnimationDocument;
 
 namespace devmode::core {
 class ManifestStore;
+class DevSaveCoordinator;
 }
 
 class AssetInfoUI {
@@ -58,6 +59,8 @@ class AssetInfoUI {
     void set_assets(Assets* a);
     Assets* assets() const { return assets_; }
     void set_manifest_store(devmode::core::ManifestStore* store);
+    void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
+    devmode::core::DevSaveCoordinator* save_coordinator() const { return save_coordinator_; }
     devmode::core::ManifestStore* manifest_store() const { return manifest_store_; }
     void set_target_asset(class Asset* a);
     class Asset* get_target_asset() const { return target_asset_; }
@@ -68,14 +71,15 @@ class AssetInfoUI {
     void request_apply_section(AssetInfoSectionId section_id);
     void set_header_visibility_callback(std::function<void(bool)> cb);
     void mark_target_asset_composite_dirty();
-    void notify_spawn_group_entry_changed(const nlohmann::json& entry);
-    void notify_spawn_group_removed(const std::string& spawn_id);
     void sync_target_spacing_settings();
     void sync_target_tags();
     void sync_target_basic_render_settings(bool type_changed);
 
     void begin_color_sampling(const utils::color::RangedColor& current, std::function<void(SDL_Color)> on_sample, std::function<void()> on_cancel);
     void cancel_color_sampling(bool silent);
+    bool enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority priority,
+                               const std::string& label,
+                               std::function<void()> on_success = {});
 
   private:
     void rebuild_default_sections();
@@ -83,6 +87,7 @@ class AssetInfoUI {
     void apply_camera_override(bool enable);
     float compute_player_screen_height(const class WarpedScreenGrid& cam) const;
     void save_now() const;
+    bool persist_asset_bundle(const char* reason = nullptr);
     bool apply_section_to_assets(AssetInfoSectionId section_id, const std::vector<std::string>& asset_names);
     static const char* section_display_name(AssetInfoSectionId section_id);
     bool validate_target_asset() const;
@@ -126,8 +131,7 @@ class AssetInfoUI {
     bool pending_animation_editor_open_ = false;
     bool forcing_high_quality_rendering_ = false;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
-    Section_SpawnGroups* spawn_groups_section_ = nullptr;
-
+    devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
     std::unique_ptr<class DMButton> duplicate_btn_;
     std::unique_ptr<class ButtonWidget> duplicate_btn_widget_;
     std::unique_ptr<class DMButton> delete_btn_;

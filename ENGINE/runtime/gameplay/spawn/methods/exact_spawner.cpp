@@ -5,7 +5,7 @@
 #include "spawn_context.hpp"
 #include "check.hpp"
 #include "asset_spawn_planner.hpp"
-#include "assets/asset_info.hpp"
+#include "assets/asset/asset_info.hpp"
 #include "utils/area.hpp"
 #include "utils/relative_room_position.hpp"
 
@@ -56,7 +56,7 @@ void ExactSpawner::spawn(const SpawnInfo& item, const Area* area, SpawnContext& 
             continue;
         }
 
-        auto* result = ctx.spawnAsset(candidate->name, info, *area, pos, 0, nullptr, item.spawn_id, item.position);
+        auto* result = ctx.spawnAsset(candidate->name, info, *area, pos, 0, item.spawn_id, item.position);
         if (!result) continue;
 
         if (ctx.checks_enabled()) {

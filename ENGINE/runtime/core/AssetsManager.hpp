@@ -112,6 +112,7 @@ public:
     const WarpedScreenGrid& getView() const { return camera_; }
 
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
+    std::uint32_t frame_id() const { return frame_id_; }
 
     void render_overlays(SDL_Renderer* renderer);
     SDL_Renderer* renderer() const;
@@ -238,17 +239,6 @@ public:
     Asset* player = nullptr;
 
     Asset* spawn_asset(const std::string& name, SDL_Point world_pos);
-    Asset* spawn_asset_attached(const std::string& name, Asset* anchor_owner, const std::string& anchor_name);
-    Asset* spawn_asset_attached(const std::string& name, const Asset::AnchorFollowTarget& binding);
-    Asset* bind_follower(Asset* controller_asset,
-                         const std::string& follower_asset_id,
-                         const std::string& anchor_name);
-    Asset* bind_follower(Asset* controller_asset,
-                         const std::string& follower_asset_id,
-                         const Asset::AnchorFollowTarget& binding);
-    bool unbind_follower(Asset* controller_asset, Asset* follower_asset);
-    Asset* create_asset_and_bind_to_anchor(Asset* controller_asset, const std::string& anchor_name, const std::string& asset_name);
-    bool unbind_and_delete_created(Asset* controller_asset, Asset* created_asset);
 
     void rebuild_from_grid_state();
 
@@ -313,7 +303,6 @@ private:
     bool movement_debug_enabled_ = false;
     bool movement_debug_visible_ = true;
     bool anchor_point_debug_enabled_ = false;
-    bool anchor_follow_debug_logging_ = false;
     bool asset_boundary_box_display_enabled_ = false;
     world::WorldGrid world_grid_{};
     std::vector<world::GridPoint*> active_points_;
@@ -397,7 +386,6 @@ private:
     std::vector<class AnchorBoundAssetHelper*> binding_helpers_;
 
     void rebuild_non_player_update_buffer_if_needed();
-    void propagate_anchor_follows();
     // Force anchor basis/signature refresh for all live assets so anchor world transforms
     // stay in lockstep with the latest camera/grid state (used after grid rebuild).
     void refresh_anchor_bases_for_active_assets();

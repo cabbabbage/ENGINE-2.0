@@ -43,9 +43,6 @@ public:
     Asset* create_asset_at_point(Asset* a, int world_z = 0, int resolution_layer = -1);
     Asset* register_asset(std::unique_ptr<Asset> a, int world_z = 0, int resolution_layer = -1);
     Asset* register_asset(Asset* a, int world_z = 0, int resolution_layer = -1);
-    void   update_asset_parent(Asset* child, Asset* new_parent);
-    Asset* parent_of(const Asset* child) const;
-    bool   unbind_child(Asset* child);
     Chunk* ensure_chunk_from_world(const GridPoint& world_px);
     Chunk* chunk_from_world(const GridPoint& world_px) const;
     Chunk* get_or_create_chunk_ij(int i, int j);
@@ -74,7 +71,6 @@ public:
     ChunkManager& chunks();
     const ChunkManager& chunks() const;
     std::vector<Asset*> all_assets() const;
-    std::vector<Asset*> children_of(const Asset* parent) const;
 
     GridKey grid_key_from_world(const GridPoint& world, int world_z = 0, int layer = -1) const;
     GridKey grid_key_from_world(const GridPoint& world_point) const;
@@ -153,14 +149,11 @@ private:
     std::unordered_map<GridId, GridPoint> points_;
     std::unordered_map<Asset*, GridKey> asset_to_key_;
     std::unordered_map<GridKey, GridId, GridKeyHash> key_to_id_;
-    std::unordered_map<Asset*, std::vector<Asset*>> parent_to_children_;
-    std::unordered_map<Asset*, Asset*> child_to_parent_;
     std::vector<GridId> roots_;
     mutable std::uint64_t traversal_stamp_ = 1;
 
     void add_root_id(GridId id);
     void remove_root_id(GridId id);
-    void detach_parent_links(Asset* asset);
 };
 
 }

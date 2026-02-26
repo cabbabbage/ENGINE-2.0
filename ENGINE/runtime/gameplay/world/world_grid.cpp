@@ -229,7 +229,6 @@ std::unique_ptr<Asset> WorldGrid::extract_asset(Asset* a) {
     auto resid_it = residency_.find(a);
     Chunk* chunk = (resid_it != residency_.end()) ? resid_it->second : nullptr;
 
-    detach_parent_links(a);
     std::unique_ptr<Asset> owned = detach_asset_from_grid_point(a, *gp, true);
     if (chunk) {
         remove_from_chunk(a, chunk);
@@ -255,8 +254,6 @@ Asset* WorldGrid::remove_asset(Asset* a) {
     if (!a) {
         return nullptr;
     }
-
-    detach_parent_links(a);
 
     bool removed_from_point = false;
     auto key_lookup = asset_to_key_.find(a);
@@ -289,11 +286,6 @@ Asset* WorldGrid::remove_asset(Asset* a) {
 
     prune_empty_points();
 
-    // Ensure anchor-following children react immediately to controller movement.
-    if (a) {
-        a->mark_anchors_dirty();
-    }
-
     return a;
 }
 
@@ -304,118 +296,6 @@ std::vector<Asset*> WorldGrid::all_assets() const {
         out.push_back(entry.first);
     }
     return out;
-}
-
-std::vector<Asset*> WorldGrid::children_of(const Asset* parent) const {
-    if (!parent) {
-        return {};
-    }
-    auto it = parent_to_children_.find(const_cast<Asset*>(parent));
-    if (it == parent_to_children_.end()) {
-        return {};
-    }
-    return it->second;
-}
-
-void WorldGrid::update_asset_parent(Asset* child, Asset* new_parent) {
-    if (!child) {
-        return;
-    }
-
-    Asset* old_parent = nullptr;
-    auto existing = child_to_parent_.find(child);
-    if (existing != child_to_parent_.end()) {
-        old_parent = existing->second;
-    }
-
-    if (old_parent == new_parent) {
-        child->parent = new_parent;
-        return;
-    }
-
-    if (old_parent) {
-        auto pit = parent_to_children_.find(old_parent);
-        if (pit != parent_to_children_.end()) {
-            auto& vec = pit->second;
-            vec.erase(std::remove(vec.begin(), vec.end(), child), vec.end());
-            if (vec.empty()) {
-                parent_to_children_.erase(pit);
-            }
-        }
-        child_to_parent_.erase(child);
-    }
-
-    if (new_parent) {
-        auto& children = parent_to_children_[new_parent];
-        if (std::find(children.begin(), children.end(), child) == children.end()) {
-            children.push_back(child);
-        }
-        child_to_parent_[child] = new_parent;
-    }
-
-    child->parent = new_parent;
-}
-
-Asset* WorldGrid::parent_of(const Asset* child) const {
-    if (!child) {
-        return nullptr;
-    }
-    auto it = child_to_parent_.find(const_cast<Asset*>(child));
-    if (it == child_to_parent_.end()) {
-        return nullptr;
-    }
-    return it->second;
-}
-
-bool WorldGrid::unbind_child(Asset* child) {
-    if (!child) {
-        return false;
-    }
-
-    Asset* parent = parent_of(child);
-    const bool had_parent = parent != nullptr;
-
-    if (parent) {
-        auto pit = parent_to_children_.find(parent);
-        if (pit != parent_to_children_.end()) {
-            auto& vec = pit->second;
-            vec.erase(std::remove(vec.begin(), vec.end(), child), vec.end());
-            if (vec.empty()) {
-                parent_to_children_.erase(pit);
-            }
-        }
-    }
-
-    child_to_parent_.erase(child);
-    child->parent = nullptr;
-    child->set_anchor_follow_target(std::nullopt);
-
-#ifndef NDEBUG
-    SDL_assert(parent_of(child) == nullptr);
-    if (had_parent) {
-        // If the child still claims a follow source, it must not contradict the map.
-        const auto follow = child->anchor_follow_target();
-        SDL_assert(!follow.has_value() || follow->source == nullptr);
-    }
-#endif
-    return had_parent;
-}
-
-void WorldGrid::detach_parent_links(Asset* asset) {
-    if (!asset) {
-        return;
-    }
-
-    update_asset_parent(asset, nullptr);
-
-    auto it = parent_to_children_.find(asset);
-    if (it != parent_to_children_.end()) {
-        const auto children = it->second; // copy to allow mutation during unbind
-        for (Asset* child : children) {
-            (void)unbind_child(child);
-        }
-        parent_to_children_.erase(it);
-    }
 }
 
 void WorldGrid::remove_asset_from_point(Asset* a, GridPoint& point) {
@@ -861,7 +741,6 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
 
     GridPoint& point = ensure_point(grid_index, chunk_index, &chunk, nullptr, new_key.z, new_key.layer);
     attach_asset_to_grid_point(std::move(a), raw, point);
-    update_asset_parent(raw, raw ? raw->parent : nullptr);
     return raw;
 }
 
@@ -977,17 +856,6 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
 
     if (point_changed) {
         a->mark_anchors_dirty();
-
-        auto children_it = parent_to_children_.find(a);
-        if (children_it != parent_to_children_.end()) {
-            const auto children = children_it->second; // copy: child moves can mutate parent map
-            for (Asset* child : children) {
-                if (!child || child->dead) {
-                    continue;
-                }
-                child->apply_anchor_follow_target();
-            }
-        }
     }
 
     return a;
@@ -1010,8 +878,6 @@ void WorldGrid::rebuild_chunks() {
     points_.clear();
     residency_.clear();
     asset_to_key_.clear();
-    parent_to_children_.clear();
-    child_to_parent_.clear();
     roots_.clear();
     chunks_.reset();
     invalidate_active_cache();

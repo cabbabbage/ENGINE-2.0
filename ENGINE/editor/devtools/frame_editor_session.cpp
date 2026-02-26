@@ -225,13 +225,6 @@ bool FrameEditorSession::should_render_asset(const Asset* asset) const {
     if (asset == target_) {
         return true;
     }
-    const Asset* current = asset->parent;
-    while (current) {
-        if (current == target_) {
-            return true;
-        }
-        current = current->parent;
-    }
     return false;
 }
 

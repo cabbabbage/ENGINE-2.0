@@ -42,13 +42,10 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_in,
              const Area& spawn_area,
              SDL_Point start_pos,
              int depth_in,
-             Asset* parent_in,
              const std::string& spawn_id_in,
              const std::string& spawn_method_in,
-             int grid_resolution_in,
-             std::optional<AnchorFollowTarget> anchor_follow)
-    : parent(parent_in)
-    , info(std::move(info_in))
+             int grid_resolution_in)
+    : info(std::move(info_in))
     , current_animation()
     , pos_(nullptr)
     , initial_world_pos_(start_pos)
@@ -56,8 +53,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_in,
     , depth(depth_in)
     , spawn_id(spawn_id_in)
     , spawn_method(spawn_method_in)
-    , owning_room_name_(spawn_area.get_name())
-    , follow_anchor_(std::move(anchor_follow)) {
+    , owning_room_name_(spawn_area.get_name()) {
     current_scale = 1.0f;
     cached_w = info ? info->original_canvas_width : 0;
     cached_h = info ? info->original_canvas_height : 0;
@@ -82,4 +78,3 @@ void Asset::set_assets(Assets* a) { assets_ = a; }
 void Asset::sync_transform_to_position() {}
 
 #endif // ENGINE_WORLD_TESTS
-

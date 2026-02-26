@@ -66,56 +66,6 @@ static std::mutex& asset_rng_mutex()
         return mutex;
 }
 
-std::string normalize_controller_binding_id(const std::string& value) {
-        std::string out;
-        out.reserve(value.size());
-        for (char ch : value) {
-                const unsigned char uch = static_cast<unsigned char>(ch);
-                if (std::isalnum(uch)) {
-                        out.push_back(static_cast<char>(std::tolower(uch)));
-                } else if (ch == '_' || ch == '-' || std::isspace(uch)) {
-                        if (!out.empty() && out.back() != '_') {
-                                out.push_back('_');
-                        }
-                }
-        }
-        while (!out.empty() && out.back() == '_') {
-                out.pop_back();
-        }
-
-        constexpr const char* kSuffix = "_controller";
-        constexpr std::size_t kSuffixLen = 11;
-        if (out.size() > kSuffixLen &&
-            out.compare(out.size() - kSuffixLen, kSuffixLen, kSuffix) == 0) {
-                out.resize(out.size() - kSuffixLen);
-                while (!out.empty() && out.back() == '_') {
-                        out.pop_back();
-                }
-        }
-        return out;
-}
-
-Asset* resolve_follow_source_by_controller_id(Assets* assets, const std::string& controller_asset_id) {
-        if (!assets) {
-                return nullptr;
-        }
-        const std::string wanted = normalize_controller_binding_id(controller_asset_id);
-        if (wanted.empty()) {
-                return nullptr;
-        }
-
-        for (Asset* candidate : assets->all) {
-                if (!candidate || candidate->dead || !candidate->info) {
-                        continue;
-                }
-                if (normalize_controller_binding_id(candidate->info->custom_controller_key) == wanted ||
-                    normalize_controller_binding_id(candidate->info->name) == wanted) {
-                        return candidate;
-                }
-        }
-        return nullptr;
-}
-
 std::unordered_map<std::string, std::pair<bool,bool>> Asset::s_flip_overrides_{};
 std::mutex Asset::s_flip_overrides_mutex_{};
 
@@ -123,13 +73,10 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
              const Area& spawn_area,
              SDL_Point start_pos,
              int depth_,
-             Asset* parent_,
              const std::string& spawn_id_,
              const std::string& spawn_method_,
-             int grid_resolution_,
-             std::optional<AnchorFollowTarget> anchor_follow)
-: parent(parent_)
-, info(std::move(info_))
+             int grid_resolution_)
+: info(std::move(info_))
 , current_animation()
 , static_frame(false)
 , active(false)
@@ -140,7 +87,6 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , spawn_id(spawn_id_)
 , spawn_method(spawn_method_)
 , owning_room_name_(spawn_area.get_name())
-, follow_anchor_(std::nullopt)
 {
 	set_flip();
 
@@ -211,8 +157,7 @@ Asset::~Asset() {
 }
 
 Asset::Asset(const Asset& o)
-    : parent(o.parent)
-    , info(o.info)
+    : info(o.info)
     , current_animation(o.current_animation)
     , pos_(nullptr)
     , initial_world_pos_(o.initial_world_pos_)
@@ -256,10 +201,6 @@ Asset::Asset(const Asset& o)
     , composite_dirty_(true)
     , composite_rect_({0, 0, 0, 0})
     , composite_scale_(o.composite_scale_)
-    , follow_anchor_(o.follow_anchor_)
-    , last_follow_world_(o.last_follow_world_)
-    , last_follow_world_z_(o.last_follow_world_z_)
-    , follow_initialized_(o.follow_initialized_)
 {
 
         clear_render_caches();
@@ -276,7 +217,6 @@ Asset& Asset::operator=(const Asset& o) {
         if (this == &o) return *this;
 
         clear_render_caches();
-        parent               = o.parent;
         info                 = o.info;
         current_animation    = o.current_animation;
     pos_                 = nullptr;
@@ -329,10 +269,6 @@ Asset& Asset::operator=(const Asset& o) {
         composite_dirty_          = true;
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
-        follow_anchor_            = o.follow_anchor_;
-        last_follow_world_        = o.last_follow_world_;
-        last_follow_world_z_      = o.last_follow_world_z_;
-        follow_initialized_       = o.follow_initialized_;
         anchor_handles_.clear();
         anchor_lookup_.clear();
         refresh_filter_tags();
@@ -512,8 +448,7 @@ void Asset::set_current_animation(const std::string& name)
 		frame_progress = 0.0f;
 		refresh_cached_dimensions();
                 mark_anchors_dirty();
-                apply_anchor_follow_target();
-	}
+        }
 }
 
 void Asset::update() {
@@ -529,8 +464,6 @@ void Asset::update() {
     // Detect external transform/frame changes before we do any work so bound children can react immediately.
     const bool external_world_changed = update_anchor_basis_if_needed();
 
-    apply_anchor_follow_target();
-
     const bool controller_suppressed_for_frame_editor =
         assets_ && assets_->is_frame_editor_target_active(this);
 
@@ -542,8 +475,6 @@ void Asset::update() {
         }
         controller_->process_pending_attacks(*this);
     }
-
-    apply_anchor_follow_target();
 
     update_scale_values();
 
@@ -1034,173 +965,6 @@ bool Asset::update_anchor_basis_if_needed() {
         return world_changed;
 }
 
-void Asset::set_anchor_follow_target(std::optional<AnchorFollowTarget> follow) {
-        if (follow.has_value()) {
-                vibble::log::warn("[Asset] Anchor follow is deprecated; request ignored.");
-        }
-        follow_anchor_.reset();
-        follow_initialized_ = false;
-        follow_missing_ = false;
-        last_follow_world_ = SDL_Point{0, 0};
-        last_follow_world_z_ = 0;
-        last_follow_source_revision_ = 0;
-        set_anchor_hidden(false);
-}
-
-void Asset::bind_child_to_anchor(Asset* child, const std::string& anchor_name) {
-        throw std::runtime_error("bind_child_to_anchor is removed. Use AnchorBoundAssetHelper.");
-}
-
-void Asset::unbind_child_from_anchor(Asset* child) {
-        throw std::runtime_error("unbind_child_from_anchor is removed. Use AnchorBoundAssetHelper.");
-}
-
-void Asset::refresh_bound_children_anchor_follows() {
-        // Anchor-follow propagation now runs in a global Assets update phase.
-        // Keep this helper for compatibility with existing call sites.
-}
-
-void Asset::apply_anchor_follow_target() {
-        if (!follow_anchor_ || !follow_anchor_->valid()) {
-                return;
-        }
-        AnchorFollowTarget& follow = *follow_anchor_;
-        Asset* source = follow.source;
-        if ((!source || source->dead) && !follow.controller_asset_id.empty()) {
-                source = resolve_follow_source_by_controller_id(assets_, follow.controller_asset_id);
-                if (source) {
-                        follow.source = source;
-                        if (assets_) {
-                                assets_->world_grid().update_asset_parent(this, source);
-                        }
-                }
-        }
-        if (!source || source == this || source->dead) {
-                follow_initialized_ = false;
-                follow_missing_ = true;
-                set_anchor_hidden(true);
-                last_follow_source_revision_ = 0;
-                return;
-        }
-
-        const std::uint64_t source_anchor_revision = source->anchor_world_revision();
-
-        // Always resolve against the parent's latest anchor sample. In game mode
-        // the parent revision can occasionally skip an increment, which leaves the
-        // cached anchor stale. Marking the handle dirty keeps followers glued each frame.
-        auto& handle = source->get_anchor_point(follow.anchor_name);
-        handle.dirty = true;
-
-        auto resolved = source->anchor_state(follow.anchor_name, anchor_points::GridMaterialization::Ensure, follow.depth_policy);
-        const bool missing_anchor = !resolved.has_value() || resolved->missing || !resolved->has_canonical_texture_source;
-        if (missing_anchor) {
-                follow_missing_ = true;
-                follow_initialized_ = false;
-                last_follow_source_revision_ = source_anchor_revision;
-                last_follow_world_ = SDL_Point{0, 0};
-                last_follow_world_z_ = 0;
-                mark_anchors_dirty();
-                set_anchor_hidden(true);
-                if (assets_ && assets_->anchor_follow_debug_logging_) {
-                        const int frame_idx = source->current_frame ? source->current_frame->frame_index : -1;
-                        const std::string source_name = (source->info && !source->info->name.empty())
-                                ? source->info->name
-                                : std::string("<unnamed>");
-                        const std::string follower_name = (info && !info->name.empty()) ? info->name : std::string("<unnamed>");
-                        vibble::log::info("[AnchorDebug] follow anchor '" + follow.anchor_name + "' missing/invalid on frame " +
-                                          std::to_string(frame_idx) + " for follower '" + follower_name +
-                                          "' from source '" + source_name + "'.");
-                }
-                return;
-        }
-        follow_error_reported_ = false;
-        follow_missing_ = false;
-        set_anchor_hidden(false);
-
-        SDL_Point target_px = resolved->world_px;
-        int target_z = resolved->world_z;
-        int target_layer = resolved->resolution_layer;
-
-        // Optional anchor-to-anchor alignment: keep a specific follower anchor glued to the source anchor.
-        if (!follow.follower_anchor_name.empty() && current_frame) {
-                if (current_frame->find_anchor(follow.follower_anchor_name) != nullptr) {
-                        auto follower_anchor = anchor_state(follow.follower_anchor_name,
-                                                            anchor_points::GridMaterialization::None,
-                                                            anchor_points::AnchorDepthPolicy::MatchOwner);
-                        if (follower_anchor.has_value() &&
-                            !follower_anchor->missing &&
-                            follower_anchor->has_canonical_texture_source) {
-                                const int offset_x = follower_anchor->world_px.x - world_x();
-                                const int offset_y = follower_anchor->world_px.y - world_y();
-                                const int offset_z = follower_anchor->world_z - world_z();
-                                target_px.x -= offset_x;
-                                target_px.y -= offset_y;
-                                target_z -= offset_z;
-                        }
-                }
-        }
-
-        if (follow.layer_policy.has_value() &&
-            follow.layer_policy.value() == AnchorFollowTarget::LayerPolicy::MatchControllerAsset) {
-                if (auto* source_gp = source->grid_point()) {
-                        target_layer = source_gp->resolution_layer();
-                } else {
-                        target_layer = source->grid_resolution;
-                }
-        }
-
-        if (!resolved->grid_point && source) {
-                if (auto* source_gp = source->grid_point()) {
-                        target_layer = source_gp->resolution_layer();
-                } else {
-                        target_layer = source->grid_resolution;
-                }
-        }
-
-        grid_resolution = target_layer;
-
-        const bool had_follow_position = follow_initialized_;
-        const SDL_Point previous_follow_world = last_follow_world_;
-        const int previous_follow_world_z = last_follow_world_z_;
-
-        const bool unchanged = had_follow_position &&
-                               previous_follow_world.x == target_px.x &&
-                               previous_follow_world.y == target_px.y &&
-                               previous_follow_world_z == target_z &&
-                               world_x() == target_px.x &&
-                               world_y() == target_px.y &&
-                               world_z() == target_z &&
-                               (!pos_ || pos_->resolution_layer() == target_layer);
-
-        last_follow_world_ = target_px;
-        last_follow_world_z_ = target_z;
-        follow_initialized_ = true;
-        last_follow_source_revision_ = source_anchor_revision;
-
-        if (unchanged) {
-                return;
-        }
-
-        ++anchor_world_revision_;
-
-        if (!assets_) {
-                initial_world_pos_ = target_px;
-                return;
-        }
-
-        world::WorldGrid& grid = assets_->world_grid();
-        world::GridPoint& target = world::GridPoint::from_world(target_px.x, target_px.y, target_z, target_layer, grid);
-        if (pos_) {
-                grid.move_asset(this, *pos_, target);
-        } else {
-                const int start_x = target_px.x + 1;
-                const int start_y = target_px.y + 1;
-                world::GridPoint virtual_start = world::GridPoint::make_virtual(start_x, start_y, target_z, target_layer);
-                grid.move_asset(this, virtual_start, target);
-        }
-        mark_anchors_dirty();
-}
-
 Asset::AnchorHandle& Asset::get_anchor_point(const std::string& name) {
         auto it = anchor_lookup_.find(name);
         if (it != anchor_lookup_.end() && it->second < anchor_handles_.size()) {
@@ -1232,13 +996,6 @@ std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name,
         if (!resolved.has_canonical_texture_source && !resolved.missing) {
                 resolved.missing = true;
                 resolved.grid_point = nullptr;
-                if (assets_ && assets_->anchor_follow_debug_logging_) {
-                        const int frame_idx = current_frame ? current_frame->frame_index : -1;
-                        const std::string asset_name = (info && !info->name.empty()) ? info->name : std::string("<unnamed>");
-                        vibble::log::info("[AnchorDebug] anchor '" + name + "' for asset '" + asset_name +
-                                          "' treated as missing on frame " + std::to_string(frame_idx) +
-                                          " due to invalid canonical texture source.");
-                }
         }
         return resolved;
 }
@@ -1278,13 +1035,6 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 source_texture_px = SDL_Point{0, 0};
                 has_canonical_texture_source = false;
                 dirty = false;
-                Assets* assets_owner = owner ? owner->assets_ : nullptr;
-                if (assets_owner && assets_owner->anchor_follow_debug_logging_) {
-                        const int frame_idx = frame ? frame->frame_index : -1;
-                        const std::string asset_name = (owner && owner->info) ? owner->info->name : std::string("<unnamed>");
-                        vibble::log::info("[AnchorDebug] missing anchor '" + name + "' on frame " +
-                                          std::to_string(frame_idx) + " for asset '" + asset_name + "': " + reason);
-                }
         };
 
         if (!frame) {

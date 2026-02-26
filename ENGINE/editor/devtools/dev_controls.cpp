@@ -119,7 +119,7 @@ void open_path_in_file_explorer(const std::filesystem::path& path) {
         return;
     }
 #if defined(_WIN32)
-    ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, SW_SHOWDEFAULT);
+    ShellExecuteW(nullptr, L"open", path.wstring().c_str(),  nullptr, nullptr, SW_SHOWDEFAULT);
 #elif defined(__APPLE__)
     const std::string command = std::string("open \"") + path.u8string() + "\"";
     std::system(command.c_str());
@@ -4012,7 +4012,7 @@ void DevControls::regenerate_map_spawn_group(const nlohmann::json& entry) {
                             attempt_weights[idx] = 0.0;
                             continue;
                         }
-                        auto* result = ctx.spawnAsset(candidate.name, candidate.info, *area_ptr, spawn_pos, 0, nullptr, info.spawn_id, info.position);
+                        auto* result = ctx.spawnAsset(candidate.name, candidate.info, *area_ptr, spawn_pos, 0, info.spawn_id, info.position);
                         if (!result) {
                             attempt_weights[idx] = 0.0;
                             continue;
@@ -4266,15 +4266,15 @@ void DevControls::create_trail_template() {
     const MapGridSettings grid_settings = assets_->map_grid_settings();
     const std::string manifest_context = assets_->map_id();
 
-    pending_trail_template_ = std::make_unique<Room>(Room::Point{0, 0},
-                                                     "trail",
-                                                     key,
-                                                     nullptr,
-                                                     manifest_context,
-                                                     &assets_->library(),
-                                                     nullptr,
-                                                     &inserted,
-                                                     map_assets_section,
+    pending_trail_template_ = std::make_unique<Room>(Room::Point{0, 0},          // origin
+                                                     "trail",                    // type
+                                                     key,                        // room_def_name
+                                                     nullptr,                    // parent
+                                                     manifest_context,           // manifest_context
+                                                     &assets_->library(),        // asset_lib
+                                                     nullptr,                    // precomputed_area
+                                                     &inserted,                  // room_data
+                                                     map_assets_section,         // map_assets_data
                                                      grid_settings,
                                                      static_cast<double>(map_radius_or_default()),
                                                      "trails_data",

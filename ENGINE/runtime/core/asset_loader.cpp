@@ -335,6 +335,18 @@ void AssetLoader::finalizeAssets() {
                         }
 
                         const std::string name = a->info->name;
+
+                        // Guard against assets whose default animation has no frames (e.g., missing art on disk).
+                        // These can cause downstream crashes when animation runtimes are built.
+                        auto default_anim = a->info->animations.find("default");
+                        if (default_anim == a->info->animations.end() || default_anim->second.frames.empty()) {
+                                vibble::log::error(std::string("[AssetLoader] finalizeAssets: asset '") + name + "' is missing default animation frames; skipping.");
+                                asset_up.reset();
+                                ++skipped_assets;
+                                ++room_skipped;
+                                continue;
+                        }
+
                         try {
                                 asset_up->finalize_setup();
                                 ++finalized_assets;
@@ -415,6 +427,7 @@ void AssetLoader::createAssets(world::WorldGrid& grid) {
                 Asset* asset = grid.create_asset_at_point(std::move(asset_up));
                 if (asset) {
                         registered_assets.push_back(asset);
+                        vibble::log::info(std::string("[AssetLoader] Registered asset: ") + (asset->info ? asset->info->name : std::string{"<null>"}));
                 }
         }
         vibble::log::debug(std::string("[AssetLoader] Registered assets: total=") + std::to_string(registered_assets.size()));

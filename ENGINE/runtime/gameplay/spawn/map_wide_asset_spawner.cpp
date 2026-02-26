@@ -329,7 +329,7 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
             continue;
         }
 
-        Asset* spawned = context.spawnAsset(candidate->name, candidate->info, *owner->room_area, spawn_pos, 0, nullptr, spawn_info->spawn_id, "MapWide");
+        Asset* spawned = context.spawnAsset(candidate->name, candidate->info, *owner->room_area, spawn_pos, 0, spawn_info->spawn_id, "MapWide");
         if (spawned) {
             spawned->set_owning_room_name(owner->room_name);
             owner_map[spawned] = owner;

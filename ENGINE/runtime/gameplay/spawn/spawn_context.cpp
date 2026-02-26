@@ -54,7 +54,6 @@ Asset* SpawnContext::spawnAssetInternal(const std::string& name,
                                         const Area& area,
                                         SDL_Point pos,
                                         int depth,
-                                        Asset* parent,
                                         const std::string& spawn_id,
                                         const std::string& spawn_method,
                                         const std::optional<Asset::TilingInfo>& tiling)
@@ -63,7 +62,7 @@ Asset* SpawnContext::spawnAssetInternal(const std::string& name,
         if (clip_area_ && !position_allowed(*clip_area_, pos)) {
                 return nullptr;
         }
-        auto assetPtr = std::make_unique<Asset>(info, area, pos, depth, parent, spawn_id, spawn_method, spawn_resolution_);
+        auto assetPtr = std::make_unique<Asset>(info, area, pos, depth, spawn_id, spawn_method, spawn_resolution_);
         Asset* raw = assetPtr.get();
         all_.push_back(std::move(assetPtr));
         if (tiling && raw) {
@@ -79,14 +78,13 @@ Asset* SpawnContext::spawnAsset(const std::string& name,
                                 const Area& area,
                                 SDL_Point pos,
                                 int depth,
-                                Asset* parent,
                                 const std::string& spawn_id,
                                 const std::string& spawn_method)
 {
         if (info && info->tillable) {
-                return spawnTiledAsset(name, info, area, pos, depth, parent, spawn_id, spawn_method);
+                return spawnTiledAsset(name, info, area, pos, depth, spawn_id, spawn_method);
         }
-        return spawnAssetInternal(name, info, area, pos, depth, parent, spawn_id, spawn_method, std::nullopt);
+        return spawnAssetInternal(name, info, area, pos, depth, spawn_id, spawn_method, std::nullopt);
 }
 
 Asset* SpawnContext::spawnTiledAsset(const std::string& name,
@@ -94,12 +92,11 @@ Asset* SpawnContext::spawnTiledAsset(const std::string& name,
                                      const Area& area,
                                      SDL_Point pos,
                                      int depth,
-                                     Asset* parent,
                                      const std::string& spawn_id,
                                      const std::string& spawn_method)
 {
         if (!info) {
-                return spawnAssetInternal(name, info, area, pos, depth, parent, spawn_id, spawn_method, std::nullopt);
+                return spawnAssetInternal(name, info, area, pos, depth, spawn_id, spawn_method, std::nullopt);
         }
 
         Asset::TilingInfo tiling{};
@@ -120,7 +117,7 @@ Asset* SpawnContext::spawnTiledAsset(const std::string& name,
         }
 
         if (tile_w <= 0 || tile_h <= 0) {
-                return spawnAssetInternal(name, info, area, pos, depth, parent, spawn_id, spawn_method, std::nullopt);
+                return spawnAssetInternal(name, info, area, pos, depth, spawn_id, spawn_method, std::nullopt);
         }
 
         const auto bounds = area.get_bounds();
@@ -161,7 +158,7 @@ Asset* SpawnContext::spawnTiledAsset(const std::string& name,
         int coverage_h = std::max(tile_h, limit_y - origin_y);
         tiling.coverage = SDL_Rect{ origin_x, origin_y, coverage_w, coverage_h };
 
-        return spawnAssetInternal(name, info, area, aligned_pos, depth, parent, spawn_id, spawn_method, tiling);
+        return spawnAssetInternal(name, info, area, aligned_pos, depth, spawn_id, spawn_method, tiling);
 }
 
 bool SpawnContext::point_overlaps_trail(SDL_Point pt, const Area* ignore) const {

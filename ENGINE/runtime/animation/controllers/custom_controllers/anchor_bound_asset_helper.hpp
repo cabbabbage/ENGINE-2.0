@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <cstdint>
 
 class Asset;
 class Assets;
@@ -22,6 +23,9 @@ public:
     ~AnchorBoundAssetHelper();
 
     // Public API available to controllers.
+    // Ensure children remain glued to their anchors; safe to call multiple times per frame.
+    void tick_for_frame();
+
     bool bind(const std::string& child_asset_id, const std::string& anchor_name);
     bool bind_for_ticks(const std::string& child_asset_id, const std::string& anchor_name, int ticks);
     void unbind(const std::string& child_asset_id);

@@ -163,6 +163,12 @@ void vibble_controller::update(const Input& input) {
 
     dx_ = dy_ = 0;
     movement(input);
+
+    // Force bound children to refresh their anchor every frame in case the engine loop misses us.
+    if (binding_helper_) {
+        binding_helper_->tick_for_frame();
+    }
+
 }
 
 std::string vibble_controller::animation_for_direction(int raw_x, int raw_y) const {

@@ -855,16 +855,16 @@
           "anchor_points": [
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 899,
-                "texture_y": 493,
-                "in_front": true
+                "texture_y": 493
               },
               {
+                "in_front": true,
                 "name": "bow_tie_a",
                 "texture_x": 893,
-                "texture_y": 604,
-                "in_front": true
+                "texture_y": 604
               }
             ]
           ],
@@ -899,114 +899,114 @@
           "anchor_points": [
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 899,
-                "texture_y": 493,
-                "in_front": true
+                "texture_y": 493
               },
               {
+                "in_front": true,
                 "name": "bow_tie_a",
                 "texture_x": 893,
-                "texture_y": 604,
-                "in_front": true
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 899,
-                "texture_y": 493,
-                "in_front": true
+                "texture_y": 493
               },
               {
+                "in_front": true,
                 "name": "bow_tie_a",
                 "texture_x": 893,
-                "texture_y": 604,
-                "in_front": true
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 899,
-                "texture_y": 493,
-                "in_front": true
+                "texture_y": 493
               },
               {
+                "in_front": true,
                 "name": "bow_tie_a",
                 "texture_x": 893,
-                "texture_y": 604,
-                "in_front": true
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 899,
-                "texture_y": 493,
-                "in_front": true
+                "texture_y": 493
               },
               {
+                "in_front": true,
                 "name": "bow_tie_a",
                 "texture_x": 893,
-                "texture_y": 604,
-                "in_front": true
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 899,
-                "texture_y": 493,
-                "in_front": true
+                "texture_y": 493
               },
               {
+                "in_front": true,
                 "name": "bow_tie_a",
                 "texture_x": 893,
-                "texture_y": 604,
-                "in_front": true
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 899,
-                "texture_y": 493,
-                "in_front": true
+                "texture_y": 493
               },
               {
+                "in_front": true,
                 "name": "bow_tie_a",
                 "texture_x": 893,
-                "texture_y": 604,
-                "in_front": true
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 899,
-                "texture_y": 493,
-                "in_front": true
+                "texture_y": 493
               },
               {
+                "in_front": true,
                 "name": "bow_tie_a",
                 "texture_x": 893,
-                "texture_y": 604,
-                "in_front": true
+                "texture_y": 604
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 899,
-                "texture_y": 493,
-                "in_front": true
+                "texture_y": 493
               },
               {
+                "in_front": true,
                 "name": "bow_tie_a",
                 "texture_x": 893,
-                "texture_y": 604,
-                "in_front": true
+                "texture_y": 604
               }
             ]
           ],
@@ -1023,8 +1023,8 @@
             [
               {
                 "name": "eyes",
-                "texture_x": 899,
-                "texture_y": 493,
+                "texture_x": 766,
+                "texture_y": 467,
                 "in_front": true
               },
               {
@@ -1037,8 +1037,8 @@
             [
               {
                 "name": "eyes",
-                "texture_x": 899,
-                "texture_y": 493,
+                "texture_x": 766,
+                "texture_y": 467,
                 "in_front": true
               },
               {
@@ -1051,8 +1051,8 @@
             [
               {
                 "name": "eyes",
-                "texture_x": 899,
-                "texture_y": 493,
+                "texture_x": 766,
+                "texture_y": 467,
                 "in_front": true
               },
               {
@@ -1065,8 +1065,8 @@
             [
               {
                 "name": "eyes",
-                "texture_x": 899,
-                "texture_y": 493,
+                "texture_x": 766,
+                "texture_y": 467,
                 "in_front": true
               },
               {
@@ -1079,8 +1079,8 @@
             [
               {
                 "name": "eyes",
-                "texture_x": 899,
-                "texture_y": 493,
+                "texture_x": 766,
+                "texture_y": 467,
                 "in_front": true
               },
               {
@@ -1093,8 +1093,8 @@
             [
               {
                 "name": "eyes",
-                "texture_x": 899,
-                "texture_y": 493,
+                "texture_x": 766,
+                "texture_y": 467,
                 "in_front": true
               },
               {
@@ -1107,8 +1107,8 @@
             [
               {
                 "name": "eyes",
-                "texture_x": 899,
-                "texture_y": 493,
+                "texture_x": 766,
+                "texture_y": 467,
                 "in_front": true
               },
               {
@@ -1121,8 +1121,8 @@
             [
               {
                 "name": "eyes",
-                "texture_x": 899,
-                "texture_y": 493,
+                "texture_x": 766,
+                "texture_y": 467,
                 "in_front": true
               },
               {
@@ -1418,9 +1418,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,
@@ -2406,8 +2406,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1214,
-              "dy": 351,
+              "dx": -1150,
+              "dy": 324,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2522,8 +2522,8 @@
                 }
               ],
               "display_name": "vibble_eyes",
-              "dx": 46,
-              "dy": 300,
+              "dx": -1268,
+              "dy": 340,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

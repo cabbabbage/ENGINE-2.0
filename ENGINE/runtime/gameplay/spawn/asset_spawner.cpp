@@ -305,7 +305,7 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                                                 attempt_weights[idx] = 0.0;
                                                 continue;
                                         }
-                                        auto* result = batch_ctx.spawnAsset(candidate.name, candidate.info, area, spawn_pos, 0, nullptr, queue_item.spawn_id, queue_item.position);
+                                        auto* result = batch_ctx.spawnAsset(candidate.name, candidate.info, area, spawn_pos, 0, queue_item.spawn_id, queue_item.position);
                                         if (!result) {
                                                 attempt_weights[idx] = 0.0;
                                                 continue;
@@ -433,7 +433,7 @@ void AssetSpawner::run_edge_spawning(const Area& area) {
                                 continue;
                         }
 
-                        auto* result = ctx.spawnAsset(candidate->name, candidate->info, area, spawn_pos, 0, nullptr, queue_item.spawn_id, queue_item.position);
+                        auto* result = ctx.spawnAsset(candidate->name, candidate->info, area, spawn_pos, 0, queue_item.spawn_id, queue_item.position);
                         if (result) {
                                 ctx.checker().register_asset(result, enforce_spacing, false);
                         }

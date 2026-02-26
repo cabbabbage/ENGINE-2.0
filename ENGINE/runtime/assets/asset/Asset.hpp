@@ -78,21 +78,6 @@ class Asset {
         public:
     RenderCompositePackage render_package;
 
-    struct AnchorFollowTarget {
-        Asset*       source = nullptr;
-        std::string  controller_asset_id;
-        std::string  anchor_name;
-        std::string  follower_anchor_name;
-        std::optional<anchor_points::AnchorDepthPolicy> depth_policy;
-        enum class LayerPolicy {
-            MatchResolvedAnchor,
-            MatchControllerAsset
-        };
-        std::optional<LayerPolicy> layer_policy;
-
-        bool valid() const { return (source != nullptr || !controller_asset_id.empty()) && !anchor_name.empty(); }
-    };
-
     struct TilingInfo {
         bool      enabled      = false;
         SDL_Point grid_origin{0, 0};
@@ -111,11 +96,9 @@ class Asset {
           const Area& spawn_area,
           SDL_Point start_pos,
           int depth,
-          Asset* parent = nullptr,
           const std::string& spawn_id = std::string{},
           const std::string& spawn_method = std::string{},
-          int grid_resolution = 0,
-          std::optional<AnchorFollowTarget> anchor_follow = std::nullopt);
+          int grid_resolution = 0);
     Asset(const Asset& other);
     Asset& operator=(const Asset& other);
     Asset(Asset&&) noexcept = default;
@@ -231,7 +214,6 @@ class Asset {
     float smoothed_translation_y() const;
     float smoothed_scale() const;
     float smoothed_alpha() const;
-    Asset* parent = nullptr;
     std::shared_ptr<AssetInfo> info;
     std::string current_animation;
     int grid_resolution = 0;
@@ -333,11 +315,6 @@ class Asset {
     bool update_anchor_basis_if_needed();
     AnchorBasisSignature compute_anchor_basis_signature() const;
     void capture_anchor_basis_snapshot(const AnchorBasisSignature& signature);
-    void set_anchor_follow_target(std::optional<AnchorFollowTarget> follow);
-    void bind_child_to_anchor(Asset* child, const std::string& anchor_name);
-    void unbind_child_from_anchor(Asset* child);
-    const std::optional<AnchorFollowTarget>& anchor_follow_target() const { return follow_anchor_; }
-    std::uint64_t anchor_world_revision() const { return anchor_world_revision_; }
 
 public:
     static void SetFlipOverrideForSpawnId(const std::string& spawn_id, bool enabled, bool flipped);
@@ -419,18 +396,9 @@ private:
     std::vector<AnchorHandle> anchor_handles_;
     std::unordered_map<std::string, std::size_t> anchor_lookup_;
 
-    std::optional<AnchorFollowTarget> follow_anchor_{};
-    SDL_Point last_follow_world_{0, 0};
-    int last_follow_world_z_ = 0;
-    bool follow_initialized_ = false;
-    bool follow_missing_ = false;
-    bool follow_error_reported_ = false;
-    std::uint64_t last_follow_source_revision_ = 0;
     std::uint64_t anchor_world_revision_ = 1;
     AnchorBasisSignature last_anchor_basis_signature_{};
     bool anchor_basis_initialized_ = false;
-    void apply_anchor_follow_target();
-    void refresh_bound_children_anchor_follows();
 
     void refresh_filter_tags();
 

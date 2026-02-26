@@ -182,7 +182,6 @@ void EdgeSpawner::spawn(const SpawnInfo& item, const Area* area, SpawnContext& c
                                            *target_area,
                                            spawn_point,
                                            0,
-                                           nullptr,
                                            item.spawn_id,
                                            item.position)) {
             if (ctx.checks_enabled()) {

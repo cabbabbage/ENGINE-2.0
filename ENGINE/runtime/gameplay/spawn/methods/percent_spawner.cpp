@@ -72,7 +72,7 @@ void PercentSpawner::spawn(const SpawnInfo& item, const Area* area, SpawnContext
             continue;
         }
 
-        auto* result = ctx.spawnAsset(candidate->name, info, *area, final_pos, 0, nullptr, item.spawn_id, item.position);
+        auto* result = ctx.spawnAsset(candidate->name, info, *area, final_pos, 0, item.spawn_id, item.position);
         if (!result) {
             ++slots_used;
             continue;

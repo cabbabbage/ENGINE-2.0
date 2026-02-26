@@ -6280,8 +6280,7 @@ bool RoomEditor::spawn_group_locked(const std::string& spawn_id) const {
 bool RoomEditor::asset_matches_selection_filter(const Asset* asset) const {
     if (!asset) return false;
 
-    const auto& anchor_follow = asset->anchor_follow_target();
-    const bool is_anchored_asset = anchor_follow && anchor_follow->valid();
+    const bool is_anchored_asset = false;
 
     // Check if asset is a map asset
     const bool is_map_asset = !asset->spawn_id.empty() && !is_room_spawn_id(asset->spawn_id);

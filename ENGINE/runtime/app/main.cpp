@@ -864,62 +864,90 @@ void run(SDL_Window* window,
     { SDL_Event ev; while (SDL_PollEvent(&ev)) {} }
     vibble::log::info("[Main] Cached asset resources loaded.");
 
+    std::optional<MapDescriptor> autostart_map;
+    if (const char* env = std::getenv("VIBBLE_AUTOSTART_MAP")) {
+        std::string desired = env;
+        if (!desired.empty() && manifest_data.maps.is_object()) {
+            auto it = manifest_data.maps.find(desired);
+            if (it == manifest_data.maps.end() && !manifest_data.maps.empty()) {
+                vibble::log::warn(std::string("[Main] Auto-start map '") + desired + "' not found; using first available map.");
+                it = manifest_data.maps.begin();
+            }
+            if (it != manifest_data.maps.end()) {
+                MapDescriptor descriptor;
+                descriptor.id = it.key();
+                descriptor.data = it.value();
+                autostart_map = std::move(descriptor);
+            } else {
+                vibble::log::warn(std::string("[Main] VIBBLE_AUTOSTART_MAP requested '") + desired + "' but no maps are available.");
+            }
+        }
+    }
+
     while (true) {
-        MainMenu menu(renderer, screen_w, screen_h, manifest_data.maps);
-        vibble::log::info("[Main] Main menu displayed.");
         std::optional<MapDescriptor> chosen_map;
         bool quit_requested = false;
         bool should_show_loading_screen = false;
-        SDL_Event e;
-        bool choosing = true;
-        while (choosing) {
-            while (SDL_PollEvent(&e)) {
-                if (e.type == SDL_EVENT_QUIT) {
-                    quit_requested = true;
-                    choosing = false;
-                    break;
-                }
-                auto result = menu.handle_event(e);
-                if (!result) {
-                    continue;
-                }
-                if (result->id == "QUIT") {
-                    quit_requested = true;
-                    choosing = false;
-                    break;
-                }
-                if (result->id == "CREATE_NEW_MAP") {
-                    auto created = create_new_map_interactively();
-                    if (created) {
-                        chosen_map = std::move(*created);
-                        vibble::log::info(std::string("[Main] New map created and selected: ") + chosen_map->id);
+        std::unique_ptr<MainMenu> menu;
+
+        if (autostart_map) {
+            chosen_map = std::move(autostart_map);
+            should_show_loading_screen = true;
+            vibble::log::info(std::string("[Main] Auto-selecting map via VIBBLE_AUTOSTART_MAP: ") + chosen_map->id);
+        } else {
+            menu = std::make_unique<MainMenu>(renderer, screen_w, screen_h, manifest_data.maps);
+            vibble::log::info("[Main] Main menu displayed.");
+            SDL_Event e;
+            bool choosing = true;
+            while (choosing) {
+                while (SDL_PollEvent(&e)) {
+                    if (e.type == SDL_EVENT_QUIT) {
+                        quit_requested = true;
                         choosing = false;
-                        should_show_loading_screen = true;
+                        break;
                     }
-                    continue;
+                    auto result = menu->handle_event(e);
+                    if (!result) {
+                        continue;
+                    }
+                    if (result->id == "QUIT") {
+                        quit_requested = true;
+                        choosing = false;
+                        break;
+                    }
+                    if (result->id == "CREATE_NEW_MAP") {
+                        auto created = create_new_map_interactively();
+                        if (created) {
+                            chosen_map = std::move(*created);
+                            vibble::log::info(std::string("[Main] New map created and selected: ") + chosen_map->id);
+                            choosing = false;
+                            should_show_loading_screen = true;
+                        }
+                        continue;
+                    }
+                    MapDescriptor descriptor;
+                    descriptor.id   = result->id;
+                    descriptor.data = result->data;
+                    chosen_map = std::move(descriptor);
+                    vibble::log::info(std::string("[Main] Map selected: ") + chosen_map->id);
+                    choosing = false;
+                    should_show_loading_screen = true;
+                    break;
                 }
-                MapDescriptor descriptor;
-                descriptor.id   = result->id;
-                descriptor.data = result->data;
-                chosen_map = std::move(descriptor);
-                vibble::log::info(std::string("[Main] Map selected: ") + chosen_map->id);
-                choosing = false;
-                should_show_loading_screen = true;
-                break;
+                if (!choosing) {
+                    break;
+                }
+                SDL_SetRenderTarget(renderer, nullptr);
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+                SDL_RenderClear(renderer);
+                menu->render();
+                SDL_RenderPresent(renderer);
+                SDL_Delay(16);
             }
-            if (!choosing) {
-                break;
-            }
-            SDL_SetRenderTarget(renderer, nullptr);
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
-            SDL_RenderClear(renderer);
-            menu.render();
-            SDL_RenderPresent(renderer);
-            SDL_Delay(16);
         }
 
-        if (should_show_loading_screen) {
-            menu.showLoadingScreen();
+        if (should_show_loading_screen && menu) {
+            menu->showLoadingScreen();
         }
         if (quit_requested || !chosen_map) {
             break;

@@ -2,7 +2,6 @@
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "devtools/core/manifest_store.hpp"
-#include "devtools/dev_controls_persistence.hpp"
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <algorithm>
@@ -366,8 +365,12 @@ manifest_writer_(std::move(manifest_writer))
                                 payload = *entry;
                         }
                         payload = apply_mutation(std::move(payload));
-                        if (devmode::persist_map_manifest_entry(*manifest_store_, manifest_map_id_, payload, std::cerr)) {
+                        auto guard = manifest_store_->scoped_guard("Room::push_payload");
+                        bool ok = manifest_store_->update_map_entry(manifest_map_id_, payload);
+                        if (ok) {
                                 manifest_store_->flush();
+                        } else {
+                                std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
                         }
                 }
 };
@@ -1014,9 +1017,12 @@ bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
         if (manifest_writer_ && !manifest_map_id_.empty()) {
                 manifest_writer_(manifest_map_id_, payload);
         } else if (manifest_store_ && !manifest_map_id_.empty()) {
-                success = devmode::persist_map_manifest_entry(*manifest_store_, manifest_map_id_, payload, std::cerr);
+                auto guard = manifest_store_->scoped_guard("Room::apply_room_payload_for_save");
+                success = manifest_store_->update_map_entry(manifest_map_id_, payload);
                 if (success) {
                         manifest_store_->flush();
+                } else {
+                        std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
                 }
         }
 
@@ -1028,6 +1034,18 @@ bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
 
 void Room::save_assets_json() const {
         assets_save_dirty_ = true;
-        const nlohmann::json payload = build_room_payload_for_save();
-        apply_room_payload_for_save(payload);
+        // Keep mutations in-memory; SaveManager batch will persist map entry.
+        if (room_data_ptr_) {
+                *room_data_ptr_ = assets_json;
+        }
+        if (map_info_root_) {
+                if (!map_info_root_->is_object()) {
+                        *map_info_root_ = nlohmann::json::object();
+                }
+                nlohmann::json& section = (*map_info_root_)[data_section_];
+                if (!section.is_object()) {
+                        section = nlohmann::json::object();
+                }
+                section[room_name] = assets_json;
+        }
 }

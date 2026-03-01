@@ -17,7 +17,7 @@
 ## Work Plan
 
 ### 1) Inventory and Guardrails
-- [ ] Audit all call sites of enqueue_map_entry, persist_map_manifest_entry, manifest_store_->flush(), save_assets_json, persist_map_info_to_disk, save_bundle/cache save loops across editor/runtime; document per file/function.
+- [~] Audit all call sites of enqueue_map_entry, persist_map_manifest_entry, manifest_store_->flush(), save_assets_json, persist_map_info_to_disk, save_bundle/cache save loops across editor/runtime; document per file/function. *(Runtime Room, AssetsManager, MainApp, AssetLibraryUI updated; editor UI still pending audit.)*
 - [x] Add temporary logging/assert in ManifestStore and cache write paths to flag disk writes made outside SaveManager; gate Dev Mode edit callbacks against these paths. *(ManifestStore now tracks guarded writes, emits warnings, and exposes telemetry; cache paths still pending.)*
 - [~] Add metrics counters for cache miss generation and attempted direct manifest writes to ease regression detection. *(Telemetry for unguarded/asset/map writes added; cache miss metrics still TODO.)*
 
@@ -29,11 +29,11 @@
 - [x] Add loud logging for skipped or failed steps and include map_id/asset_id context for debugging. *(Guard violations now log with context.)*
 
 ### 3) MapData Model Introduction
-- Create MapData (shared runtime/editor) with typed ownership of layers/settings, rooms metadata/order/layer refs, trails, map-wide assets, boundary data, fog settings, terrain/grid settings, dev map settings.
-- Implement MapData::from_manifest_entry/to_manifest_entry adapters that round-trip unknown JSON by storing an extras blob merged back on save.
-- Add MapData dirty flag and APIs mark_dirty/is_dirty/save_self_to_manifest; ensure child objects signal MapData on mutation.
-- Replace direct mutations of Assets::map_info_json or manifest blobs in MapModeUI, MapLayersController, DevControls, RoomEditor, trail/room configurators with MapData API calls.
-- Register MapData with SaveManager so each dirty map entry is composed and written in the batch.
+- [ ] Create MapData (shared runtime/editor) with typed ownership of layers/settings, rooms metadata/order/layer refs, trails, map-wide assets, boundary data, fog settings, terrain/grid settings, dev map settings.
+- [ ] Implement MapData::from_manifest_entry/to_manifest_entry adapters that round-trip unknown JSON by storing an extras blob merged back on save.
+- [~] Add MapData dirty flag and APIs mark_dirty/is_dirty/save_self_to_manifest; ensure child objects signal MapData on mutation. *(Map-level dirty tracking added via DevControls; room/trail mark_dirty feeds SaveManager, but MapData type still absent.)*
+- [~] Replace direct mutations of Assets::map_info_json or manifest blobs in MapModeUI, MapLayersController, DevControls, RoomEditor, trail/room configurators with MapData API calls. *(UI/editors now mutate in-memory JSON and mark dirty; no direct disk writes.)*
+- [~] Register MapData with SaveManager so each dirty map entry is composed and written in the batch. *(SaveManager now owns map saveable via DevControls map_dirty flag.)*
 
 ### 4) Room and Trail Migration
 - Add mark_dirty/is_dirty/save_self_to_manifest methods to Room (and trail instances if represented as Room); ensure save_self_to_manifest writes only into the provided manifest JSON object.
@@ -41,6 +41,7 @@
 - Convert room/trail persistence from push-on-change to object-owned save; all editors call mark_dirty instead of persistence functions.
 - Replace save_assets_json call sites in RoomEditor and TrailEditorSuite with mark_dirty; register room/trail objects with SaveManager for ordered save.
 - Ensure map-wide editor callbacks mutate runtime model and call mark_dirty without disk I/O; preserve live visual refresh (regen/invalidate) decoupled from persistence.
+- [~] Partial: Room now exposes mark_dirty/is_dirty, save_assets_json is in-memory only, editors (RoomEditor/TrailEditorSuite/RoomConfigurator) now mark map dirty via callbacks; SaveManager batches map writes.
 
 ### 5) AssetInfo and Cache Handling
 - Add dirty field plus mark_dirty, save_self_to_manifest, save_self_to_cache_if_dirty to AssetInfo; cache writes occur only after manifest save succeeds.
@@ -53,7 +54,7 @@
 ### 6) Dev UI and Runtime Integration
 - Replace manifest writes in MapModeUI fog/terrain/layer callbacks with dirty-mark callbacks on MapData/rooms/trails; keep visual refresh calls intact.
 - In DevControls modals (map_assets_modal_, boundary_assets_modal_), replace persist_map_info_to_disk() with MapData::mark_dirty and in-memory mutation.
-- Remove direct calls to persist_map_manifest_entry/enqueue_map_entry from runtime/editor systems; route through SaveManager registration and dirty tracking.
+- [~] Remove direct calls to persist_map_manifest_entry/enqueue_map_entry from runtime/editor systems; route through SaveManager registration and dirty tracking. *(Runtime Room, AssetsManager, MainApp, DevSaveCoordinator now use ManifestStore with guards; editor UIs now mark dirty and batch via SaveManager.)*
 - Ensure boundary/fog/terrain/map-asset edits mark both the local object and MapData dirty because MapData owns the embedded map entry.
 - Adjust dev_save_coordinator and dev_save_coordinator.hpp to delegate to SaveManager and drop ad-hoc manifest_store_->flush usage.
 - Keep Python Frame Editor immediate save as explicit exception; document and isolate to prevent unintended batch overwrite.

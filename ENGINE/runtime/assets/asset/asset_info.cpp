@@ -671,6 +671,7 @@ bool AssetInfo::commit_manifest() {
                 auto& provider = manifest_store_provider_slot();
                 if (provider) {
                         if (auto* store = provider()) {
+                                auto guard = store->scoped_guard("AssetInfo::commit_manifest");
                                 auto txn = store->begin_asset_transaction(name, true);
                                 if (txn) {
                                         txn.data() = payload;

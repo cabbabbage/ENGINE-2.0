@@ -301,6 +301,7 @@ void Assets::save_map_info_json() {
         std::cerr << "[Assets] Unable to persist map manifest entry: manifest store unavailable.\n";
         return;
     }
+    auto guard = store->scoped_guard("Assets::save_map_info_json");
     if (!store->update_map_entry(map_id_, map_info_json_)) {
         std::cerr << "[Assets] Failed to persist map manifest entry for " << map_id_ << "\n";
         return;

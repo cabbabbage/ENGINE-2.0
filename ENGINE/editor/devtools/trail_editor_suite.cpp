@@ -22,25 +22,9 @@ bool TrailEditorSuite::enqueue_active_trail_save(devmode::core::DevSaveCoordinat
     if (!active_trail_) {
         return false;
     }
-    if (!save_coordinator_) {
-        active_trail_->save_assets_json();
-        return true;
-    }
-
-    const nlohmann::json payload = active_trail_->build_room_payload_for_save();
-    Room* trail = active_trail_;
-    const std::string label = std::string("Trail ") + active_trail_->room_name;
-    save_coordinator_->enqueue_custom(
-        devmode::core::DevSaveCoordinator::IntentKind::Custom,
-        std::string("trail:") + active_trail_->room_name,
-        [trail, payload](devmode::core::ManifestStore&) {
-            return trail ? trail->apply_room_payload_for_save(payload) : false;
-        },
-        priority,
-        label);
-    if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
-        save_coordinator_->flush_now(label);
-        return !active_trail_->has_pending_assets_save();
+    active_trail_->save_assets_json();
+    if (dirty_callback_) {
+        dirty_callback_(priority);
     }
     return true;
 }

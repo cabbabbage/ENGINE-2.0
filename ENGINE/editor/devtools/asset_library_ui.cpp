@@ -1356,6 +1356,7 @@ bool AssetLibraryUI::remove_tag_from_manifest_assets(const std::string& tag) {
     const std::string hashed = "#" + tag;
     bool manifest_changed = false;
 
+    auto guard = manifest_store_owner_->scoped_guard("AssetLibraryUI::remove_tag_from_manifest_assets");
     auto asset_views = manifest_store_owner_->assets();
     for (const auto& view : asset_views) {
         if (!view) {
@@ -1399,6 +1400,7 @@ bool AssetLibraryUI::remove_tag_from_manifest_maps(const std::string& tag) {
         return false;
     }
 
+    auto guard = manifest_store_owner_->scoped_guard("AssetLibraryUI::remove_hashtag");
     for (auto it = maps_it->begin(); it != maps_it->end(); ++it) {
         nlohmann::json map_entry = *it;
         bool updated = false;
@@ -1626,6 +1628,7 @@ void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer
             if (references_remaining) {
                 auto maps_it = manifest.find("maps");
                 if (maps_it != manifest.end() && maps_it->is_object()) {
+                    auto guard = manifest_store_owner_->scoped_guard("AssetLibraryUI::remove_asset");
                     for (auto it = maps_it->begin(); it != maps_it->end(); ++it) {
                         nlohmann::json map_entry = *it;
                         bool updated = false;
@@ -1644,6 +1647,7 @@ void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer
 
                 auto assets_it = manifest.find("assets");
                 if (assets_it != manifest.end() && assets_it->is_object()) {
+                    auto guard_assets = manifest_store_owner_->scoped_guard("AssetLibraryUI::remove_asset.assets");
                     for (auto it = assets_it->begin(); it != assets_it->end(); ++it) {
                         const std::string& referenced_asset = it.key();
                         auto transaction = manifest_store_owner_->begin_asset_transaction(referenced_asset);

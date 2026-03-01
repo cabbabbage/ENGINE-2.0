@@ -58,6 +58,10 @@ public:
     void set_manifest_store(devmode::core::ManifestStore* store);
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
     void set_save_manager(devmode::core::SaveManager* manager);
+    void set_dirty_callback(std::function<void(devmode::core::DevSaveCoordinator::Priority)> cb) { dirty_callback_ = std::move(cb); }
+    void set_on_saved(std::function<void()> cb) { on_saved_ = std::move(cb); }
+    void mark_layers_clean();
+    void notify_saved();
 
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
@@ -151,6 +155,8 @@ private:
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
     devmode::core::SaveManager* save_manager_ = nullptr;
+    std::function<void(devmode::core::DevSaveCoordinator::Priority)> dirty_callback_;
+    std::function<void()> on_saved_;
     std::unique_ptr<MapLayersPreviewPanel> layers_preview_panel_;
     std::shared_ptr<MapLayersController> layers_controller_;
     std::unique_ptr<SlidingWindowContainer> room_config_container_;

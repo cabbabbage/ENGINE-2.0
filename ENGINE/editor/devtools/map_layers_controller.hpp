@@ -25,6 +25,7 @@ public:
     void set_manifest_store(devmode::core::ManifestStore* store, std::string map_id);
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
     void set_save_manager(devmode::core::SaveManager* manager);
+    void set_dirty_callback(std::function<void(devmode::core::DevSaveCoordinator::Priority)> cb) { dirty_callback_ = std::move(cb); }
 
     ListenerId add_listener(Listener cb);
     void remove_listener(ListenerId id);
@@ -81,6 +82,7 @@ private:
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
     devmode::core::SaveManager* save_manager_ = nullptr;
+    std::function<void(devmode::core::DevSaveCoordinator::Priority)> dirty_callback_;
     bool dirty_ = false;
     ListenerId next_listener_id_ = 1;
     std::vector<ListenerEntry> listeners_;

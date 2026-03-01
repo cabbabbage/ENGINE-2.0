@@ -36,6 +36,7 @@ public:
     void set_on_open_area(std::function<void(const std::string&, const std::string&)> cb,
                           std::string stack_key = {});
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator) { save_coordinator_ = coordinator; }
+    void set_dirty_callback(std::function<void(devmode::core::DevSaveCoordinator::Priority)> cb) { dirty_callback_ = std::move(cb); }
 
 private:
     void ensure_ui();
@@ -55,6 +56,7 @@ private:
     std::function<void(const std::string&, const std::string&)> on_open_area_{};
     std::string open_area_stack_key_{};
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
+    std::function<void(devmode::core::DevSaveCoordinator::Priority)> dirty_callback_;
 };
 
 

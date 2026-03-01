@@ -63,6 +63,7 @@ public:
     void set_manifest_store(devmode::core::ManifestStore* store);
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
     void set_save_manager(devmode::core::SaveManager* manager);
+    void set_map_dirty_callback(std::function<void(devmode::core::DevSaveCoordinator::Priority)> cb) { mark_map_dirty_callback_ = std::move(cb); }
 
     void set_enabled(bool enabled, bool preserve_camera_state = false);
     bool is_enabled() const { return enabled_; }
@@ -398,6 +399,7 @@ private:
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
     devmode::core::SaveManager* save_manager_ = nullptr;
+    std::function<void(devmode::core::DevSaveCoordinator::Priority)> mark_map_dirty_callback_;
     int drag_perimeter_curr_h_ = 0;
     bool drag_moved_ = false;
     std::string drag_spawn_id_;

@@ -272,6 +272,7 @@ void MainApp::setup() {
                         try {
                                 devmode::core::ManifestStore store;
                                 store.reload();
+                                auto guard = store.scoped_guard("MainApp::content_root_rewrite");
                                 if (!store.update_map_entry(map_identifier, map_manifest_json)) {
                                         vibble::log::warn(std::string("[MainApp] Failed to persist manifest entry for '") + map_identifier + "'.");
                                 } else {
@@ -808,6 +809,7 @@ std::optional<MapDescriptor> create_new_map_interactively() {
             music_section["tracks"] = nlohmann::json::array();
         }
 
+        auto guard = manifest_store.scoped_guard("MainApp::create_map");
         if (!manifest_store.update_map_entry(*sanitized, map_info)) {
             tinyfd_messageBox("Error Creating Map", "Failed to update manifest for new map.", "ok", "error", 0);
             continue;

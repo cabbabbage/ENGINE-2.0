@@ -53,7 +53,6 @@
 #include "dm_styles.hpp"
 #include "draw_utils.hpp"
 #include "widgets.hpp"
-#include "dev_controls_persistence.hpp"
 #include "rendering/render/render.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 
@@ -783,18 +782,48 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         map_mode_ui_->set_manifest_store(&manifest_store_);
         map_mode_ui_->set_save_coordinator(&save_coordinator_);
         map_mode_ui_->set_save_manager(&save_manager_);
+        map_mode_ui_->set_dirty_callback([this](devmode::core::DevSaveCoordinator::Priority priority) {
+            this->mark_map_dirty(priority);
+        });
+        map_mode_ui_->set_on_saved([this]() {
+            if (room_editor_) {
+                room_editor_->notify_room_assets_saved();
+            }
+            if (map_mode_ui_) {
+                map_mode_ui_->mark_layers_clean();
+            }
+        });
         save_manager_.register_saveable({
             "map-session",
-            [this]() { return manifest_store_.dirty(); },
+            [this]() { return map_dirty_; },
             [this](devmode::core::DevSaveCoordinator::Priority priority) {
-                if (!this->persist_map_info_to_disk()) {
+                if (!assets_) {
                     return false;
                 }
-                if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
+                const std::string map_id = assets_->map_id();
+                if (map_id.empty()) {
+                    std::cerr << "[DevControls] Cannot batch-save map: id empty\n";
+                    return false;
+                }
+                nlohmann::json payload = assets_->map_info_json();
+                bool ok = save_manager_.persist_map_entry(
+                    map_id, std::move(payload), priority, "Map session",
+                    [this]() {
+                        map_dirty_ = false;
+                        if (map_mode_ui_) map_mode_ui_->mark_layers_clean();
+                        if (map_mode_ui_) map_mode_ui_->notify_saved();
+                        if (room_editor_) room_editor_->notify_room_assets_saved();
+                    });
+                if (ok && priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
                     save_coordinator_.flush_now("Map session save");
                 }
-                return true;
-            }});
+                if (ok && priority != devmode::core::DevSaveCoordinator::Priority::Immediate) {
+                    // Clear flag here; success callback will also clear but that's fine.
+                    map_dirty_ = false;
+                }
+                return ok;
+            },
+            devmode::core::SaveManager::Stage::Manifest});
     }
     map_grid_regen_cb_ = [this]() { this->regenerate_map_grid_assets(); };
     apply_header_suppression();
@@ -841,6 +870,9 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     }
     if (room_editor_ && map_mode_ui_) {
         room_editor_->set_shared_footer_bar(map_mode_ui_->get_footer_bar());
+        room_editor_->set_map_dirty_callback([this](devmode::core::DevSaveCoordinator::Priority priority) {
+            this->mark_map_dirty(priority);
+        });
     }
 
     if (map_mode_ui_) {
@@ -902,6 +934,9 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     if (trail_suite_) {
         trail_suite_->set_screen_dimensions(screen_w_, screen_h_);
         trail_suite_->set_save_coordinator(&save_coordinator_);
+        trail_suite_->set_dirty_callback([this](devmode::core::DevSaveCoordinator::Priority priority) {
+            this->mark_map_dirty(priority);
+        });
     }
     other_settings_.initialize();
     other_settings_.set_assets_context(assets_);
@@ -1010,6 +1045,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
 
 DevControls::~DevControls() {
     restore_filter_hidden_assets();
+    save_manager_.save_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate, "shutdown");
     save_coordinator_.flush_now("shutdown");
     manifest_store_.flush();
     devmode::ui_settings::flush_if_dirty();
@@ -1247,12 +1283,8 @@ void DevControls::set_rooms(std::vector<Room*>* rooms, std::size_t generation) {
         for (Room* room : *rooms_) {
             if (!room) continue;
             room->set_manifest_store(&manifest_store_, map_id, map_info,
-                                     [this](const std::string& id, const nlohmann::json& payload) {
-                                         save_manager_.persist_map_entry(
-                                             id,
-                                             payload,
-                                             devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                             "Room edit");
+                                     [this](const std::string&, const nlohmann::json&) {
+                                         this->mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
                                      });
         }
     }
@@ -1280,11 +1312,9 @@ void DevControls::set_map_context(nlohmann::json* map_info, const std::string& m
             if (!room) continue;
             room->set_manifest_store(&manifest_store_, map_id, info,
                                      [this](const std::string& id, const nlohmann::json& payload) {
-                                         save_manager_.persist_map_entry(
-                                             id,
-                                             payload,
-                                             devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                             "Room edit");
+                                         (void)id;
+                                         (void)payload;
+                                         this->mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
                                      });
         }
     }
@@ -3397,6 +3427,13 @@ void DevControls::notify_spawn_group_removed(const std::string& spawn_id) {
     Asset::ClearFlipOverrideForSpawnId(spawn_id);
 }
 
+void DevControls::mark_map_dirty(devmode::core::DevSaveCoordinator::Priority priority) {
+    map_dirty_ = true;
+    if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
+        save_manager_.save_dirty(priority, "Immediate map change");
+    }
+}
+
 const std::vector<Asset*>& DevControls::get_selected_assets() const {
     static std::vector<Asset*> empty;
     if (world_mutation_in_progress_ || !can_use_room_editor_ui()) return empty;
@@ -4680,11 +4717,8 @@ bool DevControls::persist_map_info_to_disk() {
         std::cerr << "[DevControls] Cannot persist map info: map id empty\n";
         return false;
     }
-    nlohmann::json payload = assets_->map_info_json();
-    return save_manager_.persist_map_entry(map_id,
-                                           std::move(payload),
-                                           devmode::core::DevSaveCoordinator::Priority::Immediate,
-                                           "Manual map save");
+    mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate);
+    return true;
 }
 
 void DevControls::render_grid_resolution_toast(SDL_Renderer* renderer) {

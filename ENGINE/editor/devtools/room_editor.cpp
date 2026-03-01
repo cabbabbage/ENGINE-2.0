@@ -364,31 +364,10 @@ bool RoomEditor::enqueue_current_room_save(devmode::core::DevSaveCoordinator::Pr
         return false;
     }
 
-    const nlohmann::json payload = current_room_->build_room_payload_for_save();
-
-    if (save_coordinator_ && manifest_store_ && assets_) {
-        const std::string label = std::string("Room ") + current_room_->room_name;
-        Room* room = current_room_;
-        save_coordinator_->enqueue_custom(
-            devmode::core::DevSaveCoordinator::IntentKind::Custom,
-            std::string("room:") + current_room_->room_name,
-            [room, payload](devmode::core::ManifestStore&) {
-                return room ? room->apply_room_payload_for_save(payload) : false;
-            },
-            priority,
-            label,
-            [this]() { notify_room_assets_saved(); });
-        if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
-            save_coordinator_->flush_now(label);
-            if (current_room_->has_pending_assets_save()) {
-                show_notice("Save failed; room changes remain dirty and will be retried.");
-                return false;
-            }
-        }
-        return true;
-    }
-
     current_room_->save_assets_json();
+    if (mark_map_dirty_callback_) {
+        mark_map_dirty_callback_(priority);
+    }
     notify_room_assets_saved();
     return true;
 }
@@ -4311,10 +4290,8 @@ std::string RoomEditor::rename_active_room(const std::string& old_name, const st
     if (final_key != current_room_->room_name) {
         current_room_->rename(final_key, map_info);
         map_layers::rename_room_references_in_layers(map_info, old_name, final_key);
-        if (save_manager_ && assets_) {
-            save_manager_->persist_map_entry(assets_->map_id(), map_info,
-                                             devmode::core::DevSaveCoordinator::Priority::Debounced,
-                                             "Room rename");
+        if (mark_map_dirty_callback_) {
+            mark_map_dirty_callback_(devmode::core::DevSaveCoordinator::Priority::Debounced);
         }
         rebuild_room_spawn_id_cache();
         invalidate_label_cache(current_room_);

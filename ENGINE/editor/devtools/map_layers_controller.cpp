@@ -3,7 +3,6 @@
 #include "map_layers_common.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "devtools/core/manifest_store.hpp"
-#include "devtools/core/save_manager.hpp"
 #include "utils/display_color.hpp"
 
 #include <SDL3/SDL.h>
@@ -85,26 +84,11 @@ void MapLayersController::clear_listeners() {
 
 bool MapLayersController::save(devmode::core::DevSaveCoordinator::Priority priority) {
     if (!map_info_) return false;
-    if (!manifest_store_) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapLayersController] Cannot save map info: manifest store is not available.");
-        return false;
+    dirty_ = true;
+    if (dirty_callback_) {
+        dirty_callback_(priority);
     }
-    if (map_id_.empty()) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapLayersController] Cannot save map info: map identifier is empty.");
-        return false;
-    }
-
-    nlohmann::json payload = *map_info_;
-    auto on_success = [this]() {
-        mark_clean();
-        notify();
-    };
-
-    if (!save_manager_) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapLayersController] Cannot save map info: save manager is not available.");
-        return false;
-    }
-    return save_manager_->persist_map_entry(map_id_, std::move(payload), priority, "Map layers", on_success);
+    return true;
 }
 
 bool MapLayersController::reload() {

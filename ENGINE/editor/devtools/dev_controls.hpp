@@ -106,6 +106,8 @@ public:
     [[nodiscard]] const devmode::core::ManifestStore& manifest_store() const;
     [[nodiscard]] devmode::core::DevSaveCoordinator& save_coordinator();
     [[nodiscard]] const devmode::core::DevSaveCoordinator& save_coordinator() const;
+    void mark_map_dirty(devmode::core::DevSaveCoordinator::Priority priority =
+                            devmode::core::DevSaveCoordinator::Priority::Debounced);
 
     void toggle_room_config();
     void close_room_config();
@@ -369,6 +371,7 @@ private:
     devmode::core::ManifestStore manifest_store_;
     devmode::core::DevSaveCoordinator save_coordinator_;
     devmode::core::SaveManager save_manager_;
+    bool map_dirty_ = false;
     OtherSettingsAndControls other_settings_;
 
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;

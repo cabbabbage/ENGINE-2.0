@@ -124,6 +124,21 @@ void MapModeUI::set_save_manager(devmode::core::SaveManager* manager) {
     }
 }
 
+void MapModeUI::mark_layers_clean() {
+    if (layers_controller_) {
+        layers_controller_->mark_clean();
+    }
+    if (layers_panel_) {
+        layers_panel_->mark_dirty(false);
+    }
+}
+
+void MapModeUI::notify_saved() {
+    if (on_saved_) {
+        on_saved_();
+    }
+}
+
 void MapModeUI::set_map_context(nlohmann::json* map_info, const std::string& map_path) {
     map_info_ = map_info;
     map_path_ = map_path;
@@ -530,6 +545,9 @@ void MapModeUI::ensure_panels() {
         layers_controller_->set_manifest_store(manifest_store_, map_id_);
         layers_controller_->set_save_coordinator(save_coordinator_);
         layers_controller_->set_save_manager(save_manager_);
+        layers_controller_->set_dirty_callback([this](devmode::core::DevSaveCoordinator::Priority priority) {
+            if (dirty_callback_) dirty_callback_(priority);
+        });
     }
     if (!layers_panel_) {
         layers_panel_ = std::make_unique<MapLayersPanel>();
@@ -1413,30 +1431,18 @@ bool MapModeUI::is_terrain_panel_visible() const {
 
 bool MapModeUI::save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority priority) const {
     if (!map_info_) return false;
-    if (!manifest_store_) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapModeUI] Cannot save map info: manifest store is not available.");
-        return false;
+    if (dirty_callback_) {
+        dirty_callback_(priority);
+        return true;
     }
-    if (map_id_.empty()) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapModeUI] Cannot save map info: map identifier is empty.");
-        return false;
-    }
-    nlohmann::json payload = *map_info_;
-    const std::string label = std::string("Map ") + map_id_;
-    if (!save_manager_) {
-        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapModeUI] Cannot save map info: save manager is not available.");
-        return false;
-    }
-    return save_manager_->persist_map_entry(map_id_, std::move(payload), priority, label);
+    return false;
 }
 
 bool MapModeUI::auto_save_layers_data() {
     bool saved = false;
-    if (layers_controller_) {
-        saved = layers_controller_->save(devmode::core::DevSaveCoordinator::Priority::Debounced);
-    }
-    if (!saved) {
-        saved = save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority::Debounced);
+    if (dirty_callback_) {
+        dirty_callback_(devmode::core::DevSaveCoordinator::Priority::Debounced);
+        saved = true;
     }
     if (rooms_display_) {
         rooms_display_->refresh();

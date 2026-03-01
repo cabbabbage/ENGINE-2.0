@@ -125,7 +125,8 @@ class Asset {
         return cached_h;
     }
     float runtime_height_px() const;
-    void move_to_world_position(int world_x, int world_y, int world_z = 0);
+    void move_to_world_position(int world_x, int world_y, int world_z = 0,
+                                std::optional<int> resolution_layer_override = std::nullopt);
     void set_world_z(int world_z);
 
     void update();

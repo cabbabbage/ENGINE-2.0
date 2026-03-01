@@ -124,6 +124,10 @@ void AnchorBoundAssetHelper::unbind(const std::string& child_asset_id) {
 
 void AnchorBoundAssetHelper::update() {
     if (!controller_) return;
+
+    // Ensure anchor handles are recomputed every frame so children stay glued to moving anchors.
+    controller_->mark_anchors_dirty();
+
     for (auto& [id, state] : children_) {
         if (!state.active) continue;
         if (state.ticks_remaining > 0) {
@@ -189,7 +193,7 @@ bool AnchorBoundAssetHelper::attach_child(const std::string& id, ChildState& sta
     vibble::log::debug("[AnchorBinder] resolving anchor '" + anchor_name + "' for '" + id + "'");
     auto resolved = controller_->anchor_state(anchor_name,
                                               anchor_points::GridMaterialization::Ensure,
-                                              anchor_points::AnchorDepthPolicy::MatchOwner);
+                                              std::nullopt);
     vibble::log::debug("[AnchorBinder] anchor resolved: missing=" + std::string(resolved && resolved->missing ? "true" : "false"));
     if (!resolved.has_value() || resolved->missing || !resolved->has_canonical_texture_source) {
         // Keep hidden until anchor exists.
@@ -197,8 +201,18 @@ bool AnchorBoundAssetHelper::attach_child(const std::string& id, ChildState& sta
         return true;
     }
 
-    child->move_to_world_position(resolved->world_px.x, resolved->world_px.y, resolved->world_z);
-    child->grid_resolution = resolved->resolution_layer;
+    const bool needs_move =
+        child->world_x() != resolved->world_px.x ||
+        child->world_y() != resolved->world_px.y ||
+        child->world_z() != resolved->world_z ||
+        child->grid_resolution != resolved->resolution_layer;
+
+    if (needs_move) {
+        child->move_to_world_position(resolved->world_px.x,
+                                      resolved->world_px.y,
+                                      resolved->world_z,
+                                      resolved->resolution_layer);
+    }
 
     child->set_hidden(false);
     child->set_anchor_hidden(false);

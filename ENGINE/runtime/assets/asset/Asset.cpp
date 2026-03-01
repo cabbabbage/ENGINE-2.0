@@ -1025,7 +1025,8 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 return;
         }
         const AnimationFrame* frame = owner->current_frame;
-        auto mark_missing = [&](const std::string& reason) {
+        auto mark_missing = [&](const std::string& reason, bool keep_dirty = true) {
+                (void)reason;
                 grid = nullptr;
                 world_px = SDL_Point{0, 0};
                 world_z = 0;
@@ -1034,7 +1035,7 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 in_front = true;
                 source_texture_px = SDL_Point{0, 0};
                 has_canonical_texture_source = false;
-                dirty = false;
+                dirty = keep_dirty;
         };
 
         if (!frame) {
@@ -1132,11 +1133,16 @@ float Asset::smoothed_alpha() const {
         return std::clamp(value, 0.0f, 1.0f);
 }
 
-void Asset::move_to_world_position(int world_x, int world_y, int world_z) {
+void Asset::move_to_world_position(int world_x,
+                                   int world_y,
+                                   int world_z,
+                                   std::optional<int> resolution_layer_override) {
     if (!assets_) return;
 
     world::WorldGrid& grid = assets_->world_grid();
-    const int resolved_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+    const int resolved_layer = resolution_layer_override.has_value()
+        ? vibble::grid::clamp_resolution(*resolution_layer_override)
+        : (pos_ ? pos_->resolution_layer() : grid_resolution);
     world::GridPoint& target = world::GridPoint::from_world(world_x, world_y, world_z, resolved_layer, grid);
 
     if (pos_) {
@@ -1144,10 +1150,11 @@ void Asset::move_to_world_position(int world_x, int world_y, int world_z) {
     } else {
         const int start_x = world_x + 1; // force placement when no previous grid residency
         const int start_y = world_y + 1;
-        world::GridPoint virtual_start = world::GridPoint::make_virtual(start_x, start_y, world_z, grid_resolution);
+        world::GridPoint virtual_start = world::GridPoint::make_virtual(start_x, start_y, world_z, resolved_layer);
         grid.move_asset(this, virtual_start, target);
     }
 
+    grid_resolution = resolved_layer;
     mark_anchors_dirty();
 }
 

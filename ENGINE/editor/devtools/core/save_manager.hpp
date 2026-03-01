@@ -45,9 +45,12 @@ public:
                            std::function<void()> on_success = {});
 
 private:
+    bool flush_manifest_stage(const std::string& reason);
+
     ManifestStore* store_ = nullptr;
     DevSaveCoordinator* coordinator_ = nullptr;
     std::vector<Saveable> saveables_;
+    bool batch_save_active_ = false;
 };
 
 }

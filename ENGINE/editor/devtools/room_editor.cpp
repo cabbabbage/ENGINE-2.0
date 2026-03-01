@@ -364,7 +364,7 @@ bool RoomEditor::enqueue_current_room_save(devmode::core::DevSaveCoordinator::Pr
         return false;
     }
 
-    current_room_->save_assets_json();
+    current_room_->mark_dirty();
     if (mark_map_dirty_callback_) {
         mark_map_dirty_callback_(priority);
     }

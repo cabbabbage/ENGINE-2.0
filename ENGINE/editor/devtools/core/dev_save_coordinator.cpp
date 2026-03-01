@@ -41,6 +41,40 @@ std::string summarize_labels(const std::vector<std::string>& labels) {
 
 DevSaveCoordinator::DevSaveCoordinator() = default;
 
+
+DevSaveCoordinator::ScopedFlushSuppression::ScopedFlushSuppression(ScopedFlushSuppression&& other) noexcept {
+    coordinator_ = other.coordinator_;
+    active_ = other.active_;
+    other.coordinator_ = nullptr;
+    other.active_ = false;
+}
+
+DevSaveCoordinator::ScopedFlushSuppression& DevSaveCoordinator::ScopedFlushSuppression::operator=(ScopedFlushSuppression&& other) noexcept {
+    if (this != &other) {
+        release();
+        coordinator_ = other.coordinator_;
+        active_ = other.active_;
+        other.coordinator_ = nullptr;
+        other.active_ = false;
+    }
+    return *this;
+}
+
+DevSaveCoordinator::ScopedFlushSuppression::~ScopedFlushSuppression() {
+    release();
+}
+
+void DevSaveCoordinator::ScopedFlushSuppression::release() {
+    if (!active_ || !coordinator_) {
+        return;
+    }
+    if (coordinator_->flush_suppression_depth_ > 0) {
+        --coordinator_->flush_suppression_depth_;
+    }
+    coordinator_ = nullptr;
+    active_ = false;
+}
+
 void DevSaveCoordinator::set_manifest_store(ManifestStore* store) {
     store_ = store;
 }
@@ -142,7 +176,7 @@ void DevSaveCoordinator::enqueue_custom(IntentKind kind,
 
     schedule_deadline(intents_[index_[key]]);
 
-    if (priority == Priority::Immediate) {
+    if (priority == Priority::Immediate && flush_suppression_depth_ == 0) {
         flush_now(label);
     }
 }
@@ -159,7 +193,15 @@ void DevSaveCoordinator::tick() {
 }
 
 void DevSaveCoordinator::flush_now(const std::string& reason) {
+    if (flush_suppression_depth_ > 0) {
+        return;
+    }
     process(true, reason);
+}
+
+DevSaveCoordinator::ScopedFlushSuppression DevSaveCoordinator::scoped_flush_suppression() {
+    ++flush_suppression_depth_;
+    return ScopedFlushSuppression(this, true);
 }
 
 bool DevSaveCoordinator::process(bool force, const std::string& reason) {

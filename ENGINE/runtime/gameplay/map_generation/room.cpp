@@ -1032,20 +1032,3 @@ bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
         return success;
 }
 
-void Room::save_assets_json() const {
-        assets_save_dirty_ = true;
-        // Keep mutations in-memory; SaveManager batch will persist map entry.
-        if (room_data_ptr_) {
-                *room_data_ptr_ = assets_json;
-        }
-        if (map_info_root_) {
-                if (!map_info_root_->is_object()) {
-                        *map_info_root_ = nlohmann::json::object();
-                }
-                nlohmann::json& section = (*map_info_root_)[data_section_];
-                if (!section.is_object()) {
-                        section = nlohmann::json::object();
-                }
-                section[room_name] = assets_json;
-        }
-}

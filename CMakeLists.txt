@@ -270,6 +270,7 @@ add_executable(engine_tests
     ENGINE/runtime/utils/utils/log.cpp
     ENGINE/runtime/utils/utils/cache_manager.cpp
     ENGINE/runtime/utils/utils/loading_status_notifier.cpp
+    ENGINE/tests/test_map_data.cpp
   )
 
 target_include_directories(engine_tests

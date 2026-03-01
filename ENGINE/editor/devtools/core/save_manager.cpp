@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <unordered_set>
 
 #include <nlohmann/json.hpp>
 
@@ -63,6 +64,14 @@ bool SaveManager::has_dirty_saveables() const {
     return false;
 }
 
+bool SaveManager::flush_manifest_stage(const std::string& reason) {
+    if (!store_ || !coordinator_) {
+        return false;
+    }
+    coordinator_->flush_now(reason.empty() ? "SaveManager manifest stage" : reason);
+    return true;
+}
+
 bool SaveManager::save_dirty(DevSaveCoordinator::Priority priority, const std::string& reason) {
     bool any_saved = false;
     ManifestStore::ScopedWriteGuard guard;
@@ -80,21 +89,84 @@ bool SaveManager::save_dirty(DevSaveCoordinator::Priority priority, const std::s
     }
 
     std::sort(dirty.begin(), dirty.end(), [](const auto& a, const auto& b) {
+        if (a.get().stage == b.get().stage) {
+            return a.get().id < b.get().id;
+        }
         return static_cast<int>(a.get().stage) < static_cast<int>(b.get().stage);
     });
 
-    for (const auto& ref : dirty) {
-        const Saveable& saveable = ref.get();
-        if (saveable.save && saveable.save(priority)) {
-            any_saved = true;
+    std::unordered_set<std::string> manifest_success;
+    manifest_success.reserve(dirty.size());
+
+    batch_save_active_ = true;
+
+    // Stage 1: Manifest
+    {
+        const auto suppression = coordinator_ ? coordinator_->scoped_flush_suppression()
+                                              : DevSaveCoordinator::ScopedFlushSuppression{};
+        for (const auto& ref : dirty) {
+            const Saveable& saveable = ref.get();
+            if (saveable.stage != Stage::Manifest) {
+                continue;
+            }
+            if (saveable.save && saveable.save(priority)) {
+                manifest_success.insert(saveable.id);
+                any_saved = true;
+            }
         }
     }
 
-    if (coordinator_ && priority == DevSaveCoordinator::Priority::Immediate) {
-        coordinator_->flush_now(reason);
-    } else if (!coordinator_ && store_ && priority == DevSaveCoordinator::Priority::Immediate) {
-        store_->flush();
+    if (!manifest_success.empty()) {
+        if (coordinator_) {
+            flush_manifest_stage(reason.empty() ? "SaveManager manifest flush" : reason);
+        } else if (store_) {
+            store_->flush();
+        }
     }
+
+    // Stage 2: Cache (only entries with successful manifest stage)
+    {
+        const auto suppression = coordinator_ ? coordinator_->scoped_flush_suppression()
+                                              : DevSaveCoordinator::ScopedFlushSuppression{};
+        for (const auto& ref : dirty) {
+            const Saveable& saveable = ref.get();
+            if (saveable.stage != Stage::Cache) {
+                continue;
+            }
+            if (manifest_success.find(saveable.id) == manifest_success.end()) {
+                continue;
+            }
+            if (saveable.save && saveable.save(priority)) {
+                any_saved = true;
+            }
+        }
+    }
+
+    // Stage 3: Post
+    {
+        const auto suppression = coordinator_ ? coordinator_->scoped_flush_suppression()
+                                              : DevSaveCoordinator::ScopedFlushSuppression{};
+        for (const auto& ref : dirty) {
+            const Saveable& saveable = ref.get();
+            if (saveable.stage != Stage::Post) {
+                continue;
+            }
+            if (saveable.save && saveable.save(priority)) {
+                any_saved = true;
+            }
+        }
+    }
+
+    batch_save_active_ = false;
+
+    if (priority == DevSaveCoordinator::Priority::Immediate) {
+        if (coordinator_) {
+            coordinator_->flush_now(reason.empty() ? "SaveManager immediate completion" : reason);
+        } else if (store_) {
+            store_->flush();
+        }
+    }
+
     return any_saved;
 }
 
@@ -106,6 +178,20 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
     if (map_id.empty()) {
         std::cerr << "[SaveManager] Map identifier is empty; cannot persist map entry\n";
         return false;
+    }
+
+    if (batch_save_active_) {
+        if (!store_) {
+            std::cerr << "[SaveManager] Manifest store unavailable; cannot persist map entry\n";
+            return false;
+        }
+        if (!store_->update_map_entry(map_id, payload)) {
+            return false;
+        }
+        if (on_success) {
+            on_success();
+        }
+        return true;
     }
 
     if (coordinator_) {
@@ -135,12 +221,12 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
         return false;
     }
     if (priority == DevSaveCoordinator::Priority::Immediate) {
-        auto guard = store_->scoped_guard("SaveManager::persist_map_entry");
-        (void)guard;
+        auto immediate_guard = store_->scoped_guard("SaveManager::persist_map_entry");
+        (void)immediate_guard;
         store_->flush();
-        if (on_success) {
-            on_success();
-        }
+    }
+    if (on_success) {
+        on_success();
     }
     return true;
 }

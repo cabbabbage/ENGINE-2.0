@@ -97,7 +97,6 @@ class Room {
     nlohmann::json build_room_payload_for_save() const;
     bool apply_room_payload_for_save(const nlohmann::json& payload) const;
     bool has_pending_assets_save() const { return assets_save_dirty_; }
-    void save_assets_json() const;
     void mark_dirty() const { assets_save_dirty_ = true; }
     bool is_dirty() const { return assets_save_dirty_; }
     bool is_spawn_room() const;

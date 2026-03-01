@@ -38,9 +38,9 @@ public:
     void clear();
 
     // Get statistics for profiling
-    size_t getBatchCount() const;
     size_t getDrawCallCount() const { return draw_call_count_; }
     size_t getTotalVertices() const { return total_vertices_; }
+    double getLastFlushCpuMs() const { return last_flush_cpu_ms_; }
 
 private:
     struct DrawItem {
@@ -54,6 +54,7 @@ private:
     std::vector<DrawItem> draw_list_;
     size_t draw_call_count_ = 0;
     size_t total_vertices_ = 0;
+    double last_flush_cpu_ms_ = 0.0;
 
     // Reusable buffers to avoid allocations
     std::vector<SDL_Vertex> vertex_buffer_;

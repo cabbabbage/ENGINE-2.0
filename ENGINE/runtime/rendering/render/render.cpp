@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -15,7 +16,6 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
-#include <unordered_set>
 #include <vector>
 
 #include <SDL3_image/SDL_image.h>
@@ -73,8 +73,11 @@ void GeometryBatcher::addQuad(SDL_Texture* texture, const SDL_Vertex vertices[4]
 
 void GeometryBatcher::flush() {
     if (draw_list_.empty()) {
+        last_flush_cpu_ms_ = 0.0;
         return;
     }
+
+    const auto flush_start = std::chrono::steady_clock::now();
 
     draw_call_count_ = 0;
     total_vertices_ = 0;
@@ -82,51 +85,13 @@ void GeometryBatcher::flush() {
     // Static quad indices pattern (0,1,2, 0,2,3)
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
-    // Sort all quads globally by depth (highest depth = furthest = rendered first)
-    std::sort(draw_list_.begin(), draw_list_.end(),
-              [](const DrawItem& a, const DrawItem& b) {
-                  return a.depth > b.depth;
-              });
+    vertex_buffer_.clear();
+    index_buffer_.clear();
 
-    // Now render in depth order, batching consecutive quads with same texture+blend
-    size_t i = 0;
-    while (i < draw_list_.size()) {
-        SDL_Texture* current_texture = draw_list_[i].texture;
-        SDL_BlendMode current_blend = draw_list_[i].blend_mode;
-
-        // Find run of consecutive quads with same texture+blend
-        size_t run_end = i;
-        while (run_end < draw_list_.size() &&
-               draw_list_[run_end].texture == current_texture &&
-               draw_list_[run_end].blend_mode == current_blend) {
-            ++run_end;
+    auto emit_current_batch = [&](SDL_Texture* current_texture, SDL_BlendMode current_blend) {
+        if (!current_texture || vertex_buffer_.empty() || index_buffer_.empty()) {
+            return;
         }
-
-        // Build vertex and index buffers for this run
-        vertex_buffer_.clear();
-        index_buffer_.clear();
-        const size_t run_length = run_end - i;
-        vertex_buffer_.reserve(run_length * 4);
-        index_buffer_.reserve(run_length * 6);
-
-        for (size_t j = i; j < run_end; ++j) {
-            const auto& quad = draw_list_[j];
-            const int base_index = static_cast<int>(vertex_buffer_.size());
-
-            vertex_buffer_.push_back(quad.vertices[0]);
-            vertex_buffer_.push_back(quad.vertices[1]);
-            vertex_buffer_.push_back(quad.vertices[2]);
-            vertex_buffer_.push_back(quad.vertices[3]);
-
-            index_buffer_.push_back(base_index + kQuadIndices[0]);
-            index_buffer_.push_back(base_index + kQuadIndices[1]);
-            index_buffer_.push_back(base_index + kQuadIndices[2]);
-            index_buffer_.push_back(base_index + kQuadIndices[3]);
-            index_buffer_.push_back(base_index + kQuadIndices[4]);
-            index_buffer_.push_back(base_index + kQuadIndices[5]);
-        }
-
-        // Draw this run
         SDL_SetTextureBlendMode(current_texture, current_blend);
         SDL_RenderGeometry(renderer_,
                            current_texture,
@@ -138,31 +103,62 @@ void GeometryBatcher::flush() {
         ++draw_call_count_;
         total_vertices_ += vertex_buffer_.size();
 
-        i = run_end;
+        vertex_buffer_.clear();
+        index_buffer_.clear();
+    };
+
+    SDL_Texture* current_texture = nullptr;
+    SDL_BlendMode current_blend = SDL_BLENDMODE_BLEND;
+
+    double previous_depth = draw_list_.front().depth;
+    bool has_previous_depth = false;
+
+    for (const auto& quad : draw_list_) {
+#ifndef NDEBUG
+        if (has_previous_depth && quad.depth > previous_depth) {
+            SDL_assert(!"GeometryBatcher::flush draw_list_ depth is not monotonic (expected descending order)");
+        }
+#endif
+        previous_depth = quad.depth;
+        has_previous_depth = true;
+
+        if (!current_texture) {
+            current_texture = quad.texture;
+            current_blend = quad.blend_mode;
+        }
+
+        if (quad.texture != current_texture || quad.blend_mode != current_blend) {
+            emit_current_batch(current_texture, current_blend);
+            current_texture = quad.texture;
+            current_blend = quad.blend_mode;
+        }
+
+        const int base_index = static_cast<int>(vertex_buffer_.size());
+
+        vertex_buffer_.push_back(quad.vertices[0]);
+        vertex_buffer_.push_back(quad.vertices[1]);
+        vertex_buffer_.push_back(quad.vertices[2]);
+        vertex_buffer_.push_back(quad.vertices[3]);
+
+        index_buffer_.push_back(base_index + kQuadIndices[0]);
+        index_buffer_.push_back(base_index + kQuadIndices[1]);
+        index_buffer_.push_back(base_index + kQuadIndices[2]);
+        index_buffer_.push_back(base_index + kQuadIndices[3]);
+        index_buffer_.push_back(base_index + kQuadIndices[4]);
+        index_buffer_.push_back(base_index + kQuadIndices[5]);
     }
+
+    emit_current_batch(current_texture, current_blend);
+
+    const auto flush_end = std::chrono::steady_clock::now();
+    last_flush_cpu_ms_ = std::chrono::duration<double, std::milli>(flush_end - flush_start).count();
 }
 
 void GeometryBatcher::clear() {
     draw_list_.clear();
     draw_call_count_ = 0;
     total_vertices_ = 0;
-}
-
-size_t GeometryBatcher::getBatchCount() const {
-    if (draw_list_.empty()) {
-        return 0;
-    }
-    struct PairHash {
-        size_t operator()(const std::pair<SDL_Texture*, SDL_BlendMode>& key) const {
-            return reinterpret_cast<size_t>(key.first) ^ static_cast<size_t>(key.second);
-        }
-    };
-    std::unordered_set<std::pair<SDL_Texture*, SDL_BlendMode>, PairHash> unique;
-    unique.reserve(draw_list_.size());
-    for (const auto& item : draw_list_) {
-        unique.emplace(item.texture, item.blend_mode);
-    }
-    return unique.size();
+    last_flush_cpu_ms_ = 0.0;
 }
 
 void GridTileRenderer::invalidate_texture_cache() {
@@ -1483,4 +1479,3 @@ void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_eff
     SDL_SetTextureAlphaMod(sky_texture_, 255);
     sdl_render::Texture(renderer_, sky_texture_, nullptr, &dst);
 }
-

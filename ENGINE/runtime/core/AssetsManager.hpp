@@ -335,6 +335,8 @@ private:
     std::unordered_map<Asset*, AssetDimensionCache> asset_dimension_cache_;
     std::vector<Asset*> asset_dimension_update_queue_;
     std::unordered_set<Asset*> asset_dimension_update_lookup_;
+    std::vector<Asset*> anchor_basis_dirty_queue_;
+    std::unordered_set<Asset*> anchor_basis_dirty_lookup_;
     Asset* max_asset_width_holder_ = nullptr;
     Asset* max_asset_height_holder_ = nullptr;
     std::vector<Asset*> visible_candidate_buffer_;
@@ -386,9 +388,9 @@ private:
     std::vector<class AnchorBoundAssetHelper*> binding_helpers_;
 
     void rebuild_non_player_update_buffer_if_needed();
-    // Force anchor basis/signature refresh for all live assets so anchor world transforms
-    // stay in lockstep with the latest camera/grid state (used after grid rebuild).
-    void refresh_anchor_bases_for_active_assets();
+    void mark_anchor_basis_dirty(Asset* asset);
+    void mark_anchor_bases_dirty_for_active_assets();
+    void refresh_dirty_anchor_bases();
     void update_active_assets(const world::GridPoint& center);
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();

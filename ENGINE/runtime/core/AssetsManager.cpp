@@ -234,6 +234,9 @@ Assets::Assets(AssetLibrary& library,
     movement_commands_buffer_.reserve(all.size());
     grid_registration_buffer_.clear();
     grid_registration_buffer_.reserve(4);
+    anchor_basis_dirty_queue_.clear();
+    anchor_basis_dirty_queue_.reserve(all.size());
+    anchor_basis_dirty_lookup_.clear();
     vibble::log::info("[Assets] Constructor: Setting up assets (" + std::to_string(all.size()) + " total)");
     for (Asset* a : all) {
         if (!a) continue;
@@ -521,6 +524,8 @@ bool Assets::boundary_assets_visible() const {
 Assets::~Assets() {
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
+    anchor_basis_dirty_queue_.clear();
+    anchor_basis_dirty_lookup_.clear();
 
     // Persist current asset state to bundle caches on teardown (dev mode exit).
     if (dev_mode) {
@@ -584,14 +589,30 @@ void Assets::refresh_active_asset_lists() {
     update_filtered_active_assets();
 }
 
-void Assets::refresh_anchor_bases_for_active_assets() {
-    // Keep anchor basis signatures aligned with the freshest grid/camera data.
-    for (Asset* asset : all) {
+void Assets::mark_anchor_basis_dirty(Asset* asset) {
+    if (!asset || asset->dead) {
+        return;
+    }
+    if (anchor_basis_dirty_lookup_.insert(asset).second) {
+        anchor_basis_dirty_queue_.push_back(asset);
+    }
+}
+
+void Assets::mark_anchor_bases_dirty_for_active_assets() {
+    for (Asset* asset : active_assets) {
+        mark_anchor_basis_dirty(asset);
+    }
+}
+
+void Assets::refresh_dirty_anchor_bases() {
+    for (Asset* asset : anchor_basis_dirty_queue_) {
         if (!asset || asset->dead) {
             continue;
         }
         asset->update_anchor_basis_if_needed();
     }
+    anchor_basis_dirty_queue_.clear();
+    anchor_basis_dirty_lookup_.clear();
 }
 
 void Assets::update_audio_camera_metrics() {
@@ -930,6 +951,7 @@ void Assets::update(const Input& input)
                 if (!cmd.asset) continue;
                 world_grid_.move_asset(cmd.asset, cmd.previous, cmd.current);
                 cmd.asset->cache_grid_residency(cmd.current);
+                mark_anchor_basis_dirty(cmd.asset);
             }
             movement_commands_buffer_.clear();
 
@@ -978,7 +1000,7 @@ void Assets::update(const Input& input)
 
     maybe_rebuild_world_grid();
 
-    refresh_anchor_bases_for_active_assets();
+    refresh_dirty_anchor_bases();
 
     update_audio_camera_metrics();
 
@@ -1394,6 +1416,7 @@ void Assets::touch_dev_active_state_version() {
 void Assets::mark_active_assets_dirty() {
     active_assets_dirty_.store(true, std::memory_order_release);
     needs_filtered_active_refresh_ = true;
+    mark_anchor_bases_dirty_for_active_assets();
 }
 
 std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
@@ -1424,6 +1447,7 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
     queue_asset_dimension_update(raw);
     mark_grid_dirty();
     mark_active_assets_dirty();
+    mark_anchor_basis_dirty(raw);
     mark_non_player_update_buffer_dirty();
 
     return raw;
@@ -1471,6 +1495,7 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     queue_asset_dimension_update(raw);
     mark_grid_dirty();
     mark_active_assets_dirty();
+    mark_anchor_basis_dirty(raw);
     mark_non_player_update_buffer_dirty();
 
     return raw;
@@ -1586,6 +1611,7 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
                          &rooms_);
     world_grid_.update_active_chunks(screen_world_rect(), 0);
     rebuild_active_from_screen_grid();
+    mark_anchor_bases_dirty_for_active_assets();
 
     grid_dirty_ = false;
     camera_view_dirty_ = false;
@@ -1848,6 +1874,8 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     moving_assets_for_grid_.clear();
     pending_static_grid_registration_.clear();
     active_points_.clear();
+    anchor_basis_dirty_queue_.clear();
+    anchor_basis_dirty_lookup_.clear();
     mark_grid_dirty();
     mark_active_assets_dirty();
     mark_non_player_update_buffer_dirty();
@@ -2393,6 +2421,7 @@ void Assets::rebuild_active_from_screen_grid() {
             asset->active = true;
 
             active_assets.push_back(asset);
+            mark_anchor_basis_dirty(asset);
             active_traversal_.push_back(ActiveTraversalEntry{
                 asset,
                 point,
@@ -2417,6 +2446,7 @@ void Assets::rebuild_active_from_screen_grid() {
         if (!still_active && asset->last_active_frame_id == previous_active_frame_id) {
             active_changed = true;
             asset->active = false;
+            mark_anchor_basis_dirty(asset);
         }
     }
 

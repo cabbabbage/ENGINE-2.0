@@ -16,6 +16,30 @@ namespace devmode::core {
 
 class ManifestStore {
 public:
+    struct Telemetry {
+        std::uint64_t asset_writes = 0;
+        std::uint64_t map_writes = 0;
+        std::uint64_t unguarded_writes = 0;
+    };
+
+    class ScopedWriteGuard {
+    public:
+        ScopedWriteGuard() = default;
+        ScopedWriteGuard(ScopedWriteGuard&& other) noexcept;
+        ScopedWriteGuard& operator=(ScopedWriteGuard&& other) noexcept;
+        ScopedWriteGuard(const ScopedWriteGuard&) = delete;
+        ScopedWriteGuard& operator=(const ScopedWriteGuard&) = delete;
+        ~ScopedWriteGuard();
+
+        explicit operator bool() const { return owner_ != nullptr; }
+
+    private:
+        friend class ManifestStore;
+        ScopedWriteGuard(ManifestStore* owner, std::string reason);
+        ManifestStore* owner_ = nullptr;
+        std::string reason_;
+    };
+
     enum class CacheState {
         Unloaded,
         Clean,
@@ -127,6 +151,12 @@ public:
     bool update_map_entry(const std::string& map_id, const nlohmann::json& payload);
     const nlohmann::json* find_map_entry(const std::string& map_id) const;
 
+    ScopedWriteGuard scoped_guard(std::string reason = {});
+    void set_require_write_guard(bool required, bool fail_on_violation = false);
+    void set_write_violation_sink(std::function<void(const std::string&, const std::string&, const std::string&)> sink);
+    Telemetry telemetry() const { return telemetry_; }
+    void reset_telemetry();
+
 private:
     void ensure_loaded();
     void ensure_loaded_once();
@@ -141,6 +171,7 @@ private:
     void ensure_asset_container();
     void mark_dirty();
     bool has_pending_manifest_write() const;
+    bool guard_allows_write(const char* kind, const std::string& key);
 
     std::filesystem::path manifest_path_;
     std::function<manifest::ManifestData()> loader_;
@@ -155,7 +186,13 @@ private:
     std::uint64_t last_known_tag_version_ = std::numeric_limits<std::uint64_t>::max();
     std::uint64_t cache_generation_ = 0;
     std::optional<std::uint64_t> pending_reload_version_;
+
+    bool require_guard_ = false;
+    bool fail_on_guard_violation_ = false;
+    int write_guard_depth_ = 0;
+    std::vector<std::string> guard_reasons_;
+    Telemetry telemetry_;
+    std::function<void(const std::string&, const std::string&, const std::string&)> violation_sink_;
 };
 
 }
-

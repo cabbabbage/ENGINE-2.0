@@ -9,7 +9,6 @@
 #include <nlohmann/json.hpp>
 
 #include "devtools/core/manifest_store.hpp"
-#include "dev_controls_persistence.hpp"
 
 namespace devmode::core {
 
@@ -102,7 +101,9 @@ void DevSaveCoordinator::enqueue_map_entry(const std::string& map_id,
     enqueue_custom(IntentKind::MapEntry,
                    "map:" + map_id,
                    [map_id, payload = std::move(payload)](ManifestStore& store) {
-                       return devmode::persist_map_manifest_entry(store, map_id, payload, std::cerr);
+                       auto guard = store.scoped_guard("DevSaveCoordinator::enqueue_map_entry");
+                       (void)guard;
+                       return store.update_map_entry(map_id, payload);
                    },
                    priority,
                    label.empty() ? std::string("Map ") + map_id : label,

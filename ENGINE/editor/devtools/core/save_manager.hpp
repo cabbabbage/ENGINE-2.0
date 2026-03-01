@@ -14,16 +14,24 @@ class ManifestStore;
 
 class SaveManager {
 public:
+    enum class Stage {
+        Manifest = 0,
+        Cache = 1,
+        Post = 2,
+    };
+
     struct Saveable {
         std::string id;
         std::function<bool()> is_dirty;
         std::function<bool(DevSaveCoordinator::Priority)> save;
+        Stage stage = Stage::Manifest;
     };
 
     void set_manifest_store(ManifestStore* store);
     void set_save_coordinator(DevSaveCoordinator* coordinator);
 
     void register_saveable(Saveable saveable);
+    void unregister_saveable(const std::string& id);
     void clear_saveables();
 
     bool has_dirty_saveables() const;

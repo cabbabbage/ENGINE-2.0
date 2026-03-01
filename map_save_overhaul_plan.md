@@ -17,16 +17,16 @@
 ## Work Plan
 
 ### 1) Inventory and Guardrails
-- Audit all call sites of enqueue_map_entry, persist_map_manifest_entry, manifest_store_->flush(), save_assets_json, persist_map_info_to_disk, save_bundle/cache save loops across editor/runtime; document per file/function.
-- Add temporary logging/assert in ManifestStore and cache write paths to flag disk writes made outside SaveManager; gate Dev Mode edit callbacks against these paths.
-- Add metrics counters for cache miss generation and attempted direct manifest writes to ease regression detection.
+- [ ] Audit all call sites of enqueue_map_entry, persist_map_manifest_entry, manifest_store_->flush(), save_assets_json, persist_map_info_to_disk, save_bundle/cache save loops across editor/runtime; document per file/function.
+- [x] Add temporary logging/assert in ManifestStore and cache write paths to flag disk writes made outside SaveManager; gate Dev Mode edit callbacks against these paths. *(ManifestStore now tracks guarded writes, emits warnings, and exposes telemetry; cache paths still pending.)*
+- [~] Add metrics counters for cache miss generation and attempted direct manifest writes to ease regression detection. *(Telemetry for unguarded/asset/map writes added; cache miss metrics still TODO.)*
 
 ### 2) SaveManager Architecture and Batch Pipeline
-- Finalize SaveManager interface under devtools/core: owns ordered list of ISaveable objects, tracks dirty state, and exposes register_saveable/unregister_saveable/mark_dirty/save_all.
-- Define batch save sequence: gather dirty MapData and assets, write manifest entries via ManifestStore to temp, fsync, rename to manifest.json, then write asset caches for items whose manifest save succeeded, finally clear dirty flags.
-- Keep ManifestStore unchanged as low-level writer but only invoked by SaveManager; remove any other callers.
-- Expose a DevSaveCoordinator wrapper to orchestrate save on app exit/explicit save, delegating to SaveManager only.
-- Add loud logging for skipped or failed steps and include map_id/asset_id context for debugging.
+- [x] Finalize SaveManager interface under devtools/core: owns ordered list of ISaveable objects, tracks dirty state, and exposes register_saveable/unregister_saveable/mark_dirty/save_all. *(Ordered stages + guard-scoped saves implemented.)*
+- [ ] Define batch save sequence: gather dirty MapData and assets, write manifest entries via ManifestStore to temp, fsync, rename to manifest.json, then write asset caches for items whose manifest save succeeded, finally clear dirty flags.
+- [~] Keep ManifestStore unchanged as low-level writer but only invoked by SaveManager; remove any other callers. *(DevSaveCoordinator now uses ManifestStore directly with SaveManager guard; legacy callers remain.)*
+- [ ] Expose a DevSaveCoordinator wrapper to orchestrate save on app exit/explicit save, delegating to SaveManager only.
+- [x] Add loud logging for skipped or failed steps and include map_id/asset_id context for debugging. *(Guard violations now log with context.)*
 
 ### 3) MapData Model Introduction
 - Create MapData (shared runtime/editor) with typed ownership of layers/settings, rooms metadata/order/layer refs, trails, map-wide assets, boundary data, fog settings, terrain/grid settings, dev map settings.

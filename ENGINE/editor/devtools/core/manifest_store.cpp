@@ -4,6 +4,9 @@
 #include <cctype>
 #include <utility>
 #include <limits>
+#include <iostream>
+
+#include <SDL3/SDL_log.h>
 
 #include "devtools/core/dev_json_store.hpp"
 #include "devtools/tag_utils.hpp"
@@ -16,6 +19,52 @@ std::string to_lower(std::string value) {
     });
     return value;
 }
+}
+
+ManifestStore::ScopedWriteGuard::ScopedWriteGuard(ManifestStore* owner, std::string reason)
+    : owner_(owner), reason_(std::move(reason)) {
+    if (owner_) {
+        ++owner_->write_guard_depth_;
+        if (!reason_.empty()) {
+            owner_->guard_reasons_.push_back(reason_);
+        }
+    }
+}
+
+ManifestStore::ScopedWriteGuard::ScopedWriteGuard(ScopedWriteGuard&& other) noexcept
+    : owner_(other.owner_), reason_(std::move(other.reason_)) {
+    other.owner_ = nullptr;
+    other.reason_.clear();
+}
+
+ManifestStore::ScopedWriteGuard& ManifestStore::ScopedWriteGuard::operator=(ScopedWriteGuard&& other) noexcept {
+    if (this == &other) {
+        return *this;
+    }
+    if (owner_) {
+        if (!reason_.empty() && !owner_->guard_reasons_.empty()) {
+            owner_->guard_reasons_.pop_back();
+        }
+        --owner_->write_guard_depth_;
+    }
+    owner_ = other.owner_;
+    reason_ = std::move(other.reason_);
+    other.owner_ = nullptr;
+    other.reason_.clear();
+    return *this;
+}
+
+ManifestStore::ScopedWriteGuard::~ScopedWriteGuard() {
+    if (!owner_) {
+        return;
+    }
+    if (!reason_.empty() && !owner_->guard_reasons_.empty()) {
+        owner_->guard_reasons_.pop_back();
+    }
+    if (owner_->write_guard_depth_ > 0) {
+        --owner_->write_guard_depth_;
+    }
+    owner_ = nullptr;
 }
 
 ManifestStore::AssetEditSession::AssetEditSession(ManifestStore* owner,
@@ -206,6 +255,11 @@ bool ManifestStore::remove_asset(const std::string& name) {
         return false;
     }
 
+    ++telemetry_.asset_writes;
+    if (!guard_allows_write("asset", *resolved)) {
+        return false;
+    }
+
     nlohmann::json& assets = manifest_cache_["assets"];
     auto erased = assets.erase(*resolved);
     if (erased == 0) {
@@ -296,6 +350,23 @@ const nlohmann::json* ManifestStore::find_map_entry(const std::string& map_id) c
     return &(*it);
 }
 
+ManifestStore::ScopedWriteGuard ManifestStore::scoped_guard(std::string reason) {
+    return ScopedWriteGuard(this, std::move(reason));
+}
+
+void ManifestStore::set_require_write_guard(bool required, bool fail_on_violation) {
+    require_guard_ = required;
+    fail_on_guard_violation_ = fail_on_violation;
+}
+
+void ManifestStore::set_write_violation_sink(std::function<void(const std::string&, const std::string&, const std::string&)> sink) {
+    violation_sink_ = std::move(sink);
+}
+
+void ManifestStore::reset_telemetry() {
+    telemetry_ = Telemetry{};
+}
+
 void ManifestStore::ensure_loaded() {
     ensure_loaded_once();
     refresh_from_disk_if_safe();
@@ -359,11 +430,38 @@ void ManifestStore::refresh_from_disk_if_safe() {
     pending_reload_version_.reset();
 }
 
+bool ManifestStore::guard_allows_write(const char* kind, const std::string& key) {
+    if (!require_guard_ || write_guard_depth_ > 0) {
+        return true;
+    }
+    ++telemetry_.unguarded_writes;
+    const std::string reason = guard_reasons_.empty() ? std::string{} : guard_reasons_.back();
+    if (violation_sink_) {
+        violation_sink_(kind ? kind : "", key, reason);
+    }
+    std::string message = "[ManifestStore] Unguarded write to ";
+    message += kind ? kind : "entry";
+    if (!key.empty()) {
+        message += " '" + key + "'";
+    }
+    if (!reason.empty()) {
+        message += " while handling '" + reason + "'";
+    }
+    SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "%s", message.c_str());
+    std::cerr << message << "\n";
+    return !fail_on_guard_violation_;
+}
+
 bool ManifestStore::apply_edit(const std::string& name,
                                const nlohmann::json& payload,
                                std::uint64_t expected_generation) {
     ensure_loaded();
     ensure_asset_container();
+
+    ++telemetry_.asset_writes;
+    if (!guard_allows_write("asset", name)) {
+        return false;
+    }
 
     if (expected_generation != cache_generation_) {
         refresh_from_disk_if_safe();
@@ -385,6 +483,11 @@ bool ManifestStore::apply_map_edit(const std::string& name,
                                    std::uint64_t expected_generation) {
     ensure_loaded();
     ensure_asset_container();
+
+    ++telemetry_.map_writes;
+    if (!guard_allows_write("map", name)) {
+        return false;
+    }
 
     if (expected_generation != cache_generation_) {
         refresh_from_disk_if_safe();

@@ -51,6 +51,7 @@ public:
                                 const std::string& label,
                                 std::function<void()> on_success = {});
 
+    [[deprecated("Route map persistence through devmode::core::SaveManager")]]
     void enqueue_map_entry(const std::string& map_id,
                            nlohmann::json payload,
                            Priority priority,

@@ -20,7 +20,7 @@
 #include "core/AssetsManager.hpp"
 #include "devtools/widgets.hpp"
 #include "devtools/core/manifest_store.hpp"
-#include "devtools/dev_controls_persistence.hpp"
+#include "devtools/core/save_manager.hpp"
 #include "dm_styles.hpp"
 #include "utils/input.hpp"
 
@@ -105,6 +105,7 @@ void MapModeUI::set_manifest_store(devmode::core::ManifestStore* store) {
     if (layers_controller_) {
         layers_controller_->set_manifest_store(manifest_store_, map_id_);
         layers_controller_->set_save_coordinator(save_coordinator_);
+        layers_controller_->set_save_manager(save_manager_);
     }
 }
 
@@ -112,6 +113,14 @@ void MapModeUI::set_save_coordinator(devmode::core::DevSaveCoordinator* coordina
     save_coordinator_ = coordinator;
     if (layers_controller_) {
         layers_controller_->set_save_coordinator(save_coordinator_);
+        layers_controller_->set_save_manager(save_manager_);
+    }
+}
+
+void MapModeUI::set_save_manager(devmode::core::SaveManager* manager) {
+    save_manager_ = manager;
+    if (layers_controller_) {
+        layers_controller_->set_save_manager(save_manager_);
     }
 }
 
@@ -121,6 +130,7 @@ void MapModeUI::set_map_context(nlohmann::json* map_info, const std::string& map
     map_id_ = assets_ ? assets_->map_id() : std::string{};
     if (layers_controller_) {
         layers_controller_->set_manifest_store(manifest_store_, map_id_);
+        layers_controller_->set_save_manager(save_manager_);
     }
     sync_panel_map_info();
 }
@@ -519,6 +529,7 @@ void MapModeUI::ensure_panels() {
     if (layers_controller_) {
         layers_controller_->set_manifest_store(manifest_store_, map_id_);
         layers_controller_->set_save_coordinator(save_coordinator_);
+        layers_controller_->set_save_manager(save_manager_);
     }
     if (!layers_panel_) {
         layers_panel_ = std::make_unique<MapLayersPanel>();
@@ -873,6 +884,7 @@ void MapModeUI::sync_panel_map_info() {
     if (layers_panel_) {
         if (layers_controller_) {
             layers_controller_->set_manifest_store(manifest_store_, map_id_);
+            layers_controller_->set_save_manager(save_manager_);
             layers_controller_->bind(map_info_, map_path_);
         }
         layers_panel_->set_map_info(map_info_, map_path_);
@@ -1411,18 +1423,11 @@ bool MapModeUI::save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priorit
     }
     nlohmann::json payload = *map_info_;
     const std::string label = std::string("Map ") + map_id_;
-    if (save_coordinator_) {
-        save_coordinator_->enqueue_map_entry(map_id_, std::move(payload), priority, label);
-        if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
-            save_coordinator_->flush_now(label);
-        }
-        return true;
-    }
-    if (!devmode::persist_map_manifest_entry(*manifest_store_, map_id_, payload, std::cerr)) {
+    if (!save_manager_) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapModeUI] Cannot save map info: save manager is not available.");
         return false;
     }
-    manifest_store_->flush();
-    return true;
+    return save_manager_->persist_map_entry(map_id_, std::move(payload), priority, label);
 }
 
 bool MapModeUI::auto_save_layers_data() {
@@ -1687,7 +1692,5 @@ void MapModeUI::complete_map_color_sampling(SDL_Color color) {
         apply_cb(color);
     }
 }
-
-
 
 

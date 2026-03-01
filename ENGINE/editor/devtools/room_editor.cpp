@@ -13,12 +13,12 @@
 #include "core/AssetsManager.hpp"
 #include "devtools/room_editor_map_info.hpp"
 #include "devtools/asset_info_ui.hpp"
-#include "devtools/dev_controls_persistence.hpp"
 #include "map_layers_common.hpp"
 #include "devtools/asset_library_ui.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/core/dev_edit_transaction.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "devtools/core/save_manager.hpp"
 #include "devtools/DockableCollapsible.hpp"
 #include "devtools/draw_utils.hpp"
 #include "dev_mode_color_utils.hpp"
@@ -2230,6 +2230,10 @@ void RoomEditor::set_save_coordinator(devmode::core::DevSaveCoordinator* coordin
     }
 }
 
+void RoomEditor::set_save_manager(devmode::core::SaveManager* manager) {
+    save_manager_ = manager;
+}
+
 void RoomEditor::close_asset_info_editor() {
     if (info_ui_) info_ui_->close();
     if (asset_info_panel_visible_) {
@@ -4307,11 +4311,10 @@ std::string RoomEditor::rename_active_room(const std::string& old_name, const st
     if (final_key != current_room_->room_name) {
         current_room_->rename(final_key, map_info);
         map_layers::rename_room_references_in_layers(map_info, old_name, final_key);
-        if (manifest_store_ && assets_) {
-            if (devmode::persist_map_manifest_entry(
-                    *manifest_store_, assets_->map_id(), map_info, std::cerr)) {
-                manifest_store_->flush();
-            }
+        if (save_manager_ && assets_) {
+            save_manager_->persist_map_entry(assets_->map_id(), map_info,
+                                             devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                             "Room rename");
         }
         rebuild_room_spawn_id_cache();
         invalidate_label_cache(current_room_);

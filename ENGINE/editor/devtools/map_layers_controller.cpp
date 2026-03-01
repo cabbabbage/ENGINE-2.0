@@ -3,7 +3,7 @@
 #include "map_layers_common.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "devtools/core/manifest_store.hpp"
-#include "devtools/dev_controls_persistence.hpp"
+#include "devtools/core/save_manager.hpp"
 #include "utils/display_color.hpp"
 
 #include <SDL3/SDL.h>
@@ -58,6 +58,10 @@ void MapLayersController::set_save_coordinator(devmode::core::DevSaveCoordinator
     save_coordinator_ = coordinator;
 }
 
+void MapLayersController::set_save_manager(devmode::core::SaveManager* manager) {
+    save_manager_ = manager;
+}
+
 MapLayersController::ListenerId MapLayersController::add_listener(Listener cb) {
     if (!cb) return 0;
     const ListenerId id = next_listener_id_++;
@@ -96,17 +100,11 @@ bool MapLayersController::save(devmode::core::DevSaveCoordinator::Priority prior
         notify();
     };
 
-    if (save_coordinator_) {
-        save_coordinator_->enqueue_map_entry(map_id_, std::move(payload), priority, "Map layers", on_success);
-        return true;
-    }
-
-    if (!devmode::persist_map_manifest_entry(*manifest_store_, map_id_, payload, std::cerr)) {
+    if (!save_manager_) {
+        SDL_LogError(SDL_LOG_CATEGORY_APPLICATION, "[MapLayersController] Cannot save map info: save manager is not available.");
         return false;
     }
-    manifest_store_->flush();
-    on_success();
-    return true;
+    return save_manager_->persist_map_entry(map_id_, std::move(payload), priority, "Map layers", on_success);
 }
 
 bool MapLayersController::reload() {
@@ -777,4 +775,3 @@ void MapLayersController::ensure_spawn_room_data(const std::string& previous_nam
     spawn_entry["is_spawn"] = true;
     rooms_data[kSpawnRoomName] = std::move(spawn_entry);
 }
-

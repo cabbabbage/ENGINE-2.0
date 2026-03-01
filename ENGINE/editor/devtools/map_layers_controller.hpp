@@ -11,6 +11,7 @@
 
 namespace devmode::core {
 class ManifestStore;
+class SaveManager;
 }
 
 class MapLayersController {
@@ -23,6 +24,7 @@ public:
     void bind(nlohmann::json* map_info, std::string map_path);
     void set_manifest_store(devmode::core::ManifestStore* store, std::string map_id);
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
+    void set_save_manager(devmode::core::SaveManager* manager);
 
     ListenerId add_listener(Listener cb);
     void remove_listener(ListenerId id);
@@ -78,8 +80,8 @@ private:
     std::string map_id_;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
+    devmode::core::SaveManager* save_manager_ = nullptr;
     bool dirty_ = false;
     ListenerId next_listener_id_ = 1;
     std::vector<ListenerEntry> listeners_;
 };
-

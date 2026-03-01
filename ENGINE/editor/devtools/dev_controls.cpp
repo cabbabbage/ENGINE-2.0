@@ -714,6 +714,8 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     std::cout << ctor_start << "\n";
 
     save_coordinator_.set_manifest_store(&manifest_store_);
+    save_manager_.set_manifest_store(&manifest_store_);
+    save_manager_.set_save_coordinator(&save_coordinator_);
     save_coordinator_.set_notice_sink([this](bool success, const std::string& message) {
         if (assets_) {
             assets_->show_dev_notice(message, success ? 1200u : 2000u);
@@ -736,6 +738,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     if (room_editor_) {
         room_editor_->set_manifest_store(&manifest_store_);
         room_editor_->set_save_coordinator(&save_coordinator_);
+        room_editor_->set_save_manager(&save_manager_);
 
         room_editor_->set_header_visibility_callback([this](bool visible) {
             sliding_headers_hidden_ = visible;
@@ -779,6 +782,19 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     if (map_mode_ui_) {
         map_mode_ui_->set_manifest_store(&manifest_store_);
         map_mode_ui_->set_save_coordinator(&save_coordinator_);
+        map_mode_ui_->set_save_manager(&save_manager_);
+        save_manager_.register_saveable({
+            "map-session",
+            [this]() { return manifest_store_.dirty(); },
+            [this](devmode::core::DevSaveCoordinator::Priority priority) {
+                if (!this->persist_map_info_to_disk()) {
+                    return false;
+                }
+                if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
+                    save_coordinator_.flush_now("Map session save");
+                }
+                return true;
+            }});
     }
     map_grid_regen_cb_ = [this]() { this->regenerate_map_grid_assets(); };
     apply_header_suppression();
@@ -1230,7 +1246,14 @@ void DevControls::set_rooms(std::vector<Room*>* rooms, std::size_t generation) {
         nlohmann::json* map_info = &assets_->map_info_json();
         for (Room* room : *rooms_) {
             if (!room) continue;
-            room->set_manifest_store(&manifest_store_, map_id, map_info);
+            room->set_manifest_store(&manifest_store_, map_id, map_info,
+                                     [this](const std::string& id, const nlohmann::json& payload) {
+                                         save_manager_.persist_map_entry(
+                                             id,
+                                             payload,
+                                             devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                             "Room edit");
+                                     });
         }
     }
     if (map_editor_) map_editor_->set_rooms(rooms);
@@ -1255,7 +1278,14 @@ void DevControls::set_map_context(nlohmann::json* map_info, const std::string& m
         nlohmann::json* info = &assets_->map_info_json();
         for (Room* room : *rooms_) {
             if (!room) continue;
-            room->set_manifest_store(&manifest_store_, map_id, info);
+            room->set_manifest_store(&manifest_store_, map_id, info,
+                                     [this](const std::string& id, const nlohmann::json& payload) {
+                                         save_manager_.persist_map_entry(
+                                             id,
+                                             payload,
+                                             devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                             "Room edit");
+                                     });
         }
     }
     other_settings_.set_map_info(map_info_json_);
@@ -4651,11 +4681,10 @@ bool DevControls::persist_map_info_to_disk() {
         return false;
     }
     nlohmann::json payload = assets_->map_info_json();
-    save_coordinator_.enqueue_map_entry(map_id, std::move(payload),
-                                        devmode::core::DevSaveCoordinator::Priority::Immediate,
-                                        "Manual map save");
-    save_coordinator_.flush_now("Manual map save");
-    return true;
+    return save_manager_.persist_map_entry(map_id,
+                                           std::move(payload),
+                                           devmode::core::DevSaveCoordinator::Priority::Immediate,
+                                           "Manual map save");
 }
 
 void DevControls::render_grid_resolution_toast(SDL_Renderer* renderer) {

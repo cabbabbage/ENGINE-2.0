@@ -19,6 +19,7 @@
 #include "trail_editor_suite.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "devtools/core/save_manager.hpp"
 #include "map_assets_modals.hpp"
 
 class Asset;
@@ -367,6 +368,7 @@ private:
     std::unique_ptr<Room> pending_trail_template_;
     devmode::core::ManifestStore manifest_store_;
     devmode::core::DevSaveCoordinator save_coordinator_;
+    devmode::core::SaveManager save_manager_;
     OtherSettingsAndControls other_settings_;
 
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;

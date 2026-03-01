@@ -11,6 +11,7 @@ class ManifestStore;
 
 namespace devmode {
 
+[[deprecated("Route map persistence through devmode::core::SaveManager")]]
 bool persist_map_manifest_entry(core::ManifestStore& store, const std::string& map_id, const nlohmann::json& data, std::ostream& log);
 
 }

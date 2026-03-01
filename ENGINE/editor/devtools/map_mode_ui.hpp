@@ -19,6 +19,7 @@
 class Assets;
 namespace devmode::core {
 class ManifestStore;
+class SaveManager;
 }
 class Input;
 class MapLayersPreviewPanel;
@@ -56,6 +57,7 @@ public:
 
     void set_manifest_store(devmode::core::ManifestStore* store);
     void set_save_coordinator(devmode::core::DevSaveCoordinator* coordinator);
+    void set_save_manager(devmode::core::SaveManager* manager);
 
     void update(const Input& input);
     bool handle_event(const SDL_Event& e);
@@ -148,6 +150,7 @@ private:
 
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     devmode::core::DevSaveCoordinator* save_coordinator_ = nullptr;
+    devmode::core::SaveManager* save_manager_ = nullptr;
     std::unique_ptr<MapLayersPreviewPanel> layers_preview_panel_;
     std::shared_ptr<MapLayersController> layers_controller_;
     std::unique_ptr<SlidingWindowContainer> room_config_container_;
@@ -187,4 +190,3 @@ private:
     std::function<void(SDL_Color)> map_color_sampling_apply_{};
     std::function<void()> map_color_sampling_cancel_{};
 };
-

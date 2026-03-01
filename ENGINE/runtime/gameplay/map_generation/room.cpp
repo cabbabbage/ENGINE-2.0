@@ -354,7 +354,11 @@ manifest_writer_(std::move(manifest_writer))
                         mutate(payload);
                         return payload;
 };
-                if (manifest_store_ && !manifest_map_id_.empty()) {
+                if (manifest_writer_ && !manifest_map_id_.empty()) {
+                        nlohmann::json payload = map_info_root_ ? *map_info_root_ : nlohmann::json::object();
+                        payload = apply_mutation(std::move(payload));
+                        manifest_writer_(manifest_map_id_, payload);
+                } else if (manifest_store_ && !manifest_map_id_.empty()) {
                         nlohmann::json payload;
                         if (map_info_root_) {
                                 payload = *map_info_root_;
@@ -365,10 +369,6 @@ manifest_writer_(std::move(manifest_writer))
                         if (devmode::persist_map_manifest_entry(*manifest_store_, manifest_map_id_, payload, std::cerr)) {
                                 manifest_store_->flush();
                         }
-                } else if (manifest_writer_ && !manifest_map_id_.empty()) {
-                        nlohmann::json payload = map_info_root_ ? *map_info_root_ : nlohmann::json::object();
-                        payload = apply_mutation(std::move(payload));
-                        manifest_writer_(manifest_map_id_, payload);
                 }
 };
 
@@ -1011,13 +1011,13 @@ bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
         }
 
         bool success = true;
-        if (manifest_store_ && !manifest_map_id_.empty()) {
+        if (manifest_writer_ && !manifest_map_id_.empty()) {
+                manifest_writer_(manifest_map_id_, payload);
+        } else if (manifest_store_ && !manifest_map_id_.empty()) {
                 success = devmode::persist_map_manifest_entry(*manifest_store_, manifest_map_id_, payload, std::cerr);
                 if (success) {
                         manifest_store_->flush();
                 }
-        } else if (manifest_writer_ && !manifest_map_id_.empty()) {
-                manifest_writer_(manifest_map_id_, payload);
         }
 
         if (success) {

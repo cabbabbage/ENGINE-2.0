@@ -84,10 +84,7 @@ void MapLayersController::clear_listeners() {
 
 bool MapLayersController::save(devmode::core::DevSaveCoordinator::Priority priority) {
     if (!map_info_) return false;
-    dirty_ = true;
-    if (dirty_callback_) {
-        dirty_callback_(priority);
-    }
+    mark_dirty(priority);
     return true;
 }
 
@@ -182,7 +179,7 @@ bool MapLayersController::set_min_edge_distance(double value) {
         return false;
     }
     settings["min_edge_distance"] = stored;
-    dirty_ = true;
+    mark_dirty();
     notify();
     return true;
 }
@@ -201,7 +198,7 @@ int MapLayersController::create_layer(const std::string& display_name) {
 };
     arr.push_back(std::move(layer));
     ensure_layer_indices();
-    dirty_ = true;
+    mark_dirty();
     notify();
     return idx;
 }
@@ -213,7 +210,7 @@ bool MapLayersController::delete_layer(int index) {
     if (!arr.is_array() || index < 0 || index >= static_cast<int>(arr.size())) return false;
     arr.erase(arr.begin() + index);
     ensure_layer_indices();
-    dirty_ = true;
+    mark_dirty();
     notify();
     return true;
 }
@@ -229,7 +226,7 @@ bool MapLayersController::reorder_layer(int from, int to) {
     arr.erase(arr.begin() + from);
     arr.insert(arr.begin() + to, std::move(layer));
     ensure_layer_indices();
-    dirty_ = true;
+    mark_dirty();
     notify();
     return true;
 }
@@ -278,7 +275,7 @@ int MapLayersController::duplicate_layer(int index) {
     const int insert_index = std::min(index + 1, static_cast<int>(arr.size()));
     arr.insert(arr.begin() + insert_index, std::move(copy));
     ensure_layer_indices();
-    dirty_ = true;
+    mark_dirty();
     notify();
     return insert_index;
 }
@@ -292,7 +289,7 @@ bool MapLayersController::rename_layer(int index, const std::string& name) {
     trimmed.erase(std::find_if(trimmed.rbegin(), trimmed.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), trimmed.end());
     if (trimmed.empty()) return false;
     (*layer_json)["name"] = trimmed;
-    dirty_ = true;
+    mark_dirty();
     notify();
     return true;
 }
@@ -334,7 +331,7 @@ bool MapLayersController::add_candidate(int layer_index, const std::string& room
             }
         }
         ensure_spawn_room_data(previous_name);
-        dirty_ = true;
+        mark_dirty();
         notify();
         return true;
     }
@@ -346,7 +343,7 @@ bool MapLayersController::add_candidate(int layer_index, const std::string& room
 };
     rooms.push_back(std::move(candidate));
     clamp_layer_counts(*layer_json);
-    dirty_ = true;
+    mark_dirty();
     notify();
     return true;
 }
@@ -360,7 +357,7 @@ bool MapLayersController::remove_candidate(int layer_index, int candidate_index)
     if (!rooms.is_array() || candidate_index < 0 || candidate_index >= static_cast<int>(rooms.size())) return false;
     rooms.erase(rooms.begin() + candidate_index);
     clamp_layer_counts(*layer_json);
-    dirty_ = true;
+    mark_dirty();
     notify();
     return true;
 }
@@ -389,7 +386,7 @@ bool MapLayersController::set_candidate_instance_range(int layer_index,
     }
     clamp_layer_counts(*layer_json);
     if (changed) {
-        dirty_ = true;
+        mark_dirty();
         notify();
     }
     return changed;
@@ -484,7 +481,7 @@ bool MapLayersController::add_candidate_child(int layer_index, int candidate_ind
     clamp_layer_counts(*layer_json);
 
     if (changed) {
-        dirty_ = true;
+        mark_dirty();
         notify();
     }
     return changed;
@@ -502,7 +499,7 @@ bool MapLayersController::remove_candidate_child(int layer_index, int candidate_
     auto it = std::find(required.begin(), required.end(), child_room);
     if (it == required.end()) return false;
     required.erase(it);
-    dirty_ = true;
+    mark_dirty();
     notify();
     return true;
 }
@@ -535,7 +532,7 @@ void MapLayersController::ensure_initialized() {
             mutated = mutated || entry_mutated;
         }
         if (mutated) {
-            dirty_ = true;
+            mark_dirty();
         }
     }
 }
@@ -606,6 +603,13 @@ bool MapLayersController::validate_candidate_index(const json& layer, int candid
     const auto it = layer.find("rooms");
     if (it == layer.end() || !it->is_array()) return false;
     return candidate_index >= 0 && candidate_index < static_cast<int>(it->size());
+}
+
+void MapLayersController::mark_dirty(devmode::core::DevSaveCoordinator::Priority priority) {
+    dirty_ = true;
+    if (dirty_callback_) {
+        dirty_callback_(priority);
+    }
 }
 
 void MapLayersController::notify() {

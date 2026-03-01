@@ -20,6 +20,7 @@
 #include "gameplay/world/world_grid.hpp"
 #include "assets/Asset.hpp"
 #include "gameplay/world/grid_point.hpp"
+#include "core/manifest/map_data.hpp"
 
 class Asset;
 class SceneRenderer;
@@ -188,6 +189,10 @@ public:
 
     nlohmann::json& map_info_json() { return map_info_json_; }
     const nlohmann::json& map_info_json() const { return map_info_json_; }
+    bool mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator);
+    void mark_map_data_dirty();
+    bool map_data_dirty() const { return map_data_dirty_; }
+    void clear_map_data_dirty() { map_data_dirty_ = false; }
     const std::string& map_path() const { return map_path_; }
     const std::string& map_id() const { return map_id_; }
     world::WorldGrid& world_grid() { return world_grid_; }
@@ -320,6 +325,7 @@ private:
     std::string map_id_;
     std::string map_path_;
     nlohmann::json map_info_json_;
+    bool map_data_dirty_ = false;
     std::atomic<bool> active_assets_dirty_{true};
     MapGridSettings map_grid_settings_{};
     std::unique_ptr<devmode::core::ManifestStore> manifest_store_fallback_;

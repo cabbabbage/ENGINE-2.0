@@ -309,8 +309,26 @@ void Assets::save_map_info_json() {
     store->flush();
 }
 
+bool Assets::mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator) {
+    if (!mutator) {
+        return false;
+    }
+    manifest::MapData map_data = manifest::MapData::from_manifest_entry(map_id_, map_info_json_);
+    if (!mutator(map_data)) {
+        return false;
+    }
+    map_info_json_ = map_data.to_manifest_entry();
+    mark_map_data_dirty();
+    return true;
+}
+
+void Assets::mark_map_data_dirty() {
+    map_data_dirty_ = true;
+}
+
 void Assets::persist_map_info_json() {
     save_map_info_json();
+    map_data_dirty_ = false;
 }
 
 void Assets::hydrate_map_info_sections() {

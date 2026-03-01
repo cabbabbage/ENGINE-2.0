@@ -1344,6 +1344,7 @@ void MapModeUI::open_room_configuration(const std::string& room_key, SlidingPane
     }
 
     auto on_change = [this]() {
+        mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
         if (layers_panel_) {
             layers_panel_->mark_dirty(true);
         }
@@ -1352,6 +1353,7 @@ void MapModeUI::open_room_configuration(const std::string& room_key, SlidingPane
         }
 };
     auto on_entry_change = [this](const nlohmann::json&, const auto&) {
+        mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
         if (layers_panel_) {
             layers_panel_->mark_dirty(true);
         }
@@ -1438,8 +1440,27 @@ bool MapModeUI::save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priorit
     return false;
 }
 
+bool MapModeUI::mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator) {
+    if (!assets_) {
+        return false;
+    }
+    return assets_->mutate_map_data(mutator);
+}
+
+void MapModeUI::mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority priority) {
+    if (assets_) {
+        assets_->mark_map_data_dirty();
+    }
+    if (dirty_callback_) {
+        dirty_callback_(priority);
+    }
+}
+
 bool MapModeUI::auto_save_layers_data() {
     bool saved = false;
+    if (assets_) {
+        assets_->mark_map_data_dirty();
+    }
     if (dirty_callback_) {
         dirty_callback_(devmode::core::DevSaveCoordinator::Priority::Debounced);
         saved = true;
@@ -1479,64 +1500,58 @@ std::string MapModeUI::rename_active_room(const std::string& old_name, const std
         return base.empty() ? old_name : base;
     }
 
-    nlohmann::json& map_info = *map_info_;
-    nlohmann::json& rooms = map_info["rooms_data"];
-    if (!rooms.is_object()) {
-        rooms = nlohmann::json::object();
-    }
+    std::string result_key = old_name;
+    mutate_map_data([&](manifest::MapData& map_data) {
+        nlohmann::json map_info = map_data.to_manifest_entry();
+        nlohmann::json& rooms = map_info["rooms_data"];
+        if (!rooms.is_object()) {
+            rooms = nlohmann::json::object();
+        }
 
-    std::string current_key = active_room_config_key_.empty() ? old_name : active_room_config_key_;
-    if (!rooms.contains(current_key)) {
-        current_key = old_name;
-    }
-    if (!rooms.contains(current_key)) {
-        return base.empty() ? old_name : base;
-    }
+        std::string current_key = active_room_config_key_.empty() ? old_name : active_room_config_key_;
+        if (!rooms.contains(current_key)) {
+            current_key = old_name;
+        }
+        if (!rooms.contains(current_key)) {
+            result_key = base.empty() ? old_name : base;
+            return false;
+        }
 
-    std::string candidate = base.empty() ? current_key : base;
-    if (candidate.empty()) {
-        candidate = current_key;
-    }
+        std::string candidate = base.empty() ? current_key : base;
+        if (candidate.empty()) {
+            candidate = current_key;
+        }
 
-    nlohmann::json entry = rooms[current_key];
-    entry["name"] = desired_name;
+        nlohmann::json entry = rooms[current_key];
+        entry["name"] = desired_name;
+
+        if (candidate == current_key || rooms.contains(candidate)) {
+            rooms[current_key] = std::move(entry);
+            result_key = current_key;
+        } else {
+            rooms.erase(current_key);
+            rooms[candidate] = std::move(entry);
+            map_layers::rename_room_references_in_layers(map_info, current_key, candidate);
+            result_key = candidate;
+        }
+
+        map_data = manifest::MapData::from_manifest_entry(map_data.map_id, map_info);
+        return true;
+    });
 
     const bool renaming_active = !active_room_config_key_.empty();
-
-    auto refresh_room_binding = [&](const std::string& key) {
-        if (!renaming_active || !room_configurator_) {
-            return;
-        }
-        if (active_room_config_key_ != key) {
-            return;
-        }
-        auto it = rooms.find(key);
-        if (it == rooms.end() || !it->is_object()) {
-            return;
-        }
-        room_configurator_->refresh_spawn_groups(it.value());
-};
-
-    if (candidate == current_key || rooms.contains(candidate)) {
-        rooms[current_key] = std::move(entry);
-        if (renaming_active) {
-            active_room_config_key_ = current_key;
-        }
-        handle_rooms_data_mutated(true);
-        refresh_room_binding(current_key);
-        return current_key;
-    }
-
-    rooms.erase(current_key);
-    rooms[candidate] = std::move(entry);
-    map_layers::rename_room_references_in_layers(map_info, current_key, candidate);
     if (renaming_active) {
-        active_room_config_key_ = candidate;
+        active_room_config_key_ = result_key;
     }
     handle_rooms_data_mutated(true);
-    refresh_room_binding(candidate);
-    return candidate;
+    if (renaming_active && room_configurator_ && active_room_config_key_ == result_key) {
+        if (nlohmann::json* entry = active_room_entry()) {
+            room_configurator_->refresh_spawn_groups(*entry);
+        }
+    }
+    return result_key;
 }
+
 
 void MapModeUI::update_room_config_header_controls() {
     if (!room_config_container_) {
@@ -1550,72 +1565,123 @@ void MapModeUI::delete_active_room_spawn_group(const std::string& spawn_id) {
     if (spawn_id.empty()) {
         return;
     }
-    nlohmann::json* room_entry = active_room_entry();
-    if (!room_entry) {
+    if (active_room_config_key_.empty()) {
         return;
     }
-    nlohmann::json& groups = ensure_spawn_groups_array(*room_entry);
-    auto it = std::remove_if(groups.begin(), groups.end(), [&](nlohmann::json& entry) {
-        if (!entry.is_object()) return false;
-        if (!entry.contains("spawn_id") || !entry["spawn_id"].is_string()) return false;
-        return entry["spawn_id"].get<std::string>() == spawn_id;
-    });
-    if (it == groups.end()) {
-        return;
-    }
-    groups.erase(it, groups.end());
-    for (size_t i = 0; i < groups.size(); ++i) {
-        if (groups[i].is_object()) {
-            groups[i]["priority"] = static_cast<int>(i);
+
+    bool changed = false;
+    mutate_map_data([&](manifest::MapData& map_data) {
+        nlohmann::json map_entry = map_data.to_manifest_entry();
+        nlohmann::json& rooms = map_entry["rooms_data"];
+        if (!rooms.is_object()) {
+            return false;
         }
+        auto it_room = rooms.find(active_room_config_key_);
+        if (it_room == rooms.end() || !it_room->is_object()) {
+            return false;
+        }
+
+        nlohmann::json& groups = ensure_spawn_groups_array(it_room.value());
+        auto it = std::remove_if(groups.begin(), groups.end(), [&](nlohmann::json& entry) {
+            if (!entry.is_object()) return false;
+            if (!entry.contains("spawn_id") || !entry["spawn_id"].is_string()) return false;
+            return entry["spawn_id"].get<std::string>() == spawn_id;
+        });
+        if (it == groups.end()) {
+            return false;
+        }
+        groups.erase(it, groups.end());
+        for (size_t i = 0; i < groups.size(); ++i) {
+            if (groups[i].is_object()) {
+                groups[i]["priority"] = static_cast<int>(i);
+            }
+        }
+        sanitize_perimeter_spawn_groups(groups);
+        map_data = manifest::MapData::from_manifest_entry(map_data.map_id, map_entry);
+        changed = true;
+        return true;
+    });
+
+    if (!changed) {
+        return;
     }
-    sanitize_perimeter_spawn_groups(groups);
-    room_configurator_->refresh_spawn_groups(*room_entry);
+    if (room_configurator_) {
+        if (nlohmann::json* room_entry = active_room_entry()) {
+            room_configurator_->refresh_spawn_groups(*room_entry);
+        }
+        room_configurator_->notify_spawn_groups_mutated();
+    }
     handle_rooms_data_mutated(true);
-    room_configurator_->notify_spawn_groups_mutated();
 }
 
 void MapModeUI::reorder_active_room_spawn_group(const std::string& spawn_id, size_t index) {
     if (spawn_id.empty()) {
         return;
     }
-    nlohmann::json* room_entry = active_room_entry();
-    if (!room_entry) {
-        return;
-    }
-    nlohmann::json& groups = ensure_spawn_groups_array(*room_entry);
-    if (!groups.is_array() || groups.empty()) {
+    if (active_room_config_key_.empty()) {
         return;
     }
 
-    auto it = std::find_if(groups.begin(), groups.end(), [&](const nlohmann::json& entry) {
-        if (!entry.is_object()) return false;
-        if (!entry.contains("spawn_id") || !entry["spawn_id"].is_string()) return false;
-        return entry["spawn_id"].get<std::string>() == spawn_id;
-    });
-    if (it == groups.end()) {
-        return;
-    }
-
-    nlohmann::json moved = *it;
-    groups.erase(it);
-    size_t clamped = std::min(index, groups.size());
-    groups.insert(groups.begin() + static_cast<std::ptrdiff_t>(clamped), std::move(moved));
-
-    for (size_t i = 0; i < groups.size(); ++i) {
-        if (groups[i].is_object()) {
-            groups[i]["priority"] = static_cast<int>(i);
+    bool changed = false;
+    mutate_map_data([&](manifest::MapData& map_data) {
+        nlohmann::json map_entry = map_data.to_manifest_entry();
+        nlohmann::json& rooms = map_entry["rooms_data"];
+        if (!rooms.is_object()) {
+            return false;
         }
-    }
+        auto it_room = rooms.find(active_room_config_key_);
+        if (it_room == rooms.end() || !it_room->is_object()) {
+            return false;
+        }
 
-    room_configurator_->refresh_spawn_groups(*room_entry);
+        nlohmann::json& groups = ensure_spawn_groups_array(it_room.value());
+        if (!groups.is_array() || groups.empty()) {
+            return false;
+        }
+
+        auto it = std::find_if(groups.begin(), groups.end(), [&](const nlohmann::json& entry) {
+            if (!entry.is_object()) return false;
+            if (!entry.contains("spawn_id") || !entry["spawn_id"].is_string()) return false;
+            return entry["spawn_id"].get<std::string>() == spawn_id;
+        });
+        if (it == groups.end()) {
+            return false;
+        }
+
+        nlohmann::json moved = *it;
+        groups.erase(it);
+        size_t clamped = std::min(index, groups.size());
+        groups.insert(groups.begin() + static_cast<std::ptrdiff_t>(clamped), std::move(moved));
+
+        for (size_t i = 0; i < groups.size(); ++i) {
+            if (groups[i].is_object()) {
+                groups[i]["priority"] = static_cast<int>(i);
+            }
+        }
+
+        map_data = manifest::MapData::from_manifest_entry(map_data.map_id, map_entry);
+        changed = true;
+        return true;
+    });
+
+    if (!changed) {
+        return;
+    }
+    if (room_configurator_) {
+        if (nlohmann::json* room_entry = active_room_entry()) {
+            room_configurator_->refresh_spawn_groups(*room_entry);
+        }
+        room_configurator_->notify_spawn_groups_mutated();
+    }
     handle_rooms_data_mutated(false);
-    room_configurator_->notify_spawn_groups_mutated();
 }
 
 void MapModeUI::handle_rooms_data_mutated(bool refresh_rooms_list) {
     if (!map_info_) {
         return;
+    }
+    if (assets_) {
+        assets_->mark_map_data_dirty();
     }
     if (layers_panel_) {
         layers_panel_->mark_dirty(true);
@@ -1636,7 +1702,16 @@ void MapModeUI::create_room_from_panel(SlidingPanel return_panel) {
     if (!map_info_ || !map_info_->is_object()) {
         return;
     }
-    std::string new_key = map_layers::create_room_entry(*map_info_);
+    std::string new_key;
+    mutate_map_data([&](manifest::MapData& map_data) {
+        nlohmann::json map_entry = map_data.to_manifest_entry();
+        new_key = map_layers::create_room_entry(map_entry);
+        if (new_key.empty()) {
+            return false;
+        }
+        map_data = manifest::MapData::from_manifest_entry(map_data.map_id, map_entry);
+        return true;
+    });
     if (new_key.empty()) {
         return;
     }

@@ -14,6 +14,7 @@
 #include "fog_settings_panel.hpp"
 #include "terrain_settings_panel.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "core/manifest/map_data.hpp"
 #include "dev_footer_bar.hpp"
 
 class Assets;
@@ -138,6 +139,9 @@ private:
     void delete_active_room_spawn_group(const std::string& spawn_id);
     void reorder_active_room_spawn_group(const std::string& spawn_id, size_t index);
     void handle_rooms_data_mutated(bool refresh_rooms_list);
+    bool mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator);
+    void mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority priority =
+                                 devmode::core::DevSaveCoordinator::Priority::Debounced);
     void update_room_config_header_controls();
     void begin_map_color_sampling(const utils::color::RangedColor& current, std::function<void(SDL_Color)> on_sample, std::function<void()> on_cancel);
     void cancel_map_color_sampling(bool silent = false);

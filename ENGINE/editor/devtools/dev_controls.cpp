@@ -4285,43 +4285,50 @@ void DevControls::create_trail_template() {
         return;
     }
 
-    nlohmann::json& map_info = *map_info_json_;
-    if (!map_info.is_object()) {
+    std::string key;
+    bool created = assets_->mutate_map_data([&](manifest::MapData& map_data) {
+        nlohmann::json trails = map_data.trails_data;
+        if (!trails.is_object()) {
+            trails = nlohmann::json::object();
+        }
+
+        const std::string base_name = "NewTrail";
+        key = base_name;
+        int suffix = 1;
+        while (trails.contains(key)) {
+            key = base_name + std::to_string(suffix++);
+        }
+
+        std::vector<SDL_Color> used_colors = utils::display_color::collect(trails);
+        SDL_Color display_color = utils::display_color::generate_distinct_color(used_colors);
+
+        nlohmann::json entry = nlohmann::json::object();
+        entry["name"] = key;
+        entry["geometry"] = "Square";
+        entry["min_width"] = 400;
+        entry["max_width"] = 400;
+        entry["min_height"] = 200;
+        entry["max_height"] = 200;
+        entry["inherits_map_assets"] = true;
+        entry["is_spawn"] = false;
+        entry["is_boss"] = false;
+        entry["edge_smoothness"] = 8;
+        entry["curvyness"] = 4;
+        entry["spawn_groups"] = nlohmann::json::array();
+        utils::display_color::write(entry, display_color);
+
+        trails[key] = std::move(entry);
+        map_data.trails_data = std::move(trails);
+        return true;
+    });
+
+    if (!created || key.empty()) {
         sync_header_button_states();
         return;
     }
 
+    nlohmann::json& map_info = *map_info_json_;
     nlohmann::json& trails = map_info["trails_data"];
-    if (!trails.is_object()) {
-        trails = nlohmann::json::object();
-    }
-
-    const std::string base_name = "NewTrail";
-    std::string key = base_name;
-    int suffix = 1;
-    while (trails.contains(key)) {
-        key = base_name + std::to_string(suffix++);
-    }
-
-    std::vector<SDL_Color> used_colors = utils::display_color::collect(trails);
-    SDL_Color display_color = utils::display_color::generate_distinct_color(used_colors);
-
-    nlohmann::json entry = nlohmann::json::object();
-    entry["name"] = key;
-    entry["geometry"] = "Square";
-    entry["min_width"] = 400;
-    entry["max_width"] = 400;
-    entry["min_height"] = 200;
-    entry["max_height"] = 200;
-    entry["inherits_map_assets"] = true;
-    entry["is_spawn"] = false;
-    entry["is_boss"] = false;
-    entry["edge_smoothness"] = 8;
-    entry["curvyness"] = 4;
-    entry["spawn_groups"] = nlohmann::json::array();
-    utils::display_color::write(entry, display_color);
-
-    trails[key] = std::move(entry);
     nlohmann::json& inserted = trails[key];
 
     nlohmann::json* map_assets_section = nullptr;
@@ -4351,8 +4358,11 @@ void DevControls::create_trail_template() {
                                                      Room::ManifestWriter{});
 
     if (pending_trail_template_) {
+        pending_trail_template_->mark_dirty();
         pending_trail_template_->set_manifest_store(&manifest_store_, manifest_context, &map_info);
     }
+
+    mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
 
     if (trail_suite_) {
         trail_suite_->open(pending_trail_template_.get());

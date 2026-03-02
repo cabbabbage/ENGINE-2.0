@@ -107,7 +107,9 @@ public:
     [[nodiscard]] devmode::core::DevSaveCoordinator& save_coordinator();
     [[nodiscard]] const devmode::core::DevSaveCoordinator& save_coordinator() const;
     void mark_map_dirty(devmode::core::DevSaveCoordinator::Priority priority =
-                            devmode::core::DevSaveCoordinator::Priority::Debounced);
+                            devmode::core::DevSaveCoordinator::Priority::Debounced,
+                    devmode::core::SaveManager::MapWritePath path =
+                        devmode::core::SaveManager::MapWritePath::Default);
 
     void toggle_room_config();
     void close_room_config();
@@ -331,6 +333,9 @@ private:
     void ensure_boundary_assets_modal_open();
 
 
+    bool persist_map_info_to_disk(devmode::core::SaveManager::MapWritePath path =
+                                 devmode::core::SaveManager::MapWritePath::Default);
+
     Assets* assets_ = nullptr;
     Input* input_ = nullptr;
     std::vector<Asset*>* active_assets_ = nullptr;
@@ -371,6 +376,8 @@ private:
     devmode::core::DevSaveCoordinator save_coordinator_;
     devmode::core::SaveManager save_manager_;
     bool map_dirty_ = false;
+    devmode::core::SaveManager::MapWritePath map_write_path_ =
+        devmode::core::SaveManager::MapWritePath::Default;
     OtherSettingsAndControls other_settings_;
 
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;

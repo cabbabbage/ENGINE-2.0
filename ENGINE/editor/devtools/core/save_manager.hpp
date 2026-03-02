@@ -14,6 +14,11 @@ class ManifestStore;
 
 class SaveManager {
 public:
+    enum class MapWritePath {
+        Default = 0,
+        FrameEditorTag = 1,
+    };
+
     enum class Stage {
         Manifest = 0,
         Cache = 1,
@@ -42,7 +47,8 @@ public:
                            nlohmann::json payload,
                            DevSaveCoordinator::Priority priority,
                            const std::string& label,
-                           std::function<void()> on_success = {});
+                           std::function<void()> on_success = {},
+                           MapWritePath path = MapWritePath::Default);
 
 private:
     bool flush_manifest_stage(const std::string& reason);

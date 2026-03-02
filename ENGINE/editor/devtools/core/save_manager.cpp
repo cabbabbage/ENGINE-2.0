@@ -1,6 +1,7 @@
 #include "save_manager.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <iostream>
 #include <unordered_set>
 
@@ -9,6 +10,32 @@
 #include "devtools/core/manifest_store.hpp"
 
 namespace devmode::core {
+
+namespace {
+const char* map_write_path_name(SaveManager::MapWritePath path) {
+    switch (path) {
+        case SaveManager::MapWritePath::FrameEditorTag: return "frame-editor-tag";
+        case SaveManager::MapWritePath::Default:
+        default: return "default";
+    }
+}
+
+const char* map_write_reason(SaveManager::MapWritePath path) {
+    switch (path) {
+        case SaveManager::MapWritePath::FrameEditorTag: return "SaveManager::persist_map_entry(frame-editor-tag)";
+        case SaveManager::MapWritePath::Default:
+        default: return "SaveManager::persist_map_entry";
+    }
+}
+
+std::uint64_t extract_save_manager_version(const nlohmann::json& entry) {
+    const auto it = entry.find("_save_manager_version");
+    if (it == entry.end() || !it->is_number_unsigned()) {
+        return 0;
+    }
+    return it->get<std::uint64_t>();
+}
+}
 
 void SaveManager::set_manifest_store(ManifestStore* store) {
     store_ = store;
@@ -174,10 +201,22 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
                                     nlohmann::json payload,
                                     DevSaveCoordinator::Priority priority,
                                     const std::string& label,
-                                    std::function<void()> on_success) {
+                                    std::function<void()> on_success,
+                                    MapWritePath path) {
     if (map_id.empty()) {
         std::cerr << "[SaveManager] Map identifier is empty; cannot persist map entry\n";
         return false;
+    }
+
+    std::cerr << "[SaveManager] Persist map entry requested: map='" << map_id
+              << "' path='" << map_write_path_name(path) << "' label='" << label << "'"
+              << (batch_save_active_ ? " during batch save" : "") << "\n";
+
+    if (path == MapWritePath::FrameEditorTag) {
+        const std::uint64_t next_version = extract_save_manager_version(payload) + 1;
+        payload["_save_manager_version"] = next_version;
+        std::cerr << "[SaveManager] FRAME-EDITOR EXCEPTION PATH: map '" << map_id
+                  << "' assigned version " << next_version << "\n";
     }
 
     if (batch_save_active_) {
@@ -185,6 +224,21 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
             std::cerr << "[SaveManager] Manifest store unavailable; cannot persist map entry\n";
             return false;
         }
+
+        if (path != MapWritePath::FrameEditorTag) {
+            if (const nlohmann::json* latest = store_->find_map_entry(map_id)) {
+                const std::uint64_t payload_version = extract_save_manager_version(payload);
+                const std::uint64_t latest_version = extract_save_manager_version(*latest);
+                if (latest_version > payload_version) {
+                    std::cerr << "[SaveManager] FRAME-EDITOR EXCEPTION PATH: stale batch payload for '"
+                              << map_id << "' (payload=" << payload_version
+                              << ", manifest=" << latest_version
+                              << ") - preserving newer manifest entry\n";
+                    payload = *latest;
+                }
+            }
+        }
+
         if (!store_->update_map_entry(map_id, payload)) {
             return false;
         }
@@ -198,8 +252,8 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
         coordinator_->enqueue_custom(
             DevSaveCoordinator::IntentKind::MapEntry,
             "map:" + map_id,
-            [map_id, payload = std::move(payload)](ManifestStore& store) {
-                auto guard = store.scoped_guard("SaveManager::persist_map_entry");
+            [map_id, payload = std::move(payload), path](ManifestStore& store) {
+                auto guard = store.scoped_guard(map_write_reason(path));
                 (void)guard;
                 return store.update_map_entry(map_id, payload);
             },
@@ -221,7 +275,7 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
         return false;
     }
     if (priority == DevSaveCoordinator::Priority::Immediate) {
-        auto immediate_guard = store_->scoped_guard("SaveManager::persist_map_entry");
+        auto immediate_guard = store_->scoped_guard(map_write_reason(path));
         (void)immediate_guard;
         store_->flush();
     }

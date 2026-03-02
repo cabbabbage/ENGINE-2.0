@@ -45,7 +45,8 @@ public:
                const std::string& animation_id,
                FrameEditorLaunchMode launch_mode,
                std::function<void(const std::string&)> on_host_closed,
-               std::function<void()> on_end_callback = {});
+               std::function<void()> on_end_callback = {},
+               std::function<void()> on_save_and_update_callback = {});
     void end();
 
     bool is_active() const { return active_; }
@@ -79,6 +80,7 @@ private:
     FrameEditorLaunchMode launch_mode_ = FrameEditorLaunchMode::Movement;
     std::function<void(const std::string&)> on_host_closed_{};
     std::function<void()> on_end_{};
+    std::function<void()> on_save_and_update_{};
 
     bool active_ = false;
     Mode mode_ = Mode::Movement;

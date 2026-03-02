@@ -810,16 +810,19 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                     map_id, std::move(payload), priority, "Map session",
                     [this]() {
                         map_dirty_ = false;
+                        map_write_path_ = devmode::core::SaveManager::MapWritePath::Default;
                         if (map_mode_ui_) map_mode_ui_->mark_layers_clean();
                         if (map_mode_ui_) map_mode_ui_->notify_saved();
                         if (room_editor_) room_editor_->notify_room_assets_saved();
-                    });
+                    },
+                    map_write_path_);
                 if (ok && priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
                     save_coordinator_.flush_now("Map session save");
                 }
                 if (ok && priority != devmode::core::DevSaveCoordinator::Priority::Immediate) {
                     // Clear flag here; success callback will also clear but that's fine.
                     map_dirty_ = false;
+                    map_write_path_ = devmode::core::SaveManager::MapWritePath::Default;
                 }
                 return ok;
             },
@@ -3315,6 +3318,9 @@ void DevControls::begin_frame_editor_session(Asset* asset,
         this->frame_editor_prev_asset_info_open_ = false;
         this->frame_editor_asset_for_reopen_ = nullptr;
         this->apply_header_suppression();
+    },
+    [this]() {
+        this->persist_map_info_to_disk(devmode::core::SaveManager::MapWritePath::FrameEditorTag);
     });
     apply_header_suppression();
 }
@@ -3463,10 +3469,17 @@ void DevControls::notify_spawn_group_removed(const std::string& spawn_id) {
     Asset::ClearFlipOverrideForSpawnId(spawn_id);
 }
 
-void DevControls::mark_map_dirty(devmode::core::DevSaveCoordinator::Priority priority) {
+void DevControls::mark_map_dirty(devmode::core::DevSaveCoordinator::Priority priority,
+                                devmode::core::SaveManager::MapWritePath path) {
     map_dirty_ = true;
+    map_write_path_ = path;
     if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
         save_manager_.save_dirty(priority, "Immediate map change");
+        const std::string reason =
+            path == devmode::core::SaveManager::MapWritePath::FrameEditorTag
+                ? "Immediate map change (frame-editor-tag)"
+                : "Immediate map change";
+        save_manager_.save_dirty(priority, reason);
     }
 }
 
@@ -4748,6 +4761,22 @@ bool DevControls::boundary_assets_visible() const {
     }
     return other_settings_.is_type_filter_enabled(std::string(asset_types::boundary));
 }
+
+
+bool DevControls::persist_map_info_to_disk(devmode::core::SaveManager::MapWritePath path) {
+    if (!assets_) {
+        std::cerr << "[DevControls] Cannot persist map info: assets manager not set\n";
+        return false;
+    }
+    const std::string map_id = assets_->map_id();
+    if (map_id.empty()) {
+        std::cerr << "[DevControls] Cannot persist map info: map id empty\n";
+        return false;
+    }
+    mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate, path);
+    return true;
+}
+
 
 void DevControls::render_grid_resolution_toast(SDL_Renderer* renderer) {
     if (!renderer || !grid_resolution_toast_) {

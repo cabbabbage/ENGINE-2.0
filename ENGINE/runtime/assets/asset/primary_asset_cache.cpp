@@ -419,20 +419,12 @@ bool PrimaryAssetCache::load_or_build(AssetInfo& info,
                                       std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
                                       CacheManager::BundleData& raw_bundle) {
     const fs::path bundle_path = fs::path("cache") / info.name / "bundle.bin";
-    const std::uint64_t current_hash = compute_hash(info);
-
     CacheManager::BundleData bundle;
-    bool loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
-    if (loaded && bundle.content_hash == current_hash) {
-        raw_bundle = bundle;
-        return populate_runtime_frames(info, bundle, out_frames);
-    }
-
-    if (!build_bundle_from_sources(info, bundle)) {
-        vibble::log::error("[PrimaryAssetCache] Failed to build bundle for " + info.name);
+    if (!CacheManager::load_bundle(bundle_path.generic_string(), bundle)) {
+        vibble::log::debug("[PrimaryAssetCache] No cached bundle for " + info.name + "; skipping cache preload.");
         return false;
     }
-    bundle.content_hash = current_hash;
+
     raw_bundle = bundle;
     return populate_runtime_frames(info, bundle, out_frames);
 }

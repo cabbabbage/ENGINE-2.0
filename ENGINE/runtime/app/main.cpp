@@ -1,5 +1,4 @@
 #include "main.hpp"
-#include "utils/rebuild_assets.hpp"
 #include "utils/text_style.hpp"
 #include "ui/main_menu.hpp"
 #include "ui/menu_ui.hpp"
@@ -17,7 +16,6 @@
 #include "audio/audio_engine.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "utils/loading_status_notifier.hpp"
-#include "utils/rebuild_queue.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL.h>
@@ -819,8 +817,7 @@ std::optional<MapDescriptor> create_new_map_interactively() {
 void run(SDL_Window* window,
          EngineRenderer& engine_renderer,
          int screen_w,
-         int screen_h,
-         bool rebuild_cache) {
+         int screen_h) {
     (void)window;
 
     SDL_Renderer* renderer = engine_renderer.raw();
@@ -949,17 +946,6 @@ void run(SDL_Window* window,
         LoadingScreen loading_screen(renderer, screen_w, screen_h);
         loading_screen.init();
 
-        if (rebuild_cache) {
-            vibble::log::info("[Main] Rebuilding asset cache...");
-            RebuildAssets* rebuilder = new RebuildAssets(renderer, selected_map.id);
-            delete rebuilder;
-            vibble::log::info("[Main] Asset cache rebuild complete.");
-            vibble::log::info("[Main] Refreshing shared asset library after cache rebuild...");
-            shared_asset_library->load_all_from_resources();
-            shared_asset_library->loadAllAnimations(renderer);
-            vibble::log::info("[Main] Shared asset library refreshed.");
-        }
-
         MenuUI app(&engine_renderer, screen_w, screen_h, std::move(selected_map), &loading_screen, shared_asset_library.get(), window);
         app.init();
         if (app.wants_return_to_main_menu()) {
@@ -970,30 +956,10 @@ void run(SDL_Window* window,
 }
 
 int main(int argc, char* argv[]) {
+        (void)argc;
+        (void)argv;
         vibble::log::info("[Main] Starting game engine...");
-        const bool rebuild_cache =
-                (argc > 1 && argv[1] && std::string(argv[1]) == "-r");
-
-        vibble::RebuildQueueCoordinator rebuild_queue;
-        if (rebuild_cache) {
-                vibble::log::info("[Main] -r detected; queueing full asset rebuild.");
-                rebuild_queue.request_full_asset_rebuild();
-        }
-
-        if (!rebuild_queue.validate_manifest_cache()) {
-                vibble::log::warn("[Main] Cache validation step failed.");
-        }
-
-        if (rebuild_queue.has_pending_asset_work()) {
-        vibble::log::info("[Main] Processing queued asset rebuilds via asset_tool_cli (C++ cache generator)...");
-        if (rebuild_queue.run_asset_tool()) {
-            vibble::log::info("[Main] Asset rebuilds completed.");
-        } else {
-            vibble::log::warn("[Main] asset_tool_cli reported an error.");
-        }
-        } else {
-                vibble::log::info("[Main] No queued asset rebuilds detected.");
-        }
+        vibble::log::info("[Main] Startup uses existing asset caches; regeneration runs on exit.");
 
         const SDL_InitFlags init_flags =
                 static_cast<SDL_InitFlags>(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
@@ -1080,7 +1046,7 @@ int main(int argc, char* argv[]) {
         }
         vibble::log::info(std::string("[Main] Screen resolution: ") + std::to_string(screen_width) + "x" + std::to_string(screen_height));
 
-        run(window, *engine_renderer, screen_width, screen_height, rebuild_cache);
+        run(window, *engine_renderer, screen_width, screen_height);
 
         engine_renderer.reset();
         SDL_DestroyWindow(window);

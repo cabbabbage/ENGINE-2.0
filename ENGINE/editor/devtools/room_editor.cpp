@@ -2806,9 +2806,8 @@ float RoomEditor::edge_pan_intensity(int value, int max_value, float threshold_f
 }
 
 bool RoomEditor::apply_shift_edge_pan(const Input& input, WarpedScreenGrid& cam) {
-    const bool shift_down =
-        input.isScancodeDown(SDL_SCANCODE_LSHIFT) || input.isScancodeDown(SDL_SCANCODE_RSHIFT);
-    if (!shift_down || screen_w_ <= 1 || screen_h_ <= 1) {
+    const bool has_selection = !selected_assets_.empty();
+    if (!has_selection || screen_w_ <= 1 || screen_h_ <= 1) {
         return false;
     }
 
@@ -2926,8 +2925,9 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     } else if (!shift_down) {
         hit_before_pan = nullptr;
     }
-    const bool selection_interaction_active = shift_down || !selected_assets_.empty();
-    const bool selection_blocks_camera_pan = !selected_assets_.empty();
+    const bool has_selection = !selected_assets_.empty();
+    const bool selection_interaction_active = shift_down || has_selection;
+    const bool selection_blocks_camera_pan = has_selection;
     const bool pointer_blocks_pan = selection_blocks_camera_pan ||
                                     (!selection_interaction_active && dragging_) ||
                                     (selection_interaction_active && !dragging_ && hit_before_pan && (left_down || left_pressed_this_frame));
@@ -2946,7 +2946,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
     if (!camera_settings_lock_active_) {
         camera_controls_.handle_input(cam, input, pointer_blocks_pan);
-        if (!camera_controls_.is_panning() && !pointer_blocks_pan) {
+        if (has_selection && !camera_controls_.is_panning()) {
             apply_shift_edge_pan(input, cam);
         }
     }

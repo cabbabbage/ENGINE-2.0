@@ -459,6 +459,17 @@ bool RoomEditor::commit_room_edit_transaction(const std::function<bool()>& mutat
     return tx.run(hooks);
 }
 
+void RoomEditor::mark_map_dirty_for_spawn_groups(
+    devmode::core::DevSaveCoordinator::Priority priority) {
+    if (mark_map_dirty_callback_) {
+        mark_map_dirty_callback_(priority);
+        return;
+    }
+    if (assets_) {
+        assets_->mark_map_data_dirty();
+    }
+}
+
 void RoomEditor::copy_selected_spawn_group() {
     auto spawn_id_opt = selected_spawn_group_id();
     if (!spawn_id_opt) {
@@ -5337,8 +5348,8 @@ void RoomEditor::finalize_drag_session() {
                         respawn_spawn_group(*entry);
                     }
                 } else if (resolved.source == SpawnEntryResolution::Source::Map) {
+                    mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority::Debounced);
                     if (assets_) {
-                        assets_->persist_map_info_json();
                         assets_->notify_spawn_group_config_changed(*entry);
                     }
                 }
@@ -5575,24 +5586,16 @@ void RoomEditor::refresh_spawn_group_config_ui() {
         resolved = locate_spawn_entry(*active_spawn_group_id_);
         if (resolved.source == SpawnEntryResolution::Source::Map && resolved.owner_array) {
             if (sanitize_perimeter_spawn_groups(*resolved.owner_array)) {
-                if (assets_) {
-                    assets_->persist_map_info_json();
-                }
+                mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority::Debounced);
             }
         }
     }
 
     auto map_on_change = [this]() {
-        if (!assets_) {
-            return;
-        }
-        assets_->persist_map_info_json();
+        mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority::Debounced);
 };
 
     auto map_on_entry_change = [this](const nlohmann::json& entry, const SpawnGroupConfig::ChangeSummary& summary) {
-        if (!assets_) {
-            return;
-        }
         bool sanitized = false;
         if (entry.is_object()) {
             const std::string id = entry.value("spawn_id", std::string{});
@@ -5601,10 +5604,12 @@ void RoomEditor::refresh_spawn_group_config_ui() {
                 sanitized = sanitize_perimeter_spawn_groups(*current.owner_array);
             }
         }
-        assets_->persist_map_info_json();
+        mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority::Debounced);
         if (sanitized || summary.method_changed || summary.quantity_changed || summary.candidates_changed ||
             summary.resolution_changed) {
-            assets_->notify_spawn_group_config_changed(entry);
+            if (assets_) {
+                assets_->notify_spawn_group_config_changed(entry);
+            }
         }
 };
 
@@ -6285,8 +6290,8 @@ bool RoomEditor::snap_spawn_group_to_resolution(Asset* anchor, int resolution) {
         if (resolved.source == SpawnEntryResolution::Source::Room) {
             save_current_room_assets_json();
         } else if (resolved.source == SpawnEntryResolution::Source::Map) {
+            mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority::Debounced);
             if (assets_) {
-                assets_->persist_map_info_json();
                 assets_->notify_spawn_group_config_changed(*resolved.entry);
             }
         }

@@ -96,6 +96,8 @@ class Room {
     const nlohmann::json& assets_data() const;
     nlohmann::json build_room_payload_for_save() const;
     bool apply_room_payload_for_save(const nlohmann::json& payload) const;
+    // Update the in-memory map info JSON with the current room state without touching disk.
+    void snapshot_assets_to_map_info();
     bool has_pending_assets_save() const { return assets_save_dirty_; }
     void mark_dirty() const { assets_save_dirty_ = true; }
     bool is_dirty() const { return assets_save_dirty_; }

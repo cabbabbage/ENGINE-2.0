@@ -292,11 +292,16 @@ private:
     void reopen_room_configurator();
     void notify_room_assets_saved();
     bool enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority priority);
-    bool save_current_room_assets_json();
+    bool save_current_room_assets_json(devmode::core::DevSaveCoordinator::Priority priority =
+                                           devmode::core::DevSaveCoordinator::Priority::Immediate);
     bool validate_room_edit_invariants(std::string* error = nullptr);
     bool commit_room_edit_transaction(const std::function<bool()>& mutate,
                                       const std::string& action_label,
-                                      bool refresh_ui_on_success = true);
+                                      bool refresh_ui_on_success = true,
+                                      devmode::core::DevSaveCoordinator::Priority save_priority =
+                                          devmode::core::DevSaveCoordinator::Priority::Immediate);
+    void mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority priority =
+                                             devmode::core::DevSaveCoordinator::Priority::Debounced);
     void copy_selected_spawn_group();
     void paste_spawn_group_from_clipboard();
     std::optional<std::string> selected_spawn_group_id() const;

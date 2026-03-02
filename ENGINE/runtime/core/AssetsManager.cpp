@@ -325,6 +325,18 @@ void Assets::mark_map_data_dirty() {
     map_data_dirty_ = true;
 }
 
+void Assets::snapshot_rooms_to_map_info() {
+    if (!map_info_json_.is_object()) {
+        map_info_json_ = nlohmann::json::object();
+    }
+    for (Room* room : rooms_) {
+        if (!room) {
+            continue;
+        }
+        room->snapshot_assets_to_map_info();
+    }
+}
+
 void Assets::persist_map_info_json() {
     save_map_info_json();
     map_data_dirty_ = false;

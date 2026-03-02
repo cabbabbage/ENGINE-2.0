@@ -194,6 +194,8 @@ public:
     void mark_map_data_dirty();
     bool map_data_dirty() const { return map_data_dirty_; }
     void clear_map_data_dirty() { map_data_dirty_ = false; }
+    // Capture the current in-memory room state (including spawn groups) into map_info_json_.
+    void snapshot_rooms_to_map_info();
     const std::string& map_path() const { return map_path_; }
     const std::string& map_id() const { return map_id_; }
     world::WorldGrid& world_grid() { return world_grid_; }

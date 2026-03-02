@@ -1000,6 +1000,26 @@ nlohmann::json Room::build_room_payload_for_save() const {
         return payload;
 }
 
+void Room::snapshot_assets_to_map_info() {
+        // Keep the in-memory manifest representation aligned with the live room state.
+        if (map_info_root_) {
+                if (!map_info_root_->is_object()) {
+                        *map_info_root_ = nlohmann::json::object();
+                }
+                nlohmann::json& section = (*map_info_root_)[data_section_];
+                if (!section.is_object()) {
+                        section = nlohmann::json::object();
+                }
+                section[room_name] = assets_json;
+                room_data_ptr_ = &section[room_name];
+                return;
+        }
+
+        if (room_data_ptr_) {
+                *room_data_ptr_ = assets_json;
+        }
+}
+
 bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
         if (!payload.is_object()) {
                 return false;

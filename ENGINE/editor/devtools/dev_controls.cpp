@@ -810,11 +810,15 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                 if (!assets_) {
                     return false;
                 }
+                // Ensure in-memory room state (including spawn groups) is reflected in the map payload.
+                assets_->snapshot_rooms_to_map_info();
                 const std::string map_id = assets_->map_id();
                 if (map_id.empty()) {
                     std::cerr << "[DevControls] Cannot batch-save map: id empty\n";
                     return false;
                 }
+                std::cerr << "[DevControls] Serializing rooms (spawn groups included) into map payload for '"
+                          << map_id << "'\n";
                 nlohmann::json payload = assets_->map_info_json();
                 bool ok = save_manager_.persist_map_entry(
                     map_id, std::move(payload), priority, "Map session",

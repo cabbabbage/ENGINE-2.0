@@ -1132,6 +1132,7 @@
   },
   "maps": {
     "Forrest": {
+      "_save_manager_version": 1,
       "audio": {
         "music": {
           "content_root": "content/Forrest/music",

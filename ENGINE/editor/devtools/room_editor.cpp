@@ -3870,7 +3870,11 @@ bool RoomEditor::regenerate_geometry(Room* room) {
         }
     }
     if (!to_delete.empty()) {
-        assets_->delete_assets_runtime(to_delete);
+        auto batch = assets_->begin_world_mutation_batch();
+        for (Asset* asset : to_delete) {
+            batch.mark_for_deletion(asset);
+        }
+        (void)batch.commit();
     }
 
     Room* previous = current_room_;

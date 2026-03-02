@@ -1955,8 +1955,9 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
             SDL_Rect header = entry->header_rect();
             if (header.w <= 0 || header.h <= 0) continue;
             if (SDL_PointInRect(&pointer, &header)) {
-                if (callbacks_.on_open_floating) {
-                    callbacks_.on_open_floating(entry->spawn_id(), pointer);
+                const std::string id = entry->spawn_id();
+                if (!id.empty() && callbacks_.on_open_floating) {
+                    callbacks_.on_open_floating(id, pointer);
                 }
                 process_pending_notifications();
                 return true;

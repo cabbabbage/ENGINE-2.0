@@ -99,6 +99,7 @@ struct GridPoint {
         , resolution_layer_(resolution_layer)
         , parent_(parent_point)
         , is_virtual_(is_virtual_point)
+        , is_floor(world_z == 0)
         , world(GridCoord{world_x, world_y})
         , grid_index(grid_idx)
         , chunk_index(chunk_idx)
@@ -140,6 +141,8 @@ struct GridPoint {
 
     RegionKind region_kind = RegionKind::Boundary;
     const Room* region_owner = nullptr; // Non-owning; points to Room that contains this point, if any.
+    // True when this grid point represents the ground (floor) for its XY.
+    bool is_floor = false;
 
     // Renderer/UI boundary helpers (explicit conversions)
     SDL_Point to_sdl_point() const { return SDL_Point{world_x_, world_y_}; }
@@ -241,6 +244,7 @@ struct GridPoint {
         terrain_slope_x    = 0.0f;
         terrain_slope_y    = 0.0f;
         terrain_revision   = 0;
+        is_floor           = (world_z_ == 0);
         screen_data_frame_updated = frame_stamp;
         screen_data_valid  = false;
     }

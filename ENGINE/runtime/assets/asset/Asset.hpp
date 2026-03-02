@@ -308,10 +308,15 @@ class Asset {
         int   resolution_layer = 0;         // grid resolution used for anchor materialization
     };
 
-    AnchorHandle& get_anchor_point(const std::string& name);
-    std::optional<ResolvedAnchor> anchor_state(const std::string& name,
-                                               anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None,
-                                               std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
+    AnchorPoint* get_anchor_point(const std::string& name);
+    std::optional<AnchorPoint> anchor_state(const std::string& name,
+                                            anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None,
+                                            std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
+    AnchorPoint& resolve_anchor_point_entry(std::size_t index,
+                                            anchor_points::GridMaterialization grid_policy,
+                                            std::optional<anchor_points::AnchorDepthPolicy> depth_policy,
+                                            const DisplacedAssetAnchorPoint* frame_anchor);
+    void refresh_anchor_point_cache_from_frame();
     void mark_anchors_dirty();
     bool update_anchor_basis_if_needed();
     AnchorBasisSignature compute_anchor_basis_signature() const;
@@ -394,8 +399,13 @@ private:
     float        world_z_offset_    = 0.0f;
     bool         mesh_dirty_        = true;
 
+    void initialize_anchor_registry_from_animations();
+    AnchorHandle* find_anchor_handle(const std::string& name);
+
     std::vector<AnchorHandle> anchor_handles_;
-    std::unordered_map<std::string, std::size_t> anchor_lookup_;
+    std::vector<AnchorPoint> anchor_points_;
+    std::unordered_map<std::string, std::size_t> anchor_name_to_index_;
+    bool anchors_initialized_ = false;
 
     std::uint64_t anchor_world_revision_ = 1;
     AnchorBasisSignature last_anchor_basis_signature_{};

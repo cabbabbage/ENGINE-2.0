@@ -6,6 +6,15 @@
 
 namespace world { struct GridPoint; }
 
+// Lightweight 2D vector used by runtime anchor results.
+struct Vec2 {
+    float x = 0.0f;
+    float y = 0.0f;
+
+    Vec2() = default;
+    Vec2(float x_, float y_) : x(x_), y(y_) {}
+};
+
 // Canonical anchor contract:
 // - texture_x/texture_y name an integer pixel in the un-flipped source texture.
 // - The anchor refers to the *center* of that pixel: (x + 0.5, y + 0.5).
@@ -42,6 +51,21 @@ struct ResolvedAnchor {
     world::GridPoint* grid_point = nullptr;
     bool             missing = false;
     bool             in_front = true;
+};
+
+// Runtime-facing anchor state used by animation, rendering, and binding helpers.
+struct AnchorPoint {
+    std::string name;
+    int frame_index = -1;
+    bool exists = false;
+    bool in_front = true;
+    Vec2 relative_pos_2d{};
+    Vec2 world_pos_2d{};
+    int world_z = 0;
+    int resolution_layer = 0;
+
+    bool is_active() const { return exists; }
+    const Vec2& world_pos() const { return world_pos_2d; }
 };
 
 namespace anchor_points {

@@ -219,19 +219,39 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
     const std::uint64_t terrain_frame_id = assets_ ? static_cast<std::uint64_t>(assets_->current_frame_id()) : 0;
     const int default_layer = grid.default_resolution_layer();
 
+    auto find_floor_point = [&](const SDL_Point& pos) -> const world::GridPoint* {
+        const int layer = default_layer;
+        const world::GridKey floor_key{pos.x, pos.y, 0, layer};
+        if (const world::GridPoint* gp = grid.find_grid_point(floor_key)) {
+            if (gp->is_floor || gp->world_z() == 0) {
+                return gp;
+            }
+        }
+        const auto& all_points = grid.points();
+        for (const auto& entry : all_points) {
+            const world::GridPoint& gp = entry.second;
+            if (gp.world_x() == pos.x &&
+                gp.world_y() == pos.y &&
+                gp.resolution_layer() == layer &&
+                gp.is_floor) {
+                return &gp;
+            }
+        }
+        return nullptr;
+    };
+
     auto sample_height = [&](const SDL_Point& pos) -> float {
         if (!terrain_enabled) {
             return 0.0f;
         }
-        const int layer = default_layer;
-        if (const world::GridPoint* gp = grid.find_grid_point(world::GridKey{pos.x, pos.y, 0, layer})) {
-            if (gp->terrain_revision == runtime_state->revision) {
-                return gp->terrain_elevation;
-            }
+        const world::GridPoint* gp = find_floor_point(pos);
+        if (gp && gp->terrain_revision == runtime_state->revision) {
+            return gp->terrain_elevation;
         }
         if (!rooms_ptr) {
             return 0.0f;
         }
+        const int layer = default_layer;
         world::GridKey key{pos.x, pos.y, 0, layer};
         return terrain_field_->sample_elevation(key, grid, *rooms_ptr, *runtime_state, terrain_frame_id);
     };
@@ -1241,18 +1261,30 @@ void SceneRenderer::render() {
                 if (!anchor.is_valid()) {
                     continue;
                 }
-                const auto sample = anchor_points::resolve_frame_anchor_sample(
-                    *asset,
-                    anchor,
-                    anchor.in_front ? anchor_points::AnchorDepthPolicy::InFront : anchor_points::AnchorDepthPolicy::Behind,
-                    anchor_points::GridMaterialization::None);
-                if (sample.resolved.missing || !std::isfinite(sample.screen_px.x) || !std::isfinite(sample.screen_px.y)) {
+                auto runtime_anchor = asset->anchor_state(
+                    anchor.name,
+                    anchor_points::GridMaterialization::None,
+                    anchor.in_front ? std::optional<anchor_points::AnchorDepthPolicy>(anchor_points::AnchorDepthPolicy::InFront)
+                                    : std::optional<anchor_points::AnchorDepthPolicy>(anchor_points::AnchorDepthPolicy::Behind));
+                if (!runtime_anchor.has_value() || !runtime_anchor->is_active()) {
                     continue;
                 }
 
-                const int cx = static_cast<int>(std::lround(sample.screen_px.x));
-                const int cy = static_cast<int>(std::lround(sample.screen_px.y));
-                const SDL_Color fill = anchor.in_front ? SDL_Color{255, 220, 0, 235} : SDL_Color{120, 200, 255, 235};
+                SDL_FPoint screen{};
+                if (!project_world_point(cam,
+                                         runtime_anchor->world_pos_2d.x,
+                                         runtime_anchor->world_pos_2d.y,
+                                         static_cast<float>(runtime_anchor->world_z),
+                                         screen)) {
+                    continue;
+                }
+                if (!std::isfinite(screen.x) || !std::isfinite(screen.y)) {
+                    continue;
+                }
+
+                const int cx = static_cast<int>(std::lround(screen.x));
+                const int cy = static_cast<int>(std::lround(screen.y));
+                const SDL_Color fill = runtime_anchor->in_front ? SDL_Color{255, 220, 0, 235} : SDL_Color{120, 200, 255, 235};
                 const SDL_Color outline = SDL_Color{20, 20, 20, 235};
 
                 SDL_SetRenderDrawColor(renderer_, outline.r, outline.g, outline.b, outline.a);

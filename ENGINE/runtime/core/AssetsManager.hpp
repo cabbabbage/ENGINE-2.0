@@ -270,6 +270,7 @@ private:
     bool run_fallback_exit_save(const std::string& reason);
     bool persist_map_if_dirty(const std::string& reason);
     bool save_dirty_asset_caches(const std::string& reason);
+    void bake_terrain_if_needed(const TerrainRuntimeState& state, TerrainField& field);
 
     bool process_removals();
     bool apply_world_mutation_batch(WorldMutationBatch& batch);

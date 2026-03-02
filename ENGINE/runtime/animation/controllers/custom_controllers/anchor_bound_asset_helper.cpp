@@ -6,6 +6,7 @@
 #include "utils/log.hpp"
 
 #include <SDL3/SDL.h>
+#include <cmath>
 
 namespace {
 
@@ -153,8 +154,7 @@ void AnchorBoundAssetHelper::apply_binding_tick(const std::string& child_id, Chi
     auto resolved = controller_->anchor_state(state.anchor_name,
                                               anchor_points::GridMaterialization::Ensure,
                                               std::nullopt);
-    const bool anchor_available =
-        resolved.has_value() && !resolved->missing && resolved->has_canonical_texture_source;
+    const bool anchor_available = resolved.has_value() && resolved->is_active();
 
     if (!anchor_available) {
         set_child_hidden_state(state.child, true);
@@ -169,8 +169,10 @@ void AnchorBoundAssetHelper::apply_binding_tick(const std::string& child_id, Chi
         return;
     }
 
-    state.child->move_to_world_position(resolved->world_px.x,
-                                        resolved->world_px.y,
+    const int anchor_world_x = static_cast<int>(std::lround(resolved->world_pos_2d.x));
+    const int anchor_world_y = static_cast<int>(std::lround(resolved->world_pos_2d.y));
+    state.child->move_to_world_position(anchor_world_x,
+                                        anchor_world_y,
                                         resolved->world_z,
                                         resolved->resolution_layer);
     set_child_hidden_state(state.child, false);
@@ -179,8 +181,8 @@ void AnchorBoundAssetHelper::apply_binding_tick(const std::string& child_id, Chi
     log_binding_tick(child_id,
                      state,
                      true,
-                     resolved->world_px.x,
-                     resolved->world_px.y,
+                     anchor_world_x,
+                     anchor_world_y,
                      state.child->world_x(),
                      state.child->world_y());
 }

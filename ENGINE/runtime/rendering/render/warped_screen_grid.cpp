@@ -1419,6 +1419,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     for (world::GridPoint* gp : grid_points) {
         if (!gp) continue;
 
+        gp->is_floor = (gp->world_z() == 0);
+
         if (gp->occupants.empty()) {
             continue;
         }

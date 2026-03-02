@@ -11,6 +11,7 @@
 
 #include <vector>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -163,6 +164,72 @@ TEST_CASE("GridPoint caches survive revision reuse across WarpedScreenGrid rebui
     gp.last_camera_state_version_ = cam.projection_params().state_version;
     CHECK_FALSE(gp.needs_projection_update(10, gp.last_camera_state_version_, disabled_state.revision));
     CHECK(gp.needs_projection_update(10, gp.last_camera_state_version_, disabled_state.revision + 1));
+}
+
+TEST_CASE("GridPoint floor flag propagates through value semantics and reset") {
+    using world::GridPoint;
+
+    auto make_virtual = [](int z) {
+        return GridPoint::make_virtual(1, 2, z, 0);
+    };
+
+    GridPoint floor = make_virtual(0);
+    floor.is_floor = true;
+
+    GridPoint copied{floor};
+    CHECK(copied.is_floor);
+
+    GridPoint moved = make_virtual(5);
+    moved = std::move(copied);
+    CHECK(moved.is_floor);
+    CHECK_FALSE(copied.is_floor);
+
+    GridPoint other = make_virtual(7);
+    other.is_floor = false;
+    using std::swap;
+    swap(moved, other);
+    CHECK_FALSE(moved.is_floor);
+    CHECK(other.is_floor);
+
+    moved.is_floor = true;
+    moved.reset_frame_state();
+    CHECK_FALSE(moved.is_floor);
+}
+
+TEST_CASE("Terrain application marks ground points as floor and clears vertical variants") {
+    TerrainSettings settings{};
+    settings.enabled = true;
+    settings.max_elevation_world = 60.0f;
+    auto runtime = make_state(settings, "floor-flag");
+
+    Area view = make_rect("view", -32, -32, 32, 32);
+    WarpedScreenGrid cam(128, 128, view);
+    TerrainField field;
+    world::WorldGrid grid;
+    std::vector<Room*> rooms;
+
+    auto info = std::make_shared<AssetInfo>("stub_asset");
+    info->original_canvas_width = 8;
+    info->original_canvas_height = 8;
+    Area spawn = make_rect("spawn", 0, 0, 1, 1);
+
+    auto asset_floor = std::make_unique<Asset>(info, spawn, SDL_Point{0, 0}, 0);
+    auto asset_upper = std::make_unique<Asset>(info, spawn, SDL_Point{0, 0}, 0);
+
+    const int layer = grid.default_resolution_layer();
+    world::GridPoint& gp_floor = world::GridPoint::from_world(0, 0, 0, layer, grid);
+    world::GridPoint& gp_upper = world::GridPoint::from_world(0, 0, 5, layer, grid);
+
+    gp_floor.is_floor = false;
+    gp_upper.is_floor = true; // Intentionally wrong to verify it gets cleared.
+
+    gp_floor.assets_here().push_back(std::move(asset_floor));
+    gp_upper.assets_here().push_back(std::move(asset_upper));
+
+    cam.rebuild_grid(grid, 0.0f, 1, &field, &runtime, &rooms);
+
+    CHECK(gp_floor.is_floor);
+    CHECK_FALSE(gp_upper.is_floor);
 }
 
 } // TEST_SUITE

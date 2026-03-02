@@ -15,8 +15,10 @@
 #include "devtools/depth_cue_settings.hpp"
 #include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "rendering/render/render.hpp"
+#include "rendering/render/terrain_field.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
+#include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/area.hpp"
 #include "utils/input.hpp"
 #include "utils/range_util.hpp"
@@ -74,6 +76,68 @@ int halved_render_quality_percent(int percent) {
     }
     const int halved = static_cast<int>(std::lround(percent * 0.5));
     return std::max(kMinRenderQuality, align_render_quality_percent(halved));
+}
+
+struct TerrainBakeBounds {
+    int min_x = std::numeric_limits<int>::max();
+    int min_y = std::numeric_limits<int>::max();
+    int max_x = std::numeric_limits<int>::min();
+    int max_y = std::numeric_limits<int>::min();
+    int center_x = 0;
+    int center_y = 0;
+    int radius = 0;
+};
+
+TerrainBakeBounds compute_terrain_bake_bounds(const std::vector<Room*>& rooms,
+                                              const nlohmann::json& map_info,
+                                              int spacing) {
+    TerrainBakeBounds b{};
+    auto grow_with_area = [&](const std::unique_ptr<Area>& area) {
+        if (!area) {
+            return;
+        }
+        const auto [minx, miny, maxx, maxy] = area->get_bounds();
+        b.min_x = std::min(b.min_x, minx);
+        b.min_y = std::min(b.min_y, miny);
+        b.max_x = std::max(b.max_x, maxx);
+        b.max_y = std::max(b.max_y, maxy);
+    };
+
+    for (const Room* room : rooms) {
+        if (!room) continue;
+        grow_with_area(room->room_area);
+        for (const auto& named : room->areas) {
+            grow_with_area(named.area);
+        }
+    }
+
+    const double map_radius_d = map_layers::map_radius_from_map_info(map_info);
+    if (std::isfinite(map_radius_d) && map_radius_d > 0.0) {
+        b.radius = static_cast<int>(std::ceil(map_radius_d));
+        b.center_x = b.radius;
+        b.center_y = b.radius;
+        b.min_x = std::min(b.min_x, b.center_x - b.radius);
+        b.min_y = std::min(b.min_y, b.center_y - b.radius);
+        b.max_x = std::max(b.max_x, b.center_x + b.radius);
+        b.max_y = std::max(b.max_y, b.center_y + b.radius);
+    } else {
+        if (b.min_x == std::numeric_limits<int>::max()) {
+            b.min_x = b.min_y = -spacing;
+            b.max_x = b.max_y = spacing;
+        }
+        b.center_x = (b.min_x + b.max_x) / 2;
+        b.center_y = (b.min_y + b.max_y) / 2;
+        const double dx = static_cast<double>(b.max_x - b.center_x);
+        const double dy = static_cast<double>(b.max_y - b.center_y);
+        b.radius = static_cast<int>(std::ceil(std::sqrt(dx * dx + dy * dy)));
+    }
+
+    const int pad = std::max(1, spacing);
+    b.min_x -= pad;
+    b.min_y -= pad;
+    b.max_x += pad;
+    b.max_y += pad;
+    return b;
 }
 
 
@@ -2426,9 +2490,92 @@ void Assets::invalidate_dynamic_boundary_system() {
     }
 }
 
+void Assets::bake_terrain_if_needed(const TerrainRuntimeState& state, TerrainField& field) {
+    if (!state.settings.enabled) {
+        world_grid_.clear_terrain_bake_revision();
+        return;
+    }
+    if (world_grid_.terrain_bake_revision() == state.revision) {
+        return;
+    }
+
+    const int spacing = std::max(1, map_grid_settings_.spacing());
+    const int max_layer = world_grid_.max_resolution_layers();
+    const int bake_layer = std::clamp(max_layer - map_grid_settings_.grid_resolution, 0, max_layer);
+    const TerrainBakeBounds bounds = compute_terrain_bake_bounds(rooms_, map_info_json_, spacing);
+    const long long radius_sq = static_cast<long long>(bounds.radius) * static_cast<long long>(bounds.radius);
+
+    field.set_runtime_state(state, rooms_);
+    constexpr std::uint64_t frame_id = 0;
+
+    auto sample_height = [&](const world::GridKey& key) -> float {
+        return field.sample_elevation(key, world_grid_, rooms_, state, frame_id);
+    };
+
+    auto bake_point = [&](world::GridPoint& gp, const world::GridKey& key, int step) {
+        const int safe_step = std::max(1, step);
+        const float height = sample_height(key);
+        const float hx1 = sample_height(world::GridKey{key.x + safe_step, key.y, key.z, key.layer});
+        const float hx0 = sample_height(world::GridKey{key.x - safe_step, key.y, key.z, key.layer});
+        const float hy1 = sample_height(world::GridKey{key.x, key.y + safe_step, key.z, key.layer});
+        const float hy0 = sample_height(world::GridKey{key.x, key.y - safe_step, key.z, key.layer});
+        const float denom = static_cast<float>(safe_step * 2);
+        float slope_x = 0.0f;
+        float slope_y = 0.0f;
+        if (denom > 0.0f) {
+            slope_x = (hx1 - hx0) / denom;
+            slope_y = (hy1 - hy0) / denom;
+        }
+
+        gp.terrain_elevation = height;
+        gp.terrain_slope_x = slope_x;
+        gp.terrain_slope_y = slope_y;
+        gp.terrain_revision = state.revision;
+        gp.is_floor = (key.z == 0);
+    };
+
+    std::size_t baked_points = 0;
+    for (int y = bounds.min_y; y <= bounds.max_y; y += spacing) {
+        for (int x = bounds.min_x; x <= bounds.max_x; x += spacing) {
+            if (bounds.radius > 0) {
+                const long long dx = static_cast<long long>(x - bounds.center_x);
+                const long long dy = static_cast<long long>(y - bounds.center_y);
+                if (dx * dx + dy * dy > radius_sq) {
+                    continue;
+                }
+            }
+            world::GridKey key{x, y, 0, bake_layer};
+            world::GridPoint& gp = world_grid_.find_or_create_grid_point(key);
+            bake_point(gp, key, spacing);
+            ++baked_points;
+        }
+    }
+
+    for (auto& entry : world_grid_.points()) {
+        world::GridPoint& gp = entry.second;
+        const int layer = std::clamp(gp.resolution_layer(), 0, max_layer);
+        const int step = std::max(1, world_grid_.grid_spacing_for_layer(layer));
+        world::GridKey key{gp.world_x(), gp.world_y(), gp.world_z(), layer};
+        bake_point(gp, key, step);
+    }
+
+    world_grid_.set_terrain_bake_revision(state.revision);
+    vibble::log::info("[Assets] Terrain baked for " + std::to_string(baked_points) +
+                      " cells (rev=" + std::to_string(state.revision) + ").");
+}
+
 void Assets::set_terrain_sources(TerrainField* field, const TerrainRuntimeState& state) {
     terrain_field_source_ = field;
     terrain_runtime_state_ = state;
+    if (terrain_field_source_) {
+        try {
+            bake_terrain_if_needed(state, *terrain_field_source_);
+        } catch (const std::exception& ex) {
+            vibble::log::warn(std::string("[Assets] Terrain bake skipped due to error: ") + ex.what());
+        } catch (...) {
+            vibble::log::warn("[Assets] Terrain bake skipped due to unknown error.");
+        }
+    }
     mark_grid_dirty();
     camera_view_dirty_ = true;
 }

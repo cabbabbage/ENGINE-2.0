@@ -43,6 +43,7 @@ GridPoint::GridPoint(const GridPoint& other)
     , resolution_layer_(other.resolution_layer_)
     , parent_(other.parent_)
     , is_virtual_(other.is_virtual_)
+    , is_floor(other.is_floor)
     , region_kind(other.region_kind)
     , region_owner(other.region_owner)
     , world(other.world)
@@ -267,6 +268,7 @@ GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     screen_data_frame_updated = other.screen_data_frame_updated;
     screen_data_valid = other.screen_data_valid;
     last_camera_state_version_ = other.last_camera_state_version_;
+    is_floor = other.is_floor;
 
     // Transfer occupants (ownership)
     occupants = std::move(other.occupants);
@@ -296,6 +298,7 @@ GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     other.terrain_slope_x = 0.0f;
     other.terrain_slope_y = 0.0f;
     other.terrain_revision = 0;
+    other.is_floor = false;
 
     return *this;
 }
@@ -316,13 +319,17 @@ GridPoint& GridPoint::from_world(int x, int y, int z, int layer, WorldGrid& grid
     const GridPoint world_point = GridPoint::make_virtual(x, y, z, layer);
     const GridKey key = grid.grid_key_from_world(world_point, z, layer);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
-    return grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    gp.is_floor = (gp.world_z() == 0);
+    return gp;
 }
 
 GridPoint& GridPoint::from_world(const GridKey& key, WorldGrid& grid) {
     const GridPoint world_point = GridPoint::make_virtual(key.x, key.y, key.z, key.layer);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
-    return grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    gp.is_floor = (gp.world_z() == 0);
+    return gp;
 }
 
 GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
@@ -372,7 +379,9 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     const GridPoint world_point = GridPoint::make_virtual(world_x_px, world_y_px, world_z_px, -1);
     const GridKey key = grid.grid_key_from_world(world_point, world_z_px, -1);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
-    return &grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    gp.is_floor = (gp.world_z() == 0);
+    return &gp;
 }
 
 GridPoint GridPoint::make_virtual(int world_x,
@@ -397,6 +406,7 @@ void GridPoint::update_world_position(int new_x, int new_y, int new_z) {
     world_x_ = new_x;
     world_y_ = new_y;
     world_z_ = new_z;
+    is_floor = (new_z == 0);
     // Keep legacy 'world' field in sync
     const_cast<GridCoord&>(world) = GridCoord{new_x, new_y};
     // Invalidate screen data since position changed
@@ -417,6 +427,7 @@ void swap(GridPoint& a, GridPoint& b) noexcept {
     swap(a.tilt_radians, b.tilt_radians);
     swap(a.region_kind, b.region_kind);
     swap(a.region_owner, b.region_owner);
+    swap(a.is_floor, b.is_floor);
     swap(a.on_screen, b.on_screen);
     swap(a.terrain_elevation, b.terrain_elevation);
     swap(a.terrain_slope_x, b.terrain_slope_x);

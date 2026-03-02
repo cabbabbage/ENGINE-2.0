@@ -10,11 +10,14 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <iomanip>
 #include <limits>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -1257,10 +1260,22 @@ void SceneRenderer::render() {
             if (anchors.empty()) {
                 continue;
             }
+
+            std::unordered_set<std::string> drawn_names;
             for (const auto& anchor : anchors) {
                 if (!anchor.is_valid()) {
                     continue;
                 }
+                if (!drawn_names.insert(anchor.name).second) {
+                    const std::string asset_name = asset->info ? asset->info->name : std::string{"<unknown>"};
+                    const int frame_index = asset->current_frame ? asset->current_frame->frame_index : -1;
+                    vibble::log::warn("[AnchorDebug] duplicate anchor '" + anchor.name +
+                                      "' on asset '" + asset_name +
+                                      "' (frame " + std::to_string(frame_index) +
+                                      ") -- rendering once");
+                    continue;
+                }
+
                 auto runtime_anchor = asset->anchor_state(
                     anchor.name,
                     anchor_points::GridMaterialization::None,
@@ -1270,21 +1285,15 @@ void SceneRenderer::render() {
                     continue;
                 }
 
-                SDL_FPoint screen{};
-                if (!project_world_point(cam,
-                                         runtime_anchor->world_pos_2d.x,
-                                         runtime_anchor->world_pos_2d.y,
-                                         static_cast<float>(runtime_anchor->world_z),
-                                         screen)) {
-                    continue;
-                }
+                const SDL_FPoint screen = runtime_anchor->screen_pos_2d;
                 if (!std::isfinite(screen.x) || !std::isfinite(screen.y)) {
                     continue;
                 }
 
                 const int cx = static_cast<int>(std::lround(screen.x));
                 const int cy = static_cast<int>(std::lround(screen.y));
-                const SDL_Color fill = runtime_anchor->in_front ? SDL_Color{255, 220, 0, 235} : SDL_Color{120, 200, 255, 235};
+                const SDL_Color fill = runtime_anchor->in_front ? SDL_Color{255, 60, 60, 230}
+                                                                : SDL_Color{120, 200, 255, 235};
                 const SDL_Color outline = SDL_Color{20, 20, 20, 235};
 
                 SDL_SetRenderDrawColor(renderer_, outline.r, outline.g, outline.b, outline.a);
@@ -1294,7 +1303,7 @@ void SceneRenderer::render() {
                 SDL_Rect fill_rect{cx - 2, cy - 2, 4, 4};
                 sdl_render::FillRect(renderer_, &fill_rect);
 
-                SDL_SetRenderDrawColor(renderer_, outline.r, outline.g, outline.b, outline.a);
+                SDL_SetRenderDrawColor(renderer_, fill.r, fill.g, fill.b, fill.a);
                 SDL_RenderLine(renderer_, cx - 6, cy, cx + 6, cy);
                 SDL_RenderLine(renderer_, cx, cy - 6, cx, cy + 6);
             }

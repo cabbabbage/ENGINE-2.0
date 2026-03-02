@@ -59,6 +59,7 @@ struct AnchorPoint {
     int frame_index = -1;
     bool exists = false;
     bool in_front = true;
+    SDL_FPoint screen_pos_2d{0.0f, 0.0f};
     Vec2 relative_pos_2d{};
     Vec2 world_pos_2d{};
     int world_z = 0;

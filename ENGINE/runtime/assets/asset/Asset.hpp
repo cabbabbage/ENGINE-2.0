@@ -275,6 +275,7 @@ class Asset {
         int             world_z = 0;
         int             resolution_layer = 0;
         SDL_Point       source_texture_px{0, 0};
+        SDL_FPoint      screen_px{0.0f, 0.0f};
         bool            has_canonical_texture_source = false;
         bool            dirty = true;
         bool            missing = false;
@@ -321,6 +322,7 @@ class Asset {
     std::optional<AnchorPoint> anchor_state(const std::string& name,
                                             anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None,
                                             std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
+    void assert_unique_anchor_names_for_frame() const;
     AnchorPoint& resolve_anchor_point_entry(std::size_t index,
                                             anchor_points::GridMaterialization grid_policy,
                                             std::optional<anchor_points::AnchorDepthPolicy> depth_policy,

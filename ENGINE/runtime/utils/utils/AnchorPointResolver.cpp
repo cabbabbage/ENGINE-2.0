@@ -70,6 +70,11 @@ struct FrameDimensions {
     float world_z_offset = 0.0f;
 };
 
+struct AnchorFrameSample {
+    SDL_FPoint mesh_uv{0.5f, 0.5f};
+    SDL_Point source_px{0, 0};
+};
+
 void assert_anchor_is_canonical_texture_pixel(const DisplacedAssetAnchorPoint& anchor) {
     if (anchor.texture_x < 0 || anchor.texture_y < 0) {
         throw std::runtime_error("Anchor resolver invariant failure: canonical texture pixel coordinates must be non-negative");
@@ -127,9 +132,9 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
     return true;
 }
 
-SDL_FPoint compute_anchor_uv(const Asset& asset,
-                             const DisplacedAssetAnchorPoint& anchor,
-                             const FrameDimensions& dims) {
+AnchorFrameSample compute_anchor_frame_sample(const Asset& asset,
+                                              const DisplacedAssetAnchorPoint& anchor,
+                                              const FrameDimensions& dims) {
     // Texture origin is top-left; +X right, +Y down. The canonical anchor lives at the center of
     // the named pixel (x+0.5, y+0.5). Horizontal flips mirror U after the pixel-center conversion.
     // Keep this in lockstep with the editor preview math.
@@ -160,15 +165,23 @@ SDL_FPoint compute_anchor_uv(const Asset& asset,
         scaled_px.y = std::clamp(scaled_px.y, 0, dims.frame_h - 1);
     }
 
-    return anchor_points::anchor_pixel_to_uv(scaled_px,
-                                             dims.frame_w,
-                                             dims.frame_h,
-                                             dims.flip);
+    const bool flip_h = (dims.flip & SDL_FLIP_HORIZONTAL) != 0;
+    const int sampled_x = flip_h ? (dims.frame_w - 1 - scaled_px.x) : scaled_px.x;
+    const int sampled_y = scaled_px.y;
+
+    const float mesh_u = (dims.frame_w > 1)
+                             ? static_cast<float>(sampled_x) / static_cast<float>(dims.frame_w - 1)
+                             : 0.5f;
+    const float mesh_v = (dims.frame_h > 1)
+                             ? static_cast<float>(sampled_y) / static_cast<float>(dims.frame_h - 1)
+                             : 0.5f;
+
+    return AnchorFrameSample{SDL_FPoint{mesh_u, mesh_v}, SDL_Point{anchor.texture_x, anchor.texture_y}};
 }
 
 SDL_FPoint compute_anchor_screen_from_mesh(const Asset& asset,
                                            const FrameDimensions& dims,
-                                           const SDL_FPoint& uv,
+                                           const SDL_FPoint& mesh_uv,
                                            const WarpedScreenGrid& cam,
                                            float perspective_scale) {
     const float world_x = asset.smoothed_translation_x();
@@ -230,12 +243,12 @@ SDL_FPoint compute_anchor_screen_from_mesh(const Asset& asset,
     }
 
     const SDL_FPoint top{
-        screen_tl.x + (screen_tr.x - screen_tl.x) * uv.x,
-        screen_tl.y + (screen_tr.y - screen_tl.y) * uv.x};
+        screen_tl.x + (screen_tr.x - screen_tl.x) * mesh_uv.x,
+        screen_tl.y + (screen_tr.y - screen_tl.y) * mesh_uv.x};
     const SDL_FPoint bottom{
-        screen_bl.x + (screen_br.x - screen_bl.x) * uv.x,
-        screen_bl.y + (screen_br.y - screen_bl.y) * uv.x};
-    return SDL_FPoint{top.x + (bottom.x - top.x) * uv.y, top.y + (bottom.y - top.y) * uv.y};
+        screen_bl.x + (screen_br.x - screen_bl.x) * mesh_uv.x,
+        screen_bl.y + (screen_br.y - screen_bl.y) * mesh_uv.x};
+    return SDL_FPoint{top.x + (bottom.x - top.x) * mesh_uv.y, top.y + (bottom.y - top.y) * mesh_uv.y};
 }
 
 }  // namespace
@@ -272,8 +285,8 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
 
     assert_anchor_is_canonical_texture_pixel(anchor);
 
-    const SDL_FPoint uv = compute_anchor_uv(asset, anchor, dims);
-    sample.uv = uv;
+    const AnchorFrameSample anchor_sample = compute_anchor_frame_sample(asset, anchor, dims);
+    sample.uv = anchor_sample.mesh_uv;
 
     const world::GridPoint* owner_gp = asset.grid_point();
     const float perspective_scale = owner_gp ? std::max(0.0001f, owner_gp->perspective_scale) : 1.0f;
@@ -285,9 +298,9 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     const float world_width = static_cast<float>(dims.final_w) / safe_perspective;
     const float world_height = static_cast<float>(dims.final_h) / safe_perspective;
 
-    const float anchor_world_x = world_x + (uv.x - 0.5f) * world_width;
+    const float anchor_world_x = world_x + (anchor_sample.mesh_uv.x - 0.5f) * world_width;
     const float anchor_world_y = world_y;
-    const float anchor_world_z = dims.world_z_offset + (1.0f - uv.y) * world_height;
+    const float anchor_world_z = dims.world_z_offset + (1.0f - anchor_sample.mesh_uv.y) * world_height;
 
     int depth_delta = 0;
     if (depth_policy == AnchorDepthPolicy::InFront) {
@@ -303,7 +316,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     sample.resolved.world_px = SDL_Point{resolved_x, resolved_y};
     sample.resolved.world_z = resolved_z;
     sample.resolved.resolution_layer = resolution_layer;
-    sample.resolved.source_texture_px = SDL_Point{anchor.texture_x, anchor.texture_y};
+    sample.resolved.source_texture_px = anchor_sample.source_px;
     sample.resolved.has_canonical_texture_source = true;
     sample.resolved.missing = false;
 
@@ -317,7 +330,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
 
     sample.screen_px = compute_anchor_screen_from_mesh(asset,
                                                        dims,
-                                                       uv,
+                                                       anchor_sample.mesh_uv,
                                                        assets_owner->getView(),
                                                        perspective_scale);
     return sample;

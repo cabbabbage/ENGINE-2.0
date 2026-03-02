@@ -33,7 +33,7 @@ public:
 };
 
     struct DevModeSettings {
-        bool show_grid = false;
+        bool show_grid = true;
         bool snap_to_grid = true;
         bool movement_debug = false;
         bool anchor_point_debug = false;

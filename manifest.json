@@ -1090,7 +1090,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 14.0
+        "scale_percentage": 9.0
       },
       "start": "default",
       "tags": [],
@@ -1132,7 +1132,7 @@
   },
   "maps": {
     "Forrest": {
-      "_save_manager_version": 1,
+      "_save_manager_version": 2,
       "audio": {
         "music": {
           "content_root": "content/Forrest/music",
@@ -1307,9 +1307,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 100,

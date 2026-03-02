@@ -1061,6 +1061,29 @@ void Asset::mark_anchors_dirty() {
         ++anchor_world_revision_;
 }
 
+void Asset::assert_unique_anchor_names_for_frame() const {
+#if !defined(NDEBUG)
+        if (!current_frame) {
+                return;
+        }
+        std::unordered_set<std::string> seen;
+        for (const auto& anchor : current_frame->anchor_points) {
+                if (!anchor.is_valid()) {
+                        continue;
+                }
+                if (!seen.insert(anchor.name).second) {
+                        const std::string asset_name = info ? info->name : std::string{"<unknown>"};
+                        vibble::log::warn("[AnchorDebug] Duplicate anchor name '{}' on asset '{}' (frame {})",
+                                          anchor.name,
+                                          asset_name,
+                                          current_frame->frame_index);
+                        SDL_assert(!"Anchor names must be unique per asset frame");
+                        break;
+                }
+        }
+#endif
+}
+
 Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         AnchorBasisSignature sig{};
         sig.world_x = world_x();
@@ -1157,9 +1180,11 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
                 resolved.relative_pos_2d = Vec2{
                         resolved.world_pos_2d.x - static_cast<float>(origin_world.x),
                         resolved.world_pos_2d.y - static_cast<float>(origin_world.y)};
+                resolved.screen_pos_2d = handle.screen_px;
         } else {
                 resolved.world_pos_2d = Vec2{};
                 resolved.relative_pos_2d = Vec2{};
+                resolved.screen_pos_2d = SDL_FPoint{0.0f, 0.0f};
         }
         resolved.world_z = handle.world_z;
         resolved.resolution_layer = handle.resolution_layer;
@@ -1172,6 +1197,10 @@ AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
         assert(index < anchor_handles_.size());
         assert(index < anchor_points_.size());
 
+#if !defined(NDEBUG)
+        assert_unique_anchor_names_for_frame();
+#endif
+
         AnchorHandle& handle = anchor_handles_[index];
         handle.owner = this;
         handle.update(grid_policy, depth_policy);
@@ -1180,38 +1209,6 @@ AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
         resolved.name = handle.name;
         resolved.frame_index = current_frame ? current_frame->frame_index : -1;
         apply_anchor_runtime_state(resolved, handle, frame_anchor);
-
-#if !defined(NDEBUG)
-        const bool perform_parity_check = resolved.exists && assets_ && assets_->anchor_point_debug_enabled();
-        if (perform_parity_check) {
-                const auto sample = anchor_points::resolve_frame_anchor_sample(
-                        *this,
-                        *frame_anchor,
-                        resolved.in_front ? anchor_points::AnchorDepthPolicy::InFront
-                                          : anchor_points::AnchorDepthPolicy::Behind,
-                        anchor_points::GridMaterialization::None);
-
-                SDL_FPoint projected{};
-                const WarpedScreenGrid& cam = assets_->getView();
-                if (cam.project_world_point(SDL_FPoint{resolved.world_pos_2d.x, resolved.world_pos_2d.y},
-                                            static_cast<float>(resolved.world_z),
-                                            projected) &&
-                    std::isfinite(projected.x) &&
-                    std::isfinite(projected.y)) {
-                        constexpr float kParityTolerancePx = 0.5f;
-                        const float dx = std::fabs(projected.x - sample.screen_px.x);
-                        const float dy = std::fabs(projected.y - sample.screen_px.y);
-                        if (dx > kParityTolerancePx || dy > kParityTolerancePx) {
-                                vibble::log::warn("[Asset] Anchor '{}' screen parity mismatch on asset '{}' (frame {}, Δx={}, Δy={})",
-                                                  resolved.name,
-                                                  info ? info->name : std::string{"<unknown>"},
-                                                  resolved.frame_index,
-                                                  dx,
-                                                  dy);
-                        }
-                }
-        }
-#endif
 
         return resolved;
 }
@@ -1273,6 +1270,7 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 missing = true;
                 in_front = true;
                 source_texture_px = SDL_Point{0, 0};
+                screen_px = SDL_FPoint{0.0f, 0.0f};
                 has_canonical_texture_source = false;
                 dirty = keep_dirty;
         };
@@ -1323,6 +1321,7 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
         missing = resolved_sample.resolved.missing;
         in_front = resolved_sample.resolved.in_front;
         source_texture_px = resolved_sample.resolved.source_texture_px;
+        screen_px = resolved_sample.screen_px;
         has_canonical_texture_source = resolved_sample.resolved.has_canonical_texture_source;
         dirty = false;
 }

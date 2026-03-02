@@ -731,7 +731,7 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         }
     });
 
-    grid_overlay_enabled_ = devmode::ui_settings::load_bool(kGridOverlayEnabledKey, false);
+    grid_overlay_enabled_ = devmode::ui_settings::load_bool(kGridOverlayEnabledKey, true);
     snap_to_grid_enabled_ = devmode::ui_settings::load_bool(kGridSnapEnabledKey, true);
     const int saved_overlay_r = static_cast<int>(devmode::ui_settings::load_number(kGridOverlayResolutionKey, -1));
     if (saved_overlay_r >= 0) {

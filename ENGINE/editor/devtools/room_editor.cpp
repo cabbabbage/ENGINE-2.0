@@ -2806,8 +2806,8 @@ float RoomEditor::edge_pan_intensity(int value, int max_value, float threshold_f
 }
 
 bool RoomEditor::apply_shift_edge_pan(const Input& input, WarpedScreenGrid& cam) {
-    const bool has_selection = !selected_assets_.empty();
-    if (!has_selection || screen_w_ <= 1 || screen_h_ <= 1) {
+    const bool dragging_asset = dragging_;
+    if (!dragging_asset || screen_w_ <= 1 || screen_h_ <= 1) {
         return false;
     }
 
@@ -2946,7 +2946,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
 
     if (!camera_settings_lock_active_) {
         camera_controls_.handle_input(cam, input, pointer_blocks_pan);
-        if (has_selection && !camera_controls_.is_panning()) {
+        if (dragging_ && !camera_controls_.is_panning()) {
             apply_shift_edge_pan(input, cam);
         }
     }

@@ -1225,7 +1225,6 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to commit manifest for '%s'", info_->name.c_str());
         return false;
     }
-    manifest_store_->flush();
     run_after_save();
     return true;
 }
@@ -1487,7 +1486,6 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
                 tag_utils::notify_tags_changed();
                 *tags_notified = true;
             }
-            manifest_store_->flush();
         }
     }
 
@@ -1845,7 +1843,6 @@ bool AssetInfoUI::duplicate_current_asset(const std::string& raw_name) {
             fs::remove_all(dst_dir, cleanup_ec);
             return false;
         }
-        manifest_store_->flush();
 
         if (assets_) {
             assets_->library().load_all_from_resources();
@@ -1911,7 +1908,6 @@ void AssetInfoUI::confirm_delete_request() {
         }
     }
 
-    bool manifest_flush_required = false;
     bool manifest_entry_removed = false;
     if (!asset_name.empty()) {
         if (manifest_store_) {
@@ -1920,7 +1916,6 @@ void AssetInfoUI::confirm_delete_request() {
             if (!manifest_entry_removed) {
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to remove '%s' from manifest", asset_name.c_str());
             }
-            manifest_flush_required = remove_result.used_store || manifest_flush_required;
         } else {
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Manifest store unavailable; manifest not updated for '%s'", asset_name.c_str());
             manifest_entry_removed = devmode::manifest_utils::remove_manifest_asset_entry(asset_name, &std::cerr);
@@ -1950,13 +1945,6 @@ void AssetInfoUI::confirm_delete_request() {
         remove_directory_if_exists(cache_dir);
     }
 
-    if (!asset_name.empty() && manifest_store_ && manifest_entry_removed) {
-        manifest_flush_required = manifest_flush_required || manifest_store_->dirty();
-    }
-
-    if (manifest_store_ && manifest_flush_required) {
-        manifest_store_->flush();
-    }
 
     if (assets_ && !asset_name.empty()) {
         assets_->library().remove(asset_name);

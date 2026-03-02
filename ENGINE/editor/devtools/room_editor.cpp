@@ -2578,7 +2578,6 @@ void RoomEditor::apply_asset_scale_live_update(Asset* asset, int scale_percent) 
                         asset->info->name.c_str());
             return;
         }
-        manifest_store_->flush();
         if (assets_) {
             assets_->mark_active_assets_dirty();
         }

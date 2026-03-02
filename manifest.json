@@ -374,7 +374,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/grave_4",
       "asset_name": "grave_4",
-      "asset_type": "Object",
+      "asset_type": "object",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
@@ -855,10 +855,10 @@
           "anchor_points": [
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ]
           ],
@@ -893,66 +893,66 @@
           "anchor_points": [
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ]
           ],
@@ -968,66 +968,66 @@
           "anchor_points": [
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ],
             [
               {
+                "in_front": true,
                 "name": "eyes",
                 "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_y": 446
               }
             ]
           ],

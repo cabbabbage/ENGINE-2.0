@@ -367,9 +367,7 @@ manifest_writer_(std::move(manifest_writer))
                         payload = apply_mutation(std::move(payload));
                         auto guard = manifest_store_->scoped_guard("Room::push_payload");
                         bool ok = manifest_store_->update_map_entry(manifest_map_id_, payload);
-                        if (ok) {
-                                manifest_store_->flush();
-                        } else {
+                        if (!ok) {
                                 std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
                         }
                 }
@@ -1019,9 +1017,7 @@ bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
         } else if (manifest_store_ && !manifest_map_id_.empty()) {
                 auto guard = manifest_store_->scoped_guard("Room::apply_room_payload_for_save");
                 success = manifest_store_->update_map_entry(manifest_map_id_, payload);
-                if (success) {
-                        manifest_store_->flush();
-                } else {
+                if (!success) {
                         std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
                 }
         }

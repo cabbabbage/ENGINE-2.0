@@ -1767,7 +1767,6 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
 
     bool committed = commit_fn();
     if (committed) {
-        manifest_store_->flush();
         on_success();
     }
     return committed;

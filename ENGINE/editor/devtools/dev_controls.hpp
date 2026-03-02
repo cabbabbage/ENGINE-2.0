@@ -330,7 +330,6 @@ private:
     void ensure_map_assets_modal_open();
     void ensure_boundary_assets_modal_open();
 
-    bool persist_map_info_to_disk();
 
     Assets* assets_ = nullptr;
     Input* input_ = nullptr;

@@ -3929,10 +3929,7 @@ void DevControls::remove_spawn_group_assets(const std::string& spawn_id) {
     }
 
     batch.set_pre_commit_save([this]() {
-        if (!persist_map_info_to_disk()) {
-            assets_->show_dev_notice("Save failed; world changes were not applied.");
-            return false;
-        }
+        mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced);
         return true;
     });
 
@@ -4195,7 +4192,7 @@ void DevControls::ensure_map_assets_modal_open() {
         if (room_editor_) room_editor_->clear_selection();
         this->sync_header_button_states();
     });
-    auto save = [this]() { return persist_map_info_to_disk(); };
+    auto save = [this]() { mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced); return true; };
     auto regen = [this](const nlohmann::json& entry) { this->regenerate_map_spawn_group(entry); };
     auto& map_json = assets_->map_info_json();
     SDL_Color color{200, 200, 255, 255};
@@ -4286,7 +4283,7 @@ void DevControls::ensure_boundary_assets_modal_open() {
         if (room_editor_) room_editor_->clear_selection();
         this->sync_header_button_states();
     });
-    auto save = [this]() { return persist_map_info_to_disk(); };
+    auto save = [this]() { mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced); return true; };
     auto regen = [this](const nlohmann::json& entry) { this->regenerate_boundary_spawn_group(entry); };
     auto& map_json = assets_->map_info_json();
     SDL_Color color{255, 200, 120, 255};
@@ -4404,7 +4401,6 @@ void DevControls::create_trail_template() {
         trail_suite_->open(pending_trail_template_.get());
     }
 
-    persist_map_info_to_disk();
     if (assets_) {
         assets_->show_dev_notice(std::string("Created trail \"") + key + "\"");
     }
@@ -4751,20 +4747,6 @@ bool DevControls::boundary_assets_visible() const {
         return true;
     }
     return other_settings_.is_type_filter_enabled(std::string(asset_types::boundary));
-}
-
-bool DevControls::persist_map_info_to_disk() {
-    if (!assets_) {
-        std::cerr << "[DevControls] Cannot persist map info: assets manager not set\n";
-        return false;
-    }
-    const std::string map_id = assets_->map_id();
-    if (map_id.empty()) {
-        std::cerr << "[DevControls] Cannot persist map info: map id empty\n";
-        return false;
-    }
-    mark_map_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate);
-    return true;
 }
 
 void DevControls::render_grid_resolution_toast(SDL_Renderer* renderer) {

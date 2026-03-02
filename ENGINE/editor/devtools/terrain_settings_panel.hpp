@@ -21,7 +21,9 @@ public:
     ~TerrainSettingsPanel() override = default;
 
     void build() override;
-    void set_map_info(nlohmann::json* map_info, std::function<bool()> on_save);
+    void set_map_info(nlohmann::json* map_info,
+                      std::function<void()> on_apply,
+                      std::function<bool()> on_save);
 
 private:
     void refresh_from_map();
@@ -31,6 +33,7 @@ private:
     void save_current_values();
 
     nlohmann::json* map_info_ = nullptr;
+    std::function<void()> on_apply_{};
     std::function<bool()> on_save_{};
 
     bool enabled_ = true;

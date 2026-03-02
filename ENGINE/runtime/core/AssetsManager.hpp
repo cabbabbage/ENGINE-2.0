@@ -177,6 +177,7 @@ public:
     void set_dev_grid_overlay_callback(std::function<void()> cb) { dev_grid_overlay_callback_ = cb; }
 
     void set_terrain_sources(TerrainField* field, const TerrainRuntimeState& state);
+    void refresh_terrain_dependents();
     const TerrainRuntimeState* terrain_runtime_state() const {
         return terrain_runtime_state_ ? &*terrain_runtime_state_ : nullptr;
     }

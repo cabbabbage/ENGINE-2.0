@@ -143,6 +143,8 @@ private:
     bool mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator);
     void mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority priority =
                                  devmode::core::DevSaveCoordinator::Priority::Debounced);
+    void request_terrain_rebake(devmode::core::DevSaveCoordinator::Priority priority =
+                                   devmode::core::DevSaveCoordinator::Priority::Debounced);
     void update_room_config_header_controls();
     void begin_map_color_sampling(const utils::color::RangedColor& current, std::function<void(SDL_Color)> on_sample, std::function<void()> on_cancel);
     void cancel_map_color_sampling(bool silent = false);

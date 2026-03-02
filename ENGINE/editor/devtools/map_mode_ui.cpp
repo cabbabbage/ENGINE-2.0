@@ -925,9 +925,13 @@ void MapModeUI::sync_panel_map_info() {
         });
     }
     if (terrain_settings_panel_) {
-        terrain_settings_panel_->set_map_info(map_info_, [this]() {
-            return this->save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority::Debounced);
-        });
+        terrain_settings_panel_->set_map_info(
+            map_info_,
+            [this]() { this->request_terrain_rebake(devmode::core::DevSaveCoordinator::Priority::Debounced); },
+            [this]() {
+                mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate);
+                return save_all_now(devmode::core::DevSaveCoordinator::Priority::Immediate);
+            });
     }
 }
 
@@ -1468,6 +1472,16 @@ void MapModeUI::mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority 
     }
     if (dirty_callback_) {
         dirty_callback_(priority);
+    }
+}
+
+void MapModeUI::request_terrain_rebake(devmode::core::DevSaveCoordinator::Priority priority) {
+    if (assets_) {
+        assets_->refresh_terrain_dependents();
+    }
+    mark_map_data_dirty(priority);
+    if (layers_panel_) {
+        layers_panel_->mark_dirty(true);
     }
 }
 

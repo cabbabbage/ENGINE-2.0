@@ -52,6 +52,7 @@ AnchorBoundAssetHelper::~AnchorBoundAssetHelper() {
         if (!state.child) {
             continue;
         }
+        controller_->remove_child(state.child);
         set_child_hidden_state(state.child, true);
         state.bound = false;
         state.currently_active = false;
@@ -75,6 +76,7 @@ Asset* AnchorBoundAssetHelper::create_child(const std::string& asset_id) {
     }
 
     set_child_hidden_state(child, true);
+    controller_->add_child(child);
 
     ChildState state{};
     state.child = child;

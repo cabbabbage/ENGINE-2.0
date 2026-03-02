@@ -246,6 +246,7 @@ Asset& Asset::operator=(const Asset& o) {
         spawn_method         = o.spawn_method;
         owning_room_name_    = o.owning_room_name_;
         controller_.reset();
+        children_.clear();
         anim_.reset();
         neighbors.reset();
         impassable_naighbors.reset();
@@ -278,6 +279,27 @@ Asset& Asset::operator=(const Asset& o) {
         refresh_filter_tags();
         initialize_anchor_registry_from_animations();
         return *this;
+}
+
+void Asset::add_child(Asset* child) {
+    if (!child || child == this) {
+        return;
+    }
+    if (std::find(children_.begin(), children_.end(), child) != children_.end()) {
+        return;
+    }
+    children_.push_back(child);
+}
+
+void Asset::remove_child(Asset* child) {
+    if (!child) {
+        return;
+    }
+    auto it = std::remove(children_.begin(), children_.end(), child);
+    if (it == children_.end()) {
+        return;
+    }
+    children_.erase(it, children_.end());
 }
 
 void Asset::initialize_anchor_registry_from_animations() {

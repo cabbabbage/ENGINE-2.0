@@ -93,8 +93,11 @@ void TerrainSettingsPanel::build() {
     refresh_from_map();
 }
 
-void TerrainSettingsPanel::set_map_info(nlohmann::json* map_info, std::function<bool()> on_save) {
+void TerrainSettingsPanel::set_map_info(nlohmann::json* map_info,
+                                        std::function<void()> on_apply,
+                                        std::function<bool()> on_save) {
     map_info_ = map_info;
+    on_apply_ = std::move(on_apply);
     on_save_ = std::move(on_save);
     refresh_from_map();
 }
@@ -174,10 +177,13 @@ void TerrainSettingsPanel::sync_state_from_widgets() {
 
 void TerrainSettingsPanel::apply_current_values() {
     sync_state_from_widgets();
+    if (on_apply_) {
+        on_apply_();
+    }
 }
 
 void TerrainSettingsPanel::save_current_values() {
-    sync_state_from_widgets();
+    apply_current_values();
     if (!map_info_) {
         return;
     }

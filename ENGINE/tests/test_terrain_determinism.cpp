@@ -2,6 +2,7 @@
 
 #include "rendering/render/terrain_field.hpp"
 #include "rendering/render/terrain_runtime_state.hpp"
+#include "rendering/render/terrain_settings_manifest.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "gameplay/world/grid_point.hpp"
@@ -12,6 +13,7 @@
 #include <vector>
 #include <string>
 #include <utility>
+#include <nlohmann/json.hpp>
 
 namespace {
 
@@ -164,6 +166,68 @@ TEST_CASE("GridPoint caches survive revision reuse across WarpedScreenGrid rebui
     gp.last_camera_state_version_ = cam.projection_params().state_version;
     CHECK_FALSE(gp.needs_projection_update(10, gp.last_camera_state_version_, disabled_state.revision));
     CHECK(gp.needs_projection_update(10, gp.last_camera_state_version_, disabled_state.revision + 1));
+}
+
+
+TEST_CASE("Terrain manifest reload reproduces identical elevation and floor flags") {
+    TerrainSettings settings{};
+    settings.enabled = true;
+    settings.max_elevation_world = 333.0f;
+    settings.edge_falloff_distance_world = 144.0f;
+    settings.smoothness = 0.67f;
+    settings.noise_variation = 1.31f;
+    settings.roughness = 0.58f;
+    settings.blend_strength = 0.41f;
+    settings.resolution_density_scale = 1.42f;
+    settings.light.base_seed = 0x23456u;
+    settings.light.lock_seed_to_world = true;
+    settings.light.direction_world = SDL_FPoint{0.13f, -0.99f};
+    settings.light.position_world = SDL_FPoint{32.0f, -480.0f};
+    settings.light.light_strength = 0.93f;
+    settings.light.contrast = 1.77f;
+
+    nlohmann::json manifest = nlohmann::json::object();
+    terrain_manifest::write_settings(manifest, settings);
+    const TerrainSettings reloaded_settings = terrain_manifest::read_settings(&manifest);
+
+    const auto runtime_a = TerrainRuntimeState::from_settings(settings, "reload-map", false);
+    const auto runtime_b = TerrainRuntimeState::from_settings(reloaded_settings, "reload-map", false);
+
+    TerrainField field_a;
+    TerrainField field_b;
+    world::WorldGrid grid_a;
+    world::WorldGrid grid_b;
+    std::vector<Room*> rooms;
+
+    field_a.begin_frame(1, runtime_a, rooms);
+    field_b.begin_frame(1, runtime_b, rooms);
+
+    const world::GridKey sample_key{128, -96, 0, 0};
+    const float elev_a = field_a.sample_elevation(sample_key, grid_a, rooms, runtime_a, 1);
+    const float elev_b = field_b.sample_elevation(sample_key, grid_b, rooms, runtime_b, 1);
+    CHECK(elev_a == doctest::Approx(elev_b));
+
+    const int layer = grid_a.default_resolution_layer();
+    world::GridPoint& floor_a = world::GridPoint::from_world(sample_key.x, sample_key.y, 0, layer, grid_a);
+    world::GridPoint& floor_b = world::GridPoint::from_world(sample_key.x, sample_key.y, 0, layer, grid_b);
+    world::GridPoint& upper_a = world::GridPoint::from_world(sample_key.x, sample_key.y, 5, layer, grid_a);
+    world::GridPoint& upper_b = world::GridPoint::from_world(sample_key.x, sample_key.y, 5, layer, grid_b);
+
+    auto apply_floor_flags = [](world::GridPoint& floor, world::GridPoint& upper, std::uint64_t rev, float elev) {
+        floor.terrain_revision = rev;
+        floor.terrain_elevation = elev;
+        floor.is_floor = true;
+        upper.terrain_revision = rev;
+        upper.terrain_elevation = elev + 5.0f;
+        upper.is_floor = false;
+    };
+
+    apply_floor_flags(floor_a, upper_a, runtime_a.revision, elev_a);
+    apply_floor_flags(floor_b, upper_b, runtime_b.revision, elev_b);
+
+    CHECK(floor_a.is_floor == floor_b.is_floor);
+    CHECK(upper_a.is_floor == upper_b.is_floor);
+    CHECK(floor_a.terrain_elevation == doctest::Approx(floor_b.terrain_elevation));
 }
 
 TEST_CASE("GridPoint floor flag propagates through value semantics and reset") {

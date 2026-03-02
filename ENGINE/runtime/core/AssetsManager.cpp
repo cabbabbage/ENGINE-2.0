@@ -1983,26 +1983,25 @@ void Assets::schedule_removal(Asset* a) {
 }
 
 std::vector<Asset*> Assets::collect_removal_closure(const std::vector<Asset*>& roots) const {
-    std::unordered_set<Asset*> removal_set;
-    removal_set.reserve(roots.size());
-    for (Asset* asset : roots) {
-        if (asset) {
-            removal_set.insert(asset);
+    std::unordered_set<Asset*> visited;
+    std::vector<Asset*> ordered;
+
+    const auto enqueue_recursive = [&](auto&& self, Asset* asset) -> void {
+        if (!asset || visited.find(asset) != visited.end()) {
+            return;
         }
+        visited.insert(asset);
+        ordered.push_back(asset);
+        for (Asset* child : asset->children()) {
+            self(self, child);
+        }
+    };
+
+    visited.reserve(roots.size());
+    for (Asset* asset : roots) {
+        enqueue_recursive(enqueue_recursive, asset);
     }
 
-    std::vector<Asset*> ordered;
-    ordered.reserve(removal_set.size());
-    for (Asset* asset : roots) {
-        if (asset && removal_set.erase(asset) > 0) {
-            ordered.push_back(asset);
-        }
-    }
-    for (Asset* asset : removal_set) {
-        if (asset) {
-            ordered.push_back(asset);
-        }
-    }
     return ordered;
 }
 
@@ -2074,6 +2073,15 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     }
     if (unique_removals.empty()) {
         return 0;
+    }
+
+    for (Asset* asset : all) {
+        if (!asset || unique_removals.find(asset) != unique_removals.end()) {
+            continue;
+        }
+        for (Asset* removed : ordered_removals) {
+            asset->remove_child(removed);
+        }
     }
 
     for (Asset* asset : ordered_removals) {
@@ -2600,6 +2608,31 @@ void Assets::set_terrain_sources(TerrainField* field, const TerrainRuntimeState&
     }
     mark_grid_dirty();
     camera_view_dirty_ = true;
+}
+
+void Assets::refresh_terrain_dependents() {
+    if (terrain_runtime_state_) {
+        world_grid_.clear_terrain_bake_revision();
+        if (terrain_field_source_) {
+            try {
+                bake_terrain_if_needed(*terrain_runtime_state_, *terrain_field_source_);
+            } catch (const std::exception& ex) {
+                vibble::log::warn(std::string("[Assets] Terrain rebake skipped due to error: ") + ex.what());
+            } catch (...) {
+                vibble::log::warn("[Assets] Terrain rebake skipped due to unknown error.");
+            }
+        }
+    }
+
+    mark_grid_dirty();
+    mark_active_assets_dirty();
+    ++active_candidate_generation_;
+    if (active_candidate_generation_ == 0) {
+        ++active_candidate_generation_;
+    }
+    visible_candidate_buffer_.clear();
+    camera_view_dirty_ = true;
+    invalidate_dynamic_boundary_system();
 }
 
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {

@@ -166,6 +166,10 @@ class Asset {
     void set_camera(WarpedScreenGrid* v) { window = v; }
     void set_assets(Assets* a);
     Assets* get_assets() const { return assets_; }
+    void add_child(Asset* child);
+    void remove_child(Asset* child);
+    std::vector<Asset*>& children() { return children_; }
+    const std::vector<Asset*>& children() const { return children_; }
     void set_tiling_info(std::optional<TilingInfo> info);
     const std::optional<TilingInfo>& tiling_info() const { return tiling_info_; }
     const std::string& owning_room_name() const { return owning_room_name_; }
@@ -353,6 +357,7 @@ private:
     float frame_progress = 0.0f;
     Assets* assets_ = nullptr;
     std::unique_ptr<AssetController>   controller_;
+    std::vector<Asset*> children_;
     std::unique_ptr<AssetList> neighbors;
     std::unique_ptr<AssetList> impassable_naighbors;
 

@@ -1498,7 +1498,7 @@ void RoomConfigurator::rebuild_spawn_rows(bool force_collapse_sections) {
 
             renumber_spawn_group_priorities(arr);
 };
-        callbacks.on_open_floating = [this, id](SDL_Point point) {
+        callbacks.on_open_floating = [this, id](const std::string&, SDL_Point point) {
             SpawnCallbackGuard guard(this->spawn_callbacks_active_);
             if (on_spawn_open_panel_) on_spawn_open_panel_(id, point);
 };

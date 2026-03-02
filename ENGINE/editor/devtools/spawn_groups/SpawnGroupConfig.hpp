@@ -23,6 +23,7 @@ namespace devmode::core { class ManifestStore; }
 class SpawnGroupConfig : public DockableCollapsible {
     struct Entry;
 public:
+    using DockableCollapsible::open;
     struct ChangeSummary {
         bool method_changed = false;
         bool quantity_changed = false;

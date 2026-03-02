@@ -1275,6 +1275,25 @@ bool RoomEditor::handle_sdl_event(const SDL_Event& event) {
     const bool wheel_event = (event.type == SDL_EVENT_MOUSE_WHEEL);
     const bool pointer_based = pointer_event || wheel_event;
 
+    if (event.type == SDL_EVENT_MOUSE_BUTTON_UP &&
+        event.button.button == SDL_BUTTON_LEFT &&
+        event.button.clicks >= 2 &&
+        !is_room_ui_blocking_point(mx, my) &&
+        enabled_) {
+        SDL_Point click_point{mx, my};
+        Asset* target = selected_assets_.empty() ? nullptr : selected_asset_within_interaction_radius(click_point);
+        if (target && !target->spawn_id.empty() && !spawn_group_locked(target->spawn_id)) {
+            if (active_modal_ == ActiveModal::AssetInfo) {
+                pulse_active_modal_header();
+                if (input_) input_->consumeEvent(event);
+                return true;
+            }
+            open_spawn_group_floating_panel(target->spawn_id, click_point);
+            if (input_) input_->consumeEvent(event);
+            return true;
+        }
+    }
+
     struct RouteResult {
         bool handled = false;
         bool pointer_blocked = false;
@@ -4251,6 +4270,9 @@ void RoomEditor::ensure_room_configurator() {
                 if (nlohmann::json* entry = find_spawn_entry(spawn_id)) {
                     respawn_spawn_group(*entry);
                 }
+            },
+            [this](const std::string& spawn_id, SDL_Point point) {
+                open_spawn_group_floating_panel(spawn_id, point);
             });
         room_cfg_ui_->set_on_room_renamed([this](const std::string& old_name, const std::string& desired) {
             return this->rename_active_room(old_name, desired);
@@ -4339,6 +4361,9 @@ void RoomEditor::ensure_spawn_group_config_ui() {
         if (nlohmann::json* entry = find_spawn_entry(id)) {
             respawn_spawn_group(*entry);
         }
+};
+    callbacks.on_open_floating = [this](const std::string& id, SDL_Point point) {
+        open_spawn_group_floating_panel(id, point);
 };
     spawn_group_panel_->set_callbacks(std::move(callbacks));
     spawn_group_panel_->set_on_layout_changed([this]() { update_spawn_group_config_anchor(); });
@@ -5392,6 +5417,10 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
 
     update_grid_resolution_for_selection(primary);
 
+    if (spawn_id.empty() && spawn_group_panel_ && spawn_group_panel_->is_visible() && active_spawn_group_id_) {
+        spawn_id = *active_spawn_group_id_;
+    }
+
     if (spawn_id.empty()) {
         if (spawn_group_panel_) {
             spawn_group_panel_->close();
@@ -5469,9 +5498,8 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
         focused = room_cfg_ui_->focus_spawn_group(spawn_id);
     }
 
-    if (focused && spawn_group_panel_) {
-        spawn_group_panel_->close();
-        spawn_group_panel_->set_visible(false);
+    if (focused && spawn_group_panel_ && spawn_group_panel_->is_visible()) {
+        FloatingDockableManager::instance().bring_to_front(spawn_group_panel_.get());
     }
 }
 
@@ -5809,6 +5837,84 @@ void RoomEditor::open_spawn_group_editor_by_id(const std::string& spawn_id) {
         spawn_group_panel_->close();
         spawn_group_panel_->set_visible(false);
     }
+}
+
+void RoomEditor::open_spawn_group_floating_panel(const std::string& spawn_id, std::optional<SDL_Point> screen_anchor) {
+    if (spawn_id.empty()) {
+        return;
+    }
+    if (active_modal_ == ActiveModal::AssetInfo) {
+        pulse_active_modal_header();
+        return;
+    }
+
+    ensure_spawn_group_config_ui();
+    if (!spawn_group_panel_) {
+        return;
+    }
+
+    SpawnEntryResolution resolved = locate_spawn_entry(spawn_id);
+    if (!resolved.valid()) {
+        return;
+    }
+
+    active_spawn_group_id_ = spawn_id;
+    const bool locked = spawn_group_locked(spawn_id);
+
+    bool has_matching_asset = false;
+    if (assets_) {
+        for (Asset* asset : assets_->all) {
+            if (!asset || asset->dead) continue;
+            if (!asset_belongs_to_room(asset)) continue;
+            if (asset->spawn_id == spawn_id) {
+                has_matching_asset = true;
+                break;
+            }
+        }
+    }
+    if (has_matching_asset && !locked) {
+        select_spawn_group_assets(spawn_id);
+    }
+
+    refresh_spawn_group_config_ui();
+    update_spawn_group_config_anchor();
+    spawn_group_panel_->set_screen_dimensions(screen_w_, screen_h_);
+    spawn_group_panel_->set_work_area(FloatingPanelLayoutManager::instance().usableRect());
+    spawn_group_panel_->reset_scroll();
+    spawn_group_panel_->open();
+    spawn_group_panel_->force_pointer_ready();
+
+    SDL_Rect work = FloatingPanelLayoutManager::instance().usableRect();
+    if (work.w <= 0 || work.h <= 0) {
+        work = SDL_Rect{0, 0, screen_w_, screen_h_};
+    }
+
+    SDL_Point desired = screen_anchor.value_or(spawn_groups_anchor_point());
+    if (screen_anchor) {
+        desired.x += 12;
+        desired.y += 12;
+    }
+
+    SDL_Rect rect = spawn_group_panel_->rect();
+    const int width = std::max(rect.w, DockableCollapsible::kDefaultFloatingContentWidth);
+    const int height = std::max(rect.h, 420);
+    const int max_x = std::max(work.x, work.x + work.w - width);
+    const int max_y = std::max(work.y, work.y + work.h - height);
+    const int min_x = work.x;
+    const int min_y = work.y;
+    const int pos_x = std::clamp(desired.x, min_x, max_x);
+    const int pos_y = std::clamp(desired.y, min_y, max_y);
+    spawn_group_panel_->set_position(pos_x, pos_y);
+
+    FloatingDockableManager::instance().open_floating(
+        "Spawn Group: " + spawn_id,
+        spawn_group_panel_.get(),
+        [this]() {
+            if (spawn_group_panel_) {
+                spawn_group_panel_->close();
+            }
+        },
+        "spawn_group_panel");
 }
 
 void RoomEditor::reopen_room_configurator() {

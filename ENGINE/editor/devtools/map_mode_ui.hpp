@@ -108,6 +108,7 @@ private:
     void configure_footer_buttons();
     void sync_footer_button_states();
     void update_footer_visibility();
+    bool save_all_now(devmode::core::DevSaveCoordinator::Priority priority) const;
     enum class PanelType { None, Layers, Grid };
     enum class SlidingPanel { None, RoomConfig, RoomsList, LayerControls };
     void set_active_panel(PanelType panel);

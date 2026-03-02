@@ -317,6 +317,7 @@ class Asset {
     };
 
     AnchorPoint* get_anchor_point(const std::string& name);
+    std::optional<std::string> anchor_name_for_index(std::size_t index) const;
     std::optional<AnchorPoint> anchor_state(const std::string& name,
                                             anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None,
                                             std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);

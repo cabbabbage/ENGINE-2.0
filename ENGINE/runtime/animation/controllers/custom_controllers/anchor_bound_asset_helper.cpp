@@ -81,9 +81,11 @@ std::optional<AnchorPoint> AnchorBoundAssetHelper::resolve_anchor(BindingRecord&
         return std::nullopt;
     }
 
-    if (record.anchor_name.empty() && record.anchor_index &&
-        *record.anchor_index < record.parent->anchor_handles_.size()) {
-        record.anchor_name = record.parent->anchor_handles_[*record.anchor_index].name;
+    if (record.anchor_name.empty() && record.anchor_index) {
+        auto name = record.parent->anchor_name_for_index(*record.anchor_index);
+        if (name.has_value()) {
+            record.anchor_name = *name;
+        }
     }
 
     if (record.anchor_name.empty()) {

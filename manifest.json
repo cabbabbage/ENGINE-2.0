@@ -857,8 +857,8 @@
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 893,
+                "texture_y": 440
               }
             ]
           ],
@@ -895,64 +895,64 @@
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 899,
+                "texture_y": 435
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 897,
+                "texture_y": 437
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 911,
+                "texture_y": 437
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 913,
+                "texture_y": 438
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 894,
+                "texture_y": 452
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 906,
+                "texture_y": 434
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 913,
+                "texture_y": 438
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 913,
+                "texture_y": 438
               }
             ]
           ],
@@ -970,64 +970,64 @@
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 898,
+                "texture_y": 456
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 915,
+                "texture_y": 442
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 903,
+                "texture_y": 434
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 892,
+                "texture_y": 443
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 910,
+                "texture_y": 436
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 895,
+                "texture_y": 454
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 893,
+                "texture_y": 441
               }
             ],
             [
               {
                 "in_front": true,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446
+                "texture_x": 902,
+                "texture_y": 458
               }
             ]
           ],
@@ -1307,9 +1307,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,

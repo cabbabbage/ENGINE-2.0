@@ -1136,6 +1136,13 @@ AnchorPoint* Asset::get_anchor_point(const std::string& name) {
         return &anchor_points_[it->second];
 }
 
+std::optional<std::string> Asset::anchor_name_for_index(std::size_t index) const {
+        if (index >= anchor_points_.size()) {
+                return std::nullopt;
+        }
+        return anchor_points_[index].name;
+}
+
 void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
                                      const AnchorHandle& handle,
                                      const DisplacedAssetAnchorPoint* frame_anchor) const {

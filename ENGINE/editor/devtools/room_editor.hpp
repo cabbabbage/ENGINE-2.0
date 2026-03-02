@@ -135,6 +135,18 @@ private:
     void begin_area_drag_session(const std::string& area_name, const SDL_Point& world_mouse);
     void update_area_drag_session(const SDL_Point& world_mouse);
     void finalize_area_drag_session();
+    enum class GeometryHandle {
+        None,
+        Min,
+        Max,
+    };
+    Room* find_geometry_room_at_point(SDL_Point world_point) const;
+    bool geometry_room_is_trail(const Room* room) const;
+    GeometryHandle hit_test_geometry_handle(Room* room, SDL_Point world_point) const;
+    bool is_point_between_geometry_bounds(Room* room, SDL_Point world_point) const;
+    void clear_geometry_selection();
+    void mark_geometry_dirty(Room* room);
+    bool regenerate_geometry(Room* room);
     nlohmann::json* find_area_entry_json(Room* room, const std::string& area_name) const;
     void ensure_area_anchor_spawn_entry(Room* room, const std::string& area_name);
     enum class BlockingPanel {
@@ -426,6 +438,10 @@ private:
     int area_drag_resolution_ = 0;
     SDL_Point area_drag_start_world_{0, 0};
     SDL_Point area_drag_last_world_{0, 0};
+    Room* hovered_geometry_room_ = nullptr;
+    Room* selected_geometry_room_ = nullptr;
+    GeometryHandle geometry_drag_handle_ = GeometryHandle::None;
+    Uint32 geometry_last_click_ms_ = 0;
 
     struct SpawnGroupClipboard {
         nlohmann::json entry;

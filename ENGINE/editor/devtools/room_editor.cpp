@@ -955,6 +955,7 @@ void RoomEditor::set_current_room(Room* room) {
     if (room != current_room_) {
         room_editor_trace("[RoomEditor] clearing active spawn group target");
         clear_active_spawn_group_target();
+        clear_geometry_selection();
     }
 
     current_room_ = room;
@@ -1000,6 +1001,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
     if (!assets_) return;
     if (!enabled_) {
         active_modal_ = ActiveModal::None;
+        clear_geometry_selection();
         mouse_controls_enabled_last_frame_ = false;
         blocking_panel_visible_.fill(false);
         set_camera_settings_lock(false);
@@ -1991,7 +1993,27 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
     const WarpedScreenGrid& cam = assets_->getView();
 
     if (renderer) {
-        if (current_room_ && current_room_->room_area) {
+        if (selected_geometry_room_ && selected_geometry_room_->room_area) {
+            const auto& root = selected_geometry_room_->assets_data();
+            const int min_w = std::max(1, root.value("min_width", 1));
+            const int max_w = std::max(min_w, root.value("max_width", min_w));
+            const SDL_Point center = selected_geometry_room_->room_area->get_center();
+            auto draw_ring = [&](int diameter, SDL_Color color) {
+                const int radius = std::max(1, diameter / 2);
+                SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+                SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+                const int segments = 160;
+                SDL_FPoint prev = cam.map_to_screen(SDL_Point{center.x + radius, center.y});
+                for (int i = 1; i <= segments; ++i) {
+                    double a = (static_cast<double>(i) / static_cast<double>(segments)) * 2.0 * kPi;
+                    SDL_FPoint cur = cam.map_to_screen(SDL_Point{center.x + static_cast<int>(std::lround(std::cos(a) * radius)), center.y + static_cast<int>(std::lround(std::sin(a) * radius))});
+                    SDL_RenderLine(renderer, prev.x, prev.y, cur.x, cur.y);
+                    prev = cur;
+                }
+            };
+            draw_ring(max_w, SDL_Color{255, 165, 0, 220});
+            draw_ring(min_w, SDL_Color{80, 150, 255, 220});
+        } else if (current_room_ && current_room_->room_area) {
             const SDL_Color accent_hover = DMStyles::AccentButton().hover_bg;
             auto style = dm_draw::ResolveRoomBoundsOverlayStyle(accent_hover);
             SDL_Color accent_fill = dm_draw::LightenColor(DMStyles::AccentButton().bg, 0.18f);
@@ -2004,6 +2026,11 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             accent_glow.a = 140;
             style.glow = accent_glow;
             dm_draw::RenderRoomBoundsOverlay(renderer, assets_->getView(), *current_room_->room_area, style);
+        } else if (hovered_geometry_room_ && hovered_geometry_room_->room_area) {
+            auto style = dm_draw::ResolveRoomBoundsOverlayStyle(SDL_Color{255,255,255,255});
+            style.outline = SDL_Color{255,255,255,240};
+            style.fill = SDL_Color{255,255,255,20};
+            dm_draw::RenderRoomBoundsOverlay(renderer, assets_->getView(), *hovered_geometry_room_->room_area, style);
         }
     }
 
@@ -2446,6 +2473,7 @@ void RoomEditor::reset_click_state() {
 }
 
 void RoomEditor::clear_selection() {
+    clear_geometry_selection();
     const bool had_selection = !selected_assets_.empty();
     const bool had_highlight = !highlighted_assets_.empty();
     const bool had_hover = hovered_asset_ != nullptr;
@@ -2631,6 +2659,7 @@ bool RoomEditor::select_asset_or_group(Asset* asset) {
         return false;
     }
 
+    clear_geometry_selection();
     selected_assets_.clear();
 
     bool select_group = !asset->spawn_id.empty();
@@ -2945,8 +2974,9 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         hit_before_pan = nullptr;
     }
     const bool has_selection = !selected_assets_.empty();
-    const bool selection_interaction_active = shift_down || has_selection;
-    const bool selection_blocks_camera_pan = has_selection;
+    const bool has_geometry_selection = selected_geometry_room_ != nullptr;
+    const bool selection_interaction_active = shift_down || has_selection || has_geometry_selection;
+    const bool selection_blocks_camera_pan = has_selection || has_geometry_selection;
     const bool pointer_blocks_pan = selection_blocks_camera_pan ||
                                     (!selection_interaction_active && dragging_) ||
                                     (selection_interaction_active && !dragging_ && hit_before_pan && (left_down || left_pressed_this_frame));
@@ -3007,6 +3037,40 @@ void RoomEditor::handle_mouse_input(const Input& input) {
     snapped_cursor_world_ = snap_to_grid_enabled_
         ? snap_world_point_to_overlay_grid(world_pt, cursor_snap_resolution_)
         : world_pt;
+
+    hovered_geometry_room_ = (shift_down && !selected_geometry_room_ && selected_assets_.empty())
+        ? find_geometry_room_at_point(world_pt)
+        : hovered_geometry_room_;
+
+    if (selected_geometry_room_ && left_down) {
+        if (geometry_drag_handle_ == GeometryHandle::None) {
+            geometry_drag_handle_ = hit_test_geometry_handle(selected_geometry_room_, world_pt);
+        }
+        if (geometry_drag_handle_ != GeometryHandle::None) {
+            auto& root = selected_geometry_room_->assets_data();
+            const SDL_Point center = selected_geometry_room_->room_area ? selected_geometry_room_->room_area->get_center() : SDL_Point{0, 0};
+            const double dx = static_cast<double>(world_pt.x - center.x);
+            const double dy = static_cast<double>(world_pt.y - center.y);
+            int candidate = static_cast<int>(std::lround(std::max(std::abs(dx), std::abs(dy)) * 2.0));
+            candidate = std::max(1, candidate);
+            int min_w = std::max(1, root.value("min_width", 1));
+            int max_w = std::max(min_w, root.value("max_width", min_w));
+            if (geometry_drag_handle_ == GeometryHandle::Min) {
+                min_w = std::min(candidate, max_w);
+                if (candidate > max_w) max_w = candidate;
+            } else {
+                max_w = std::max(candidate, min_w);
+                if (candidate < min_w) min_w = candidate;
+            }
+            root["min_width"] = min_w;
+            root["max_width"] = max_w;
+            root["min_height"] = min_w;
+            root["max_height"] = max_w;
+            mark_geometry_dirty(selected_geometry_room_);
+        }
+    } else if (!left_down) {
+        geometry_drag_handle_ = GeometryHandle::None;
+    }
 
     Asset* hit = hit_test_asset(screen_pt, nullptr);
     if (!selected_assets_.empty()) {
@@ -3134,7 +3198,7 @@ void RoomEditor::handle_mouse_input(const Input& input) {
         was_dragged   = false;
     }
 
-    if (!dragging_ && selected_assets_.empty()) {
+    if (!dragging_ && selected_assets_.empty() && !selected_geometry_room_) {
         Asset* hover_candidate = shift_down ? hit : nullptr;
         if (hovered_asset_ != hover_candidate) {
             hovered_asset_ = hover_candidate;
@@ -3680,6 +3744,145 @@ void RoomEditor::update_hover_state(Asset* hit) {
     }
 }
 
+Room* RoomEditor::find_geometry_room_at_point(SDL_Point world_point) const {
+    if (!assets_) {
+        return nullptr;
+    }
+    Room* best = nullptr;
+    int best_layer = std::numeric_limits<int>::min();
+    for (Room* room : assets_->rooms()) {
+        if (!room || !room->room_area) continue;
+        if (!room->room_area->contains_point(world_point)) continue;
+        if (!best || room->layer >= best_layer) {
+            best = room;
+            best_layer = room->layer;
+        }
+    }
+    return best;
+}
+
+bool RoomEditor::geometry_room_is_trail(const Room* room) const {
+    if (!room) return false;
+    std::string lowered = room->type;
+    std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return lowered == "trail";
+}
+
+RoomEditor::GeometryHandle RoomEditor::hit_test_geometry_handle(Room* room, SDL_Point world_point) const {
+    if (!room || !room->room_area) return GeometryHandle::None;
+    const auto& root = room->assets_data();
+    const bool is_circle = [&]() {
+        std::string g = root.value("geometry", std::string{"square"});
+        std::transform(g.begin(), g.end(), g.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        return g == "circle";
+    }();
+
+    const int min_w = std::max(1, root.value("min_width", 1));
+    const int max_w = std::max(min_w, root.value("max_width", min_w));
+    const SDL_Point c = room->room_area->get_center();
+    const double dx = static_cast<double>(world_point.x - c.x);
+    const double dy = static_cast<double>(world_point.y - c.y);
+    const double dist = std::hypot(dx, dy);
+    const double metric = is_circle ? dist : std::max(std::abs(dx), std::abs(dy));
+    const double min_edge = static_cast<double>(min_w) * 0.5;
+    const double max_edge = static_cast<double>(max_w) * 0.5;
+    const double tol = std::max(12.0, static_cast<double>(max_w) * 0.05);
+
+    if (std::abs(metric - max_edge) <= tol) return GeometryHandle::Max;
+    if (std::abs(metric - min_edge) <= tol) return GeometryHandle::Min;
+    return GeometryHandle::None;
+}
+
+bool RoomEditor::is_point_between_geometry_bounds(Room* room, SDL_Point world_point) const {
+    if (!room || !room->room_area) return false;
+    const auto& root = room->assets_data();
+    const bool is_circle = [&]() {
+        std::string g = root.value("geometry", std::string{"square"});
+        std::transform(g.begin(), g.end(), g.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+        return g == "circle";
+    }();
+    const int min_w = std::max(1, root.value("min_width", 1));
+    int max_w = std::max(min_w, root.value("max_width", min_w));
+    if (geometry_room_is_trail(room)) {
+        max_w = std::max(max_w, root.value("max_height", max_w));
+    }
+
+    const SDL_Point c = room->room_area->get_center();
+    const double dx = static_cast<double>(world_point.x - c.x);
+    const double dy = static_cast<double>(world_point.y - c.y);
+    const double metric = is_circle ? std::hypot(dx, dy) : std::max(std::abs(dx), std::abs(dy));
+    return metric >= static_cast<double>(min_w) * 0.5 && metric <= static_cast<double>(max_w) * 0.5;
+}
+
+void RoomEditor::clear_geometry_selection() {
+    hovered_geometry_room_ = nullptr;
+    selected_geometry_room_ = nullptr;
+    geometry_drag_handle_ = GeometryHandle::None;
+}
+
+void RoomEditor::mark_geometry_dirty(Room* room) {
+    if (!room) return;
+    room->mark_dirty();
+    mark_spatial_index_dirty();
+    if (mark_map_dirty_callback_) {
+        mark_map_dirty_callback_(devmode::core::DevSaveCoordinator::Priority::Debounced);
+    }
+}
+
+bool RoomEditor::regenerate_geometry(Room* room) {
+    if (!room || !room->room_area || !assets_) return false;
+    auto& root = room->assets_data();
+    const int min_w = std::max(1, root.value("min_width", 1));
+    const int max_w = std::max(min_w, root.value("max_width", min_w));
+    int chosen = min_w;
+    if (max_w - min_w >= 2) {
+        std::mt19937 rng(std::random_device{}());
+        chosen = std::uniform_int_distribution<int>(min_w + 1, max_w - 1)(rng);
+    } else {
+        chosen = max_w;
+    }
+
+    const int edge_smoothness = root.value("edge_smoothness", 2);
+    std::string geometry = root.value("geometry", std::string{"Square"});
+    if (!geometry.empty()) geometry[0] = static_cast<char>(std::toupper(static_cast<unsigned char>(geometry[0])));
+    const SDL_Point center = room->room_area->get_center();
+    const int map_w = std::max(1, std::abs(center.x) * 2 + max_w * 4);
+    const int map_h = std::max(1, std::abs(center.y) * 2 + max_w * 4);
+    try {
+        room->room_area = std::make_unique<Area>(room->room_name, center, chosen, chosen, geometry, edge_smoothness, map_w, map_h, room->room_area->resolution());
+        room->room_area->set_type(room->type);
+    } catch (...) {
+        return false;
+    }
+
+    std::vector<Asset*> to_delete;
+    to_delete.reserve(assets_->all.size());
+    for (Asset* asset : assets_->all) {
+        if (!asset || asset->dead || asset == assets_->player) continue;
+        if (asset->owning_room_name() == room->room_name) {
+            to_delete.push_back(asset);
+            continue;
+        }
+        if (room->room_area->contains_point(asset->world_point())) {
+            to_delete.push_back(asset);
+        }
+    }
+    if (!to_delete.empty()) {
+        assets_->delete_assets_runtime(to_delete);
+    }
+
+    Room* previous = current_room_;
+    current_room_ = room;
+    regenerate_current_room();
+    current_room_ = previous;
+
+    assets_->invalidate_dynamic_boundary_system();
+    mark_geometry_dirty(room);
+    return true;
+}
+
 std::optional<std::string> RoomEditor::find_room_area_at_point(SDL_Point world_point) {
     if (!current_room_) {
         return std::nullopt;
@@ -3799,6 +4002,21 @@ void RoomEditor::handle_click(const Input& input) {
         }
         rclick_buffer_frames_ = 2;
 
+        if (shift_modifier) {
+            Room* target_geom = selected_geometry_room_ ? selected_geometry_room_ : find_geometry_room_at_point(world_mouse);
+            if (target_geom && is_point_between_geometry_bounds(target_geom, world_mouse)) {
+                if (geometry_room_is_trail(target_geom)) {
+                    open_room_config();
+                } else {
+                    if (target_geom != current_room_ && assets_) {
+                        assets_->set_editor_current_room(target_geom);
+                    }
+                    open_room_config();
+                }
+                return;
+            }
+        }
+
         auto open_library_at = [&](const SDL_Point& point) {
             pending_spawn_world_pos_ = point;
             open_asset_library();
@@ -3848,6 +4066,32 @@ void RoomEditor::handle_click(const Input& input) {
         return;
     }
 
+    if (shift_modifier) {
+        Room* hit_room = find_geometry_room_at_point(world_mouse);
+        if (hit_room) {
+            GeometryHandle handle = hit_test_geometry_handle(hit_room, world_mouse);
+            if (handle != GeometryHandle::None || is_point_between_geometry_bounds(hit_room, world_mouse)) {
+                if (!selected_assets_.empty()) {
+                    clear_selection();
+                }
+                selected_geometry_room_ = hit_room;
+                hovered_geometry_room_ = hit_room;
+                geometry_drag_handle_ = handle;
+
+                const Uint32 now = SDL_GetTicks();
+                if (geometry_last_click_ms_ != 0 && now - geometry_last_click_ms_ <= 300) {
+                    regenerate_geometry(hit_room);
+                }
+                geometry_last_click_ms_ = now;
+                return;
+            }
+        }
+        if (selected_geometry_room_) {
+            clear_geometry_selection();
+            return;
+        }
+    }
+
     if (!selected_assets_.empty()) {
         if (!selected_asset_within_interaction_radius(screen_mouse)) {
             clear_selection();
@@ -3856,6 +4100,9 @@ void RoomEditor::handle_click(const Input& input) {
     }
 
     if (!shift_modifier) {
+        if (selected_geometry_room_) {
+            clear_geometry_selection();
+        }
         return;
     }
 
@@ -4050,7 +4297,10 @@ void RoomEditor::update_highlighted_assets() {
 
     highlighted_assets_.clear();
 
-    if (!selected_assets_.empty()) {
+    if (selected_geometry_room_) {
+        selected_assets_.clear();
+        hovered_asset_ = nullptr;
+    } else if (!selected_assets_.empty()) {
         // When something is selected, lock highlights to the selection.
         highlighted_assets_ = selected_assets_;
     } else if (hovered_asset_ && asset_belongs_to_room(hovered_asset_) &&

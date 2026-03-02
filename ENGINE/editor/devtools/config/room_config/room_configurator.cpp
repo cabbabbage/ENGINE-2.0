@@ -1498,6 +1498,10 @@ void RoomConfigurator::rebuild_spawn_rows(bool force_collapse_sections) {
 
             renumber_spawn_group_priorities(arr);
 };
+        callbacks.on_open_floating = [this, id](SDL_Point point) {
+            SpawnCallbackGuard guard(this->spawn_callbacks_active_);
+            if (on_spawn_open_panel_) on_spawn_open_panel_(id, point);
+};
         config->set_callbacks(std::move(callbacks));
 
         SpawnGroupConfig::EntryCallbacks entry_callbacks{};
@@ -2320,12 +2324,14 @@ void RoomConfigurator::set_spawn_group_callbacks(std::function<void(const std::s
                                                  std::function<void(const std::string&)> on_delete,
                                                  std::function<void(const std::string&, size_t)> on_reorder,
                                                  std::function<void()> on_add,
-                                                 std::function<void(const std::string&)> on_regenerate) {
+                                                 std::function<void(const std::string&)> on_regenerate,
+                                                 std::function<void(const std::string&, SDL_Point)> on_open_floating) {
     on_spawn_edit_ = std::move(on_edit);
     on_spawn_delete_ = std::move(on_delete);
     on_spawn_reorder_ = std::move(on_reorder);
     on_spawn_add_ = std::move(on_add);
     on_spawn_regenerate_ = std::move(on_regenerate);
+    on_spawn_open_panel_ = std::move(on_open_floating);
 }
 
 bool RoomConfigurator::focus_spawn_group(const std::string& spawn_id) {

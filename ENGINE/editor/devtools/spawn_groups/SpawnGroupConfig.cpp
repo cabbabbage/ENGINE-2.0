@@ -1948,6 +1948,22 @@ bool SpawnGroupConfig::handle_event(const SDL_Event& e) {
     const bool pointer_event =
         (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP || e.type == SDL_EVENT_MOUSE_MOTION);
 
+    if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT && e.button.clicks >= 2) {
+        SDL_Point pointer = sdl_mouse_util::ButtonPoint(e.button);
+        for (const auto& entry : entries_) {
+            if (!entry) continue;
+            SDL_Rect header = entry->header_rect();
+            if (header.w <= 0 || header.h <= 0) continue;
+            if (SDL_PointInRect(&pointer, &header)) {
+                if (callbacks_.on_open_floating) {
+                    callbacks_.on_open_floating(entry->spawn_id(), pointer);
+                }
+                process_pending_notifications();
+                return true;
+            }
+        }
+    }
+
     if (drag_state_.active) {
         if (pointer_event) {
             SDL_Point pointer{0, 0};

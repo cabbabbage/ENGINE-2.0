@@ -37,6 +37,7 @@ public:
         std::function<void(const std::string&)> on_delete;
         std::function<void(const std::string&, size_t)> on_reorder;
         std::function<void()> on_add;
+        std::function<void(const std::string&, SDL_Point)> on_open_floating;
 };
 
     class EntryController {

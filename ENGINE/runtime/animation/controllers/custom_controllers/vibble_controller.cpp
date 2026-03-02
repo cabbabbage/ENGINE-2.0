@@ -41,7 +41,14 @@ vibble_controller::vibble_controller(Asset* player)
     : player_(player) {
     if (player_) {
         binding_helper_ = std::make_unique<AnchorBoundAssetHelper>(player_);
-        binding_helper_->bind(kEyesFollowerId, kEyesAnchorName);
+        if (Asset* eyes_child = player_->get_assets() ? player_->get_assets()->spawn_asset(kEyesFollowerId, player_->world_point()) : nullptr) {
+            auto anchor = player_->anchor_state(kEyesAnchorName,
+                                                anchor_points::GridMaterialization::None,
+                                                std::nullopt);
+            if (anchor.has_value()) {
+                binding_helper_->bind_child_to_anchor(*player_, *eyes_child, anchor.value());
+            }
+        }
     }
 }
 

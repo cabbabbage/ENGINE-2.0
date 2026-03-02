@@ -413,6 +413,10 @@ void GridPoint::update_world_position(int new_x, int new_y, int new_z) {
     screen_data_valid = false;
 }
 
+void GridPoint::set_world_z(int new_z) {
+    update_world_position(world_x_, world_y_, new_z);
+}
+
 void swap(GridPoint& a, GridPoint& b) noexcept {
     using std::swap;
 

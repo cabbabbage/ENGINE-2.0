@@ -226,6 +226,8 @@ struct GridPoint {
 
     // Update world position (controlled mutation for movement)
     void update_world_position(int new_x, int new_y, int new_z = 0);
+    // Convenience helper to change only world Z without touching XY.
+    void set_world_z(int new_z);
 
     // Swap mutable data between points (for efficient grid reorganization)
     friend void swap(GridPoint& a, GridPoint& b) noexcept;

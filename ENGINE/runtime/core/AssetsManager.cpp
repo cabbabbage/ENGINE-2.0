@@ -1126,13 +1126,6 @@ void Assets::update(const Input& input)
         grid_registration_buffer_.clear();
     }
 
-    // Update binding helpers once per frame after controller/world mutations.
-    for (auto* helper : binding_helpers_) {
-        if (helper) {
-            helper->tick_for_frame();
-        }
-    }
-
     const bool height_animation_active = false;
     const bool camera_refresh_needed = room_changed || player_moved || height_animation_active || camera_settings_dirty_;
     if (dev_controls_) {
@@ -1160,6 +1153,13 @@ void Assets::update(const Input& input)
     maybe_rebuild_world_grid();
 
     refresh_dirty_anchor_bases();
+
+    // Run binding follow updates after anchors are refreshed so children see latest transforms.
+    for (auto* helper : binding_helpers_) {
+        if (helper) {
+            helper->tick_for_frame();
+        }
+    }
 
     update_audio_camera_metrics();
 
@@ -2075,6 +2075,17 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
         return 0;
     }
 
+    // Purge anchor bindings that reference assets slated for removal (parents or children).
+    if (!binding_helpers_.empty()) {
+        for (Asset* victim : unique_removals) {
+            for (auto* helper : binding_helpers_) {
+                if (helper) {
+                    helper->purge_bindings_for_asset(victim);
+                }
+            }
+        }
+    }
+
     for (Asset* asset : all) {
         if (!asset || unique_removals.find(asset) != unique_removals.end()) {
             continue;
@@ -2308,6 +2319,33 @@ Asset* Assets::find_asset_by_name(const std::string& name) const {
     }
     for (Asset* asset : all) {
         if (asset && asset->info && asset->info->name == name) {
+            return asset;
+        }
+    }
+    return nullptr;
+}
+
+Asset* Assets::find_asset_by_stable_id(const std::string& id) const {
+    if (id.empty()) {
+        return nullptr;
+    }
+    auto matches_id = [&](Asset* asset) -> bool {
+        if (!asset) {
+            return false;
+        }
+        if (!asset->spawn_id.empty() && asset->spawn_id == id) {
+            return true;
+        }
+        return asset->info && asset->info->name == id;
+    };
+
+    for (Asset* asset : active_assets) {
+        if (matches_id(asset)) {
+            return asset;
+        }
+    }
+    for (Asset* asset : all) {
+        if (matches_id(asset)) {
             return asset;
         }
     }
@@ -2758,7 +2796,7 @@ void Assets::rebuild_active_from_screen_grid() {
             active_traversal_.push_back(ActiveTraversalEntry{
                 asset,
                 point,
-                anchor_world_y - static_cast<double>(asset->world_y())
+                anchor_world_y - static_cast<double>(asset->world_y()) + asset->render_depth_bias()
             });
         }
     }

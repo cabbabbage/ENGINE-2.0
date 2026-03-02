@@ -167,6 +167,7 @@ Asset::Asset(const Asset& o)
     , flipped(o.flipped)
     , distance_from_camera(o.distance_from_camera)
     , angle_from_camera(o.angle_from_camera)
+    , render_depth_bias_(o.render_depth_bias_)
     , depth(o.depth)
     , dead(o.dead)
     , static_frame(o.static_frame)
@@ -227,6 +228,7 @@ Asset& Asset::operator=(const Asset& o) {
         flipped              = o.flipped;
         distance_from_camera = o.distance_from_camera;
         angle_from_camera = o.angle_from_camera;
+        render_depth_bias_   = o.render_depth_bias_;
 	depth                = o.depth;
 	dead                 = o.dead;
 	static_frame         = o.static_frame;
@@ -300,6 +302,10 @@ void Asset::remove_child(Asset* child) {
         return;
     }
     children_.erase(it, children_.end());
+}
+
+bool Asset::has_child(const Asset* child) const {
+    return child && std::find(children_.begin(), children_.end(), child) != children_.end();
 }
 
 void Asset::initialize_anchor_registry_from_animations() {
@@ -1389,4 +1395,12 @@ void Asset::set_world_z(int world_z) {
 
     // Move to same XY but different Z
     move_to_world_position(pos_->world_x(), pos_->world_y(), world_z);
+}
+
+void Asset::set_render_depth_bias(double bias) {
+    if (!std::isfinite(bias)) {
+        bias = 0.0;
+    }
+    constexpr double kMaxBiasMagnitude = 0.5;
+    render_depth_bias_ = std::clamp(bias, -kMaxBiasMagnitude, kMaxBiasMagnitude);
 }

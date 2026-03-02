@@ -30,6 +30,8 @@ std::string asset_label(const Asset* asset) {
     return asset->info->name;
 }
 
+constexpr double kBindingRenderBias = 0.01;
+
 } // namespace
 
 AnchorBoundAssetHelper::AnchorBoundAssetHelper(Asset* controller)
@@ -42,141 +44,241 @@ AnchorBoundAssetHelper::AnchorBoundAssetHelper(Asset* controller)
 }
 
 AnchorBoundAssetHelper::~AnchorBoundAssetHelper() {
-    if (!assets_) {
-        return;
+    if (assets_) {
+        assets_->unregister_binding_helper(this);
     }
 
-    assets_->unregister_binding_helper(this);
     for (auto& [id, state] : children_) {
         (void)id;
-        if (!state.child) {
-            continue;
-        }
-        controller_->remove_child(state.child);
-        set_child_hidden_state(state.child, true);
-        state.bound = false;
-        state.currently_active = false;
-        state.ticks_remaining = -1;
+        teardown_binding(state);
     }
+    children_.clear();
 }
 
 void AnchorBoundAssetHelper::tick_for_frame() {
     update();
 }
 
-Asset* AnchorBoundAssetHelper::create_child(const std::string& asset_id) {
-    if (!assets_ || !controller_) {
-        return nullptr;
+std::string AnchorBoundAssetHelper::asset_stable_id(const Asset* asset) const {
+    if (!asset) {
+        return {};
     }
-
-    Asset* child = assets_->spawn_asset(asset_id, controller_->world_point());
-    if (!child) {
-        vibble::log::warn("[AnchorBinder] failed to spawn child asset '" + asset_id + "'.");
-        return nullptr;
+    if (!asset->spawn_id.empty()) {
+        return asset->spawn_id;
     }
-
-    set_child_hidden_state(child, true);
-    controller_->add_child(child);
-
-    ChildState state{};
-    state.child = child;
-    children_[asset_id] = std::move(state);
-    return child;
+    if (asset->info && !asset->info->name.empty()) {
+        return asset->info->name;
+    }
+    return std::to_string(reinterpret_cast<std::uintptr_t>(asset));
 }
 
-bool AnchorBoundAssetHelper::bind(const std::string& child_asset_id, const std::string& anchor_name) {
-    return bind_for_ticks(child_asset_id, anchor_name, -1);
+std::string AnchorBoundAssetHelper::binding_key_for_child(const Asset& child) const {
+    return asset_stable_id(&child);
 }
 
-bool AnchorBoundAssetHelper::bind_for_ticks(const std::string& child_asset_id,
-                                            const std::string& anchor_name,
-                                            int ticks) {
-    if (!controller_ || !assets_) {
-        return false;
+std::optional<AnchorPoint> AnchorBoundAssetHelper::resolve_anchor(BindingRecord& record) const {
+    if (!record.parent) {
+        return std::nullopt;
     }
 
-    ChildState* state = get_child_state(child_asset_id);
-    if (!state) {
-        Asset* created = create_child(child_asset_id);
-        state = get_child_state(child_asset_id);
-        if (!created || !state) {
-            return false;
+    if (record.anchor_name.empty() && record.anchor_index &&
+        *record.anchor_index < record.parent->anchor_handles_.size()) {
+        record.anchor_name = record.parent->anchor_handles_[*record.anchor_index].name;
+    }
+
+    if (record.anchor_name.empty()) {
+        return std::nullopt;
+    }
+
+    return record.parent->anchor_state(record.anchor_name,
+                                       anchor_points::GridMaterialization::Ensure,
+                                       std::nullopt);
+}
+
+void AnchorBoundAssetHelper::apply_render_order_hint(Asset& child,
+                                                     const Asset& parent,
+                                                     const AnchorPoint& anchor) const {
+    const double parent_bias = parent.render_depth_bias();
+    const double bias_delta = anchor.in_front ? -kBindingRenderBias : kBindingRenderBias;
+    child.set_render_depth_bias(parent_bias + bias_delta);
+}
+
+void AnchorBoundAssetHelper::teardown_binding(BindingRecord& state) {
+    if (state.parent && state.child) {
+        if (state.registered_with_parent || state.parent->has_child(state.child)) {
+            state.parent->remove_child(state.child);
         }
     }
+    if (state.child) {
+        set_child_hidden_state(state.child, true);
+        state.child->set_render_depth_bias(0.0);
+    }
+    state.bound = false;
+    state.currently_active = false;
+    state.ticks_remaining = -1;
+    state.expiry_tick = std::nullopt;
+    state.anchor_index = std::nullopt;
+    state.anchor_name.clear();
+    state.registered_with_parent = false;
+}
 
-    state->anchor_name = anchor_name;
-    state->ticks_remaining = ticks;
-    state->bound = true;
-    apply_binding_tick(child_asset_id, *state);
+void AnchorBoundAssetHelper::purge_bindings_for_asset(const Asset* asset) {
+    if (!asset) {
+        return;
+    }
+    const std::string stable = asset_stable_id(asset);
+    for (auto it = children_.begin(); it != children_.end(); ) {
+        BindingRecord& state = it->second;
+        const bool matches =
+            state.child == asset || state.parent == asset ||
+            (!stable.empty() && (state.child_id == stable || state.parent_id == stable));
+        if (matches) {
+            teardown_binding(state);
+            it = children_.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+bool AnchorBoundAssetHelper::bind_child_to_anchor(Asset& parent, Asset& child, const AnchorPoint& anchor) {
+    return bind_child_for_ticks(parent, child, anchor, -1);
+}
+
+bool AnchorBoundAssetHelper::bind_child_for_ticks(Asset& parent,
+                                                  Asset& child,
+                                                  const AnchorPoint& anchor,
+                                                  int ticks) {
+    const std::string key = binding_key_for_child(child);
+    BindingRecord& state = children_[key];
+    state.parent = &parent;
+    state.parent_id = asset_stable_id(&parent);
+    state.child = &child;
+    state.child_id = asset_stable_id(&child);
+    state.anchor_name = anchor.name;
+    state.anchor_index = std::nullopt;
+    state.ticks_remaining = ticks;
+    state.expiry_tick = (ticks > 0) ? std::optional<std::uint64_t>(tick_counter_ + static_cast<std::uint64_t>(ticks)) : std::nullopt;
+    state.bound = true;
+    state.currently_active = false;
+    state.last_anchor_in_front = anchor.in_front;
+
+    parent.add_child(&child);
+    state.registered_with_parent = true;
+    child.set_render_depth_bias(0.0);
+    apply_binding_tick(key, state);
     return true;
 }
 
-void AnchorBoundAssetHelper::unbind(const std::string& child_asset_id) {
-    ChildState* state = get_child_state(child_asset_id);
-    if (!state) {
+void AnchorBoundAssetHelper::unbind_child(Asset& parent, Asset& child) {
+    const std::string key = binding_key_for_child(child);
+    auto it = children_.find(key);
+    if (it == children_.end()) {
         return;
     }
-
-    if (state->child) {
-        set_child_hidden_state(state->child, true);
+    if (it->second.parent == &parent && it->second.child == &child) {
+        teardown_binding(it->second);
+        children_.erase(it);
     }
-    state->bound = false;
-    state->currently_active = false;
-    state->ticks_remaining = -1;
-    state->anchor_name.clear();
+}
+
+bool AnchorBoundAssetHelper::resolve_binding_entities(BindingRecord& record) {
+    if (assets_) {
+        if (record.parent && !assets_->contains_asset(record.parent)) {
+            record.parent = nullptr;
+        }
+        if (record.child && !assets_->contains_asset(record.child)) {
+            record.child = nullptr;
+        }
+    }
+
+    if (!record.parent && controller_ && asset_stable_id(controller_) == record.parent_id) {
+        record.parent = controller_;
+    }
+
+    if (!record.parent && assets_) {
+        record.parent = assets_->find_asset_by_stable_id(record.parent_id);
+    }
+
+    if (!record.child && assets_) {
+        record.child = assets_->find_asset_by_stable_id(record.child_id);
+    }
+
+    return record.parent != nullptr && record.child != nullptr;
 }
 
 void AnchorBoundAssetHelper::update() {
-    if (!controller_) {
-        return;
-    }
+    ++tick_counter_;
 
-    controller_->mark_anchors_dirty();
+    for (auto it = children_.begin(); it != children_.end(); ) {
+        BindingRecord& state = it->second;
+        const std::string& id = it->first;
 
-    for (auto& [id, state] : children_) {
         if (!state.bound) {
+            teardown_binding(state);
+            it = children_.erase(it);
+            continue;
+        }
+
+        if (!resolve_binding_entities(state)) {
+#if !defined(NDEBUG)
+            vibble::log::debug("[AnchorBinder] stale binding removed (parent='" + state.parent_id +
+                               "' child='" + state.child_id + "')");
+#endif
+            teardown_binding(state);
+            it = children_.erase(it);
+            continue;
+        }
+
+        if (state.expiry_tick.has_value() && tick_counter_ >= *state.expiry_tick) {
+            teardown_binding(state);
+            it = children_.erase(it);
             continue;
         }
         if (state.ticks_remaining > 0) {
             --state.ticks_remaining;
             if (state.ticks_remaining == 0) {
-                unbind(id);
+                teardown_binding(state);
+                it = children_.erase(it);
                 continue;
             }
         }
         apply_binding_tick(id, state);
+        ++it;
     }
 }
 
-void AnchorBoundAssetHelper::apply_binding_tick(const std::string& child_id, ChildState& state) {
-    if (!controller_ || !state.child) {
+void AnchorBoundAssetHelper::apply_binding_tick(const std::string& child_id, BindingRecord& state) {
+    if (!state.parent || !state.child) {
         return;
     }
 
-    auto resolved = controller_->anchor_state(state.anchor_name,
-                                              anchor_points::GridMaterialization::Ensure,
-                                              std::nullopt);
+    auto resolved = resolve_anchor(state);
     const bool anchor_available = resolved.has_value() && resolved->is_active();
 
     if (!anchor_available) {
         set_child_hidden_state(state.child, true);
+        state.child->set_render_depth_bias(0.0);
         state.currently_active = false;
         log_binding_tick(child_id,
                          state,
                          false,
-                         controller_->world_x(),
-                         controller_->world_y(),
+                         state.parent->world_x(),
+                         state.parent->world_y(),
                          state.child->world_x(),
                          state.child->world_y());
         return;
     }
 
-    const int anchor_world_x = static_cast<int>(std::lround(resolved->world_pos_2d.x));
-    const int anchor_world_y = static_cast<int>(std::lround(resolved->world_pos_2d.y));
+    const AnchorPoint& anchor = *resolved;
+    state.last_anchor_in_front = anchor.in_front;
+    const int anchor_world_x = static_cast<int>(std::lround(anchor.world_pos_2d.x));
+    const int anchor_world_y = static_cast<int>(std::lround(anchor.world_pos_2d.y));
     state.child->move_to_world_position(anchor_world_x,
                                         anchor_world_y,
-                                        resolved->world_z,
-                                        resolved->resolution_layer);
+                                        anchor.world_z,
+                                        anchor.resolution_layer);
+    apply_render_order_hint(*state.child, *state.parent, anchor);
     set_child_hidden_state(state.child, false);
     state.currently_active = true;
 
@@ -189,14 +291,6 @@ void AnchorBoundAssetHelper::apply_binding_tick(const std::string& child_id, Chi
                      state.child->world_y());
 }
 
-AnchorBoundAssetHelper::ChildState* AnchorBoundAssetHelper::get_child_state(const std::string& id) {
-    auto it = children_.find(id);
-    if (it == children_.end()) {
-        return nullptr;
-    }
-    return &it->second;
-}
-
 void AnchorBoundAssetHelper::set_child_hidden_state(Asset* child, bool hidden) const {
     if (!child) {
         return;
@@ -207,21 +301,22 @@ void AnchorBoundAssetHelper::set_child_hidden_state(Asset* child, bool hidden) c
 }
 
 void AnchorBoundAssetHelper::log_binding_tick(const std::string& child_id,
-                                              const ChildState& state,
+                                              const BindingRecord& state,
                                               bool anchor_available,
                                               int anchor_world_x,
                                               int anchor_world_y,
                                               int child_world_x,
                                               int child_world_y) const {
-    if (!debug_tick_logging_enabled_ || !controller_) {
+    if (!debug_tick_logging_enabled_ || !state.parent) {
         return;
     }
 
-    const std::string parent_label = asset_label(controller_);
+    const std::string parent_label = asset_label(state.parent);
     const std::string child_label = state.child ? asset_label(state.child) : child_id;
     vibble::log::debug("[AnchorBinderTick] parent=" + parent_label +
                        " child=" + child_label +
                        " anchor=" + state.anchor_name +
+                       " anchor_in_front=" + std::string(state.last_anchor_in_front ? "true" : "false") +
                        " anchor_world=(" + std::to_string(anchor_world_x) + "," + std::to_string(anchor_world_y) + ")" +
                        " child_world=(" + std::to_string(child_world_x) + "," + std::to_string(child_world_y) + ")" +
                        " active=" + std::string(state.currently_active ? "true" : "false") +

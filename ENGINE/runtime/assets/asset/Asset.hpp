@@ -128,6 +128,8 @@ class Asset {
     void move_to_world_position(int world_x, int world_y, int world_z = 0,
                                 std::optional<int> resolution_layer_override = std::nullopt);
     void set_world_z(int world_z);
+    double render_depth_bias() const { return render_depth_bias_; }
+    void set_render_depth_bias(double bias);
 
     void update();
     SDL_Texture* get_current_frame() const;
@@ -168,6 +170,7 @@ class Asset {
     Assets* get_assets() const { return assets_; }
     void add_child(Asset* child);
     void remove_child(Asset* child);
+    bool has_child(const Asset* child) const;
     std::vector<Asset*>& children() { return children_; }
     const std::vector<Asset*>& children() const { return children_; }
     void set_tiling_info(std::optional<TilingInfo> info);
@@ -226,6 +229,7 @@ class Asset {
     bool flipped = false;
     float distance_from_camera = 0.0f;
     float angle_from_camera = 0.0f;
+    double render_depth_bias_ = 0.0;
 
 
     int depth = 0;

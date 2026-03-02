@@ -74,6 +74,7 @@ public:
     Room* resolve_current_room(Room* detected_room);
 
     void set_enabled(bool enabled);
+    bool run_exit_save_sequence(const std::string& reason);
     bool is_enabled() const { return enabled_; }
     Mode mode() const { return mode_; }
     void sync_camera_tilt_override();
@@ -375,6 +376,8 @@ private:
     devmode::core::ManifestStore manifest_store_;
     devmode::core::DevSaveCoordinator save_coordinator_;
     devmode::core::SaveManager save_manager_;
+    bool exit_save_sequence_ran_ = false;
+    bool exit_save_sequence_ok_ = true;
     bool map_dirty_ = false;
     devmode::core::SaveManager::MapWritePath map_write_path_ =
         devmode::core::SaveManager::MapWritePath::Default;

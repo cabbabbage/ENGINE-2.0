@@ -85,6 +85,7 @@ public:
     nlohmann::json save_current_room(std::string room_name);
     void update(const Input& input);
     void set_dev_mode(bool mode);
+    bool run_exit_save_sequence(const std::string& reason);
     void set_force_high_quality_rendering(bool enable);
     bool force_high_quality_rendering() const { return force_high_quality_rendering_; }
     void set_render_suppressed(bool suppressed);

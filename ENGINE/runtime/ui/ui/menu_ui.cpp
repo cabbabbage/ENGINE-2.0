@@ -326,8 +326,26 @@ void MenuUI::drawVignette(Uint8 alpha) const {
 	sdl_render::FillRect(renderer, &v);
 }
 
+bool MenuUI::run_exit_save_sequence(const std::string& reason) {
+        if (!game_assets_) {
+                std::cout << "[MenuUI] Exit save sequence skipped (game assets unavailable, reason='"
+                          << reason << "')\n";
+                return true;
+        }
+
+        const bool ok = game_assets_->run_exit_save_sequence(reason);
+        if (ok) {
+                std::cout << "[MenuUI] Exit save sequence finished (reason='" << reason << "')\n";
+        } else {
+                std::cerr << "[MenuUI] EXIT SAVE FAILURE before shutdown (reason='" << reason
+                          << "').\n";
+        }
+        return ok;
+}
+
 void MenuUI::doExit() {
 	std::cout << "[MenuUI] End Run -> return to main menu\n";
+        run_exit_save_sequence("pause_menu_end_run");
 	return_to_main_menu_ = true;
 }
 
@@ -387,6 +405,7 @@ void MenuUI::doSettings() {
 
 void MenuUI::doQuit() {
 	std::cout << "[MenuUI] Quit Game -> exiting application\n";
+        run_exit_save_sequence("pause_menu_quit_game");
 }
 
 void MenuUI::doToggleDevMode() {

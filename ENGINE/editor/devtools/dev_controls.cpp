@@ -1079,9 +1079,10 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
 
 DevControls::~DevControls() {
     restore_filter_hidden_assets();
-    save_manager_.save_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate, "shutdown");
-    save_coordinator_.flush_now("shutdown");
-    manifest_store_.flush();
+    const bool exit_save_ok = run_exit_save_sequence("shutdown");
+    if (!exit_save_ok) {
+        std::cerr << "[DevControls] EXIT SAVE FAILURE during shutdown. Pending edits may be lost.\n";
+    }
     devmode::ui_settings::flush_if_dirty();
     AssetInfo::set_manifest_store_provider({});
     simple_label_cache().clear();
@@ -1101,6 +1102,36 @@ devmode::core::DevSaveCoordinator& DevControls::save_coordinator() {
 
 const devmode::core::DevSaveCoordinator& DevControls::save_coordinator() const {
     return save_coordinator_;
+}
+
+bool DevControls::run_exit_save_sequence(const std::string& reason) {
+    if (exit_save_sequence_ran_) {
+        std::cout << "[DevControls] Exit save sequence already executed; reusing cached result for reason='"
+                  << reason << "' success=" << (exit_save_sequence_ok_ ? "true" : "false") << "\n";
+        return exit_save_sequence_ok_;
+    }
+
+    exit_save_sequence_ran_ = true;
+
+    std::cout << "[DevControls] Exit save sequence begin (reason='" << reason << "')\n";
+
+    const bool batch_saved =
+        save_manager_.save_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate, reason);
+    save_coordinator_.flush_now(reason);
+
+    const bool has_dirty_after = save_manager_.has_dirty_saveables();
+    exit_save_sequence_ok_ = !has_dirty_after;
+
+    if (exit_save_sequence_ok_) {
+        std::cout << "[DevControls] Exit save sequence complete (batch_saved="
+                  << (batch_saved ? "true" : "false") << ", dirty_remaining=false)\n";
+    } else {
+        std::cerr << "[DevControls] EXIT SAVE FAILURE: dirty saveables remain after exit flush (reason='"
+                  << reason << "').\n";
+    }
+
+    manifest_store_.flush();
+    return exit_save_sequence_ok_;
 }
 
 void DevControls::set_input(Input* input) {

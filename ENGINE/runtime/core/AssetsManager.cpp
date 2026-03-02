@@ -1365,6 +1365,15 @@ void Assets::set_dev_mode(bool mode) {
     log_camera_fog_state(dev_mode ? "dev-mode-enabled" : "dev-mode-disabled");
 }
 
+bool Assets::run_exit_save_sequence(const std::string& reason) {
+    if (!dev_controls_) {
+        std::cout << "[Assets] Exit save sequence skipped (dev controls unavailable, reason='"
+                  << reason << "')\n";
+        return true;
+    }
+    return dev_controls_->run_exit_save_sequence(reason);
+}
+
 void Assets::set_force_high_quality_rendering(bool enable) {
     if (force_high_quality_rendering_ == enable) {
         return;

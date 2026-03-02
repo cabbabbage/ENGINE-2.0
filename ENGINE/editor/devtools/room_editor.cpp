@@ -372,7 +372,7 @@ bool RoomEditor::enqueue_current_room_save(devmode::core::DevSaveCoordinator::Pr
     return true;
 }
 
-bool RoomEditor::save_current_room_assets_json() {
+bool RoomEditor::save_current_room_assets_json(devmode::core::DevSaveCoordinator::Priority priority) {
     if (!current_room_) {
         return false;
     }
@@ -385,7 +385,7 @@ bool RoomEditor::save_current_room_assets_json() {
         return false;
     }
 
-    return enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority::Immediate);
+    return enqueue_current_room_save(priority);
 }
 
 bool RoomEditor::validate_room_edit_invariants(std::string* error) {
@@ -424,7 +424,8 @@ bool RoomEditor::validate_room_edit_invariants(std::string* error) {
 
 bool RoomEditor::commit_room_edit_transaction(const std::function<bool()>& mutate,
                                               const std::string& action_label,
-                                              bool refresh_ui_on_success) {
+                                              bool refresh_ui_on_success,
+                                              devmode::core::DevSaveCoordinator::Priority save_priority) {
     if (!current_room_) {
         return false;
     }
@@ -441,7 +442,7 @@ bool RoomEditor::commit_room_edit_transaction(const std::function<bool()>& mutat
         }
         return valid;
     };
-    hooks.commit = [this]() { return save_current_room_assets_json(); };
+    hooks.commit = [this, save_priority]() { return save_current_room_assets_json(save_priority); };
     hooks.on_commit_success = [this, refresh_ui_on_success]() {
         rebuild_room_spawn_id_cache();
         if (refresh_ui_on_success) {

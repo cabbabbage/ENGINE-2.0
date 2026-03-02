@@ -2040,8 +2040,14 @@ void RoomEditor::render_overlays(SDL_Renderer* renderer) {
             dm_draw::RenderRoomBoundsOverlay(renderer, assets_->getView(), *current_room_->room_area, style);
         } else if (hovered_geometry_room_ && hovered_geometry_room_->room_area) {
             auto style = dm_draw::ResolveRoomBoundsOverlayStyle(SDL_Color{255,255,255,255});
-            style.outline = SDL_Color{255,255,255,240};
-            style.fill = SDL_Color{255,255,255,20};
+            const SDL_Color white_outline{255, 255, 255, 240};
+            const SDL_Color white_fill{255, 255, 255, 32};
+            const SDL_Color white_center{255, 255, 255, 220};
+            const SDL_Color white_glow{255, 255, 255, 140};
+            style.outline = white_outline;
+            style.fill = white_fill;
+            style.center = white_center;
+            style.glow = white_glow;
             dm_draw::RenderRoomBoundsOverlay(renderer, assets_->getView(), *hovered_geometry_room_->room_area, style);
         }
     }
@@ -3065,8 +3071,12 @@ void RoomEditor::handle_mouse_input(const Input& input) {
             const double dy = static_cast<double>(world_pt.y - center.y);
             int candidate = static_cast<int>(std::lround(std::max(std::abs(dx), std::abs(dy)) * 2.0));
             candidate = std::max(1, candidate);
-            int min_w = std::max(1, root.value("min_width", 1));
-            int max_w = std::max(min_w, root.value("max_width", min_w));
+            const int prev_min_w = std::max(1, root.value("min_width", 1));
+            const int prev_max_w = std::max(prev_min_w, root.value("max_width", prev_min_w));
+            const int prev_min_h = std::max(1, root.value("min_height", prev_min_w));
+            const int prev_max_h = std::max(prev_min_h, root.value("max_height", prev_max_w));
+            int min_w = prev_min_w;
+            int max_w = prev_max_w;
             if (geometry_drag_handle_ == GeometryHandle::Min) {
                 min_w = std::min(candidate, max_w);
                 if (candidate > max_w) max_w = candidate;
@@ -3074,13 +3084,23 @@ void RoomEditor::handle_mouse_input(const Input& input) {
                 max_w = std::max(candidate, min_w);
                 if (candidate < min_w) min_w = candidate;
             }
-            root["min_width"] = min_w;
-            root["max_width"] = max_w;
-            root["min_height"] = min_w;
-            root["max_height"] = max_w;
-            mark_geometry_dirty(selected_geometry_room_);
+            const int new_min_h = min_w;
+            const int new_max_h = max_w;
+            const bool width_changed = (min_w != prev_min_w) || (max_w != prev_max_w);
+            const bool height_changed = (new_min_h != prev_min_h) || (new_max_h != prev_max_h);
+            if (width_changed || height_changed) {
+                root["min_width"] = min_w;
+                root["max_width"] = max_w;
+                root["min_height"] = new_min_h;
+                root["max_height"] = new_max_h;
+                geometry_drag_pending_dirty_ = true;
+            }
         }
     } else if (!left_down) {
+        if (geometry_drag_pending_dirty_ && selected_geometry_room_) {
+            mark_geometry_dirty(selected_geometry_room_);
+        }
+        geometry_drag_pending_dirty_ = false;
         geometry_drag_handle_ = GeometryHandle::None;
     }
 
@@ -3829,6 +3849,10 @@ bool RoomEditor::is_point_between_geometry_bounds(Room* room, SDL_Point world_po
 }
 
 void RoomEditor::clear_geometry_selection() {
+    if (geometry_drag_pending_dirty_ && selected_geometry_room_) {
+        mark_geometry_dirty(selected_geometry_room_);
+    }
+    geometry_drag_pending_dirty_ = false;
     hovered_geometry_room_ = nullptr;
     selected_geometry_room_ = nullptr;
     geometry_drag_handle_ = GeometryHandle::None;
@@ -5547,7 +5571,8 @@ void RoomEditor::refresh_spawn_group_config_ui() {
         if (!current_room_) {
             return;
         }
-        commit_room_edit_transaction([]() { return true; }, "spawn group update", false);
+        commit_room_edit_transaction([]() { return true; }, "spawn group update", false,
+                                     devmode::core::DevSaveCoordinator::Priority::Debounced);
 };
 
     auto on_entry_change = [this](const nlohmann::json& entry, const SpawnGroupConfig::ChangeSummary& summary) {
@@ -5564,7 +5589,8 @@ void RoomEditor::refresh_spawn_group_config_ui() {
                 }
             }
             return true;
-        }, "spawn group update", false);
+        }, "spawn group update", false,
+        devmode::core::DevSaveCoordinator::Priority::Debounced);
         if (committed && (sanitized || summary.method_changed || summary.quantity_changed || summary.candidates_changed ||
             summary.resolution_changed)) {
             respawn_spawn_group(entry);
@@ -5990,7 +6016,7 @@ void RoomEditor::add_spawn_group_internal() {
         sanitize_perimeter_spawn_groups(arr);
         active_spawn_group_id_ = new_spawn_id;
         return true;
-    }, "spawn group add");
+    }, "spawn group add", true, devmode::core::DevSaveCoordinator::Priority::Debounced);
     if (committed) {
         open_spawn_group_editor_by_id(new_spawn_id);
     }
@@ -6009,7 +6035,7 @@ bool RoomEditor::delete_spawn_group_internal(const std::string& spawn_id) {
             clear_active_spawn_group_target();
         }
         return true;
-    }, "spawn group deletion");
+    }, "spawn group deletion", true, devmode::core::DevSaveCoordinator::Priority::Debounced);
     if (!deleted) {
         return false;
     }
@@ -6077,7 +6103,7 @@ void RoomEditor::reorder_spawn_group_internal(const std::string& spawn_id, size_
             if (arr[i].is_object()) arr[i]["priority"] = static_cast<int>(i);
         }
         return true;
-    }, "spawn group reorder");
+    }, "spawn group reorder", true, devmode::core::DevSaveCoordinator::Priority::Debounced);
 }
 
 void RoomEditor::open_spawn_group_editor_by_id(const std::string& spawn_id) {

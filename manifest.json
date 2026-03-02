@@ -2295,8 +2295,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1150,
-              "dy": 324,
+              "dx": -280,
+              "dy": 632,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

@@ -2,6 +2,8 @@
 import argparse
 import copy
 import json
+import math
+import random
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
@@ -286,6 +288,7 @@ class AnchorEditorApp:
         list_buttons.pack(fill="x", pady=(0, 4))
         self._styled_button(list_buttons, "Add Anchor", self._add_anchor, accent=True).pack(side="left", fill="x", expand=True)
         self._styled_button(list_buttons, "Delete Anchor", self._delete_anchor).pack(side="left", fill="x", expand=True, padx=4)
+        self._styled_button(list_buttons, "Rnd All", self._randomize_all_anchors).pack(side="left", fill="x", expand=True, padx=4)
 
         center = tk.Frame(main, bg=PALETTE["panel"])
         center.pack(side="left", fill="both", expand=True, padx=(0, 6), pady=12)
@@ -542,8 +545,10 @@ class AnchorEditorApp:
         self.anchor_x_var.set(str(anchor["texture_x"]))
         self.anchor_y_var.set(str(anchor["texture_y"]))
         self.loading = prev_loading
-        self._render_preview()
         self._anchor_dirty = True
+        self._render_preview()
+        self._save_manifest()
+        self._anchor_dirty = False
 
     def _on_preview_click(self, event):
         self._drag_active = False
@@ -701,6 +706,26 @@ class AnchorEditorApp:
             self.current_anchor = len(frame) - 1
         self._refresh_frame_ui()
         self._save_manifest()
+
+    def _randomize_all_anchors(self):
+        for anim_id, payload in self.animations.items():
+            if not isinstance(payload, dict):
+                continue
+            frame_count = _frame_count_with_disk(payload, self.manifest_root, self.asset, self.asset_key)
+            anchors = _normalize_anchor_points(payload, frame_count_override=frame_count)
+            for frame in anchors:
+                for anchor in frame:
+                    angle = random.uniform(0.0, 2.0 * math.pi)
+                    delta_x = int(round(12.0 * math.cos(angle)))
+                    delta_y = int(round(12.0 * math.sin(angle)))
+                    anchor["texture_x"] = max(0, anchor["texture_x"] + delta_x)
+                    anchor["texture_y"] = max(0, anchor["texture_y"] + delta_y)
+            payload["anchor_points"] = anchors
+            payload["number_of_frames"] = len(anchors)
+            if anim_id == self.animation_id:
+                self.frames = anchors
+        self._save_manifest()
+        self._refresh_frame_ui()
 
     def _prev_frame(self):
         if self.current_frame > 0:

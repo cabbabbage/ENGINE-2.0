@@ -446,6 +446,7 @@ private:
     Room* hovered_geometry_room_ = nullptr;
     Room* selected_geometry_room_ = nullptr;
     GeometryHandle geometry_drag_handle_ = GeometryHandle::None;
+    bool geometry_drag_pending_dirty_ = false;
     Uint32 geometry_last_click_ms_ = 0;
 
     struct SpawnGroupClipboard {

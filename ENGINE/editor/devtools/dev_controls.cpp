@@ -153,7 +153,6 @@ private:
 };
 
 constexpr const char* kModeIdRoom = "room";
-constexpr const char* kModeIdMap = "map";
 constexpr int kPopupOutlineThickness = 1;
 
 int layer_spacing(int layer) {
@@ -459,6 +458,17 @@ bool is_trail_room(const Room* room) {
         return false;
     }
     return to_lower_copy(room->type) == "trail";
+}
+
+std::string format_room_header_label(const Room* room) {
+    if (!room) {
+        return std::string("Boundary");
+    }
+    const bool trail = is_trail_room(room);
+    if (room->room_name.empty()) {
+        return trail ? std::string("Trail") : std::string("Room");
+    }
+    return (trail ? std::string("Trail: ") : std::string("Room: ")) + room->room_name;
 }
 
 template <class Modal>
@@ -810,6 +820,9 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                     map_id, std::move(payload), priority, "Map session",
                     [this]() {
                         map_dirty_ = false;
+                        if (assets_) {
+                            assets_->clear_map_data_dirty();
+                        }
                         map_write_path_ = devmode::core::SaveManager::MapWritePath::Default;
                         if (map_mode_ui_) map_mode_ui_->mark_layers_clean();
                         if (map_mode_ui_) map_mode_ui_->notify_saved();
@@ -879,28 +892,6 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
         map_mode_ui_->set_footer_always_visible(true);
         map_mode_ui_->set_header_mode(MapModeUI::HeaderMode::Room);
         apply_camera_area_render_flag();
-        map_mode_ui_->set_on_mode_changed([this](MapModeUI::HeaderMode mode){
-            if (mode == MapModeUI::HeaderMode::Map) {
-                if (this->mode_ != Mode::MapEditor) {
-                    enter_map_editor_mode();
-                }
-                other_settings_.set_active_mode(kModeIdMap);
-            } else if (mode == MapModeUI::HeaderMode::Room) {
-                if (this->mode_ == Mode::MapEditor) {
-                    exit_map_editor_mode(false, true);
-                }
-                this->set_mode(Mode::RoomEditor);
-                if (map_mode_ui_) {
-                    map_mode_ui_->set_header_mode(MapModeUI::HeaderMode::Room);
-                    if (auto* footer = map_mode_ui_->get_footer_bar()) {
-                        std::string label = std::string("Room: ") + (current_room_ ? current_room_->room_name : std::string{});
-                        footer->set_title(label);
-                    }
-                }
-                other_settings_.set_active_mode(kModeIdRoom);
-            }
-            sync_header_button_states();
-        });
     }
     if (room_editor_ && map_mode_ui_) {
         room_editor_->set_shared_footer_bar(map_mode_ui_->get_footer_bar());
@@ -984,34 +975,10 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
     other_settings_.set_extra_panel_height(0);
     other_settings_.set_extra_panel_renderer({});
     other_settings_.set_extra_panel_event_handler({});
-    other_settings_.set_mode_buttons({
-        {kModeIdRoom, "Room", mode_ == Mode::RoomEditor},
-        {kModeIdMap, "Map", mode_ == Mode::MapEditor}
-    });
+    other_settings_.set_header_title(format_room_header_label(current_room_));
     other_settings_.set_grid_resolution_range(0, vibble::grid::kMaxResolution);
     other_settings_.set_grid_resolution_change_callback([this](int new_r) {
         apply_grid_resolution_change(new_r);
-    });
-    other_settings_.set_mode_changed_callback([this](const std::string& id) {
-        if (id == kModeIdMap) {
-            if (this->mode_ != Mode::MapEditor) {
-                enter_map_editor_mode();
-            }
-        } else if (id == kModeIdRoom) {
-            if (this->mode_ == Mode::MapEditor) {
-                exit_map_editor_mode(false, true);
-            }
-            this->set_mode(Mode::RoomEditor);
-            if (map_mode_ui_) {
-                map_mode_ui_->set_header_mode(MapModeUI::HeaderMode::Room);
-                if (auto* footer = map_mode_ui_->get_footer_bar()) {
-                    std::string label = std::string("Room: ") +
-                                        (current_room_ ? current_room_->room_name : std::string{});
-                    footer->set_title(label);
-                }
-            }
-        }
-        sync_header_button_states();
     });
 
     OtherSettingsAndControls::DevModeSettings dev_settings{};
@@ -1283,9 +1250,21 @@ void DevControls::set_screen_dimensions(int width, int height) {
 }
 
 void DevControls::set_current_room(Room* room, bool force_refresh) {
+    const std::string header_label = format_room_header_label(room);
+
     if (!force_refresh && current_room_ == room) {
         current_room_ = room;
         dev_selected_room_ = room;
+        other_settings_.set_header_title(header_label);
+        if (map_mode_ui_) {
+            if (auto* footer = map_mode_ui_->get_footer_bar()) {
+                if (mode_ == Mode::RoomEditor) {
+                    footer->set_title(header_label);
+                } else {
+                    footer->set_title(std::string("Map"));
+                }
+            }
+        }
         return;
     }
     const bool room_changed = (current_room_ != room);
@@ -1318,12 +1297,14 @@ void DevControls::set_current_room(Room* room, bool force_refresh) {
         }
     }
     other_settings_.set_current_room(room);
+    other_settings_.set_header_title(header_label);
     if (map_mode_ui_) {
         if (auto* footer = map_mode_ui_->get_footer_bar()) {
-            std::string label;
-            if (mode_ == Mode::RoomEditor) label = std::string("Room: ") + (current_room_ ? current_room_->room_name : std::string{});
-            else label = std::string("Map");
-            footer->set_title(label);
+            if (mode_ == Mode::RoomEditor) {
+                footer->set_title(header_label);
+            } else {
+                footer->set_title(std::string("Map"));
+            }
         }
     }
 
@@ -1591,20 +1572,15 @@ void DevControls::update(const Input& input) {
         camera_panel_ && camera_panel_->is_visible() && camera_panel_->is_point_inside(input.getX(), input.getY());
     pointer_over_image_effect_panel_ =
         image_effect_panel_ && image_effect_panel_->is_visible() && image_effect_panel_->is_point_inside(input.getX(), input.getY());
-    if (mode_ == Mode::MapEditor) {
-        if (map_mode_ui_ && input.wasScancodePressed(SDL_SCANCODE_F8)) {
-            const bool was_visible = map_mode_ui_->is_layers_panel_visible();
-            map_mode_ui_->toggle_layers_panel();
-            const bool now_visible = map_mode_ui_->is_layers_panel_visible();
-            if (assets_ && was_visible != now_visible) {
-                assets_->show_dev_notice(now_visible ? "Layers panel opened" : "Layers panel closed", 1400);
-            }
+    if (map_mode_ui_ && input.wasScancodePressed(SDL_SCANCODE_F8)) {
+        const bool was_visible = map_mode_ui_->is_layers_panel_visible();
+        map_mode_ui_->toggle_layers_panel();
+        const bool now_visible = map_mode_ui_->is_layers_panel_visible();
+        if (assets_ && was_visible != now_visible) {
+            assets_->show_dev_notice(now_visible ? "Layers panel opened" : "Layers panel closed", 1400);
         }
-        if (map_editor_) {
-            map_editor_->update(input);
-            handle_map_selection();
-        }
-    } else if (mode_ == Mode::RoomEditor && room_editor_ && room_editor_->is_enabled()) {
+    }
+    if (room_editor_ && room_editor_->is_enabled()) {
 
         const bool frame_editing = frame_editor_session_ && frame_editor_session_->is_active();
         if (!frame_editing) {
@@ -2873,15 +2849,6 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
     }
 
-    if (mode_ == Mode::MapEditor) {
-        return;
-    }
-
- 
-    else {
-        // Depth cue drag functionality removed
-    }
-
     if (!(frame_editor_session_ && frame_editor_session_->is_active()) && can_route_room_editor &&
         (camera_panel_->is_visible() || keyboard_like_event)) {
         const bool handled = room_editor_ && room_editor_->handle_sdl_event(event);
@@ -3166,9 +3133,7 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         SDL_SetRenderDrawBlendMode(renderer, prev_mode);
     }
 
-    if (renderer && mode_ == Mode::MapEditor) {
-        if (map_editor_) map_editor_->render(renderer);
-    } else if (renderer && mode_ == Mode::RoomEditor && room_editor_) {
+    if (renderer && room_editor_) {
         room_editor_->render_overlays(renderer);
 
         if (frame_editor_session_ && frame_editor_session_->is_active()) {
@@ -3502,6 +3467,9 @@ void DevControls::notify_spawn_group_removed(const std::string& spawn_id) {
 
 void DevControls::mark_map_dirty(devmode::core::DevSaveCoordinator::Priority priority,
                                 devmode::core::SaveManager::MapWritePath path) {
+    if (assets_) {
+        assets_->mark_map_data_dirty();
+    }
     map_dirty_ = true;
     map_write_path_ = path;
     if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
@@ -3606,11 +3574,10 @@ void DevControls::configure_header_button_sets() {
         return layers_btn;
 };
 
-    std::vector<MapModeUI::HeaderButtonConfig> map_buttons;
     std::vector<MapModeUI::HeaderButtonConfig> room_buttons;
 
-    map_buttons.push_back(make_camera_button());
-    map_buttons.push_back(make_layers_button());
+    room_buttons.push_back(make_camera_button());
+    room_buttons.push_back(make_layers_button());
 
     {
         MapModeUI::HeaderButtonConfig map_assets_btn;
@@ -3629,7 +3596,7 @@ void DevControls::configure_header_button_sets() {
             }
             sync_header_button_states();
 };
-        map_buttons.push_back(std::move(map_assets_btn));
+        room_buttons.push_back(std::move(map_assets_btn));
     }
 
     {
@@ -3649,7 +3616,7 @@ void DevControls::configure_header_button_sets() {
             }
             sync_header_button_states();
 };
-        map_buttons.push_back(std::move(boundary_btn));
+        room_buttons.push_back(std::move(boundary_btn));
     }
 
     {
@@ -3663,11 +3630,8 @@ void DevControls::configure_header_button_sets() {
         trail_btn.on_toggle = [this](bool) {
             this->create_trail_template();
 };
-        map_buttons.push_back(std::move(trail_btn));
+        room_buttons.push_back(std::move(trail_btn));
     }
-
-    room_buttons.push_back(make_camera_button());
-    room_buttons.push_back(make_layers_button());
 
     MapModeUI::HeaderButtonConfig room_config_btn;
     room_config_btn.id = "room_config";
@@ -3738,7 +3702,7 @@ void DevControls::configure_header_button_sets() {
     };
     room_buttons.push_back(std::move(explorer_btn));
 
-    map_mode_ui_->set_mode_button_sets(std::move(map_buttons), std::move(room_buttons));
+    map_mode_ui_->set_mode_button_sets({}, std::move(room_buttons));
     other_settings_.ensure_layout();
     sync_header_button_states();
 }
@@ -3751,18 +3715,15 @@ void DevControls::sync_header_button_states() {
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "asset_library", library_open);
     const bool camera_open = camera_panel_ && camera_panel_->is_visible();
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "camera", camera_open);
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Map, "camera", camera_open);
     const bool layers_open = map_mode_ui_->is_layers_panel_visible();
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Map, "layers", layers_open);
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Map, "map_layers", layers_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "layers", layers_open);
     map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "regenerate", false);
 
     const bool map_assets_open = map_assets_modal_ && map_assets_modal_->visible();
     const bool boundary_open = boundary_assets_modal_ && boundary_assets_modal_->visible();
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Map, "map_assets", map_assets_open);
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Map, "map_boundary", boundary_open);
-    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Map, "create_trail", false);
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "map_assets", map_assets_open);
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "map_boundary", boundary_open);
+    map_mode_ui_->set_button_state(MapModeUI::HeaderMode::Room, "create_trail", false);
 
     if (room_editor_) {
         room_editor_->set_blocking_panel_visible(RoomEditor::BlockingPanel::AssetLibrary, library_open);
@@ -4278,19 +4239,14 @@ void DevControls::apply_camera_area_render_flag() {
 }
 
 void DevControls::set_mode(Mode new_mode) {
+    if (new_mode == Mode::MapEditor) {
+        new_mode = Mode::RoomEditor;
+    }
     if (mode_ == new_mode) {
         return;
     }
-    const Mode previous = mode_;
     mode_ = new_mode;
-    switch (mode_) {
-    case Mode::RoomEditor:
-        other_settings_.set_active_mode(kModeIdRoom);
-        break;
-    case Mode::MapEditor:
-        other_settings_.set_active_mode(kModeIdMap);
-        break;
-    }
+    other_settings_.set_active_mode(kModeIdRoom);
     apply_camera_area_render_flag();
 
     mark_layout_dirty();
@@ -4301,7 +4257,7 @@ void DevControls::update_movement_debug_visibility() {
     if (!assets_) {
         return;
     }
-    assets_->set_movement_debug_visible(mode_ == Mode::MapEditor);
+    assets_->set_movement_debug_visible(false);
 }
 
 void DevControls::restore_filter_hidden_assets() const {
@@ -4567,50 +4523,18 @@ void DevControls::close_image_effect_panel() {
 }
 
 bool DevControls::can_use_room_editor_ui() const {
-    return enabled_ && mode_ == Mode::RoomEditor && room_editor_ && room_editor_->is_enabled();
+    return enabled_ && room_editor_ && room_editor_->is_enabled();
 }
 
 void DevControls::enter_map_editor_mode() {
-    if (!map_editor_) return;
-    if (mode_ == Mode::MapEditor) return;
-
-    close_all_floating_panels();
-    set_mode(Mode::MapEditor);
-    map_editor_->set_input(input_);
-    map_editor_->set_rooms(rooms_);
-    map_editor_->set_screen_dimensions(screen_w_, screen_h_);
-    map_editor_->set_enabled(true);
-    if (room_editor_) room_editor_->set_enabled(false, true);
-    if (map_mode_ui_) {
-        map_mode_ui_->set_header_mode(MapModeUI::HeaderMode::Map);
-        map_mode_ui_->set_map_mode_active(true);
-    }
+    set_mode(Mode::RoomEditor);
     sync_header_button_states();
 }
 
 void DevControls::exit_map_editor_mode(bool focus_player, bool restore_previous_state) {
-    if (!map_editor_) return;
-    if (mode_ != Mode::MapEditor) return;
-
-    const bool camera_was_visible = camera_panel_ && camera_panel_->is_visible();
-    close_all_floating_panels();
-    map_editor_->exit(focus_player, restore_previous_state);
-    if (map_mode_ui_) map_mode_ui_->close_all_panels();
-    if (map_mode_ui_) {
-        map_mode_ui_->set_map_mode_active(false);
-        map_mode_ui_->set_header_mode(MapModeUI::HeaderMode::Room);
-    }
+    (void)focus_player;
+    (void)restore_previous_state;
     set_mode(Mode::RoomEditor);
-    if (room_editor_ && enabled_) {
-        room_editor_->set_enabled(true, true);
-        room_editor_->set_current_room(current_room_);
-        if (map_editor_) {
-            map_editor_->set_current_room(current_room_);
-        }
-    }
-    if (camera_was_visible && camera_panel_) {
-        camera_panel_->open();
-    }
     sync_header_button_states();
 }
 
@@ -4755,15 +4679,7 @@ void DevControls::refresh_active_asset_filters() {
 }
 
 bool DevControls::should_hide_assets_for_map_mode() const {
-    if (!enabled_) {
-        return false;
-    }
-    if (mode_ != Mode::MapEditor) {
-        return false;
-    }
-    const bool map_assets_open = map_assets_modal_ && map_assets_modal_->visible();
-    const bool boundary_open = boundary_assets_modal_ && boundary_assets_modal_->visible();
-    return !(map_assets_open || boundary_open);
+    return false;
 }
 
 void DevControls::reset_asset_filters() {

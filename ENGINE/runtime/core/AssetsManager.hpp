@@ -265,6 +265,9 @@ private:
     void schedule_removal(Asset* a);
     std::vector<Asset*> collect_removal_closure(const std::vector<Asset*>& roots) const;
     std::size_t delete_assets_runtime(const std::vector<Asset*>& assets_to_delete);
+    bool run_fallback_exit_save(const std::string& reason);
+    bool persist_map_if_dirty(const std::string& reason);
+    bool save_dirty_asset_caches(const std::string& reason);
 
     bool process_removals();
     bool apply_world_mutation_batch(WorldMutationBatch& batch);
@@ -327,6 +330,8 @@ private:
     std::string map_path_;
     nlohmann::json map_info_json_;
     bool map_data_dirty_ = false;
+    bool exit_save_sequence_ran_ = false;
+    bool exit_save_sequence_ok_ = true;
     std::atomic<bool> active_assets_dirty_{true};
     MapGridSettings map_grid_settings_{};
     std::unique_ptr<devmode::core::ManifestStore> manifest_store_fallback_;

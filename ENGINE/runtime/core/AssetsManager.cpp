@@ -330,6 +330,79 @@ void Assets::persist_map_info_json() {
     map_data_dirty_ = false;
 }
 
+bool Assets::persist_map_if_dirty(const std::string& reason) {
+    if (!map_data_dirty_) {
+        return true;
+    }
+    try {
+        persist_map_info_json();
+        std::cout << "[Assets] Map manifest persisted during exit (reason='" << reason << "')\n";
+        return true;
+    } catch (const std::exception& ex) {
+        std::cerr << "[Assets] Failed to persist map manifest during exit (reason='" << reason
+                  << "'): " << ex.what() << "\n";
+        return false;
+    } catch (...) {
+        std::cerr << "[Assets] Failed to persist map manifest during exit (reason='" << reason
+                  << "')\n";
+        return false;
+    }
+}
+
+bool Assets::save_dirty_asset_caches(const std::string& reason) {
+    SDL_Renderer* renderer_ptr = renderer();
+    bool ok = true;
+    for (const auto& entry : library_.all()) {
+        if (!entry.second) {
+            continue;
+        }
+        try {
+            entry.second->save_self_to_cache_if_dirty(renderer_ptr);
+        } catch (const std::exception& ex) {
+            std::cerr << "[Assets] Failed to save asset cache for '" << entry.first
+                      << "' during exit (reason='" << reason << "'): " << ex.what() << "\n";
+            ok = false;
+        } catch (...) {
+            std::cerr << "[Assets] Failed to save asset cache for '" << entry.first
+                      << "' during exit (reason='" << reason << "')\n";
+            ok = false;
+        }
+    }
+    return ok;
+}
+
+bool Assets::run_fallback_exit_save(const std::string& reason) {
+    const bool had_map_changes = map_data_dirty_;
+    bool ok = true;
+
+    if (!persist_map_if_dirty(reason)) {
+        ok = false;
+    }
+
+    if (!save_dirty_asset_caches(reason)) {
+        ok = false;
+    }
+
+    if (auto* store = manifest_store()) {
+        try {
+            store->flush();
+        } catch (const std::exception& ex) {
+            std::cerr << "[Assets] Manifest flush failed during exit (reason='" << reason
+                      << "'): " << ex.what() << "\n";
+            ok = false;
+        } catch (...) {
+            std::cerr << "[Assets] Manifest flush failed during exit (reason='" << reason << "')\n";
+            ok = false;
+        }
+    }
+
+    std::cout << "[Assets] Fallback exit save "
+              << (ok ? "finished" : "encountered errors")
+              << " (map_dirty_prior=" << (had_map_changes ? "true" : "false")
+              << ", reason='" << reason << "')\n";
+    return ok;
+}
+
 void Assets::hydrate_map_info_sections() {
     if (!map_info_json_.is_object()) {
         return;
@@ -540,6 +613,8 @@ bool Assets::boundary_assets_visible() const {
 }
 
 Assets::~Assets() {
+    run_exit_save_sequence("assets_shutdown");
+
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
     anchor_basis_dirty_queue_.clear();
@@ -1366,12 +1441,39 @@ void Assets::set_dev_mode(bool mode) {
 }
 
 bool Assets::run_exit_save_sequence(const std::string& reason) {
-    if (!dev_controls_) {
-        std::cout << "[Assets] Exit save sequence skipped (dev controls unavailable, reason='"
-                  << reason << "')\n";
-        return true;
+    if (exit_save_sequence_ran_) {
+        std::cout << "[Assets] Exit save sequence already executed; reusing result (reason='"
+                  << reason << "', success=" << (exit_save_sequence_ok_ ? "true" : "false")
+                  << ")\n";
+        return exit_save_sequence_ok_;
     }
-    return dev_controls_->run_exit_save_sequence(reason);
+
+    exit_save_sequence_ran_ = true;
+
+    bool ok = false;
+    const bool had_dev_controls = (dev_controls_ != nullptr);
+    if (dev_controls_) {
+        ok = dev_controls_->run_exit_save_sequence(reason);
+    }
+
+    const bool need_fallback = !dev_controls_ || !ok;
+    if (need_fallback) {
+        ok = run_fallback_exit_save(reason) || ok;
+    }
+
+    exit_save_sequence_ok_ = ok;
+
+    if (exit_save_sequence_ok_) {
+        std::cout << "[Assets] Exit save sequence complete (reason='" << reason
+                  << "', dev_path=" << (had_dev_controls ? "true" : "false")
+                  << ", fallback=" << (need_fallback ? "true" : "false") << ")\n";
+    } else {
+        std::cerr << "[Assets] EXIT SAVE FAILURE (reason='" << reason
+                  << "', dev_path=" << (had_dev_controls ? "true" : "false")
+                  << ", fallback=" << (need_fallback ? "true" : "false") << ")\n";
+    }
+
+    return exit_save_sequence_ok_;
 }
 
 void Assets::set_force_high_quality_rendering(bool enable) {

@@ -774,8 +774,8 @@ void MapModeUI::configure_footer_buttons() {
         }
 };
 
-    if (header_mode_ == HeaderMode::Map) {
-        const bool has_layers_button = std::any_of(map_mode_buttons_.begin(), map_mode_buttons_.end(),
+    {
+        const bool has_layers_button = std::any_of(room_mode_buttons_.begin(), room_mode_buttons_.end(),
                                                   [](const HeaderButtonConfig& cfg) {
                                                       return cfg.id == "layers";
                                                   });
@@ -827,9 +827,6 @@ void MapModeUI::configure_footer_buttons() {
         };
         buttons.push_back(std::move(terrain_btn));
 
-        append_custom(map_mode_buttons_, HeaderMode::Map);
-
-    } else if (header_mode_ == HeaderMode::Room) {
         append_custom(room_mode_buttons_, HeaderMode::Room);
     }
 
@@ -840,20 +837,14 @@ void MapModeUI::configure_footer_buttons() {
 
 void MapModeUI::sync_footer_button_states() {
     if (!footer_bar_) return;
-    if (header_mode_ == HeaderMode::Map) {
-        const bool layers_visible = layers_panel_ && layers_panel_->is_visible();
-        footer_bar_->set_button_active_state("layers", layers_visible);
-        const bool fog_visible = fog_settings_panel_ && fog_settings_panel_->is_visible();
-        footer_bar_->set_button_active_state("fog", fog_visible);
-        const bool terrain_visible = terrain_settings_panel_ && terrain_settings_panel_->is_visible();
-        footer_bar_->set_button_active_state("terrain", terrain_visible);
-        for (const auto& config : map_mode_buttons_) {
-            footer_bar_->set_button_active_state(config.id, config.active);
-        }
-    } else if (header_mode_ == HeaderMode::Room) {
-        for (const auto& config : room_mode_buttons_) {
-            footer_bar_->set_button_active_state(config.id, config.active);
-        }
+    const bool layers_visible = layers_panel_ && layers_panel_->is_visible();
+    footer_bar_->set_button_active_state("layers", layers_visible);
+    const bool fog_visible = fog_settings_panel_ && fog_settings_panel_->is_visible();
+    footer_bar_->set_button_active_state("fog", fog_visible);
+    const bool terrain_visible = terrain_settings_panel_ && terrain_settings_panel_->is_visible();
+    footer_bar_->set_button_active_state("terrain", terrain_visible);
+    for (const auto& config : room_mode_buttons_) {
+        footer_bar_->set_button_active_state(config.id, config.active);
     }
 }
 
@@ -1773,5 +1764,4 @@ void MapModeUI::complete_map_color_sampling(SDL_Color color) {
         apply_cb(color);
     }
 }
-
 

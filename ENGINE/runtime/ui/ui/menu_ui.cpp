@@ -78,6 +78,7 @@ void MenuUI::game_loop() {
                         handle_global_shortcuts(e);
                         const bool menu_was_active = menu_active_;
 			if (e.type == SDL_EVENT_QUIT) {
+                                run_exit_save_sequence("sdl_event_quit");
 					quit = true;
 			}
                         if (e.type == SDL_EVENT_KEY_DOWN && e.key.key == SDLK_ESCAPE && e.key.repeat == 0) {
@@ -344,8 +345,9 @@ bool MenuUI::run_exit_save_sequence(const std::string& reason) {
 }
 
 void MenuUI::doExit() {
-	std::cout << "[MenuUI] End Run -> return to main menu\n";
-        run_exit_save_sequence("pause_menu_end_run");
+        const bool saved = run_exit_save_sequence("pause_menu_end_run");
+	std::cout << "[MenuUI] End Run -> return to main menu (exit_save="
+                  << (saved ? "ok" : "FAILED") << ")\n";
 	return_to_main_menu_ = true;
 }
 
@@ -404,8 +406,9 @@ void MenuUI::doSettings() {
 }
 
 void MenuUI::doQuit() {
-	std::cout << "[MenuUI] Quit Game -> exiting application\n";
-        run_exit_save_sequence("pause_menu_quit_game");
+        const bool saved = run_exit_save_sequence("pause_menu_quit_game");
+	std::cout << "[MenuUI] Quit Game -> exiting application (exit_save="
+                  << (saved ? "ok" : "FAILED") << ")\n";
 }
 
 void MenuUI::doToggleDevMode() {

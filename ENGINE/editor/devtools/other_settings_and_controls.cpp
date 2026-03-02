@@ -215,6 +215,30 @@ float smoothstep(float t) {
     return clamped * clamped * (3.0f - (2.0f * clamped));
 }
 
+std::string ellipsize_text(const std::string& text, int max_width, const DMLabelStyle& style) {
+    if (max_width <= 0) {
+        return std::string{};
+    }
+    SDL_Point full = MeasureLabelText(style, text);
+    if (full.x <= max_width) {
+        return text;
+    }
+    static const std::string kEllipsis = "...";
+    SDL_Point ellipsis_size = MeasureLabelText(style, kEllipsis);
+    if (ellipsis_size.x > max_width) {
+        return std::string{};
+    }
+    std::string result = text;
+    while (!result.empty()) {
+        result.pop_back();
+        SDL_Point trial = MeasureLabelText(style, result + kEllipsis);
+        if (trial.x <= max_width) {
+            return result + kEllipsis;
+        }
+    }
+    return text;
+}
+
 }
 
 OtherSettingsAndControls::FilterState& OtherSettingsAndControls::persistent_state() {
@@ -473,6 +497,11 @@ void OtherSettingsAndControls::set_current_room(Room* room) {
     current_room_ = room;
     rebuild_room_spawn_ids();
     notify_state_changed();
+}
+
+void OtherSettingsAndControls::set_header_title(const std::string& title) {
+    header_title_ = title;
+    layout_dirty_ = true;
 }
 
 void OtherSettingsAndControls::set_mode_buttons(std::vector<ModeButtonConfig> buttons) {
@@ -920,6 +949,16 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
         }
     }
 
+    if (!header_title_display_.empty() && header_title_rect_.w > 0 && header_title_rect_.h > 0) {
+        const DMLabelStyle& style = DMStyles::Label();
+        SDL_Point text_size = MeasureLabelText(style, header_title_display_);
+        int text_y = header_title_rect_.y + (header_title_rect_.h - text_size.y) / 2;
+        if (text_y < header_title_rect_.y) {
+            text_y = header_title_rect_.y;
+        }
+        DrawLabelText(renderer, header_title_display_, header_title_rect_.x, text_y, style);
+    }
+
     if (!filters_expanded_) {
         return;
     }
@@ -1325,9 +1364,8 @@ void OtherSettingsAndControls::clear_checkbox_rects() {
 }
 
 void OtherSettingsAndControls::layout_mode_buttons() {
-    if (mode_buttons_.empty()) {
-        return;
-    }
+    header_title_rect_ = SDL_Rect{0, 0, 0, 0};
+    header_title_display_.clear();
 
     const int count = static_cast<int>(mode_buttons_.size());
     for (auto& entry : mode_buttons_) {
@@ -1347,13 +1385,26 @@ void OtherSettingsAndControls::layout_mode_buttons() {
 
     const int padding = DMSpacing::item_gap();
     const int inner_gap = DMSpacing::small_gap();
+    const int text_padding = DMSpacing::small_gap();
     const int left = mode_bar_rect_.x + padding;
     const int right = mode_bar_rect_.x + mode_bar_rect_.w - padding;
-    if (right <= left || count <= 0) {
+    if (right <= left) {
         for (auto& entry : mode_buttons_) {
             if (entry.button) {
                 entry.button->set_rect(SDL_Rect{0, 0, 0, 0});
             }
+        }
+        return;
+    }
+
+    if (count == 0) {
+        header_title_rect_ = SDL_Rect{left, mode_bar_rect_.y, right - left, mode_bar_rect_.h};
+        if (header_title_rect_.w > 0 && header_title_rect_.h > 0 && !header_title_.empty()) {
+            const DMLabelStyle& style = DMStyles::Label();
+            const int available_width = std::max(0, header_title_rect_.w - text_padding * 2);
+            header_title_display_ = ellipsize_text(header_title_, available_width, style);
+            header_title_rect_.x += text_padding;
+            header_title_rect_.w = std::max(0, header_title_rect_.w - text_padding * 2);
         }
         return;
     }
@@ -1742,6 +1793,7 @@ void OtherSettingsAndControls::shift_all_by(int dy) {
     shift_rect(advanced_filters_heading_rect_);
     shift_rect(grid_resolution_label_rect_);
     shift_rect(filters_rect_);
+    shift_rect(header_title_rect_);
     shift_rect(stats_rect_);
     shift_rect(stats_heading_rect_);
     shift_rect(extra_panel_rect_);

@@ -52,6 +52,7 @@ public:
     void set_screen_dimensions(int width, int height);
     void set_map_info(nlohmann::json* map_info);
     void set_current_room(Room* room);
+    void set_header_title(const std::string& title);
     void set_mode_buttons(std::vector<ModeButtonConfig> buttons);
     void set_mode_changed_callback(std::function<void(const std::string&)> cb);
     void set_active_mode(const std::string& id, bool trigger_callback = false);
@@ -185,6 +186,7 @@ private:
     SDL_Rect advanced_filters_heading_rect_{0, 0, 0, 0};
     SDL_Rect grid_resolution_label_rect_{0, 0, 0, 0};
     SDL_Rect filters_rect_{0, 0, 0, 0};
+    SDL_Rect header_title_rect_{0, 0, 0, 0};
     SDL_Rect stats_rect_{0, 0, 0, 0};
     SDL_Rect stats_heading_rect_{0, 0, 0, 0};
     std::array<SDL_Rect, 4> stats_line_rects_{};
@@ -198,6 +200,8 @@ private:
         std::unique_ptr<class DMButton> button;
 };
     std::vector<ModeButtonEntry> mode_buttons_;
+    std::string header_title_;
+    std::string header_title_display_;
     std::function<void(const std::string&)> on_mode_selected_{};
     std::unique_ptr<class DMButton> filter_toggle_button_;
     std::unique_ptr<class DMButton> hide_button_;

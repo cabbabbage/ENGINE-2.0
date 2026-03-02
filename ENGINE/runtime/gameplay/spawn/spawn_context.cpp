@@ -182,8 +182,19 @@ void SpawnContext::set_map_grid_settings(const MapGridSettings& settings) {
         spawn_resolution_ = occupancy_ ? occupancy_->resolution() : vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution);
 }
 
-world::GridPoint SpawnContext::to_grid_point(SDL_Point pos) const {
+void SpawnContext::set_floor_point_resolver(FloorPointResolver resolver) {
+        floor_point_resolver_ = std::move(resolver);
+}
+
+world::GridPoint SpawnContext::resolve_floor_point(SDL_Point pos) const {
+        if (floor_point_resolver_) {
+                return floor_point_resolver_(pos, spawn_resolution_);
+        }
         return world::GridPoint::make_virtual(pos.x, pos.y, 0, spawn_resolution_);
+}
+
+world::GridPoint SpawnContext::to_grid_point(SDL_Point pos) const {
+        return resolve_floor_point(pos);
 }
 
 void SpawnContext::set_spacing_filter(std::unordered_set<std::string> names) {

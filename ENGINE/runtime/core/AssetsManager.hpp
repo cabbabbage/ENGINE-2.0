@@ -271,6 +271,7 @@ private:
     bool persist_map_if_dirty(const std::string& reason);
     bool save_dirty_asset_caches(const std::string& reason);
     void bake_terrain_if_needed(const TerrainRuntimeState& state, TerrainField& field);
+    world::GridPoint resolve_floor_world_point(SDL_Point world_pos, int resolution_layer = -1) const;
 
     bool process_removals();
     bool apply_world_mutation_batch(WorldMutationBatch& batch);

@@ -1621,6 +1621,24 @@ std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
     return world_grid_.extract_asset(asset);
 }
 
+world::GridPoint Assets::resolve_floor_world_point(SDL_Point world_pos, int resolution_layer) const {
+    const int max_layer = world_grid_.max_resolution_layers();
+    const int requested_layer = (resolution_layer >= 0) ? resolution_layer : std::clamp(max_layer - map_grid_settings_.grid_resolution, 0, max_layer);
+    const int layer = std::clamp(requested_layer, 0, max_layer);
+
+    world::GridPoint resolved = world::GridPoint::make_virtual(world_pos.x, world_pos.y, 0, layer);
+    const world::GridKey key{world_pos.x, world_pos.y, 0, layer};
+    if (const world::GridPoint* baked = world_grid_.find_grid_point(key)) {
+        resolved.terrain_elevation = baked->terrain_elevation;
+        resolved.terrain_slope_x = baked->terrain_slope_x;
+        resolved.terrain_slope_y = baked->terrain_slope_y;
+        resolved.terrain_revision = baked->terrain_revision;
+        const int floor_z = static_cast<int>(std::lround(static_cast<double>(baked->terrain_elevation)));
+        resolved.set_world_z(floor_z);
+    }
+    return resolved;
+}
+
 Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resolution_layer) {
     if (!asset) {
         return nullptr;
@@ -1630,7 +1648,10 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
     // Avoid double insertion in all vector.
     const bool already_tracked = std::find(all.begin(), all.end(), raw) != all.end();
 
-    raw = world_grid_.attach_asset(std::move(asset), world_z, resolution_layer);
+    const int resolved_layer = (resolution_layer >= 0) ? resolution_layer : world_grid_.default_resolution_layer();
+    const int resolved_z = (world_z != 0) ? world_z : resolve_floor_world_point(raw->world_point(), resolved_layer).world_z();
+
+    raw = world_grid_.attach_asset(std::move(asset), resolved_z, resolved_layer);
     if (!raw) {
         return nullptr;
     }
@@ -1684,7 +1705,8 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     raw->set_camera(&camera_);
     raw->finalize_setup();
 
-    raw = world_grid_.create_asset_at_point(std::move(uptr));
+    const world::GridPoint floor_point = resolve_floor_world_point(world_pos);
+    raw = world_grid_.create_asset_at_point(std::move(uptr), floor_point.world_z(), floor_point.resolution_layer());
     all.push_back(raw);
 
     queue_asset_dimension_update(raw);

@@ -629,9 +629,6 @@ void Asset::update() {
 }
 
 void Asset::refresh_anchor_point_cache_from_frame() {
-    if (!current_frame) {
-        return;
-    }
     if (!anchors_initialized_) {
         initialize_anchor_registry_from_animations();
     }
@@ -640,20 +637,41 @@ void Asset::refresh_anchor_point_cache_from_frame() {
         return;
     }
 
+    const SDL_Point origin_world = world_point();
     const std::size_t count = std::min(anchor_handles_.size(), anchor_points_.size());
     for (std::size_t idx = 0; idx < count; ++idx) {
+        AnchorPoint& resolved = anchor_points_[idx];
         const DisplacedAssetAnchorPoint* frame_anchor =
-            current_frame ? current_frame->find_anchor(anchor_points_[idx].name) : nullptr;
-        std::optional<anchor_points::AnchorDepthPolicy> depth_policy;
-        if (frame_anchor) {
-            depth_policy = frame_anchor->in_front
-                               ? anchor_points::AnchorDepthPolicy::InFront
-                               : anchor_points::AnchorDepthPolicy::Behind;
+            current_frame ? current_frame->find_anchor(resolved.name) : nullptr;
+
+        resolved.name = anchor_handles_[idx].name;
+        resolved.frame_index = current_frame ? current_frame->frame_index : -1;
+        resolved.exists = frame_anchor && frame_anchor->is_valid();
+        resolved.in_front = frame_anchor ? frame_anchor->in_front : true;
+
+        if (!resolved.exists) {
+            resolved.relative_pos_2d = Vec2{};
+            resolved.world_pos_2d = Vec2{};
+            resolved.world_z = world_z();
+            resolved.resolution_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+            continue;
         }
-        resolve_anchor_point_entry(idx,
-                                   anchor_points::GridMaterialization::None,
-                                   depth_policy,
-                                   frame_anchor);
+
+        std::optional<anchor_points::AnchorDepthPolicy> depth_policy =
+            frame_anchor->in_front
+                ? std::optional<anchor_points::AnchorDepthPolicy>(anchor_points::AnchorDepthPolicy::InFront)
+                : std::optional<anchor_points::AnchorDepthPolicy>(anchor_points::AnchorDepthPolicy::Behind);
+
+        AnchorHandle& handle = anchor_handles_[idx];
+        handle.owner = this;
+        handle.update(anchor_points::GridMaterialization::None, depth_policy);
+
+        apply_anchor_runtime_state(resolved, handle, frame_anchor);
+        if (resolved.exists) {
+            resolved.relative_pos_2d = Vec2{
+                resolved.world_pos_2d.x - static_cast<float>(origin_world.x),
+                resolved.world_pos_2d.y - static_cast<float>(origin_world.y)};
+        }
     }
 }
 
@@ -1090,21 +1108,9 @@ AnchorPoint* Asset::get_anchor_point(const std::string& name) {
         return &anchor_points_[it->second];
 }
 
-AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
-                                               anchor_points::GridMaterialization grid_policy,
-                                               std::optional<anchor_points::AnchorDepthPolicy> depth_policy,
-                                               const DisplacedAssetAnchorPoint* frame_anchor) {
-        assert(index < anchor_handles_.size());
-        assert(index < anchor_points_.size());
-
-        AnchorHandle& handle = anchor_handles_[index];
-        handle.owner = this;
-        handle.update(grid_policy, depth_policy);
-
-        AnchorPoint& resolved = anchor_points_[index];
-        resolved.name = handle.name;
-        resolved.frame_index = current_frame ? current_frame->frame_index : -1;
-
+void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
+                                     const AnchorHandle& handle,
+                                     const DisplacedAssetAnchorPoint* frame_anchor) const {
         const bool anchor_present = frame_anchor && frame_anchor->is_valid();
         resolved.exists = anchor_present && !handle.missing && handle.has_canonical_texture_source;
         resolved.in_front = anchor_present ? frame_anchor->in_front : handle.in_front;
@@ -1122,6 +1128,23 @@ AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
         }
         resolved.world_z = handle.world_z;
         resolved.resolution_layer = handle.resolution_layer;
+}
+
+AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
+                                               anchor_points::GridMaterialization grid_policy,
+                                               std::optional<anchor_points::AnchorDepthPolicy> depth_policy,
+                                               const DisplacedAssetAnchorPoint* frame_anchor) {
+        assert(index < anchor_handles_.size());
+        assert(index < anchor_points_.size());
+
+        AnchorHandle& handle = anchor_handles_[index];
+        handle.owner = this;
+        handle.update(grid_policy, depth_policy);
+
+        AnchorPoint& resolved = anchor_points_[index];
+        resolved.name = handle.name;
+        resolved.frame_index = current_frame ? current_frame->frame_index : -1;
+        apply_anchor_runtime_state(resolved, handle, frame_anchor);
 
 #if !defined(NDEBUG)
         const bool perform_parity_check = resolved.exists && assets_ && assets_->anchor_point_debug_enabled();

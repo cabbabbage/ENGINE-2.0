@@ -316,6 +316,9 @@ class Asset {
                                             anchor_points::GridMaterialization grid_policy,
                                             std::optional<anchor_points::AnchorDepthPolicy> depth_policy,
                                             const DisplacedAssetAnchorPoint* frame_anchor);
+    void apply_anchor_runtime_state(AnchorPoint& resolved,
+                                    const AnchorHandle& handle,
+                                    const DisplacedAssetAnchorPoint* frame_anchor) const;
     void refresh_anchor_point_cache_from_frame();
     void mark_anchors_dirty();
     bool update_anchor_basis_if_needed();

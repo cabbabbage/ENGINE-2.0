@@ -660,26 +660,43 @@ nlohmann::json AssetInfo::manifest_payload() const {
         return payload;
 }
 
-bool AssetInfo::commit_manifest() {
-        nlohmann::json payload = info_json_;
-        if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {
-                payload["asset_name"] = name;
-        }
+void AssetInfo::mark_dirty() {
+        dirty_ = true;
+}
+
+bool AssetInfo::is_dirty() const {
+        return dirty_;
+}
+
+bool AssetInfo::save_self_to_manifest(devmode::core::ManifestStore* store) {
+        nlohmann::json payload = manifest_payload();
 
         bool manifest_saved = false;
         try {
-                auto& provider = manifest_store_provider_slot();
-                if (provider) {
-                        if (auto* store = provider()) {
-                                auto guard = store->scoped_guard("AssetInfo::commit_manifest");
-                                auto txn = store->begin_asset_transaction(name, true);
-                                if (txn) {
-                                        txn.data() = payload;
-                                        manifest_saved = txn.finalize();
-                                        store->flush();
+                if (store) {
+                        auto guard = store->scoped_guard("AssetInfo::save_self_to_manifest");
+                        auto txn = store->begin_asset_transaction(name, true);
+                        if (txn) {
+                                txn.data() = payload;
+                                manifest_saved = txn.finalize();
+                        }
+                }
+
+                if (!manifest_saved) {
+                        auto& provider = manifest_store_provider_slot();
+                        if (provider) {
+                                if (auto* provided_store = provider()) {
+                                        auto guard = provided_store->scoped_guard("AssetInfo::save_self_to_manifest");
+                                        auto txn = provided_store->begin_asset_transaction(name, true);
+                                        if (txn) {
+                                                txn.data() = payload;
+                                                manifest_saved = txn.finalize();
+                                                provided_store->flush();
+                                        }
                                 }
                         }
                 }
+
                 if (!manifest_saved) {
                         manifest::ManifestData manifest = manifest::load_manifest();
                         if (!manifest.raw.contains("assets") || !manifest.raw["assets"].is_object()) {
@@ -696,9 +713,20 @@ bool AssetInfo::commit_manifest() {
                 std::cerr << "[AssetInfo] Unknown error persisting manifest entry for '" << name << "'\n";
         }
 
+        if (manifest_saved) {
+                info_json_ = std::move(payload);
+        }
+        return manifest_saved;
+}
+
+bool AssetInfo::save_self_to_cache_if_dirty(SDL_Renderer* renderer) {
+        if (!dirty_) {
+                return true;
+        }
+
         bool bundle_saved = false;
         try {
-                PrimaryAssetCache cache(nullptr);
+                PrimaryAssetCache cache(renderer);
                 bundle_saved = cache.save_current(*this);
                 if (!bundle_saved) {
                         std::cerr << "[AssetInfo] Failed to save bundle for '" << name << "'\n";
@@ -709,10 +737,19 @@ bool AssetInfo::commit_manifest() {
                 std::cerr << "[AssetInfo] Unknown error saving bundle for '" << name << "'\n";
         }
 
-        if (manifest_saved) {
-                info_json_ = std::move(payload);
+        if (bundle_saved) {
+                dirty_ = false;
         }
-        return manifest_saved && bundle_saved;
+        return bundle_saved;
+}
+
+bool AssetInfo::commit_manifest() {
+        const bool manifest_saved = save_self_to_manifest();
+        if (!manifest_saved) {
+                return false;
+        }
+        mark_dirty();
+        return save_self_to_cache_if_dirty(nullptr);
 }
 
 void AssetInfo::set_asset_type(const std::string &t) {

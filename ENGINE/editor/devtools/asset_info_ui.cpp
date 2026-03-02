@@ -29,7 +29,6 @@
 #include "utils/cache_manager.hpp"
 #include "widgets.hpp"
 #include "tag_utils.hpp"
-#include "assets/asset/primary_asset_cache.hpp"
 
 #include "DockableCollapsible.hpp"
 #include "FloatingPanelLayoutManager.hpp"
@@ -1160,33 +1159,6 @@ void AssetInfoUI::cancel_color_sampling(bool silent) {
     }
 }
 
-bool AssetInfoUI::persist_asset_bundle(const char* reason) {
-    if (!info_) {
-        return false;
-    }
-    try {
-        PrimaryAssetCache cache(assets_ ? assets_->renderer() : nullptr);
-        if (!cache.save_current(*info_)) {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                        "[AssetInfoUI] Failed to persist bundle for %s%s",
-                        info_->name.c_str(),
-                        reason ? reason : "");
-            return false;
-        }
-        return true;
-    } catch (const std::exception& ex) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[AssetInfoUI] Exception while persisting bundle for %s: %s",
-                    info_->name.c_str(),
-                    ex.what());
-    } catch (...) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[AssetInfoUI] Unknown failure while persisting bundle for %s",
-                    info_->name.c_str());
-    }
-    return false;
-}
-
 bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority priority,
                                         const std::string& label,
                                         std::function<void()> on_success) {
@@ -1195,10 +1167,9 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
         return false;
     }
 
-    auto run_after_save = [this, cb = std::move(on_success)](bool bundle_already_persisted) mutable {
-        if (!bundle_already_persisted) {
-            persist_asset_bundle(" (manifest save)");
-        }
+    info_->mark_dirty();
+
+    auto run_after_save = [this, cb = std::move(on_success)]() mutable {
         if (cb) {
             cb();
             cb = nullptr;
@@ -1213,7 +1184,7 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
             std::move(payload),
             priority,
             intent_label,
-            [run_after_save]() mutable { run_after_save(false); });
+            [run_after_save]() mutable { run_after_save(); });
         if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
             save_coordinator_->flush_now(intent_label);
         }
@@ -1238,7 +1209,7 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
             return false;
         }
         if (committed) {
-            run_after_save(true);
+            run_after_save();
         }
         return committed;
     }
@@ -1255,7 +1226,7 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
         return false;
     }
     manifest_store_->flush();
-    run_after_save(false);
+    run_after_save();
     return true;
 }
 
@@ -1795,13 +1766,7 @@ void AssetInfoUI::on_animation_document_saved() {
         return;
     }
 
-    // Rebuild and persist the bundle immediately so dev-mode edits stay the cache truth source.
-    {
-        PrimaryAssetCache cache(renderer);
-        if (!cache.save_current(*info_)) {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Bundle rebuild failed for %s; runtime cache may be stale.", info_->name.c_str());
-        }
-    }
+    info_->mark_dirty();
 
     info_->loadAnimations(renderer);
     refresh_loaded_asset_instances();

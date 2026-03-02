@@ -824,6 +824,37 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
                 return ok;
             },
             devmode::core::SaveManager::Stage::Manifest});
+
+        save_manager_.register_saveable({
+            "asset-cache",
+            [this]() {
+                if (!assets_) {
+                    return false;
+                }
+                for (const auto& entry : assets_->library().all()) {
+                    if (entry.second && entry.second->is_dirty()) {
+                        return true;
+                    }
+                }
+                return false;
+            },
+            [this](devmode::core::DevSaveCoordinator::Priority) {
+                if (!assets_) {
+                    return false;
+                }
+                bool any_saved = false;
+                SDL_Renderer* renderer = assets_->renderer();
+                for (const auto& entry : assets_->library().all()) {
+                    if (!entry.second) {
+                        continue;
+                    }
+                    if (entry.second->save_self_to_cache_if_dirty(renderer)) {
+                        any_saved = true;
+                    }
+                }
+                return any_saved;
+            },
+            devmode::core::SaveManager::Stage::Cache});
     }
     map_grid_regen_cb_ = [this]() { this->regenerate_map_grid_assets(); };
     apply_header_suppression();
@@ -1611,6 +1642,11 @@ void DevControls::update(const Input& input) {
             }
             render_suppression_in_progress_ = false;
         }
+    }
+
+    if (save_manager_.has_dirty_saveables()) {
+        save_manager_.save_dirty(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                 "DevControls update dirty saveables");
     }
 
     save_coordinator_.tick();

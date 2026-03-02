@@ -16,7 +16,6 @@
 #include "core/manifest/manifest_loader.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/core/manifest_store.hpp"
-#include "assets/asset/primary_asset_cache.hpp"
 #include "utils/loading_status_notifier.hpp"
 #include "utils/rebuild_queue.hpp"
 #include "gameplay/world/world_grid.hpp"
@@ -130,15 +129,6 @@ MainApp::MainApp(MapDescriptor map,
 }
 
 MainApp::~MainApp() {
-        // Persist current asset state to primary bundles before tearing down.
-        if (asset_library_ && game_assets_ && game_assets_->is_dev_mode()) {
-                PrimaryAssetCache cache(nullptr);
-                for (const auto& entry : asset_library_->all()) {
-                        if (entry.second) {
-                                cache.save_current(*entry.second);
-                        }
-                }
-        }
         AudioEngine::instance().shutdown();
         if (overlay_texture_)  SDL_DestroyTexture(overlay_texture_);
         delete game_assets_;

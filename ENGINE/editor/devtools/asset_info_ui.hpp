@@ -87,7 +87,6 @@ class AssetInfoUI {
     void apply_camera_override(bool enable);
     float compute_player_screen_height(const class WarpedScreenGrid& cam) const;
     void save_now() const;
-    bool persist_asset_bundle(const char* reason = nullptr);
     bool apply_section_to_assets(AssetInfoSectionId section_id, const std::vector<std::string>& asset_names);
     static const char* section_display_name(AssetInfoSectionId section_id);
     bool validate_target_asset() const;

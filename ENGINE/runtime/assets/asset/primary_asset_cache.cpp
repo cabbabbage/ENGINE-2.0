@@ -433,7 +433,6 @@ bool PrimaryAssetCache::load_or_build(AssetInfo& info,
         return false;
     }
     bundle.content_hash = current_hash;
-    CacheManager::save_bundle(bundle_path.generic_string(), bundle);
     raw_bundle = bundle;
     return populate_runtime_frames(info, bundle, out_frames);
 }

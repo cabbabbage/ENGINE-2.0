@@ -18,6 +18,8 @@ namespace devmode::core {
 class ManifestStore;
 }
 
+struct SDL_Renderer;
+
 struct MappingOption {
 	std::string animation;
 	float percent;
@@ -102,6 +104,10 @@ class AssetInfo {
 	public:
     void loadAnimations(SDL_Renderer* renderer);
     bool commit_manifest();
+    void mark_dirty();
+    bool is_dirty() const;
+    bool save_self_to_manifest(devmode::core::ManifestStore* store = nullptr);
+    bool save_self_to_cache_if_dirty(SDL_Renderer* renderer = nullptr);
     nlohmann::json manifest_payload() const;
     void set_asset_type(const std::string &t);
     void set_min_same_type_distance(int d);
@@ -176,6 +182,7 @@ class AssetInfo {
     void rebuild_anti_tag_cache();
     std::unordered_set<std::string> tag_lookup_;
     std::unordered_set<std::string> anti_tag_lookup_;
+    bool dirty_ = false;
     friend class AnimationLoader;
     friend class PrimaryAssetCache;
 #if defined(ASSET_INFO_ENABLE_TEST_ACCESS)

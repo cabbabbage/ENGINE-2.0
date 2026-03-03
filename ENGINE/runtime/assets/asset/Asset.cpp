@@ -1407,6 +1407,7 @@ void Asset::set_render_depth_bias(double bias) {
     if (!std::isfinite(bias)) {
         bias = 0.0;
     }
-    constexpr double kMaxBiasMagnitude = 0.5;
+    // Allow anchored chains to stack several one-pixel offsets without clipping.
+    constexpr double kMaxBiasMagnitude = 8.0;
     render_depth_bias_ = std::clamp(bias, -kMaxBiasMagnitude, kMaxBiasMagnitude);
 }

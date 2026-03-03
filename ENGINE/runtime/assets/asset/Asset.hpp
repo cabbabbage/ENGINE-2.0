@@ -59,6 +59,7 @@ struct RenderObject {
     std::vector<SDL_Vertex> cached_vertices;
     std::vector<int> cached_indices;
     SDL_FPoint cached_position{0.0f, 0.0f};
+    float cached_world_z = 0.0f;
     float cached_scale = 0.0f;
     std::uint64_t cached_camera_state_version = 0;
     bool mesh_dirty = true;

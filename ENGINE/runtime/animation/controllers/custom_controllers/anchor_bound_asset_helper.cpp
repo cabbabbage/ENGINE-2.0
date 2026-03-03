@@ -30,7 +30,9 @@ std::string asset_label(const Asset* asset) {
     return asset->info->name;
 }
 
-constexpr double kBindingRenderBias = 0.01;
+// Depth bias applied to bound children so they render immediately in front of or behind
+// the parent. One world-pixel keeps ordering stable without pushing the child far away.
+constexpr double kBindingRenderBias = 1.0;
 
 } // namespace
 

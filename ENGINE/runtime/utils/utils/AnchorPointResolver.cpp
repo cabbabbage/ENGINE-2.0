@@ -13,6 +13,10 @@
 
 namespace {
 
+// Bring anchor depth policy enum into this translation unit scope so the
+// helper functions in the anonymous namespace can use it without qualifying.
+using anchor_points::AnchorDepthPolicy;
+
 #if defined(ENGINE_WORLD_TESTS)
 
 }  // namespace
@@ -74,6 +78,98 @@ struct AnchorFrameSample {
     SDL_FPoint mesh_uv{0.5f, 0.5f};
     SDL_Point source_px{0, 0};
 };
+
+constexpr float kAnchorRayBiasPx = 1.0f;
+
+struct CameraRayBasis {
+    float origin_x = 0.0f;
+    float origin_y = 0.0f;
+    float origin_z = 0.0f;
+    float dir_x = 0.0f;
+    float dir_y = 0.0f;
+    float dir_z = 0.0f;
+};
+
+std::optional<CameraRayBasis> build_camera_ray_basis(const Assets* assets_owner) {
+    if (!assets_owner) {
+        return std::nullopt;
+    }
+
+    const auto params = assets_owner->getView().projection_params();
+    const double meters_scale = std::max(1e-6, params.meters_scale);
+    if (!std::isfinite(meters_scale)) {
+        return std::nullopt;
+    }
+
+    CameraRayBasis basis{};
+    basis.origin_x = static_cast<float>(params.position_x / meters_scale + params.anchor_world_x);
+    basis.origin_y = static_cast<float>(params.position_y / meters_scale + params.anchor_world_y);
+    basis.origin_z = static_cast<float>(params.position_z / meters_scale);
+
+    basis.dir_x = static_cast<float>(params.forward_x);
+    basis.dir_y = static_cast<float>(params.forward_y);
+    basis.dir_z = static_cast<float>(params.forward_z);
+
+    const float len_sq = basis.dir_x * basis.dir_x + basis.dir_y * basis.dir_y + basis.dir_z * basis.dir_z;
+    if (len_sq <= 1e-10f || !std::isfinite(len_sq)) {
+        return std::nullopt;
+    }
+    const float inv_len = 1.0f / std::sqrt(len_sq);
+    basis.dir_x *= inv_len;
+    basis.dir_y *= inv_len;
+    basis.dir_z *= inv_len;
+    return basis;
+}
+
+void apply_depth_bias_along_camera_ray(const Assets* assets_owner,
+                                       AnchorDepthPolicy policy,
+                                       float bias_px,
+                                       float& world_x,
+                                       float& world_y,
+                                       float& world_z) {
+    if (!std::isfinite(bias_px) || bias_px <= 0.0f) {
+        return;
+    }
+
+    const float signed_bias =
+        (policy == AnchorDepthPolicy::InFront) ? -bias_px :
+        (policy == AnchorDepthPolicy::Behind) ? bias_px : 0.0f;
+
+    if (std::abs(signed_bias) <= 1e-6f) {
+        return;
+    }
+
+    const auto basis_opt = build_camera_ray_basis(assets_owner);
+    if (!basis_opt.has_value()) {
+        // Fall back to legacy behaviour (nudge along world Y) if camera data is unavailable.
+        if (policy == AnchorDepthPolicy::InFront) {
+            world_y += bias_px;
+        } else if (policy == AnchorDepthPolicy::Behind) {
+            world_y -= bias_px;
+        }
+        return;
+    }
+
+    const CameraRayBasis& basis = *basis_opt;
+    const float dir_x = world_x - basis.origin_x;
+    const float dir_y = world_y - basis.origin_y;
+    const float dir_z = world_z - basis.origin_z;
+    const float len_sq = dir_x * dir_x + dir_y * dir_y + dir_z * dir_z;
+    if (len_sq <= 1e-10f || !std::isfinite(len_sq)) {
+        return;
+    }
+    const float len = std::sqrt(len_sq);
+
+    // Avoid stepping past the camera when moving anchors towards it.
+    if (signed_bias < 0.0f && len <= std::abs(signed_bias)) {
+        return;
+    }
+
+    const float inv_len = 1.0f / len;
+    world_x += dir_x * inv_len * signed_bias;
+    world_y += dir_y * inv_len * signed_bias;
+    world_z += dir_z * inv_len * signed_bias;
+}
 
 void assert_anchor_is_canonical_texture_pixel(const DisplacedAssetAnchorPoint& anchor) {
     if (anchor.texture_x < 0 || anchor.texture_y < 0) {
@@ -302,16 +398,14 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     const float anchor_world_y = world_y;
     const float anchor_world_z = dims.world_z_offset + (1.0f - anchor_sample.mesh_uv.y) * world_height;
 
-    int depth_delta = 0;
-    if (depth_policy == AnchorDepthPolicy::InFront) {
-        depth_delta = 1;
-    } else if (depth_policy == AnchorDepthPolicy::Behind) {
-        depth_delta = -1;
-    }
+    float displaced_world_x = anchor_world_x;
+    float displaced_world_y = anchor_world_y;
+    float displaced_world_z = anchor_world_z;
+    apply_depth_bias_along_camera_ray(assets_owner, depth_policy, kAnchorRayBiasPx, displaced_world_x, displaced_world_y, displaced_world_z);
 
-    const int resolved_x = static_cast<int>(std::lround(anchor_world_x));
-    const int resolved_y = static_cast<int>(std::lround(anchor_world_y)) + depth_delta;
-    const int resolved_z = static_cast<int>(std::lround(anchor_world_z));
+    const int resolved_x = static_cast<int>(std::lround(displaced_world_x));
+    const int resolved_y = static_cast<int>(std::lround(displaced_world_y));
+    const int resolved_z = static_cast<int>(std::lround(displaced_world_z));
 
     sample.resolved.world_px = SDL_Point{resolved_x, resolved_y};
     sample.resolved.world_z = resolved_z;

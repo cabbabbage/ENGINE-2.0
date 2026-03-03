@@ -538,6 +538,7 @@ bool project_world_point(const WarpedScreenGrid& cam,
 bool build_perspective_mesh(RenderObject& obj,
                             const WarpedScreenGrid& cam,
                             float perspective_scale,
+                            float base_world_z,
                             WarpedMesh& mesh) {
     if (!obj.texture) {
         return false;
@@ -564,6 +565,7 @@ bool build_perspective_mesh(RenderObject& obj,
         obj.cached_vertices.size() == 4 &&
         obj.cached_indices.size() == 6 &&
         std::fabs(obj.cached_scale - current_scale) < kScaleMatchEpsilon &&
+        std::fabs(obj.cached_world_z - base_world_z) < kScaleMatchEpsilon &&
         obj.cached_position.x == current_position.x &&
         obj.cached_position.y == current_position.y &&
         obj.cached_camera_state_version == current_camera_version) {
@@ -575,7 +577,7 @@ bool build_perspective_mesh(RenderObject& obj,
     const float world_height = static_cast<float>(rect.h) / safe_perspective;
     const float half_width = world_width * 0.5f;
     const float height = world_height;
-    const float base_z = obj.world_z_offset;
+    const float base_z = base_world_z;
     if (!(std::isfinite(world_x) && std::isfinite(world_y) && std::isfinite(half_width) && std::isfinite(height))) {
         return false;
     }
@@ -737,6 +739,7 @@ bool build_perspective_mesh(RenderObject& obj,
     obj.cached_vertices = mesh.vertices;
     obj.cached_indices = mesh.indices;
     obj.cached_position = current_position;
+    obj.cached_world_z = base_z;
     obj.cached_scale = current_scale;
     obj.cached_camera_state_version = current_camera_version;
     obj.mesh_dirty = false;
@@ -1199,7 +1202,10 @@ void SceneRenderer::render() {
                 const float perspective_scale = candidate.grid_point
                     ? std::max(0.0001f, candidate.grid_point->perspective_scale)
                     : 1.0f;
-                if (!build_perspective_mesh(obj, cam, perspective_scale, mesh)) {
+                const float base_world_z = candidate.grid_point
+                    ? static_cast<float>(candidate.grid_point->world_z()) + candidate.grid_point->terrain_elevation + obj.world_z_offset
+                    : obj.world_z_offset;
+                if (!build_perspective_mesh(obj, cam, perspective_scale, base_world_z, mesh)) {
                     continue;
                 }
 

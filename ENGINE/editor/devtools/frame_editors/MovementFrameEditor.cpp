@@ -20,6 +20,7 @@
 #include "nlohmann/json.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
+#include "core/axis_convention.hpp"
 
 namespace devmode::frame_editors {
 
@@ -50,6 +51,8 @@ SDL_FPoint sample_quadratic_by_arclen(const SDL_FPoint& p0,
 }  // namespace
 
 void MovementFrameEditor::begin(const FrameEditorContext& context) {
+    static_assert(!axis::kUsingLegacyAxisOrdering,
+                  "MovementFrameEditor requires canonical axes (Y=height, Z=depth). Remove legacy conversions instead of swapping.");
     context_ = context;
     selection_state_ = context.selection_state;
     point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);

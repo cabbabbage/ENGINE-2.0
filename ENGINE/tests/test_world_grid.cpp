@@ -5,9 +5,11 @@
 
 #include <nlohmann/json.hpp>
 
+#include "assets/Asset.hpp"
 #include "core/manifest/map_data.hpp"
 #include "core/manifest/manifest_loader.hpp"
 #include "devtools/core/manifest_store.hpp"
+#include "gameplay/world/chunk.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "gameplay/world/world_grid.hpp"
 
@@ -89,7 +91,7 @@ TEST_CASE("WorldGrid keys stay stable across repeated requests") {
     CHECK(first_key.y == sample_pos.y);
     CHECK(first_key.z == sample_pos.z);
 
-    Chunk* chunk = grid.ensure_chunk_from_world(sample);
+    world::Chunk* chunk = grid.ensure_chunk_from_world(sample);
     REQUIRE(chunk != nullptr);
     world::GridPoint& stored = grid.find_or_create_grid_point(first_key, chunk, nullptr);
     CHECK(stored.hash_key() == grid.hash_key(first_key));

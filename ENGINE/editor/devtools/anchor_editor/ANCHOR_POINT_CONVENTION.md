@@ -5,3 +5,9 @@ Anchor point contract (runtime + editor must stay in lockstep)
 - Horizontal flips happen after conversion: if the render path is flipped (e.g., `asset.flipped`), use `u = 1 - u`. `v` is not flipped at runtime; derived animations that flip textures must pre-flip anchor pixels when cloning.
 - The editor preview (`_texture_to_canvas` / `_canvas_to_texture` in `scripts/anchor_point_editor.py`) applies the same pixel-center math and mirrors `flipped_source`/`flip_movement_horizontal` so the overlay matches runtime placement.
 - When changing anchor math, update both the runtime helper and the editor helpers together so manifests stay canonical.
+
+## Axis convention (2026-03 refresh)
+- X = right/left
+- Y = height/up
+- Z = depth/forward
+- Editor tooling must not treat Z as height; all saved data and previews use Y-up, Z-forward.

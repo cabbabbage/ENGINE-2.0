@@ -36,5 +36,7 @@ struct Basis3 {
 
 // Compile-time guard: ensure all code uses the canonical axis ordering.
 inline constexpr bool kUsingLegacyAxisOrdering = false;
+static_assert(!kUsingLegacyAxisOrdering,
+              "Legacy Y-forward/Z-up axis ordering is forbidden. All code must use X=right, Y=up, Z=depth with no compatibility swaps.");
 
 } // namespace axis

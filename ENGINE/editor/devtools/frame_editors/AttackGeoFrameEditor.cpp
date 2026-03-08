@@ -15,6 +15,7 @@
 #include "devtools/widgets.hpp"
 #include "devtools/frame_editors/shared/SnapUtils.hpp"
 #include "utils/FramePointResolver.hpp"
+#include "core/axis_convention.hpp"
 
 #include "nlohmann/json.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
@@ -64,6 +65,8 @@ int resolve_wheel_steps(const SDL_MouseWheelEvent& wheel) {
 }  // namespace
 
 void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
+    static_assert(!axis::kUsingLegacyAxisOrdering,
+                  "AttackGeoFrameEditor only supports canonical axes (Y=height, Z=depth). Remove legacy swaps instead of compensating.");
     context_ = context;
     selection_state_ = context.selection_state;
     point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);

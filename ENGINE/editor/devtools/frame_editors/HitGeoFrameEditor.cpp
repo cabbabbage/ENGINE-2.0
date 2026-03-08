@@ -15,6 +15,7 @@
 #include "devtools/widgets.hpp"
 #include "devtools/frame_editors/shared/SnapUtils.hpp"
 #include "utils/FramePointResolver.hpp"
+#include "core/axis_convention.hpp"
 #include "nlohmann/json.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
@@ -50,6 +51,8 @@ float dist_sq(const SDL_FPoint& a, const SDL_FPoint& b) {
 }  // namespace
 
 void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
+    static_assert(!axis::kUsingLegacyAxisOrdering,
+                  "HitGeoFrameEditor requires canonical axes (Y=height, Z=depth). Legacy swaps are not supported.");
     context_ = context;
     selection_state_ = context.selection_state;
     point_3d_editor_ = std::make_unique<Point3DEditor>(selection_state_);

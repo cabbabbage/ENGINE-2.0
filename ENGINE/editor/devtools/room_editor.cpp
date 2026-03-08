@@ -31,6 +31,7 @@
 #include "room_overlay_renderer.hpp"
 #include "animation/animation_update.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
+#include "core/axis_convention.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/spawn/asset_spawn_planner.hpp"
 #include "gameplay/spawn/asset_spawner.hpp"
@@ -135,6 +136,9 @@ void render_grid_point_marker(SDL_Renderer* renderer, const WarpedScreenGrid& ca
 #include "utils/log.hpp"
 
 namespace devmode::room_editor_detail {
+
+static_assert(!axis::kUsingLegacyAxisOrdering,
+              "RoomEditor must operate under the canonical axis convention (Y=height, Z=depth) with no legacy swaps.");
 
 nlohmann::json resolve_map_info_blob(const Assets* assets,
                                      const devmode::core::ManifestStore* manifest_store,

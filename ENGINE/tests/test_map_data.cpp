@@ -1,11 +1,13 @@
 #include <doctest/doctest.h>
 
 #include <nlohmann/json.hpp>
+#include <stdexcept>
 
 #include "core/manifest/map_data.hpp"
 
 TEST_CASE("MapData preserves unknown root and nested keys through round-trip") {
     nlohmann::json entry = {
+        {"schema_version", manifest::kMapSchemaVersion},
         {"rooms_data", {
             {"spawn", {
                 {"name", "spawn"},
@@ -62,7 +64,8 @@ TEST_CASE("MapData preserves unknown root and nested keys through round-trip") {
 }
 
 TEST_CASE("MapData writes known section schema keys when entry is missing") {
-    manifest::MapData data = manifest::MapData::from_manifest_entry("empty_map", nlohmann::json::object());
+    manifest::MapData data = manifest::MapData::from_manifest_entry("empty_map",
+                                                          nlohmann::json{{"schema_version", manifest::kMapSchemaVersion}});
     nlohmann::json out = data.to_manifest_entry();
 
     CHECK(out.contains("rooms_data"));
@@ -76,5 +79,15 @@ TEST_CASE("MapData writes known section schema keys when entry is missing") {
 
     CHECK(out["rooms_data"].is_object());
     CHECK(out["map_layers"].is_array());
+}
+
+TEST_CASE("MapData rejects missing schema version") {
+    CHECK_THROWS_AS(manifest::MapData::from_manifest_entry("missing", nlohmann::json::object()), std::runtime_error);
+}
+
+TEST_CASE("MapData rejects unsupported schema version") {
+    const int invalid_version = manifest::kMapSchemaVersion + 10;
+    nlohmann::json entry = {{"schema_version", invalid_version}};
+    CHECK_THROWS_WITH(manifest::MapData::from_manifest_entry("wrong", entry), "schema_version");
 }
 

@@ -8,7 +8,7 @@
 
 namespace manifest {
 namespace {
-constexpr int kManifestVersion = 1;
+constexpr int kManifestVersion = 2;
 
 std::filesystem::path project_root() {
 #ifdef PROJECT_ROOT

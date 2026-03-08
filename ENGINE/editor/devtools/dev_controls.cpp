@@ -3006,10 +3006,12 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
     auto try_floor_warped_screen_position = [&](const WarpedScreenGrid& c, SDL_Point w, SDL_FPoint& out) -> bool {
         SDL_FPoint linear{};
-        if (!c.project_world_point(SDL_FPoint{static_cast<float>(w.x), static_cast<float>(w.y)}, 0.0f, linear)) {
+        SDL_FPoint floor_xy{static_cast<float>(w.x), 0.0f};
+        const float depth_z = static_cast<float>(w.y);
+        if (!c.project_world_point(floor_xy, depth_z, linear)) {
             return false;
         }
-        float warped_y = c.warp_floor_screen_y(static_cast<float>(w.y), linear.y);
+        float warped_y = c.warp_floor_screen_y(0.0f, linear.y);
         if (!std::isfinite(linear.x) || !std::isfinite(warped_y)) {
             return false;
         }
@@ -3046,9 +3048,9 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
         SDL_Color minor{0, 255, 255, 48};
         SDL_Color major{0, 255, 255, 80};
 
-        auto [view_min_x, view_min_y, view_max_x, view_max_y] = view_cam.get_current_view().get_bounds();
-        SDL_FPoint top_left_world{static_cast<float>(view_min_x), static_cast<float>(view_min_y)};
-        SDL_FPoint bottom_right_world{static_cast<float>(view_max_x), static_cast<float>(view_max_y)};
+        auto [view_min_x, view_min_z, view_max_x, view_max_z] = view_cam.get_current_view().get_bounds();
+        SDL_FPoint top_left_world{static_cast<float>(view_min_x), static_cast<float>(view_min_z)};
+        SDL_FPoint bottom_right_world{static_cast<float>(view_max_x), static_cast<float>(view_max_z)};
         const float cam_scale = std::max(0.0001f, static_cast<float>(view_cam.get_scale()));
 
         int cell = std::max(1, grid_cell_size_px_);
@@ -3057,8 +3059,8 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
             const float depth_world_padding = cam_scale * std::max(0.0f, view_cam.current_depth_offset_px());
             const float min_world_x = std::min(top_left_world.x, bottom_right_world.x) - world_padding;
             const float max_world_x = std::max(top_left_world.x, bottom_right_world.x) + world_padding;
-            const float min_world_y = std::min(top_left_world.y, bottom_right_world.y) - world_padding - depth_world_padding * 0.5f;
-            const float max_world_y = std::max(top_left_world.y, bottom_right_world.y) + world_padding + depth_world_padding;
+            const float min_world_z = std::min(top_left_world.y, bottom_right_world.y) - world_padding - depth_world_padding * 0.5f;
+            const float max_world_z = std::max(top_left_world.y, bottom_right_world.y) + world_padding + depth_world_padding;
 
             if (depth_params.enabled) {
                 horizon_screen_y = static_cast<float>(depth_params.horizon_screen_y);
@@ -3117,9 +3119,9 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
 
                 for (int s = 0; s <= samples_per_line; ++s) {
                     const float t = static_cast<float>(s) / static_cast<float>(samples_per_line);
-                    const float wy = min_world_y + (max_world_y - min_world_y) * t;
+                    const float world_z = min_world_z + (max_world_z - min_world_z) * t;
                     SDL_Point world_point{
-                        static_cast<int>(std::lround(x)), static_cast<int>(std::lround(wy)) };
+                        static_cast<int>(std::lround(x)), static_cast<int>(std::lround(world_z)) };
                     SDL_FPoint screen{};
                     if (!try_floor_warped_screen_position(view_cam, world_point, screen)) {
                         flush_polyline();
@@ -3143,11 +3145,11 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 SDL_SetRenderDrawBlendMode(renderer, prev_mode2);
             }
 
-            float start_y = std::floor(max_world_y / cell) * cell;
+            float start_z = std::floor(max_world_z / cell) * cell;
             float highest_horizontal_screen_y = std::numeric_limits<float>::infinity();
-            for (float y = start_y; y >= min_world_y - cell; y -= cell) {
+            for (float z = start_z; z >= min_world_z - cell; z -= cell) {
                 SDL_Point sample_world{
-                    static_cast<int>(std::lround(mid_world_x)), static_cast<int>(std::lround(y)) };
+                    static_cast<int>(std::lround(mid_world_x)), static_cast<int>(std::lround(z)) };
                 SDL_FPoint sample_screen{};
                 if (try_floor_warped_screen_position(view_cam, sample_world, sample_screen)) {
                     const float screen_y = sample_screen.y;
@@ -3159,14 +3161,14 @@ void DevControls::render_overlays(SDL_Renderer* renderer) {
                 std::vector<SDL_Point> polyline;
                 polyline.reserve(static_cast<std::size_t>(samples_per_line + 1));
                 auto flush_polyline = [&]() {
-                    draw_grid_polyline(polyline, y);
+                    draw_grid_polyline(polyline, z);
                     polyline.clear();
                 };
                 for (int s = 0; s <= samples_per_line; ++s) {
                     const float t = static_cast<float>(s) / static_cast<float>(samples_per_line);
                     const float wx = min_world_x + (max_world_x - min_world_x) * t;
                     SDL_Point world_point{
-                        static_cast<int>(std::lround(wx)), static_cast<int>(std::lround(y)) };
+                        static_cast<int>(std::lround(wx)), static_cast<int>(std::lround(z)) };
                     SDL_FPoint screen{};
                     if (!try_floor_warped_screen_position(view_cam, world_point, screen)) {
                         flush_polyline();
@@ -4943,11 +4945,12 @@ void DevControls::render_grid_overlay() {
 
         auto try_floor_warped_screen_position = [&](SDL_Point world_point, SDL_FPoint& out) -> bool {
             SDL_FPoint linear{};
-            if (!view_cam.project_world_point(
-                    SDL_FPoint{static_cast<float>(world_point.x), static_cast<float>(world_point.y)}, 0.0f, linear)) {
+            SDL_FPoint floor_xy{static_cast<float>(world_point.x), 0.0f};
+            const float depth_z = static_cast<float>(world_point.y);
+            if (!view_cam.project_world_point(floor_xy, depth_z, linear)) {
                 return false;
             }
-            const float warped_y = view_cam.warp_floor_screen_y(static_cast<float>(world_point.y), linear.y);
+            const float warped_y = view_cam.warp_floor_screen_y(0.0f, linear.y);
             if (!std::isfinite(linear.x) || !std::isfinite(warped_y)) {
                 return false;
             }

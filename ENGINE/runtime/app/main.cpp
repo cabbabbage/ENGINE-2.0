@@ -574,7 +574,7 @@ nlohmann::json build_default_map_manifest(const std::string& map_name) {
         group["position"] = "Exact";
         group["priority"] = 0;
         group["dx"] = 0;
-        group["dy"] = 0;
+        group["dz"] = 0;
         group["enforce_spacing"] = false;
         group["explicit_flip"] = false;
         group["force_flipped"] = false;

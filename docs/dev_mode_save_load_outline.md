@@ -1,5 +1,10 @@
 # Dev Mode save/load structure (assets, rooms, maps)
 
+## Schema upgrade note
+
+- Manifest JSON now enforces version 2 and each map blob must carry `schema_version`: older files that omit `schema_version` or still hard-code the deprecated `dy` field will be rejected to keep the runtime/editor coordinate system unambiguous (height is always Y, planar offsets use `dz`).
+- Because of the strict validation and coordinate rename, there is no automated migration. You must re-save the affected maps/assets through Dev Mode (open them in the editor and save) so that new entries emit `schema_version = 1` plus the `dz` offsets. Treat this as a one-time “recreate content” requirement whenever you pull this change.
+
 ## 1) Asset edits (Asset Info / animation editor)
 
 - **Load (authoring data):**

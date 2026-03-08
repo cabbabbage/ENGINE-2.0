@@ -105,7 +105,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             float center_y_local = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
             box->center_x = resolver.to_percent_xy(center_x_local);
             box->center_y = resolver.to_percent_xy(center_y_local);
-            box->center_z = resolver.to_percent(snapped_world_z);
+            box->center_z = resolver.to_percent_depth(snapped_world_z);
 
             persist_changes();
             refresh_selection_state();
@@ -132,7 +132,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             float center_y_local = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
             box->center_x = resolver.to_percent_xy(center_x_local);
             box->center_y = resolver.to_percent_xy(center_y_local);
-            box->center_z = resolver.to_percent(snapped_world_z);
+            box->center_z = resolver.to_percent_depth(snapped_world_z);
 
             persist_changes();
         });
@@ -753,8 +753,8 @@ void HitGeoFrameEditor::refresh_selection_state() {
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint screen = cam.map_to_screen_f(world);
     selection_state_->world_pos = world;
-    const float base_z = resolver.base_world_z();
-    const float world_z = resolver.to_world_z(box->center_z);
+    const float base_z = resolver.base_world_depth();
+    const float world_z = resolver.to_world_depth(box->center_z);
     selection_state_->world_z = world_z;
     selection_state_->screen_pos = round_point(screen);
     selection_state_->set_anchor_world(anchor, base_z);

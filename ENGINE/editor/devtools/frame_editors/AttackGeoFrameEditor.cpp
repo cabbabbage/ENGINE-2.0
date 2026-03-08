@@ -94,22 +94,22 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
             local.y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
             float x_percent = resolver.to_percent_xy(local.x);
             float y_percent = resolver.to_percent_xy(local.y);
-            float z_percent = resolver.to_percent(snapped_world_z);
+            float depth_percent = resolver.to_percent_depth(snapped_world_z);
             switch (selected_handle_) {
                 case AttackHandle::Start:
                     vec->start_x = x_percent;
                     vec->start_y = y_percent;
-                    vec->start_z = z_percent;
+                    vec->start_z = depth_percent;
                     break;
                 case AttackHandle::Control:
                     vec->control_x = x_percent;
                     vec->control_y = y_percent;
-                    vec->control_z = z_percent;
+                    vec->control_z = depth_percent;
                     break;
                 case AttackHandle::End:
                     vec->end_x = x_percent;
                     vec->end_y = y_percent;
-                    vec->end_z = z_percent;
+                    vec->end_z = depth_percent;
                     break;
                 default:
                     break;
@@ -171,22 +171,22 @@ void AttackGeoFrameEditor::begin(const FrameEditorContext& context) {
             local.y = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
             float x_percent = resolver.to_percent_xy(local.x);
             float y_percent = resolver.to_percent_xy(local.y);
-            float z_percent = resolver.to_percent(snapped_world_z);
+            float depth_percent = resolver.to_percent_depth(snapped_world_z);
             switch (selected_handle_) {
                 case AttackHandle::Start:
                     vec->start_x = x_percent;
                     vec->start_y = y_percent;
-                    vec->start_z = z_percent;
+                    vec->start_z = depth_percent;
                     break;
                 case AttackHandle::Control:
                     vec->control_x = x_percent;
                     vec->control_y = y_percent;
-                    vec->control_z = z_percent;
+                    vec->control_z = depth_percent;
                     break;
                 case AttackHandle::End:
                     vec->end_x = x_percent;
                     vec->end_y = y_percent;
-                    vec->end_z = z_percent;
+                    vec->end_z = depth_percent;
                     break;
                 default:
                     break;
@@ -825,17 +825,17 @@ void AttackGeoFrameEditor::refresh_selection_state() {
         default:
             break;
     }
-    float z_percent = vec ? vec->start_z : 0.0f;
+    float depth_percent = vec ? vec->start_z : 0.0f;
     if (vec) {
         switch (selection_state_->target) {
-            case SelectionTarget::AttackControl: z_percent = vec->control_z; break;
-            case SelectionTarget::AttackEnd: z_percent = vec->end_z; break;
+            case SelectionTarget::AttackControl: depth_percent = vec->control_z; break;
+            case SelectionTarget::AttackEnd: depth_percent = vec->end_z; break;
             case SelectionTarget::AttackStart:
-            default: z_percent = vec->start_z; break;
+            default: depth_percent = vec->start_z; break;
         }
     }
     SDL_Point anchor = asset_anchor_world();
-    const float base_z = resolver.base_world_z();
+    const float base_z = resolver.base_world_depth();
     // Convert percent values back to world coordinates
     const float local_x_world = resolver.to_world_xy(local_x) * asset_local_scale();
     const float local_y_world = resolver.to_world_xy(local_y) * asset_local_scale();
@@ -846,7 +846,7 @@ void AttackGeoFrameEditor::refresh_selection_state() {
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint screen = cam.map_to_screen_f(world);
     selection_state_->world_pos = world;
-    selection_state_->world_z = resolver.to_world_z(z_percent);
+    selection_state_->world_z = resolver.to_world_depth(depth_percent);
     selection_state_->screen_pos = round_point(screen);
     selection_state_->set_anchor_world(anchor, base_z);
 }

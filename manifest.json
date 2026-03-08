@@ -1345,7 +1345,6 @@
               ],
               "display_name": "Vibble",
               "dx": 0,
-              "dy": 0,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1359,7 +1358,8 @@
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-Forrest-Vibble"
+              "spawn_id": "spn-Forrest-Vibble",
+              "dz": 0
             },
             {
               "candidates": [
@@ -1374,7 +1374,6 @@
               ],
               "display_name": "tailor",
               "dx": -115,
-              "dy": -269,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1388,7 +1387,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-61e4c02a6dc9"
+              "spawn_id": "spn-61e4c02a6dc9",
+              "dz": -269
             },
             {
               "candidates": [
@@ -1403,7 +1403,6 @@
               ],
               "display_name": "grave_4",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1417,7 +1416,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-f22354d044d0"
+              "spawn_id": "spn-f22354d044d0",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1432,7 +1432,6 @@
               ],
               "display_name": "booze_1",
               "dx": -96,
-              "dy": -164,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1446,7 +1445,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-4950e10ceb63"
+              "spawn_id": "spn-4950e10ceb63",
+              "dz": -164
             },
             {
               "candidates": [
@@ -1461,7 +1461,6 @@
               ],
               "display_name": "tree",
               "dx": -800,
-              "dy": -164,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1475,7 +1474,8 @@
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-1268b38d8dc9"
+              "spawn_id": "spn-1268b38d8dc9",
+              "dz": -164
             },
             {
               "candidates": [
@@ -1490,7 +1490,6 @@
               ],
               "display_name": "booze_2",
               "dx": -460,
-              "dy": 1028,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1504,7 +1503,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-a9115a2605ca"
+              "spawn_id": "spn-a9115a2605ca",
+              "dz": 1028
             },
             {
               "candidates": [
@@ -1519,7 +1519,6 @@
               ],
               "display_name": "grave_4 (Copy)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1533,7 +1532,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-20fb9933f832"
+              "spawn_id": "spn-20fb9933f832",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1548,7 +1548,6 @@
               ],
               "display_name": "grave_4 (Copy 2)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1562,7 +1561,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-5d68b4fb7448"
+              "spawn_id": "spn-5d68b4fb7448",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1577,7 +1577,6 @@
               ],
               "display_name": "grave_4 (Copy 3)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1591,7 +1590,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-0938aebf26d3"
+              "spawn_id": "spn-0938aebf26d3",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1606,7 +1606,6 @@
               ],
               "display_name": "grave_4 (Copy 4)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1620,7 +1619,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-b2b32af34a7a"
+              "spawn_id": "spn-b2b32af34a7a",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1635,7 +1635,6 @@
               ],
               "display_name": "grave_4 (Copy 5)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1649,7 +1648,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-5cc84c9506a8"
+              "spawn_id": "spn-5cc84c9506a8",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1664,7 +1664,6 @@
               ],
               "display_name": "grave_4 (Copy 6)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1678,7 +1677,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-dedbcc1763d8"
+              "spawn_id": "spn-dedbcc1763d8",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1693,7 +1693,6 @@
               ],
               "display_name": "grave_4 (Copy 7)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1707,7 +1706,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-8bce15758290"
+              "spawn_id": "spn-8bce15758290",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1722,7 +1722,6 @@
               ],
               "display_name": "grave_4 (Copy 8)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1736,7 +1735,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-d0b1ebf0c75f"
+              "spawn_id": "spn-d0b1ebf0c75f",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1751,7 +1751,6 @@
               ],
               "display_name": "grave_4 (Copy 9)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1765,7 +1764,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-eaa98ad877ed"
+              "spawn_id": "spn-eaa98ad877ed",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1780,7 +1780,6 @@
               ],
               "display_name": "grave_4 (Copy 10)",
               "dx": -1274,
-              "dy": 702,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1794,7 +1793,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-cf83a689502b"
+              "spawn_id": "spn-cf83a689502b",
+              "dz": 702
             },
             {
               "candidates": [
@@ -1809,7 +1809,6 @@
               ],
               "display_name": "grave_4 (Copy 11)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1823,7 +1822,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-6c97a3455dee"
+              "spawn_id": "spn-6c97a3455dee",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1838,7 +1838,6 @@
               ],
               "display_name": "grave_4 (Copy 12)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1852,7 +1851,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-9d4060149953"
+              "spawn_id": "spn-9d4060149953",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1867,7 +1867,6 @@
               ],
               "display_name": "grave_4 (Copy 13)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1881,7 +1880,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-2c2fb1f5f8a0"
+              "spawn_id": "spn-2c2fb1f5f8a0",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1896,7 +1896,6 @@
               ],
               "display_name": "grave_4 (Copy 14)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1910,7 +1909,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-d672c5ac5e82"
+              "spawn_id": "spn-d672c5ac5e82",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1925,7 +1925,6 @@
               ],
               "display_name": "grave_4 (Copy 15)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1939,7 +1938,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-bc13e78b6eba"
+              "spawn_id": "spn-bc13e78b6eba",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1954,7 +1954,6 @@
               ],
               "display_name": "grave_4 (Copy 16)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1968,7 +1967,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-b453f41290ac"
+              "spawn_id": "spn-b453f41290ac",
+              "dz": -108
             },
             {
               "candidates": [
@@ -1983,7 +1983,6 @@
               ],
               "display_name": "grave_4 (Copy 17)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1997,7 +1996,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-b5906e3272c3"
+              "spawn_id": "spn-b5906e3272c3",
+              "dz": -108
             },
             {
               "candidates": [
@@ -2012,7 +2012,6 @@
               ],
               "display_name": "grave_4 (Copy 18)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2026,7 +2025,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-02e29b11df2c"
+              "spawn_id": "spn-02e29b11df2c",
+              "dz": -108
             },
             {
               "candidates": [
@@ -2041,7 +2041,6 @@
               ],
               "display_name": "grave_4 (Copy 19)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2055,7 +2054,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-be149ebb2883"
+              "spawn_id": "spn-be149ebb2883",
+              "dz": -108
             },
             {
               "candidates": [
@@ -2070,7 +2070,6 @@
               ],
               "display_name": "grave_4 (Copy 20)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2084,7 +2083,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-0f411ee87026"
+              "spawn_id": "spn-0f411ee87026",
+              "dz": -108
             },
             {
               "candidates": [
@@ -2099,7 +2099,6 @@
               ],
               "display_name": "grave_4 (Copy 21)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2113,7 +2112,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-f5d6a98ce63d"
+              "spawn_id": "spn-f5d6a98ce63d",
+              "dz": -108
             },
             {
               "candidates": [
@@ -2128,7 +2128,6 @@
               ],
               "display_name": "grave_4 (Copy 22)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2142,7 +2141,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-7cebd70bc9cf"
+              "spawn_id": "spn-7cebd70bc9cf",
+              "dz": -108
             },
             {
               "candidates": [
@@ -2157,7 +2157,6 @@
               ],
               "display_name": "grave_4 (Copy 23)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2171,7 +2170,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-bd3dba664249"
+              "spawn_id": "spn-bd3dba664249",
+              "dz": -108
             },
             {
               "candidates": [
@@ -2186,7 +2186,6 @@
               ],
               "display_name": "grave_4 (Copy 24)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2200,7 +2199,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-199ee54bd4ea"
+              "spawn_id": "spn-199ee54bd4ea",
+              "dz": -108
             },
             {
               "candidates": [
@@ -2215,7 +2215,6 @@
               ],
               "display_name": "grave_4 (Copy 25)",
               "dx": -836,
-              "dy": 324,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2229,7 +2228,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-dd5170e7aad3"
+              "spawn_id": "spn-dd5170e7aad3",
+              "dz": 324
             },
             {
               "candidates": [
@@ -2244,7 +2244,6 @@
               ],
               "display_name": "grave_4 (Copy 26)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2258,7 +2257,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-18e0958faa10"
+              "spawn_id": "spn-18e0958faa10",
+              "dz": -108
             },
             {
               "candidates": [
@@ -2273,7 +2273,6 @@
               ],
               "display_name": "grave_4 (Copy 27)",
               "dx": -324,
-              "dy": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2287,7 +2286,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-89b8f9a3a73a"
+              "spawn_id": "spn-89b8f9a3a73a",
+              "dz": -108
             },
             {
               "candidates": [
@@ -2302,7 +2302,6 @@
               ],
               "display_name": "vibble",
               "dx": -280,
-              "dy": 632,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2316,7 +2315,8 @@
               "resolution": 3,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-58ad1e3d3405"
+              "spawn_id": "spn-58ad1e3d3405",
+              "dz": 632
             },
             {
               "candidates": [
@@ -2331,7 +2331,6 @@
               ],
               "display_name": "tree_darker",
               "dx": -2484,
-              "dy": -658,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2345,7 +2344,8 @@
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-a54b3ebd5f50"
+              "spawn_id": "spn-a54b3ebd5f50",
+              "dz": -658
             },
             {
               "candidates": [
@@ -2360,7 +2360,6 @@
               ],
               "display_name": "tree_2",
               "dx": -3102,
-              "dy": -1147,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2374,7 +2373,8 @@
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-f0e02f8a997a"
+              "spawn_id": "spn-f0e02f8a997a",
+              "dz": -1147
             },
             {
               "candidates": [
@@ -2389,7 +2389,6 @@
               ],
               "display_name": "tree_2",
               "dx": -444,
-              "dy": 249,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2403,7 +2402,8 @@
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-a3e3bec3ae05"
+              "spawn_id": "spn-a3e3bec3ae05",
+              "dz": 249
             },
             {
               "candidates": [
@@ -2418,7 +2418,6 @@
               ],
               "display_name": "vibble_eyes",
               "dx": -1268,
-              "dy": 340,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2432,7 +2431,8 @@
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-0c99f500c607"
+              "spawn_id": "spn-0c99f500c607",
+              "dz": 340
             },
             {
               "candidates": [
@@ -2447,7 +2447,6 @@
               ],
               "display_name": "bow_tie",
               "dx": 263,
-              "dy": 357,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2461,7 +2460,8 @@
               "resolution": 6,
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
-              "spawn_id": "spn-94b59227bd12"
+              "spawn_id": "spn-94b59227bd12",
+              "dz": 357
             }
           ]
         }
@@ -2486,8 +2486,9 @@
           "name": "basic",
           "spawn_groups": []
         }
-      }
+      },
+      "schema_version": 1
     }
   },
-  "version": 1
+  "version": 2
 }

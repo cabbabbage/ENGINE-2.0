@@ -32,8 +32,11 @@ float FramePointResolver::base_world_height() const {
     return static_cast<float>(asset_->world_y());
 }
 
-float FramePointResolver::to_percent(float world_height) const {
-    return to_percent_height(world_height);
+float FramePointResolver::base_world_depth() const {
+    if (!asset_) {
+        return 0.0f;
+    }
+    return static_cast<float>(asset_->world_z());
 }
 
 float FramePointResolver::to_percent_height(float world_height) const {
@@ -54,8 +57,22 @@ float FramePointResolver::to_world_height(float height_percent) const {
     return base_height + (height_percent * height);
 }
 
-float FramePointResolver::to_world_z(float z_percent) const {
-    return to_world_height(z_percent);
+float FramePointResolver::to_percent_depth(float world_depth) const {
+    const float height = parent_height_px();
+    if (height <= 0.0f) {
+        return 0.0f;
+    }
+    const float base_depth = base_world_depth();
+    return (world_depth - base_depth) / height;
+}
+
+float FramePointResolver::to_world_depth(float depth_percent) const {
+    if (!asset_) {
+        return 0.0f;
+    }
+    const float height = parent_height_px();
+    const float base_depth = base_world_depth();
+    return base_depth + (depth_percent * height);
 }
 
 float FramePointResolver::to_percent_xy(float world_coord) const {
@@ -83,9 +100,9 @@ FramePointResolver::Displacement_percent_vals FramePointResolver::to_percent_dis
     const float source_height = anchor_points::anchor_height_px(*source_asset);
 
     if (source_height > 0.0f) {
-        vals.right_percent = static_cast<float>(x) / source_height;
-        vals.height_percent = static_cast<float>(y) / source_height;
-        vals.depth_percent = static_cast<float>(z) / source_height;
+        vals.dx_percent = static_cast<float>(x) / source_height;
+        vals.dy_percent = static_cast<float>(y) / source_height;
+        vals.dz_percent = static_cast<float>(z) / source_height;
     }
     return vals;
 }
@@ -105,9 +122,9 @@ world::GridPoint* FramePointResolver::to_grid_point_displacement(FramePointResol
         return nullptr;
     }
 
-    const int displaced_x = source_gp->world_x() + static_cast<int>(std::lround(vals.right_percent * source_height));
-    const int displaced_y = source_gp->world_y() + static_cast<int>(std::lround(vals.height_percent * source_height));
-    const int displaced_z = source_gp->world_z() + static_cast<int>(std::lround(vals.depth_percent * source_height));
+    const int displaced_x = source_gp->world_x() + static_cast<int>(std::lround(vals.dx_percent * source_height));
+    const int displaced_y = source_gp->world_y() + static_cast<int>(std::lround(vals.dy_percent * source_height));
+    const int displaced_z = source_gp->world_z() + static_cast<int>(std::lround(vals.dz_percent * source_height));
 
     world::GridKey key{displaced_x, displaced_y, displaced_z, source_gp->resolution_layer()};
     return assets->world_grid().find_grid_point_strict(key);

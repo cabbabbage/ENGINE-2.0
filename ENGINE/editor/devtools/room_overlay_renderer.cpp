@@ -57,8 +57,9 @@ void RenderRoomBoundsOverlay(
     if (area_points.size() >= 2) {
         auto project_point = [&](const SDL_Point& world_point) -> std::optional<SDL_FPoint> {
             SDL_FPoint screen_f{};
-            SDL_FPoint world_f{static_cast<float>(world_point.x), static_cast<float>(world_point.y)};
-            if (cam.project_world_point(world_f, 0.0f, screen_f)) {
+            SDL_FPoint floor_xy{static_cast<float>(world_point.x), 0.0f};
+            const float depth_z = static_cast<float>(world_point.y);
+            if (cam.project_world_point(floor_xy, depth_z, screen_f)) {
                 return screen_f;
             }
             return std::nullopt;

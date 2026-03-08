@@ -34,18 +34,7 @@ struct Basis3 {
     double fwd_x   = 0.0, fwd_y   = 0.0, fwd_z   = 1.0;
 };
 
-// Helper swizzles to migrate legacy coordinates (old: X right, Y forward, Z up).
-inline constexpr WorldPos from_legacy_y_forward_z_up(int x, int y_forward, int z_up) {
-    return WorldPos{ x, z_up, y_forward };
-}
-
-inline constexpr WorldPos to_legacy_y_forward_z_up(const WorldPos& p) {
-    return WorldPos{ p.x, p.z, p.y };
-}
-
-// Compile-time guard: if you see a build error referencing this constant,
-// you are still using the legacy axis ordering somewhere.
+// Compile-time guard: ensure all code uses the canonical axis ordering.
 inline constexpr bool kUsingLegacyAxisOrdering = false;
 
 } // namespace axis
-

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdexcept>
 #include <string>
 #include <string_view>
 
@@ -7,8 +8,15 @@
 
 namespace manifest {
 
+inline constexpr int kMapSchemaVersion = 1;
+
+inline std::string make_map_schema_error(const std::string& map_id, const std::string& message) {
+    return "map manifest entry '" + map_id + "' " + message;
+}
+
 struct MapData {
     std::string map_id;
+    int schema_version = kMapSchemaVersion;
 
     nlohmann::json rooms_data = nlohmann::json::object();
     nlohmann::json trails_data = nlohmann::json::object();
@@ -32,6 +40,18 @@ struct MapData {
             out = (it != entry.end()) ? *it : fallback;
         };
 
+        auto version_it = entry.find("schema_version");
+        if (version_it == entry.end() || !version_it->is_number_integer()) {
+            throw std::runtime_error(make_map_schema_error(map_id, "missing \"schema_version\"."));
+        }
+        const int version_value = version_it->get<int>();
+        if (version_value != kMapSchemaVersion) {
+            throw std::runtime_error(make_map_schema_error(map_id,
+                "has schema_version " + std::to_string(version_value) +
+                " but expected " + std::to_string(kMapSchemaVersion) + "."));
+        }
+        data.schema_version = version_value;
+
         capture_known("rooms_data", data.rooms_data, nlohmann::json::object());
         capture_known("trails_data", data.trails_data, nlohmann::json::object());
         capture_known("map_layers", data.map_layers, nlohmann::json::array());
@@ -51,7 +71,8 @@ struct MapData {
                 key == "map_boundary_data" ||
                 key == "fog_settings" ||
                 key == "map_assets_data" ||
-                key == "dev_map_settings") {
+                key == "dev_map_settings" ||
+                key == "schema_version") {
                 continue;
             }
             data.extras[key] = *it;
@@ -62,6 +83,8 @@ struct MapData {
 
     nlohmann::json to_manifest_entry() const {
         nlohmann::json out = extras.is_object() ? extras : nlohmann::json::object();
+
+        out["schema_version"] = schema_version;
 
         out["rooms_data"] = rooms_data;
         out["trails_data"] = trails_data;

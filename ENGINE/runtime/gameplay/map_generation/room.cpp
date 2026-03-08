@@ -171,7 +171,7 @@ std::vector<SDL_Point> decode_relative_points(const nlohmann::json& entry) {
         for (const auto& point : entry["points"]) {
                 if (!point.is_object()) continue;
                 int x = point.value("x", 0);
-                int z = point.value("z", point.value("y", 0));
+                int z = point.value("z", 0);
                 pts.push_back(SDL_Point{x, z});
         }
         return pts;
@@ -864,7 +864,7 @@ nlohmann::json Room::create_static_room_json(std::string name) {
                 entry["position"] = "Exact";
                 entry["enforce_spacing"] = false;
                 entry["dx"] = ax - cx;
-                entry["dy"] = ay - cy;
+                entry["dz"] = ay - cy;
                 if (width > 0) entry["origional_width"] = width;
                 if (height > 0) entry["origional_height"] = height;
                 entry["display_name"] = a->info->name;

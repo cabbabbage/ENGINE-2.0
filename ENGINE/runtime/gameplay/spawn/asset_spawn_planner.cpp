@@ -448,8 +448,8 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
 
         s.check_min_spacing = asset.value("enforce_spacing", false);
 
-        s.exact_offset.x = asset.value("dx", asset.value("exact_dx", 0));
-        s.exact_offset.y = asset.value("dy", asset.value("exact_dy", 0));
+        s.exact_offset.x = asset.value("dx", 0);
+        s.exact_offset.y = asset.value("dz", 0);
         if (resolve_geometry) {
             s.exact_origin_w = orig_w;
             s.exact_origin_h = orig_h;

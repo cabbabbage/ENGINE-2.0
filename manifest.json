@@ -1265,7 +1265,8 @@
             {
               "anchor": {
                 "x": 0,
-                "y": 0
+                "y": 0,
+                "z": 0
               },
               "anchor_relative_to_center": true,
               "kind": "Spawn",
@@ -1273,7 +1274,8 @@
               "origin_room": {
                 "anchor": {
                   "x": 2300,
-                  "y": 2300
+                  "y": 0,
+                  "z": 2300
                 },
                 "anchor_relative_to_center": true,
                 "height": 3000,
@@ -1283,19 +1285,23 @@
               "points": [
                 {
                   "x": -256,
-                  "y": -256
+                  "y": 0,
+                  "z": -256
                 },
                 {
                   "x": 256,
-                  "y": -256
+                  "y": 0,
+                  "z": -256
                 },
                 {
                   "x": 256,
-                  "y": 256
+                  "y": 0,
+                  "z": 256
                 },
                 {
                   "x": -256,
-                  "y": 256
+                  "y": 0,
+                  "z": 256
                 }
               ],
               "resolution": 3,

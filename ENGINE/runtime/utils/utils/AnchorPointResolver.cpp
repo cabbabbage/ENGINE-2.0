@@ -141,12 +141,8 @@ void apply_depth_bias_along_camera_ray(const Assets* assets_owner,
 
     const auto basis_opt = build_camera_ray_basis(assets_owner);
     if (!basis_opt.has_value()) {
-        // Fall back to legacy behaviour (nudge along world Y) if camera data is unavailable.
-        if (policy == AnchorDepthPolicy::InFront) {
-            world_y += bias_px;
-        } else if (policy == AnchorDepthPolicy::Behind) {
-            world_y -= bias_px;
-        }
+        // Fall back to biasing along the canonical depth axis when camera data is unavailable.
+        world_z += signed_bias;
         return;
     }
 
@@ -395,20 +391,20 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     const float world_height = static_cast<float>(dims.final_h) / safe_perspective;
 
     const float anchor_world_x = world_x + (anchor_sample.mesh_uv.x - 0.5f) * world_width;
-    const float anchor_world_y = world_y;
-    const float anchor_world_z = dims.world_z_offset + (1.0f - anchor_sample.mesh_uv.y) * world_height;
+    const float anchor_world_height = world_y;
+    const float anchor_world_depth = dims.world_z_offset + (1.0f - anchor_sample.mesh_uv.y) * world_height;
 
     float displaced_world_x = anchor_world_x;
-    float displaced_world_y = anchor_world_y;
-    float displaced_world_z = anchor_world_z;
-    apply_depth_bias_along_camera_ray(assets_owner, depth_policy, kAnchorRayBiasPx, displaced_world_x, displaced_world_y, displaced_world_z);
+    float displaced_world_height = anchor_world_height;
+    float displaced_world_depth = anchor_world_depth;
+    apply_depth_bias_along_camera_ray(assets_owner, depth_policy, kAnchorRayBiasPx, displaced_world_x, displaced_world_height, displaced_world_depth);
 
     const int resolved_x = static_cast<int>(std::lround(displaced_world_x));
-    const int resolved_y = static_cast<int>(std::lround(displaced_world_y));
-    const int resolved_z = static_cast<int>(std::lround(displaced_world_z));
+    const int resolved_height = static_cast<int>(std::lround(displaced_world_height));
+    const int resolved_depth = static_cast<int>(std::lround(displaced_world_depth));
 
-    sample.resolved.world_px = SDL_Point{resolved_x, resolved_y};
-    sample.resolved.world_z = resolved_z;
+    sample.resolved.world_px = SDL_Point{resolved_x, resolved_height};
+    sample.resolved.world_z = resolved_depth;
     sample.resolved.resolution_layer = resolution_layer;
     sample.resolved.source_texture_px = anchor_sample.source_px;
     sample.resolved.has_canonical_texture_source = true;

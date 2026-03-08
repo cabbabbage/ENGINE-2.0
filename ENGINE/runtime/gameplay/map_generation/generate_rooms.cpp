@@ -20,7 +20,7 @@ constexpr double kTau = 6.28318530717958647692;
 
 GenerateRooms::GenerateRooms(const std::vector<LayerSpec>& layers,
                              int map_cx,
-                             int map_cy,
+                             int map_cz,
                              const std::string& map_id,
                              nlohmann::json& map_manifest,
                              double min_edge_distance,
@@ -28,7 +28,7 @@ GenerateRooms::GenerateRooms(const std::vector<LayerSpec>& layers,
                              Room::ManifestWriter manifest_writer)
 : map_layers_(layers),
 map_center_x_(map_cx),
-map_center_y_(map_cy),
+map_center_z_(map_cz),
 map_id_(map_id),
 map_manifest_(&map_manifest),
 manifest_store_(manifest_store),
@@ -37,10 +37,10 @@ rng_(std::random_device{}()),
 min_edge_distance_(std::max(0.0, min_edge_distance))
 {}
 
-SDL_Point GenerateRooms::polar_to_cartesian(int cx, int cy, double radius, float angle_rad) {
+SDL_Point GenerateRooms::polar_to_cartesian(int cx, int cz, double radius, float angle_rad) {
         const double x = static_cast<double>(cx) + std::cos(angle_rad) * radius;
-        const double y = static_cast<double>(cy) + std::sin(angle_rad) * radius;
-        return SDL_Point{ static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)) };
+        const double z = static_cast<double>(cz) + std::sin(angle_rad) * radius;
+        return SDL_Point{ static_cast<int>(std::lround(x)), static_cast<int>(std::lround(z)) };
 }
 
 std::vector<RoomSpec> GenerateRooms::get_children_from_layer(const LayerSpec& layer) {
@@ -156,7 +156,7 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
         }
         const nlohmann::json* map_assets_ptr = &map_assets_data;
         auto root = std::make_unique<Room>(
-                                        Room::Point{ map_center_x_, map_center_y_ },
+                                        Room::Point{ map_center_x_, map_center_z_ },
                                         "room",
                                         root_spec.name,
                                         nullptr,
@@ -235,7 +235,7 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                                 placed_angles.reserve(children_specs.size());
                                 for (std::size_t i = 0; i < children_specs.size(); ++i) {
                                         const double angle = angles[i];
-                                        SDL_Point pos = polar_to_cartesian(map_center_x_, map_center_y_, used_radius, static_cast<float>(angle));
+                                        SDL_Point pos = polar_to_cartesian(map_center_x_, map_center_z_, used_radius, static_cast<float>(angle));
                                         if (testing) {
                                                 std::cout << "[GenerateRooms] Placing layer-1 child " << children_specs[i].name
                                                           << " at angle " << angle << " → (" << pos.x << ", " << pos.y << ")\n";
@@ -330,7 +330,7 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
                                         for (std::size_t idx = 0; idx < ordered_specs.size(); ++idx) {
                                                 Room* parent = ordered_parents[idx];
                                                 const double angle = angles[idx];
-                                                SDL_Point pos = polar_to_cartesian(map_center_x_, map_center_y_, used_radius, static_cast<float>(angle));
+                                                SDL_Point pos = polar_to_cartesian(map_center_x_, map_center_z_, used_radius, static_cast<float>(angle));
                                                 if (testing) {
                                                         std::cout << "[GenerateRooms] Placing child " << ordered_specs[idx].name
                                                                   << " under parent " << parent->room_name

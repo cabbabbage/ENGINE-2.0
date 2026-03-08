@@ -180,7 +180,7 @@ class GenerateRooms {
     using Point = SDL_Point;
     GenerateRooms(const std::vector<LayerSpec>& layers,
                   int map_cx,
-                  int map_cy,
+                  int map_cz,
                   const std::string& map_id,
                   nlohmann::json& map_manifest,
                   double min_edge_distance,
@@ -199,7 +199,7 @@ class GenerateRooms {
     std::vector<RoomSpec> get_children_from_layer(const LayerSpec& layer);
     std::vector<LayerSpec> map_layers_;
     int map_center_x_;
-    int map_center_y_;
+    int map_center_z_;
     std::string map_id_;
     nlohmann::json* map_manifest_ = nullptr;
     devmode::core::ManifestStore* manifest_store_ = nullptr;

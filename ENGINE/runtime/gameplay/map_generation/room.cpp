@@ -1,4 +1,5 @@
 #include "room.hpp"
+#include "core/axis_convention.hpp"
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "devtools/core/manifest_store.hpp"
@@ -83,18 +84,20 @@ bool is_supported_kind(Kind kind) {
 }
 
 AnchorData resolve_anchor(const nlohmann::json& entry,
-                          SDL_Point default_anchor,
+                          axis::WorldPos default_anchor,
                           Kind kind) {
         AnchorData data;
         data.world = default_anchor;
         data.relative_offset = SDL_Point{0, 0};
+        data.relative_height_offset = 0;
         data.relative_to_center = is_supported_kind(kind);
 
-        SDL_Point stored{0, 0};
+        axis::WorldPos stored{};
         bool has_anchor = false;
         if (entry.contains("anchor") && entry["anchor"].is_object()) {
-                stored.x = entry["anchor"].value("x", 0);
-                stored.y = entry["anchor"].value("y", 0);
+                stored.x = entry["anchor"].value("x", default_anchor.x);
+                stored.y = entry["anchor"].value("y", default_anchor.y);
+                stored.z = entry["anchor"].value("z", default_anchor.z);
                 has_anchor = true;
         }
 
@@ -104,22 +107,26 @@ AnchorData resolve_anchor(const nlohmann::json& entry,
                 wants_relative = entry["anchor_relative_to_center"].get<bool>();
         } else if (!has_flag && data.relative_to_center) {
 
-                stored = SDL_Point{0, 0};
+                stored = axis::WorldPos{0, 0, 0};
                 wants_relative = true;
         }
 
         if (wants_relative && data.relative_to_center) {
-                data.relative_offset = stored;
+                data.relative_offset = SDL_Point{stored.x, stored.z};
+                data.relative_height_offset = stored.y;
                 data.world.x = default_anchor.x + stored.x;
                 data.world.y = default_anchor.y + stored.y;
+                data.world.z = default_anchor.z + stored.z;
                 data.relative_to_center = true;
         } else if (has_anchor) {
                 data.world = stored;
-                data.relative_offset.x = data.world.x - default_anchor.x;
-                data.relative_offset.y = data.world.y - default_anchor.y;
+                data.relative_offset.x = stored.x - default_anchor.x;
+                data.relative_offset.y = stored.z - default_anchor.z;
+                data.relative_height_offset = stored.y - default_anchor.y;
                 data.relative_to_center = false;
         } else {
                 data.relative_offset = SDL_Point{0, 0};
+                data.relative_height_offset = 0;
                 data.world = default_anchor;
         }
 
@@ -132,13 +139,15 @@ void write_anchor(nlohmann::json& entry,
         if (is_supported_kind(kind) && anchor.relative_to_center) {
                 entry["anchor"] = nlohmann::json::object({
                         {"x", anchor.relative_offset.x},
-                        {"y", anchor.relative_offset.y}
+                        {"y", anchor.relative_height_offset},
+                        {"z", anchor.relative_offset.y}
                 });
                 entry["anchor_relative_to_center"] = true;
         } else {
                 entry["anchor"] = nlohmann::json::object({
                         {"x", anchor.world.x},
-                        {"y", anchor.world.y}
+                        {"y", anchor.world.y},
+                        {"z", anchor.world.z}
                 });
                 entry.erase("anchor_relative_to_center");
         }
@@ -162,27 +171,27 @@ std::vector<SDL_Point> decode_relative_points(const nlohmann::json& entry) {
         for (const auto& point : entry["points"]) {
                 if (!point.is_object()) continue;
                 int x = point.value("x", 0);
-                int y = point.value("y", 0);
-                pts.push_back(SDL_Point{x, y});
+                int z = point.value("z", point.value("y", 0));
+                pts.push_back(SDL_Point{x, z});
         }
         return pts;
 }
 
-std::vector<SDL_Point> decode_points(const nlohmann::json& entry, SDL_Point anchor) {
+std::vector<SDL_Point> decode_points(const nlohmann::json& entry, axis::WorldPos anchor) {
         std::vector<SDL_Point> pts;
         auto rel = decode_relative_points(entry);
         pts.reserve(rel.size());
         for (const auto& point : rel) {
-                pts.push_back(SDL_Point{anchor.x + point.x, anchor.y + point.y});
+                pts.push_back(SDL_Point{anchor.x + point.x, anchor.z + point.y});
         }
         return pts;
 }
 
-nlohmann::json encode_points(const std::vector<SDL_Point>& points, SDL_Point anchor) {
+nlohmann::json encode_points(const std::vector<SDL_Point>& points, axis::WorldPos anchor) {
         nlohmann::json arr = nlohmann::json::array();
         arr.get_ref<nlohmann::json::array_t&>().reserve(points.size());
         for (const auto& p : points) {
-                arr.push_back({ {"x", p.x - anchor.x}, {"y", p.y - anchor.y} });
+                arr.push_back({ {"x", p.x}, {"y", anchor.y}, {"z", p.y} });
         }
         return arr;
 }
@@ -475,8 +484,13 @@ void Room::load_named_areas_from_json() {
                 if (!assets_json.is_object()) return;
                 if (!assets_json.contains("areas") || !assets_json["areas"].is_array()) return;
 
-                SDL_Point default_anchor = room_area ? room_area->get_center()
-                                                     : SDL_Point{map_origin.first, map_origin.second};
+                axis::WorldPos default_anchor{};
+                if (room_area) {
+                        auto center = room_area->get_center();
+                        default_anchor = axis::WorldPos{center.x, 0, center.y};
+                } else {
+                        default_anchor = axis::WorldPos{map_origin.first, 0, map_origin.second};
+                }
 
                 auto room_dims = current_room_dimensions();
 
@@ -523,14 +537,15 @@ void Room::load_named_areas_from_json() {
                                         anchor.relative_offset.x = scale_component(anchor.relative_offset.x, sx);
                                         anchor.relative_offset.y = scale_component(anchor.relative_offset.y, sy);
                                         anchor.world.x = default_anchor.x + anchor.relative_offset.x;
-                                        anchor.world.y = default_anchor.y + anchor.relative_offset.y;
+                                        anchor.world.z = default_anchor.z + anchor.relative_offset.y;
+                                        anchor.world.y = default_anchor.y + anchor.relative_height_offset;
                                 }
 
                                 pts.reserve(relative_points.size());
                                 for (const auto& rel : relative_points) {
                                         const int dx = scale_component(rel.x, sx);
-                                        const int dy = scale_component(rel.y, sy);
-                                        pts.push_back(SDL_Point{anchor.world.x + dx, anchor.world.y + dy});
+                                        const int dz = scale_component(rel.y, sy);
+                                        pts.push_back(SDL_Point{anchor.world.x + dx, anchor.world.z + dz});
                                 }
                                 persisted_width = current_width;
                                 persisted_height = current_height;
@@ -577,6 +592,7 @@ void Room::load_named_areas_from_json() {
                                         if (orj.contains("anchor") && orj["anchor"].is_object()) {
                                                 meta.anchor.x = orj["anchor"].value("x", 0);
                                                 meta.anchor.y = orj["anchor"].value("y", 0);
+                                                meta.anchor.z = orj["anchor"].value("z", 0);
                                         }
                                         meta.anchor_relative_to_center = orj.value("anchor_relative_to_center", false);
                                         na.origin_room = meta;
@@ -586,7 +602,11 @@ void Room::load_named_areas_from_json() {
                                         meta["name"] = room_name;
                                         meta["width"] = room_dims.first;
                                         meta["height"] = room_dims.second;
-                                        meta["anchor"] = nlohmann::json::object({ {"x", anchor.world.x}, {"y", anchor.world.y} });
+                                        meta["anchor"] = nlohmann::json::object({
+                                                {"x", anchor.world.x},
+                                                {"y", anchor.world.y},
+                                                {"z", anchor.world.z}
+                                        });
                                         meta["anchor_relative_to_center"] = anchor.relative_to_center;
                                         item["origin_room"] = meta;
                                         NamedArea::OriginRoomMeta store;
@@ -717,12 +737,22 @@ void Room::upsert_named_area(const Area& area,
                 return;
         }
 
-        SDL_Point default_anchor = room_area ? room_area->get_center()
-                                             : SDL_Point{map_origin.first, map_origin.second};
+        axis::WorldPos default_anchor{};
+        if (room_area) {
+                auto center = room_area->get_center();
+                default_anchor = axis::WorldPos{center.x, 0, center.y};
+        } else {
+                default_anchor = axis::WorldPos{map_origin.first, 0, map_origin.second};
+        }
         RoomAreaSerialization::AnchorData anchor;
-        anchor.world = RoomAreaSerialization::choose_anchor(kind, default_anchor, pts);
-        anchor.relative_offset = SDL_Point{ anchor.world.x - default_anchor.x,
-                                            anchor.world.y - default_anchor.y };
+        SDL_Point default_anchor_point{default_anchor.x, default_anchor.z};
+        SDL_Point initial_anchor = RoomAreaSerialization::choose_anchor(kind, default_anchor_point, pts);
+        anchor.world.x = initial_anchor.x;
+        anchor.world.z = initial_anchor.y;
+        anchor.world.y = default_anchor.y;
+        anchor.relative_offset = SDL_Point{anchor.world.x - default_anchor.x,
+                                           anchor.world.z - default_anchor.z};
+        anchor.relative_height_offset = 0;
         anchor.relative_to_center = RoomAreaSerialization::is_supported_kind(kind);
         if (existing_entry) {
                 anchor = RoomAreaSerialization::resolve_anchor(*existing_entry, default_anchor, kind);
@@ -766,7 +796,11 @@ void Room::upsert_named_area(const Area& area,
                 origin_meta["name"] = room_name;
                 origin_meta["width"] = std::max(0, dims.first);
                 origin_meta["height"] = std::max(0, dims.second);
-                origin_meta["anchor"] = nlohmann::json::object({ {"x", anchor.world.x}, {"y", anchor.world.y} });
+                origin_meta["anchor"] = nlohmann::json::object({
+                        {"x", anchor.world.x},
+                        {"y", anchor.world.y},
+                        {"z", anchor.world.z}
+                });
                 origin_meta["anchor_relative_to_center"] = anchor.relative_to_center;
                 entry["origin_room"] = std::move(origin_meta);
         } catch (...) {

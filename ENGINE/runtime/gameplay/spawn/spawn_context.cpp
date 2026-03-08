@@ -190,7 +190,8 @@ world::GridPoint SpawnContext::resolve_floor_point(SDL_Point pos) const {
         if (floor_point_resolver_) {
                 return floor_point_resolver_(pos, spawn_resolution_);
         }
-        return world::GridPoint::make_virtual(pos.x, pos.y, 0, spawn_resolution_);
+        // `pos.y` represents depth (world_z) on the ground plane; layer height is calculated separately.
+        return world::GridPoint::make_virtual(pos.x, 0, pos.y, spawn_resolution_);
 }
 
 world::GridPoint SpawnContext::to_grid_point(SDL_Point pos) const {

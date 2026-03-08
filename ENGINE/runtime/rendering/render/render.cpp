@@ -1,4 +1,5 @@
 #include "rendering/render/render.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "utils/sdl_render_conversions.hpp"
 
 #include <algorithm>
@@ -501,7 +502,8 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
             if (batcher) {
                 // Use depth from tile's world position (floor tiles are at lowest depth)
                 const double avg_height = static_cast<double>(height_tl + height_tr + height_br + height_bl) * 0.25;
-                const double depth = cam.anchor_world_y() - static_cast<double>(tile.world_rect.y + tile.world_rect.h) - avg_height;
+                const double tile_depth = static_cast<double>(tile.world_rect.y + tile.world_rect.h);
+                const double depth = render_depth::depth_from_anchor(cam.anchor_world_z(), tile_depth, -avg_height);
                 batcher->addQuad(tile.texture, vertices, indices, SDL_BLENDMODE_BLEND, depth);
             } else {
                 SDL_RenderGeometry(renderer, tile.texture, vertices, 4, indices, 6);
@@ -1141,9 +1143,9 @@ void SceneRenderer::render() {
         dynamic_boundary_system_->update(cam, grid, assets_, boundary_delta_ms);
     }
 
-    const double anchor_world_y = cam.anchor_world_y();
-    auto depth_from_anchor = [&](double world_y) {
-        return anchor_world_y - world_y;
+    const double anchor_depth = cam.anchor_world_z();
+    auto depth_from_anchor = [&](double world_depth) {
+        return render_depth::depth_from_anchor(anchor_depth, world_depth);
     };
 
     // Sprites are depth-sorted inside their respective update() calls; bind directly, no copy.

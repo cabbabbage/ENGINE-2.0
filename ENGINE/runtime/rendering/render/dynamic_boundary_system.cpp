@@ -1,4 +1,5 @@
 #include "rendering/render/dynamic_boundary_system.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/grid_overlay.hpp"
 #include "gameplay/world/world_grid.hpp"
@@ -305,7 +306,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                                            assignment.world_z,
                                            assignment.key.resolution_layer);
         const world::GridKey virtual_key =
-            grid.grid_key_from_world(virtual_point, assignment.world_z, assignment.key.resolution_layer);
+            grid.grid_key_from_world(virtual_point, assignment.key.resolution_layer);
         if (world::GridPoint* gp = grid.find_grid_point(virtual_key)) {
             gp->region_kind = world::GridPoint::RegionKind::Boundary;
             gp->region_owner = nullptr;
@@ -402,11 +403,11 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         active_boundary_sprites_.push_back(sprite);
     }
 
-    const double anchor_y = cam.anchor_world_y();
+    const double anchor_depth = cam.anchor_world_z();
     std::sort(active_boundary_sprites_.begin(), active_boundary_sprites_.end(),
-        [anchor_y](const BoundarySprite& a, const BoundarySprite& b) {
-            const double da = anchor_y - static_cast<double>(a.world_pos.y);
-            const double db = anchor_y - static_cast<double>(b.world_pos.y);
+        [anchor_depth](const BoundarySprite& a, const BoundarySprite& b) {
+            const double da = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(a.world_pos.y));
+            const double db = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(b.world_pos.y));
             if (da != db) return da > db;
             return a.world_pos.x < b.world_pos.x;
         });

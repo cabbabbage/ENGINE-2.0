@@ -34,6 +34,13 @@ std::uint64_t mix_value(std::uint64_t seed, std::uint64_t value) {
 }
 
 using vibble::strings::to_lower_copy;
+
+inline SDL_Point asset_plane_point(const Asset* asset) {
+    if (!asset) {
+        return SDL_Point{0, 0};
+    }
+    return SDL_Point{asset->world_x(), asset->world_z()};
+}
 }
 
 MapWideAssetSpawner::MapWideAssetSpawner(AssetLibrary* asset_library,
@@ -191,7 +198,7 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
         if (!asset_uptr) {
             continue;
         }
-        occupancy.set_occupied_at(asset_uptr->world_point(), true);
+        occupancy.set_occupied_at(asset_plane_point(asset_uptr.get()), true);
     }
 
     std::vector<const Area*> trail_areas;
@@ -249,7 +256,7 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
                 owner = it->second;
             }
             if (!owner) {
-                owner = resolve_owner(asset_uptr->world_point(), rooms);
+                owner = resolve_owner(asset_plane_point(asset_uptr.get()), rooms);
             }
             if (!owner) {
                 continue;
@@ -350,7 +357,7 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
             owner = it->second;
         }
         if (!owner) {
-            owner = resolve_owner(asset_uptr->world_point(), rooms);
+            owner = resolve_owner(asset_plane_point(asset_uptr.get()), rooms);
         }
         if (!owner) {
             continue;

@@ -134,7 +134,7 @@ ChunkManager& WorldGrid::chunks() {
     return chunks_;
 }
 
-GridId WorldGrid::make_point_id(int i, int j, int world_z, int resolution_layer, std::uint32_t salt) const {
+GridId WorldGrid::make_point_id(int grid_x, int grid_depth, int world_y, int resolution_layer, std::uint32_t salt) const {
     auto mix = [](std::uint64_t value) {
         value ^= value >> 30;
         value *= 0xbf58476d1ce4e5b9ULL;
@@ -144,9 +144,9 @@ GridId WorldGrid::make_point_id(int i, int j, int world_z, int resolution_layer,
         return value;
     };
 
-    const std::uint64_t ux = static_cast<std::uint32_t>(i);
-    const std::uint64_t uy = static_cast<std::uint32_t>(j);
-    const std::uint64_t uz = static_cast<std::uint32_t>(world_z);
+    const std::uint64_t ux = static_cast<std::uint32_t>(grid_x);
+    const std::uint64_t uy = static_cast<std::uint32_t>(grid_depth);
+    const std::uint64_t uz = static_cast<std::uint32_t>(world_y);
     const std::uint64_t ul = static_cast<std::uint32_t>(resolution_layer);
     const std::uint64_t us = static_cast<std::uint64_t>(salt);
 
@@ -160,13 +160,12 @@ GridId WorldGrid::make_point_id(int i, int j, int world_z, int resolution_layer,
     return (id == 0) ? static_cast<GridId>(1) : id;
 }
 
-GridKey WorldGrid::grid_key_from_world(const GridPoint& world, int world_z, int layer) const {
-    const int resolution_layer = (layer >= 0) ? layer : world.resolution_layer();
-    return GridKey{world.world_x(), world.world_y(), world_z, resolution_layer};
-}
-
-GridKey WorldGrid::grid_key_from_world(const GridPoint& world_point) const {
-    return GridKey{world_point.world_x(), world_point.world_y(), world_point.world_z(), world_point.resolution_layer()};
+GridKey WorldGrid::grid_key_from_world(const GridPoint& world_point, int layer) const {
+    const int resolution_layer = (layer >= 0) ? layer : world_point.resolution_layer();
+    return GridKey{world_point.world_x(),
+                   world_point.world_y(),
+                   world_point.world_z(),
+                   resolution_layer};
 }
 
 std::size_t WorldGrid::hash_key(const GridKey& key) {
@@ -512,15 +511,15 @@ std::vector<PointPtr*> gather_roots(const std::unordered_map<GridId, GridPoint>&
 std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
                                                 int min_layer,
                                                 int max_layer,
-                                                int min_world_z,
-                                                int max_world_z,
+                                                int min_world_depth,
+                                                int max_world_depth,
                                                 bool skip_inactive_branches,
                                                 bool include_empty_nodes,
                                                 RegionMetrics* metrics) {
     const int safe_min_layer = std::max(0, std::min(min_layer, max_layer));
     const int safe_max_layer = std::max(safe_min_layer, max_layer);
-    const int safe_min_z = std::min(min_world_z, max_world_z);
-    const int safe_max_z = std::max(min_world_z, max_world_z);
+    const int safe_min_depth = std::min(min_world_depth, max_world_depth);
+    const int safe_max_depth = std::max(min_world_depth, max_world_depth);
 
     std::vector<GridPoint*> result;
     const std::uint64_t visit_stamp = next_traversal_stamp();
@@ -554,9 +553,9 @@ std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
         if (metrics) ++metrics->nodes_visited;
 
         const bool in_layer = node->resolution_layer() >= safe_min_layer && node->resolution_layer() <= safe_max_layer;
-        const bool in_z     = node->world_z() >= safe_min_z && node->world_z() <= safe_max_z;
+        const bool in_depth = node->world_z() >= safe_min_depth && node->world_z() <= safe_max_depth;
         const bool in_bounds = world_point_in_rect(node, world_bounds);
-        const bool include_node = in_layer && in_z && in_bounds && (include_empty_nodes || !node->occupants.empty());
+        const bool include_node = in_layer && in_depth && in_bounds && (include_empty_nodes || !node->occupants.empty());
         if (include_node) {
             result.push_back(node);
         }
@@ -575,15 +574,15 @@ std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
 std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
                                                       int min_layer,
                                                       int max_layer,
-                                                      int min_world_z,
-                                                      int max_world_z,
+                                                      int min_world_depth,
+                                                      int max_world_depth,
                                                       bool skip_inactive_branches,
                                                       bool include_empty_nodes,
                                                       RegionMetrics* metrics) const {
     const int safe_min_layer = std::max(0, std::min(min_layer, max_layer));
     const int safe_max_layer = std::max(safe_min_layer, max_layer);
-    const int safe_min_z = std::min(min_world_z, max_world_z);
-    const int safe_max_z = std::max(min_world_z, max_world_z);
+    const int safe_min_depth = std::min(min_world_depth, max_world_depth);
+    const int safe_max_depth = std::max(min_world_depth, max_world_depth);
 
     std::vector<const GridPoint*> result;
     const std::uint64_t visit_stamp = next_traversal_stamp();
@@ -617,9 +616,9 @@ std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& world_bo
         if (metrics) ++metrics->nodes_visited;
 
         const bool in_layer = node->resolution_layer() >= safe_min_layer && node->resolution_layer() <= safe_max_layer;
-        const bool in_z     = node->world_z() >= safe_min_z && node->world_z() <= safe_max_z;
+        const bool in_depth = node->world_z() >= safe_min_depth && node->world_z() <= safe_max_depth;
         const bool in_bounds = world_point_in_rect(node, world_bounds);
-        const bool include_node = in_layer && in_z && in_bounds && (include_empty_nodes || !node->occupants.empty());
+        const bool include_node = in_layer && in_depth && in_bounds && (include_empty_nodes || !node->occupants.empty());
         if (include_node) {
             result.push_back(node);
         }
@@ -703,7 +702,7 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
     const int resolved_layer = (resolution_layer >= 0) ? resolution_layer : default_resolution_layer();
     const GridPoint world_pos = world_point_for_asset(raw, resolved_layer);
     const GridCoord grid_index = grid_index_from_world(world_pos, resolved_layer);
-    const GridKey new_key = grid_key_from_world(world_pos, world_z, resolved_layer);
+    const GridKey new_key = grid_key_from_world(world_pos, resolved_layer);
 
     auto existing_key_it = asset_to_key_.find(raw);
     if (existing_key_it != asset_to_key_.end() && existing_key_it->second != new_key) {
@@ -836,7 +835,7 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
         }
     }
 
-    const GridKey new_key = grid_key_from_world(new_pos, new_pos.world_z(), resolved_layer);
+    const GridKey new_key = grid_key_from_world(new_pos, resolved_layer);
     GridPoint& point = ensure_point(new_index, chunk_index, &target, nullptr, new_key.y, new_key.layer);
 
     if (point_changed) {

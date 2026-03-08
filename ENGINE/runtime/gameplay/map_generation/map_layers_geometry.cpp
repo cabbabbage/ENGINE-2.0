@@ -174,7 +174,7 @@ double room_extent_from_rooms_data(const nlohmann::json* rooms_data,
     const auto& room = *room_it;
 
     double max_width = extract_dimension(room, "max_width");
-    double max_height = extract_dimension(room, "max_height");
+    double max_depth = extract_dimension(room, "max_height");
     const bool is_circle = is_circle_geometry(room.value("geometry", std::string()));
 
     double radius_value = 0.0;
@@ -185,7 +185,7 @@ double room_extent_from_rooms_data(const nlohmann::json* rooms_data,
 
     if (is_circle) {
         if (radius_value <= 0.0) {
-            double diameter_guess = std::max(max_width, max_height);
+            double diameter_guess = std::max(max_width, max_depth);
             if (diameter_guess <= 0.0) {
                 const double alt_w = extract_dimension(room, "min_width");
                 const double alt_h = extract_dimension(room, "min_height");
@@ -196,7 +196,7 @@ double room_extent_from_rooms_data(const nlohmann::json* rooms_data,
             }
         }
         if (radius_value <= 0.0) {
-            radius_value = std::max(max_width, max_height) * 0.5;
+            radius_value = std::max(max_width, max_depth) * 0.5;
         }
         if (radius_value <= 0.0) {
             radius_value = 1.0;
@@ -204,17 +204,17 @@ double room_extent_from_rooms_data(const nlohmann::json* rooms_data,
         return radius_value;
     }
 
-    if (max_width <= 0.0 && max_height <= 0.0) {
+    if (max_width <= 0.0 && max_depth <= 0.0) {
         max_width = 100.0;
-        max_height = 100.0;
+        max_depth = 100.0;
     } else {
-        max_width = sanitize_dimension(max_width, max_height);
-        max_height = sanitize_dimension(max_height, max_width);
+        max_width = sanitize_dimension(max_width, max_depth);
+        max_depth = sanitize_dimension(max_depth, max_width);
     }
 
     const double clamped_width = std::max(0.0, max_width);
-    const double clamped_height = std::max(0.0, max_height);
-    const double diagonal = std::sqrt(clamped_width * clamped_width + clamped_height * clamped_height);
+    const double clamped_depth = std::max(0.0, max_depth);
+    const double diagonal = std::sqrt(clamped_width * clamped_width + clamped_depth * clamped_depth);
     return diagonal * 0.5;
 }
 

@@ -28,6 +28,8 @@ class AssetSpawner;
 class SpawnContext {
 
         public:
+    // Coordinates returned by spawn helpers live on the ground plane:
+    //   X => right, Y => depth (world_z). Heights are handled separately.
     using Point = SDL_Point;
     SpawnContext(std::mt19937& rng, Check& checker, std::vector<Area>& exclusion_zones, const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>& asset_info_library, std::vector<std::unique_ptr<Asset>>& all, AssetLibrary* asset_library, vibble::grid::Grid& grid, vibble::grid::Occupancy* occupancy = nullptr);
     Asset* spawnAsset(const std::string& name,

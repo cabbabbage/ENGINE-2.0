@@ -15,6 +15,7 @@
 #include "devtools/depth_cue_settings.hpp"
 #include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "rendering/render/render.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
@@ -2565,7 +2566,7 @@ void Assets::rebuild_active_from_screen_grid() {
     std::unordered_set<Asset*> seen_assets;
     seen_assets.reserve(camera_.get_visible_points().size() * 2);
 
-    const double anchor_world_y = camera_.anchor_world_y();
+    const double anchor_depth = camera_.anchor_world_z();
 
     // Screen Grid traversal: use per-frame visible nodes (already filtered by region + branch masks).
     for (world::GridPoint* point : camera_.get_visible_points()) {
@@ -2604,7 +2605,7 @@ void Assets::rebuild_active_from_screen_grid() {
             active_traversal_.push_back(ActiveTraversalEntry{
                 asset,
                 point,
-                anchor_world_y - static_cast<double>(asset->world_y()) + asset->render_depth_bias()
+                render_depth::depth_from_anchor(anchor_depth, static_cast<double>(asset->world_z()), asset->render_depth_bias())
             });
         }
     }

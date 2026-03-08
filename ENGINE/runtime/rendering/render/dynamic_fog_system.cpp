@@ -1,4 +1,5 @@
 #include "rendering/render/dynamic_fog_system.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "assets/Asset.hpp"
 #include "rendering/render/grid_overlay.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
@@ -169,11 +170,11 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
     }
 
     // Depth-sort so render.cpp can merge fog into the interleaved draw order without copying
-    const double anchor_y = cam.anchor_world_y();
+    const double anchor_depth = cam.anchor_world_z();
     std::sort(active_fog_sprites_.begin(), active_fog_sprites_.end(),
-        [anchor_y](const FogSprite& a, const FogSprite& b) {
-            const double da = anchor_y - static_cast<double>(a.world_pos.y);
-            const double db = anchor_y - static_cast<double>(b.world_pos.y);
+        [anchor_depth](const FogSprite& a, const FogSprite& b) {
+            const double da = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(a.world_pos.y));
+            const double db = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(b.world_pos.y));
             if (da != db) return da > db;
             return a.world_pos.x < b.world_pos.x;
         });

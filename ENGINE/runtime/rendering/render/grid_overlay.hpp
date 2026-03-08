@@ -5,6 +5,10 @@
 #include <cstdint>
 #include <vector>
 
+#include "rendering/render/render_depth_policy.hpp"
+
+// The grid overlay lives on the canonical X/Z plane (world.Z governs depth sorting while world.Y is used for height).
+
 namespace render_overlay {
 
 // Shared bounds for grid overlay tuning knobs.

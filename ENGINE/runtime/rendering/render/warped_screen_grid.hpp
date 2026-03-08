@@ -142,11 +142,14 @@ public:
     void apply_camera_settings(const nlohmann::json& data);
     nlohmann::json camera_settings_to_json() const;
 
+    // Projects a point that lies on the ground plane (x/z) to screen space.
     SDL_FPoint map_to_screen(SDL_Point world) const;
     SDL_FPoint map_to_screen_f(SDL_FPoint world) const;
+    // world.y is height (Y), world_z carries depth (Z) relative to the camera anchor.
     bool project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const;
     SDL_FPoint screen_to_map(SDL_Point screen) const;
 
+    // world.x maps to X, world.y to height (Y), and world_z to depth (Z).
     RenderEffects compute_render_effects(SDL_Point world, float asset_screen_height, float reference_screen_height, RenderSmoothingKey smoothing_key, int world_z = 0) const;
 
     FloorDepthParams compute_floor_depth_params() const;
@@ -156,12 +159,12 @@ public:
     double current_focus_depth() const { return runtime_focus_depth_; }
     double current_focus_ndc_offset() const { return runtime_focus_ndc_offset_; }
     float current_depth_offset_px() const { return runtime_depth_offset_px_; }
-    double current_anchor_world_y() const { return runtime_anchor_world_y_; }
+    double current_anchor_world_z() const { return runtime_anchor_world_z_; }
     double current_pitch_radians() const { return runtime_pitch_rad_; }
     float current_pitch_degrees() const { return runtime_pitch_deg_; }
 
     double view_height_world() const;
-    double anchor_world_y() const;
+    double anchor_world_z() const;
     SDL_FPoint get_view_center_f() const;
     SDL_Point get_screen_center() const {
         SDL_FPoint center = camera_.state().center;
@@ -261,7 +264,7 @@ private:
 
     double runtime_camera_height_ = 0.0;
     double runtime_focus_depth_ = 0.0;
-    double runtime_anchor_world_y_ = 0.0;
+    double runtime_anchor_world_z_ = 0.0;
     double runtime_focus_ndc_offset_ = 0.0;
     double runtime_pitch_rad_ = 0.0;
     float runtime_pitch_deg_ = 0.0f;

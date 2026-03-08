@@ -635,7 +635,7 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
     runtime_camera_height_ = camera_.current_height();
     runtime_pitch_deg_ = camera_.current_pitch_deg();
     runtime_pitch_rad_ = camera_.current_pitch_rad();
-    runtime_anchor_world_y_ = camera_.state().center.y;
+    runtime_anchor_world_z_ = camera_.state().center.y;
     depth_enabled_   = true;
 }
 
@@ -798,7 +798,7 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     runtime_camera_height_ = camera_.current_height();
     runtime_pitch_deg_ = camera_.current_pitch_deg();
     runtime_pitch_rad_ = camera_.current_pitch_rad();
-    runtime_anchor_world_y_ = camera_.state().center.y;
+    runtime_anchor_world_z_ = camera_.state().center.y;
 }
 
 Area WarpedScreenGrid::convert_area_to_aspect(const Area& in) const {
@@ -822,7 +822,7 @@ void WarpedScreenGrid::recompute_current_view() {
     const CameraState& cam = camera_state_cached();
     runtime_camera_height_ = cam.camera_height;
     runtime_focus_depth_ = cam.focus_depth;
-    runtime_anchor_world_y_ = cam.anchor_world_y;
+    runtime_anchor_world_z_ = cam.anchor_world_y;
     runtime_focus_ndc_offset_ = cam.focus_ndc_offset;
     runtime_pitch_rad_ = cam.pitch_radians;
     runtime_pitch_deg_ = cam.pitch_degrees;
@@ -911,8 +911,8 @@ bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_
     const CameraState& cam = camera_state_cached();
     ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
-                                                static_cast<double>(world_z),   // height (Y)
-                                                static_cast<double>(world.y),   // depth (Z)
+                                                static_cast<double>(world.y),   // height (Y)
+                                                static_cast<double>(world_z),   // depth (Z)
                                                 screen_width_,
                                                 screen_height_,
                                                 horizon_fade_for_height(cam.camera_height));
@@ -952,10 +952,10 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
     RenderEffects result;
 
     const CameraState& cam = camera_state_cached();
-ProjectionResult proj = project_world_point_internal(cam,
+    ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
-                                                static_cast<double>(world_z),   // height (Y)
-                                                static_cast<double>(world.y),   // depth (Z)
+                                                static_cast<double>(world.y),   // height (Y)
+                                                static_cast<double>(world_z),   // depth (Z)
                                                 screen_width_,
                                                 screen_height_,
                                                 horizon_fade_for_height(cam.camera_height));
@@ -1092,7 +1092,7 @@ double WarpedScreenGrid::view_height_world() const {
     return static_cast<double>(std::max(0, maxy - miny));
 }
 
-double WarpedScreenGrid::anchor_world_y() const {
+double WarpedScreenGrid::anchor_world_z() const {
 
     return static_cast<double>(camera_.state().center.y);
 }
@@ -1155,7 +1155,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     const CameraState& cam_state = camera_state_cached();
     runtime_camera_height_ = cam_state.camera_height;
     runtime_focus_depth_ = cam_state.focus_depth;
-    runtime_anchor_world_y_ = cam_state.anchor_world_y;
+    runtime_anchor_world_z_ = cam_state.anchor_world_y;
     runtime_focus_ndc_offset_ = cam_state.focus_ndc_offset;
     runtime_pitch_rad_ = cam_state.pitch_radians;
     runtime_pitch_deg_ = cam_state.pitch_degrees;
@@ -1653,7 +1653,7 @@ void WarpedScreenGrid::update() {
     runtime_camera_height_ = cam.camera_height;
     runtime_pitch_deg_ = cam.pitch_degrees;
     runtime_pitch_rad_ = cam.pitch_radians;
-    runtime_anchor_world_y_ = cam.anchor_world_y;
+    runtime_anchor_world_z_ = cam.anchor_world_y;
 }
 
 Area WarpedScreenGrid::frame_to_area(const SDL_Rect& frame) const {

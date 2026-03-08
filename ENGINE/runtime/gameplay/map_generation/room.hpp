@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/axis_convention.hpp"
 #include "utils/area.hpp"
 #include "assets/asset_library.hpp"
 #include "gameplay/spawn/asset_spawn_planner.hpp"
@@ -29,15 +30,16 @@ Kind infer_kind_from_strings(const std::string& kind_value, const std::string& t
 std::string to_string(Kind kind);
 bool is_supported_kind(Kind kind);
 struct AnchorData {
-        SDL_Point world{0, 0};
-        SDL_Point relative_offset{0, 0};
-        bool      relative_to_center = false;
+        axis::WorldPos world{};
+        SDL_Point      relative_offset{0, 0};  // x ↔ X axis, y ↔ Z axis (depth)
+        int            relative_height_offset = 0;
+        bool           relative_to_center = false;
 };
 SDL_Point choose_anchor(Kind kind, SDL_Point default_anchor, const std::vector<SDL_Point>& world_points);
-std::vector<SDL_Point> decode_points(const nlohmann::json& entry, SDL_Point anchor);
+std::vector<SDL_Point> decode_points(const nlohmann::json& entry, axis::WorldPos anchor);
 std::vector<SDL_Point> decode_relative_points(const nlohmann::json& entry);
-nlohmann::json encode_points(const std::vector<SDL_Point>& points, SDL_Point anchor);
-AnchorData resolve_anchor(const nlohmann::json& entry, SDL_Point default_anchor, Kind kind);
+nlohmann::json encode_points(const std::vector<SDL_Point>& points, axis::WorldPos anchor);
+AnchorData resolve_anchor(const nlohmann::json& entry, axis::WorldPos default_anchor, Kind kind);
 void write_anchor(nlohmann::json& entry, const AnchorData& anchor, Kind kind);
 }
 
@@ -121,7 +123,7 @@ class Room {
             std::string name;
             int width = 0;
             int height = 0;
-            SDL_Point anchor{0, 0};
+            axis::WorldPos anchor{};
             bool anchor_relative_to_center = false;
 };
         std::optional<OriginRoomMeta> origin_room;

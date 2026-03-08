@@ -60,7 +60,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
         // Movement mode uses raw delta Z values (like dx/dy), not percentages
-        point_3d_editor_->set_z_display_mode(ZDisplayMode::RawDelta);
+        point_3d_editor_->set_z_display_mode(CoordinateDisplayMode::RawDelta);
     }
     dirty_ = false;
     wants_close_ = false;

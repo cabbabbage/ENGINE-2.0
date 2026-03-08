@@ -145,11 +145,13 @@ public:
     // Projects a point that lies on the ground plane (x/z) to screen space.
     SDL_FPoint map_to_screen(SDL_Point world) const;
     SDL_FPoint map_to_screen_f(SDL_FPoint world) const;
-    // world.y is height (Y), world_z carries depth (Z) relative to the camera anchor.
+    // world.y is height (Y).
+    // world_z carries depth (Z) relative to the camera anchor.
     bool project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const;
     SDL_FPoint screen_to_map(SDL_Point screen) const;
 
-    // world.x maps to X, world.y to height (Y), and world_z to depth (Z).
+    // world.x maps to X and world.y to height (Y).
+    // world_z encodes depth (Z).
     RenderEffects compute_render_effects(SDL_Point world, float asset_screen_height, float reference_screen_height, RenderSmoothingKey smoothing_key, int world_z = 0) const;
 
     FloorDepthParams compute_floor_depth_params() const;

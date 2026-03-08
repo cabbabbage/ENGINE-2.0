@@ -307,7 +307,7 @@ GridPoint& GridPoint::from_world(int x, int y, int z, int layer, WorldGrid& grid
 
 GridPoint& GridPoint::from_world(const axis::WorldPos& pos, int layer, WorldGrid& grid) {
     const GridPoint world_point = GridPoint::make_virtual(pos, layer);
-    const GridKey key = grid.grid_key_from_world(world_point, pos.z, layer);
+    const GridKey key = grid.grid_key_from_world(world_point, layer);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
     GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
     gp.is_floor = (gp.world_y() == 0);
@@ -368,7 +368,7 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     const int world_z_px = static_cast<int>(std::lround(world_meters.z / safe_scale));
 
     const GridPoint world_point = GridPoint::make_virtual(axis::WorldPos{world_x_px, world_y_px, world_z_px}, -1);
-    const GridKey key = grid.grid_key_from_world(world_point, world_z_px, -1);
+    const GridKey key = grid.grid_key_from_world(world_point, -1);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
     GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
     gp.is_floor = (gp.world_y() == 0);

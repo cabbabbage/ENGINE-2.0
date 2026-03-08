@@ -180,11 +180,6 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
         });
 }
 
-void DynamicFogSystem::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam) {
-    // Note: Fog rendering is now handled in SceneRenderer::render() with depth-sorted warped quads.
-    // This method is kept for API compatibility but is no longer used.
-}
-
 std::uint64_t DynamicFogSystem::make_grid_point_hash(int world_x, int world_y, int world_z, int layer) const {
     return render_overlay::hash_grid_cell(world_x, world_y, world_z, layer);
 }

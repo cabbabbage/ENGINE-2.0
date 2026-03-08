@@ -60,7 +60,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
         // Hit geometry uses Z as percentage of parent height
-        point_3d_editor_->set_z_display_mode(ZDisplayMode::Percentage);
+        point_3d_editor_->set_z_display_mode(CoordinateDisplayMode::Percentage);
         FramePointResolver resolver(context_.target);
         point_3d_editor_->set_parent_height(resolver.parent_height_px());
 

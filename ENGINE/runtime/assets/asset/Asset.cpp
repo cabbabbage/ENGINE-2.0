@@ -865,7 +865,7 @@ void Asset::update_neighbor_lists(bool force_update) {
         impassable_naighbors = std::move(imp_child);
     }
 
-    last_neighbor_origin_ = pos_ ? SDL_Point{pos_->world.x, pos_->world.y} : SDL_Point{0, 0};
+    last_neighbor_origin_ = pos_ ? SDL_Point{pos_->world_x(), pos_->world_y()} : SDL_Point{0, 0};
     neighbor_lists_initialized_ = true;
 }
 
@@ -920,7 +920,7 @@ Area Asset::get_area(const std::string& name) const {
                 return Area(name, 0);
         }
 
-        SDL_Point world_pos = pos_ ? SDL_Point{pos_->world.x, pos_->world.y} : SDL_Point{0, 0};
+        SDL_Point world_pos = pos_ ? SDL_Point{pos_->world_x(), pos_->world_y()} : SDL_Point{0, 0};
         return area_helpers::make_world_area(*info, *base, world_pos, flipped);
 }
 

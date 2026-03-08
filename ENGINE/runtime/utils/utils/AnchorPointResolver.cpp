@@ -411,7 +411,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     sample.resolved.missing = false;
 
     world::WorldGrid& grid = assets_owner->world_grid();
-    const world::GridKey key{resolved_x, resolved_y, resolved_z, resolution_layer};
+    const world::GridKey key{resolved_x, resolved_height, resolved_depth, resolution_layer};
     if (grid_policy == GridMaterialization::Ensure) {
         sample.resolved.grid_point = &grid.find_or_create_grid_point(key);
     } else {

@@ -3,6 +3,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(VIBBLEEngine)
 
+# Required interpreter for lint/check scripts.
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
 # ------------------------------------------
 # Build settings focused on compile speed
 # ------------------------------------------
@@ -271,6 +274,7 @@ add_executable(engine_tests
     ENGINE/runtime/utils/utils/cache_manager.cpp
     ENGINE/runtime/utils/utils/loading_status_notifier.cpp
     ENGINE/tests/test_map_data.cpp
+    ENGINE/tests/test_world_grid.cpp
   )
 
 target_include_directories(engine_tests
@@ -366,3 +370,12 @@ foreach(tool_target asset_tool_cli set_rebuild_cli cache_validator_cli apply_eff
         )
     endforeach()
 endforeach()
+
+add_custom_target(legacy_axis_marker_check
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check_legacy_markers.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Scanning for banned legacy axis markers"
+)
+
+add_dependencies(engine legacy_axis_marker_check)
+add_dependencies(engine_tests legacy_axis_marker_check)

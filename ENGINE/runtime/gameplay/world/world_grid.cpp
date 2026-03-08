@@ -245,10 +245,6 @@ Asset* WorldGrid::create_asset_at_point(std::unique_ptr<Asset> a, int world_z, i
     return register_asset(std::move(a), world_z, resolution_layer);
 }
 
-Asset* WorldGrid::create_asset_at_point(Asset* a, int world_z, int resolution_layer) {
-    return register_asset(std::unique_ptr<Asset>(a), world_z, resolution_layer);
-}
-
 Asset* WorldGrid::remove_asset(Asset* a) {
     if (!a) {
         return nullptr;
@@ -742,10 +738,6 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
     GridPoint& point = ensure_point(grid_index, chunk_index, &chunk, nullptr, new_key.y, new_key.layer);
     attach_asset_to_grid_point(std::move(a), raw, point);
     return raw;
-}
-
-Asset* WorldGrid::register_asset(Asset* a, int world_z, int resolution_layer) {
-    return register_asset(std::unique_ptr<Asset>(a), world_z, resolution_layer);
 }
 
 Chunk* WorldGrid::ensure_chunk_from_world(const GridPoint& world_px) {

@@ -602,17 +602,6 @@ inline SDL_Surface* CreateScaledSurface(SDL_Surface* src, float scale) {
     return dst;
 }
 
-struct ScalingProfileBuildOptions {
-    double                screen_aspect = 16.0 / 9.0;
-    const AssetLibrary*   asset_library = nullptr;
-};
-
-// Consolidated pipeline: scaling profiles are generated on-demand elsewhere,
-// so keep a no-op shim to satisfy legacy callers without reintroducing the old builder.
-inline bool BuildScalingProfiles(const ScalingProfileBuildOptions&) {
-    return true;
-}
-
 }
 
 namespace render_pipeline::shading {

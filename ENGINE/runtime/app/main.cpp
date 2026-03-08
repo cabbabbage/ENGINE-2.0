@@ -271,26 +271,6 @@ void MainApp::setup() {
                         }
                 }
 
-                render_pipeline::ScalingProfileBuildOptions scaling_options;
-                if (screen_w_ > 0 && screen_h_ > 0) {
-                        scaling_options.screen_aspect =
-                                static_cast<double>(screen_w_) / static_cast<double>(screen_h_);
-                }
-                scaling_options.asset_library = const_cast<const AssetLibrary*>(asset_library_);
-                try {
-
-                        const bool has_any_assets = asset_library_ && !asset_library_->all().empty();
-                        if (has_any_assets) {
-                                render_pipeline::BuildScalingProfiles(scaling_options);
-                        } else {
-                                vibble::log::info("[MainApp] No assets detected; skipping scaling profile build.");
-                        }
-                } catch (const std::exception& ex) {
-                        vibble::log::warn(std::string("[MainApp] Scaling profile build skipped due to error: ") + ex.what());
-                } catch (...) {
-                        vibble::log::warn("[MainApp] Scaling profile build skipped due to unknown error.");
-                }
-
                 vibble::log::info("[MainApp] Constructing AssetLoader...");
                 auto loader_begin = std::chrono::steady_clock::now();
                 loader_ = std::make_unique<AssetLoader>( map_identifier, map_manifest_json, renderer, content_root, nullptr, asset_library_);

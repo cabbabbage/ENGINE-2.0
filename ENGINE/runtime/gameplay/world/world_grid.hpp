@@ -40,9 +40,7 @@ public:
     void set_origin(const GridPoint& origin);
 
     Asset* create_asset_at_point(std::unique_ptr<Asset> a, int world_z = 0, int resolution_layer = -1);
-    Asset* create_asset_at_point(Asset* a, int world_z = 0, int resolution_layer = -1);
     Asset* register_asset(std::unique_ptr<Asset> a, int world_z = 0, int resolution_layer = -1);
-    Asset* register_asset(Asset* a, int world_z = 0, int resolution_layer = -1);
     Chunk* ensure_chunk_from_world(const GridPoint& world_px);
     Chunk* chunk_from_world(const GridPoint& world_px) const;
     Chunk* get_or_create_chunk_ij(int i, int j);

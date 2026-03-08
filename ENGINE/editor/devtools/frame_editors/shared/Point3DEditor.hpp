@@ -19,9 +19,6 @@ enum class CoordinateDisplayMode {
     Percentage   // Display as percentage 0.0-1.0 of parent height (for children, hit/attack geo)
 };
 
-// Backwards compatibility alias
-using ZDisplayMode = CoordinateDisplayMode;
-
 class Point3DEditor {
 public:
     Point3DEditor() = default;

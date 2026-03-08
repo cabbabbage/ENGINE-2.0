@@ -32,9 +32,6 @@ public:
     // Update fog sprites for current frame based on camera position
     void update(const WarpedScreenGrid& cam, const world::WorldGrid& grid);
 
-    // Render all active fog sprites
-    void render(SDL_Renderer* renderer, const WarpedScreenGrid& cam);
-
     // Get fog sprites for rendering in z-order with assets
     const std::vector<FogSprite>& get_fog_sprites() const { return active_fog_sprites_; }
 

@@ -269,13 +269,6 @@ struct GridPoint {
     static constexpr std::uint8_t BRANCH_Y_POS = 1 << 3;
     static constexpr std::uint8_t BRANCH_Z_NEG = 1 << 4;
     static constexpr std::uint8_t BRANCH_Z_POS = 1 << 5;
-    // Legacy aliases for in-flight Phase 3/4 code paths.
-    static constexpr std::uint8_t kBranchXNeg = BRANCH_X_NEG;
-    static constexpr std::uint8_t kBranchXPos = BRANCH_X_POS;
-    static constexpr std::uint8_t kBranchYNeg = BRANCH_Y_NEG;
-    static constexpr std::uint8_t kBranchYPos = BRANCH_Y_POS;
-    static constexpr std::uint8_t kBranchZNeg = BRANCH_Z_NEG;
-    static constexpr std::uint8_t kBranchZPos = BRANCH_Z_POS;
 
     std::vector<std::unique_ptr<Asset>>& assets_here() { return occupants; }
     const std::vector<std::unique_ptr<Asset>>& assets_here() const { return occupants; }

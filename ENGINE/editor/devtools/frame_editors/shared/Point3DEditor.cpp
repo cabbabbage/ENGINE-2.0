@@ -308,7 +308,7 @@ void Point3DEditor::sync_textboxes_from_selection() {
 
     if (tb_dz_) {
         std::string dz_str;
-        if (z_display_mode_ == ZDisplayMode::RawDelta) {
+        if (z_display_mode_ == CoordinateDisplayMode::RawDelta) {
             // Display Z as raw integer value (like dx/dy)
             const float display_z = locked_z.value_or(rel_z);
             dz_str = std::to_string(static_cast<int>(std::lround(display_z)));
@@ -373,7 +373,7 @@ void Point3DEditor::apply_textbox_changes() {
 
     if (tb_dz_ && is_axis_enabled(AdjustmentAxis::Z)) {
         float new_world_z;
-        if (z_display_mode_ == ZDisplayMode::RawDelta) {
+        if (z_display_mode_ == CoordinateDisplayMode::RawDelta) {
             // Textbox contains a raw delta value (like dx/dy)
             const float value = locked_z.value_or(parse_float(tb_dz_->value(), rel_z));
             new_world_z = anchor_z + value;
@@ -570,8 +570,8 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
         screen_pos = cam->map_to_screen_f(world_pos);
     }
 
-    // Calculate perspective scale based on world Y (depth) position
-    // In this engine, Y is depth (forward/back), Z is height
+    // Calculate perspective scale based on the planar Y coordinate (depth, forward/back).
+    // The world_z argument provides the vertical offset for this projection.
     const float depth_y = world_pos.y;
     const float height_z = world_z;
 
@@ -678,7 +678,7 @@ SDL_FPoint Point3DEditor::constrain_drag_delta(const SDL_FPoint& drag_delta,
             constrained.x = 0.0f;  // Y is depth (forward/back in screen vertical)
             break;
         case AdjustmentAxis::Z:
-            constrained.x = 0.0f;  // Z is height (up/down in screen vertical)
+            constrained.x = 0.0f;  // Vertical adjustments come from the world_z offset, not horizontal X.
             break;
     }
     return constrained;

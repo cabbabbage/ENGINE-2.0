@@ -171,10 +171,11 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         const double meters_scale_raw = std::max(1e-6, static_cast<double>(settings.meters_per_100_world_px));
         const double meters_scale = meters_scale_raw / 100.0;
         const Vec3 anchor{ 0.0, 0.0, 0.0 };
+        // Height along +Y (up), depth along +Z (forward)
         Vec3 camera_pos{
             0.0,
-            0.0,
-            camera_height_pixels * meters_scale
+            camera_height_pixels * meters_scale,
+            0.0
         };
         state.screen_zoom = 1.0 + std::clamp(safe_params.zoom_percent, 0.0, 100.0) * 0.01;
         if (!std::isfinite(state.screen_zoom) || state.screen_zoom <= 0.0) {
@@ -188,17 +189,16 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         if (lock_anchor_to_screen_center) {
             const double tan_pitch = std::tan(pitch_rad);
             if (std::isfinite(tan_pitch) && std::fabs(tan_pitch) > 1e-6) {
-                const double horizontal_offset = camera_pos.z / tan_pitch;
-                // Move the camera horizontally so the anchor projects to the exact screen center.
-                camera_pos.y = horizontal_offset;
+                // Shift along -Z so anchor stays centered given pitch.
+                camera_pos.z = camera_pos.y / tan_pitch;
             }
         }
 
         Vec3 to_anchor = anchor - camera_pos;
-        Vec3 horiz_dir{ to_anchor.x, to_anchor.y, 0.0 };
+        Vec3 horiz_dir{ to_anchor.x, 0.0, to_anchor.z };
         const double horiz_len = length(horiz_dir);
         if (horiz_len < 1e-3 || !std::isfinite(horiz_len)) {
-            horiz_dir = Vec3{0.0, -1.0, 0.0};
+            horiz_dir = Vec3{0.0, 0.0, -1.0};
         } else {
             horiz_dir = horiz_dir * (1.0 / horiz_len);
         }
@@ -207,25 +207,21 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         const double sin_pitch = std::sin(pitch_rad);
         Vec3 forward{
             horiz_dir.x * cos_pitch,
-            horiz_dir.y * cos_pitch,
-            -sin_pitch
+            -sin_pitch,
+            horiz_dir.z * cos_pitch
         };
         forward = normalize(forward);
         if (length(forward) < 1e-6 || !std::isfinite(length(forward))) {
-            forward = Vec3{0.0, -cos_pitch, -sin_pitch};
+            forward = Vec3{0.0, -sin_pitch, -cos_pitch};
             forward = normalize(forward);
         }
 
-        Vec3 world_up{0.0, 0.0, 1.0};
+        Vec3 world_up{0.0, 1.0, 0.0};
         Vec3 right = cross(world_up, forward);
-        if (length(right) < 1e-6 || !std::isfinite(length(right))) {
-            world_up = Vec3{0.0, 1.0, 0.0};
-            right = cross(world_up, forward);
-        }
         right = normalize(right);
         Vec3 up = normalize(cross(forward, right));
 
-        const double dist_horiz = length(Vec3{ anchor.x - camera_pos.x, anchor.y - camera_pos.y, 0.0 });
+        const double dist_horiz = length(Vec3{ anchor.x - camera_pos.x, 0.0, anchor.z - camera_pos.z });
 
         state.position = camera_pos;
         state.forward = forward;
@@ -253,8 +249,8 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         state.meters_scale = meters_scale;
         state.pitch_radians = pitch_rad;
         state.pitch_degrees = tilt_deg;
-        state.camera_world_y = anchor_world.y;
-        state.anchor_world_y = anchor_world.y;
+        state.camera_world_y = camera_pos.y;
+        state.anchor_world_y = 0.0;
 
         return state;
     }

@@ -26,6 +26,7 @@
 #include <limits>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <thread>
 #include <unordered_set>
 #include <nlohmann/json.hpp>
@@ -304,9 +305,16 @@ void OtherSettingsAndControls::set_grid_resolution_range(int min_resolution, int
         grid_resolution_stepper_->set_value(clamped);
     }
     ensure_dev_settings_controls();
-    if (overlay_grid_stepper_) {
-        overlay_grid_stepper_->set_range(min_clamped, max_clamped);
-        overlay_grid_stepper_->set_value(std::clamp(dev_mode_settings_.overlay_resolution, min_clamped, max_clamped));
+    const int overlay_min = grid_resolution_min_;
+    const int overlay_max = grid_resolution_max_ > 0 ? grid_resolution_max_ : std::max(grid_resolution_min_, 10);
+    if (auto* overlay = find_setting(kOverlayResolutionSettingId)) {
+        overlay->schema.min_value = overlay_min;
+        overlay->schema.max_value = overlay_max;
+        if (overlay->stepper) {
+            overlay->stepper->set_range(overlay_min, overlay_max);
+            const int value = overlay->schema.int_getter ? overlay->schema.int_getter() : overlay_min;
+            overlay->stepper->set_value(std::clamp(value, overlay_min, overlay_max));
+        }
     }
     layout_dirty_ = true;
 }
@@ -567,92 +575,69 @@ void OtherSettingsAndControls::set_filters_expanded(bool expanded) {
     }
 }
 
-void OtherSettingsAndControls::set_dev_mode_settings(const DevModeSettings& settings) {
-    dev_mode_settings_ = settings;
+void OtherSettingsAndControls::set_settings_schema(std::vector<SettingSchema> schema) {
+    settings_.clear();
+    settings_.reserve(schema.size());
+    for (auto& entry : schema) {
+        SettingWidget widget;
+        widget.schema = std::move(entry);
+        settings_.push_back(std::move(widget));
+    }
     ensure_dev_settings_controls();
-    if (overlay_grid_checkbox_) {
-        overlay_grid_checkbox_->set_value(dev_mode_settings_.show_grid);
-    }
-    if (overlay_grid_stepper_) {
-        const int clamped = std::clamp(dev_mode_settings_.overlay_resolution, grid_resolution_min_, grid_resolution_max_);
-        overlay_grid_stepper_->set_value(clamped);
-    }
-    if (snap_to_grid_checkbox_) {
-        snap_to_grid_checkbox_->set_value(dev_mode_settings_.snap_to_grid);
-    }
-    if (movement_debug_checkbox_) {
-        movement_debug_checkbox_->set_value(dev_mode_settings_.movement_debug);
-    }
-    if (anchor_point_debug_checkbox_) {
-        anchor_point_debug_checkbox_->set_value(dev_mode_settings_.anchor_point_debug);
-    }
-    if (depth_effects_checkbox_) {
-        depth_effects_checkbox_->set_value(dev_mode_settings_.depth_effects);
+    layout_dirty_ = true;
+}
+
+void OtherSettingsAndControls::refresh_setting_values() {
+    ensure_dev_settings_controls();
+    for (auto& setting : settings_) {
+        switch (setting.schema.control) {
+        case SettingControl::Toggle: {
+            if (setting.checkbox) {
+                const bool value = setting.schema.bool_getter ? setting.schema.bool_getter() : setting.checkbox->value();
+                setting.checkbox->set_value(value);
+            }
+            break;
+        }
+        case SettingControl::Stepper: {
+            if (setting.stepper) {
+                const int value = setting.schema.int_getter ? setting.schema.int_getter() : setting.stepper->value();
+                const int max_value = setting.schema.max_value > 0 ? setting.schema.max_value : value;
+                const int clamped = std::clamp(value, setting.schema.min_value, max_value);
+                setting.stepper->set_value(clamped);
+            }
+            break;
+        }
+        }
     }
     layout_dirty_ = true;
 }
 
-void OtherSettingsAndControls::set_dev_mode_settings_callbacks(std::function<void(bool)> on_show_grid,
-                                                               std::function<void(int)> on_overlay_resolution_change,
-                                                               std::function<void(bool)> on_snap_to_grid,
-                                                               std::function<void(bool)> on_movement_debug,
-                                                               std::function<void(bool)> on_anchor_point_debug,
-                                                               std::function<void(bool)> on_depth_effects) {
-    on_show_grid_toggle_ = std::move(on_show_grid);
-    on_overlay_resolution_change_ = std::move(on_overlay_resolution_change);
-    on_snap_to_grid_toggle_ = std::move(on_snap_to_grid);
-    on_movement_debug_toggle_ = std::move(on_movement_debug);
-    on_anchor_point_debug_toggle_ = std::move(on_anchor_point_debug);
-    on_depth_effects_toggle_ = std::move(on_depth_effects);
-}
-
-void OtherSettingsAndControls::set_show_grid_enabled(bool enabled) {
-    dev_mode_settings_.show_grid = enabled;
+void OtherSettingsAndControls::set_setting_value(const std::string& id, bool enabled) {
     ensure_dev_settings_controls();
-    if (overlay_grid_checkbox_) {
-        overlay_grid_checkbox_->set_value(enabled);
+    if (auto* setting = find_setting(id)) {
+        if (setting->checkbox) {
+            setting->checkbox->set_value(enabled);
+        }
     }
 }
 
-void OtherSettingsAndControls::set_overlay_resolution_value(int resolution) {
-    const int clamped = std::clamp(resolution, grid_resolution_min_, grid_resolution_max_);
-    dev_mode_settings_.overlay_resolution = clamped;
+void OtherSettingsAndControls::set_setting_value(const std::string& id, int value) {
     ensure_dev_settings_controls();
-    if (overlay_grid_stepper_) {
-        overlay_grid_stepper_->set_value(clamped);
+    if (auto* setting = find_setting(id)) {
+        if (setting->stepper) {
+            const int max_value = setting->schema.max_value > 0 ? setting->schema.max_value : value;
+            setting->stepper->set_value(std::clamp(value, setting->schema.min_value, max_value));
+        }
     }
 }
 
-void OtherSettingsAndControls::set_snap_to_grid_enabled(bool enabled) {
-    dev_mode_settings_.snap_to_grid = enabled;
-    ensure_dev_settings_controls();
-    if (snap_to_grid_checkbox_) {
-        snap_to_grid_checkbox_->set_value(enabled);
+OtherSettingsAndControls::SettingWidget* OtherSettingsAndControls::find_setting(const std::string& id) {
+    for (auto& setting : settings_) {
+        if (setting.schema.id == id) {
+            return &setting;
+        }
     }
-}
-
-void OtherSettingsAndControls::set_movement_debug_enabled(bool enabled) {
-    dev_mode_settings_.movement_debug = enabled;
-    ensure_dev_settings_controls();
-    if (movement_debug_checkbox_) {
-        movement_debug_checkbox_->set_value(enabled);
-    }
-}
-
-
-void OtherSettingsAndControls::set_anchor_point_debug_enabled(bool enabled) {
-    dev_mode_settings_.anchor_point_debug = enabled;
-    ensure_dev_settings_controls();
-    if (anchor_point_debug_checkbox_) {
-        anchor_point_debug_checkbox_->set_value(enabled);
-    }
-}
-void OtherSettingsAndControls::set_depth_effects_enabled(bool enabled) {
-    dev_mode_settings_.depth_effects = enabled;
-    ensure_dev_settings_controls();
-    if (depth_effects_checkbox_) {
-        depth_effects_checkbox_->set_value(enabled);
-    }
+    return nullptr;
 }
 
 void OtherSettingsAndControls::set_header_suppressed(bool suppressed) {
@@ -984,23 +969,16 @@ void OtherSettingsAndControls::render(SDL_Renderer* renderer) const {
         DrawLabelText(renderer, kOverlaySectionTitle, overlay_section_label_rect_.x, overlay_section_label_rect_.y, DMStyles::Label());
     }
 
-    if (overlay_grid_checkbox_) {
-        overlay_grid_checkbox_->render(renderer);
-    }
-    if (snap_to_grid_checkbox_) {
-        snap_to_grid_checkbox_->render(renderer);
-    }
-    if (movement_debug_checkbox_) {
-        movement_debug_checkbox_->render(renderer);
-    }
-    if (anchor_point_debug_checkbox_) {
-        anchor_point_debug_checkbox_->render(renderer);
-    }
-    if (depth_effects_checkbox_) {
-        depth_effects_checkbox_->render(renderer);
-    }
-    if (overlay_grid_stepper_) {
-        overlay_grid_stepper_->render(renderer);
+    for (const auto& setting : settings_) {
+        if (setting.schema.control == SettingControl::Toggle) {
+            if (setting.checkbox) {
+                setting.checkbox->render(renderer);
+            }
+        } else if (setting.schema.control == SettingControl::Stepper) {
+            if (setting.stepper) {
+                setting.stepper->render(renderer);
+            }
+        }
     }
 
     if (!filters_expanded_) {
@@ -1085,46 +1063,38 @@ bool OtherSettingsAndControls::handle_event(const SDL_Event& event) {
         return used;
     }
 
-    auto handle_setting_checkbox = [&](DMCheckbox* checkbox, std::function<void(bool)> cb, bool* backing_value) {
-        if (!checkbox) {
-            return;
-        }
-        const bool before = checkbox->value();
-        if (checkbox->handle_event(event)) {
-            used = true;
-            const bool after = checkbox->value();
-            if (backing_value) {
-                *backing_value = after;
+    for (auto& setting : settings_) {
+        switch (setting.schema.control) {
+        case SettingControl::Toggle: {
+            if (!setting.checkbox) {
+                break;
             }
-            if (cb && before != after) {
-                cb(after);
+            const bool before = setting.checkbox->value();
+            if (setting.checkbox->handle_event(event)) {
+                used = true;
+                const bool after = setting.checkbox->value();
+                if (setting.schema.bool_setter && before != after) {
+                    setting.schema.bool_setter(after);
+                }
             }
+            break;
         }
-    };
-
-    auto handle_overlay_stepper = [&](DMNumericStepper* stepper, std::function<void(int)> cb, int* backing_value) {
-        if (!stepper) {
-            return;
-        }
-        const int before = stepper->value();
-        if (stepper->handle_event(event)) {
-            used = true;
-            const int after = stepper->value();
-            if (backing_value) {
-                *backing_value = after;
+        case SettingControl::Stepper: {
+            if (!setting.stepper) {
+                break;
             }
-            if (cb && before != after) {
-                cb(after);
+            const int before = setting.stepper->value();
+            if (setting.stepper->handle_event(event)) {
+                used = true;
+                const int after = setting.stepper->value();
+                if (setting.schema.int_setter && before != after) {
+                    setting.schema.int_setter(after);
+                }
             }
+            break;
         }
-    };
-
-    handle_setting_checkbox(overlay_grid_checkbox_.get(), on_show_grid_toggle_, &dev_mode_settings_.show_grid);
-    handle_setting_checkbox(snap_to_grid_checkbox_.get(), on_snap_to_grid_toggle_, &dev_mode_settings_.snap_to_grid);
-    handle_setting_checkbox(movement_debug_checkbox_.get(), on_movement_debug_toggle_, &dev_mode_settings_.movement_debug);
-    handle_setting_checkbox(anchor_point_debug_checkbox_.get(), on_anchor_point_debug_toggle_, &dev_mode_settings_.anchor_point_debug);
-    handle_setting_checkbox(depth_effects_checkbox_.get(), on_depth_effects_toggle_, &dev_mode_settings_.depth_effects);
-    handle_overlay_stepper(overlay_grid_stepper_.get(), on_overlay_resolution_change_, &dev_mode_settings_.overlay_resolution);
+        }
+    }
 
     bool checkbox_used = false;
     for (auto& entry : entries_) {
@@ -1332,23 +1302,13 @@ void OtherSettingsAndControls::clear_checkbox_rects() {
     if (grid_resolution_stepper_) {
         grid_resolution_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
     }
-    if (overlay_grid_checkbox_) {
-        overlay_grid_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-    }
-    if (overlay_grid_stepper_) {
-        overlay_grid_stepper_->set_rect(SDL_Rect{0, 0, 0, 0});
-    }
-    if (snap_to_grid_checkbox_) {
-        snap_to_grid_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-    }
-    if (movement_debug_checkbox_) {
-        movement_debug_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-    }
-    if (anchor_point_debug_checkbox_) {
-        anchor_point_debug_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
-    }
-    if (depth_effects_checkbox_) {
-        depth_effects_checkbox_->set_rect(SDL_Rect{0, 0, 0, 0});
+    for (auto& setting : settings_) {
+        if (setting.checkbox) {
+            setting.checkbox->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (setting.stepper) {
+            setting.stepper->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
     }
     grid_section_label_rect_ = SDL_Rect{0, 0, 0, 0};
     debug_section_label_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -1468,6 +1428,15 @@ void OtherSettingsAndControls::layout_dev_settings() {
         return;
     }
 
+    for (auto& setting : settings_) {
+        if (setting.checkbox) {
+            setting.checkbox->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+        if (setting.stepper) {
+            setting.stepper->set_rect(SDL_Rect{0, 0, 0, 0});
+        }
+    }
+
     const int margin_x = DMSpacing::item_gap();
     const int margin_y = DMSpacing::item_gap();
     const int row_gap = DMSpacing::item_gap();
@@ -1493,56 +1462,83 @@ void OtherSettingsAndControls::layout_dev_settings() {
     const int left_column = content_left;
     const int right_column = content_left + column_width + (wide_mode ? column_gap : 0);
 
-    grid_section_label_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
-    y += grid_section_label_rect_.h + row_gap;
-    bool grid_row_started = false;
-    if (overlay_grid_checkbox_) {
-        overlay_grid_checkbox_->set_rect(SDL_Rect{left_column, y, column_width, control_height});
-        grid_row_started = true;
-    }
-    const bool grid_two_column = wide_mode && overlay_grid_checkbox_ && snap_to_grid_checkbox_;
-    if (snap_to_grid_checkbox_) {
-        if (grid_two_column) {
-            snap_to_grid_checkbox_->set_rect(SDL_Rect{right_column, y, column_width, control_height});
-            y += control_height + row_gap;
-            grid_row_started = false;
-        } else {
-            if (grid_row_started) {
-                y += control_height;
+    auto collect = [&](SettingGroup group, SettingControl control) {
+        std::vector<SettingWidget*> result;
+        for (auto& setting : settings_) {
+            if (setting.schema.group == group && setting.schema.control == control) {
+                result.push_back(&setting);
             }
-            snap_to_grid_checkbox_->set_rect(SDL_Rect{left_column, y, column_width, control_height});
-            y += control_height + row_gap;
-            grid_row_started = false;
         }
-    } else if (grid_row_started) {
-        y += control_height + row_gap;
-        grid_row_started = false;
-    }
-    y += section_gap;
+        return result;
+    };
 
-    debug_section_label_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
-    y += debug_section_label_rect_.h + row_gap;
-    if (movement_debug_checkbox_) {
-        movement_debug_checkbox_->set_rect(SDL_Rect{left_column, y, max_content_width, control_height});
-        y += control_height + row_gap;
-    }
-    if (anchor_point_debug_checkbox_) {
-        anchor_point_debug_checkbox_->set_rect(SDL_Rect{left_column, y, max_content_width, control_height});
-        y += control_height + row_gap;
-    }
-    if (depth_effects_checkbox_) {
-        depth_effects_checkbox_->set_rect(SDL_Rect{left_column, y, max_content_width, control_height});
-        y += control_height + row_gap;
-    }
-    y += section_gap;
+    const auto grid_toggles = collect(SettingGroup::Grid, SettingControl::Toggle);
+    const auto debug_toggles = collect(SettingGroup::Debug, SettingControl::Toggle);
+    const auto overlay_toggles = collect(SettingGroup::Overlay, SettingControl::Toggle);
+    const auto overlay_steppers = collect(SettingGroup::Overlay, SettingControl::Stepper);
 
-    overlay_section_label_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
-    y += overlay_section_label_rect_.h + row_gap;
-    if (overlay_grid_stepper_) {
-        const int stepper_width = max_content_width;
-        const int stepper_height = overlay_grid_stepper_->preferred_height(stepper_width);
-        overlay_grid_stepper_->set_rect(SDL_Rect{content_left, y, stepper_width, stepper_height});
-        y += stepper_height;
+    if (!grid_toggles.empty()) {
+        grid_section_label_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
+        y += grid_section_label_rect_.h + row_gap;
+
+        bool grid_row_started = false;
+        const bool grid_two_column = wide_mode && grid_toggles.size() >= 2;
+        for (std::size_t i = 0; i < grid_toggles.size(); ++i) {
+            DMCheckbox* box = grid_toggles[i]->checkbox.get();
+            if (!box) {
+                continue;
+            }
+            if (grid_two_column && grid_row_started) {
+                box->set_rect(SDL_Rect{right_column, y, column_width, control_height});
+                y += control_height + row_gap;
+                grid_row_started = false;
+            } else {
+                box->set_rect(SDL_Rect{left_column, y, column_width, control_height});
+                if (grid_two_column) {
+                    grid_row_started = true;
+                } else {
+                    y += control_height + row_gap;
+                }
+            }
+        }
+        if (grid_two_column && grid_row_started) {
+            y += control_height + row_gap;
+        }
+        y += section_gap;
+    }
+
+    if (!debug_toggles.empty()) {
+        debug_section_label_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
+        y += debug_section_label_rect_.h + row_gap;
+        for (auto* setting : debug_toggles) {
+            if (!setting || !setting->checkbox) {
+                continue;
+            }
+            setting->checkbox->set_rect(SDL_Rect{left_column, y, max_content_width, control_height});
+            y += control_height + row_gap;
+        }
+        y += section_gap;
+    }
+
+    if (!overlay_toggles.empty() || !overlay_steppers.empty()) {
+        overlay_section_label_rect_ = SDL_Rect{content_left, y, max_content_width, heading_style.font_size};
+        y += overlay_section_label_rect_.h + row_gap;
+        for (auto* setting : overlay_toggles) {
+            if (!setting || !setting->checkbox) {
+                continue;
+            }
+            setting->checkbox->set_rect(SDL_Rect{left_column, y, max_content_width, control_height});
+            y += control_height + row_gap;
+        }
+        for (auto* setting : overlay_steppers) {
+            if (!setting || !setting->stepper) {
+                continue;
+            }
+            const int stepper_width = max_content_width;
+            const int stepper_height = setting->stepper->preferred_height(stepper_width);
+            setting->stepper->set_rect(SDL_Rect{content_left, y, stepper_width, stepper_height});
+            y += stepper_height;
+        }
     }
     y += margin_y;
     settings_rect_.h = std::max(0, y - settings_rect_.y);
@@ -1809,12 +1805,10 @@ void OtherSettingsAndControls::shift_all_by(int dy) {
     for (auto& entry : entries_) {
         shift_checkbox(entry.checkbox.get());
     }
-    shift_checkbox(overlay_grid_checkbox_.get());
-    shift_checkbox(snap_to_grid_checkbox_.get());
-    shift_checkbox(movement_debug_checkbox_.get());
-    shift_checkbox(anchor_point_debug_checkbox_.get());
-    shift_checkbox(depth_effects_checkbox_.get());
-    shift_stepper(overlay_grid_stepper_.get());
+    for (auto& setting : settings_) {
+        shift_checkbox(setting.checkbox.get());
+        shift_stepper(setting.stepper.get());
+    }
     shift_stepper(grid_resolution_stepper_.get());
 }
 
@@ -2118,44 +2112,39 @@ void OtherSettingsAndControls::persist_filters_expanded() const {
 }
 
 void OtherSettingsAndControls::ensure_dev_settings_controls() {
-    if (!overlay_grid_checkbox_) {
-        overlay_grid_checkbox_ = std::make_unique<DMCheckbox>("Show Grid", dev_mode_settings_.show_grid);
-    } else {
-        overlay_grid_checkbox_->set_value(dev_mode_settings_.show_grid);
+    if (settings_.empty()) {
+        return;
     }
-
     const int overlay_min = grid_resolution_min_;
     const int overlay_max = grid_resolution_max_ > 0 ? grid_resolution_max_ : std::max(grid_resolution_min_, 10);
-    const int clamped_overlay = std::clamp(dev_mode_settings_.overlay_resolution, overlay_min, overlay_max);
-    if (!overlay_grid_stepper_) {
-        overlay_grid_stepper_ = std::make_unique<DMNumericStepper>("Grid Overlay (r)", overlay_min, overlay_max, clamped_overlay);
-    } else {
-        overlay_grid_stepper_->set_range(overlay_min, overlay_max);
-        overlay_grid_stepper_->set_value(clamped_overlay);
-    }
 
-    if (!snap_to_grid_checkbox_) {
-        snap_to_grid_checkbox_ = std::make_unique<DMCheckbox>("Grid Snapping", dev_mode_settings_.snap_to_grid);
-    } else {
-        snap_to_grid_checkbox_->set_value(dev_mode_settings_.snap_to_grid);
-    }
+    for (auto& setting : settings_) {
+        if (setting.schema.control == SettingControl::Toggle) {
+            const bool value = setting.schema.bool_getter ? setting.schema.bool_getter() : false;
+            if (!setting.checkbox) {
+                setting.checkbox = std::make_unique<DMCheckbox>(setting.schema.label, value);
+            } else {
+                setting.checkbox->set_value(value);
+            }
+            continue;
+        }
 
-    if (!movement_debug_checkbox_) {
-        movement_debug_checkbox_ = std::make_unique<DMCheckbox>("Debug Movement", dev_mode_settings_.movement_debug);
-    } else {
-        movement_debug_checkbox_->set_value(dev_mode_settings_.movement_debug);
-    }
-
-    if (!anchor_point_debug_checkbox_) {
-        anchor_point_debug_checkbox_ = std::make_unique<DMCheckbox>("Debug Anchor Points", dev_mode_settings_.anchor_point_debug);
-    } else {
-        anchor_point_debug_checkbox_->set_value(dev_mode_settings_.anchor_point_debug);
-    }
-
-    if (!depth_effects_checkbox_) {
-        depth_effects_checkbox_ = std::make_unique<DMCheckbox>("Depth Effects", dev_mode_settings_.depth_effects);
-    } else {
-        depth_effects_checkbox_->set_value(dev_mode_settings_.depth_effects);
+        int min_value = std::max(0, setting.schema.min_value);
+        int max_value = std::max(min_value, setting.schema.max_value);
+        if (setting.schema.id == kOverlayResolutionSettingId) {
+            min_value = overlay_min;
+            max_value = overlay_max;
+            setting.schema.min_value = min_value;
+            setting.schema.max_value = max_value;
+        }
+        const int value = setting.schema.int_getter ? setting.schema.int_getter() : min_value;
+        const int clamped = std::clamp(value, min_value, max_value);
+        if (!setting.stepper) {
+            setting.stepper = std::make_unique<DMNumericStepper>(setting.schema.label, min_value, max_value, clamped);
+        } else {
+            setting.stepper->set_range(min_value, max_value);
+            setting.stepper->set_value(clamped);
+        }
     }
 }
 

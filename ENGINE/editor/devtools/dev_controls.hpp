@@ -251,6 +251,9 @@ public:
     void set_mode_from_header(int header_mode);
     void set_mode(Mode new_mode);
     void update_movement_debug_visibility();
+    void rebuild_settings_schema();
+    void apply_bool_setting(const char* id, bool value, bool sync_other_settings);
+    void apply_int_setting(const char* id, int value, bool sync_other_settings);
     void apply_overlay_grid_resolution(int resolution, bool user_override, bool update_stepper, bool update_footer);
     void apply_grid_resolution_change(int resolution);
     void nudge_overlay_grid_resolution(int delta);
@@ -382,6 +385,7 @@ private:
     devmode::core::SaveManager::MapWritePath map_write_path_ =
         devmode::core::SaveManager::MapWritePath::Default;
     OtherSettingsAndControls other_settings_;
+    std::vector<OtherSettingsAndControls::SettingSchema> global_settings_schema_;
 
     WarpedScreenGrid* camera_override_for_testing_ = nullptr;
 

@@ -1,7 +1,8 @@
-#include "FloatingPanelLayoutManager.hpp"
+#include "DockManager.hpp"
 
 #include <algorithm>
 #include <numeric>
+#include <utility>
 #include <vector>
 
 #include "DockableCollapsible.hpp"
@@ -139,7 +140,7 @@ int locate_position(int desired, int width, const std::vector<Interval>& interva
     return std::clamp(desired, min_x, max_x);
 }
 
-int resolve_panel_width(const FloatingPanelLayoutManager::PanelInfo& info, const SDL_Rect& usable) {
+int resolve_panel_width(const DockManager::PanelInfo& info, const SDL_Rect& usable) {
     if (!info.panel) {
         return 0;
     }
@@ -155,7 +156,7 @@ int resolve_panel_width(const FloatingPanelLayoutManager::PanelInfo& info, const
     return width;
 }
 
-int resolve_panel_height(const FloatingPanelLayoutManager::PanelInfo& info, const SDL_Rect& usable) {
+int resolve_panel_height(const DockManager::PanelInfo& info, const SDL_Rect& usable) {
     if (!info.panel) {
         return 0;
     }
@@ -187,17 +188,128 @@ SDL_Rect sanitize_rect(const SDL_Rect& rect) {
     return result;
 }
 
+void close_entry(DockManager::CloseCallback& callback, DockableCollapsible* panel) {
+    if (callback) {
+        callback();
+    } else if (panel) {
+        panel->set_visible(false);
+    }
 }
+}  // namespace
 
-FloatingPanelLayoutManager& FloatingPanelLayoutManager::instance() {
-    static FloatingPanelLayoutManager manager;
+DockManager& DockManager::instance() {
+    static DockManager manager;
     return manager;
 }
 
-SDL_Rect FloatingPanelLayoutManager::computeUsableRect(const SDL_Rect& viewport,
-                                                       const SDL_Rect& headerBounds,
-                                                       const SDL_Rect& footerBounds,
-                                                       const std::vector<SDL_Rect>& slidingContainers) {
+void DockManager::open_floating(const std::string& name,
+                                DockableCollapsible* panel,
+                                CloseCallback close_callback,
+                                const std::string& stack_key) {
+    if (!panel) {
+        return;
+    }
+
+    if (current_.panel == panel) {
+        current_.name = name;
+        current_.close_callback = std::move(close_callback);
+        current_.stack_key = stack_key;
+        return;
+    }
+
+    const bool share_stack = !stack_key.empty() && stack_key == current_.stack_key;
+
+    if (!share_stack) {
+        if (current_.panel) {
+            ActiveEntry previous = std::move(current_);
+            current_ = ActiveEntry{};
+            if (previous.panel != panel) {
+                close_entry(previous.close_callback, previous.panel);
+            }
+        }
+        while (!stack_.empty()) {
+            ActiveEntry entry = std::move(stack_.back());
+            stack_.pop_back();
+            if (entry.panel == panel) {
+                continue;
+            }
+            close_entry(entry.close_callback, entry.panel);
+        }
+    } else if (current_.panel) {
+
+        stack_.erase(std::remove_if(stack_.begin(), stack_.end(),
+                                    [panel](const ActiveEntry& entry) {
+                                        return entry.panel == panel;
+                                    }),
+                     stack_.end());
+        stack_.push_back(std::move(current_));
+        current_ = ActiveEntry{};
+    }
+
+    current_.panel = panel;
+    current_.name = name;
+    current_.close_callback = std::move(close_callback);
+    current_.stack_key = stack_key;
+}
+
+void DockManager::notify_panel_closed(const DockableCollapsible* panel) {
+    if (!panel) {
+        return;
+    }
+
+    if (current_.panel == panel) {
+        current_ = ActiveEntry{};
+        if (!stack_.empty()) {
+            current_ = std::move(stack_.back());
+            stack_.pop_back();
+        }
+        return;
+    }
+
+    stack_.erase(std::remove_if(stack_.begin(), stack_.end(),
+                                [panel](const ActiveEntry& entry) {
+                                    return entry.panel == panel;
+                                }),
+                 stack_.end());
+}
+
+std::vector<DockableCollapsible*> DockManager::open_panels() const {
+    std::vector<DockableCollapsible*> panels;
+    if (current_.panel) {
+        panels.push_back(current_.panel);
+    }
+    for (const auto& entry : stack_) {
+        if (entry.panel) {
+            panels.push_back(entry.panel);
+        }
+    }
+    return panels;
+}
+
+void DockManager::bring_to_front(DockableCollapsible* panel) {
+    if (!panel) {
+        return;
+    }
+    if (current_.panel == panel) {
+        return;
+    }
+    auto it = std::find_if(stack_.begin(), stack_.end(),
+                           [panel](const ActiveEntry& entry) { return entry.panel == panel; });
+    if (it == stack_.end()) {
+        return;
+    }
+    ActiveEntry entry = std::move(*it);
+    stack_.erase(it);
+    if (current_.panel) {
+        stack_.push_back(std::move(current_));
+    }
+    current_ = std::move(entry);
+}
+
+SDL_Rect DockManager::computeUsableRect(const SDL_Rect& viewport,
+                                        const SDL_Rect& headerBounds,
+                                        const SDL_Rect& footerBounds,
+                                        const std::vector<SDL_Rect>& slidingContainers) {
     viewport_ = sanitize_rect(viewport);
     header_bounds_ = sanitize_rect(headerBounds);
     footer_bounds_ = sanitize_rect(footerBounds);
@@ -239,11 +351,11 @@ SDL_Rect FloatingPanelLayoutManager::computeUsableRect(const SDL_Rect& viewport,
     return usable_rect_;
 }
 
-void FloatingPanelLayoutManager::layoutAll(const std::vector<PanelInfo>& panels) {
+void DockManager::layoutAll(const std::vector<PanelInfo>& panels) {
     struct ScopedLayoutFlag {
-        FloatingPanelLayoutManager& manager;
+        DockManager& manager;
         bool active = false;
-        explicit ScopedLayoutFlag(FloatingPanelLayoutManager& m) : manager(m) {
+        explicit ScopedLayoutFlag(DockManager& m) : manager(m) {
             if (!manager.applying_layout_) {
                 manager.applying_layout_ = true;
                 active = true;
@@ -325,7 +437,7 @@ void FloatingPanelLayoutManager::layoutAll(const std::vector<PanelInfo>& panels)
     }
 }
 
-SDL_Point FloatingPanelLayoutManager::positionFor(const PanelInfo& panel, const SlidingParentInfo* parent) const {
+SDL_Point DockManager::positionFor(const PanelInfo& panel, const SlidingParentInfo* parent) const {
     SDL_Point fallback{usable_rect_.x, usable_rect_.y};
     if (!panel.panel || usable_rect_.w <= 0 || usable_rect_.h <= 0) {
         return fallback;
@@ -367,7 +479,7 @@ SDL_Point FloatingPanelLayoutManager::positionFor(const PanelInfo& panel, const 
     return SDL_Point{x, y};
 }
 
-void FloatingPanelLayoutManager::registerPanel(DockableCollapsible* panel) {
+void DockManager::registerPanel(DockableCollapsible* panel) {
     if (!panel) {
         return;
     }
@@ -378,7 +490,7 @@ void FloatingPanelLayoutManager::registerPanel(DockableCollapsible* panel) {
     layoutTrackedPanels();
 }
 
-void FloatingPanelLayoutManager::unregisterPanel(const DockableCollapsible* panel) {
+void DockManager::unregisterPanel(const DockableCollapsible* panel) {
     if (!panel) {
         return;
     }
@@ -391,28 +503,28 @@ void FloatingPanelLayoutManager::unregisterPanel(const DockableCollapsible* pane
     layoutTrackedPanels();
 }
 
-void FloatingPanelLayoutManager::notifyPanelGeometryChanged(DockableCollapsible* panel) {
+void DockManager::notifyPanelGeometryChanged(DockableCollapsible* panel) {
     if (!panel || !isTracking(panel) || applying_layout_) {
         return;
     }
     layoutTrackedPanels();
 }
 
-void FloatingPanelLayoutManager::notifyPanelContentChanged(DockableCollapsible* panel) {
+void DockManager::notifyPanelContentChanged(DockableCollapsible* panel) {
     if (!panel || !isTracking(panel) || applying_layout_) {
         return;
     }
     layoutTrackedPanels();
 }
 
-void FloatingPanelLayoutManager::notifyPanelUserMoved(DockableCollapsible* panel) {
+void DockManager::notifyPanelUserMoved(DockableCollapsible* panel) {
     if (!panel) {
         return;
     }
     user_placed_.insert(panel);
 }
 
-void FloatingPanelLayoutManager::layoutTrackedPanels() {
+void DockManager::layoutTrackedPanels() {
     if (applying_layout_ || tracked_panels_.empty()) {
         return;
     }
@@ -443,6 +555,7 @@ void FloatingPanelLayoutManager::layoutTrackedPanels() {
     applying_layout_ = false;
 }
 
-bool FloatingPanelLayoutManager::isTracking(const DockableCollapsible* panel) const {
+bool DockManager::isTracking(const DockableCollapsible* panel) const {
     return std::find(tracked_panels_.begin(), tracked_panels_.end(), panel) != tracked_panels_.end();
 }
+

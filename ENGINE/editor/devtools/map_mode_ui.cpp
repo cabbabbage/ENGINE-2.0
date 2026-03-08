@@ -2,10 +2,8 @@
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/sdl_mouse_utils.hpp"
 
-#include "map_layers_preview_panel.hpp"
 #include "DockableCollapsible.hpp"
-#include "FloatingPanelLayoutManager.hpp"
-#include "FloatingDockableManager.hpp"
+#include "DockManager.hpp"
 #include "dev_footer_bar.hpp"
 #include "map_layers_controller.hpp"
 #include "map_layer_controls_display.hpp"
@@ -34,6 +32,170 @@
 #include <vector>
 #include <utility>
 #include <nlohmann/json.hpp>
+
+class MapLayersPreviewPanel : public DockableCollapsible {
+public:
+    using SaveCallback = std::function<bool()>;
+
+    explicit MapLayersPreviewPanel(int x = 72, int y = 40)
+        : DockableCollapsible("Layers Preview", true, x, y) {
+        build_rows();
+        set_visible(false);
+        set_expanded(true);
+    }
+
+    ~MapLayersPreviewPanel() override = default;
+
+    void set_map_info(nlohmann::json* map_info, SaveCallback on_save = nullptr) {
+        map_info_ = map_info;
+        on_save_ = std::move(on_save);
+        if (preview_widget_) {
+            preview_widget_->set_map_info(map_info_);
+            preview_widget_->set_on_change([this]() { this->trigger_save(); });
+        }
+    }
+
+    void set_controller(std::shared_ptr<MapLayersController> controller) {
+        controller_ = std::move(controller);
+        if (preview_widget_) {
+            preview_widget_->set_controller(controller_);
+        }
+    }
+
+    void set_on_select_layer(std::function<void(int)> cb) {
+        on_select_layer_ = std::move(cb);
+        if (preview_widget_) {
+            preview_widget_->set_on_select_layer(on_select_layer_);
+        }
+    }
+
+    void set_on_select_room(std::function<void(const std::string&)> cb) {
+        on_select_room_ = std::move(cb);
+        if (preview_widget_) {
+            preview_widget_->set_on_select_room(on_select_room_);
+        }
+    }
+
+    void set_on_show_room_list(std::function<void()> cb) {
+        on_show_room_list_ = std::move(cb);
+        if (preview_widget_) {
+            preview_widget_->set_on_show_room_list(on_show_room_list_);
+        }
+    }
+
+    void update(const Input& input, int screen_w = 0, int screen_h = 0) override {
+        DockableCollapsible::update(input, screen_w, screen_h);
+    }
+
+    bool handle_event(const SDL_Event& e) override {
+        if (!is_visible()) {
+            return false;
+        }
+        return DockableCollapsible::handle_event(e);
+    }
+
+    void render(SDL_Renderer* renderer) const override {
+        if (!renderer) {
+            return;
+        }
+        DockableCollapsible::render(renderer);
+    }
+
+    bool is_point_inside(int x, int y) const override {
+        return DockableCollapsible::is_point_inside(x, y);
+    }
+
+private:
+    void build_rows() {
+        owned_widgets_.clear();
+        preview_widget_ = nullptr;
+
+        if (!add_layer_btn_) {
+            add_layer_btn_ = std::make_unique<DMButton>("Add Layer", &DMStyles::CreateButton(), 0, DMButton::height());
+        }
+        if (!create_room_btn_) {
+            create_room_btn_ = std::make_unique<DMButton>("Create Room", &DMStyles::CreateButton(), 0, DMButton::height());
+        }
+        if (!reload_btn_) {
+            reload_btn_ = std::make_unique<DMButton>("Reload", &DMStyles::ListButton(), 0, DMButton::height());
+        }
+
+        std::vector<Widget*> button_row;
+        owned_widgets_.push_back(std::make_unique<ButtonWidget>(add_layer_btn_.get(), [this]() {
+            if (controller_) {
+                const int created = controller_->create_layer();
+                if (preview_widget_) {
+                    preview_widget_->mark_dirty();
+                }
+                if (created >= 0) {
+                    trigger_save();
+                }
+            }
+        }));
+        button_row.push_back(owned_widgets_.back().get());
+
+        owned_widgets_.push_back(std::make_unique<ButtonWidget>(create_room_btn_.get(), [this]() {
+            if (preview_widget_) {
+                preview_widget_->create_new_room_entry();
+            }
+            trigger_save();
+        }));
+        button_row.push_back(owned_widgets_.back().get());
+
+        owned_widgets_.push_back(std::make_unique<ButtonWidget>(reload_btn_.get(), [this]() {
+            if (controller_) {
+                controller_->reload();
+                if (preview_widget_) {
+                    preview_widget_->mark_dirty();
+                }
+            }
+        }));
+        button_row.push_back(owned_widgets_.back().get());
+
+        auto preview = std::make_unique<MapLayersPreviewWidget>();
+        preview->set_map_info(map_info_);
+        preview->set_controller(controller_);
+        preview->set_on_select_layer(on_select_layer_);
+        preview->set_on_select_room(on_select_room_);
+        preview->set_on_show_room_list(on_show_room_list_);
+        preview->set_on_change([this]() { this->trigger_save(); });
+
+        owned_widgets_.push_back(std::move(preview));
+        preview_widget_ = static_cast<MapLayersPreviewWidget*>(owned_widgets_.back().get());
+
+        Rows rows;
+        rows.push_back(button_row);
+        rows.push_back(Row{preview_widget_});
+        set_rows(rows);
+    }
+
+    void trigger_save() {
+        bool ok = false;
+        if (controller_) {
+            ok = controller_->save();
+        }
+        if (!ok && on_save_) {
+            ok = on_save_();
+        }
+        (void)ok;
+    }
+
+private:
+    nlohmann::json* map_info_ = nullptr;
+    SaveCallback on_save_{};
+    std::shared_ptr<MapLayersController> controller_;
+
+    std::vector<std::unique_ptr<Widget>> owned_widgets_;
+    MapLayersPreviewWidget* preview_widget_ = nullptr;
+
+    std::unique_ptr<DMButton> add_layer_btn_;
+    std::unique_ptr<DMButton> create_room_btn_;
+    std::unique_ptr<DMButton> reload_btn_;
+
+    std::function<void(int)> on_select_layer_{};
+    std::function<void(const std::string&)> on_select_room_{};
+    std::function<void()> on_show_room_list_{};
+};
 
 namespace {
 constexpr int kDefaultPanelX = 48;
@@ -450,7 +612,7 @@ bool MapModeUI::pointer_inside_floating_panel(int x, int y) const {
             return true;
         }
     }
-    for (DockableCollapsible* panel : FloatingDockableManager::instance().open_panels()) {
+    for (DockableCollapsible* panel : DockManager::instance().open_panels()) {
         if (!panel || !panel->is_visible()) {
             continue;
         }
@@ -522,7 +684,7 @@ bool MapModeUI::handle_floating_panel_event(const SDL_Event& e, bool& used) {
     }
 
     if (!consumed && (pointer_event || wheel_event)) {
-        for (DockableCollapsible* panel : FloatingDockableManager::instance().open_panels()) {
+        for (DockableCollapsible* panel : DockManager::instance().open_panels()) {
             if (!panel || !panel->is_visible()) {
                 continue;
             }
@@ -609,13 +771,10 @@ void MapModeUI::ensure_panels() {
 
     if (!rooms_list_container_) {
         rooms_list_container_ = std::make_unique<SlidingWindowContainer>();
-        rooms_list_container_->set_header_visible(true);
-        rooms_list_container_->set_scrollbar_visible(true);
 
         rooms_list_container_->set_header_visibility_controller([this](bool visible) {
             this->set_dev_sliding_headers_hidden(visible);
         });
-        rooms_list_container_->set_close_button_enabled(false);
     }
     if (!rooms_display_) {
         rooms_display_ = std::make_unique<MapRoomsDisplay>();
@@ -639,14 +798,10 @@ void MapModeUI::ensure_panels() {
     }
     if (!layer_controls_container_) {
         layer_controls_container_ = std::make_unique<SlidingWindowContainer>();
-        layer_controls_container_->set_header_visible(true);
-        layer_controls_container_->set_scrollbar_visible(true);
 
         layer_controls_container_->set_header_visibility_controller([this](bool visible) {
             this->set_dev_sliding_headers_hidden(visible);
         });
-        layer_controls_container_->set_close_button_enabled(false);
-        layer_controls_container_->set_blocks_editor_interactions(true);
     }
     if (!layer_controls_display_) {
         layer_controls_display_ = std::make_unique<MapLayerControlsDisplay>();

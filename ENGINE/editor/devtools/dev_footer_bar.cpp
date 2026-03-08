@@ -743,25 +743,25 @@ void DevFooterBar::update_title_width() {
     TTF_CloseFont(font);
 }
 
-void DevFooterBar::set_grid_overlay_enabled(bool enabled) {
+void DevFooterBar::set_grid_overlay_enabled(bool enabled, bool notify_callback) {
     if (grid_overlay_enabled_ != enabled) {
         grid_overlay_enabled_ = enabled;
         if (grid_checkbox_) {
             grid_checkbox_->set_value(enabled);
         }
-        if (on_grid_overlay_toggle_) {
+        if (notify_callback && on_grid_overlay_toggle_) {
             on_grid_overlay_toggle_(enabled);
         }
     }
 }
 
-void DevFooterBar::set_grid_resolution(int resolution) {
+void DevFooterBar::set_grid_resolution(int resolution, bool notify_callback) {
     if (grid_resolution_ != resolution) {
         grid_resolution_ = resolution;
         if (grid_stepper_) {
             grid_stepper_->set_value(resolution);
         }
-        if (on_grid_resolution_change_) {
+        if (notify_callback && on_grid_resolution_change_) {
             on_grid_resolution_change_(resolution, false);
         }
     }

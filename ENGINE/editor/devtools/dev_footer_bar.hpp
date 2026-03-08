@@ -68,9 +68,9 @@ public:
     const SDL_Rect& rect() const { return rect_; }
     bool contains(int x, int y) const;
 
-    void set_grid_overlay_enabled(bool enabled);
+    void set_grid_overlay_enabled(bool enabled, bool notify_callback = true);
     bool grid_overlay_enabled() const { return grid_overlay_enabled_; }
-    void set_grid_resolution(int resolution);
+    void set_grid_resolution(int resolution, bool notify_callback = true);
     int grid_resolution() const { return grid_resolution_; }
 
     void set_depth_effects_enabled(bool enabled);

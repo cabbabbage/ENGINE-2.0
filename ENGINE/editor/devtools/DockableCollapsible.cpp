@@ -2,8 +2,7 @@
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/sdl_mouse_utils.hpp"
 
-#include "FloatingDockableManager.hpp"
-#include "FloatingPanelLayoutManager.hpp"
+#include "DockManager.hpp"
 #include "draw_utils.hpp"
 #include "dev_ui_settings.hpp"
 #include "dm_icons.hpp"
@@ -186,7 +185,7 @@ DockableCollapsible::DockableCollapsible(const std::string& title, bool floatabl
 
 DockableCollapsible::~DockableCollapsible() {
     if (registered_with_layout_manager_) {
-        FloatingPanelLayoutManager::instance().unregisterPanel(this);
+        DockManager::instance().unregisterPanel(this);
         registered_with_layout_manager_ = false;
     }
 }
@@ -210,7 +209,7 @@ void DockableCollapsible::set_visible(bool v) {
         dragging_ = false;
         drag_exceeded_threshold_ = false;
         header_dragging_via_button_ = false;
-        FloatingDockableManager::instance().notify_panel_closed(this);
+        DockManager::instance().notify_panel_closed(this);
         if (on_close_) on_close_();
     }
     invalidate_layout();
@@ -461,7 +460,7 @@ void DockableCollapsible::set_position_internal(int x, int y, bool from_layout_m
         return;
     }
 
-    FloatingPanelLayoutManager::instance().notifyPanelUserMoved(this);
+    DockManager::instance().notifyPanelUserMoved(this);
     notify_layout_manager_geometry_changed();
     clamp_to_bounds(last_screen_w_, last_screen_h_);
     invalidate_layout(true);
@@ -471,11 +470,11 @@ void DockableCollapsible::update_layout_manager_registration() {
     bool should_register = floatable_ && visible_;
     if (should_register) {
         if (!registered_with_layout_manager_) {
-            FloatingPanelLayoutManager::instance().registerPanel(this);
+            DockManager::instance().registerPanel(this);
             registered_with_layout_manager_ = true;
         }
     } else if (registered_with_layout_manager_) {
-        FloatingPanelLayoutManager::instance().unregisterPanel(this);
+        DockManager::instance().unregisterPanel(this);
         registered_with_layout_manager_ = false;
     }
 }
@@ -484,14 +483,14 @@ void DockableCollapsible::notify_layout_manager_geometry_changed() const {
     if (!floatable_ || !registered_with_layout_manager_) {
         return;
     }
-    FloatingPanelLayoutManager::instance().notifyPanelGeometryChanged(const_cast<DockableCollapsible*>(this));
+    DockManager::instance().notifyPanelGeometryChanged(const_cast<DockableCollapsible*>(this));
 }
 
 void DockableCollapsible::notify_layout_manager_content_changed() const {
     if (!floatable_ || !registered_with_layout_manager_) {
         return;
     }
-    FloatingPanelLayoutManager::instance().notifyPanelContentChanged(const_cast<DockableCollapsible*>(this));
+    DockManager::instance().notifyPanelContentChanged(const_cast<DockableCollapsible*>(this));
 }
 
 void DockableCollapsible::block_pointer_for(Uint32 ms) const {
@@ -678,7 +677,7 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
                 int dy = current.y - drag_start_pointer_.y;
                 if (std::abs(dx) > kHeaderDragStartThreshold || std::abs(dy) > kHeaderDragStartThreshold) {
                     drag_exceeded_threshold_ = true;
-                    FloatingDockableManager::instance().bring_to_front(this);
+                    DockManager::instance().bring_to_front(this);
                 }
             }
             if (drag_exceeded_threshold_) {
@@ -697,7 +696,7 @@ bool DockableCollapsible::handle_event(const SDL_Event& e) {
             drag_exceeded_threshold_ = false;
             if (drag_moved) {
                 notify_layout_manager_geometry_changed();
-                FloatingPanelLayoutManager::instance().notifyPanelUserMoved(this);
+                DockManager::instance().notifyPanelUserMoved(this);
                 block_pointer_for(kPointerBlockAfterDragMs);
                 invalidate_layout(true);
             }

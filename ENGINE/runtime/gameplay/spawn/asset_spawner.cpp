@@ -2,12 +2,7 @@
 #include "asset_spawn_planner.hpp"
 #include "spacing_util.hpp"
 #include "spawn_context.hpp"
-#include "methods/exact_spawner.hpp"
-#include "methods/center_spawner.hpp"
-#include "methods/random_spawner.hpp"
-#include "methods/perimeter_spawner.hpp"
-#include "methods/edge_spawner.hpp"
-#include "methods/percent_spawner.hpp"
+#include "methods/spawn_method.hpp"
 #include "check.hpp"
 #include <algorithm>
 #include <fstream>
@@ -195,14 +190,8 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                 }
         }
         ctx.set_trail_areas(std::move(trail_areas));
-        ExactSpawner exact;
-        CenterSpawner center;
-        RandomSpawner random;
-        PerimeterSpawner perimeter;
-        EdgeSpawner edge;
-        PercentSpawner percent;
-
-    for (auto& queue_item : spawn_queue_) {
+        SpawnMethod method;
+        for (auto& queue_item : spawn_queue_) {
                 if (!queue_item.has_candidates()) continue;
                 if (current_room_) {
                         bool has_area = false;
@@ -231,8 +220,6 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                                 continue;
                         }
                 }
-                const std::string& pos = queue_item.position;
-
                 if (current_room_ && !queue_item.link_area_name.empty()) {
                         Area* link = current_room_->find_area(queue_item.link_area_name);
                         ctx.set_clip_area(link);
@@ -324,19 +311,8 @@ void AssetSpawner::run_spawning(AssetSpawnPlanner* planner, const Area& area) {
                         batch_checker.reset_session();
                         continue;
                 }
-                if (pos == "Exact" || pos == "Exact Position") {
-                        exact.spawn(queue_item, &area, ctx);
-                } else if (pos == "Center") {
-                        center.spawn(queue_item, &area, ctx);
-                } else if (pos == "Perimeter") {
-                        perimeter.spawn(queue_item, &area, ctx);
-                } else if (pos == "Edge") {
-                        edge.spawn(queue_item, &area, ctx);
-                } else if (pos == "Percent") {
-                        percent.spawn(queue_item, &area, ctx);
-                } else {
-                        random.spawn(queue_item, &area, ctx);
-                }
+                SpawnMethod method;
+                method.spawn(queue_item, &area, ctx);
 
                 if (!ctx.all_assets().empty()) {
                         Asset* last = ctx.all_assets().back().get();

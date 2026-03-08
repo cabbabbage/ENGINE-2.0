@@ -274,273 +274,6 @@ namespace {
 
 }
 
-struct AssetLibraryUI::AssetTileWidget : public Widget {
-    static constexpr int kPad = 8;
-    static constexpr int kDeleteButtonSize = 24;
-    AssetLibraryUI* owner = nullptr;
-    std::shared_ptr<AssetInfo> info;
-    SDL_Rect rect_{0,0,0,0};
-    SDL_Rect delete_rect_{0,0,kDeleteButtonSize,kDeleteButtonSize};
-    bool hovered = false;
-    bool pressed = false;
-    bool right_pressed = false;
-    bool delete_hovered = false;
-    bool delete_pressed = false;
-    std::function<void(const std::shared_ptr<AssetInfo>&)> on_click;
-    std::function<void(const std::shared_ptr<AssetInfo>&)> on_right_click;
-    std::function<void(const std::shared_ptr<AssetInfo>&)> on_delete;
-    std::function<void(const std::shared_ptr<AssetInfo>&, bool)> on_multi_select_toggle;
-    bool multi_select_enabled = false;
-    bool multi_select_selected = false;
-    bool multi_select_pressed = false;
-
-    explicit AssetTileWidget(AssetLibraryUI* owner_ptr,
-                             std::shared_ptr<AssetInfo> i,
-                             std::function<void(const std::shared_ptr<AssetInfo>&)> click,
-                             std::function<void(const std::shared_ptr<AssetInfo>&)> right_click,
-                             std::function<void(const std::shared_ptr<AssetInfo>&)> delete_click,
-                             std::function<void(const std::shared_ptr<AssetInfo>&, bool)> multi_select_click,
-                             bool enable_multi_select,
-                             bool initially_selected)
-        : owner(owner_ptr),
-          info(std::move(i)),
-          on_click(std::move(click)),
-          on_right_click(std::move(right_click)),
-          on_delete(std::move(delete_click)),
-          on_multi_select_toggle(std::move(multi_select_click)),
-          multi_select_enabled(enable_multi_select),
-          multi_select_selected(initially_selected) {}
-
-    void set_rect(const SDL_Rect& r) override {
-        rect_ = r;
-        delete_rect_ = SDL_Rect{ rect_.x + kPad, rect_.y + kPad, kDeleteButtonSize, kDeleteButtonSize };
-    }
-    const SDL_Rect& rect() const override { return rect_; }
-    int height_for_width(int ) const override { return 200; }
-
-    bool handle_event(const SDL_Event& e) override {
-        if (multi_select_enabled) {
-            if (e.type == SDL_EVENT_MOUSE_MOTION) {
-                SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
-                hovered = SDL_PointInRect(&p, &rect_);
-                delete_hovered = SDL_PointInRect(&p, &delete_rect_);
-            } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-                SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-                if (SDL_PointInRect(&p, &rect_)) {
-                    multi_select_pressed = true;
-                    return true;
-                }
-                return false;
-            } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
-                SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-                bool inside = SDL_PointInRect(&p, &rect_);
-                bool was_pressed = multi_select_pressed;
-                multi_select_pressed = false;
-                if (inside && was_pressed) {
-                    multi_select_selected = !multi_select_selected;
-                    if (on_multi_select_toggle) {
-                        on_multi_select_toggle(info, multi_select_selected);
-                    }
-                    return true;
-                }
-            }
-            return false;
-        }
-
-        if (e.type == SDL_EVENT_MOUSE_MOTION) {
-            SDL_Point p = sdl_mouse_util::MotionPoint(e.motion);
-            hovered = SDL_PointInRect(&p, &rect_);
-            delete_hovered = SDL_PointInRect(&p, &delete_rect_);
-        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-            if (!SDL_PointInRect(&p, &rect_)) {
-                return false;
-            }
-            if (e.button.button == SDL_BUTTON_LEFT) {
-                if (SDL_PointInRect(&p, &delete_rect_)) {
-                    delete_pressed = true;
-                    return true;
-                }
-                pressed = true;
-                return true;
-            }
-            if (e.button.button == SDL_BUTTON_RIGHT) {
-                if (SDL_PointInRect(&p, &delete_rect_)) {
-                    return true;
-                }
-                right_pressed = true;
-                return true;
-            }
-        } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            SDL_Point p = sdl_mouse_util::ButtonPoint(e.button);
-            if (e.button.button == SDL_BUTTON_LEFT) {
-                bool inside_delete = SDL_PointInRect(&p, &delete_rect_);
-                bool inside_tile = SDL_PointInRect(&p, &rect_);
-                bool was_delete = delete_pressed;
-                bool was_tile = pressed;
-                delete_pressed = false;
-                pressed = false;
-                if (inside_delete && was_delete) {
-                    if (on_delete) on_delete(info);
-                    return true;
-                }
-                if (inside_tile && was_tile) {
-                    if (on_click) on_click(info);
-                    return true;
-                }
-            } else if (e.button.button == SDL_BUTTON_RIGHT) {
-                bool was = right_pressed;
-                right_pressed = false;
-                if (was && SDL_PointInRect(&p, &rect_)) {
-                    if (on_right_click) on_right_click(info);
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    void render(SDL_Renderer* r) const override {
-        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(r, kTileBG.r, kTileBG.g, kTileBG.b, kTileBG.a);
-        sdl_render::FillRect(r, &rect_);
-
-        const int pad = kPad;
-        const int label_h = 24;
-
-        SDL_Rect button_rect = delete_rect_;
-        const int corner_radius = DMStyles::CornerRadius();
-        const int bevel_depth = DMStyles::BevelDepth();
-        const SDL_Color& highlight = DMStyles::HighlightColor();
-        const SDL_Color& shadow = DMStyles::ShadowColor();
-
-        if (multi_select_enabled) {
-            SDL_Color checkbox_bg = multi_select_selected ? DMStyles::CheckboxHoverFill() : DMStyles::CheckboxBaseFill();
-            if (delete_hovered) {
-                checkbox_bg = DMStyles::CheckboxHoverFill();
-            }
-            dm_draw::DrawBeveledRect( r, button_rect, corner_radius, bevel_depth, checkbox_bg, highlight, shadow, false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-            SDL_Color border = multi_select_selected ? DMStyles::CheckboxActiveOutline() : DMStyles::CheckboxOutlineColor();
-            if (delete_hovered) {
-                border = DMStyles::CheckboxHoverOutline();
-            }
-            dm_draw::DrawRoundedOutline( r, button_rect, std::min(corner_radius, button_rect.w / 2), 1, border);
-            if (multi_select_selected) {
-                SDL_Color check = DMStyles::CheckboxCheckColor();
-                SDL_SetRenderDrawColor(r, check.r, check.g, check.b, check.a);
-                const int inset = std::max(3, button_rect.w / 5);
-                SDL_RenderLine(r, button_rect.x + inset, button_rect.y + button_rect.h / 2, button_rect.x + button_rect.w / 2, button_rect.y + button_rect.h - inset + 1);
-                SDL_RenderLine(r, button_rect.x + button_rect.w / 2, button_rect.y + button_rect.h - inset + 1, button_rect.x + button_rect.w - inset, button_rect.y + inset);
-            }
-        } else {
-            const auto& delete_style = DMStyles::DeleteButton();
-            SDL_Color delete_bg = delete_style.bg;
-            if (delete_pressed) {
-                delete_bg = delete_style.press_bg;
-            } else if (delete_hovered) {
-                delete_bg = delete_style.hover_bg;
-            }
-            dm_draw::DrawBeveledRect( r, button_rect, corner_radius, bevel_depth, delete_bg, highlight, shadow, false, DMStyles::HighlightIntensity(), DMStyles::ShadowIntensity());
-            dm_draw::DrawRoundedOutline( r, button_rect, corner_radius, 1, delete_style.border);
-            SDL_SetRenderDrawColor(r, delete_style.text.r, delete_style.text.g, delete_style.text.b, delete_style.text.a);
-            const int cross_inset = std::max(bevel_depth + 1, button_rect.w / 4);
-            SDL_RenderLine(r, button_rect.x + cross_inset, button_rect.y + cross_inset, button_rect.x + button_rect.w - cross_inset, button_rect.y + button_rect.h - cross_inset);
-            SDL_RenderLine(r, button_rect.x + button_rect.w - cross_inset, button_rect.y + cross_inset, button_rect.x + cross_inset, button_rect.y + button_rect.h - cross_inset);
-        }
-
-        int label_left = button_rect.x + button_rect.w + pad;
-        int label_right = rect_.x + rect_.w - pad;
-        if (label_left > label_right) {
-            label_left = rect_.x + pad;
-        }
-        SDL_Rect label_rect{ label_left, rect_.y + pad, std::max(0, label_right - label_left), label_h };
-
-        const AssetInfo* in = info.get();
-        std::string label_text = (in && !in->name.empty()) ? in->name : "(Unnamed)";
-        TTF_Font* label_font = devmode::utils::load_font(15);
-        std::string render_label = label_text;
-        if (label_font && label_rect.w > 0) {
-            int tw = 0;
-            int th = 0;
-            const std::string ellipsis = "...";
-            if (ttf_util::GetStringSize(label_font, render_label, &tw, &th) && tw > label_rect.w) {
-                std::string base = label_text;
-                while (!base.empty()) {
-                    base.pop_back();
-                    std::string candidate = base + ellipsis;
-                    if (ttf_util::GetStringSize(label_font, candidate, &tw, &th) && tw <= label_rect.w) {
-                        render_label = std::move(candidate);
-                        break;
-                    }
-                }
-                if (base.empty()) {
-                    render_label = ellipsis;
-                }
-            }
-        }
-
-        if (in) {
-            SDL_Texture* tex = owner ? owner->get_default_frame_texture(*in) : nullptr;
-            if (!tex) {
-                auto it = in->animations.find("default");
-                if (it == in->animations.end()) it = in->animations.find("start");
-                if (it == in->animations.end() && !in->animations.empty()) it = in->animations.begin();
-                if (it != in->animations.end() && !it->second.frames.empty() && !it->second.frames.front()->variants.empty()) tex = it->second.frames.front()->variants[0].base_texture;
-            }
-            if (tex) {
-                int tw = 0;
-                int th = 0;
-                texture_size(tex, tw, th);
-                if (tw > 0 && th > 0) {
-                    SDL_Rect image_rect{ rect_.x + pad,
-                                         label_rect.y + label_rect.h + pad,
-                                         rect_.w - 2 * pad,
-                                         rect_.h - (label_rect.h + 3 * pad) };
-                    image_rect.h = std::max(image_rect.h, 0);
-                    if (image_rect.w > 0 && image_rect.h > 0) {
-                        float scale = std::min(image_rect.w / float(tw), image_rect.h / float(th));
-                        if (scale > 0.0f) {
-                            int dw = static_cast<int>(tw * scale);
-                            int dh = static_cast<int>(th * scale);
-                            SDL_Rect dst{ image_rect.x + (image_rect.w - dw) / 2,
-                                          image_rect.y + (image_rect.h - dh) / 2, dw, dh };
-                            sdl_render::Texture(r, tex, nullptr, &dst);
-                        }
-                    }
-                }
-            }
-        }
-        if (hovered) {
-            SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_ADD);
-            SDL_SetRenderDrawColor(r, kTileHL.r, kTileHL.g, kTileHL.b, kTileHL.a);
-            sdl_render::FillRect(r, &rect_);
-        }
-        SDL_SetRenderDrawBlendMode(r, SDL_BLENDMODE_BLEND);
-        const int tile_radius = std::min(DMStyles::CornerRadius(), std::min(rect_.w, rect_.h) / 2);
-        dm_draw::DrawRoundedOutline( r, rect_, tile_radius, 1, kTileBd);
-        if (label_font && label_rect.w > 0) {
-            SDL_Color text_color = DMStyles::Label().color;
-            SDL_Surface* surf = ttf_util::RenderTextBlended(label_font, render_label.c_str(), text_color);
-            if (surf) {
-                SDL_Texture* tex = SDL_CreateTextureFromSurface(r, surf);
-                SDL_DestroySurface(surf);
-                if (tex) {
-                    int dw = 0;
-                    int dh = 0;
-                    texture_size(tex, dw, dh);
-                    if (dw > label_rect.w) {
-                        dw = label_rect.w;
-                    }
-                    SDL_Rect dst{ label_rect.x,
-                                  label_rect.y + std::max(0, (label_rect.h - dh) / 2), dw, dh };
-                    sdl_render::Texture(r, tex, nullptr, &dst);
-                    SDL_DestroyTexture(tex);
-                }
-            }
-        }
-    }
-};
-
 struct AssetLibraryUI::HashtagTileWidget : public Widget {
     static constexpr int kPad = 8;
     static constexpr int kDeleteButtonSize = 24;
@@ -865,9 +598,6 @@ AssetLibraryUI::AssetLibraryUI() {
     floating_ = std::make_unique<DockableCollapsible>("Asset Library", true, 10, 10);
     floating_->set_expanded(false);
 
-    search_box_ = std::make_unique<DMTextBox>("Search", "");
-    search_widget_ = std::make_unique<TextBoxWidget>(search_box_.get(), true);
-
     multi_select_button_ = std::make_unique<DMButton>("Select Multiple", &DMStyles::HeaderButton(), 200, DMButton::height());
     multi_select_button_widget_ = std::make_unique<ButtonWidget>(multi_select_button_.get(), [this](){
         toggle_multi_select_mode();
@@ -895,9 +625,9 @@ void AssetLibraryUI::toggle() {
 
         mark_rows_dirty();
         ensure_rows_layout();
-        if (search_box_) search_box_->start_editing();
-    } else if (search_box_) {
-        search_box_->stop_editing();
+        if (auto* box = asset_list_view_.search_box()) box->start_editing();
+    } else if (auto* box = asset_list_view_.search_box()) {
+        box->stop_editing();
     }
 }
 
@@ -918,10 +648,11 @@ void AssetLibraryUI::set_picker_mode(PickerModeOptions options) {
         multi_select_mode_ = false;
         multi_select_selection_.clear();
         clear_search_error();
-        if (search_box_) {
-            search_box_->stop_editing();
-            search_box_->set_value("");
+        if (auto* box = asset_list_view_.search_box()) {
+            box->stop_editing();
+            box->set_value("");
         }
+        asset_list_view_.set_query("");
         search_query_.clear();
         filter_dirty_ = true;
         mark_rows_dirty();
@@ -946,13 +677,13 @@ void AssetLibraryUI::open() {
 
         mark_rows_dirty();
         ensure_rows_layout();
-        if (search_box_) search_box_->start_editing();
+        if (auto* box = asset_list_view_.search_box()) box->start_editing();
     }
 }
 
 void AssetLibraryUI::close() {
     if (floating_) floating_->set_visible(false);
-    if (search_box_) search_box_->stop_editing();
+    if (auto* box = asset_list_view_.search_box()) box->stop_editing();
 }
 
 bool AssetLibraryUI::is_input_blocking() const {
@@ -1002,7 +733,7 @@ void AssetLibraryUI::ensure_items(AssetLibrary& lib) {
 void AssetLibraryUI::rebuild_rows_impl() {
     if (!floating_) return;
     std::vector<DockableCollapsible::Row> rows;
-    if (search_widget_) rows.push_back({ search_widget_.get() });
+    if (auto* search_widget = asset_list_view_.search_widget()) rows.push_back({ search_widget });
     if (!picker_mode_.enabled && multi_select_button_widget_) rows.push_back({ multi_select_button_widget_.get() });
     if (!picker_mode_.enabled && delete_all_button_widget_ && multi_select_mode_ && !multi_select_selection_.empty()) {
         rows.push_back({ delete_all_button_widget_.get() });
@@ -1011,7 +742,15 @@ void AssetLibraryUI::rebuild_rows_impl() {
 
     DockableCollapsible::Row current_row;
     current_row.reserve(2);
-    for (auto& tw : tiles_) {
+    auto asset_tiles = asset_list_view_.tile_ptrs();
+    for (auto* tile : asset_tiles) {
+        current_row.push_back(tile);
+        if (current_row.size() == 2) {
+            rows.push_back(current_row);
+            current_row.clear();
+        }
+    }
+    for (auto& tw : extra_tiles_) {
         current_row.push_back(tw.get());
         if (current_row.size() == 2) {
             rows.push_back(current_row);
@@ -1166,44 +905,6 @@ void AssetLibraryUI::execute_bulk_delete_queue() {
     clear_delete_state();
     multi_select_selection_.clear();
     update_multi_select_controls();
-}
-
-bool AssetLibraryUI::matches_query(const AssetInfo& info, const std::string& query) const {
-    if (query.empty()) return true;
-
-    std::istringstream ss(query);
-    std::string token;
-    std::string name_lower = to_lower_copy(info.name);
-
-    while (ss >> token) {
-        if (token.empty()) continue;
-
-        if (token.front() == '#') {
-            std::string tag = token.substr(1);
-            if (tag.empty()) continue;
-            std::string needle = to_lower_copy(tag);
-            bool tag_match = std::any_of(info.tags.begin(), info.tags.end(), [&](const std::string& t){
-                return to_lower_copy(t).find(needle) != std::string::npos;
-            });
-            if (!tag_match) {
-                return false;
-            }
-        } else {
-            std::string needle = to_lower_copy(token);
-            if (needle.empty()) continue;
-            bool in_name = name_lower.find(needle) != std::string::npos;
-            if (!in_name) {
-                bool in_tags = std::any_of(info.tags.begin(), info.tags.end(), [&](const std::string& t){
-                    return to_lower_copy(t).find(needle) != std::string::npos;
-                });
-                if (!in_tags) {
-                    return false;
-                }
-            }
-        }
-    }
-
-    return true;
 }
 
 bool AssetLibraryUI::matches_tag_query(const std::string& tag, const std::string& query) const {
@@ -1476,73 +1177,78 @@ void AssetLibraryUI::delete_hashtag(const std::string& tag) {
 }
 
 void AssetLibraryUI::refresh_tiles(Assets& assets) {
-    tiles_.clear();
-    tiles_.reserve(items_.size() + tag_items_.size());
+    search_query_ = asset_list_view_.query();
+    asset_list_view_.set_assets(&assets);
 
-    Assets* assets_ptr = &assets;
-
+    std::vector<AssetListView::Entry> entries;
+    entries.reserve(items_.size());
     for (auto& inf : items_) {
         if (!inf) continue;
-        if (!matches_query(*inf, search_query_)) continue;
-        bool is_selected = false;
-        if (!inf->name.empty()) {
-            is_selected = multi_select_selection_.find(inf->name) != multi_select_selection_.end();
-        }
-        tiles_.push_back(std::make_unique<AssetTileWidget>(
-            this,
-            inf,
-            [this](const std::shared_ptr<AssetInfo>& info){
-                if (info) {
-                    pending_selection_ = info;
-                    if (picker_mode_.enabled && picker_mode_.on_selected) {
-                        picker_mode_.on_selected(info);
-                    }
-                }
-                close();
-            },
-            [this, assets_ptr](const std::shared_ptr<AssetInfo>& info){
-                if (picker_mode_.enabled) {
-                    return;
-                }
-                if (info && assets_ptr) {
-                    assets_ptr->open_asset_info_editor(info);
-                }
-                close();
-            },
-            [this](const std::shared_ptr<AssetInfo>& info){
-                if (!picker_mode_.enabled) {
-                    request_delete(info);
-                }
-            },
-            [this](const std::shared_ptr<AssetInfo>& info, bool selected){
-                handle_multi_select_selection(info, selected);
-            },
-            !picker_mode_.enabled && multi_select_mode_,
-            is_selected
-        ));
+        AssetListView::Entry entry;
+        entry.label = inf->name.empty() ? "(Unnamed)" : inf->name;
+        entry.value = inf->name;
+        entry.manifest_name = inf->name;
+        entry.tags = inf->tags;
+        entry.info = inf;
+        entries.push_back(std::move(entry));
     }
 
+    asset_list_view_.set_entries(std::move(entries));
+    asset_list_view_.set_multi_select_enabled(!picker_mode_.enabled && multi_select_mode_);
+    asset_list_view_.set_selected_values(multi_select_selection_);
+    asset_list_view_.set_callbacks(AssetListView::Callbacks{
+        [this](const AssetListView::Entry& entry){
+            if (entry.info) {
+                pending_selection_ = entry.info;
+                if (picker_mode_.enabled && picker_mode_.on_selected) {
+                    picker_mode_.on_selected(entry.info);
+                }
+            }
+            close();
+        },
+        [this, &assets](const AssetListView::Entry& entry){
+            if (picker_mode_.enabled) {
+                return;
+            }
+            if (entry.info) {
+                assets.open_asset_info_editor(entry.info);
+            }
+            close();
+        },
+        [this](const AssetListView::Entry& entry){
+            if (!picker_mode_.enabled && entry.info) {
+                request_delete(entry.info);
+            }
+        },
+        [this](const AssetListView::Entry& entry, bool selected){
+            handle_multi_select_selection(entry.info, selected);
+        }
+    });
+
+    asset_list_view_.refresh_tiles();
+
+    extra_tiles_.clear();
     if (!picker_mode_.enabled) {
         for (const auto& tag : tag_items_) {
             if (!matches_tag_query(tag, search_query_)) continue;
-        int count = count_assets_for_tag(tag);
-        tiles_.push_back(std::make_unique<HashtagTileWidget>(
-            this,
-            tag,
-            count,
-            [this](const std::string& tag_value){
-                auto resolved = resolve_tag_to_asset(tag_value);
-                if (resolved) {
-                    pending_selection_ = resolved;
-                    close();
-                } else {
-                    std::cerr << "[AssetLibraryUI] No assets found for tag '" << tag_value << "'\n";
+            int count = count_assets_for_tag(tag);
+            extra_tiles_.push_back(std::make_unique<HashtagTileWidget>(
+                this,
+                tag,
+                count,
+                [this](const std::string& tag_value){
+                    auto resolved = resolve_tag_to_asset(tag_value);
+                    if (resolved) {
+                        pending_selection_ = resolved;
+                        close();
+                    } else {
+                        std::cerr << "[AssetLibraryUI] No assets found for tag '" << tag_value << "'\n";
+                    }
+                },
+                [this](const std::string& tag_value){
+                    delete_hashtag(tag_value);
                 }
-            },
-            [this](const std::string& tag_value){
-                delete_hashtag(tag_value);
-            }
-        ));
+            ));
         }
     }
 
@@ -1564,7 +1270,7 @@ void AssetLibraryUI::refresh_tiles(Assets& assets) {
         }
         std::sort(area_refs.begin(), area_refs.end());
         for (const auto& ref : area_refs) {
-            tiles_.push_back(std::make_unique<RoomAreaTileWidget>(
+            extra_tiles_.push_back(std::make_unique<RoomAreaTileWidget>(
                 this,
                 ref.first,
                 ref.second,
@@ -1700,7 +1406,7 @@ void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer
     multi_select_selection_.erase(asset_name);
     items_cached_ = false;
     filter_dirty_ = true;
-    tiles_.clear();
+    extra_tiles_.clear();
     pending_selection_.reset();
     if (!defer_multi_select_refresh) {
         update_multi_select_controls();
@@ -1782,10 +1488,11 @@ void AssetLibraryUI::update_delete_modal_geometry(int screen_w, int screen_h) {
 }
 
 void AssetLibraryUI::handle_create_button_pressed() {
-    if (picker_mode_.enabled || !search_box_) {
+    DMTextBox* search_box = asset_list_view_.search_box();
+    if (picker_mode_.enabled || !search_box) {
         return;
     }
-    std::string raw_value = search_box_->value();
+    std::string raw_value = search_box->value();
     std::string trimmed = devmode::utils::trim_whitespace_copy(raw_value);
     if (trimmed.empty()) {
         show_search_error("Enter a name before creating.");
@@ -1811,13 +1518,14 @@ void AssetLibraryUI::handle_create_button_pressed() {
 }
 
 void AssetLibraryUI::show_search_error(const std::string& message) {
-    if (!search_box_) {
+    DMTextBox* search_box = asset_list_view_.search_box();
+    if (!search_box) {
         return;
     }
     search_error_active_ = true;
     const std::string label_text = "Search - " + message;
-    search_box_->set_label_text(label_text);
-    search_box_->set_label_color_override(kSearchErrorColor);
+    search_box->set_label_text(label_text);
+    search_box->set_label_color_override(kSearchErrorColor);
 }
 
 void AssetLibraryUI::clear_search_error() {
@@ -1825,9 +1533,9 @@ void AssetLibraryUI::clear_search_error() {
         return;
     }
     search_error_active_ = false;
-    if (search_box_) {
-        search_box_->reset_label_text();
-        search_box_->clear_label_color_override();
+    if (auto* search_box = asset_list_view_.search_box()) {
+        search_box->reset_label_text();
+        search_box->clear_label_color_override();
     }
 }
 
@@ -1965,7 +1673,7 @@ AssetLibraryUI::CreateAssetResult AssetLibraryUI::create_new_asset(const std::st
         preview_attempted_.erase(name);
         items_cached_ = false;
         filter_dirty_ = true;
-        tiles_.clear();
+        extra_tiles_.clear();
         return CreateAssetResult::Success;
     } catch (const std::exception& e) {
         std::cerr << "[AssetLibraryUI] Exception creating asset '" << name
@@ -2055,33 +1763,6 @@ bool AssetLibraryUI::handle_delete_modal_event(const SDL_Event& e) {
     return false;
 }
 
-SDL_Texture* AssetLibraryUI::get_default_frame_texture(const AssetInfo& info) const {
-    auto find_frame = [](const AssetInfo& inf, const std::string& key) -> SDL_Texture* {
-        if (key.empty()) return nullptr;
-        auto it = inf.animations.find(key);
-        if (it != inf.animations.end() && !it->second.frames.empty()) {
-            return (!it->second.frames.empty() && !it->second.frames.front()->variants.empty()) ? it->second.frames.front()->variants[0].base_texture : nullptr;
-        }
-        return nullptr;
-};
-
-    if (SDL_Texture* tex = find_frame(info, "default")) {
-        return tex;
-    }
-    if (SDL_Texture* tex = find_frame(info, info.start_animation)) {
-        return tex;
-    }
-    if (SDL_Texture* tex = find_frame(info, "start")) {
-        return tex;
-    }
-    for (const auto& kv : info.animations) {
-        if (!kv.second.frames.empty() && !kv.second.frames.front()->variants.empty()) {
-            return kv.second.frames.front()->variants[0].base_texture;
-        }
-    }
-    return nullptr;
-}
-
 std::optional<AssetLibraryUI::AreaRef> AssetLibraryUI::consume_area_selection() {
     if (pending_area_selection_) {
         auto out = pending_area_selection_;
@@ -2102,17 +1783,15 @@ void AssetLibraryUI::update(const Input& input,
     assets_owner_ = &assets;
     library_owner_ = &lib;
     manifest_store_owner_ = &store;
+    asset_list_view_.set_assets(&assets);
     ensure_items(lib);
     ensure_rows_layout();
 
-    if (search_box_) {
-        std::string current = search_box_->value();
-        if (current != search_query_) {
-            search_query_ = std::move(current);
-            filter_dirty_ = true;
-            if (search_error_active_) {
-                clear_search_error();
-            }
+    if (asset_list_view_.update_query_from_widget()) {
+        search_query_ = asset_list_view_.query();
+        filter_dirty_ = true;
+        if (search_error_active_) {
+            clear_search_error();
         }
     }
 
@@ -2293,11 +1972,12 @@ bool AssetLibraryUI::handle_event(const SDL_Event& e) {
         handled = true;
     }
 
-    if (!handled && search_widget_ && search_box_ && e.type == SDL_EVENT_TEXT_INPUT) {
-        if (!search_box_->is_editing()) {
-            search_box_->start_editing();
+    if (!handled && asset_list_view_.search_widget() && asset_list_view_.search_box() && e.type == SDL_EVENT_TEXT_INPUT) {
+        DMTextBox* search_box = asset_list_view_.search_box();
+        if (search_box && !search_box->is_editing()) {
+            search_box->start_editing();
         }
-        if (search_widget_->handle_event(e)) {
+        if (asset_list_view_.search_widget()->handle_event(e)) {
             handled = true;
         }
     }

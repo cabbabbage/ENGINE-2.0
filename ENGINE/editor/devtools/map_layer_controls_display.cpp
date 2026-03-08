@@ -11,6 +11,7 @@
 #include "dm_styles.hpp"
 #include "font_cache.hpp"
 #include "map_layers_common.hpp"
+#include "map_layers_container_configurator.hpp"
 #include "map_layers_controller.hpp"
 #include "room_selector_popup.hpp"
 #include "utils/input.hpp"
@@ -72,10 +73,7 @@ void MapLayerControlsDisplay::attach_container(SlidingWindowContainer* container
     if (container_) {
         configure_container(*container_);
         container_->set_header_text("Layer Controls");
-        container_->set_header_visible(true);
-        container_->set_scrollbar_visible(true);
-        container_->set_close_button_enabled(false);
-        container_->set_blocks_editor_interactions(true);
+        map_layers::container_configurator::apply_default_panel_options(*container_, true);
         container_->set_header_navigation_alignment_right(true);
         update_header_navigation_button();
         container_->request_layout();
@@ -141,22 +139,16 @@ void MapLayerControlsDisplay::set_on_create_room(std::function<void()> cb) {
 }
 
 void MapLayerControlsDisplay::configure_container(SlidingWindowContainer& container) {
-    container.set_layout_function([this](const SlidingWindowContainer::LayoutContext& ctx) {
-        return this->layout_content(ctx);
-    });
-    container.set_render_function([this](SDL_Renderer* renderer) { this->render(renderer); });
-    container.set_event_function([this](const SDL_Event& e) { return this->handle_event(e); });
-    container.set_update_function([this](const Input& input, int screen_w, int screen_h) {
-        this->update(input, screen_w, screen_h);
-    });
+    map_layers::container_configurator::configure_callbacks(
+        container,
+        [this](const SlidingWindowContainer::LayoutContext& ctx) { return this->layout_content(ctx); },
+        [this](SDL_Renderer* renderer) { this->render(renderer); },
+        [this](const SDL_Event& e) { return this->handle_event(e); },
+        [this](const Input& input, int screen_w, int screen_h) { this->update(input, screen_w, screen_h); });
 }
 
 void MapLayerControlsDisplay::clear_container_callbacks(SlidingWindowContainer& container) {
-    container.set_layout_function({});
-    container.set_render_function({});
-    container.set_event_function({});
-    container.set_update_function({});
-    container.set_blocks_editor_interactions(false);
+    map_layers::container_configurator::clear_callbacks(container);
 }
 
 void MapLayerControlsDisplay::update_header_navigation_button() {

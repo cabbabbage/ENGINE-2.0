@@ -11,7 +11,6 @@
 #include "assets/asset/asset_types.hpp"
 #include "assets/asset/asset_utils.hpp"
 #include "core/AssetsManager.hpp"
-#include "devtools/room_editor_map_info.hpp"
 #include "devtools/asset_info_ui.hpp"
 #include "map_layers_common.hpp"
 #include "devtools/asset_library_ui.hpp"
@@ -26,8 +25,7 @@
 #include "spawn_groups/spawn_group_utils.hpp"
 #include "devtools/dev_footer_bar.hpp"
 #include "config/room_config/room_configurator.hpp"
-#include "devtools/FloatingDockableManager.hpp"
-#include "FloatingPanelLayoutManager.hpp"
+#include "DockManager.hpp"
 #include "devtools/widgets.hpp"
 #include "dm_styles.hpp"
 #include "room_overlay_renderer.hpp"
@@ -37,12 +35,7 @@
 #include "gameplay/spawn/asset_spawn_planner.hpp"
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "gameplay/spawn/check.hpp"
-#include "gameplay/spawn/methods/center_spawner.hpp"
-#include "gameplay/spawn/methods/exact_spawner.hpp"
-#include "gameplay/spawn/methods/perimeter_spawner.hpp"
-#include "gameplay/spawn/methods/edge_spawner.hpp"
-#include "gameplay/spawn/methods/percent_spawner.hpp"
-#include "gameplay/spawn/methods/random_spawner.hpp"
+#include "gameplay/spawn/methods/spawn_method.hpp"
 #include "gameplay/spawn/spawn_context.hpp"
 #include "utils/input.hpp"
 #include "utils/grid.hpp"
@@ -140,6 +133,31 @@ void render_grid_point_marker(SDL_Renderer* renderer, const WarpedScreenGrid& ca
 }
 #include <nlohmann/json.hpp>
 #include "utils/log.hpp"
+
+namespace devmode::room_editor_detail {
+
+nlohmann::json resolve_map_info_blob(const Assets* assets,
+                                     const devmode::core::ManifestStore* manifest_store,
+                                     const std::string& map_id) {
+    if (assets) {
+        const nlohmann::json& in_memory = assets->map_info_json();
+        if (in_memory.is_object()) {
+            return in_memory;
+        }
+    }
+
+    if (manifest_store && !map_id.empty()) {
+        if (const nlohmann::json* entry = manifest_store->find_map_entry(map_id)) {
+            if (entry->is_null()) {
+                return nlohmann::json::object();
+            }
+            return *entry;
+        }
+    }
+    return nlohmann::json::object();
+}
+
+} // namespace devmode::room_editor_detail
 
 using devmode::spawn::ensure_spawn_groups_array;
 using devmode::spawn::find_spawn_groups_array;
@@ -875,7 +893,7 @@ void RoomEditor::set_screen_dimensions(int width, int height) {
     if (spawn_group_panel_) {
         spawn_group_panel_->set_screen_dimensions(screen_w_, screen_h_);
 
-        spawn_group_panel_->set_work_area(FloatingPanelLayoutManager::instance().usableRect());
+        spawn_group_panel_->set_work_area(DockManager::instance().usableRect());
         update_spawn_group_config_anchor();
     }
 
@@ -4100,7 +4118,7 @@ void RoomEditor::handle_click(const Input& input) {
 
     const bool asset_info_open =
         (active_modal_ == ActiveModal::AssetInfo) || (info_ui_ && info_ui_->is_visible());
-    const bool floating_modal_open = FloatingDockableManager::instance().active_panel() != nullptr;
+    const bool floating_modal_open = DockManager::instance().active_panel() != nullptr;
 
     if (asset_info_open || floating_modal_open) {
         return;
@@ -4397,7 +4415,7 @@ bool RoomEditor::is_ui_blocking_input(int mx, int my) const {
     if (library_ui_ && library_ui_->is_visible() && library_ui_->is_input_blocking_at(mx, my)) {
         return true;
     }
-    auto floating = FloatingDockableManager::instance().open_panels();
+    auto floating = DockManager::instance().open_panels();
     for (DockableCollapsible* panel : floating) {
         if (!panel) continue;
         if (!panel->is_visible()) continue;
@@ -4510,7 +4528,7 @@ void RoomEditor::ensure_room_configurator() {
         });
         room_cfg_ui_->set_bounds(room_config_bounds_);
 
-        room_cfg_ui_->set_work_area(FloatingPanelLayoutManager::instance().usableRect());
+        room_cfg_ui_->set_work_area(DockManager::instance().usableRect());
         room_cfg_ui_->set_blocks_editor_interactions(false);
         room_cfg_ui_->set_on_close([this]() {
             room_config_dock_open_ = false;
@@ -4666,7 +4684,7 @@ void RoomEditor::update_room_config_bounds() {
     const int desired_width = std::max(360, screen_w_ / 3);
     const int width = std::min(max_width, desired_width);
 
-    SDL_Rect usable = FloatingPanelLayoutManager::instance().usableRect();
+    SDL_Rect usable = DockManager::instance().usableRect();
     const int height = std::max(1, usable.h > 0 ? usable.h : screen_h_);
     const int max_x = std::max(0, screen_w_ - width);
     const int desired_x = screen_w_ - width;
@@ -5785,7 +5803,7 @@ void RoomEditor::sync_spawn_group_panel_with_selection() {
     }
 
     if (focused && spawn_group_panel_ && spawn_group_panel_->is_visible()) {
-        FloatingDockableManager::instance().bring_to_front(spawn_group_panel_.get());
+        DockManager::instance().bring_to_front(spawn_group_panel_.get());
     }
 }
 
@@ -6165,12 +6183,12 @@ void RoomEditor::open_spawn_group_floating_panel(const std::string& spawn_id, st
     refresh_spawn_group_config_ui();
     update_spawn_group_config_anchor();
     spawn_group_panel_->set_screen_dimensions(screen_w_, screen_h_);
-    spawn_group_panel_->set_work_area(FloatingPanelLayoutManager::instance().usableRect());
+    spawn_group_panel_->set_work_area(DockManager::instance().usableRect());
     spawn_group_panel_->reset_scroll();
     spawn_group_panel_->open();
     spawn_group_panel_->force_pointer_ready();
 
-    SDL_Rect work = FloatingPanelLayoutManager::instance().usableRect();
+    SDL_Rect work = DockManager::instance().usableRect();
     if (work.w <= 0 || work.h <= 0) {
         work = SDL_Rect{0, 0, screen_w_, screen_h_};
     }
@@ -6192,7 +6210,7 @@ void RoomEditor::open_spawn_group_floating_panel(const std::string& spawn_id, st
     const int pos_y = std::clamp(desired.y, min_y, max_y);
     spawn_group_panel_->set_position(pos_x, pos_y);
 
-    FloatingDockableManager::instance().open_floating(
+    DockManager::instance().open_floating(
         "Spawn Group: " + spawn_id,
         spawn_group_panel_.get(),
         [this]() {
@@ -6434,28 +6452,10 @@ void RoomEditor::respawn_spawn_group(const nlohmann::json& entry) {
         }
     }
     ctx.set_trail_areas(std::move(trail_areas));
-    ExactSpawner exact;
-    CenterSpawner center;
-    RandomSpawner random;
-    PerimeterSpawner perimeter;
-    EdgeSpawner edge;
-    PercentSpawner percent;
+    SpawnMethod spawn_method;
     const Area* area = current_room_->room_area.get();
     for (const auto& info : queue) {
-        const std::string& pos = info.position;
-        if (pos == "Exact" || pos == "Exact Position") {
-            exact.spawn(info, area, ctx);
-        } else if (pos == "Center") {
-            center.spawn(info, area, ctx);
-        } else if (pos == "Perimeter") {
-            perimeter.spawn(info, area, ctx);
-        } else if (pos == "Edge") {
-            edge.spawn(info, area, ctx);
-        } else if (pos == "Percent") {
-            percent.spawn(info, area, ctx);
-        } else {
-            random.spawn(info, area, ctx);
-        }
+        spawn_method.spawn(info, area, ctx);
     }
     integrate_spawned_assets(spawned);
     checker.reset_session();

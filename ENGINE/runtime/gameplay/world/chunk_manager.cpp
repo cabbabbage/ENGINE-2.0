@@ -17,8 +17,8 @@ std::uint64_t ChunkManager::key(int i, int j) {
 GridBounds ChunkManager::bounds_for(int i, int j, int r_chunk, const GridPoint& origin) {
     const int step = 1 << r_chunk;
     const int x = origin.world_x() + i * step;
-    const int y = origin.world_y() + j * step;
-    return GridBounds::from_xywh(x, y, step, step, 0, origin.resolution_layer());
+    const int z = origin.world_z() + j * step;
+    return GridBounds::from_xywh(x, z, step, step, 0, origin.resolution_layer());
 }
 
 Chunk& ChunkManager::ensure(int i, int j, int r_chunk, const GridPoint& origin) {
@@ -44,8 +44,8 @@ Chunk* ChunkManager::find(int i, int j) const {
 Chunk* ChunkManager::from_world(const GridPoint& world_px, int r_chunk, const GridPoint& origin) const {
     const int step = 1 << r_chunk;
     const int i = floor_div(world_px.world_x() - origin.world_x(), step);
-    const int j = floor_div(world_px.world_y() - origin.world_y(), step);
-    return find(i, j);
+    const int k = floor_div(world_px.world_z() - origin.world_z(), step);
+    return find(i, k);
 }
 
 int floor_div(int value, int step) {

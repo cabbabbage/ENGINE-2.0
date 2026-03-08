@@ -321,7 +321,7 @@ GridPoint& GridPoint::from_world(const GridKey& key, WorldGrid& grid) {
 }
 
 GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
-                                  float world_z,
+                                  float world_y_target,
                                   const CameraProjectionParams& params,
                                   WorldGrid& grid) {
     if (params.screen_width <= 0 || params.screen_height <= 0) {
@@ -335,18 +335,18 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     const double tan_fov_x = std::max(1e-6, params.tan_half_fov_x);
     const double tan_fov_y = std::max(1e-6, params.tan_half_fov_y);
 
-    // Solve for depth so that resulting world_z matches the requested world_z (ground plane assumption).
+    // Solve for depth so that resulting world_y matches the requested height (ground plane assumption).
     const Vec3 cam_pos{params.position_x, params.position_y, params.position_z};
     const Vec3 cam_forward{params.forward_x, params.forward_y, params.forward_z};
     const Vec3 cam_right{params.right_x, params.right_y, params.right_z};
     const Vec3 cam_up{params.up_x, params.up_y, params.up_z};
 
-    const double denom = cam_forward.z + ndc_x * tan_fov_x * cam_right.z + ndc_y * tan_fov_y * cam_up.z;
-    const double target_z_meters = static_cast<double>(world_z) * std::max(1e-6, params.meters_scale);
+    const double denom = cam_forward.y + ndc_x * tan_fov_x * cam_right.y + ndc_y * tan_fov_y * cam_up.y;
+    const double target_y_meters = static_cast<double>(world_y_target) * std::max(1e-6, params.meters_scale);
     if (std::abs(denom) <= 1e-9) {
         return nullptr;
     }
-    const double depth = (target_z_meters - cam_pos.z) / denom;
+    const double depth = (target_y_meters - cam_pos.y) / denom;
     if (!std::isfinite(depth) || depth <= params.near_plane || depth >= params.far_plane) {
         return nullptr;
     }
@@ -362,7 +362,7 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     const double safe_scale = std::max(1e-6, params.meters_scale);
     const int world_x_px = static_cast<int>(std::lround(world_meters.x / safe_scale + params.anchor_world_x));
     const int world_y_px = static_cast<int>(std::lround(world_meters.y / safe_scale + params.anchor_world_y));
-    const int world_z_px = static_cast<int>(std::lround(world_z));
+    const int world_z_px = static_cast<int>(std::lround(world_meters.z / safe_scale));
 
     const GridPoint world_point = GridPoint::make_virtual(world_x_px, world_y_px, world_z_px, -1);
     const GridKey key = grid.grid_key_from_world(world_point, world_z_px, -1);
@@ -394,9 +394,9 @@ void GridPoint::update_world_position(int new_x, int new_y, int new_z) {
     world_x_ = new_x;
     world_y_ = new_y;
     world_z_ = new_z;
-    is_floor = (new_z == 0);
-    // Keep legacy 'world' field in sync
-    const_cast<GridCoord&>(world) = GridCoord{new_x, new_y};
+    is_floor = (new_y == 0);
+    // Keep legacy 'world' field in sync (x,z on ground)
+    const_cast<GridCoord&>(world) = GridCoord{new_x, new_z};
     // Invalidate screen data since position changed
     screen_data_valid = false;
 }
@@ -441,11 +441,11 @@ void swap(GridPoint& a, GridPoint& b) noexcept {
     swap(a.z_child_pos_, b.z_child_pos_);
 }
 
-GridBounds GridBounds::from_xywh(int x, int y, int w, int h, int world_z, int layer) {
+GridBounds GridBounds::from_xywh(int x, int z, int w, int h, int world_y, int layer) {
     const int max_x = x + std::max(0, w - 1);
-    const int max_y = y + std::max(0, h - 1);
-    GridPoint min = GridPoint::make_virtual(x, y, world_z, layer);
-    GridPoint max = GridPoint::make_virtual(max_x, max_y, world_z, layer);
+    const int max_z = z + std::max(0, h - 1);
+    GridPoint min = GridPoint::make_virtual(x, world_y, z, layer);
+    GridPoint max = GridPoint::make_virtual(max_x, world_y, max_z, layer);
     return GridBounds(min, max);
 }
 
@@ -455,31 +455,31 @@ GridBounds GridBounds::from_min_max(const GridPoint& min_pt, const GridPoint& ma
 
 bool GridBounds::contains(const GridPoint& pt) const {
     return pt.world_x() >= min.world_x() && pt.world_x() <= max.world_x() &&
-           pt.world_y() >= min.world_y() && pt.world_y() <= max.world_y();
+           pt.world_z() >= min.world_z() && pt.world_z() <= max.world_z();
 }
 
 GridBounds GridBounds::expanded(int margin) const {
     const int m = std::max(0, margin);
-    GridPoint new_min = GridPoint::make_virtual(min.world_x() - m, min.world_y() - m, min.world_z(), min.resolution_layer());
-    GridPoint new_max = GridPoint::make_virtual(max.world_x() + m, max.world_y() + m, max.world_z(), max.resolution_layer());
+    GridPoint new_min = GridPoint::make_virtual(min.world_x() - m, min.world_y(), min.world_z() - m, min.resolution_layer());
+    GridPoint new_max = GridPoint::make_virtual(max.world_x() + m, max.world_y(), max.world_z() + m, max.resolution_layer());
     return GridBounds(new_min, new_max);
 }
 
 SDL_Rect GridBounds::to_sdl_rect() const {
     return SDL_Rect{
         min.world_x(),
-        min.world_y(),
+        min.world_z(),
         std::max(0, max.world_x() - min.world_x() + 1),
-        std::max(0, max.world_y() - min.world_y() + 1)
+        std::max(0, max.world_z() - min.world_z() + 1)
     };
 }
 
 SDL_FRect GridBounds::to_sdl_frect() const {
     return SDL_FRect{
         static_cast<float>(min.world_x()),
-        static_cast<float>(min.world_y()),
+        static_cast<float>(min.world_z()),
         static_cast<float>(std::max(0, max.world_x() - min.world_x() + 1)),
-        static_cast<float>(std::max(0, max.world_y() - min.world_y() + 1))
+        static_cast<float>(std::max(0, max.world_z() - min.world_z() + 1))
     };
 }
 

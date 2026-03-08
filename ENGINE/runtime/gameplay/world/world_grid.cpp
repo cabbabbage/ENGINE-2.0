@@ -355,15 +355,16 @@ void WorldGrid::attach_asset_to_grid_point(std::unique_ptr<Asset> owned, Asset* 
     }
 }
 
-GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent, int world_z, int resolution_layer_override) {
+GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent, int world_y, int resolution_layer_override) {
     const int resolution_layer = (resolution_layer_override >= 0) ? resolution_layer_override : default_resolution_layer();
     const int spacing = grid_spacing_for_layer(resolution_layer);
     const int canonical_world_x = origin_.world_x() + grid_index.x * spacing;
-    const int canonical_world_y = origin_.world_y() + grid_index.y * spacing;
-    const GridKey canonical_key{canonical_world_x, canonical_world_y, world_z, resolution_layer};
+    const int canonical_world_z = origin_.world_z() + grid_index.z * spacing;
+    const int canonical_world_y = world_y;
+    const GridKey canonical_key{canonical_world_x, canonical_world_y, canonical_world_z, resolution_layer};
 
     std::uint32_t salt = 0;
-    GridId id = make_point_id(grid_index.x, grid_index.y, world_z, resolution_layer, salt);
+    GridId id = make_point_id(grid_index.x, grid_index.z, world_y, resolution_layer, salt);
     while (true) {
         auto existing_it = points_.find(id);
         if (existing_it == points_.end()) {
@@ -372,21 +373,21 @@ GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, 
         const GridPoint& existing = existing_it->second;
         const bool same_identity = existing.world_x() == canonical_world_x &&
                                    existing.world_y() == canonical_world_y &&
-                                   existing.world_z() == world_z &&
+                                   existing.world_z() == canonical_world_z &&
                                    existing.resolution_layer() == resolution_layer;
         if (same_identity) {
             key_to_id_[canonical_key] = id;
             return existing_it->second;
         }
         ++salt;
-        id = make_point_id(grid_index.x, grid_index.y, world_z, resolution_layer, salt);
+        id = make_point_id(grid_index.x, grid_index.z, world_y, resolution_layer, salt);
     }
 
     auto [it, inserted] = points_.try_emplace(
         id,
         canonical_world_x,
         canonical_world_y,
-        world_z,
+        world_y,
         resolution_layer,
         grid_index,
         chunk_index,
@@ -463,9 +464,9 @@ GridPoint& WorldGrid::find_or_create_grid_point(const GridKey& key, Chunk* ownin
     GridCoord chunk_idx{0, 0};
     if (chunk_step > 0) {
         chunk_idx.x = grid_floor_div(world.world_x() - origin_.world_x(), chunk_step);
-        chunk_idx.y = grid_floor_div(world.world_y() - origin_.world_y(), chunk_step);
+        chunk_idx.z = grid_floor_div(world.world_z() - origin_.world_z(), chunk_step);
     }
-    GridPoint& point = ensure_point(grid_idx, chunk_idx, owning_chunk, parent, key.z, key.layer);
+    GridPoint& point = ensure_point(grid_idx, chunk_idx, owning_chunk, parent, key.y, key.layer);
 
     key_to_id_[key] = point.id;
     return point;
@@ -714,9 +715,9 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
     }
 
     const int i = grid_floor_div(world_pos.world_x() - origin_.world_x(), chunk_step);
-    const int j = grid_floor_div(world_pos.world_y() - origin_.world_y(), chunk_step);
-    const GridCoord chunk_index{i, j};
-    Chunk& chunk = chunks_.ensure(chunk_index.x, chunk_index.y, r_chunk_, origin_);
+    const int k = grid_floor_div(world_pos.world_z() - origin_.world_z(), chunk_step);
+    const GridCoord chunk_index{i, k};
+    Chunk& chunk = chunks_.ensure(chunk_index.x, chunk_index.z, r_chunk_, origin_);
 
     auto ensure_asset_in_chunk = [&]() {
         auto it = std::find(chunk.assets.begin(), chunk.assets.end(), raw);
@@ -739,7 +740,7 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
     }
     ensure_asset_in_chunk();
 
-    GridPoint& point = ensure_point(grid_index, chunk_index, &chunk, nullptr, new_key.z, new_key.layer);
+    GridPoint& point = ensure_point(grid_index, chunk_index, &chunk, nullptr, new_key.y, new_key.layer);
     attach_asset_to_grid_point(std::move(a), raw, point);
     return raw;
 }
@@ -754,8 +755,8 @@ Chunk* WorldGrid::ensure_chunk_from_world(const GridPoint& world_px) {
         return nullptr;
     }
     const int i = grid_floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
-    const int j = grid_floor_div(world_px.world_y() - origin_.world_y(), chunk_step);
-    return get_or_create_chunk_ij(i, j);
+    const int k = grid_floor_div(world_px.world_z() - origin_.world_z(), chunk_step);
+    return get_or_create_chunk_ij(i, k);
 }
 
 Chunk* WorldGrid::chunk_from_world(const GridPoint& world_px) const {
@@ -764,12 +765,12 @@ Chunk* WorldGrid::chunk_from_world(const GridPoint& world_px) const {
         return nullptr;
     }
     const int i = grid_floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
-    const int j = grid_floor_div(world_px.world_y() - origin_.world_y(), chunk_step);
-    return chunks_.find(i, j);
+    const int k = grid_floor_div(world_px.world_z() - origin_.world_z(), chunk_step);
+    return chunks_.find(i, k);
 }
 
-Chunk* WorldGrid::get_or_create_chunk_ij(int i, int j) {
-    return &chunks_.ensure(i, j, r_chunk_, origin_);
+Chunk* WorldGrid::get_or_create_chunk_ij(int i, int k) {
+    return &chunks_.ensure(i, k, r_chunk_, origin_);
 }
 
 void WorldGrid::remove_from_chunk(Asset* a, Chunk* c) {
@@ -794,19 +795,19 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
         return nullptr;
     }
     const int old_i = grid_floor_div(old_pos.world_x() - origin_.world_x(), chunk_step);
-    const int old_j = grid_floor_div(old_pos.world_y() - origin_.world_y(), chunk_step);
+    const int old_k = grid_floor_div(old_pos.world_z() - origin_.world_z(), chunk_step);
     const int new_i = grid_floor_div(new_pos.world_x() - origin_.world_x(), chunk_step);
-    const int new_j = grid_floor_div(new_pos.world_y() - origin_.world_y(), chunk_step);
-    const GridCoord chunk_index{new_i, new_j};
+    const int new_k = grid_floor_div(new_pos.world_z() - origin_.world_z(), chunk_step);
+    const GridCoord chunk_index{new_i, new_k};
 
     Chunk* previous = nullptr;
     auto existing = residency_.find(a);
     if (existing != residency_.end()) {
         previous = existing->second;
     } else {
-        previous = chunks_.find(old_i, old_j);
+        previous = chunks_.find(old_i, old_k);
     }
-    Chunk& target = chunks_.ensure(new_i, new_j, r_chunk_, origin_);
+    Chunk& target = chunks_.ensure(new_i, new_k, r_chunk_, origin_);
 
     if (previous != &target) {
         if (previous) {
@@ -825,8 +826,8 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     }
 
     std::unique_ptr<Asset> owned;
-    const bool xy_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_y() != new_pos.world_y());
-    const bool point_changed = xy_changed ||
+    const bool xz_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_z() != new_pos.world_z());
+    const bool point_changed = xz_changed ||
                                (old_pos.world_z() != new_pos.world_z()) ||
                                (old_pos.resolution_layer() != new_pos.resolution_layer());
     if (point_changed) {
@@ -836,7 +837,7 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     }
 
     const GridKey new_key = grid_key_from_world(new_pos, new_pos.world_z(), resolved_layer);
-    GridPoint& point = ensure_point(new_index, chunk_index, &target, nullptr, new_key.z, new_key.layer);
+    GridPoint& point = ensure_point(new_index, chunk_index, &target, nullptr, new_key.y, new_key.layer);
 
     if (point_changed) {
         if (owned) {
@@ -896,16 +897,16 @@ void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_
     GridBounds expanded = camera_world.expanded(margin);
     const int min_x = std::min(expanded.min.world_x(), expanded.max.world_x());
     const int max_x = std::max(expanded.min.world_x(), expanded.max.world_x());
-    const int min_y = std::min(expanded.min.world_y(), expanded.max.world_y());
-    const int max_y = std::max(expanded.min.world_y(), expanded.max.world_y());
+    const int min_z = std::min(expanded.min.world_z(), expanded.max.world_z());
+    const int max_z = std::max(expanded.min.world_z(), expanded.max.world_z());
 
     const bool needs_update = !has_cached_camera_rect_ ||
         last_margin_px_ != margin_px ||
         last_chunk_resolution_ != r_chunk_ ||
         last_expanded_camera_.min.world_x() != min_x ||
-        last_expanded_camera_.min.world_y() != min_y ||
+        last_expanded_camera_.min.world_z() != min_z ||
         last_expanded_camera_.max.world_x() != max_x ||
-        last_expanded_camera_.max.world_y() != max_y;
+        last_expanded_camera_.max.world_z() != max_z;
 
     if (!needs_update) {
         return;
@@ -914,15 +915,15 @@ void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_
     chunks_.clear_active();
     auto& active = chunks_.active();
     const int chunk_step = 1 << r_chunk_;
-    if (chunk_step > 0 && max_x >= min_x && max_y >= min_y) {
+    if (chunk_step > 0 && max_x >= min_x && max_z >= min_z) {
         const int min_i = grid_floor_div(min_x - origin_.world_x(), chunk_step);
-        const int min_j = grid_floor_div(min_y - origin_.world_y(), chunk_step);
+        const int min_k = grid_floor_div(min_z - origin_.world_z(), chunk_step);
         const int max_i = grid_floor_div(max_x - origin_.world_x(), chunk_step);
-        const int max_j = grid_floor_div(max_y - origin_.world_y(), chunk_step);
-        if (max_i >= min_i && max_j >= min_j) {
+        const int max_k = grid_floor_div(max_z - origin_.world_z(), chunk_step);
+        if (max_i >= min_i && max_k >= min_k) {
             for (int i = min_i; i <= max_i; ++i) {
-                for (int j = min_j; j <= max_j; ++j) {
-                    if (Chunk* chunk = chunks_.find(i, j)) {
+                for (int k = min_k; k <= max_k; ++k) {
+                    if (Chunk* chunk = chunks_.find(i, k)) {
                         active.push_back(chunk);
                     }
                 }
@@ -957,8 +958,8 @@ GridCoord WorldGrid::grid_index_from_world(const GridPoint& world_point, int lay
         return GridCoord{0, 0};
     }
     const int i = grid_floor_div(world_point.world_x() - origin_.world_x(), spacing);
-    const int j = grid_floor_div(world_point.world_y() - origin_.world_y(), spacing);
-    return GridCoord{i, j};
+    const int k = grid_floor_div(world_point.world_z() - origin_.world_z(), spacing);
+    return GridCoord{i, k};
 }
 
 void WorldGrid::propagate_branch_active(GridPoint* node) {

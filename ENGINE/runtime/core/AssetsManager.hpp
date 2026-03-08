@@ -1,7 +1,6 @@
 #pragma once
 
 #include "rendering/render/warped_screen_grid.hpp"
-#include "rendering/render/terrain_runtime_state.hpp"
 #include "assets/asset_library.hpp"
 #include "core/popup_manager.hpp"
 #include <SDL3/SDL.h>
@@ -30,7 +29,6 @@ class Room;
 class Input;
 class DevControls;
 class AssetInfo;
-class TerrainField;
 
 class QuickTaskPopup;
 namespace animation_editor {
@@ -177,13 +175,6 @@ public:
 
     void set_dev_grid_overlay_callback(std::function<void()> cb) { dev_grid_overlay_callback_ = cb; }
 
-    void set_terrain_sources(TerrainField* field, const TerrainRuntimeState& state);
-    void refresh_terrain_dependents();
-    const TerrainRuntimeState* terrain_runtime_state() const {
-        return terrain_runtime_state_ ? &*terrain_runtime_state_ : nullptr;
-    }
-    TerrainField* terrain_field_source() const { return terrain_field_source_; }
-
     void set_editor_current_room(Room* room);
 
     Room* current_room() { return current_room_; }
@@ -272,7 +263,6 @@ private:
     bool run_fallback_exit_save(const std::string& reason);
     bool persist_map_if_dirty(const std::string& reason);
     bool save_dirty_asset_caches(const std::string& reason);
-    void bake_terrain_if_needed(const TerrainRuntimeState& state, TerrainField& field);
     world::GridPoint resolve_floor_world_point(SDL_Point world_pos, int resolution_layer = -1) const;
 
     bool process_removals();
@@ -399,9 +389,6 @@ private:
     std::uint64_t dev_active_state_version_ = 1;
 
     std::function<void()> dev_grid_overlay_callback_;
-
-    TerrainField* terrain_field_source_ = nullptr; // non-owning; owned by SceneRenderer
-    std::optional<TerrainRuntimeState> terrain_runtime_state_;
 
     std::vector<class AnchorBoundAssetHelper*> binding_helpers_;
 

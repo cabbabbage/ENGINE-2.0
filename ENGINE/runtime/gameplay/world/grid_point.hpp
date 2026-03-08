@@ -116,7 +116,7 @@ struct GridPoint {
     static GridPoint& from_world(int x, int y, int z, int layer, WorldGrid& grid);
     static GridPoint& from_world(const GridKey& key, WorldGrid& grid);
     static GridPoint* from_screen(const SDL_FPoint& screen,
-                                  float world_z,
+                                  float world_y,
                                   const CameraProjectionParams& proj,
                                   WorldGrid& grid);
     static GridPoint make_virtual(int world_x,

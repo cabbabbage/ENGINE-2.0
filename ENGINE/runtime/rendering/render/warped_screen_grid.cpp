@@ -356,16 +356,16 @@ struct ProjectionResult {
 
         const double unit_meters = std::max(1e-6, cam.meters_scale);
         const Vec3 unit_world_x{ unit_meters, 0.0, 0.0 };
-        const Vec3 unit_world_z{ 0.0, 0.0, unit_meters };
+        const Vec3 unit_world_y{ 0.0, unit_meters, 0.0 };
         const Vec3 delta_cam_x{
             dot(unit_world_x, cam.right),
             dot(unit_world_x, cam.up),
             dot(unit_world_x, cam.forward)
         };
-        const Vec3 delta_cam_z{
-            dot(unit_world_z, cam.right),
-            dot(unit_world_z, cam.up),
-            dot(unit_world_z, cam.forward)
+        const Vec3 delta_cam_y{
+            dot(unit_world_y, cam.right),
+            dot(unit_world_y, cam.up),
+            dot(unit_world_y, cam.forward)
         };
         auto screen_distance_for_delta = [&](const Vec3& delta_cam) -> std::optional<double> {
             const double depth2 = depth_along_forward + delta_cam.z;
@@ -394,9 +394,9 @@ struct ProjectionResult {
         if (const auto scale_x = screen_distance_for_delta(delta_cam_x)) {
             perspective_scale = static_cast<float>(*scale_x);
         }
-        if (const auto scale_z = screen_distance_for_delta(delta_cam_z)) {
+        if (const auto scale_y = screen_distance_for_delta(delta_cam_y)) {
             if (std::isfinite(perspective_scale) && perspective_scale > 1e-6f) {
-                vertical_scale = static_cast<float>(*scale_z / perspective_scale);
+                vertical_scale = static_cast<float>(*scale_y / perspective_scale);
             }
         }
         if (std::isfinite(cam.near_camera_max_perspective_scale) &&
@@ -900,8 +900,8 @@ SDL_FPoint WarpedScreenGrid::map_to_screen_f(SDL_FPoint world) const {
     const CameraState& cam = camera_state_cached();
     ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
-                                                static_cast<double>(world.y),
-                                                0.0,
+                                                0.0, // height defaults to 0
+                                                static_cast<double>(world.y), // depth
                                                 screen_width_,
                                                 screen_height_,
                                                 horizon_fade_for_height(cam.camera_height));
@@ -915,8 +915,8 @@ bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_
     const CameraState& cam = camera_state_cached();
     ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
-                                                static_cast<double>(world.y),
-                                                static_cast<double>(world_z),
+                                                static_cast<double>(world_z),   // height (Y)
+                                                static_cast<double>(world.y),   // depth (Z)
                                                 screen_width_,
                                                 screen_height_,
                                                 horizon_fade_for_height(cam.camera_height));
@@ -956,10 +956,10 @@ WarpedScreenGrid::RenderEffects WarpedScreenGrid::compute_render_effects(
     RenderEffects result;
 
     const CameraState& cam = camera_state_cached();
-    ProjectionResult proj = project_world_point_internal(cam,
+ProjectionResult proj = project_world_point_internal(cam,
                                                 static_cast<double>(world.x),
-                                                static_cast<double>(world.y),
-                                                static_cast<double>(world_z),
+                                                static_cast<double>(world_z),   // height (Y)
+                                                static_cast<double>(world.y),   // depth (Z)
                                                 screen_width_,
                                                 screen_height_,
                                                 horizon_fade_for_height(cam.camera_height));
@@ -1111,63 +1111,14 @@ void WarpedScreenGrid::clear_grid_state() {
     bounds_ = GridBounds{};
 }
 
-void WarpedScreenGrid::rebuild_grid_bounds() {
-    if (warped_points_.empty()) {
-        cached_world_rect_ = SDL_Rect{0, 0, 0, 0};
-        bounds_ = GridBounds{};
-        return;
-    }
-
-    int minx = INT_MAX, miny = INT_MAX, maxx = INT_MIN, maxy = INT_MIN;
-    for (const world::GridPoint* gp : warped_points_) {
-        if (!gp) continue;
-        minx = std::min(minx, gp->world.x);
-        miny = std::min(miny, gp->world.y);
-        maxx = std::max(maxx, gp->world.x);
-        maxy = std::max(maxy, gp->world.y);
-    }
-    if (minx > maxx || miny > maxy) {
-        cached_world_rect_ = SDL_Rect{0, 0, 0, 0};
-        bounds_ = GridBounds{};
-        return;
-    }
-    cached_world_rect_.x = minx;
-    cached_world_rect_.y = miny;
-    cached_world_rect_.w = std::max(0, maxx - minx);
-    cached_world_rect_.h = std::max(0, maxy - miny);
-
-    bounds_.left = 0.0f;
-    bounds_.top = 0.0f;
-    bounds_.right = static_cast<float>(screen_width_);
-    bounds_.bottom = static_cast<float>(screen_height_);
-}
 
 void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                                     float dt_seconds,
-                                    std::uint64_t frame_id,
-                                    TerrainField* terrain_field,
-                                    const TerrainRuntimeState* terrain_state,
-                                    const std::vector<Room*>* rooms) {
+                                    std::uint64_t frame_id) {
     (void)dt_seconds;
     frame_counter_ = frame_id;
     const std::uint64_t frame_stamp = frame_id;
     clear_grid_state();
-
-    terrain_telemetry_ = {};
-    terrain_telemetry_.frame_id = frame_stamp;
-
-    TerrainField::CacheMetrics cache_before{};
-    const bool terrain_available = terrain_field && terrain_state && rooms;
-    const bool terrain_enabled = terrain_available && terrain_state->settings.enabled;
-    if (terrain_available) {
-        cache_before = terrain_field->cache_metrics();
-        terrain_telemetry_.terrain_revision = terrain_state->revision;
-        terrain_telemetry_.cache_before = cache_before.frame_cache_entries;
-        terrain_telemetry_.cache_resets_total = cache_before.cache_resets;
-    }
-    if (terrain_enabled) {
-        terrain_field->begin_frame(frame_stamp, *terrain_state, *rooms);
-    }
 
     // Refresh the world-space view area based on the latest camera parameters.
     recompute_current_view();
@@ -1200,14 +1151,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     warped_points_.reserve(grid_points.size());
     visible_points_.reserve(grid_points.size());
     visible_assets_.reserve(grid_points.size());
-    std::size_t terrain_samples_main = 0;
-    std::size_t terrain_samples_neighbor = 0;
-    std::size_t projected_points = 0;
-    std::size_t revision_reprojects = 0;
-    std::size_t simulated_revision_failures = 0;
 
-    const float screen_w    = static_cast<float>(screen_width_);
-    const float screen_h    = static_cast<float>(screen_height_);
     const ScreenBounds virtual_bounds = expanded_screen_bounds(screen_width_, screen_height_);
     const float virtual_w = virtual_bounds.right - virtual_bounds.left;
     const float virtual_h = virtual_bounds.bottom - virtual_bounds.top;
@@ -1224,16 +1168,9 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         last_min_world_z_ = 0;
         last_max_world_z_ = 0;
         last_depth_culled_ = 0;
-        if (terrain_available) {
-            const TerrainField::CacheMetrics after_metrics = terrain_field->cache_metrics();
-            terrain_telemetry_.cache_after = after_metrics.frame_cache_entries;
-            terrain_telemetry_.cache_resets_total = after_metrics.cache_resets;
-            terrain_telemetry_.terrain_revision = after_metrics.runtime_revision;
-        }
         rebuild_grid_bounds();
         return;
     }
-    const float horizon_screen_y = static_cast<float>(cam_state.horizon_screen_y);
     const float horizon_band = horizon_fade_for_height(cam_state.camera_height);
 
     const float world_margin_units = std::max(0.0f, settings_.extra_cull_margin);
@@ -1247,15 +1184,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         virtual_w + margin_px * 2.0f,
         virtual_bounds.bottom - cull_top + margin_px
 };
-    double allowed_sample_ratio = 1.0;
-    if (virtual_w > 0.0f && virtual_h > 0.0f) {
-        const double cull_area = static_cast<double>(cull_rect.w) * static_cast<double>(cull_rect.h);
-        const double virtual_area = static_cast<double>(virtual_w) * static_cast<double>(virtual_h);
-        const double area_ratio = virtual_area > 0.0 ? cull_area / virtual_area : 0.0;
-        allowed_sample_ratio = std::max(1.0, area_ratio + 0.25);
-    }
     const float min_visible_px =
-        screen_h * std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
+        static_cast<float>(screen_height_) * std::clamp(settings_.min_visible_screen_ratio, 0.0f, 0.5f);
     last_min_world_z_ = std::numeric_limits<int>::max();
     last_max_world_z_ = std::numeric_limits<int>::min();
     last_depth_culled_ = 0;
@@ -1354,8 +1284,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         if (gp) {
             perspective_scale = std::max(0.0001f, gp->perspective_scale);
         }
-        // Bounds should be expressed in world units; remove per-point perspective scaling
-        // that will be reapplied later by the projection step.
         const float world_scale = scale / perspective_scale;
 
         const float fw = static_cast<float>(std::max(1, asset->info->original_canvas_width));
@@ -1435,85 +1363,13 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         }
 
         const SDL_Point world_pos{ gp->world_x(), gp->world_y() };
-        const std::uint64_t terrain_rev = terrain_enabled ? terrain_state->revision : 0;
-        const bool terrain_changed = terrain_enabled && gp->terrain_revision != terrain_rev;
-        float terrain_height = terrain_enabled ? gp->terrain_elevation : 0.0f;
-        float terrain_slope_x = terrain_enabled ? gp->terrain_slope_x : 0.0f;
-        float terrain_slope_y = terrain_enabled ? gp->terrain_slope_y : 0.0f;
+        const double base_world_z = static_cast<double>(gp->world_z());
 
-        if (terrain_enabled && (terrain_changed || !std::isfinite(terrain_height))) {
-            const int layer = gp->resolution_layer() < 0 ? world_grid.default_resolution_layer() : gp->resolution_layer();
-            world::GridKey key{ gp->world_x(), gp->world_y(), gp->world_z(), layer };
-            terrain_height = terrain_field->sample_elevation(key, world_grid, *rooms, *terrain_state, frame_stamp);
-            ++terrain_samples_main;
-            terrain_slope_x = 0.0f;
-            terrain_slope_y = 0.0f;
-
-            const bool sample_normals = point_inside_frustum(static_cast<double>(world_pos.x),
-                                                             static_cast<double>(world_pos.y),
-                                                             static_cast<double>(gp->world_z()) + static_cast<double>(terrain_height));
-            if (sample_normals) {
-                const int clamped_layer = std::clamp(layer, 0, world_grid.max_resolution_layers());
-                const int spacing = std::max(1, world_grid.grid_spacing_for_layer(clamped_layer));
-                auto neighbor_sample = [&](int wx, int wy) -> float {
-                    world::GridKey neighbor{wx, wy, gp->world_z(), clamped_layer};
-                    ++terrain_samples_neighbor;
-                    return terrain_field->sample_elevation(neighbor, world_grid, *rooms, *terrain_state, frame_stamp);
-                };
-                const float hx1 = neighbor_sample(world_pos.x + spacing, world_pos.y);
-                const float hx0 = neighbor_sample(world_pos.x - spacing, world_pos.y);
-                const float hy1 = neighbor_sample(world_pos.x, world_pos.y + spacing);
-                const float hy0 = neighbor_sample(world_pos.x, world_pos.y - spacing);
-                const float denom = static_cast<float>(spacing * 2);
-                if (denom > 0.0f) {
-                    terrain_slope_x = (hx1 - hx0) / denom;
-                    terrain_slope_y = (hy1 - hy0) / denom;
-                }
-            }
-
-            gp->terrain_elevation = terrain_height;
-            gp->terrain_slope_x = terrain_slope_x;
-            gp->terrain_slope_y = terrain_slope_y;
-            gp->terrain_revision = terrain_rev;
-        } else if (terrain_available && !terrain_state->settings.enabled) {
-            gp->terrain_elevation = 0.0f;
-            gp->terrain_slope_x = 0.0f;
-            gp->terrain_slope_y = 0.0f;
-            gp->terrain_revision = terrain_rev;
-            terrain_height = 0.0f;
-            terrain_slope_x = 0.0f;
-            terrain_slope_y = 0.0f;
-        } else if (!terrain_available && gp->terrain_revision != 0) {
-            gp->terrain_revision = 0;
-            gp->terrain_elevation = 0.0f;
-            gp->terrain_slope_x = 0.0f;
-            gp->terrain_slope_y = 0.0f;
-        }
-
-        const double base_world_z = static_cast<double>(gp->world_z()) + static_cast<double>(terrain_height);
-
-        const bool needs_projection =
-            (terrain_enabled && terrain_changed) ||
-            gp->needs_projection_update(frame_stamp, camera_state_version_, terrain_rev);
-
-        if (terrain_enabled) {
-            const std::uint64_t simulated_revision =
-                (terrain_rev == std::numeric_limits<std::uint64_t>::max())
-                    ? terrain_rev
-                    : terrain_rev + 1;
-            if (!gp->needs_projection_update(frame_stamp, camera_state_version_, simulated_revision)) {
-                ++simulated_revision_failures;
-            }
-        }
+        const bool needs_projection = gp->needs_projection_update(frame_stamp, camera_state_version_);
 
         CameraSpaceData space{};
 
         if (needs_projection) {
-            ++projected_points;
-            if (terrain_changed) {
-                ++revision_reprojects;
-            }
-            // Use GridPoint's self-contained projection method
             world::CameraProjectionParams params = camera_state_to_projection_params(
                 cam_state, screen_width_, screen_height_, horizon_band);
             params.state_version = camera_state_version_;
@@ -1521,13 +1377,11 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             gp->project_to_screen(params);
             gp->mark_screen_data_updated(frame_stamp);
 
-            // Still need camera space data for frustum culling
             space = to_camera_space(
                 static_cast<double>(world_pos.x),
                 static_cast<double>(world_pos.y),
                 base_world_z);
         } else {
-            // GridPoint already has valid cached data
             space.distance = static_cast<double>(gp->distance_to_camera);
             space.valid = true;
         }
@@ -1613,7 +1467,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             };
         }
 
-        // Track z-range and depth culling stats
         const int z_floor = static_cast<int>(std::floor(base_world_z));
         const int z_ceil  = static_cast<int>(std::ceil(base_world_z));
         last_min_world_z_ = std::min(last_min_world_z_, z_floor);
@@ -1622,8 +1475,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             ++last_depth_culled_;
         }
 
-        // GridPoint now has all projection data from project_to_screen()
-        // Check which assets are actually visible in the frustum
         frustum_hits.clear();
         for (const auto& owned : gp->occupants) {
             if (!owned) {
@@ -1637,7 +1488,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             }
         }
 
-        // Update visibility based on frustum check
         gp->on_screen = !frustum_hits.empty();
 
         warped_points_.push_back(gp);
@@ -1651,69 +1501,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     if (!active_chunks_.empty()) {
         std::sort(active_chunks_.begin(), active_chunks_.end());
         active_chunks_.erase(std::unique(active_chunks_.begin(), active_chunks_.end()), active_chunks_.end());
-    }
-
-    if (terrain_available) {
-        const TerrainField::CacheMetrics after_metrics = terrain_field->cache_metrics();
-        terrain_telemetry_.cache_after = after_metrics.frame_cache_entries;
-        terrain_telemetry_.cache_resets_total = after_metrics.cache_resets;
-        terrain_telemetry_.terrain_revision = after_metrics.runtime_revision;
-    }
-
-    terrain_telemetry_.sampled_points = terrain_samples_main;
-    terrain_telemetry_.neighbor_samples = terrain_samples_neighbor;
-    terrain_telemetry_.projected_points = projected_points;
-    terrain_telemetry_.revision_reprojects = revision_reprojects;
-    terrain_telemetry_.simulated_revision_failures = simulated_revision_failures;
-    terrain_telemetry_.visible_points = visible_points_.size();
-    terrain_telemetry_.allowed_ratio = allowed_sample_ratio;
-    if (terrain_telemetry_.visible_points > 0) {
-        terrain_telemetry_.sample_to_visible_ratio =
-            static_cast<double>(terrain_samples_main) /
-            static_cast<double>(terrain_telemetry_.visible_points);
-    } else {
-        terrain_telemetry_.sample_to_visible_ratio = 0.0;
-    }
-    terrain_telemetry_.sample_ratio_warning =
-        terrain_telemetry_.visible_points > 0 &&
-        terrain_telemetry_.sample_to_visible_ratio > allowed_sample_ratio;
-
-    if (terrain_enabled) {
-        vibble::log::debug("[WarpedScreenGrid] terrain frame=" + std::to_string(frame_stamp) +
-                           " cache_before=" + std::to_string(terrain_telemetry_.cache_before) +
-                           " cache_after=" + std::to_string(terrain_telemetry_.cache_after) +
-                           " samples=" + std::to_string(terrain_samples_main) +
-                           " neighbor_samples=" + std::to_string(terrain_samples_neighbor) +
-                           " visible=" + std::to_string(terrain_telemetry_.visible_points) +
-                           " ratio=" + std::to_string(terrain_telemetry_.sample_to_visible_ratio) +
-                           " allowed=" + std::to_string(terrain_telemetry_.allowed_ratio) +
-                           " projections=" + std::to_string(projected_points) +
-                           " revision_reprojects=" + std::to_string(revision_reprojects) +
-                           " cache_resets_total=" + std::to_string(terrain_telemetry_.cache_resets_total));
-    }
-    if (terrain_telemetry_.sample_ratio_warning) {
-        vibble::log::warn("[WarpedScreenGrid] terrain sampling ratio exceeded cull margin: samples=" +
-                          std::to_string(terrain_samples_main) +
-                          " visible=" + std::to_string(terrain_telemetry_.visible_points) +
-                          " ratio=" + std::to_string(terrain_telemetry_.sample_to_visible_ratio) +
-                          " allowed=" + std::to_string(terrain_telemetry_.allowed_ratio) +
-                          " extra_cull_margin=" + std::to_string(settings_.extra_cull_margin));
-    }
-    if (simulated_revision_failures > 0) {
-        vibble::log::warn("[WarpedScreenGrid] simulated terrain revision bump did not invalidate projections for " +
-                          std::to_string(simulated_revision_failures) + " point(s)");
-    }
-
-    if (last_min_world_z_ == std::numeric_limits<int>::max()) {
-        last_min_world_z_ = 0;
-        last_max_world_z_ = 0;
-    }
-    if (depth_debug_logging_) {
-        vibble::log::debug("[WarpedScreenGrid] frame=" + std::to_string(frame_stamp) +
-                           " nodes=" + std::to_string(last_nodes_visited_) +
-                           " branches_skipped=" + std::to_string(last_branches_skipped_) +
-                           " depth_culled=" + std::to_string(last_depth_culled_) +
-                           " z_range=[" + std::to_string(last_min_world_z_) + "," + std::to_string(last_max_world_z_) + "]");
     }
 
     rebuild_grid_bounds();

@@ -1822,10 +1822,7 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
     last_grid_rebuild_frame_ = frame_id_;
     camera_.rebuild_grid(world_grid_,
                          last_frame_dt_seconds_,
-                         frame_id_,
-                         terrain_field_source_,
-                         terrain_runtime_state(),
-                         &rooms_);
+                         frame_id_);
     world_grid_.update_active_chunks(screen_world_rect(), 0);
     rebuild_active_from_screen_grid();
     mark_anchor_bases_dirty_for_active_assets();

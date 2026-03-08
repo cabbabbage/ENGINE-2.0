@@ -116,7 +116,7 @@ class Asset {
     GridPoint* grid_point() const { return pos_; }
     int world_x() const { return pos_ ? pos_->world_x() : initial_world_pos_.x; }
     int world_y() const { return pos_ ? pos_->world_y() : initial_world_pos_.y; }
-    int world_z() const { return pos_ ? pos_->world_z() : 0; }
+    int world_z() const { return pos_ ? pos_->world_z() : initial_world_z_; }
     SDL_Point world_xz_point() const { return SDL_Point{world_x(), world_z()}; }
     SDL_Point world_xy_point() const { return SDL_Point{world_x(), world_y()}; }
     int height() const {
@@ -361,6 +361,7 @@ private:
     bool merged_from_neighbors_ = false;
     GridPoint* pos_ = nullptr; // Non-owning pointer to GridPoint in WorldGrid; set by WorldGrid on registration
     SDL_Point initial_world_pos_{0, 0}; // Spawn position, used before registration with WorldGrid
+    int initial_world_z_ = 0;           // Spawn depth, used before registration with WorldGrid
     void set_flip();
 
     float frame_progress = 0.0f;

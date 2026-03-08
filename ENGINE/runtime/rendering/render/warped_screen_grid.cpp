@@ -198,7 +198,8 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         Vec3 horiz_dir{ to_anchor.x, 0.0, to_anchor.z };
         const double horiz_len = length(horiz_dir);
         if (horiz_len < 1e-3 || !std::isfinite(horiz_len)) {
-            horiz_dir = Vec3{0.0, 0.0, -1.0};
+            // Default to looking forward along +Z (canonical depth).
+            horiz_dir = Vec3{0.0, 0.0, 1.0};
         } else {
             horiz_dir = horiz_dir * (1.0 / horiz_len);
         }

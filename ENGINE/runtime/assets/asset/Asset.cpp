@@ -81,7 +81,8 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , static_frame(false)
 , active(false)
 , pos_(nullptr)
-, initial_world_pos_(start_pos)
+, initial_world_pos_(SDL_Point{start_pos.x, 0})
+, initial_world_z_(start_pos.y)
 , grid_resolution(vibble::grid::clamp_resolution(grid_resolution_))
 , depth(depth_)
 , spawn_id(spawn_id_)
@@ -162,6 +163,7 @@ Asset::Asset(const Asset& o)
     , current_animation(o.current_animation)
     , pos_(nullptr)
     , initial_world_pos_(o.initial_world_pos_)
+    , initial_world_z_(o.initial_world_z_)
     , grid_resolution(vibble::grid::clamp_resolution(o.grid_resolution))
     , active(o.active)
     , flipped(o.flipped)
@@ -223,6 +225,8 @@ Asset& Asset::operator=(const Asset& o) {
         info                 = o.info;
         current_animation    = o.current_animation;
     pos_                 = nullptr;
+    initial_world_pos_   = o.initial_world_pos_;
+    initial_world_z_     = o.initial_world_z_;
     grid_resolution      = vibble::grid::clamp_resolution(o.grid_resolution);
 	active               = o.active;
         flipped              = o.flipped;
@@ -1394,6 +1398,9 @@ void Asset::move_to_world_position(int world_x,
 
     grid_resolution = resolved_layer;
     mark_anchors_dirty();
+    initial_world_pos_.x = world_x;
+    initial_world_pos_.y = world_y;
+    initial_world_z_ = world_z;
 }
 
 void Asset::set_world_z(int world_z) {

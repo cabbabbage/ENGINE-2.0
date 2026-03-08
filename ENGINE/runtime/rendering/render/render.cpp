@@ -281,7 +281,8 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
             verts[3].tex_coord = SDL_FPoint{0.0f, tex_h};
 
             if (batcher) {
-                batcher->addQuad(tile.texture, verts, indices, SDL_BLENDMODE_BLEND, 0.0);
+                // Ground tiles sit behind world assets; use a large depth so batch order stays monotonic.
+                batcher->addQuad(tile.texture, verts, indices, SDL_BLENDMODE_BLEND, 1'000'000.0);
             } else {
                 SDL_RenderGeometry(renderer, tile.texture, verts, 4, indices, 6);
             }
@@ -841,6 +842,65 @@ void SceneRenderer::render() {
     SDL_RenderClear(renderer_);
     WarpedScreenGrid& cam = assets_->getView();
     render_sky_layer(cam, assets_->depth_effects_enabled());
+
+    if (!geometry_batcher_) return;
+
+    geometry_batcher_->clear();
+
+    // 1) Ground / tiles
+    tile_renderer_->render(renderer_, cam, assets_->world_grid(), geometry_batcher_.get());
+
+    // 2) Assets (depth-sorted painter’s algorithm)
+    const double anchor_depth = cam.anchor_world_z();
+    std::vector<Asset*> render_list;
+    render_list.reserve(assets_->getActiveRaw().size());
+    for (Asset* a : assets_->getActiveRaw()) {
+        if (a && !a->dead) {
+            render_list.push_back(a);
+        }
+    }
+    std::sort(render_list.begin(), render_list.end(), [&](Asset* a, Asset* b) {
+        const double da = render_depth::depth_from_anchor(anchor_depth,
+                                                          static_cast<double>(a->world_z()),
+                                                          a->render_depth_bias());
+        const double db = render_depth::depth_from_anchor(anchor_depth,
+                                                          static_cast<double>(b->world_z()),
+                                                          b->render_depth_bias());
+        return da > db; // deepest first (far → near) to satisfy batcher monotonic depth
+    });
+
+    for (Asset* asset : render_list) {
+        composite_renderer_.update(asset, 0.0f);
+        const world::GridPoint* gp = cam.grid_point_for_asset(asset);
+        const float perspective_scale =
+            (gp && std::isfinite(gp->perspective_scale) && gp->perspective_scale > 0.0f)
+                ? gp->perspective_scale
+                : 1.0f;
+        const float base_world_z = static_cast<float>(asset->world_z());
+        const double depth_bias = asset->render_depth_bias();
+
+        for (RenderObject& obj : asset->render_package) {
+            const float effective_world_z = base_world_z + obj.world_z_offset;
+            WarpedMesh mesh{};
+            if (!build_perspective_mesh(obj, cam, perspective_scale, effective_world_z, mesh)) {
+                continue;
+            }
+            if (mesh.vertices.size() != 4 || mesh.indices.size() != 6) {
+                continue;
+            }
+            SDL_Vertex verts[4];
+            int indices[6];
+            for (int i = 0; i < 4; ++i) verts[i] = mesh.vertices[static_cast<std::size_t>(i)];
+            for (int i = 0; i < 6; ++i) indices[i] = mesh.indices[static_cast<std::size_t>(i)];
+
+            const double draw_depth = render_depth::depth_from_anchor(anchor_depth,
+                                                                      static_cast<double>(effective_world_z),
+                                                                      depth_bias);
+            geometry_batcher_->addQuad(obj.texture, verts, indices, obj.blend_mode, draw_depth);
+        }
+    }
+
+    geometry_batcher_->flush();
 }
 
 void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled) {

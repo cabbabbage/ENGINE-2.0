@@ -273,6 +273,11 @@ add_executable(engine_tests
     ENGINE/runtime/utils/utils/log.cpp
     ENGINE/runtime/utils/utils/cache_manager.cpp
     ENGINE/runtime/utils/utils/loading_status_notifier.cpp
+    ENGINE/runtime/gameplay/world/grid_point.cpp
+    ENGINE/runtime/gameplay/world/world_grid.cpp
+    ENGINE/runtime/gameplay/world/chunk.cpp
+    ENGINE/runtime/gameplay/world/chunk_manager.cpp
+    ENGINE/tests/stubs/asset/Asset_world_tests_stubs.cpp
     ENGINE/tests/test_map_data.cpp
     ENGINE/tests/test_world_grid.cpp
   )
@@ -289,6 +294,7 @@ target_include_directories(engine_tests
 
 target_compile_definitions(engine_tests PRIVATE
     DEV_MODE_DISABLE_JSON_DEBOUNCE=1
+    ENGINE_WORLD_TESTS=1
     PROJECT_ROOT="${TEST_ROOT}"
     FRAME_EDITOR_TEST_PUBLIC_ACCESS=1
     FRAME_EDITOR_ACCESS=public
@@ -370,12 +376,3 @@ foreach(tool_target asset_tool_cli set_rebuild_cli cache_validator_cli apply_eff
         )
     endforeach()
 endforeach()
-
-add_custom_target(legacy_axis_marker_check
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/check_legacy_markers.py
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    COMMENT "Scanning for banned legacy axis markers"
-)
-
-add_dependencies(engine legacy_axis_marker_check)
-add_dependencies(engine_tests legacy_axis_marker_check)

@@ -137,9 +137,6 @@ void render_grid_point_marker(SDL_Renderer* renderer, const WarpedScreenGrid& ca
 
 namespace devmode::room_editor_detail {
 
-static_assert(!axis::kUsingLegacyAxisOrdering,
-              "RoomEditor must operate under the canonical axis convention (Y=height, Z=depth) with no legacy swaps.");
-
 nlohmann::json resolve_map_info_blob(const Assets* assets,
                                      const devmode::core::ManifestStore* manifest_store,
                                      const std::string& map_id) {

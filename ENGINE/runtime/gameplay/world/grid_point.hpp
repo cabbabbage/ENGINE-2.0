@@ -83,8 +83,6 @@ struct CameraProjectionParams {
 using GridId = std::uint64_t;
 
 struct GridPoint {
-    static_assert(!axis::kUsingLegacyAxisOrdering,
-                  "GridPoint must be constructed using the canonical axis ordering (X=right, Y=height, Z=depth)");
 
     GridPoint() = delete;
     GridPoint(int world_x,

@@ -757,6 +757,54 @@ SceneRenderer::~SceneRenderer() {
     if (blur_tex_)            { SDL_DestroyTexture(blur_tex_);            blur_tex_            = nullptr; }
 }
 
+bool SceneRenderer::ensure_sky_texture() {
+    if (sky_texture_) {
+        return true;
+    }
+    if (sky_texture_failed_ || !renderer_) {
+        return false;
+    }
+
+    const std::filesystem::path path = sky_texture_path_;
+    if (path.empty() || !std::filesystem::exists(path)) {
+        vibble::log::warn(std::string{"[SceneRenderer] Sky texture missing at "} + path.string());
+        sky_texture_failed_ = true;
+        return false;
+    }
+
+    SDL_Texture* tex = IMG_LoadTexture(renderer_, path.string().c_str());
+    if (!tex) {
+        vibble::log::warn(std::string{"[SceneRenderer] Failed to load sky texture: "} + SDL_GetError());
+        sky_texture_failed_ = true;
+        return false;
+    }
+
+    float tex_w = 0.0f;
+    float tex_h = 0.0f;
+    if (!SDL_GetTextureSize(tex, &tex_w, &tex_h) || tex_w <= 0.0f || tex_h <= 0.0f) {
+        vibble::log::warn("[SceneRenderer] Sky texture has invalid dimensions.");
+        SDL_DestroyTexture(tex);
+        sky_texture_failed_ = true;
+        return false;
+    }
+
+    sky_texture_ = tex;
+    sky_texture_width_ = static_cast<int>(std::lround(tex_w));
+    sky_texture_height_ = static_cast<int>(std::lround(tex_h));
+    sky_texture_failed_ = false;
+    return true;
+}
+
+void SceneRenderer::destroy_sky_texture() {
+    if (sky_texture_) {
+        SDL_DestroyTexture(sky_texture_);
+        sky_texture_ = nullptr;
+    }
+    sky_texture_width_ = 0;
+    sky_texture_height_ = 0;
+    sky_texture_failed_ = false;
+}
+
 SDL_Renderer* SceneRenderer::get_renderer() const {
     return renderer_;
 }

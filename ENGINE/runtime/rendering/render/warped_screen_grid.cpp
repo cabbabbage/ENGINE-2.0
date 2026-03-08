@@ -1107,6 +1107,46 @@ void WarpedScreenGrid::clear_grid_state() {
     bounds_ = GridBounds{};
 }
 
+void WarpedScreenGrid::rebuild_grid_bounds() {
+    // Prefer visible points when available; otherwise fall back to all warped points.
+    const auto& points = !visible_points_.empty() ? visible_points_ : warped_points_;
+    if (points.empty()) {
+        cached_world_rect_ = SDL_Rect{0, 0, 0, 0};
+        bounds_ = GridBounds{};
+        return;
+    }
+
+    int min_x = std::numeric_limits<int>::max();
+    int max_x = std::numeric_limits<int>::min();
+    int min_z = std::numeric_limits<int>::max();
+    int max_z = std::numeric_limits<int>::min();
+
+    for (const auto* gp : points) {
+        if (!gp) {
+            continue;
+        }
+        min_x = std::min(min_x, gp->world_x());
+        max_x = std::max(max_x, gp->world_x());
+        min_z = std::min(min_z, gp->world_z());
+        max_z = std::max(max_z, gp->world_z());
+    }
+
+    if (min_x == std::numeric_limits<int>::max()) {
+        cached_world_rect_ = SDL_Rect{0, 0, 0, 0};
+        bounds_ = GridBounds{};
+        return;
+    }
+
+    const int width  = std::max(0, max_x - min_x);
+    const int height = std::max(0, max_z - min_z);
+    cached_world_rect_ = SDL_Rect{min_x, min_z, width, height};
+
+    bounds_.left   = static_cast<float>(min_x);
+    bounds_.top    = static_cast<float>(min_z);
+    bounds_.right  = static_cast<float>(max_x);
+    bounds_.bottom = static_cast<float>(max_z);
+}
+
 
 void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
                                     float dt_seconds,

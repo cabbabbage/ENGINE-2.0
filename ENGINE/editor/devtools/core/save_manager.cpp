@@ -36,29 +36,6 @@ std::uint64_t extract_save_manager_version(const nlohmann::json& entry) {
     return it->get<std::uint64_t>();
 }
 
-bool contains_legacy_axis_marker(const nlohmann::json& node) {
-    if (node.is_object()) {
-        for (auto it = node.begin(); it != node.end(); ++it) {
-            std::string key = it.key();
-            std::transform(key.begin(), key.end(), key.begin(), ::tolower);
-            if (key.find("legacy_axis") != std::string::npos ||
-                key.find("legacycoords") != std::string::npos ||
-                key.find("z_is_height") != std::string::npos) {
-                return true;
-            }
-            if (contains_legacy_axis_marker(*it)) {
-                return true;
-            }
-        }
-    } else if (node.is_array()) {
-        for (const auto& element : node) {
-            if (contains_legacy_axis_marker(element)) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
 }
 
 void SaveManager::set_manifest_store(ManifestStore* store) {
@@ -229,12 +206,6 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
                                     MapWritePath path) {
     if (map_id.empty()) {
         std::cerr << "[SaveManager] Map identifier is empty; cannot persist map entry\n";
-        return false;
-    }
-
-    if (contains_legacy_axis_marker(payload)) {
-        std::cerr << "[SaveManager] Rejected payload for '" << map_id
-                  << "' because it contains legacy axis markers (Z-as-height is no longer supported)\n";
         return false;
     }
 

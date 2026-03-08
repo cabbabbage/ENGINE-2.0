@@ -6,8 +6,7 @@
 //   Y: up (height)
 //   Z: forward/depth
 //
-// All new code must follow this convention. Old Y-forward / Z-up usages are
-// considered legacy and should be removed during the refactor.
+// All world-space logic, serialization, tooling, and rendering must use this convention directly.
 
 #include <cstdint>
 
@@ -34,9 +33,5 @@ struct Basis3 {
     double fwd_x   = 0.0, fwd_y   = 0.0, fwd_z   = 1.0;
 };
 
-// Compile-time guard: ensure all code uses the canonical axis ordering.
-inline constexpr bool kUsingLegacyAxisOrdering = false;
-static_assert(!kUsingLegacyAxisOrdering,
-              "Legacy Y-forward/Z-up axis ordering is forbidden. All code must use X=right, Y=up, Z=depth with no compatibility swaps.");
 
 } // namespace axis

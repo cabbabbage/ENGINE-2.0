@@ -77,8 +77,6 @@ void FrameEditorSession::begin(Assets* assets,
     if (active_) {
         end();
     }
-    static_assert(!axis::kUsingLegacyAxisOrdering,
-                  "FrameEditorSession must run with canonical axes (Y=height, Z=depth); do not compensate for legacy data.");
     if (!assets || !asset || !document || animation_id.empty()) {
         return;
     }

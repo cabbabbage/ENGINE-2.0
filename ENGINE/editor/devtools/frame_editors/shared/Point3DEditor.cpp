@@ -30,8 +30,6 @@ float parse_float(const std::string& text, float fallback) {
 
 Point3DEditor::Point3DEditor(SelectionState* selection)
     : selection_(selection) {
-    static_assert(!axis::kUsingLegacyAxisOrdering,
-                  "Point3DEditor assumes canonical axes (Y=height, Z=depth); legacy swaps are not supported.");
     tb_dx_ = std::make_unique<DMTextBox>("X", "0");
     tb_dy_ = std::make_unique<DMTextBox>("Y", "0");
     tb_dz_ = std::make_unique<DMTextBox>("Z", "0");

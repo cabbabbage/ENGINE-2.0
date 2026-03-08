@@ -29,8 +29,6 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
-#include "rendering/render/terrain_field.hpp"
-#include "rendering/render/terrain_shading.hpp"
 #include "animation/animation_update.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "assets/animation.hpp"
@@ -208,18 +206,13 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
 void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid, GeometryBatcher* batcher) {
     if (!renderer) return;
 
-    terrain_vertices_last_frame_ = 0;
-    terrain_tiles_last_frame_ = 0;
 
     const auto& chunks = grid.active_chunks();
     if (chunks.empty()) return;
 
     const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
     int indices[6] = {0, 1, 2, 0, 2, 3};
-    const TerrainRuntimeState* runtime_state = terrain_state_;
-    const bool terrain_enabled = terrain_field_ && runtime_state && runtime_state->settings.enabled;
     const auto* rooms_ptr = assets_ ? &assets_->rooms() : nullptr;
-    const std::uint64_t terrain_frame_id = assets_ ? static_cast<std::uint64_t>(assets_->current_frame_id()) : 0;
     const int default_layer = grid.default_resolution_layer();
 
     auto find_floor_point = [&](const SDL_Point& pos) -> const world::GridPoint* {
@@ -244,24 +237,19 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
     };
 
     auto sample_height = [&](const SDL_Point& pos) -> float {
-        if (!terrain_enabled) {
             return 0.0f;
         }
         const world::GridPoint* gp = find_floor_point(pos);
-        if (gp && gp->terrain_revision == runtime_state->revision) {
-            return gp->terrain_elevation;
         }
         if (!rooms_ptr) {
             return 0.0f;
         }
         const int layer = default_layer;
         world::GridKey key{pos.x, pos.y, 0, layer};
-        return terrain_field_->sample_elevation(key, grid, *rooms_ptr, *runtime_state, terrain_frame_id);
     };
 
     auto sample_gradient = [&](const SDL_Point& pos, float& sx, float& sy) {
         sx = sy = 0.0f;
-        if (!terrain_enabled) {
             return;
         }
         const int spacing = std::max(1, grid.grid_spacing_for_layer(default_layer));
@@ -350,9 +338,6 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
             const float tx1 = 1.0f - padding_x;
             const float ty1 = 1.0f - padding_y;
 
-            if (terrain_enabled) {
-                terrain_vertices_last_frame_ += 4;
-                ++terrain_tiles_last_frame_;
             }
 
             SDL_Vertex vertices[4]{};
@@ -362,22 +347,17 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
             vertices[3].position = SDL_FPoint{ screen_bl.x, screen_bl.y };
 
             SDL_FColor v0 = white, v1 = white, v2 = white, v3 = white;
-            if (terrain_enabled) {
                 float sx = 0.0f, sy = 0.0f;
                 sample_gradient(world_tl, sx, sy);
-                const float shade0 = terrain_brightness(*runtime_state, sx, sy, SDL_FPoint{static_cast<float>(world_tl.x), static_cast<float>(world_tl.y)});
                 v0 = SDL_FColor{shade0, shade0, shade0, 1.0f};
 
                 sample_gradient(world_tr, sx, sy);
-                const float shade1 = terrain_brightness(*runtime_state, sx, sy, SDL_FPoint{static_cast<float>(world_tr.x), static_cast<float>(world_tr.y)});
                 v1 = SDL_FColor{shade1, shade1, shade1, 1.0f};
 
                 sample_gradient(world_br, sx, sy);
-                const float shade2 = terrain_brightness(*runtime_state, sx, sy, SDL_FPoint{static_cast<float>(world_br.x), static_cast<float>(world_br.y)});
                 v2 = SDL_FColor{shade2, shade2, shade2, 1.0f};
 
                 sample_gradient(world_bl, sx, sy);
-                const float shade3 = terrain_brightness(*runtime_state, sx, sy, SDL_FPoint{static_cast<float>(world_bl.x), static_cast<float>(world_bl.y)});
                 v3 = SDL_FColor{shade3, shade3, shade3, 1.0f};
             }
             vertices[0].color = v0;
@@ -400,12 +380,8 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
         }
     }
 
-    if (terrain_enabled && runtime_state) {
         const std::uint64_t revision = runtime_state->revision;
         if (revision != last_logged_revision_) {
-            vibble::log::info("[GridTileRenderer] terrain revision=" + std::to_string(revision) +
-                              " vertices=" + std::to_string(terrain_vertices_last_frame_) +
-                              " tiles=" + std::to_string(terrain_tiles_last_frame_));
             last_logged_revision_ = revision;
         }
     } else {
@@ -793,7 +769,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   composite_renderer_(renderer, assets),
   dynamic_fog_system_(std::make_unique<DynamicFogSystem>()),
   dynamic_boundary_system_(std::make_unique<DynamicBoundarySystem>()),
-  terrain_field_(std::make_unique<TerrainField>())
 {
 
     map_clear_color_ = SDL_Color{69, 101, 74, 255};
@@ -812,7 +787,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
         }
     }
 
-    // Apply terrain settings once at startup (no dev UI surface).
     {
         TerrainSettings settings = TerrainSettings::sanitized(TerrainSettings::readonly());
         auto read_float_from = [](const nlohmann::json& obj, const char* key, float& target) {
@@ -854,15 +828,12 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
         };
 
         try {
-            auto ts_it = map_manifest.find("terrain_settings");
             if (ts_it != map_manifest.end() && ts_it->is_object()) {
                 const auto& ts = *ts_it;
                 read_bool_from(ts, "enabled", settings.enabled);
                 if (auto rand_it = ts.find("randomize_seed"); rand_it != ts.end() && rand_it->is_boolean()) {
-                    terrain_randomize_session_seed_ = rand_it->get<bool>();
                 }
                 if (auto rand2_it = ts.find("randomize_session_seed"); rand2_it != ts.end() && rand2_it->is_boolean()) {
-                    terrain_randomize_session_seed_ = rand2_it->get<bool>();
                 }
                 read_float_from(ts, "max_elevation_world", settings.max_elevation_world);
                 read_float_from(ts, "edge_falloff_distance_world", settings.edge_falloff_distance_world);
@@ -896,16 +867,10 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
         } catch (...) {
         }
         TerrainSettings::apply(settings);
-        terrain_settings_revision_seen_ = TerrainSettings::revision();
-        terrain_runtime_state_ = TerrainRuntimeState::from_settings(TerrainSettings::readonly(), map_id, terrain_randomize_session_seed_);
-        if (terrain_field_) {
-            terrain_field_->set_runtime_state(terrain_runtime_state_, assets_->rooms());
         }
         if (assets_) {
-            assets_->set_terrain_sources(terrain_field_.get(), terrain_runtime_state_);
         }
         if (tile_renderer_) {
-            tile_renderer_->set_terrain_sources(terrain_field_.get(), &terrain_runtime_state_);
         }
     }
 
@@ -969,20 +934,12 @@ void SceneRenderer::render() {
     frame_counter_ = frame_id;
 
     const std::uint64_t current_settings_rev = TerrainSettings::revision();
-    if (current_settings_rev != terrain_settings_revision_seen_) {
-        terrain_settings_revision_seen_ = current_settings_rev;
         const std::string map_identifier = assets_ ? assets_->map_id() : std::string();
-        terrain_runtime_state_ = TerrainRuntimeState::from_settings(TerrainSettings::readonly(),
                                                                     map_identifier,
-                                                                    terrain_randomize_session_seed_);
-        if (terrain_field_) {
-            terrain_field_->set_runtime_state(terrain_runtime_state_, assets_->rooms());
         }
         if (assets_) {
-            assets_->set_terrain_sources(terrain_field_.get(), terrain_runtime_state_);
         }
         if (tile_renderer_) {
-            tile_renderer_->set_terrain_sources(terrain_field_.get(), &terrain_runtime_state_);
         }
     }
 
@@ -998,8 +955,6 @@ void SceneRenderer::render() {
 
     WarpedScreenGrid& cam = assets_->getView();
     world::WorldGrid& grid = assets_->world_grid();
-    if (terrain_field_) {
-        terrain_field_->begin_frame(frame_id, terrain_runtime_state_, assets_->rooms());
     }
 
     const auto& render_traversal = assets_->active_traversal();
@@ -1203,7 +1158,6 @@ void SceneRenderer::render() {
                     ? std::max(0.0001f, candidate.grid_point->perspective_scale)
                     : 1.0f;
                 const float base_world_z = candidate.grid_point
-                    ? static_cast<float>(candidate.grid_point->world_z()) + candidate.grid_point->terrain_elevation + obj.world_z_offset
                     : obj.world_z_offset;
                 if (!build_perspective_mesh(obj, cam, perspective_scale, base_world_z, mesh)) {
                     continue;

@@ -25,7 +25,6 @@ class ButtonWidget;
 class Input;
 class Area;
 class Assets;
-class Section_BasicInfo;
 class SearchAssets;
 namespace animation_editor {
 class AnimationEditorWindow;
@@ -110,7 +109,7 @@ class AssetInfoUI {
 
     std::vector<std::unique_ptr<DockableCollapsible>> sections_;
     DockableCollapsible* focused_section_ = nullptr;
-    class Section_BasicInfo* basic_info_section_ = nullptr;
+    DockableCollapsible* basic_info_section_ = nullptr;
     mutable std::vector<SDL_Rect> section_bounds_;
 
     mutable class Asset* target_asset_ = nullptr;

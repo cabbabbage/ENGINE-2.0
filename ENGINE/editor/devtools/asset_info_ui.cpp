@@ -1522,8 +1522,10 @@ void AssetInfoUI::render_world_overlay(SDL_Renderer* r, const WarpedScreenGrid& 
 
     float reference_screen_height = compute_player_screen_height(cam);
 
-    if (basic_info_section_ && basic_info_section_->is_expanded()) {
-        basic_info_section_->render_world_overlay(r, cam, target_asset_, reference_screen_height);
+    if (auto* basic = static_cast<Section_BasicInfo*>(basic_info_section_)) {
+        if (basic->is_expanded()) {
+            basic->render_world_overlay(r, cam, target_asset_, reference_screen_height);
+        }
     }
 
 }
@@ -2099,8 +2101,8 @@ void AssetInfoUI::rebuild_default_sections() {
 };
 
     auto basic = std::make_unique<Section_BasicInfo>();
+    basic->set_ui(this);
     basic_info_section_ = basic.get();
-    basic_info_section_->set_ui(this);
     adopt_section(basic_info_section_);
     finalize_section(basic_info_section_);
     sections_.push_back(std::move(basic));

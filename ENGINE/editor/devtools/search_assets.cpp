@@ -2,8 +2,7 @@
 
 #include "asset_list_view.hpp"
 #include "DockableCollapsible.hpp"
-#include "FloatingDockableManager.hpp"
-#include "FloatingPanelLayoutManager.hpp"
+#include "DockManager.hpp"
 #include "dm_styles.hpp"
 #include "tag_utils.hpp"
 #include "utils/input.hpp"
@@ -58,11 +57,11 @@ SearchAssets::~SearchAssets() = default;
 
 namespace {
 
-FloatingPanelLayoutManager::PanelInfo build_panel_info_for_panel(DockableCollapsible* panel,
-                                                                int fallback_width,
-                                                                int fallback_height,
-                                                                bool force_layout) {
-    FloatingPanelLayoutManager::PanelInfo info;
+DockManager::PanelInfo build_panel_info_for_panel(DockableCollapsible* panel,
+                                                  int fallback_width,
+                                                  int fallback_height,
+                                                  bool force_layout) {
+    DockManager::PanelInfo info;
     info.panel = panel;
     info.force_layout = force_layout;
     info.preferred_width = fallback_width;
@@ -168,7 +167,7 @@ void SearchAssets::set_screen_dimensions(int width, int height) {
     }
 }
 
-void SearchAssets::layout_with_parent(const FloatingPanelLayoutManager::SlidingParentInfo& parent) {
+void SearchAssets::layout_with_parent(const DockManager::SlidingParentInfo& parent) {
     if (embedded_) {
         return;
     }
@@ -263,7 +262,7 @@ void SearchAssets::open(Callback cb) {
     apply_position(target.x, target.y);
     ensure_visible_position();
     if (!floating_stack_key_.empty()) {
-        FloatingDockableManager::instance().open_floating(
+        DockManager::instance().open_floating(
             "Search Assets",
             panel_.get(),
             [this]() { this->close(); },
@@ -577,13 +576,13 @@ std::vector<std::pair<std::string, bool>> SearchAssets::results_for_testing() co
     return out;
 }
 
-FloatingPanelLayoutManager::PanelInfo SearchAssets::build_panel_info(bool force_layout) const {
+DockManager::PanelInfo SearchAssets::build_panel_info(bool force_layout) const {
     constexpr int kFallbackWidth = 520;
     constexpr int kFallbackHeight = 400;
     return build_panel_info_for_panel(panel_.get(), kFallbackWidth, kFallbackHeight, force_layout);
 }
 
-void SearchAssets::ensure_visible_position(const FloatingPanelLayoutManager::SlidingParentInfo* parent) {
+void SearchAssets::ensure_visible_position(const DockManager::SlidingParentInfo* parent) {
     if (embedded_) {
         return;
     }
@@ -594,15 +593,15 @@ void SearchAssets::ensure_visible_position(const FloatingPanelLayoutManager::Sli
         return;
     }
 
-    FloatingPanelLayoutManager::PanelInfo info = build_panel_info(true);
+    DockManager::PanelInfo info = build_panel_info(true);
 
     if (parent) {
-        SDL_Point placement = FloatingPanelLayoutManager::instance().positionFor(info, parent);
+        SDL_Point placement = DockManager::instance().positionFor(info, parent);
         panel_->set_position_from_layout_manager(placement.x, placement.y);
     } else {
-        std::vector<FloatingPanelLayoutManager::PanelInfo> panels;
+        std::vector<DockManager::PanelInfo> panels;
         panels.push_back(info);
-        FloatingPanelLayoutManager::instance().layoutAll(panels);
+        DockManager::instance().layoutAll(panels);
     }
 
     last_known_position_ = panel_->position();

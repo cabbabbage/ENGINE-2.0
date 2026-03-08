@@ -607,7 +607,11 @@ struct ScalingProfileBuildOptions {
     const AssetLibrary*   asset_library = nullptr;
 };
 
-bool BuildScalingProfiles(const ScalingProfileBuildOptions& options);
+// Consolidated pipeline: scaling profiles are generated on-demand elsewhere,
+// so keep a no-op shim to satisfy legacy callers without reintroducing the old builder.
+inline bool BuildScalingProfiles(const ScalingProfileBuildOptions&) {
+    return true;
+}
 
 }
 

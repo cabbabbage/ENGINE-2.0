@@ -1285,24 +1285,24 @@
               },
               "points": [
                 {
-                  "x": 12439,
+                  "x": 14978,
                   "y": 0,
-                  "z": 12439
+                  "z": 14978
                 },
                 {
-                  "x": 12951,
+                  "x": 15490,
                   "y": 0,
-                  "z": 12439
+                  "z": 14978
                 },
                 {
-                  "x": 12951,
+                  "x": 15490,
                   "y": 0,
-                  "z": 12951
+                  "z": 15490
                 },
                 {
-                  "x": 12439,
+                  "x": 14978,
                   "y": 0,
-                  "z": 12951
+                  "z": 15490
                 }
               ],
               "resolution": 3,
@@ -1314,9 +1314,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,
@@ -2302,8 +2302,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -280,
-              "dz": 632,
+              "dx": 659,
+              "dz": -2540,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

@@ -198,8 +198,8 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         Vec3 horiz_dir{ to_anchor.x, 0.0, to_anchor.z };
         const double horiz_len = length(horiz_dir);
         if (horiz_len < 1e-3 || !std::isfinite(horiz_len)) {
-            // Default to looking forward along +Z (canonical depth).
-            horiz_dir = Vec3{0.0, 0.0, 1.0};
+            // Default to looking forward along -Z so the camera sits behind the anchor.
+            horiz_dir = Vec3{0.0, 0.0, -1.0};
         } else {
             horiz_dir = horiz_dir * (1.0 / horiz_len);
         }
@@ -721,9 +721,8 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
 {
     invalidate_camera_cache();
     // Keep the anchor unlocked in both modes so the projection math stays consistent.
-    // Locking it to the screen center was pulling the virtual camera back in normal mode,
-    // which over-reduced perspective scale for certain assets (barrel, spider).
-    lock_anchor_to_screen_center_ = false;
+    // Lock to screen center so depth parallax remains visible on ground plane.
+    lock_anchor_to_screen_center_ = true;
 
     CameraParams cur_params;
     CameraParams neigh_params;

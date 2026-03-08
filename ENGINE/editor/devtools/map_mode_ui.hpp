@@ -12,7 +12,6 @@
 
 #include "utils/ranged_color.hpp"
 #include "fog_settings_panel.hpp"
-#include "terrain_settings_panel.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
 #include "core/manifest/map_data.hpp"
 #include "dev_footer_bar.hpp"
@@ -95,7 +94,6 @@ public:
     bool is_any_panel_visible() const;
     bool is_layers_panel_visible() const;
     bool is_fog_panel_visible() const;
-    bool is_terrain_panel_visible() const;
     void toggle_fog_panel();
 
 private:
@@ -129,8 +127,6 @@ private:
     SDL_Rect room_config_bounds() const;
     void open_fog_panel();
     void close_fog_panel();
-    void open_terrain_panel();
-    void close_terrain_panel();
     void show_sliding_panel(SlidingPanel panel, bool preserve_layers_panel = false);
     SDL_Rect sanitize_sliding_area(const SDL_Rect& bounds) const;
     SDL_Rect effective_work_area() const;
@@ -143,8 +139,6 @@ private:
     bool mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator);
     void mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority priority =
                                  devmode::core::DevSaveCoordinator::Priority::Debounced);
-    void request_terrain_rebake(devmode::core::DevSaveCoordinator::Priority priority =
-                                   devmode::core::DevSaveCoordinator::Priority::Debounced);
     void update_room_config_header_controls();
     void begin_map_color_sampling(const utils::color::RangedColor& current, std::function<void(SDL_Color)> on_sample, std::function<void()> on_cancel);
     void cancel_map_color_sampling(bool silent = false);
@@ -173,7 +167,6 @@ private:
     std::unique_ptr<MapRoomsDisplay> rooms_display_;
     std::unique_ptr<MapLayersPanel> layers_panel_;
     std::unique_ptr<FogSettingsPanel> fog_settings_panel_;
-    std::unique_ptr<TerrainSettingsPanel> terrain_settings_panel_;
     std::unique_ptr<DevFooterBar> footer_bar_;
     bool footer_buttons_configured_ = false;
     bool map_mode_active_ = false;

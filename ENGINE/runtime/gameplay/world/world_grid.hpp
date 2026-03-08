@@ -80,10 +80,6 @@ public:
     const GridPoint* point_for_id(GridId id) const;
     GridPoint* point_for_asset(const Asset* asset);
     const GridPoint* point_for_asset(const Asset* asset) const;
-    // Terrain bake bookkeeping
-    std::uint64_t terrain_bake_revision() const { return terrain_bake_revision_; }
-    void set_terrain_bake_revision(std::uint64_t rev) { terrain_bake_revision_ = rev; }
-    void clear_terrain_bake_revision() { terrain_bake_revision_ = 0; }
 
     // Detach/attach helpers for suspending and reactivating assets without destroying them.
     std::unique_ptr<Asset> extract_asset(Asset* a);
@@ -141,7 +137,6 @@ private:
     int       r_chunk_ = 0;
     int       grid_resolution_ = 0;
     int       max_resolution_layers_ = 0;
-    std::uint64_t terrain_bake_revision_ = 0;
 
     ChunkManager chunks_;
     std::unordered_map<Asset*, Chunk*> residency_;

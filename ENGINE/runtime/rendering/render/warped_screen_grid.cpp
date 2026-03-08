@@ -6,8 +6,6 @@
 #include "core/find_current_room.hpp"
 #include "utils/log.hpp"
 #include "gameplay/world/world_grid.hpp"
-#include "rendering/render/terrain_field.hpp"
-#include "rendering/render/terrain_runtime_state.hpp"
 
 #include <algorithm>
 #include <array>

@@ -12,7 +12,6 @@
 #include "map_rooms_display.hpp"
 #include "config/room_config/room_configurator.hpp"
 #include "fog_settings_panel.hpp"
-#include "terrain_settings_panel.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
 #include "SlidingWindowContainer.hpp"
 #include "core/AssetsManager.hpp"
@@ -433,9 +432,6 @@ void MapModeUI::apply_sliding_area_bounds() {
     }
     if (fog_settings_panel_) {
         fog_settings_panel_->set_work_area(work_area);
-    }
-    if (terrain_settings_panel_) {
-        terrain_settings_panel_->set_work_area(work_area);
     }
 
     if (room_config_container_) {
@@ -870,16 +866,6 @@ void MapModeUI::ensure_panels() {
         fog_settings_panel_->set_work_area(effective_work_area());
         track_floating_panel(fog_settings_panel_.get());
     }
-    if (!terrain_settings_panel_) {
-        terrain_settings_panel_ = std::make_unique<TerrainSettingsPanel>();
-        terrain_settings_panel_->build();
-        terrain_settings_panel_->set_visible(false);
-        terrain_settings_panel_->set_on_close([this]() { this->sync_footer_button_states(); });
-    }
-    if (terrain_settings_panel_) {
-        terrain_settings_panel_->set_work_area(effective_work_area());
-        track_floating_panel(terrain_settings_panel_.get());
-    }
     if (!footer_bar_) {
         footer_bar_ = std::make_unique<DevFooterBar>("");
         footer_bar_->set_bounds(screen_w_, screen_h_);
@@ -967,21 +953,6 @@ void MapModeUI::configure_footer_buttons() {
         };
         buttons.push_back(std::move(fog_btn));
 
-        DevFooterBar::Button terrain_btn;
-        terrain_btn.id = "terrain";
-        terrain_btn.label = "Terrain";
-        terrain_btn.group = FooterButtonGroup::Primary;
-        terrain_btn.style_override = &DMStyles::HeaderButton();
-        terrain_btn.active_style_override = &DMStyles::AccentButton();
-        terrain_btn.on_toggle = [this](bool active) {
-            if (active) {
-                this->open_terrain_panel();
-            } else {
-                this->close_terrain_panel();
-            }
-        };
-        buttons.push_back(std::move(terrain_btn));
-
         DevFooterBar::Button save_btn;
         save_btn.id = "save";
         save_btn.label = "Save";
@@ -1008,8 +979,6 @@ void MapModeUI::sync_footer_button_states() {
     footer_bar_->set_button_active_state("layers", layers_visible);
     const bool fog_visible = fog_settings_panel_ && fog_settings_panel_->is_visible();
     footer_bar_->set_button_active_state("fog", fog_visible);
-    const bool terrain_visible = terrain_settings_panel_ && terrain_settings_panel_->is_visible();
-    footer_bar_->set_button_active_state("terrain", terrain_visible);
     for (const auto& config : room_mode_buttons_) {
         footer_bar_->set_button_active_state(config.id, config.active);
     }
@@ -1078,15 +1047,6 @@ void MapModeUI::sync_panel_map_info() {
         fog_settings_panel_->set_map_info(map_info_, [this]() {
             return this->save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority::Debounced);
         });
-    }
-    if (terrain_settings_panel_) {
-        terrain_settings_panel_->set_map_info(
-            map_info_,
-            [this]() { this->request_terrain_rebake(devmode::core::DevSaveCoordinator::Priority::Debounced); },
-            [this]() {
-                mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate);
-                return save_all_now(devmode::core::DevSaveCoordinator::Priority::Immediate);
-            });
     }
 }
 
@@ -1328,28 +1288,11 @@ void MapModeUI::toggle_fog_panel() {
     }
 }
 
-void MapModeUI::open_terrain_panel() {
-    ensure_panels();
-    if (terrain_settings_panel_) {
-        terrain_settings_panel_->open();
-        bring_panel_to_front(terrain_settings_panel_.get());
-    }
-    sync_footer_button_states();
-}
-
-void MapModeUI::close_terrain_panel() {
-    if (terrain_settings_panel_) {
-        terrain_settings_panel_->close();
-    }
-    sync_footer_button_states();
-}
-
 void MapModeUI::close_all_panels() {
     if (layers_preview_panel_) {
         layers_preview_panel_->close();
     }
     close_fog_panel();
-    close_terrain_panel();
     set_active_panel(PanelType::None);
     close_room_configuration(false);
 }
@@ -1589,10 +1532,6 @@ bool MapModeUI::is_fog_panel_visible() const {
     return fog_settings_panel_ && fog_settings_panel_->is_visible();
 }
 
-bool MapModeUI::is_terrain_panel_visible() const {
-    return terrain_settings_panel_ && terrain_settings_panel_->is_visible();
-}
-
 bool MapModeUI::save_map_info_to_disk(devmode::core::DevSaveCoordinator::Priority priority) const {
     if (!map_info_) return false;
     if (dirty_callback_) {
@@ -1627,16 +1566,6 @@ void MapModeUI::mark_map_data_dirty(devmode::core::DevSaveCoordinator::Priority 
     }
     if (dirty_callback_) {
         dirty_callback_(priority);
-    }
-}
-
-void MapModeUI::request_terrain_rebake(devmode::core::DevSaveCoordinator::Priority priority) {
-    if (assets_) {
-        assets_->refresh_terrain_dependents();
-    }
-    mark_map_data_dirty(priority);
-    if (layers_panel_) {
-        layers_panel_->mark_dirty(true);
     }
 }
 

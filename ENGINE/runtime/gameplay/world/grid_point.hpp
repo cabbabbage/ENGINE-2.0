@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include "core/axis_convention.hpp"
+
 class Asset;
 class Room;
 
@@ -41,7 +43,7 @@ struct GridKey {
 
 struct GridCoord {
     int x = 0;
-    int y = 0;
+    int z = 0; // ground depth index (legacy 'y')
 };
 
 struct GridKeyHash {
@@ -53,9 +55,9 @@ struct CameraProjectionParams {
     // Camera position in meters
     double position_x = 0.0, position_y = 0.0, position_z = 0.0;
     // Camera basis vectors
-    double forward_x = 0.0, forward_y = 1.0, forward_z = 0.0;
+    double forward_x = 0.0, forward_y = 0.0, forward_z = 1.0;
     double right_x = 1.0, right_y = 0.0, right_z = 0.0;
-    double up_x = 0.0, up_y = 0.0, up_z = 1.0;
+    double up_x = 0.0, up_y = 1.0, up_z = 0.0;
     // World anchor point (pixels)
     double anchor_world_x = 0.0, anchor_world_y = 0.0;
     // Conversion factor: world pixels to meters
@@ -99,8 +101,8 @@ struct GridPoint {
         , resolution_layer_(resolution_layer)
         , parent_(parent_point)
         , is_virtual_(is_virtual_point)
-        , is_floor(world_z == 0)
-        , world(GridCoord{world_x, world_y})
+        , is_floor(world_y == 0)
+        , world(GridCoord{world_x, world_z})
         , grid_index(grid_idx)
         , chunk_index(chunk_idx)
         , chunk(owning_chunk) {}
@@ -141,12 +143,12 @@ struct GridPoint {
 
     RegionKind region_kind = RegionKind::Boundary;
     const Room* region_owner = nullptr; // Non-owning; points to Room that contains this point, if any.
-    // True when this grid point represents the ground (floor) for its XY.
+    // True when this grid point represents the ground (floor) for its XZ.
     bool is_floor = false;
 
     // Renderer/UI boundary helpers (explicit conversions)
-    SDL_Point to_sdl_point() const { return SDL_Point{world_x_, world_y_}; }
-    SDL_FPoint to_sdl_fpoint() const { return SDL_FPoint{static_cast<float>(world_x_), static_cast<float>(world_y_)}; }
+    SDL_Point to_sdl_point() const { return SDL_Point{world_x_, world_z_}; }
+    SDL_FPoint to_sdl_fpoint() const { return SDL_FPoint{static_cast<float>(world_x_), static_cast<float>(world_z_)}; }
 
     enum class ChildDirection {
         XNeg = 0,
@@ -201,10 +203,6 @@ struct GridPoint {
     float      distance_to_camera = 0.0f;
     float      tilt_radians       = 0.0f;
     bool       on_screen          = false;
-    float      terrain_elevation  = 0.0f;
-    float      terrain_slope_x    = 0.0f;
-    float      terrain_slope_y    = 0.0f;
-    std::uint64_t terrain_revision = 0;
 
     mutable std::uint64_t screen_data_frame_updated = 0;
     mutable bool          screen_data_valid         = false;
@@ -213,12 +211,10 @@ struct GridPoint {
 
     // Smart caching: returns true if projection calculation is needed
     bool needs_projection_update(std::uint64_t current_frame,
-                                 std::uint64_t camera_version,
-                                 std::uint64_t terrain_rev) const {
+                                 std::uint64_t camera_version) const {
         return !screen_data_valid ||
                screen_data_frame_updated != current_frame ||
-               last_camera_state_version_ != camera_version ||
-               terrain_revision != terrain_rev;
+               last_camera_state_version_ != camera_version;
     }
 
     // Self-contained projection: GridPoint calculates its own screen position
@@ -242,10 +238,6 @@ struct GridPoint {
         distance_to_camera = 0.0f;
         tilt_radians       = 0.0f;
         on_screen          = false;
-        terrain_elevation  = 0.0f;
-        terrain_slope_x    = 0.0f;
-        terrain_slope_y    = 0.0f;
-        terrain_revision   = 0;
         is_floor           = (world_z_ == 0);
         screen_data_frame_updated = frame_stamp;
         screen_data_valid  = false;
@@ -364,8 +356,8 @@ struct GridPoint {
         return "id=" + std::to_string(id) +
                " world=(" + std::to_string(world_x_) + "," + std::to_string(world_y_) + "," + std::to_string(world_z_) + ")" +
                " layer=" + std::to_string(resolution_layer_) +
-               " grid_index=(" + std::to_string(grid_index.x) + "," + std::to_string(grid_index.y) + ")" +
-               " chunk_index=(" + std::to_string(chunk_index.x) + "," + std::to_string(chunk_index.y) + ")" +
+               " grid_index=(" + std::to_string(grid_index.x) + "," + std::to_string(grid_index.z) + ")" +
+               " chunk_index=(" + std::to_string(chunk_index.x) + "," + std::to_string(chunk_index.z) + ")" +
                (is_virtual_ ? " virtual=1" : " virtual=0") +
                " assets=" + std::to_string(occupants.size()) +
                " children_with_assets=" + std::to_string(children_with_assets) +
@@ -426,7 +418,8 @@ struct GridBounds {
         : min(min_pt)
         , max(max_pt) {}
 
-    static GridBounds from_xywh(int x, int y, int w, int h, int world_z = 0, int layer = 0);
+    // x/z rectangle on ground plane; world_y is height.
+    static GridBounds from_xywh(int x, int z, int w, int h, int world_y = 0, int layer = 0);
     static GridBounds from_min_max(const GridPoint& min_pt, const GridPoint& max_pt);
 
     bool contains(const GridPoint& pt) const;
@@ -441,17 +434,18 @@ namespace grid_math {
 // Lightweight helpers to keep spatial math in the GridPoint domain and avoid
 // ad-hoc SDL_Point arithmetic sprinkled across systems that aren't render UI.
 inline GridPoint from_sdl(const SDL_Point& pt,
-                          int world_z = 0,
+                          int world_y = 0,
                           int resolution_layer = 0) {
-    return GridPoint::make_virtual(pt.x, pt.y, world_z, resolution_layer);
+    // SDL y maps to world depth (Z) on the ground plane; height supplied separately.
+    return GridPoint::make_virtual(pt.x, world_y, pt.y, resolution_layer);
 }
 
 inline SDL_Point to_sdl(const GridPoint& gp) { return gp.to_sdl_point(); }
 
-inline GridPoint offset(const GridPoint& base, int dx, int dy) {
+inline GridPoint offset(const GridPoint& base, int dx, int dz) {
     return GridPoint::make_virtual(base.world_x() + dx,
-                                   base.world_y() + dy,
-                                   base.world_z(),
+                                   base.world_y(),
+                                   base.world_z() + dz,
                                    base.resolution_layer());
 }
 
@@ -461,12 +455,12 @@ inline GridPoint offset(const GridPoint& base, const SDL_Point& delta) {
 
 inline int distance_sq(const GridPoint& a, const GridPoint& b) {
     const int dx = a.world_x() - b.world_x();
-    const int dy = a.world_y() - b.world_y();
-    return dx * dx + dy * dy;
+    const int dz = a.world_z() - b.world_z();
+    return dx * dx + dz * dz;
 }
 
 inline int manhattan(const GridPoint& a, const GridPoint& b) {
-    return std::abs(a.world_x() - b.world_x()) + std::abs(a.world_y() - b.world_y());
+    return std::abs(a.world_x() - b.world_x()) + std::abs(a.world_z() - b.world_z());
 }
 } // namespace grid_math
 

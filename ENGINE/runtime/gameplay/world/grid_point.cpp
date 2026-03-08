@@ -59,10 +59,6 @@ GridPoint::GridPoint(const GridPoint& other)
     , distance_to_camera(other.distance_to_camera)
     , tilt_radians(other.tilt_radians)
     , on_screen(other.on_screen)
-    , terrain_elevation(other.terrain_elevation)
-    , terrain_slope_x(other.terrain_slope_x)
-    , terrain_slope_y(other.terrain_slope_y)
-    , terrain_revision(other.terrain_revision)
     , screen_data_frame_updated(other.screen_data_frame_updated)
     , screen_data_valid(other.screen_data_valid)
     , last_camera_state_version_(other.last_camera_state_version_)
@@ -88,11 +84,11 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
 
     // Convert world position to meters
     const double safe_scale = std::max(1e-6, params.meters_scale);
-    const double world_z_total = static_cast<double>(world_z_) + static_cast<double>(terrain_elevation);
+    const double world_y_total = static_cast<double>(world_y_) + static_cast<double>(terrain_elevation);
     const Vec3 world_meters{
         (static_cast<double>(world_x_) - params.anchor_world_x) * safe_scale,
-        (static_cast<double>(world_y_) - params.anchor_world_y) * safe_scale,
-        world_z_total * safe_scale
+        world_y_total * safe_scale,
+        (static_cast<double>(world_z_)) * safe_scale
     };
 
     // Camera vectors
@@ -156,7 +152,7 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     float vert_scale = 1.0f;
     const double unit_meters = std::max(1e-6, params.meters_scale);
     const Vec3 unit_world_x{unit_meters, 0.0, 0.0};
-    const Vec3 unit_world_z{0.0, 0.0, unit_meters};
+    const Vec3 unit_world_y{0.0, unit_meters, 0.0};
 
     auto screen_distance_for_delta = [&](const Vec3& unit_world) -> std::optional<double> {
         const Vec3 delta_cam{
@@ -187,9 +183,9 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     if (const auto scale_x = screen_distance_for_delta(unit_world_x)) {
         scale = *scale_x;
     }
-    if (const auto scale_z = screen_distance_for_delta(unit_world_z)) {
+    if (const auto scale_y = screen_distance_for_delta(unit_world_y)) {
         if (std::isfinite(scale) && scale > 1e-6) {
-            vert_scale = static_cast<float>(*scale_z / scale);
+            vert_scale = static_cast<float>(*scale_y / scale);
         }
     }
 
@@ -261,10 +257,6 @@ GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     distance_to_camera = other.distance_to_camera;
     tilt_radians = other.tilt_radians;
     on_screen = other.on_screen;
-    terrain_elevation = other.terrain_elevation;
-    terrain_slope_x = other.terrain_slope_x;
-    terrain_slope_y = other.terrain_slope_y;
-    terrain_revision = other.terrain_revision;
     screen_data_frame_updated = other.screen_data_frame_updated;
     screen_data_valid = other.screen_data_valid;
     last_camera_state_version_ = other.last_camera_state_version_;
@@ -294,10 +286,6 @@ GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     other.z_child_pos_ = nullptr;
     other.children_with_assets = 0;
     other.active_child_mask = 0;
-    other.terrain_elevation = 0.0f;
-    other.terrain_slope_x = 0.0f;
-    other.terrain_slope_y = 0.0f;
-    other.terrain_revision = 0;
     other.is_floor = false;
 
     return *this;
@@ -320,7 +308,7 @@ GridPoint& GridPoint::from_world(int x, int y, int z, int layer, WorldGrid& grid
     const GridKey key = grid.grid_key_from_world(world_point, z, layer);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
     GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
-    gp.is_floor = (gp.world_z() == 0);
+    gp.is_floor = (gp.world_y() == 0);
     return gp;
 }
 
@@ -328,7 +316,7 @@ GridPoint& GridPoint::from_world(const GridKey& key, WorldGrid& grid) {
     const GridPoint world_point = GridPoint::make_virtual(key.x, key.y, key.z, key.layer);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
     GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
-    gp.is_floor = (gp.world_z() == 0);
+    gp.is_floor = (gp.world_y() == 0);
     return gp;
 }
 
@@ -380,7 +368,7 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     const GridKey key = grid.grid_key_from_world(world_point, world_z_px, -1);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
     GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
-    gp.is_floor = (gp.world_z() == 0);
+    gp.is_floor = (gp.world_y() == 0);
     return &gp;
 }
 
@@ -433,10 +421,6 @@ void swap(GridPoint& a, GridPoint& b) noexcept {
     swap(a.region_owner, b.region_owner);
     swap(a.is_floor, b.is_floor);
     swap(a.on_screen, b.on_screen);
-    swap(a.terrain_elevation, b.terrain_elevation);
-    swap(a.terrain_slope_x, b.terrain_slope_x);
-    swap(a.terrain_slope_y, b.terrain_slope_y);
-    swap(a.terrain_revision, b.terrain_revision);
     swap(a.screen_data_frame_updated, b.screen_data_frame_updated);
     swap(a.screen_data_valid, b.screen_data_valid);
     swap(a.last_camera_state_version_, b.last_camera_state_version_);

@@ -124,51 +124,54 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
     };
 
     // Render fog on the map floor
-    int min_world_z = 0;
-    int max_world_z = 0;
+    int min_world_z = cam.last_min_world_z();
+    int max_world_z = cam.last_max_world_z();
+    if (min_world_z > max_world_z) {
+        min_world_z = 0;
+        max_world_z = 0;
+    }
 
     // Snap to grid alignment
     int start_x = static_cast<int>(std::floor(visible_bounds.x / grid_spacing)) * grid_spacing;
-    int start_y = static_cast<int>(std::floor(visible_bounds.y / grid_spacing)) * grid_spacing;
-    int end_x = static_cast<int>(std::ceil((visible_bounds.x + visible_bounds.w) / grid_spacing)) * grid_spacing;
-    int end_y = static_cast<int>(std::ceil((visible_bounds.y + visible_bounds.h) / grid_spacing)) * grid_spacing;
+    int start_z = static_cast<int>(std::floor(visible_bounds.y / grid_spacing)) * grid_spacing;
+    int end_x   = static_cast<int>(std::ceil((visible_bounds.x + visible_bounds.w) / grid_spacing)) * grid_spacing;
+    int end_z   = static_cast<int>(std::ceil((visible_bounds.y + visible_bounds.h) / grid_spacing)) * grid_spacing;
 
-    // Iterate over z layers (sample only 2 layers for sparse fog)
-    const int z_step = std::max(1, (max_world_z - min_world_z) / 2);
-    for (int world_z = min_world_z; world_z <= max_world_z; world_z += z_step) {
-        // Iterate over grid positions at layer 4 spacing (729 pixels)
+    start_z = std::max(start_z, min_world_z);
+    end_z   = std::max(start_z, std::min(end_z, max_world_z));
+
+    const int z_step = std::max(1, grid_spacing);
+    for (int world_depth = start_z; world_depth <= end_z; world_depth += z_step) {
         for (int world_x = start_x; world_x <= end_x; world_x += grid_spacing) {
-            for (int world_y = start_y; world_y <= end_y; world_y += grid_spacing) {
-                // Assign fog texture for this grid point (memoized random assignment)
-                int fog_index = assign_fog_texture_for_point(world_x, world_y, world_z, kFogResolutionLayer);
-                if (fog_index < 0 || fog_index >= static_cast<int>(fog_textures_.size())) {
-                    continue;
-                }
-
-                const auto& fog_tex_entry = fog_textures_[fog_index];
-                if (!fog_tex_entry.texture || fog_tex_entry.width <= 0 || fog_tex_entry.height <= 0) {
-                    continue;
-                }
-
-                SDL_FPoint base_world_pos{static_cast<float>(world_x), static_cast<float>(world_y)};
-                const SDL_FPoint jitter_offset = sample_jitter_offset(world_x, world_y, world_z, kFogResolutionLayer, max_random_jitter);
-                SDL_FPoint world_pos{base_world_pos.x + jitter_offset.x, base_world_pos.y + jitter_offset.y};
-                SDL_FPoint screen_pos{};
-                if (!cam.project_world_point(world_pos, static_cast<float>(world_z), screen_pos)) {
-                    continue;
-                }
-                if (!std::isfinite(screen_pos.x) || !std::isfinite(screen_pos.y)) {
-                    continue;
-                }
-
-                active_fog_sprites_.push_back(FogSprite{
-                    fog_tex_entry.texture, world_pos, screen_pos, 1.0f, world_z,
-                    fog_tex_entry.width, fog_tex_entry.height
-                });
+            int fog_index = assign_fog_texture_for_point(world_x, world_depth, world_depth, kFogResolutionLayer);
+            if (fog_index < 0 || fog_index >= static_cast<int>(fog_textures_.size())) {
+                continue;
             }
+
+            const auto& fog_tex_entry = fog_textures_[fog_index];
+            if (!fog_tex_entry.texture || fog_tex_entry.width <= 0 || fog_tex_entry.height <= 0) {
+                continue;
+            }
+
+            SDL_FPoint ground_pos{static_cast<float>(world_x), 0.0f};
+            const SDL_FPoint jitter_offset = sample_jitter_offset(world_x, world_depth, world_depth, kFogResolutionLayer, max_random_jitter);
+            const float jittered_depth = static_cast<float>(world_depth) + jitter_offset.y;
+            const float jittered_x = ground_pos.x + jitter_offset.x;
+            SDL_FPoint screen_pos{};
+            if (!cam.project_world_point(SDL_FPoint{jittered_x, 0.0f}, jittered_depth, screen_pos)) {
+                continue;
+            }
+            if (!std::isfinite(screen_pos.x) || !std::isfinite(screen_pos.y)) {
+                continue;
+            }
+
+            SDL_FPoint world_pos{jittered_x, jittered_depth};
+            active_fog_sprites_.push_back(FogSprite{
+                fog_tex_entry.texture, world_pos, screen_pos, 1.0f, static_cast<int>(std::lround(jittered_depth)),
+                fog_tex_entry.width, fog_tex_entry.height
+            });
         }
     }
-
     // Depth-sort so render.cpp can merge fog into the interleaved draw order without copying
     const double anchor_depth = cam.anchor_world_z();
     std::sort(active_fog_sprites_.begin(), active_fog_sprites_.end(),

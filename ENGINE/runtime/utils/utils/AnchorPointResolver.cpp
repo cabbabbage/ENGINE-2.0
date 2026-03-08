@@ -278,6 +278,7 @@ SDL_FPoint compute_anchor_screen_from_mesh(const Asset& asset,
                                            float perspective_scale) {
     const float world_x = asset.smoothed_translation_x();
     const float world_y = asset.smoothed_translation_y();
+    const float base_world_z = static_cast<float>(asset.world_z());
     const float safe_perspective = (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
     const float world_width = static_cast<float>(dims.final_w) / safe_perspective;
     const float world_height = static_cast<float>(dims.final_h) / safe_perspective;
@@ -285,8 +286,9 @@ SDL_FPoint compute_anchor_screen_from_mesh(const Asset& asset,
 
     SDL_FPoint screen_bl{};
     SDL_FPoint screen_br{};
-    cam.project_world_point(SDL_FPoint{world_x - half_width, world_y}, dims.world_z_offset, screen_bl);
-    cam.project_world_point(SDL_FPoint{world_x + half_width, world_y}, dims.world_z_offset, screen_br);
+    const float base_depth = base_world_z + dims.world_z_offset;
+    cam.project_world_point(SDL_FPoint{world_x - half_width, world_y}, base_depth, screen_bl);
+    cam.project_world_point(SDL_FPoint{world_x + half_width, world_y}, base_depth, screen_br);
 
     const float bottom_dx = screen_br.x - screen_bl.x;
     const float bottom_dy = screen_br.y - screen_bl.y;
@@ -386,13 +388,14 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
 
     const float world_x = asset.smoothed_translation_x();
     const float world_y = asset.smoothed_translation_y();
+    const float base_world_z = static_cast<float>(asset.world_z());
     const float safe_perspective = (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
     const float world_width = static_cast<float>(dims.final_w) / safe_perspective;
     const float world_height = static_cast<float>(dims.final_h) / safe_perspective;
 
     const float anchor_world_x = world_x + (anchor_sample.mesh_uv.x - 0.5f) * world_width;
     const float anchor_world_height = world_y;
-    const float anchor_world_depth = dims.world_z_offset + (1.0f - anchor_sample.mesh_uv.y) * world_height;
+    const float anchor_world_depth = base_world_z + dims.world_z_offset + (1.0f - anchor_sample.mesh_uv.y) * world_height;
 
     float displaced_world_x = anchor_world_x;
     float displaced_world_height = anchor_world_height;

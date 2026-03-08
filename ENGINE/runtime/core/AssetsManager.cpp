@@ -1869,7 +1869,7 @@ bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rec
         SDL_FPoint top_right{};
         SDL_FPoint bottom_left{};
         SDL_FPoint bottom_right{};
-        const float base_z = 0.0f;
+        const float base_z = static_cast<float>(asset->world_z());
         const bool projected =
             camera_.project_world_point(SDL_FPoint{world_x - half_width, world_y}, base_z + height, top_left) &&
             camera_.project_world_point(SDL_FPoint{world_x + half_width, world_y}, base_z + height, top_right) &&

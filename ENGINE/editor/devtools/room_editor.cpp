@@ -3409,13 +3409,14 @@ bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam
     float max_y = -std::numeric_limits<float>::infinity();
     SDL_FPoint base_screen{};
     bool have_bounds = false;
+    const float base_depth = static_cast<float>(asset->world_z());
 
     for (const auto& obj : asset->render_package) {
         if (obj.screen_rect.w <= 0 || obj.screen_rect.h <= 0) {
             continue;
         }
         SDL_FPoint world_point{ static_cast<float>(obj.screen_rect.x), static_cast<float>(obj.screen_rect.y) };
-        if (!cam.project_world_point(world_point, obj.world_z_offset, base_screen)) {
+        if (!cam.project_world_point(world_point, base_depth + obj.world_z_offset, base_screen)) {
             continue;
         }
         const float half_width = static_cast<float>(obj.screen_rect.w) * 0.5f;
@@ -6754,6 +6755,7 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
     const int base_alpha = (overlay_color.a == 0) ? 255 : overlay_color.a;
     const int target_alpha = static_cast<int>(std::lround(static_cast<float>(base_alpha) * 0.8f));
     overlay_color.a = static_cast<Uint8>(std::clamp(target_alpha, 0, 255));
+    const float base_depth = static_cast<float>(asset->world_z());
 
     auto project_render_object_rect = [&](const RenderObject& obj, SDL_FRect& out_rect) -> bool {
         if (obj.screen_rect.w <= 0 || obj.screen_rect.h <= 0) {
@@ -6765,7 +6767,7 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
             static_cast<float>(obj.screen_rect.x),
             static_cast<float>(obj.screen_rect.y)
         };
-        if (!cam.project_world_point(world_point, obj.world_z_offset, base_screen)) {
+        if (!cam.project_world_point(world_point, base_depth + obj.world_z_offset, base_screen)) {
             return false;
         }
         if (!std::isfinite(base_screen.x) || !std::isfinite(base_screen.y)) {

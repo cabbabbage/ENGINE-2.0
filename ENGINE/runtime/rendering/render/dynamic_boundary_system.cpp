@@ -255,11 +255,10 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 continue;
             }
 
-            const int world_z = 0;
             for (int ix = start_idx_x; ix <= end_idx_x; ++ix) {
                 const int world_x = grid_origin.world_x() + ix * grid_spacing;
                 for (int iy = start_idx_y; iy <= end_idx_y; ++iy) {
-                    const int world_y = grid_origin.world_y() + iy * grid_spacing;
+                    const int world_z = grid_origin.world_z() + iy * grid_spacing;
                     const BoundaryKey key = make_key(static_cast<int>(type_idx), resolution_layer, ix, iy, world_z);
                     const int candidate_idx = select_candidate_for_key(key, btype);
                     if (candidate_idx < 0 || candidate_idx >= static_cast<int>(btype.candidates.size())) {
@@ -271,16 +270,18 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                     }
 
                     const SDL_FPoint jitter = sample_jitter_offset(key, max_random_jitter);
+                    const float jittered_z = static_cast<float>(world_z) + jitter.y;
                     SDL_FPoint world_pos{
                         static_cast<float>(world_x) + jitter.x,
-                        static_cast<float>(world_y) + jitter.y
+                        0.0f
                     };
-                    const SDL_Point world_pt{static_cast<int>(std::lround(world_pos.x)), static_cast<int>(std::lround(world_pos.y))};
+                    const SDL_Point world_pt{static_cast<int>(std::lround(world_pos.x)), static_cast<int>(std::lround(jittered_z))};
                     const auto& region_entry = resolve_region_cache(world_pt, rooms);
                     if (region_entry.region_kind != RegionKind::Boundary || region_entry.blocked) {
                         continue;
                     }
-                    static_assignments_.push_back(StaticCellAssignment{key, candidate_idx, static_cast<int>(type_idx), world_pos, world_z});
+
+                    static_assignments_.push_back(StaticCellAssignment{key, candidate_idx, static_cast<int>(type_idx), world_pos, static_cast<int>(std::lround(jittered_z))});
                 }
             }
         }

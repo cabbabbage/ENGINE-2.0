@@ -215,13 +215,14 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
 
     auto floor_project = [&](SDL_Point world_pos, SDL_FPoint& out) -> bool {
         SDL_FPoint screen{};
-        if (!cam.project_world_point(SDL_FPoint{static_cast<float>(world_pos.x), static_cast<float>(world_pos.y)}, 0.0f, screen)) {
+        const float world_depth = static_cast<float>(world_pos.y);
+        if (!cam.project_world_point(SDL_FPoint{static_cast<float>(world_pos.x), 0.0f}, world_depth, screen)) {
             return false;
         }
         if (!std::isfinite(screen.x) || !std::isfinite(screen.y)) {
             return false;
         }
-        screen.y = cam.warp_floor_screen_y(static_cast<float>(world_pos.y), screen.y);
+        screen.y = cam.warp_floor_screen_y(0.0f, screen.y);
         if (!std::isfinite(screen.y)) {
             return false;
         }

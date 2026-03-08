@@ -45,4 +45,7 @@ class Styles {
     static const LabelStyle& LabelExit();
     static const ButtonStyle& MainDecoButton();
     static const ButtonStyle& ExitDecoButton();
+    static int SliderLabelGap();
+    static int SliderLabelHorizontalInset();
+    static int SliderValueRightInset();
 };

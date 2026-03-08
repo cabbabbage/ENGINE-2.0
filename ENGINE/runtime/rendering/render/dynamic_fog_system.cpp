@@ -1,30 +1,18 @@
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "assets/Asset.hpp"
+#include "rendering/render/grid_overlay.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "utils/log.hpp"
 
 #include <SDL3_image/SDL_image.h>
-#include <random>
 #include <cmath>
 #include <algorithm>
 #include <filesystem>
-#include <limits>
 #include <cstdint>
 
 namespace fs = std::filesystem;
-
-namespace {
-constexpr float kMinGridMultiplier = 0.25f;
-constexpr float kMaxGridMultiplier = 8.0f;
-constexpr float kMinBaseScale = 0.25f;
-constexpr float kMaxBaseScale = 12.0f;
-constexpr float kMinVerticalOffset = -300.0f;
-constexpr float kMaxVerticalOffset = 300.0f;
-constexpr float kMinRandomJitter = 0.0f;
-constexpr float kMaxRandomJitter = 500.0f;
-}
 
 DynamicFogSystem::DynamicFogSystem() = default;
 
@@ -114,7 +102,6 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
     // Get visible world bounds from camera
     SDL_FPoint view_center = cam.get_view_center_f();
     double view_height = cam.view_height_world();
-    const auto& settings = cam.realism_settings();
 
     // Use grid-resolution aware spacing, scaled by dev-configured multiplier
     const int resolution_layer = std::clamp(grid.grid_resolution(), 0, grid.max_resolution_layers());
@@ -122,9 +109,9 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
     if (base_spacing <= 0 || base_spacing > 20000) {
         base_spacing = grid.grid_spacing_for_layer(kFogResolutionLayer);
     }
-    const float spacing_multiplier = std::clamp(config().grid_spacing_multiplier, kMinGridMultiplier, kMaxGridMultiplier);
-    const int grid_spacing = std::max(1, static_cast<int>(std::lround(static_cast<float>(base_spacing) * spacing_multiplier)));
-    const float max_random_jitter = std::clamp(config().max_random_jitter, kMinRandomJitter, kMaxRandomJitter);
+    const float spacing_multiplier = render_overlay::clamp_spacing_multiplier(config().grid_spacing_multiplier);
+    const int grid_spacing = render_overlay::scaled_spacing(base_spacing, spacing_multiplier);
+    const float max_random_jitter = render_overlay::clamp_random_jitter(config().max_random_jitter);
 
     // Expand visible bounds to ensure coverage
     const float margin = view_height * 0.5f;
@@ -198,14 +185,7 @@ void DynamicFogSystem::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
 }
 
 std::uint64_t DynamicFogSystem::make_grid_point_hash(int world_x, int world_y, int world_z, int layer) const {
-    // Create a simple hash from grid coordinates
-    // Combine x, y, z, layer into a single 64-bit hash
-    std::uint64_t h = 0;
-    h ^= std::hash<int>{}(world_x) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<int>{}(world_y) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<int>{}(world_z) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<int>{}(layer) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    return h;
+    return render_overlay::hash_grid_cell(world_x, world_y, world_z, layer);
 }
 
 int DynamicFogSystem::assign_fog_texture_for_point(int world_x, int world_y, int world_z, int layer) {
@@ -216,21 +196,14 @@ int DynamicFogSystem::assign_fog_texture_for_point(int world_x, int world_y, int
         return it->second;  // Already assigned
     }
 
-    // Randomly assign a fog texture
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dist(0, static_cast<int>(fog_textures_.size()) - 1);
-    int fog_index = dist(gen);
+    const int fog_index = render_overlay::hashed_roll(hash, static_cast<int>(fog_textures_.size()));
 
     fog_assignments_[hash] = fog_index;
     return fog_index;
 }
 
 void DynamicFogSystem::set_grid_spacing_multiplier(float multiplier) {
-    if (!std::isfinite(multiplier)) {
-        return;
-    }
-    config().grid_spacing_multiplier = std::clamp(multiplier, kMinGridMultiplier, kMaxGridMultiplier);
+    config().grid_spacing_multiplier = render_overlay::clamp_spacing_multiplier(multiplier);
 }
 
 float DynamicFogSystem::grid_spacing_multiplier() {
@@ -238,10 +211,7 @@ float DynamicFogSystem::grid_spacing_multiplier() {
 }
 
 void DynamicFogSystem::set_base_size_scale(float scale) {
-    if (!std::isfinite(scale)) {
-        return;
-    }
-    config().base_size_scale = std::clamp(scale, kMinBaseScale, kMaxBaseScale);
+    config().base_size_scale = render_overlay::clamp_base_size_scale(scale);
 }
 
 float DynamicFogSystem::base_size_scale() {
@@ -249,10 +219,7 @@ float DynamicFogSystem::base_size_scale() {
 }
 
 void DynamicFogSystem::set_vertical_offset(float offset) {
-    if (!std::isfinite(offset)) {
-        return;
-    }
-    config().vertical_offset = std::clamp(offset, kMinVerticalOffset, kMaxVerticalOffset);
+    config().vertical_offset = render_overlay::clamp_vertical_offset(offset);
 }
 
 float DynamicFogSystem::vertical_offset() {
@@ -260,10 +227,7 @@ float DynamicFogSystem::vertical_offset() {
 }
 
 void DynamicFogSystem::set_max_random_jitter(float jitter) {
-    if (!std::isfinite(jitter)) {
-        return;
-    }
-    config().max_random_jitter = std::clamp(jitter, kMinRandomJitter, kMaxRandomJitter);
+    config().max_random_jitter = render_overlay::clamp_random_jitter(jitter);
 }
 
 float DynamicFogSystem::max_random_jitter() {
@@ -275,21 +239,7 @@ SDL_FPoint DynamicFogSystem::sample_jitter_offset(int world_x,
                                                   int world_z,
                                                   int layer,
                                                   float max_jitter) const {
-    if (max_jitter <= 0.0f) {
-        return SDL_FPoint{0.0f, 0.0f};
-    }
-    std::uint64_t state = make_grid_point_hash(world_x, world_y, world_z, layer);
-    state ^= 0x9e3779b97f4a7c15ULL;
-    auto uniform01 = [&state]() -> double {
-        state ^= state << 13;
-        state ^= state >> 7;
-        state ^= state << 17;
-        const uint32_t value = static_cast<uint32_t>(state >> 32);
-        return static_cast<double>(value) / static_cast<double>(std::numeric_limits<uint32_t>::max());
-    };
-    const double jitter_x = (uniform01() * 2.0 - 1.0) * static_cast<double>(max_jitter);
-    const double jitter_y = (uniform01() * 2.0 - 1.0) * static_cast<double>(max_jitter);
-    return SDL_FPoint{static_cast<float>(jitter_x), static_cast<float>(jitter_y)};
+    return render_overlay::jitter_from_hash(make_grid_point_hash(world_x, world_y, world_z, layer), max_jitter);
 }
 
 DynamicFogSystem::FogConfig& DynamicFogSystem::config() {

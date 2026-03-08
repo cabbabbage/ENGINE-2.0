@@ -71,35 +71,35 @@ void MapWideAssetSpawner::spawn(std::vector<std::unique_ptr<Room>>& rooms) {
     }
 
     int min_x = std::numeric_limits<int>::max();
-    int min_y = std::numeric_limits<int>::max();
+    int min_z = std::numeric_limits<int>::max();
     int max_x = std::numeric_limits<int>::min();
-    int max_y = std::numeric_limits<int>::min();
+    int max_z = std::numeric_limits<int>::min();
     bool have_area = false;
 
     for (const auto& room_ptr : rooms) {
         if (!room_ptr || !room_ptr->room_area) {
             continue;
         }
-        auto [rminx, rminy, rmaxx, rmaxy] = room_ptr->room_area->get_bounds();
+        auto [rminx, rminz, rmaxx, rmaxz] = room_ptr->room_area->get_bounds();
         min_x = std::min(min_x, rminx);
-        min_y = std::min(min_y, rminy);
+        min_z = std::min(min_z, rminz);
         max_x = std::max(max_x, rmaxx);
-        max_y = std::max(max_y, rmaxy);
+        max_z = std::max(max_z, rmaxz);
         have_area = true;
     }
 
     if (!have_area) {
         return;
     }
-    if (min_x >= max_x || min_y >= max_y) {
+    if (min_x >= max_x || min_z >= max_z) {
         return;
     }
 
     std::vector<SDL_Point> polygon{
-        SDL_Point{min_x, min_y},
-        SDL_Point{max_x, min_y},
-        SDL_Point{max_x, max_y},
-        SDL_Point{min_x, max_y},
+        SDL_Point{min_x, min_z},
+        SDL_Point{max_x, min_z},
+        SDL_Point{max_x, max_z},
+        SDL_Point{min_x, max_z},
 };
     Area sweep_area("map_wide_sweep", polygon);
     sweep_area.set_type("map_wide");

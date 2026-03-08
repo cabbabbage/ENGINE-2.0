@@ -44,6 +44,8 @@ struct CameraState {
     double screen_pan_y_px = 0.0;
     float  near_camera_max_perspective_scale = 0.0f;
     float  offscreen_fade_amount_px = 0.0f;
+    // Canonical anchors: height is separate from ground-plane depth.
+    double anchor_world_z = 0.0; // depth (Z) anchor on ground plane
 };
 
 class Asset;

@@ -58,8 +58,10 @@ struct CameraProjectionParams {
     double forward_x = 0.0, forward_y = 0.0, forward_z = 1.0;
     double right_x = 1.0, right_y = 0.0, right_z = 0.0;
     double up_x = 0.0, up_y = 1.0, up_z = 0.0;
-    // World anchor point (pixels)
-    double anchor_world_x = 0.0, anchor_world_y = 0.0;
+    // World anchor point (pixels) on the ground plane (X/Z) plus optional height offset.
+    double anchor_world_x = 0.0; // ground-plane X anchor
+    double anchor_world_y = 0.0; // world height anchor (Y)
+    double anchor_world_z = 0.0; // ground-plane depth anchor (Z)
     // Conversion factor: world pixels to meters
     double meters_scale = 0.01;
     // Field of view tangents

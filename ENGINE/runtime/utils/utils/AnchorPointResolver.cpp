@@ -32,7 +32,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               AnchorDepthPolicy,
                                               GridMaterialization) {
     FrameAnchorSample sample{};
-    sample.resolved.world_px = asset.world_point();
+    sample.resolved.world_px = asset.world_xz_point();
     sample.resolved.world_z = asset.world_z();
     sample.screen_px = SDL_FPoint{static_cast<float>(asset.world_x()), static_cast<float>(asset.world_y())};
     sample.resolved.in_front = anchor.in_front;
@@ -104,7 +104,7 @@ std::optional<CameraRayBasis> build_camera_ray_basis(const Assets* assets_owner)
     CameraRayBasis basis{};
     basis.origin_x = static_cast<float>(params.position_x / meters_scale + params.anchor_world_x);
     basis.origin_y = static_cast<float>(params.position_y / meters_scale + params.anchor_world_y);
-    basis.origin_z = static_cast<float>(params.position_z / meters_scale);
+    basis.origin_z = static_cast<float>(params.position_z / meters_scale + params.anchor_world_z);
 
     basis.dir_x = static_cast<float>(params.forward_x);
     basis.dir_y = static_cast<float>(params.forward_y);

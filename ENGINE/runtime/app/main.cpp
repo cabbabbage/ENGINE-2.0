@@ -304,7 +304,7 @@ void MainApp::setup() {
 
                 int start_px = player_ptr ? player_ptr->world_x()
                                           : static_cast<int>(loader_->getMapRadius());
-                int start_py = player_ptr ? player_ptr->world_y()
+                int start_pz = player_ptr ? player_ptr->world_z()
                                           : static_cast<int>(loader_->getMapRadius());
 
                 AssetLibrary* active_library = loader_->getAssetLibrary();
@@ -313,7 +313,7 @@ void MainApp::setup() {
                 }
 
                 vibble::log::info("[MainApp] Creating Assets object...");
-                game_assets_ = new Assets( *active_library, player_ptr, loader_->getRooms(), screen_w_, screen_h_, start_px, start_py, static_cast<int>(loader_->getMapRadius() * 1.2), renderer, loader_->map_identifier(), loader_->map_manifest(), loader_->content_root(), std::move(world_grid));
+                game_assets_ = new Assets( *active_library, player_ptr, loader_->getRooms(), screen_w_, screen_h_, start_px, start_pz, static_cast<int>(loader_->getMapRadius() * 1.2), renderer, loader_->map_identifier(), loader_->map_manifest(), loader_->content_root(), std::move(world_grid));
                 vibble::log::info("[MainApp] Assets object created successfully.");
 
                 const double spawn_seconds =

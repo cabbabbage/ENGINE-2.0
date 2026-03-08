@@ -20,7 +20,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
         if (self && up.planner_iface_) {
             const int visited_thresh = up.planner_iface_->visit_threshold_px();
             const int visited_thresh_squared = visited_thresh * visited_thresh;
-            const world::GridPoint current = world::grid_math::from_sdl(self->world_point(), self->world_z(), self->grid_resolution);
+            const world::GridPoint current = world::grid_math::from_sdl(self->world_xz_point(), self->world_z(), self->grid_resolution);
             const world::GridPoint target  = world::grid_math::from_sdl(plan.final_dest, self->world_z(), self->grid_resolution);
             const int dist_sq = animation_update::detail::distance_sq(current, target);
             if (dist_sq <= visited_thresh_squared) {
@@ -40,7 +40,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
     auto abort_plan = [&]() {
         plan.strides.clear();
         plan.sanitized_checkpoints.clear();
-        plan.final_dest = self->world_point();
+        plan.final_dest = self->world_xz_point();
         stride_index    = 0;
         stride_frame_counter = 0;
         up.switch_to(animation_update::detail::kDefaultAnimation, 0);
@@ -88,7 +88,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
     }
 
     AnimationFrame* frame = self->current_frame;
-    SDL_Point        from  = self->world_point();
+    SDL_Point        from  = self->world_xz_point();
     SDL_Point        delta{0, 0};
     if (!up.suppress_root_motion_active()) {
         delta = animation_update::detail::frame_world_delta(*frame, *self, up.grid());

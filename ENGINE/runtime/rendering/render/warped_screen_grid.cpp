@@ -250,7 +250,8 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         state.pitch_radians = pitch_rad;
         state.pitch_degrees = tilt_deg;
         state.camera_world_y = camera_pos.y;
-        state.anchor_world_y = 0.0;
+        state.anchor_world_y = 0.0; // height anchor (Y)
+        state.anchor_world_z = static_cast<double>(anchor_world.y); // depth anchor (Z)
 
         return state;
     }
@@ -321,8 +322,8 @@ struct ProjectionResult {
         const double safe_scale = std::max(1e-6, meters_scale);
         const Vec3 world_meters{
             (world_x_pixels - static_cast<double>(cam.anchor_world_px.x)) * safe_scale,
-            (world_y_pixels - static_cast<double>(cam.anchor_world_px.y)) * safe_scale,
-            world_z_pixels * safe_scale
+            (world_y_pixels - cam.anchor_world_y) * safe_scale,
+            (world_z_pixels - cam.anchor_world_z) * safe_scale
         };
         const Vec3 to_point_meters = world_meters - cam.position;
         const double depth_along_forward = dot(to_point_meters, cam.forward);
@@ -453,10 +454,10 @@ struct ProjectionResult {
         dir = dir + cam.right * (ndc_x * cam.tan_half_fov_x);
         dir = dir + cam.up * (ndc_y * cam.tan_half_fov_y);
         dir = normalize(dir);
-        if (std::abs(dir.z) < 1e-6) {
+        if (std::abs(dir.y) < 1e-6) {
             return std::nullopt;
         }
-        const double t = -cam.position.z / dir.z;
+        const double t = -cam.position.y / dir.y;
         if (!std::isfinite(t) || t <= 0.0) {
             return std::nullopt;
         }
@@ -464,7 +465,7 @@ struct ProjectionResult {
         const double safe_scale = std::max(1e-6, cam.meters_scale);
         return SDL_FPoint{
             static_cast<float>(hit.x / safe_scale + static_cast<double>(cam.anchor_world_px.x)),
-            static_cast<float>(hit.y / safe_scale + static_cast<double>(cam.anchor_world_px.y))
+            static_cast<float>(hit.z / safe_scale + cam.anchor_world_z)
         };
     }
 
@@ -527,7 +528,8 @@ WarpedScreenGrid::FloorDepthParams build_floor_params_from_camera_state(
         params.up_y = cam.up.y;
         params.up_z = cam.up.z;
         params.anchor_world_x = static_cast<double>(cam.anchor_world_px.x);
-        params.anchor_world_y = static_cast<double>(cam.anchor_world_px.y);
+        params.anchor_world_y = cam.anchor_world_y; // height anchor
+        params.anchor_world_z = cam.anchor_world_z; // depth anchor
         params.meters_scale = cam.meters_scale;
         params.tan_half_fov_x = cam.tan_half_fov_x;
         params.tan_half_fov_y = cam.tan_half_fov_y;
@@ -767,7 +769,7 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
         auto [ax, ay] = cur->room_area->get_center();
         auto [bx, by] = neigh->room_area->get_center();
         const double pax = double(player->world_x());
-        const double pay = double(player->world_y());
+        const double pay = double(player->world_z());
         const double vx = double(bx - ax);
         const double vy = double(by - ay);
         const double wx = double(pax - ax);
@@ -789,7 +791,7 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     if (dev_mode && focus_override_active) {
         set_screen_center(camera_.state().focus_override);
     } else if (player) {
-        set_screen_center(SDL_Point{ player->world_x(), player->world_y() }, false);
+        set_screen_center(SDL_Point{ player->world_x(), player->world_z() }, false);
     } else if (cur && cur->room_area) {
         set_screen_center(cur->room_area->get_center());
     }
@@ -822,7 +824,7 @@ void WarpedScreenGrid::recompute_current_view() {
     const CameraState& cam = camera_state_cached();
     runtime_camera_height_ = cam.camera_height;
     runtime_focus_depth_ = cam.focus_depth;
-    runtime_anchor_world_z_ = cam.anchor_world_y;
+    runtime_anchor_world_z_ = cam.anchor_world_z;
     runtime_focus_ndc_offset_ = cam.focus_ndc_offset;
     runtime_pitch_rad_ = cam.pitch_radians;
     runtime_pitch_deg_ = cam.pitch_degrees;
@@ -1094,7 +1096,7 @@ double WarpedScreenGrid::view_height_world() const {
 
 double WarpedScreenGrid::anchor_world_z() const {
 
-    return static_cast<double>(camera_.state().center.y);
+    return runtime_anchor_world_z_;
 }
 
 void WarpedScreenGrid::clear_grid_state() {
@@ -1195,7 +1197,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     const CameraState& cam_state = camera_state_cached();
     runtime_camera_height_ = cam_state.camera_height;
     runtime_focus_depth_ = cam_state.focus_depth;
-    runtime_anchor_world_z_ = cam_state.anchor_world_y;
+    runtime_anchor_world_z_ = cam_state.anchor_world_z;
     runtime_focus_ndc_offset_ = cam_state.focus_ndc_offset;
     runtime_pitch_rad_ = cam_state.pitch_radians;
     runtime_pitch_deg_ = cam_state.pitch_degrees;
@@ -1262,8 +1264,8 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         CameraSpaceData data{};
         const Vec3 world_meters{
             (world_x - static_cast<double>(cam_state.anchor_world_px.x)) * safe_scale,
-            (world_y - static_cast<double>(cam_state.anchor_world_px.y)) * safe_scale,
-            world_z * safe_scale
+            (world_y - cam_state.anchor_world_y) * safe_scale,
+            (world_z - cam_state.anchor_world_z) * safe_scale
         };
         const Vec3 to_point = world_meters - cam_state.position;
         data.depth = dot(to_point, cam_state.forward);
@@ -1693,7 +1695,7 @@ void WarpedScreenGrid::update() {
     runtime_camera_height_ = cam.camera_height;
     runtime_pitch_deg_ = cam.pitch_degrees;
     runtime_pitch_rad_ = cam.pitch_radians;
-    runtime_anchor_world_z_ = cam.anchor_world_y;
+    runtime_anchor_world_z_ = cam.anchor_world_z;
 }
 
 Area WarpedScreenGrid::frame_to_area(const SDL_Rect& frame) const {

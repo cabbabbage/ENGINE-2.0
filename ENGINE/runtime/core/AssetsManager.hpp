@@ -71,7 +71,7 @@ public:
            int screen_width,
            int screen_height,
            int screen_center_x,
-           int screen_center_y,
+           int screen_center_z,
            int map_radius,
            SDL_Renderer* renderer,
            const std::string& map_id,
@@ -290,8 +290,8 @@ private:
     SceneRenderer* scene = nullptr;
     int screen_width;
     int screen_height;
-    int dx = 0;
-    int dy = 0;
+    int delta_x_ = 0;
+    int delta_z_ = 0;
     std::vector<Asset*> active_assets;
     std::vector<Asset*> filtered_active_assets;
     std::unordered_set<Asset*> filtered_active_asset_membership_;

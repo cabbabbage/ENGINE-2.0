@@ -84,8 +84,8 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     const double safe_scale = std::max(1e-6, params.meters_scale);
     const Vec3 world_meters{
         (static_cast<double>(canonical_world.x) - params.anchor_world_x) * safe_scale,
-        static_cast<double>(canonical_world.y) * safe_scale,
-        static_cast<double>(canonical_world.z) * safe_scale
+        (static_cast<double>(canonical_world.y) - params.anchor_world_y) * safe_scale,
+        (static_cast<double>(canonical_world.z) - params.anchor_world_z) * safe_scale
     };
 
     // Camera vectors
@@ -365,7 +365,7 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     const double safe_scale = std::max(1e-6, params.meters_scale);
     const int world_x_px = static_cast<int>(std::lround(world_meters.x / safe_scale + params.anchor_world_x));
     const int world_y_px = static_cast<int>(std::lround(world_meters.y / safe_scale + params.anchor_world_y));
-    const int world_z_px = static_cast<int>(std::lround(world_meters.z / safe_scale));
+    const int world_z_px = static_cast<int>(std::lround(world_meters.z / safe_scale + params.anchor_world_z));
 
     const GridPoint world_point = GridPoint::make_virtual(axis::WorldPos{world_x_px, world_y_px, world_z_px}, -1);
     const GridKey key = grid.grid_key_from_world(world_point, -1);

@@ -127,7 +127,7 @@ Assets::Assets(AssetLibrary& library,
                int screen_width_,
                int screen_height_,
                int screen_center_x,
-               int screen_center_y,
+               int screen_center_z,
                int map_radius,
                SDL_Renderer* renderer,
                const std::string& map_id,
@@ -166,7 +166,7 @@ Assets::Assets(AssetLibrary& library,
     depth_effects_enabled_ = true;
 
     vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
-    InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_y, map_radius);
+    InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_z, map_radius);
     vibble::log::info("[Assets] Constructor: InitializeAssets complete");
 
     finder_ = new CurrentRoomFinder(rooms_, player);
@@ -182,9 +182,9 @@ Assets::Assets(AssetLibrary& library,
 };
     Room* intro_room = current_room();
 
-    SDL_Point intro_center{screen_center_x, screen_center_y};
+    SDL_Point intro_center{screen_center_x, screen_center_z};
     if (player) {
-        intro_center = SDL_Point{player->world_x(), player->world_y()};
+        intro_center = SDL_Point{player->world_x(), player->world_z()};
     } else if (Room* room = intro_room) {
         if (room->room_area) {
             intro_center = room->room_area->get_center();
@@ -192,7 +192,7 @@ Assets::Assets(AssetLibrary& library,
     }
     camera_.set_screen_center(intro_center);
     SDL_Point center_px = camera_.get_screen_center();
-    last_camera_center_for_grid_ = world::GridPoint::make_virtual(center_px.x, center_px.y, 0, 0);
+    last_camera_center_for_grid_ = world::GridPoint::make_virtual(center_px.x, 0, center_px.y, 0);
     last_camera_scale_for_grid_ = camera_.get_scale();
     last_camera_pitch_for_grid_ = camera_.current_pitch_radians();
     if (player) {
@@ -500,8 +500,8 @@ void Assets::force_camera_view_refresh() {
     const SDL_Point center_px = camera_.get_screen_center();
     const world::GridPoint center_point = world::GridPoint::make_virtual(
         center_px.x,
-        center_px.y,
         0,
+        center_px.y,
         world_grid_.max_resolution_layers());
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
@@ -717,9 +717,9 @@ void Assets::update_audio_camera_metrics() {
     auto update_audio_metrics = [&](Asset* asset) {
         if (!asset) return;
         const float dx = static_cast<float>(asset->world_x() - camera_focus.x);
-        const float dy = static_cast<float>(asset->world_y() - camera_focus.y);
-        asset->distance_from_camera = std::sqrt(dx * dx + dy * dy);
-        asset->angle_from_camera = std::atan2(dy, dx);
+        const float dz = static_cast<float>(asset->world_z() - camera_focus.y);
+        asset->distance_from_camera = std::sqrt(dx * dx + dz * dz);
+        asset->angle_from_camera = std::atan2(dz, dx);
 };
 
     if (player) {
@@ -788,7 +788,9 @@ void Assets::log_asset_movement(Asset* asset, const world::GridPoint& previous, 
     if (!asset) {
         return;
     }
-    if (previous.world_x() == current.world_x() && previous.world_y() == current.world_y()) {
+    if (previous.world_x() == current.world_x() &&
+        previous.world_y() == current.world_y() &&
+        previous.world_z() == current.world_z()) {
         return;
     }
     movement_commands_buffer_.push_back(GridMovementCommand{
@@ -964,13 +966,13 @@ void Assets::update(const Input& input)
     const bool room_changed = (current_room_ != active_room);
     current_room_ = active_room;
 
-    dx = dy = 0;
+    delta_x_ = delta_z_ = 0;
 
     // Pause runtime asset updates while in Dev Mode unless a frame editor session requires them.
     const bool runtime_updates_enabled = should_run_runtime_updates();
 
     int start_px = player ? player->world_x() : 0;
-    int start_py = player ? player->world_y() : 0;
+    int start_pz = player ? player->world_z() : 0;
 
     if (player) {
         player->active = true;
@@ -987,9 +989,9 @@ void Assets::update(const Input& input)
 
     bool player_moved = false;
     if (player) {
-        dx = player->world_x() - start_px;
-        dy = player->world_y() - start_py;
-        const bool moved_during_update = (dx != 0 || dy != 0);
+        delta_x_ = player->world_x() - start_px;
+        delta_z_ = player->world_z() - start_pz;
+        const bool moved_during_update = (delta_x_ != 0 || delta_z_ != 0);
         world::GridPoint current_player_pos = world::GridPoint::make_virtual(player->world_x(),
                                                                              player->world_y(),
                                                                              player->world_z(),
@@ -997,6 +999,7 @@ void Assets::update(const Input& input)
         const bool moved_since_last_frame =
             !last_player_pos_valid_ ||
             current_player_pos.world_x() != last_known_player_pos_.world_x() ||
+            current_player_pos.world_z() != last_known_player_pos_.world_z() ||
             current_player_pos.world_y() != last_known_player_pos_.world_y();
 
         last_known_player_pos_ = std::move(current_player_pos);
@@ -1005,7 +1008,7 @@ void Assets::update(const Input& input)
         player_moved = moved_during_update || moved_since_last_frame;
         if (runtime_updates_enabled && moved_during_update) {
             log_asset_movement(player,
-                               world::GridPoint::make_virtual(start_px, start_py, player->world_z(), player->grid_resolution),
+                               world::GridPoint::make_virtual(start_px, 0, start_pz, player->grid_resolution),
                                current_player_pos);
         }
     } else {
@@ -1025,7 +1028,9 @@ void Assets::update(const Input& input)
         if (runtime_updates_enabled) {
 
             asset->update();
-            if (previous_pos.world_x() != asset->world_x() || previous_pos.world_y() != asset->world_y()) {
+            if (previous_pos.world_x() != asset->world_x() ||
+                previous_pos.world_y() != asset->world_y() ||
+                previous_pos.world_z() != asset->world_z()) {
                 log_asset_movement(asset,
                                    previous_pos,
                                    world::GridPoint::make_virtual(asset->world_x(),
@@ -1563,7 +1568,7 @@ world::GridPoint Assets::resolve_floor_world_point(SDL_Point world_pos, int reso
     const int requested_layer = (resolution_layer >= 0) ? resolution_layer : std::clamp(max_layer - map_grid_settings_.grid_resolution, 0, max_layer);
     const int layer = std::clamp(requested_layer, 0, max_layer);
 
-    return world::GridPoint::make_virtual(world_pos.x, world_pos.y, 0, layer);
+    return world::GridPoint::make_virtual(world_pos.x, 0, world_pos.y, layer);
 }
 
 Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resolution_layer) {
@@ -1576,7 +1581,7 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
     const bool already_tracked = std::find(all.begin(), all.end(), raw) != all.end();
 
     const int resolved_layer = (resolution_layer >= 0) ? resolution_layer : world_grid_.default_resolution_layer();
-    const int resolved_z = (world_z != 0) ? world_z : resolve_floor_world_point(raw->world_point(), resolved_layer).world_z();
+    const int resolved_z = (world_z != 0) ? world_z : resolve_floor_world_point(raw->world_xz_point(), resolved_layer).world_z();
 
     raw = world_grid_.attach_asset(std::move(asset), resolved_z, resolved_layer);
     if (!raw) {
@@ -1679,7 +1684,7 @@ void Assets::rebuild_from_grid_state() {
     ++frame_id_;
     rebuild_all_assets_from_grid();
     const SDL_Point center_px = camera_.get_screen_center();
-    initialize_active_assets(world::GridPoint::make_virtual(center_px.x, center_px.y, 0, world_grid_.max_resolution_layers()));
+    initialize_active_assets(world::GridPoint::make_virtual(center_px.x, 0, center_px.y, world_grid_.max_resolution_layers()));
     refresh_filtered_active_assets();
     mark_non_player_update_buffer_dirty();
 }
@@ -1721,8 +1726,8 @@ bool Assets::maybe_rebuild_world_grid() {
     const SDL_Point center_px = camera_.get_screen_center();
     const world::GridPoint current_center = world::GridPoint::make_virtual(
         center_px.x,
-        center_px.y,
         0,
+        center_px.y,
         world_grid_.max_resolution_layers());
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
@@ -1730,7 +1735,7 @@ bool Assets::maybe_rebuild_world_grid() {
     const bool active_dirty = active_assets_dirty_.load(std::memory_order_acquire) || pending_initial_rebuild_;
     const bool camera_changed =
         current_center.world_x() != last_camera_center_for_grid_.world_x() ||
-        current_center.world_y() != last_camera_center_for_grid_.world_y() ||
+        current_center.world_z() != last_camera_center_for_grid_.world_z() ||
         std::fabs(current_scale - last_camera_scale_for_grid_) > kCameraGridEpsilon ||
         std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon;
 
@@ -1826,7 +1831,7 @@ bool Assets::rebuild_active_assets_if_needed() {
     }
 
     const SDL_Point center_px = camera_.get_screen_center();
-    const world::GridPoint current_center = world::GridPoint::make_virtual(center_px.x, center_px.y, 0, world_grid_.max_resolution_layers());
+    const world::GridPoint current_center = world::GridPoint::make_virtual(center_px.x, 0, center_px.y, world_grid_.max_resolution_layers());
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
 
@@ -2187,7 +2192,7 @@ std::optional<Asset::TilingInfo> Assets::compute_tiling_for_asset(const Asset* a
     }
     step = std::max(1, step);
 
-    const SDL_Point world_pos{ asset->world_x(), asset->world_y() };
+    const SDL_Point world_pos{ asset->world_x(), asset->world_z() };
     const int base_w = std::max(1, asset->info->original_canvas_width);
     const int base_h = std::max(1, asset->info->original_canvas_height);
     double scale = 1.0;
@@ -2521,7 +2526,7 @@ void Assets::classify_region(world::GridPoint& point) {
     point.region_kind = world::GridPoint::RegionKind::Boundary;
     point.region_owner = nullptr;
 
-    const SDL_Point pt{point.world_x(), point.world_y()};
+    const SDL_Point pt{point.world_x(), point.world_z()};
     for (Room* room : rooms_) {
         if (!room) continue;
         const bool room_is_trail = is_trail_string(room->type);

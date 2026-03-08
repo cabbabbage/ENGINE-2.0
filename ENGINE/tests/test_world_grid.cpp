@@ -63,6 +63,7 @@ TEST_CASE("GridPoint projection round-trips via camera params") {
     params.screen_zoom = 1.0;
     params.anchor_world_x = 0.0;
     params.anchor_world_y = 0.0;
+    params.anchor_world_z = 0.0;
     params.state_version = 1;
 
     original.project_to_screen(params);

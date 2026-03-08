@@ -665,7 +665,7 @@ void Asset::refresh_anchor_point_cache_from_frame() {
         return;
     }
 
-    const SDL_Point origin_world = world_point();
+    const SDL_Point origin_world = world_xz_point();
     const std::size_t count = std::min(anchor_handles_.size(), anchor_points_.size());
     for (std::size_t idx = 0; idx < count; ++idx) {
         AnchorPoint& resolved = anchor_points_[idx];
@@ -1176,7 +1176,7 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
         if (resolved.exists) {
                 resolved.world_pos_2d = Vec2{static_cast<float>(handle.world_px.x),
                                              static_cast<float>(handle.world_px.y)};
-                const SDL_Point origin_world = world_point();
+                const SDL_Point origin_world = world_xz_point();
                 resolved.relative_pos_2d = Vec2{
                         resolved.world_pos_2d.x - static_cast<float>(origin_world.x),
                         resolved.world_pos_2d.y - static_cast<float>(origin_world.y)};

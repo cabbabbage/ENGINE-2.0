@@ -15,7 +15,7 @@ SDL_Point FramePointResolver::anchor_world() const {
     if (!asset_) {
         return SDL_Point{0, 0};
     }
-    return animation_update::detail::bottom_middle_for(*asset_, asset_->world_point());
+    return animation_update::detail::bottom_middle_for(*asset_, asset_->world_xz_point());
 }
 
 float FramePointResolver::parent_height_px() const {

@@ -197,9 +197,9 @@ void Check::gather_from_cells(const std::unordered_map<CellKey, std::vector<Asse
     SDL_Point origin_index = grid_->world_to_index(pos, resolution_);
     const int span = clamp_positive((radius + cell_world_size_ - 1) / cell_world_size_);
 
-    for (int dy = -span; dy <= span; ++dy) {
+    for (int dz = -span; dz <= span; ++dz) {
         for (int dx = -span; dx <= span; ++dx) {
-            SDL_Point idx{origin_index.x + dx, origin_index.y + dy};
+            SDL_Point idx{origin_index.x + dx, origin_index.y + dz};
             auto it = cells.find(make_key(idx));
             if (it == cells.end()) {
                 continue;

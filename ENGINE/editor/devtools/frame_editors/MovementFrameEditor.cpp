@@ -710,7 +710,7 @@ SDL_Point MovementFrameEditor::asset_anchor_world() const {
     if (!context_.target) {
         return SDL_Point{0, 0};
     }
-    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_point());
+    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_xz_point());
 }
 
 float MovementFrameEditor::base_world_z() const {

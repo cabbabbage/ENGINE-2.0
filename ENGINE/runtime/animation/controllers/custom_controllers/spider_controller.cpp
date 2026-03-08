@@ -31,7 +31,7 @@ void spider_controller::update(const Input&) {
         }
     }
     else if (self_->needs_target) {
-        self_->anim_->auto_move(player->world_point());
+        self_->anim_->auto_move(player->world_xz_point());
     }
 
     attack_helpers::send_attack_if_hit(self_, player);

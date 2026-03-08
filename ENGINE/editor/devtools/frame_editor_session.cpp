@@ -285,7 +285,7 @@ void FrameEditorSession::frame_camera_for_editor_entry() {
     }
 
     WarpedScreenGrid& cam = assets_->getView();
-    const SDL_Point focus = target_->world_point();
+    const SDL_Point focus = target_->world_xz_point();
 
     // Establish a consistent baseline before computing scale.
     cam.set_manual_height_override(true);

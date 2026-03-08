@@ -19,7 +19,7 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/3_candles",
       "asset_name": "3_candles",
-      "asset_type": "Object",
+      "asset_type": "object",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
@@ -1284,32 +1284,32 @@
               },
               "points": [
                 {
-                  "x": 2283,
+                  "x": 7361,
                   "y": 0,
-                  "z": 2283
+                  "z": 7361
                 },
                 {
-                  "x": 2795,
+                  "x": 7873,
                   "y": 0,
-                  "z": 2283
+                  "z": 7361
                 },
                 {
-                  "x": 2795,
+                  "x": 7873,
                   "y": 0,
-                  "z": 2795
+                  "z": 7873
                 },
                 {
-                  "x": 2283,
+                  "x": 7361,
                   "y": 0,
-                  "z": 2795
+                  "z": 7873
                 }
               ],
               "resolution": 3,
               "type": "spawning"
             }
           ],
-          "camera_height_px": 1000,
-          "camera_tilt_deg": 60.0,
+          "camera_height_px": 775,
+          "camera_tilt_deg": 146.0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [

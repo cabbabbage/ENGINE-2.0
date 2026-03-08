@@ -335,7 +335,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     std::vector<SDL_Point> absolute;
     absolute.reserve(rel_checkpoints.size());
     vibble::grid::Grid& grid_service = grid();
-    SDL_Point           cursor_index = grid_service.world_to_index(self_->world_point(), resolution);
+    SDL_Point           cursor_index = grid_service.world_to_index(self_->world_xz_point(), resolution);
     for (const SDL_Point& delta : rel_checkpoints) {
         SDL_Point delta_indices = grid_service.convert_resolution(delta, 0, resolution);
         cursor_index.x += delta_indices.x;
@@ -346,7 +346,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
 
     plan_      = planner_(*self_, sanitizer_.sanitize(*self_, absolute, visited_thresh_), visited_thresh_, grid());
     final_dest = plan_.final_dest;
-    plan_.world_start = self_->world_point();
+    plan_.world_start = self_->world_xz_point();
     plan_.override_non_locked = override_non_locked;
     if (debug_logging) {
         std::ostringstream oss;
@@ -397,7 +397,7 @@ void AnimationUpdate::clear_movement_plan() {
     const bool debug_logging = debug_enabled_;
     plan_.strides.clear();
     plan_.sanitized_checkpoints.clear();
-    plan_.final_dest = self_ ? self_->world_point() : SDL_Point{ 0, 0 };
+    plan_.final_dest = self_ ? self_->world_xz_point() : SDL_Point{ 0, 0 };
     plan_.override_non_locked = true;
     final_dest       = plan_.final_dest;
     input_event_     = true;

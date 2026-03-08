@@ -84,10 +84,9 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
 
     // Convert world position to meters
     const double safe_scale = std::max(1e-6, params.meters_scale);
-    const double world_y_total = static_cast<double>(world_y_) + static_cast<double>(terrain_elevation);
     const Vec3 world_meters{
         (static_cast<double>(world_x_) - params.anchor_world_x) * safe_scale,
-        world_y_total * safe_scale,
+        static_cast<double>(world_y_) * safe_scale,
         (static_cast<double>(world_z_)) * safe_scale
     };
 

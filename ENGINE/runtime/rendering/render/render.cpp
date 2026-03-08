@@ -206,6 +206,135 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
 void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid, GeometryBatcher* batcher) {
     if (!renderer) return;
 
+    const auto& chunks = grid.active_chunks();
+    if (chunks.empty()) return;
+
+    const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
+    int indices[6] = {0, 1, 2, 0, 2, 3};
+
+    auto floor_project = [&](SDL_Point world_pos, SDL_FPoint& out) -> bool {
+        SDL_FPoint screen{};
+        if (!cam.project_world_point(SDL_FPoint{static_cast<float>(world_pos.x), static_cast<float>(world_pos.y)}, 0.0f, screen)) {
+            return false;
+        }
+        if (!std::isfinite(screen.x) || !std::isfinite(screen.y)) {
+            return false;
+        }
+        screen.y = cam.warp_floor_screen_y(static_cast<float>(world_pos.y), screen.y);
+        if (!std::isfinite(screen.y)) {
+            return false;
+        }
+        out = SDL_FPoint{std::floor(screen.x), std::floor(screen.y)};
+        return true;
+    };
+
+    for (const world::Chunk* chunk : chunks) {
+        if (!chunk) continue;
+        for (const auto& tile : chunk->tiles) {
+            if (!tile.texture || tile.world_rect.w <= 0 || tile.world_rect.h <= 0) continue;
+
+            SDL_Point world_tl{ tile.world_rect.x, tile.world_rect.y };
+            SDL_Point world_tr{ tile.world_rect.x + tile.world_rect.w, tile.world_rect.y };
+            SDL_Point world_br{ tile.world_rect.x + tile.world_rect.w, tile.world_rect.y + tile.world_rect.h };
+            SDL_Point world_bl{ tile.world_rect.x, tile.world_rect.y + tile.world_rect.h };
+
+            SDL_FPoint screen_tl{};
+            SDL_FPoint screen_tr{};
+            SDL_FPoint screen_br{};
+            SDL_FPoint screen_bl{};
+            if (!floor_project(world_tl, screen_tl) ||
+                !floor_project(world_tr, screen_tr) ||
+                !floor_project(world_br, screen_br) ||
+                !floor_project(world_bl, screen_bl)) {
+                continue;
+            }
+
+            std::array<SDL_FPoint, 4> tile_points{screen_tl, screen_tr, screen_br, screen_bl};
+            enforce_trapezoid(tile_points);
+            screen_tl = tile_points[0];
+            screen_tr = tile_points[1];
+            screen_br = tile_points[2];
+            screen_bl = tile_points[3];
+
+            SDL_FPoint tex_size{};
+            if (!fetch_texture_size(tile.texture, tex_size)) {
+                continue;
+            }
+            const float tex_w = tex_size.x;
+            const float tex_h = tex_size.y;
+            if (tex_w <= 0.0f || tex_h <= 0.0f) {
+                continue;
+            }
+
+            SDL_Vertex verts[4]{};
+            verts[0].position = screen_tl;
+            verts[1].position = screen_tr;
+            verts[2].position = screen_br;
+            verts[3].position = screen_bl;
+            for (auto& v : verts) {
+                v.color = white;
+            }
+            verts[0].tex_coord = SDL_FPoint{0.0f, 0.0f};
+            verts[1].tex_coord = SDL_FPoint{tex_w, 0.0f};
+            verts[2].tex_coord = SDL_FPoint{tex_w, tex_h};
+            verts[3].tex_coord = SDL_FPoint{0.0f, tex_h};
+
+            if (batcher) {
+                batcher->addQuad(tile.texture, verts, indices, SDL_BLENDMODE_BLEND, 0.0);
+            } else {
+                SDL_RenderGeometry(renderer, tile.texture, verts, 4, indices, 6);
+            }
+        }
+    }
+
+    if (batcher) {
+        batcher->flush();
+    }
+}
+void GridTileRenderer::invalidate_texture_cache() {
+    texture_size_cache_.clear();
+}
+
+bool GridTileRenderer::fetch_texture_size(SDL_Texture* texture, SDL_FPoint& out_size) {
+    if (!texture) {
+        return false;
+    }
+    auto it = texture_size_cache_.find(texture);
+    if (it != texture_size_cache_.end()) {
+        out_size = it->second;
+        return true;
+    }
+
+    float tex_wf = 0.0f;
+    float tex_hf = 0.0f;
+    if (!SDL_GetTextureSize(texture, &tex_wf, &tex_hf)) {
+        return false;
+    }
+
+    const float rounded_w = static_cast<float>(std::lround(tex_wf));
+    const float rounded_h = static_cast<float>(std::lround(tex_hf));
+    if (rounded_w <= 0.0f || rounded_h <= 0.0f) {
+        return false;
+    }
+
+    SDL_FPoint dims{rounded_w, rounded_h};
+    texture_size_cache_.emplace(texture, dims);
+    out_size = dims;
+    return true;
+}
+
+void GridTileRenderer::render(SDL_Renderer* renderer) {
+    if (!renderer || !assets_) return;
+    render(renderer, assets_->getView(), assets_->world_grid(), nullptr);
+}
+
+void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid) {
+    render(renderer, cam, grid, nullptr);
+}
+
+void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam, const world::WorldGrid& grid, GeometryBatcher* batcher) {
+    if (!renderer) return;
+
 
     const auto& chunks = grid.active_chunks();
     if (chunks.empty()) return;
@@ -768,7 +897,7 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
   sky_texture_path_(std::filesystem::path("resources") / "misc_content" / "sky.png"),
   composite_renderer_(renderer, assets),
   dynamic_fog_system_(std::make_unique<DynamicFogSystem>()),
-  dynamic_boundary_system_(std::make_unique<DynamicBoundarySystem>()),
+  dynamic_boundary_system_(std::make_unique<DynamicBoundarySystem>())
 {
 
     map_clear_color_ = SDL_Color{69, 101, 74, 255};
@@ -788,7 +917,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
     }
 
     {
-        TerrainSettings settings = TerrainSettings::sanitized(TerrainSettings::readonly());
         auto read_float_from = [](const nlohmann::json& obj, const char* key, float& target) {
             auto it = obj.find(key);
             if (it == obj.end()) {
@@ -866,7 +994,6 @@ SceneRenderer::SceneRenderer(PrevalidatedTag,
             }
         } catch (...) {
         }
-        TerrainSettings::apply(settings);
         }
         if (assets_) {
         }
@@ -933,7 +1060,6 @@ void SceneRenderer::render() {
                                            : (frame_counter_ + 1);
     frame_counter_ = frame_id;
 
-    const std::uint64_t current_settings_rev = TerrainSettings::revision();
         const std::string map_identifier = assets_ ? assets_->map_id() : std::string();
                                                                     map_identifier,
         }

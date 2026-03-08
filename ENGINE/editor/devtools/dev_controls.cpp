@@ -4906,38 +4906,6 @@ void DevControls::render_grid_overlay() {
 
     render_room_geometry_overlay(renderer);
 
-    if (cam) {
-        const auto& telem = cam->terrain_telemetry();
-        DMLabelStyle style = DMStyles::Label();
-        DMLabelStyle shadow = style;
-        shadow.color = SDL_Color{0, 0, 0, 180};
-        int info_x = 10;
-        int info_y = 10;
-        auto draw_line = [&](const std::string& text) {
-            simple_label_cache().draw(renderer, shadow, text, info_x + 1, info_y + 1);
-            simple_label_cache().draw(renderer, style, text, info_x, info_y);
-            info_y += style.font_size + 2;
-        };
-        if (telem.frame_id != 0 || telem.cache_before != 0 || telem.cache_after != 0 ||
-            telem.sampled_points != 0 || telem.visible_points != 0) {
-            draw_line("terrain cache " + std::to_string(telem.cache_before) + " -> " +
-                      std::to_string(telem.cache_after) +
-                      " resets " + std::to_string(telem.cache_resets_total));
-            draw_line("samples " + std::to_string(telem.sampled_points) +
-                      " neighbor " + std::to_string(telem.neighbor_samples) +
-                      " visible " + std::to_string(telem.visible_points));
-            const double ratio = telem.sample_to_visible_ratio;
-            const double allowed = telem.allowed_ratio;
-            draw_line("ratio " + std::to_string(ratio) + " / " + std::to_string(allowed) +
-                      (telem.sample_ratio_warning ? " (!)":""));
-            if (telem.projected_points != 0 || telem.revision_reprojects != 0 || telem.simulated_revision_failures != 0) {
-                draw_line("proj " + std::to_string(telem.projected_points) +
-                          " rev " + std::to_string(telem.revision_reprojects) +
-                          " sim_fail " + std::to_string(telem.simulated_revision_failures));
-            }
-        }
-    }
-
     if (grid_overlay_enabled_) {
         if (!cam) {
             render_grid_resolution_toast(renderer);

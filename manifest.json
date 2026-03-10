@@ -856,14 +856,20 @@
           "anchor_points": [
             [
               {
+                "depth_offset": 1,
                 "name": "eyes",
                 "texture_x": 894,
-                "texture_y": 457,
-                "depth_offset": 1
+                "texture_y": 457
               }
             ]
           ],
+          "attack_boxes": [
+            []
+          ],
           "flipped_source": false,
+          "hit_boxes": [
+            []
+          ],
           "inherit_source_movement": false,
           "locked": false,
           "loop": true,
@@ -887,13 +893,7 @@
             "name": "",
             "path": "default"
           },
-          "speed_multiplier": 1.0,
-          "hit_boxes": [
-            []
-          ],
-          "attack_boxes": [
-            []
-          ]
+          "speed_multiplier": 1.0
         },
         "forward": {
           "anchor_points": [
@@ -1336,9 +1336,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 100,

@@ -791,35 +791,57 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     if (dev_mode && focus_override_active) {
         set_screen_center(camera_.state().focus_override);
     } else if (player) {
-        // Follow the player's visual center in normal gameplay by adjusting only
-        // the camera anchor on the world X/Z plane. Keep room camera params intact.
-        const int follow_x = player->world_x();
-        double follow_z = static_cast<double>(player->world_z());
+        // Normal gameplay follow: move only world X/Z anchor while preserving
+        // room camera params (height/tilt/zoom).
+        // Follow canonical grid depth. Render-only z offsets should not move
+        // the camera anchor used by anchor-point world conversion.
+        const double follow_world_z = static_cast<double>(player->world_z());
+        SDL_Point follow_center{
+            player->world_x(),
+            static_cast<int>(std::lround(follow_world_z))
+        };
 
-        // Track point is player's vertical center in world space.
-        const float runtime_height = player->runtime_height_px();
-        const double center_height_world =
-            static_cast<double>(player->world_y()) +
-            (std::isfinite(runtime_height) && runtime_height > 0.0f
-                 ? static_cast<double>(runtime_height) * 0.5
-                 : 0.0);
+        // First pass: hard lock to player world X/Z.
+        set_screen_center(follow_center, false);
 
-        // With anchor-locked projection, an elevated target can be centered by shifting
-        // only world depth (Z) by h * cot(pitch).
-        const double pitch = camera_.state().pitch_rad;
-        const double sin_pitch = std::sin(pitch);
-        const double cos_pitch = std::cos(pitch);
-        if (std::isfinite(center_height_world) &&
-            std::isfinite(sin_pitch) &&
-            std::isfinite(cos_pitch) &&
-            std::abs(sin_pitch) > 1e-4) {
-            const double depth_offset = center_height_world * (cos_pitch / sin_pitch);
-            if (std::isfinite(depth_offset)) {
-                follow_z -= depth_offset;
+        // Second pass: correct residual projection error (if any) by shifting
+        // only camera X/Z. This keeps horizon/pitch behavior unchanged.
+        const SDL_Point target_screen{
+            std::max(0, screen_width_ / 2),
+            std::max(0, screen_height_ / 2)
+        };
+        const SDL_FPoint player_world_ground{
+            static_cast<float>(player->world_x()),
+            static_cast<float>(follow_world_z)
+        };
+
+        for (int i = 0; i < 2; ++i) {
+            const SDL_FPoint player_screen = map_to_screen_f(player_world_ground);
+            if (!std::isfinite(player_screen.x) || !std::isfinite(player_screen.y)) {
+                break;
             }
-        }
 
-        set_screen_center(SDL_Point{follow_x, static_cast<int>(std::lround(follow_z))}, false);
+            const SDL_FPoint world_at_target = screen_to_map(target_screen);
+            const SDL_Point player_screen_px{
+                static_cast<int>(std::lround(player_screen.x)),
+                static_cast<int>(std::lround(player_screen.y))
+            };
+            const SDL_FPoint world_at_player_screen = screen_to_map(player_screen_px);
+            if (!std::isfinite(world_at_target.x) || !std::isfinite(world_at_target.y) ||
+                !std::isfinite(world_at_player_screen.x) || !std::isfinite(world_at_player_screen.y)) {
+                break;
+            }
+
+            const double dx = static_cast<double>(world_at_player_screen.x) - static_cast<double>(world_at_target.x);
+            const double dz = static_cast<double>(world_at_player_screen.y) - static_cast<double>(world_at_target.y);
+            if (std::max(std::abs(dx), std::abs(dz)) < 0.5) {
+                break;
+            }
+
+            follow_center.x += static_cast<int>(std::lround(dx));
+            follow_center.y += static_cast<int>(std::lround(dz));
+            set_screen_center(follow_center, false);
+        }
     } else if (cur && cur->room_area) {
         set_screen_center(cur->room_area->get_center());
     }

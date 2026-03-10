@@ -13,10 +13,6 @@
 
 namespace {
 
-// Bring anchor depth policy enum into this translation unit scope so the
-// helper functions in the anonymous namespace can use it without qualifying.
-using anchor_points::AnchorDepthPolicy;
-
 #if defined(ENGINE_WORLD_TESTS)
 
 }  // namespace
@@ -29,13 +25,12 @@ float anchor_height_px(const Asset& asset) {
 
 FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
-                                              AnchorDepthPolicy,
                                               GridMaterialization) {
     FrameAnchorSample sample{};
-    sample.resolved.world_px = asset.world_xz_point();
+    sample.resolved.world_px = asset.world_xy_point();
     sample.resolved.world_z = asset.world_z();
+    sample.resolved.depth_offset = anchor.depth_offset;
     sample.screen_px = SDL_FPoint{static_cast<float>(asset.world_x()), static_cast<float>(asset.world_y())};
-    sample.resolved.in_front = anchor.in_front;
     sample.resolved.source_texture_px = SDL_Point{anchor.texture_x, anchor.texture_y};
     sample.resolved.has_canonical_texture_source = true;
     sample.resolved.missing = false;
@@ -45,20 +40,14 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
 PixelLockedAnchor resolve_pixel_locked_anchor(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               GridMaterialization grid_policy) {
-    const auto sample = resolve_frame_anchor_sample(asset,
-                                                    anchor,
-                                                    anchor.in_front ? AnchorDepthPolicy::InFront : AnchorDepthPolicy::Behind,
-                                                    grid_policy);
+    const auto sample = resolve_frame_anchor_sample(asset, anchor, grid_policy);
     return PixelLockedAnchor{sample.resolved, sample.screen_px};
 }
 
 ResolvedAnchor resolve_anchor_point(const Asset& asset,
                                     const DisplacedAssetAnchorPoint& anchor,
                                     GridMaterialization grid_policy) {
-    return resolve_frame_anchor_sample(asset,
-                                       anchor,
-                                       anchor.in_front ? AnchorDepthPolicy::InFront : AnchorDepthPolicy::Behind,
-                                       grid_policy).resolved;
+    return resolve_frame_anchor_sample(asset, anchor, grid_policy).resolved;
 }
 
 }
@@ -75,22 +64,17 @@ struct FrameDimensions {
 };
 
 struct AnchorFrameSample {
-    SDL_FPoint mesh_uv{0.5f, 0.5f};
+    SDL_FPoint uv{0.5f, 0.5f};
     SDL_Point source_px{0, 0};
 };
 
-constexpr float kAnchorRayBiasPx = 1.0f;
-
-struct CameraRayBasis {
-    float origin_x = 0.0f;
-    float origin_y = 0.0f;
-    float origin_z = 0.0f;
-    float dir_x = 0.0f;
-    float dir_y = 0.0f;
-    float dir_z = 0.0f;
+struct WorldPoint3 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
 };
 
-std::optional<CameraRayBasis> build_camera_ray_basis(const Assets* assets_owner) {
+std::optional<WorldPoint3> camera_world_position(const Assets* assets_owner) {
     if (!assets_owner) {
         return std::nullopt;
     }
@@ -101,70 +85,57 @@ std::optional<CameraRayBasis> build_camera_ray_basis(const Assets* assets_owner)
         return std::nullopt;
     }
 
-    CameraRayBasis basis{};
-    basis.origin_x = static_cast<float>(params.position_x / meters_scale + params.anchor_world_x);
-    basis.origin_y = static_cast<float>(params.position_y / meters_scale + params.anchor_world_y);
-    basis.origin_z = static_cast<float>(params.position_z / meters_scale + params.anchor_world_z);
+    WorldPoint3 world_camera_position{};
+    world_camera_position.x = static_cast<float>(params.position_x / meters_scale + params.anchor_world_x);
+    world_camera_position.y = static_cast<float>(params.position_y / meters_scale + params.anchor_world_y);
+    world_camera_position.z = static_cast<float>(params.position_z / meters_scale + params.anchor_world_z);
 
-    basis.dir_x = static_cast<float>(params.forward_x);
-    basis.dir_y = static_cast<float>(params.forward_y);
-    basis.dir_z = static_cast<float>(params.forward_z);
-
-    const float len_sq = basis.dir_x * basis.dir_x + basis.dir_y * basis.dir_y + basis.dir_z * basis.dir_z;
-    if (len_sq <= 1e-10f || !std::isfinite(len_sq)) {
+    if (!std::isfinite(world_camera_position.x) ||
+        !std::isfinite(world_camera_position.y) ||
+        !std::isfinite(world_camera_position.z)) {
         return std::nullopt;
     }
-    const float inv_len = 1.0f / std::sqrt(len_sq);
-    basis.dir_x *= inv_len;
-    basis.dir_y *= inv_len;
-    basis.dir_z *= inv_len;
-    return basis;
+
+    return world_camera_position;
 }
 
-void apply_depth_bias_along_camera_ray(const Assets* assets_owner,
-                                       AnchorDepthPolicy policy,
-                                       float bias_px,
-                                       float& world_x,
-                                       float& world_y,
-                                       float& world_z) {
-    if (!std::isfinite(bias_px) || bias_px <= 0.0f) {
-        return;
+bool apply_depth_offset_along_camera_ray(const Assets* assets_owner,
+                                         int depth_offset,
+                                         const WorldPoint3& flat_relative_pixel_point,
+                                         WorldPoint3& final_anchor_point) {
+    final_anchor_point = flat_relative_pixel_point;
+    if (depth_offset == 0) {
+        return true;
     }
 
-    const float signed_bias =
-        (policy == AnchorDepthPolicy::InFront) ? -bias_px :
-        (policy == AnchorDepthPolicy::Behind) ? bias_px : 0.0f;
-
-    if (std::abs(signed_bias) <= 1e-6f) {
-        return;
+    const auto camera_position_opt = camera_world_position(assets_owner);
+    if (!camera_position_opt.has_value()) {
+        return false;
     }
 
-    const auto basis_opt = build_camera_ray_basis(assets_owner);
-    if (!basis_opt.has_value()) {
-        // Fall back to biasing along the canonical depth axis when camera data is unavailable.
-        world_z += signed_bias;
-        return;
+    const WorldPoint3 camera_position = *camera_position_opt;
+    const float camera_to_point_x = flat_relative_pixel_point.x - camera_position.x;
+    const float camera_to_point_y = flat_relative_pixel_point.y - camera_position.y;
+    const float camera_to_point_z = flat_relative_pixel_point.z - camera_position.z;
+
+    const float ray_length_sq =
+        camera_to_point_x * camera_to_point_x +
+        camera_to_point_y * camera_to_point_y +
+        camera_to_point_z * camera_to_point_z;
+    if (ray_length_sq <= 1e-10f || !std::isfinite(ray_length_sq)) {
+        return false;
     }
 
-    const CameraRayBasis& basis = *basis_opt;
-    const float dir_x = world_x - basis.origin_x;
-    const float dir_y = world_y - basis.origin_y;
-    const float dir_z = world_z - basis.origin_z;
-    const float len_sq = dir_x * dir_x + dir_y * dir_y + dir_z * dir_z;
-    if (len_sq <= 1e-10f || !std::isfinite(len_sq)) {
-        return;
-    }
-    const float len = std::sqrt(len_sq);
+    const float inv_ray_length = 1.0f / std::sqrt(ray_length_sq);
+    const float offset_amount = static_cast<float>(depth_offset);
 
-    // Avoid stepping past the camera when moving anchors towards it.
-    if (signed_bias < 0.0f && len <= std::abs(signed_bias)) {
-        return;
-    }
+    final_anchor_point.x = flat_relative_pixel_point.x + camera_to_point_x * inv_ray_length * offset_amount;
+    final_anchor_point.y = flat_relative_pixel_point.y + camera_to_point_y * inv_ray_length * offset_amount;
+    final_anchor_point.z = flat_relative_pixel_point.z + camera_to_point_z * inv_ray_length * offset_amount;
 
-    const float inv_len = 1.0f / len;
-    world_x += dir_x * inv_len * signed_bias;
-    world_y += dir_y * inv_len * signed_bias;
-    world_z += dir_z * inv_len * signed_bias;
+    return std::isfinite(final_anchor_point.x) &&
+           std::isfinite(final_anchor_point.y) &&
+           std::isfinite(final_anchor_point.z);
 }
 
 void assert_anchor_is_canonical_texture_pixel(const DisplacedAssetAnchorPoint& anchor) {
@@ -227,15 +198,8 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
 AnchorFrameSample compute_anchor_frame_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               const FrameDimensions& dims) {
-    // Texture origin is top-left; +X right, +Y down. The canonical anchor lives at the center of
-    // the named pixel (x+0.5, y+0.5). Horizontal flips mirror U after the pixel-center conversion.
-    // Keep this in lockstep with the editor preview math.
-    //
-    // Scale variants: active textures may be pre-scaled copies of the canonical sprite. Anchors in
-    // the manifest are expressed in canonical pixel space, so scale them into the active variant
-    // before converting to UVs. This keeps anchors glued to the same relative pixel regardless of
-    // which variant (and thus which mode: dev or game) is selected.
-
+    // Anchors in authored data are canonical texture pixels. If runtime is using a scaled
+    // variant, map that canonical pixel into the active variant before UV conversion.
     const float variant_scale = (std::isfinite(asset.current_nearest_variant_scale) &&
                                  asset.current_nearest_variant_scale > 0.0f)
                                     ? asset.current_nearest_variant_scale
@@ -249,7 +213,6 @@ AnchorFrameSample compute_anchor_frame_sample(const Asset& asset,
         static_cast<int>(std::lround(scaled_y_f))
     };
 
-    // Clamp after rounding to avoid sampling outside the active frame.
     if (dims.frame_w > 0) {
         scaled_px.x = std::clamp(scaled_px.x, 0, dims.frame_w - 1);
     }
@@ -257,18 +220,26 @@ AnchorFrameSample compute_anchor_frame_sample(const Asset& asset,
         scaled_px.y = std::clamp(scaled_px.y, 0, dims.frame_h - 1);
     }
 
-    const bool flip_h = (dims.flip & SDL_FLIP_HORIZONTAL) != 0;
-    const int sampled_x = flip_h ? (dims.frame_w - 1 - scaled_px.x) : scaled_px.x;
-    const int sampled_y = scaled_px.y;
+    const SDL_FPoint uv = anchor_points::anchor_pixel_to_uv(scaled_px, dims.frame_w, dims.frame_h, dims.flip);
+    return AnchorFrameSample{uv, SDL_Point{anchor.texture_x, anchor.texture_y}};
+}
 
-    const float mesh_u = (dims.frame_w > 1)
-                             ? static_cast<float>(sampled_x) / static_cast<float>(dims.frame_w - 1)
-                             : 0.5f;
-    const float mesh_v = (dims.frame_h > 1)
-                             ? static_cast<float>(sampled_y) / static_cast<float>(dims.frame_h - 1)
-                             : 0.5f;
+WorldPoint3 compute_flat_relative_pixel_point(const Asset& asset,
+                                              const FrameDimensions& dims,
+                                              const SDL_FPoint& uv,
+                                              float perspective_scale) {
+    const float safe_perspective =
+        (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
+    const float world_width = static_cast<float>(dims.final_w) / safe_perspective;
+    const float world_height = static_cast<float>(dims.final_h) / safe_perspective;
 
-    return AnchorFrameSample{SDL_FPoint{mesh_u, mesh_v}, SDL_Point{anchor.texture_x, anchor.texture_y}};
+    WorldPoint3 flat_relative_pixel_point{};
+    flat_relative_pixel_point.x =
+        asset.smoothed_translation_x() + (uv.x - 0.5f) * world_width;
+    flat_relative_pixel_point.y =
+        asset.smoothed_translation_y() + (0.5f - uv.y) * world_height;
+    flat_relative_pixel_point.z = static_cast<float>(asset.world_z());
+    return flat_relative_pixel_point;
 }
 
 SDL_FPoint compute_anchor_screen_from_mesh(const Asset& asset,
@@ -279,7 +250,8 @@ SDL_FPoint compute_anchor_screen_from_mesh(const Asset& asset,
     const float world_x = asset.smoothed_translation_x();
     const float world_y = asset.smoothed_translation_y();
     const float base_world_z = static_cast<float>(asset.world_z());
-    const float safe_perspective = (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
+    const float safe_perspective =
+        (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
     const float world_width = static_cast<float>(dims.final_w) / safe_perspective;
     const float world_height = static_cast<float>(dims.final_h) / safe_perspective;
     const float half_width = world_width * 0.5f;
@@ -360,10 +332,9 @@ float anchor_height_px(const Asset& asset) {
 
 FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
-                                              AnchorDepthPolicy depth_policy,
                                               GridMaterialization grid_policy) {
     FrameAnchorSample sample{};
-    sample.resolved.in_front = anchor.in_front;
+    sample.resolved.depth_offset = anchor.depth_offset;
 
     Assets* assets_owner = asset.get_assets();
     if (!assets_owner) {
@@ -380,41 +351,37 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     assert_anchor_is_canonical_texture_pixel(anchor);
 
     const AnchorFrameSample anchor_sample = compute_anchor_frame_sample(asset, anchor, dims);
-    sample.uv = anchor_sample.mesh_uv;
+    sample.uv = anchor_sample.uv;
 
     const world::GridPoint* owner_gp = asset.grid_point();
     const float perspective_scale = owner_gp ? std::max(0.0001f, owner_gp->perspective_scale) : 1.0f;
     const int resolution_layer = owner_gp ? owner_gp->resolution_layer() : asset.grid_resolution;
 
-    const float world_x = asset.smoothed_translation_x();
-    const float world_y = asset.smoothed_translation_y();
-    const float base_world_z = static_cast<float>(asset.world_z());
-    const float safe_perspective = (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
-    const float world_width = static_cast<float>(dims.final_w) / safe_perspective;
-    const float world_height = static_cast<float>(dims.final_h) / safe_perspective;
+    const WorldPoint3 flat_relative_pixel_point =
+        compute_flat_relative_pixel_point(asset, dims, anchor_sample.uv, perspective_scale);
+    WorldPoint3 final_anchor_point{};
+    if (!apply_depth_offset_along_camera_ray(
+            assets_owner,
+            anchor.depth_offset,
+            flat_relative_pixel_point,
+            final_anchor_point)) {
+        sample.resolved.missing = true;
+        return sample;
+    }
 
-    const float anchor_world_x = world_x + (anchor_sample.mesh_uv.x - 0.5f) * world_width;
-    const float anchor_world_height = world_y;
-    const float anchor_world_depth = base_world_z + dims.world_z_offset + (1.0f - anchor_sample.mesh_uv.y) * world_height;
+    const int resolved_x = static_cast<int>(std::lround(final_anchor_point.x));
+    const int resolved_y = static_cast<int>(std::lround(final_anchor_point.y));
+    const int resolved_z = static_cast<int>(std::lround(final_anchor_point.z));
 
-    float displaced_world_x = anchor_world_x;
-    float displaced_world_height = anchor_world_height;
-    float displaced_world_depth = anchor_world_depth;
-    apply_depth_bias_along_camera_ray(assets_owner, depth_policy, kAnchorRayBiasPx, displaced_world_x, displaced_world_height, displaced_world_depth);
-
-    const int resolved_x = static_cast<int>(std::lround(displaced_world_x));
-    const int resolved_height = static_cast<int>(std::lround(displaced_world_height));
-    const int resolved_depth = static_cast<int>(std::lround(displaced_world_depth));
-
-    sample.resolved.world_px = SDL_Point{resolved_x, resolved_height};
-    sample.resolved.world_z = resolved_depth;
+    sample.resolved.world_px = SDL_Point{resolved_x, resolved_y};
+    sample.resolved.world_z = resolved_z;
     sample.resolved.resolution_layer = resolution_layer;
     sample.resolved.source_texture_px = anchor_sample.source_px;
     sample.resolved.has_canonical_texture_source = true;
     sample.resolved.missing = false;
 
     world::WorldGrid& grid = assets_owner->world_grid();
-    const world::GridKey key{resolved_x, resolved_height, resolved_depth, resolution_layer};
+    const world::GridKey key{resolved_x, resolved_y, resolved_z, resolution_layer};
     if (grid_policy == GridMaterialization::Ensure) {
         sample.resolved.grid_point = &grid.find_or_create_grid_point(key);
     } else {
@@ -423,7 +390,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
 
     sample.screen_px = compute_anchor_screen_from_mesh(asset,
                                                        dims,
-                                                       anchor_sample.mesh_uv,
+                                                       anchor_sample.uv,
                                                        assets_owner->getView(),
                                                        perspective_scale);
     return sample;
@@ -432,20 +399,14 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
 PixelLockedAnchor resolve_pixel_locked_anchor(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               GridMaterialization grid_policy) {
-    const auto sample = resolve_frame_anchor_sample(asset,
-                                                    anchor,
-                                                    anchor.in_front ? AnchorDepthPolicy::InFront : AnchorDepthPolicy::Behind,
-                                                    grid_policy);
+    const auto sample = resolve_frame_anchor_sample(asset, anchor, grid_policy);
     return PixelLockedAnchor{sample.resolved, sample.screen_px};
 }
 
 ResolvedAnchor resolve_anchor_point(const Asset& asset,
                                     const DisplacedAssetAnchorPoint& anchor,
                                     GridMaterialization grid_policy) {
-    return resolve_frame_anchor_sample(asset,
-                                       anchor,
-                                       anchor.in_front ? AnchorDepthPolicy::InFront : AnchorDepthPolicy::Behind,
-                                       grid_policy).resolved;
+    return resolve_frame_anchor_sample(asset, anchor, grid_policy).resolved;
 }
 
 }

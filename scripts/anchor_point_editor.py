@@ -170,7 +170,7 @@ def _normalize_anchor(anchor, fallback_name=None):
         "name": name,
         "texture_x": max(0, _read_int(anchor.get("texture_x", 0), 0)),
         "texture_y": max(0, _read_int(anchor.get("texture_y", 0), 0)),
-        "in_front": bool(anchor.get("in_front", True)),
+        "depth_offset": _read_int(anchor.get("depth_offset", 0), 0),
     }
 
 
@@ -240,7 +240,7 @@ class AnchorEditorApp:
         self.anchor_name_var = tk.StringVar()
         self.anchor_x_var = tk.StringVar()
         self.anchor_y_var = tk.StringVar()
-        self.anchor_in_front_var = tk.BooleanVar(value=True)
+        self.anchor_depth_offset_var = tk.StringVar(value="0")
 
         self._build_ui()
         self._wire_traces()
@@ -342,18 +342,7 @@ class AnchorEditorApp:
         row("Name", self.anchor_name_var)
         row("Texture X", self.anchor_x_var)
         row("Texture Y", self.anchor_y_var)
-        tk.Checkbutton(
-            right,
-            text="In Front",
-            variable=self.anchor_in_front_var,
-            command=self._on_value_change,
-            bg=PALETTE["panel"],
-            fg=PALETTE["text"],
-            selectcolor=PALETTE["panel"],
-            activebackground=PALETTE["panel"],
-            font=FONTS["body"],
-            anchor="w",
-        ).pack(anchor="w", pady=(8, 0))
+        row("Depth Offset", self.anchor_depth_offset_var)
 
     def _styled_button(self, parent, text, command, accent=False):
         return _create_styled_button(parent, text, command, accent=accent)
@@ -584,6 +573,7 @@ class AnchorEditorApp:
         self.anchor_name_var.trace_add("write", lambda *_: self._on_value_change())
         self.anchor_x_var.trace_add("write", lambda *_: self._on_value_change())
         self.anchor_y_var.trace_add("write", lambda *_: self._on_value_change())
+        self.anchor_depth_offset_var.trace_add("write", lambda *_: self._on_value_change())
 
     def _unique_name_for_current_frame(self, desired_name, skip_index=None):
         frame = self.frames[self.current_frame] if self.frames else []
@@ -631,7 +621,7 @@ class AnchorEditorApp:
             self.anchor_name_var.set("")
             self.anchor_x_var.set("0")
             self.anchor_y_var.set("0")
-            self.anchor_in_front_var.set(True)
+            self.anchor_depth_offset_var.set("0")
         self._load_frame_image()
         self._render_preview()
         self.loading = False
@@ -643,7 +633,7 @@ class AnchorEditorApp:
         self.anchor_name_var.set(anchor["name"])
         self.anchor_x_var.set(str(anchor["texture_x"]))
         self.anchor_y_var.set(str(anchor["texture_y"]))
-        self.anchor_in_front_var.set(bool(anchor["in_front"]))
+        self.anchor_depth_offset_var.set(str(anchor.get("depth_offset", 0)))
 
     def _on_anchor_select(self, _event=None):
         if self.loading:
@@ -674,7 +664,7 @@ class AnchorEditorApp:
         anchor["name"] = unique_name
         anchor["texture_x"] = max(0, _read_int(self.anchor_x_var.get(), anchor.get("texture_x", 0)))
         anchor["texture_y"] = max(0, _read_int(self.anchor_y_var.get(), anchor.get("texture_y", 0)))
-        anchor["in_front"] = bool(self.anchor_in_front_var.get())
+        anchor["depth_offset"] = _read_int(self.anchor_depth_offset_var.get(), anchor.get("depth_offset", 0))
         self.anchor_list.delete(self.current_anchor)
         self.anchor_list.insert(self.current_anchor, f"{self.current_anchor + 1}. {anchor['name']}")
         self.anchor_list.selection_set(self.current_anchor)
@@ -688,7 +678,7 @@ class AnchorEditorApp:
             "name": self._unique_name_for_current_frame(f"anchor_{len(frame) + 1}"),
             "texture_x": 0,
             "texture_y": 0,
-            "in_front": True,
+            "depth_offset": 0,
         }
         frame.append(new_anchor)
         self.current_anchor = len(frame) - 1

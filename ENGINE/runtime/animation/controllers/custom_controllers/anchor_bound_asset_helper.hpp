@@ -39,14 +39,13 @@ private:
         bool bound = false;
         bool currently_active = false;
         bool registered_with_parent = false;
-        bool last_anchor_in_front = true;
+        int last_anchor_depth_offset = 0;
     };
 
     bool resolve_binding_entities(BindingRecord& record);
     std::string binding_key_for_child(const Asset& child) const;
     std::string asset_stable_id(const Asset* asset) const;
     std::optional<AnchorPoint> resolve_anchor(BindingRecord& record) const;
-    void apply_render_order_hint(Asset& child, const Asset& parent, const AnchorPoint& anchor) const;
     void teardown_binding(BindingRecord& state);
 
     void update();

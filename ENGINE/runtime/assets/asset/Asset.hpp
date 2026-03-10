@@ -281,31 +281,27 @@ class Asset {
         bool            has_canonical_texture_source = false;
         bool            dirty = true;
         bool            missing = false;
-        bool            in_front = true;
+        int             depth_offset = 0;
         Asset*          owner = nullptr;
         struct UpdateKey {
                 anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None;
-                std::optional<anchor_points::AnchorDepthPolicy> depth_policy{};
                 bool initialized = false;
 
-                bool matches(anchor_points::GridMaterialization grid,
-                             const std::optional<anchor_points::AnchorDepthPolicy>& depth) const {
-                        return initialized && grid_policy == grid && depth_policy == depth;
+                bool matches(anchor_points::GridMaterialization grid) const {
+                        return initialized && grid_policy == grid;
                 }
 
-                void set(anchor_points::GridMaterialization grid,
-                         std::optional<anchor_points::AnchorDepthPolicy> depth) {
+                void set(anchor_points::GridMaterialization grid) {
                         grid_policy = grid;
-                        depth_policy = depth;
                         initialized = true;
                 }
         } last_update_key_;
 
-        void update(anchor_points::GridMaterialization grid_policy,
-                    std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
+        void update(anchor_points::GridMaterialization grid_policy);
     };
 
-    // A single source of truth for all inputs that influence resolved anchor world position.
+    // A single source of truth for inputs that influence resolved anchor output
+    // (world coordinates and cached screen projection).
     struct AnchorBasisSignature {
         int   world_x = 0;
         int   world_y = 0;
@@ -315,19 +311,17 @@ class Asset {
         bool  flipped = false;
         float remainder_scale = 1.0f;       // runtime scale applied to rendered frame geometry
         float perspective_scale = 1.0f;     // depth-based scaling from the grid/camera
-        float world_z_offset = 0.0f;        // vertical offset fed into anchor projection
+        float world_z_offset = 0.0f;        // render depth offset used by cached anchor screen projection
         int   resolution_layer = 0;         // grid resolution used for anchor materialization
     };
 
     AnchorPoint* get_anchor_point(const std::string& name);
     std::optional<std::string> anchor_name_for_index(std::size_t index) const;
     std::optional<AnchorPoint> anchor_state(const std::string& name,
-                                            anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None,
-                                            std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
+                                            anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None);
     void assert_unique_anchor_names_for_frame() const;
     AnchorPoint& resolve_anchor_point_entry(std::size_t index,
                                             anchor_points::GridMaterialization grid_policy,
-                                            std::optional<anchor_points::AnchorDepthPolicy> depth_policy,
                                             const DisplacedAssetAnchorPoint* frame_anchor);
     void apply_anchor_runtime_state(AnchorPoint& resolved,
                                     const AnchorHandle& handle,

@@ -30,10 +30,6 @@ std::string asset_label(const Asset* asset) {
     return asset->info->name;
 }
 
-// Depth bias applied to bound children so they render immediately in front of or behind
-// the parent. One world-pixel keeps ordering stable without pushing the child far away.
-constexpr double kBindingRenderBias = 1.0;
-
 } // namespace
 
 AnchorBoundAssetHelper::AnchorBoundAssetHelper(Asset* controller)
@@ -95,16 +91,7 @@ std::optional<AnchorPoint> AnchorBoundAssetHelper::resolve_anchor(BindingRecord&
     }
 
     return record.parent->anchor_state(record.anchor_name,
-                                       anchor_points::GridMaterialization::Ensure,
-                                       std::nullopt);
-}
-
-void AnchorBoundAssetHelper::apply_render_order_hint(Asset& child,
-                                                     const Asset& parent,
-                                                     const AnchorPoint& anchor) const {
-    const double parent_bias = parent.render_depth_bias();
-    const double bias_delta = anchor.in_front ? -kBindingRenderBias : kBindingRenderBias;
-    child.set_render_depth_bias(parent_bias + bias_delta);
+                                       anchor_points::GridMaterialization::Ensure);
 }
 
 void AnchorBoundAssetHelper::teardown_binding(BindingRecord& state) {
@@ -165,7 +152,7 @@ bool AnchorBoundAssetHelper::bind_child_for_ticks(Asset& parent,
     state.expiry_tick = (ticks > 0) ? std::optional<std::uint64_t>(tick_counter_ + static_cast<std::uint64_t>(ticks)) : std::nullopt;
     state.bound = true;
     state.currently_active = false;
-    state.last_anchor_in_front = anchor.in_front;
+    state.last_anchor_depth_offset = anchor.depth_offset;
 
     parent.add_child(&child);
     state.registered_with_parent = true;
@@ -275,14 +262,13 @@ void AnchorBoundAssetHelper::apply_binding_tick(const std::string& child_id, Bin
     }
 
     const AnchorPoint& anchor = *resolved;
-    state.last_anchor_in_front = anchor.in_front;
+    state.last_anchor_depth_offset = anchor.depth_offset;
     const int anchor_world_x = static_cast<int>(std::lround(anchor.world_pos_2d.x));
     const int anchor_world_y = static_cast<int>(std::lround(anchor.world_pos_2d.y));
     state.child->move_to_world_position(anchor_world_x,
                                         anchor_world_y,
                                         anchor.world_z,
                                         anchor.resolution_layer);
-    apply_render_order_hint(*state.child, *state.parent, anchor);
     set_child_hidden_state(state.child, false);
     state.currently_active = true;
 
@@ -320,7 +306,7 @@ void AnchorBoundAssetHelper::log_binding_tick(const std::string& child_id,
     vibble::log::debug("[AnchorBinderTick] parent=" + parent_label +
                        " child=" + child_label +
                        " anchor=" + state.anchor_name +
-                       " anchor_in_front=" + std::string(state.last_anchor_in_front ? "true" : "false") +
+                       " anchor_depth_offset=" + std::to_string(state.last_anchor_depth_offset) +
                        " anchor_world=(" + std::to_string(anchor_world_x) + "," + std::to_string(anchor_world_y) + ")" +
                        " child_world=(" + std::to_string(child_world_x) + "," + std::to_string(child_world_y) + ")" +
                        " active=" + std::string(state.currently_active ? "true" : "false") +

@@ -639,6 +639,25 @@ void Assets::refresh_dirty_anchor_bases() {
     anchor_basis_dirty_lookup_.clear();
 }
 
+void Assets::refresh_anchor_dependents_for_active_assets() {
+    auto refresh_asset = [&](Asset* asset) {
+        if (!asset || asset->dead) {
+            return;
+        }
+        asset->update_anchor_basis_if_needed();
+        asset->refresh_anchor_point_cache_from_frame();
+        asset->refresh_runtime_box_cache_from_frame();
+    };
+
+    refresh_asset(player);
+    for (Asset* asset : active_assets) {
+        if (asset == player) {
+            continue;
+        }
+        refresh_asset(asset);
+    }
+}
+
 void Assets::update_audio_camera_metrics() {
 
     SDL_Point camera_focus = camera_.get_screen_center();
@@ -1020,6 +1039,7 @@ void Assets::update(const Input& input)
     maybe_rebuild_world_grid();
 
     refresh_dirty_anchor_bases();
+    refresh_anchor_dependents_for_active_assets();
 
     // Run binding follow updates after anchors are refreshed so children see latest transforms.
     for (auto* helper : binding_helpers_) {

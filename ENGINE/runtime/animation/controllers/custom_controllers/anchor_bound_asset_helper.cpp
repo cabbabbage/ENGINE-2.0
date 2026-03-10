@@ -91,7 +91,7 @@ std::optional<AnchorPoint> AnchorBoundAssetHelper::resolve_anchor(BindingRecord&
     }
 
     return record.parent->anchor_state(record.anchor_name,
-                                       anchor_points::GridMaterialization::Ensure);
+                                       anchor_points::GridMaterialization::None);
 }
 
 void AnchorBoundAssetHelper::teardown_binding(BindingRecord& state) {

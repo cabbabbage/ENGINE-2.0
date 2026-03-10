@@ -25,7 +25,7 @@ struct DisplacedAssetAnchorPoint {
     std::string name;
     int         texture_x = 0;   // Pixel coordinate on the sprite texture (X axis)
     int         texture_y = 0;   // Pixel coordinate on the sprite texture (vertical axis)
-    int         depth_offset = 0; // Signed pixel offset along camera->anchor ray from the flat texture point
+    int         depth_offset = 0; // Signed pixel offset along camera->anchor ray from the flat texture point (+farther, -closer)
 
     DisplacedAssetAnchorPoint() = default;
     DisplacedAssetAnchorPoint(std::string name_,

@@ -24,6 +24,104 @@ float anchor_height_px(const Asset& asset) {
     return asset.runtime_height_px();
 }
 
+bool compute_camera_to_point_ray(const Asset& asset,
+                                 const AnchorWorldPoint3& flat_point,
+                                 AnchorWorldPoint3& out_direction) {
+    out_direction = AnchorWorldPoint3{};
+    if (!flat_point.valid) {
+        return false;
+    }
+
+    const float origin_x = static_cast<float>(asset.world_x());
+    const float origin_y = static_cast<float>(asset.world_y());
+    const float origin_z = static_cast<float>(asset.world_z());
+    const float ray_x = flat_point.x - origin_x;
+    const float ray_y = flat_point.y - origin_y;
+    const float ray_z = flat_point.z - origin_z;
+    const float ray_len_sq = ray_x * ray_x + ray_y * ray_y + ray_z * ray_z;
+    if (ray_len_sq <= 1e-10f || !std::isfinite(ray_len_sq)) {
+        out_direction = AnchorWorldPoint3{0.0f, 0.0f, 1.0f, true};
+        return true;
+    }
+
+    const float inv_len = 1.0f / std::sqrt(ray_len_sq);
+    out_direction = AnchorWorldPoint3{
+        ray_x * inv_len,
+        ray_y * inv_len,
+        ray_z * inv_len,
+        true};
+    return std::isfinite(out_direction.x) &&
+           std::isfinite(out_direction.y) &&
+           std::isfinite(out_direction.z);
+}
+
+bool displace_along_camera_to_point_ray(const Asset& asset,
+                                        const AnchorWorldPoint3& flat_point,
+                                        float signed_offset,
+                                        AnchorWorldPoint3& out_point,
+                                        AnchorWorldPoint3* out_direction) {
+    out_point = flat_point;
+    out_point.valid = flat_point.valid;
+    if (!flat_point.valid || !std::isfinite(signed_offset)) {
+        return false;
+    }
+
+    AnchorWorldPoint3 direction{};
+    if (!compute_camera_to_point_ray(asset, flat_point, direction)) {
+        return false;
+    }
+    if (out_direction) {
+        *out_direction = direction;
+    }
+
+    out_point.x = flat_point.x + direction.x * signed_offset;
+    out_point.y = flat_point.y + direction.y * signed_offset;
+    out_point.z = flat_point.z + direction.z * signed_offset;
+    out_point.valid = std::isfinite(out_point.x) &&
+                      std::isfinite(out_point.y) &&
+                      std::isfinite(out_point.z);
+    return out_point.valid;
+}
+
+bool build_symmetric_camera_ray_extrusion(const Asset& asset,
+                                          const AnchorWorldPoint3& flat_point,
+                                          float extrusion_amount,
+                                          AnchorWorldPoint3& out_near_point,
+                                          AnchorWorldPoint3& out_far_point,
+                                          AnchorWorldPoint3* out_direction) {
+    if (!std::isfinite(extrusion_amount) || extrusion_amount < 0.0f) {
+        return false;
+    }
+
+    AnchorWorldPoint3 direction{};
+    if (!compute_camera_to_point_ray(asset, flat_point, direction)) {
+        return false;
+    }
+    if (out_direction) {
+        *out_direction = direction;
+    }
+
+    out_near_point = AnchorWorldPoint3{
+        flat_point.x - direction.x * extrusion_amount,
+        flat_point.y - direction.y * extrusion_amount,
+        flat_point.z - direction.z * extrusion_amount,
+        true};
+    out_far_point = AnchorWorldPoint3{
+        flat_point.x + direction.x * extrusion_amount,
+        flat_point.y + direction.y * extrusion_amount,
+        flat_point.z + direction.z * extrusion_amount,
+        true};
+    const bool valid = std::isfinite(out_near_point.x) &&
+                       std::isfinite(out_near_point.y) &&
+                       std::isfinite(out_near_point.z) &&
+                       std::isfinite(out_far_point.x) &&
+                       std::isfinite(out_far_point.y) &&
+                       std::isfinite(out_far_point.z);
+    out_near_point.valid = valid;
+    out_far_point.valid = valid;
+    return valid;
+}
+
 FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               GridMaterialization) {
@@ -42,6 +140,14 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         static_cast<float>(sample.resolved.world_z),
         true};
     sample.final_anchor_point = sample.flat_relative_pixel_point;
+    displace_along_camera_to_point_ray(asset,
+                                       sample.flat_relative_pixel_point,
+                                       static_cast<float>(anchor.depth_offset),
+                                       sample.final_anchor_point);
+    sample.resolved.world_px = SDL_Point{
+        static_cast<int>(std::lround(sample.final_anchor_point.x)),
+        static_cast<int>(std::lround(sample.final_anchor_point.y))};
+    sample.resolved.world_z = static_cast<int>(std::lround(sample.final_anchor_point.z));
     sample.resolved.source_texture_px = SDL_Point{anchor.texture_x, anchor.texture_y};
     sample.resolved.has_canonical_texture_source = true;
     sample.resolved.missing = false;
@@ -110,15 +216,9 @@ std::optional<WorldPoint3> camera_world_position(const Assets* assets_owner) {
     return world_camera_position;
 }
 
-bool apply_depth_offset_along_camera_ray(const Assets* assets_owner,
-                                         int depth_offset,
-                                         const WorldPoint3& flat_relative_pixel_point,
-                                         WorldPoint3& final_anchor_point) {
-    final_anchor_point = flat_relative_pixel_point;
-    if (depth_offset == 0) {
-        return true;
-    }
-
+bool compute_camera_to_point_direction(const Assets* assets_owner,
+                                       const WorldPoint3& flat_relative_pixel_point,
+                                       WorldPoint3& out_direction) {
     const auto camera_position_opt = camera_world_position(assets_owner);
     if (!camera_position_opt.has_value()) {
         return false;
@@ -138,11 +238,35 @@ bool apply_depth_offset_along_camera_ray(const Assets* assets_owner,
     }
 
     const float inv_ray_length = 1.0f / std::sqrt(ray_length_sq);
-    const float offset_amount = static_cast<float>(depth_offset);
+    out_direction.x = camera_to_point_x * inv_ray_length;
+    out_direction.y = camera_to_point_y * inv_ray_length;
+    out_direction.z = camera_to_point_z * inv_ray_length;
+    return std::isfinite(out_direction.x) &&
+           std::isfinite(out_direction.y) &&
+           std::isfinite(out_direction.z);
+}
 
-    final_anchor_point.x = flat_relative_pixel_point.x + camera_to_point_x * inv_ray_length * offset_amount;
-    final_anchor_point.y = flat_relative_pixel_point.y + camera_to_point_y * inv_ray_length * offset_amount;
-    final_anchor_point.z = flat_relative_pixel_point.z + camera_to_point_z * inv_ray_length * offset_amount;
+bool apply_depth_offset_along_camera_ray(const Assets* assets_owner,
+                                         float depth_offset,
+                                         const WorldPoint3& flat_relative_pixel_point,
+                                         WorldPoint3& final_anchor_point,
+                                         WorldPoint3* out_direction = nullptr) {
+    final_anchor_point = flat_relative_pixel_point;
+    if (!std::isfinite(depth_offset)) {
+        return false;
+    }
+
+    WorldPoint3 camera_to_point_dir{};
+    if (!compute_camera_to_point_direction(assets_owner, flat_relative_pixel_point, camera_to_point_dir)) {
+        return false;
+    }
+    if (out_direction) {
+        *out_direction = camera_to_point_dir;
+    }
+
+    final_anchor_point.x = flat_relative_pixel_point.x + camera_to_point_dir.x * depth_offset;
+    final_anchor_point.y = flat_relative_pixel_point.y + camera_to_point_dir.y * depth_offset;
+    final_anchor_point.z = flat_relative_pixel_point.z + camera_to_point_dir.z * depth_offset;
 
     return std::isfinite(final_anchor_point.x) &&
            std::isfinite(final_anchor_point.y) &&
@@ -402,6 +526,104 @@ float anchor_height_px(const Asset& asset) {
     return (h > 0) ? static_cast<float>(h) : 0.0f;
 }
 
+bool compute_camera_to_point_ray(const Asset& asset,
+                                 const AnchorWorldPoint3& flat_point,
+                                 AnchorWorldPoint3& out_direction) {
+    out_direction = AnchorWorldPoint3{};
+    if (!flat_point.valid) {
+        return false;
+    }
+
+    Assets* assets_owner = asset.get_assets();
+    if (!assets_owner) {
+        return false;
+    }
+
+    WorldPoint3 direction{};
+    if (!compute_camera_to_point_direction(
+            assets_owner,
+            WorldPoint3{flat_point.x, flat_point.y, flat_point.z},
+            direction)) {
+        return false;
+    }
+
+    out_direction = AnchorWorldPoint3{
+        direction.x,
+        direction.y,
+        direction.z,
+        std::isfinite(direction.x) && std::isfinite(direction.y) && std::isfinite(direction.z)};
+    return out_direction.valid;
+}
+
+bool displace_along_camera_to_point_ray(const Asset& asset,
+                                        const AnchorWorldPoint3& flat_point,
+                                        float signed_offset,
+                                        AnchorWorldPoint3& out_point,
+                                        AnchorWorldPoint3* out_direction) {
+    out_point = flat_point;
+    out_point.valid = flat_point.valid;
+    if (!flat_point.valid || !std::isfinite(signed_offset)) {
+        return false;
+    }
+
+    AnchorWorldPoint3 direction{};
+    if (!compute_camera_to_point_ray(asset, flat_point, direction)) {
+        return false;
+    }
+    if (out_direction) {
+        *out_direction = direction;
+    }
+
+    out_point.x = flat_point.x + direction.x * signed_offset;
+    out_point.y = flat_point.y + direction.y * signed_offset;
+    out_point.z = flat_point.z + direction.z * signed_offset;
+    out_point.valid = std::isfinite(out_point.x) &&
+                      std::isfinite(out_point.y) &&
+                      std::isfinite(out_point.z);
+    return out_point.valid;
+}
+
+bool build_symmetric_camera_ray_extrusion(const Asset& asset,
+                                          const AnchorWorldPoint3& flat_point,
+                                          float extrusion_amount,
+                                          AnchorWorldPoint3& out_near_point,
+                                          AnchorWorldPoint3& out_far_point,
+                                          AnchorWorldPoint3* out_direction) {
+    if (!flat_point.valid || !std::isfinite(extrusion_amount) || extrusion_amount < 0.0f) {
+        return false;
+    }
+
+    AnchorWorldPoint3 direction{};
+    if (!compute_camera_to_point_ray(asset, flat_point, direction)) {
+        return false;
+    }
+    if (out_direction) {
+        *out_direction = direction;
+    }
+
+    out_near_point = AnchorWorldPoint3{
+        flat_point.x - direction.x * extrusion_amount,
+        flat_point.y - direction.y * extrusion_amount,
+        flat_point.z - direction.z * extrusion_amount,
+        true};
+    out_far_point = AnchorWorldPoint3{
+        flat_point.x + direction.x * extrusion_amount,
+        flat_point.y + direction.y * extrusion_amount,
+        flat_point.z + direction.z * extrusion_amount,
+        true};
+
+    const bool valid =
+        std::isfinite(out_near_point.x) &&
+        std::isfinite(out_near_point.y) &&
+        std::isfinite(out_near_point.z) &&
+        std::isfinite(out_far_point.x) &&
+        std::isfinite(out_far_point.y) &&
+        std::isfinite(out_far_point.z);
+    out_near_point.valid = valid;
+    out_far_point.valid = valid;
+    return valid;
+}
+
 FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               GridMaterialization grid_policy) {
@@ -451,26 +673,23 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     }
     sample.flat_screen_px = flat_texture_screen_px;
     sample.has_flat_screen_px = true;
-
-    WorldPoint3 final_anchor_point{};
-    if (!apply_depth_offset_along_camera_ray(
-            assets_owner,
-            anchor.depth_offset,
-            flat_relative_pixel_point,
-            final_anchor_point)) {
-        sample.resolved.missing = true;
-        return sample;
-    }
     sample.flat_relative_pixel_point = AnchorWorldPoint3{
         flat_relative_pixel_point.x,
         flat_relative_pixel_point.y,
         flat_relative_pixel_point.z,
         true};
-    sample.final_anchor_point = AnchorWorldPoint3{
-        final_anchor_point.x,
-        final_anchor_point.y,
-        final_anchor_point.z,
-        true};
+
+    if (!displace_along_camera_to_point_ray(asset,
+                                            sample.flat_relative_pixel_point,
+                                            static_cast<float>(anchor.depth_offset),
+                                            sample.final_anchor_point)) {
+        sample.resolved.missing = true;
+        return sample;
+    }
+    WorldPoint3 final_anchor_point{
+        sample.final_anchor_point.x,
+        sample.final_anchor_point.y,
+        sample.final_anchor_point.z};
 
     const int resolved_x = static_cast<int>(std::lround(final_anchor_point.x));
     const int resolved_y = static_cast<int>(std::lround(final_anchor_point.y));
@@ -496,7 +715,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.final_screen_px = final_screen_px;
         sample.has_final_screen_px = true;
     }
-    sample.screen_px = sample.flat_screen_px;
+    sample.screen_px = sample.has_final_screen_px ? sample.final_screen_px : sample.flat_screen_px;
     return sample;
 }
 

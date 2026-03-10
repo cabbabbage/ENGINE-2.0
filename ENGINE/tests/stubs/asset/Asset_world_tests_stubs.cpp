@@ -87,6 +87,10 @@ float Asset::smoothed_scale() const {
     return current_scale;
 }
 
+float Asset::runtime_height_px() const {
+    return (cached_h > 0) ? static_cast<float>(cached_h) : 0.0f;
+}
+
 void Asset::set_assets(Assets* a) { assets_ = a; }
 void Asset::sync_transform_to_position() {}
 void Asset::clear_grid_id() { grid_id_ = 0; }

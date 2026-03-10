@@ -388,6 +388,7 @@ private:
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
     void refresh_dirty_anchor_bases();
+    void refresh_anchor_dependents_for_active_assets();
     void update_active_assets(const world::GridPoint& center);
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();

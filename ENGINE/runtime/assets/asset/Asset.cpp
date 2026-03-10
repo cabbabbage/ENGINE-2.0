@@ -717,22 +717,6 @@ void Asset::refresh_runtime_box_cache_from_frame() {
         return;
     }
 
-    const auto projection = assets_->getView().projection_params();
-    const double meters_scale = std::max(1e-6, projection.meters_scale);
-    if (!std::isfinite(meters_scale)) {
-        return;
-    }
-
-    RuntimeBoxPoint3 camera_world_position{};
-    camera_world_position.x = static_cast<float>(projection.position_x / meters_scale + projection.anchor_world_x);
-    camera_world_position.y = static_cast<float>(projection.position_y / meters_scale + projection.anchor_world_y);
-    camera_world_position.z = static_cast<float>(projection.position_z / meters_scale + projection.anchor_world_z);
-    if (!std::isfinite(camera_world_position.x) ||
-        !std::isfinite(camera_world_position.y) ||
-        !std::isfinite(camera_world_position.z)) {
-        return;
-    }
-
     auto build_volume = [&](const std::string& name,
                             int extrusion_amount,
                             int damage_amount,
@@ -762,40 +746,31 @@ void Asset::refresh_runtime_box_cache_from_frame() {
                 return false;
             }
 
-            const RuntimeBoxPoint3 flat_point{
-                sample.flat_relative_pixel_point.x,
-                sample.flat_relative_pixel_point.y,
-                sample.flat_relative_pixel_point.z};
-            const float ray_x = flat_point.x - camera_world_position.x;
-            const float ray_y = flat_point.y - camera_world_position.y;
-            const float ray_z = flat_point.z - camera_world_position.z;
-            const float ray_len_sq = ray_x * ray_x + ray_y * ray_y + ray_z * ray_z;
-            if (ray_len_sq <= 1e-10f || !std::isfinite(ray_len_sq)) {
-                return false;
-            }
-            const float inv_len = 1.0f / std::sqrt(ray_len_sq);
-            const float nx = ray_x * inv_len;
-            const float ny = ray_y * inv_len;
-            const float nz = ray_z * inv_len;
-
-            RuntimeBoxPoint3 backward{
-                flat_point.x - nx * extrusion,
-                flat_point.y - ny * extrusion,
-                flat_point.z - nz * extrusion};
-            RuntimeBoxPoint3 forward{
-                flat_point.x + nx * extrusion,
-                flat_point.y + ny * extrusion,
-                flat_point.z + nz * extrusion};
-            if (!std::isfinite(backward.x) || !std::isfinite(backward.y) || !std::isfinite(backward.z) ||
-                !std::isfinite(forward.x) || !std::isfinite(forward.y) || !std::isfinite(forward.z)) {
+            anchor_points::AnchorWorldPoint3 near_point{};
+            anchor_points::AnchorWorldPoint3 far_point{};
+            if (!anchor_points::build_symmetric_camera_ray_extrusion(*this,
+                                                                     sample.flat_relative_pixel_point,
+                                                                     extrusion,
+                                                                     near_point,
+                                                                     far_point) ||
+                !near_point.valid ||
+                !far_point.valid) {
                 return false;
             }
 
-            out_volume.world_points[corner_index] = backward;
-            out_volume.world_points[corner_index + corners.size()] = forward;
-            sum_x += backward.x + forward.x;
-            sum_y += backward.y + forward.y;
-            sum_z += backward.z + forward.z;
+            const RuntimeBoxPoint3 near_world{
+                near_point.x,
+                near_point.y,
+                near_point.z};
+            const RuntimeBoxPoint3 far_world{
+                far_point.x,
+                far_point.y,
+                far_point.z};
+            out_volume.world_points[corner_index] = near_world;
+            out_volume.world_points[corner_index + corners.size()] = far_world;
+            sum_x += near_world.x + far_world.x;
+            sum_y += near_world.y + far_world.y;
+            sum_z += near_world.z + far_world.z;
         }
 
         out_volume.centroid = RuntimeBoxPoint3{sum_x / 8.0f, sum_y / 8.0f, sum_z / 8.0f};
@@ -1257,6 +1232,7 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
 
         sig.world_z_offset = world_z_offset_;
         sig.resolution_layer = has_pos ? pos_->resolution_layer() : grid_resolution;
+        sig.camera_state_version = (assets_ ? assets_->getView().camera_state_version() : 0);
         return sig;
 }
 
@@ -1284,6 +1260,7 @@ bool Asset::update_anchor_basis_if_needed() {
                 signature.variant_index != last_anchor_basis_signature_.variant_index ||
                 signature.flipped != last_anchor_basis_signature_.flipped ||
                 signature.resolution_layer != last_anchor_basis_signature_.resolution_layer ||
+                signature.camera_state_version != last_anchor_basis_signature_.camera_state_version ||
                 !almost_equal(signature.remainder_scale, last_anchor_basis_signature_.remainder_scale) ||
                 !almost_equal(signature.perspective_scale, last_anchor_basis_signature_.perspective_scale) ||
                 !almost_equal(signature.world_z_offset, last_anchor_basis_signature_.world_z_offset);
@@ -1389,7 +1366,9 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy)
         ++counters.calls;
 #endif
 
-        const bool cache_hit = !dirty && last_update_key_.matches(grid_policy);
+        const std::uint64_t camera_state_version =
+                (owner && owner->assets_) ? owner->assets_->getView().camera_state_version() : 0;
+        const bool cache_hit = !dirty && last_update_key_.matches(grid_policy, camera_state_version);
         if (cache_hit) {
 #if !defined(NDEBUG)
                 ++counters.cache_hits;
@@ -1400,7 +1379,7 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy)
 #if !defined(NDEBUG)
         ++counters.recomputes;
 #endif
-        last_update_key_.set(grid_policy);
+        last_update_key_.set(grid_policy, camera_state_version);
 
         if (!owner) {
                 dirty = false;

@@ -306,14 +306,20 @@ class Asset {
         Asset*          owner = nullptr;
         struct UpdateKey {
                 anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None;
+                std::uint64_t camera_state_version = 0;
                 bool initialized = false;
 
-                bool matches(anchor_points::GridMaterialization grid) const {
-                        return initialized && grid_policy == grid;
+                bool matches(anchor_points::GridMaterialization grid,
+                             std::uint64_t camera_version) const {
+                        return initialized &&
+                               grid_policy == grid &&
+                               camera_state_version == camera_version;
                 }
 
-                void set(anchor_points::GridMaterialization grid) {
+                void set(anchor_points::GridMaterialization grid,
+                         std::uint64_t camera_version) {
                         grid_policy = grid;
+                        camera_state_version = camera_version;
                         initialized = true;
                 }
         } last_update_key_;
@@ -334,6 +340,7 @@ class Asset {
         float perspective_scale = 1.0f;     // depth-based scaling from the grid/camera
         float world_z_offset = 0.0f;        // render depth offset used by cached anchor screen projection
         int   resolution_layer = 0;         // grid resolution used for anchor materialization
+        std::uint64_t camera_state_version = 0; // camera snapshot that produced cached anchor placement
     };
 
     AnchorPoint* get_anchor_point(const std::string& name);

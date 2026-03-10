@@ -13,6 +13,29 @@ struct AnchorWorldPoint3 {
     bool valid = false;
 };
 
+// Compute the normalized camera->point world direction for a flat anchor point.
+// Returns false if the direction cannot be resolved safely.
+bool compute_camera_to_point_ray(const Asset& asset,
+                                 const AnchorWorldPoint3& flat_point,
+                                 AnchorWorldPoint3& out_direction);
+
+// Apply a signed world-pixel displacement along the normalized camera->point ray.
+// Positive values move farther from camera; negative values move closer.
+bool displace_along_camera_to_point_ray(const Asset& asset,
+                                        const AnchorWorldPoint3& flat_point,
+                                        float signed_offset,
+                                        AnchorWorldPoint3& out_point,
+                                        AnchorWorldPoint3* out_direction = nullptr);
+
+// Build symmetric extrusion endpoints around a flat point along the camera->point ray.
+// out_near_point is closer to camera; out_far_point is farther from camera.
+bool build_symmetric_camera_ray_extrusion(const Asset& asset,
+                                          const AnchorWorldPoint3& flat_point,
+                                          float extrusion_amount,
+                                          AnchorWorldPoint3& out_near_point,
+                                          AnchorWorldPoint3& out_far_point,
+                                          AnchorWorldPoint3* out_direction = nullptr);
+
 struct FrameAnchorSample {
     SDL_FPoint uv{0.5f, 0.5f};
     ResolvedAnchor resolved{};

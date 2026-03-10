@@ -273,11 +273,14 @@ add_executable(engine_tests
     ENGINE/runtime/utils/utils/log.cpp
     ENGINE/runtime/utils/utils/cache_manager.cpp
     ENGINE/runtime/utils/utils/loading_status_notifier.cpp
+    ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
     ENGINE/runtime/gameplay/world/grid_point.cpp
     ENGINE/runtime/gameplay/world/world_grid.cpp
     ENGINE/runtime/gameplay/world/chunk.cpp
     ENGINE/runtime/gameplay/world/chunk_manager.cpp
     ENGINE/tests/stubs/asset/Asset_world_tests_stubs.cpp
+    ENGINE/tests/stubs/utils/Area_world_tests_stubs.cpp
+    ENGINE/tests/test_anchor_point_resolver.cpp
     ENGINE/tests/test_map_data.cpp
     ENGINE/tests/test_world_grid.cpp
   )

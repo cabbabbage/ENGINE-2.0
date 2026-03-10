@@ -229,19 +229,6 @@ This document provides a comprehensive reference for all keyboard shortcuts, key
 - **Condition:** Only if not at last frame
 - **Context:** Frame editor active
 
-#### Left Arrow (Previous Attack Point)
-- **File:** [AttackGeoFrameEditor.cpp:311-342](ENGINE/editor/devtools/frame_editors/AttackGeoFrameEditor.cpp)
-- **Action:** Navigate to previous attack geometry handle
-- **Context:** Attack geometry frame editor active
-- **Details:** Cycles through Start/Control/End handles of attack vectors
-- **Behavior:** Moves to previous point in sequence
-
-#### Right Arrow (Next Attack Point)
-- **File:** [AttackGeoFrameEditor.cpp:343-374](ENGINE/editor/devtools/frame_editors/AttackGeoFrameEditor.cpp)
-- **Action:** Navigate to next attack geometry handle
-- **Context:** Attack geometry frame editor active
-- **Details:** Cycles through attack vector handles
-
 #### Escape (Close Movement Editor)
 - **File:** [MovementFrameEditor.cpp:266-268](ENGINE/editor/devtools/frame_editors/MovementFrameEditor.cpp)
 - **Action:** Close the movement frame editor
@@ -593,7 +580,6 @@ ENGINE/editor/devtools/
 │   ├── shared/
 │   │   ├── FrameNavigator.cpp             # Frame navigation
 │   │   └── Point3DEditor.cpp              # 3D point editing
-│   ├── AttackGeoFrameEditor.cpp           # Attack geometry
 │   ├── MovementFrameEditor.cpp            # Movement editing
 │   └── SyncChildrenFrameEditor.cpp        # Synchronized children
 └── [other dialog files]          # Various modal dialogs

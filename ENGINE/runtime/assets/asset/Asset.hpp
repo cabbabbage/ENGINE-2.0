@@ -270,6 +270,27 @@ class Asset {
     // Drain and return queued attacks for this tick.
     std::vector<animation_update::Attack> process_pending_attacks();
 
+    struct RuntimeBoxPoint3 {
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+    };
+
+    struct RuntimeBoxVolume {
+        std::string name;
+        int frame_index = -1;
+        int extrusion_amount = 0;
+        int damage_amount = 0;
+        std::array<RuntimeBoxPoint3, 8> world_points{};
+        RuntimeBoxPoint3 centroid{};
+        bool valid = false;
+    };
+
+    const std::vector<RuntimeBoxVolume>& current_hit_box_volumes() const { return current_hit_box_volumes_; }
+    const std::vector<RuntimeBoxVolume>& current_attack_box_volumes() const { return current_attack_box_volumes_; }
+    const RuntimeBoxVolume* find_hit_box_volume(const std::string& name) const;
+    const RuntimeBoxVolume* find_attack_box_volume(const std::string& name) const;
+
     struct AnchorHandle {
         std::string     name;
         world::GridPoint* grid = nullptr;
@@ -327,6 +348,7 @@ class Asset {
                                     const AnchorHandle& handle,
                                     const DisplacedAssetAnchorPoint* frame_anchor) const;
     void refresh_anchor_point_cache_from_frame();
+    void refresh_runtime_box_cache_from_frame();
     void mark_anchors_dirty();
     bool update_anchor_basis_if_needed();
     AnchorBasisSignature compute_anchor_basis_signature() const;
@@ -417,6 +439,10 @@ private:
     std::vector<AnchorHandle> anchor_handles_;
     std::vector<AnchorPoint> anchor_points_;
     std::unordered_map<std::string, std::size_t> anchor_name_to_index_;
+    std::vector<RuntimeBoxVolume> current_hit_box_volumes_;
+    std::vector<RuntimeBoxVolume> current_attack_box_volumes_;
+    std::unordered_map<std::string, std::size_t> runtime_hit_box_lookup_;
+    std::unordered_map<std::string, std::size_t> runtime_attack_box_lookup_;
     bool anchors_initialized_ = false;
 
     std::uint64_t anchor_world_revision_ = 1;

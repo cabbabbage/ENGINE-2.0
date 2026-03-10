@@ -75,6 +75,23 @@ SDL_Texture* clone_texture(SDL_Texture* src,
     return dst;
 }
 
+template <typename TBox>
+TBox transform_box_corners(TBox box,
+                           bool flip_horizontal,
+                           bool flip_vertical,
+                           int frame_w,
+                           int frame_h) {
+    for (auto& corner : box.corners) {
+        if (flip_horizontal && frame_w > 0) {
+            corner.texture_x = frame_w - 1 - corner.texture_x;
+        }
+        if (flip_vertical && frame_h > 0) {
+            corner.texture_y = frame_h - 1 - corner.texture_y;
+        }
+    }
+    return box;
+}
+
 }
 
 bool AnimationCloner::Clone(const Animation& source,
@@ -216,8 +233,21 @@ bool AnimationCloner::Clone(const Animation& source,
                     dst_frame.anchor_points.push_back(anchor);
                 }
                 dst_frame.rebuild_anchor_lookup();
-                dst_frame.hit_geometry = src_frame->hit_geometry;
-                dst_frame.attack_geometry = src_frame->attack_geometry;
+                dst_frame.hit_boxes.boxes.clear();
+                dst_frame.hit_boxes.boxes.reserve(src_frame->hit_boxes.boxes.size());
+                for (const auto& src_box : src_frame->hit_boxes.boxes) {
+                    dst_frame.hit_boxes.boxes.push_back(
+                        transform_box_corners(src_box, opts.flip_horizontal, opts.flip_vertical, frame_w, frame_h));
+                }
+                dst_frame.rebuild_hit_box_lookup();
+
+                dst_frame.attack_boxes.boxes.clear();
+                dst_frame.attack_boxes.boxes.reserve(src_frame->attack_boxes.boxes.size());
+                for (const auto& src_box : src_frame->attack_boxes.boxes) {
+                    dst_frame.attack_boxes.boxes.push_back(
+                        transform_box_corners(src_box, opts.flip_horizontal, opts.flip_vertical, frame_w, frame_h));
+                }
+                dst_frame.rebuild_attack_box_lookup();
             }
 
             if (path_idx == 0) {

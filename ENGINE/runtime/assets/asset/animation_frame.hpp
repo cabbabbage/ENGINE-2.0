@@ -38,21 +38,73 @@ public:
     }
 
 
-    animation_update::FrameHitGeometry hit_geometry;
-    animation_update::FrameAttackGeometry attack_geometry;
+    animation_update::FrameHitBoxes hit_boxes;
+    animation_update::FrameAttackBoxes attack_boxes;
 
-    const animation_update::FrameHitGeometry& get_hit_geometry() const {
-        return hit_geometry;
+    const animation_update::FrameHitBoxes& get_hit_boxes() const {
+        return hit_boxes;
     }
-    animation_update::FrameHitGeometry& mutable_hit_geometry() {
-        return hit_geometry;
+    animation_update::FrameHitBoxes& mutable_hit_boxes() {
+        return hit_boxes;
     }
 
-    const animation_update::FrameAttackGeometry& get_attack_geometry() const {
-        return attack_geometry;
+    const animation_update::FrameAttackBoxes& get_attack_boxes() const {
+        return attack_boxes;
     }
-    animation_update::FrameAttackGeometry& mutable_attack_geometry() {
-        return attack_geometry;
+    animation_update::FrameAttackBoxes& mutable_attack_boxes() {
+        return attack_boxes;
+    }
+
+    const animation_update::FrameHitBox* find_hit_box(const std::string& name) const {
+        if (hit_box_lookup_.empty() && !hit_boxes.boxes.empty()) {
+            const_cast<AnimationFrame*>(this)->rebuild_hit_box_lookup();
+        }
+        auto it = hit_box_lookup_.find(name);
+        if (it != hit_box_lookup_.end() && it->second < hit_boxes.boxes.size()) {
+            return &hit_boxes.boxes[it->second];
+        }
+        return nullptr;
+    }
+
+    const animation_update::FrameAttackBox* find_attack_box(const std::string& name) const {
+        if (attack_box_lookup_.empty() && !attack_boxes.boxes.empty()) {
+            const_cast<AnimationFrame*>(this)->rebuild_attack_box_lookup();
+        }
+        auto it = attack_box_lookup_.find(name);
+        if (it != attack_box_lookup_.end() && it->second < attack_boxes.boxes.size()) {
+            return &attack_boxes.boxes[it->second];
+        }
+        return nullptr;
+    }
+
+    void rebuild_hit_box_lookup() {
+        hit_box_lookup_.clear();
+        for (std::size_t i = 0; i < hit_boxes.boxes.size(); ++i) {
+            const auto& box = hit_boxes.boxes[i];
+            if (!box.name.empty()) {
+                hit_box_lookup_[box.name] = i;
+            }
+        }
+    }
+
+    void rebuild_attack_box_lookup() {
+        attack_box_lookup_.clear();
+        for (std::size_t i = 0; i < attack_boxes.boxes.size(); ++i) {
+            const auto& box = attack_boxes.boxes[i];
+            if (!box.name.empty()) {
+                attack_box_lookup_[box.name] = i;
+            }
+        }
+    }
+
+    void set_hit_boxes(std::vector<animation_update::FrameHitBox> boxes) {
+        hit_boxes.boxes = std::move(boxes);
+        rebuild_hit_box_lookup();
+    }
+
+    void set_attack_boxes(std::vector<animation_update::FrameAttackBox> boxes) {
+        attack_boxes.boxes = std::move(boxes);
+        rebuild_attack_box_lookup();
     }
 
     const DisplacedAssetAnchorPoint* find_anchor(const std::string& name) const {
@@ -83,4 +135,6 @@ public:
 
 private:
     std::unordered_map<std::string, std::size_t> anchor_lookup_;
+    std::unordered_map<std::string, std::size_t> hit_box_lookup_;
+    std::unordered_map<std::string, std::size_t> attack_box_lookup_;
 };

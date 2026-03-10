@@ -1,62 +1,87 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
+#include <string>
 #include <vector>
-
-#include "animation/attack.hpp"
 
 namespace animation_update {
 
-struct FrameHitGeometry {
-    struct HitBox {
-        std::string type;
-        float center_x   = 0.0f;
-        float center_y   = 0.0f;
-        float center_z   = 0.0f;
-        float half_width = 0.0f;
-        float half_height = 0.0f;
-        float rotation_degrees = 0.0f;
+struct FrameBoxCorner {
+    int texture_x = 0;
+    int texture_y = 0;
 
-        bool is_empty() const {
-            return half_width <= 0.0f || half_height <= 0.0f;
-        }
+    bool is_valid() const {
+        return texture_x >= 0 && texture_y >= 0;
+    }
 };
 
-    std::vector<HitBox> boxes;
+struct FrameBoxBase {
+    std::string name;
+    int extrusion_amount = 0;
+    std::array<FrameBoxCorner, 4> corners{};
 
-};
+    bool is_valid() const {
+        return !name.empty();
+    }
 
-struct FrameAttackGeometry {
-    using Vector = AttackVector;
-
-    std::vector<Vector> vectors;
-
-    Vector* vector_at(std::size_t index) {
-        if (index >= vectors.size()) {
+    FrameBoxCorner* corner_at(std::size_t index) {
+        if (index >= corners.size()) {
             return nullptr;
         }
-        return &vectors[index];
+        return &corners[index];
     }
 
-    const Vector* vector_at(std::size_t index) const {
-        if (index >= vectors.size()) {
+    const FrameBoxCorner* corner_at(std::size_t index) const {
+        if (index >= corners.size()) {
             return nullptr;
         }
-        return &vectors[index];
-    }
-
-    Vector& add_vector(Vector vec = {}) {
-        vectors.push_back(vec);
-        return vectors.back();
-    }
-
-    bool erase_vector(std::size_t index) {
-        if (index >= vectors.size()) {
-            return false;
-        }
-        vectors.erase(vectors.begin() + static_cast<std::ptrdiff_t>(index));
-        return true;
+        return &corners[index];
     }
 };
 
-}
+struct FrameHitBox : FrameBoxBase {
+};
+
+struct FrameAttackBox : FrameBoxBase {
+    int damage_amount = 0;
+};
+
+struct FrameHitBoxes {
+    std::vector<FrameHitBox> boxes;
+
+    FrameHitBox* box_at(std::size_t index) {
+        if (index >= boxes.size()) {
+            return nullptr;
+        }
+        return &boxes[index];
+    }
+
+    const FrameHitBox* box_at(std::size_t index) const {
+        if (index >= boxes.size()) {
+            return nullptr;
+        }
+        return &boxes[index];
+    }
+};
+
+struct FrameAttackBoxes {
+    std::vector<FrameAttackBox> boxes;
+
+    FrameAttackBox* box_at(std::size_t index) {
+        if (index >= boxes.size()) {
+            return nullptr;
+        }
+        return &boxes[index];
+    }
+
+    const FrameAttackBox* box_at(std::size_t index) const {
+        if (index >= boxes.size()) {
+            return nullptr;
+        }
+        return &boxes[index];
+    }
+};
+
+}  // namespace animation_update

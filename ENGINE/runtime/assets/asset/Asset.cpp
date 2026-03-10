@@ -281,6 +281,10 @@ Asset& Asset::operator=(const Asset& o) {
         anchor_handles_.clear();
         anchor_points_.clear();
         anchor_name_to_index_.clear();
+        current_hit_box_volumes_.clear();
+        current_attack_box_volumes_.clear();
+        runtime_hit_box_lookup_.clear();
+        runtime_attack_box_lookup_.clear();
         anchors_initialized_ = false;
         refresh_filter_tags();
         initialize_anchor_registry_from_animations();
@@ -638,6 +642,7 @@ void Asset::update() {
     const bool post_world_changed = update_anchor_basis_if_needed();
 
     refresh_anchor_point_cache_from_frame();
+    refresh_runtime_box_cache_from_frame();
 
     if (info->moving_asset && (external_world_changed || post_world_changed)) {
         update_neighbor_lists(true);
@@ -700,6 +705,145 @@ void Asset::refresh_anchor_point_cache_from_frame() {
                 resolved.world_pos_2d.y - static_cast<float>(origin_world.y)};
         }
     }
+}
+
+void Asset::refresh_runtime_box_cache_from_frame() {
+    current_hit_box_volumes_.clear();
+    current_attack_box_volumes_.clear();
+    runtime_hit_box_lookup_.clear();
+    runtime_attack_box_lookup_.clear();
+
+    if (!assets_ || !current_frame) {
+        return;
+    }
+
+    const auto projection = assets_->getView().projection_params();
+    const double meters_scale = std::max(1e-6, projection.meters_scale);
+    if (!std::isfinite(meters_scale)) {
+        return;
+    }
+
+    RuntimeBoxPoint3 camera_world_position{};
+    camera_world_position.x = static_cast<float>(projection.position_x / meters_scale + projection.anchor_world_x);
+    camera_world_position.y = static_cast<float>(projection.position_y / meters_scale + projection.anchor_world_y);
+    camera_world_position.z = static_cast<float>(projection.position_z / meters_scale + projection.anchor_world_z);
+    if (!std::isfinite(camera_world_position.x) ||
+        !std::isfinite(camera_world_position.y) ||
+        !std::isfinite(camera_world_position.z)) {
+        return;
+    }
+
+    auto build_volume = [&](const std::string& name,
+                            int extrusion_amount,
+                            int damage_amount,
+                            const std::array<animation_update::FrameBoxCorner, 4>& corners,
+                            RuntimeBoxVolume& out_volume) -> bool {
+        out_volume = RuntimeBoxVolume{};
+        out_volume.name = name;
+        out_volume.frame_index = current_frame ? current_frame->frame_index : -1;
+        out_volume.extrusion_amount = std::max(0, extrusion_amount);
+        out_volume.damage_amount = damage_amount;
+
+        float sum_x = 0.0f;
+        float sum_y = 0.0f;
+        float sum_z = 0.0f;
+        const float extrusion = static_cast<float>(out_volume.extrusion_amount);
+        for (std::size_t corner_index = 0; corner_index < corners.size(); ++corner_index) {
+            const auto& corner = corners[corner_index];
+            DisplacedAssetAnchorPoint sample_anchor{};
+            sample_anchor.name = "__box_corner";
+            sample_anchor.texture_x = std::max(0, corner.texture_x);
+            sample_anchor.texture_y = std::max(0, corner.texture_y);
+            sample_anchor.depth_offset = 0;
+
+            const anchor_points::FrameAnchorSample sample =
+                anchor_points::resolve_frame_anchor_sample(*this, sample_anchor, anchor_points::GridMaterialization::None);
+            if (sample.resolved.missing || !sample.flat_relative_pixel_point.valid) {
+                return false;
+            }
+
+            const RuntimeBoxPoint3 flat_point{
+                sample.flat_relative_pixel_point.x,
+                sample.flat_relative_pixel_point.y,
+                sample.flat_relative_pixel_point.z};
+            const float ray_x = flat_point.x - camera_world_position.x;
+            const float ray_y = flat_point.y - camera_world_position.y;
+            const float ray_z = flat_point.z - camera_world_position.z;
+            const float ray_len_sq = ray_x * ray_x + ray_y * ray_y + ray_z * ray_z;
+            if (ray_len_sq <= 1e-10f || !std::isfinite(ray_len_sq)) {
+                return false;
+            }
+            const float inv_len = 1.0f / std::sqrt(ray_len_sq);
+            const float nx = ray_x * inv_len;
+            const float ny = ray_y * inv_len;
+            const float nz = ray_z * inv_len;
+
+            RuntimeBoxPoint3 backward{
+                flat_point.x - nx * extrusion,
+                flat_point.y - ny * extrusion,
+                flat_point.z - nz * extrusion};
+            RuntimeBoxPoint3 forward{
+                flat_point.x + nx * extrusion,
+                flat_point.y + ny * extrusion,
+                flat_point.z + nz * extrusion};
+            if (!std::isfinite(backward.x) || !std::isfinite(backward.y) || !std::isfinite(backward.z) ||
+                !std::isfinite(forward.x) || !std::isfinite(forward.y) || !std::isfinite(forward.z)) {
+                return false;
+            }
+
+            out_volume.world_points[corner_index] = backward;
+            out_volume.world_points[corner_index + corners.size()] = forward;
+            sum_x += backward.x + forward.x;
+            sum_y += backward.y + forward.y;
+            sum_z += backward.z + forward.z;
+        }
+
+        out_volume.centroid = RuntimeBoxPoint3{sum_x / 8.0f, sum_y / 8.0f, sum_z / 8.0f};
+        out_volume.valid = true;
+        return true;
+    };
+
+    current_hit_box_volumes_.reserve(current_frame->hit_boxes.boxes.size());
+    for (const auto& box : current_frame->hit_boxes.boxes) {
+        if (!box.is_valid()) {
+            continue;
+        }
+        RuntimeBoxVolume volume{};
+        if (!build_volume(box.name, box.extrusion_amount, 0, box.corners, volume)) {
+            continue;
+        }
+        runtime_hit_box_lookup_.emplace(volume.name, current_hit_box_volumes_.size());
+        current_hit_box_volumes_.push_back(std::move(volume));
+    }
+
+    current_attack_box_volumes_.reserve(current_frame->attack_boxes.boxes.size());
+    for (const auto& box : current_frame->attack_boxes.boxes) {
+        if (!box.is_valid()) {
+            continue;
+        }
+        RuntimeBoxVolume volume{};
+        if (!build_volume(box.name, box.extrusion_amount, box.damage_amount, box.corners, volume)) {
+            continue;
+        }
+        runtime_attack_box_lookup_.emplace(volume.name, current_attack_box_volumes_.size());
+        current_attack_box_volumes_.push_back(std::move(volume));
+    }
+}
+
+const Asset::RuntimeBoxVolume* Asset::find_hit_box_volume(const std::string& name) const {
+    auto it = runtime_hit_box_lookup_.find(name);
+    if (it == runtime_hit_box_lookup_.end() || it->second >= current_hit_box_volumes_.size()) {
+        return nullptr;
+    }
+    return &current_hit_box_volumes_[it->second];
+}
+
+const Asset::RuntimeBoxVolume* Asset::find_attack_box_volume(const std::string& name) const {
+    auto it = runtime_attack_box_lookup_.find(name);
+    if (it == runtime_attack_box_lookup_.end() || it->second >= current_attack_box_volumes_.size()) {
+        return nullptr;
+    }
+    return &current_attack_box_volumes_[it->second];
 }
 
 std::string Asset::get_current_animation() const { return current_animation; }
@@ -1057,6 +1201,10 @@ void Asset::mark_anchors_dirty() {
         for (auto& handle : anchor_handles_) {
                 handle.dirty = true;
         }
+        current_hit_box_volumes_.clear();
+        current_attack_box_volumes_.clear();
+        runtime_hit_box_lookup_.clear();
+        runtime_attack_box_lookup_.clear();
         ++anchor_world_revision_;
 }
 

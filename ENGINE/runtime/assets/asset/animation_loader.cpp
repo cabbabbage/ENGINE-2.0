@@ -319,107 +319,215 @@ void apply_anchor_transforms(std::vector<std::vector<DisplacedAssetAnchorPoint>>
         }
 }
 
-void append_hit_box(animation_update::FrameHitGeometry& geometry,
-                    const nlohmann::json& node) {
-        if (node.is_null()) {
-                return;
+std::string make_unique_name(const std::string& desired,
+                             const std::string& fallback_prefix,
+                             std::unordered_set<std::string>& used_names,
+                             std::size_t ordinal) {
+        std::string base = desired;
+        if (base.empty()) {
+                base = fallback_prefix + "_" + std::to_string(ordinal + 1);
         }
-        animation_update::FrameHitGeometry::HitBox box;
+        std::string candidate = base;
+        int suffix = 2;
+        while (!used_names.insert(candidate).second) {
+                candidate = base + "_" + std::to_string(suffix++);
+        }
+        return candidate;
+}
+
+template <typename TBox>
+void parse_box_corners(TBox& box, const nlohmann::json& node) {
         if (!node.is_object()) {
                 return;
         }
-        box.center_x = read_float(node.value("center_x", 0.0f));
-        const bool has_center_z = node.contains("center_z");
-        box.center_y = has_center_z ? read_float(node.value("center_y", 0.0f)) : 0.0f;
-        box.center_z = has_center_z ? read_float(node.value("center_z", 0.0f))
-                                    : read_float(node.value("center_y", 0.0f));
-        box.half_width = read_float(node.value("half_width", 0.0f));
-        box.half_height = read_float(node.value("half_height", 0.0f));
-        box.rotation_degrees = read_float(node.value("rotation", node.value("rotation_degrees", 0.0f)));
-        if (box.is_empty()) {
-                return;
-        }
-        geometry.boxes.push_back(box);
-}
-
-void apply_hit_geometry_entry(AnimationFrame& frame, const nlohmann::json& entry) {
-        frame.hit_geometry.boxes.clear();
-        if (entry.is_object()) {
-                if (entry.contains("boxes") && entry["boxes"].is_array()) {
-                        for (const auto& node : entry["boxes"]) {
-                                append_hit_box(frame.hit_geometry, node);
-                        }
-                        return;
+        const nlohmann::json& corners = (node.contains("corners") && node["corners"].is_array())
+                                            ? node["corners"]
+                                            : nlohmann::json::array();
+        for (std::size_t idx = 0; idx < box.corners.size(); ++idx) {
+                animation_update::FrameBoxCorner corner{};
+                if (idx < corners.size() && corners[idx].is_object()) {
+                        const auto& corner_node = corners[idx];
+                        corner.texture_x = std::max(0, read_int(corner_node.value("texture_x", 0), 0));
+                        corner.texture_y = std::max(0, read_int(corner_node.value("texture_y", 0), 0));
                 }
-                if (entry.contains("center_x") || entry.contains("half_width") || entry.contains("rotation")) {
-                        append_hit_box(frame.hit_geometry, entry);
-                        return;
-                }
+                box.corners[idx] = corner;
         }
 }
 
-void append_attack_vector(animation_update::FrameAttackGeometry& geometry,
-                          const nlohmann::json& node) {
-        if (node.is_null()) {
-                return;
-        }
-        animation_update::FrameAttackGeometry::Vector vec;
+animation_update::FrameHitBox parse_hit_box(const nlohmann::json& node, std::size_t ordinal) {
+        animation_update::FrameHitBox box{};
         if (!node.is_object()) {
-                return;
+                return box;
         }
-        vec.start_x = read_float(node.value("start_x", 0.0f));
-        const bool has_start_z = node.contains("start_z");
-        vec.start_y = has_start_z ? read_float(node.value("start_y", 0.0f)) : 0.0f;
-        vec.start_z = has_start_z ? read_float(node.value("start_z", 0.0f))
-                                  : read_float(node.value("start_y", 0.0f));
-        const bool has_control = node.contains("control_x") || node.contains("control_y") || node.contains("control_z");
-        const bool has_control_z = node.contains("control_z");
-        if (has_control) {
-                vec.control_x = read_float(node.value("control_x", vec.start_x));
-                vec.control_y = has_control_z ? read_float(node.value("control_y", vec.start_y)) : 0.0f;
-                vec.control_z = has_control_z ? read_float(node.value("control_z", vec.start_z))
-                                              : read_float(node.value("control_y", vec.start_z));
-        } else {
-                vec.control_x = (vec.start_x + read_float(node.value("end_x", 0.0f))) * 0.5f;
-                const float fallback_end_z = read_float(node.value("end_z", read_float(node.value("end_y", 0.0f))));
-                const float fallback_end_y = has_start_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
-                vec.control_y = (vec.start_y + fallback_end_y) * 0.5f;
-                vec.control_z = (vec.start_z + fallback_end_z) * 0.5f;
-        }
-        vec.end_x   = read_float(node.value("end_x", 0.0f));
-        const bool has_end_z = node.contains("end_z");
-        vec.end_y   = has_end_z ? read_float(node.value("end_y", 0.0f)) : 0.0f;
-        vec.end_z   = has_end_z ? read_float(node.value("end_z", 0.0f))
-                                : read_float(node.value("end_y", 0.0f));
-        vec.damage  = read_int(node.value("damage", 0));
-        geometry.add_vector(vec);
+        box.name = node.value("name", std::string{"hit_box_" + std::to_string(ordinal + 1)});
+        box.extrusion_amount = std::max(0, read_int(node.value("extrusion_amount", 0), 0));
+        parse_box_corners(box, node);
+        return box;
 }
 
-void apply_attack_geometry_entry(AnimationFrame& frame, const nlohmann::json& entry) {
-        frame.attack_geometry.vectors.clear();
-        if (entry.is_object()) {
-                if (entry.contains("vectors") && entry["vectors"].is_array()) {
-                        for (const auto& vec_node : entry["vectors"]) {
-                                append_attack_vector(frame.attack_geometry, vec_node);
+animation_update::FrameAttackBox parse_attack_box(const nlohmann::json& node, std::size_t ordinal) {
+        animation_update::FrameAttackBox box{};
+        if (!node.is_object()) {
+                return box;
+        }
+        box.name = node.value("name", std::string{"attack_box_" + std::to_string(ordinal + 1)});
+        box.extrusion_amount = std::max(0, read_int(node.value("extrusion_amount", 0), 0));
+        box.damage_amount = read_int(node.value("damage_amount", node.value("damage", 0)), 0);
+        parse_box_corners(box, node);
+        return box;
+}
+
+std::vector<animation_update::FrameHitBox> parse_hit_box_frame(const nlohmann::json& entry) {
+        std::vector<animation_update::FrameHitBox> boxes;
+        if (!entry.is_array()) {
+                return boxes;
+        }
+        std::unordered_set<std::string> used_names;
+        boxes.reserve(entry.size());
+        for (std::size_t idx = 0; idx < entry.size(); ++idx) {
+                if (!entry[idx].is_object()) {
+                        continue;
+                }
+                animation_update::FrameHitBox box = parse_hit_box(entry[idx], idx);
+                box.name = make_unique_name(box.name, "hit_box", used_names, idx);
+                if (box.is_valid()) {
+                        boxes.push_back(std::move(box));
+                }
+        }
+        return boxes;
+}
+
+std::vector<animation_update::FrameAttackBox> parse_attack_box_frame(const nlohmann::json& entry) {
+        std::vector<animation_update::FrameAttackBox> boxes;
+        if (!entry.is_array()) {
+                return boxes;
+        }
+        std::unordered_set<std::string> used_names;
+        boxes.reserve(entry.size());
+        for (std::size_t idx = 0; idx < entry.size(); ++idx) {
+                if (!entry[idx].is_object()) {
+                        continue;
+                }
+                animation_update::FrameAttackBox box = parse_attack_box(entry[idx], idx);
+                box.name = make_unique_name(box.name, "attack_box", used_names, idx);
+                if (box.is_valid()) {
+                        boxes.push_back(std::move(box));
+                }
+        }
+        return boxes;
+}
+
+std::vector<std::vector<animation_update::FrameHitBox>> parse_hit_box_frames(const nlohmann::json& hit_boxes_json,
+                                                                              std::size_t frame_count) {
+        std::vector<std::vector<animation_update::FrameHitBox>> result(frame_count);
+        if (!hit_boxes_json.is_array()) {
+                return result;
+        }
+        const std::size_t limit = std::min<std::size_t>(frame_count, hit_boxes_json.size());
+        for (std::size_t frame_idx = 0; frame_idx < limit; ++frame_idx) {
+                result[frame_idx] = parse_hit_box_frame(hit_boxes_json[frame_idx]);
+        }
+        return result;
+}
+
+std::vector<std::vector<animation_update::FrameAttackBox>> parse_attack_box_frames(const nlohmann::json& attack_boxes_json,
+                                                                                    std::size_t frame_count) {
+        std::vector<std::vector<animation_update::FrameAttackBox>> result(frame_count);
+        if (!attack_boxes_json.is_array()) {
+                return result;
+        }
+        const std::size_t limit = std::min<std::size_t>(frame_count, attack_boxes_json.size());
+        for (std::size_t frame_idx = 0; frame_idx < limit; ++frame_idx) {
+                result[frame_idx] = parse_attack_box_frame(attack_boxes_json[frame_idx]);
+        }
+        return result;
+}
+
+std::vector<std::vector<animation_update::FrameHitBox>> collect_hit_box_frames_from_animation(const Animation& anim,
+                                                                                               std::size_t frame_count) {
+        std::vector<std::vector<animation_update::FrameHitBox>> out(frame_count);
+        if (anim.movement_path_count() == 0) {
+                return out;
+        }
+        const auto& path = anim.movement_path(0);
+        const std::size_t limit = std::min(frame_count, path.size());
+        for (std::size_t i = 0; i < limit; ++i) {
+                out[i].assign(path[i].hit_boxes.boxes.begin(), path[i].hit_boxes.boxes.end());
+        }
+        return out;
+}
+
+std::vector<std::vector<animation_update::FrameAttackBox>> collect_attack_box_frames_from_animation(const Animation& anim,
+                                                                                                     std::size_t frame_count) {
+        std::vector<std::vector<animation_update::FrameAttackBox>> out(frame_count);
+        if (anim.movement_path_count() == 0) {
+                return out;
+        }
+        const auto& path = anim.movement_path(0);
+        const std::size_t limit = std::min(frame_count, path.size());
+        for (std::size_t i = 0; i < limit; ++i) {
+                out[i].assign(path[i].attack_boxes.boxes.begin(), path[i].attack_boxes.boxes.end());
+        }
+        return out;
+}
+
+template <typename TBox>
+void apply_box_transforms(std::vector<std::vector<TBox>>& boxes,
+                          const std::vector<Animation::FrameCache>& frame_cache,
+                          bool reverse_frames,
+                          bool flip_x,
+                          bool flip_y,
+                          bool flip_movement_x,
+                          bool flip_movement_y) {
+        if (boxes.empty()) {
+                return;
+        }
+        if (reverse_frames) {
+                std::reverse(boxes.begin(), boxes.end());
+        }
+        const bool flip_horizontal = flip_x || flip_movement_x;
+        const bool flip_vertical = flip_y || flip_movement_y;
+        for (std::size_t frame_index = 0; frame_index < boxes.size(); ++frame_index) {
+                int frame_w = 0;
+                int frame_h = 0;
+                if (frame_index < frame_cache.size()) {
+                        const auto& cache = frame_cache[frame_index];
+                        if (!cache.widths.empty()) frame_w = cache.widths.front();
+                        if (!cache.heights.empty()) frame_h = cache.heights.front();
+                        if (!cache.source_rects.empty() && !cache.uses_atlas.empty() && cache.uses_atlas.front()) {
+                                frame_w = cache.source_rects.front().w;
+                                frame_h = cache.source_rects.front().h;
                         }
-                        return;
+                }
+                for (auto& box : boxes[frame_index]) {
+                        for (auto& corner : box.corners) {
+                                if (flip_horizontal && frame_w > 0) {
+                                        corner.texture_x = frame_w - 1 - corner.texture_x;
+                                }
+                                if (flip_vertical && frame_h > 0) {
+                                        corner.texture_y = frame_h - 1 - corner.texture_y;
+                                }
+                        }
                 }
         }
 }
 
-void apply_combat_geometry(std::vector<std::vector<AnimationFrame>>& paths,
-                           const nlohmann::json& hit_geometry,
-                           const nlohmann::json& attack_geometry) {
-        const nlohmann::json empty_json = nlohmann::json();
-        const bool has_hit = hit_geometry.is_array();
-        const bool has_attack = attack_geometry.is_array();
+void apply_frame_boxes(std::vector<std::vector<AnimationFrame>>& paths,
+                       const std::vector<std::vector<animation_update::FrameHitBox>>& hit_boxes,
+                       const std::vector<std::vector<animation_update::FrameAttackBox>>& attack_boxes) {
         for (auto& path : paths) {
                 for (std::size_t idx = 0; idx < path.size(); ++idx) {
                         AnimationFrame& frame = path[idx];
-                        const nlohmann::json& hit_entry = (has_hit && idx < hit_geometry.size()) ? hit_geometry[idx] : empty_json;
-                        const nlohmann::json& attack_entry = (has_attack && idx < attack_geometry.size()) ? attack_geometry[idx] : empty_json;
-                        apply_hit_geometry_entry(frame, hit_entry);
-                        apply_attack_geometry_entry(frame, attack_entry);
+                        if (idx < hit_boxes.size()) {
+                                frame.set_hit_boxes(hit_boxes[idx]);
+                        } else {
+                                frame.set_hit_boxes({});
+                        }
+                        if (idx < attack_boxes.size()) {
+                                frame.set_attack_boxes(attack_boxes[idx]);
+                        } else {
+                                frame.set_attack_boxes({});
+                        }
                 }
         }
 }
@@ -646,13 +754,15 @@ void AnimationLoader::load(Animation& animation,
         if (has_anchor_points_json) {
                 anchor_points_json = anim_json["anchor_points"];
         }
-        nlohmann::json hit_geometry_json = nlohmann::json::array();
-        if (anim_json.contains("hit_geometry") && anim_json["hit_geometry"].is_array()) {
-                hit_geometry_json = anim_json["hit_geometry"];
+        nlohmann::json hit_boxes_json = nlohmann::json::array();
+        const bool has_hit_boxes_json = anim_json.contains("hit_boxes") && anim_json["hit_boxes"].is_array();
+        if (has_hit_boxes_json) {
+                hit_boxes_json = anim_json["hit_boxes"];
         }
-        nlohmann::json attack_geometry_json = nlohmann::json::array();
-        if (anim_json.contains("attack_geometry") && anim_json["attack_geometry"].is_array()) {
-                attack_geometry_json = anim_json["attack_geometry"];
+        nlohmann::json attack_boxes_json = nlohmann::json::array();
+        const bool has_attack_boxes_json = anim_json.contains("attack_boxes") && anim_json["attack_boxes"].is_array();
+        if (has_attack_boxes_json) {
+                attack_boxes_json = anim_json["attack_boxes"];
         }
 
         auto parse_movement_sequence = [&](const nlohmann::json& seq, std::vector<AnimationFrame>& dest) {
@@ -881,8 +991,41 @@ void AnimationLoader::load(Animation& animation,
                                         animation.flip_movement_horizontal,
                                         animation.flip_movement_vertical);
         }
+        std::vector<std::vector<animation_update::FrameHitBox>> hit_box_frames;
+        if (has_hit_boxes_json) {
+                hit_box_frames = parse_hit_box_frames(hit_boxes_json, frame_count);
+        } else if (source_animation_ptr) {
+                hit_box_frames = collect_hit_box_frames_from_animation(*source_animation_ptr, frame_count);
+                apply_box_transforms(hit_box_frames,
+                                     animation.frame_cache_,
+                                     animation.reverse_source,
+                                     animation.flipped_source,
+                                     animation.flip_vertical_source,
+                                     animation.flip_movement_horizontal,
+                                     animation.flip_movement_vertical);
+        }
+
+        std::vector<std::vector<animation_update::FrameAttackBox>> attack_box_frames;
+        if (has_attack_boxes_json) {
+                attack_box_frames = parse_attack_box_frames(attack_boxes_json, frame_count);
+        } else if (source_animation_ptr) {
+                attack_box_frames = collect_attack_box_frames_from_animation(*source_animation_ptr, frame_count);
+                apply_box_transforms(attack_box_frames,
+                                     animation.frame_cache_,
+                                     animation.reverse_source,
+                                     animation.flipped_source,
+                                     animation.flip_vertical_source,
+                                     animation.flip_movement_horizontal,
+                                     animation.flip_movement_vertical);
+        }
         if (anchor_frames.size() < frame_count) {
                 anchor_frames.resize(frame_count);
+        }
+        if (hit_box_frames.size() < frame_count) {
+                hit_box_frames.resize(frame_count);
+        }
+        if (attack_box_frames.size() < frame_count) {
+                attack_box_frames.resize(frame_count);
         }
         if (animation.movement_paths_.empty()) {
                 animation.movement_paths_.emplace_back();
@@ -937,7 +1080,7 @@ void AnimationLoader::load(Animation& animation,
         }
 }
 
-        apply_combat_geometry(animation.movement_paths_, hit_geometry_json, attack_geometry_json);
+        apply_frame_boxes(animation.movement_paths_, hit_box_frames, attack_box_frames);
 
         animation.total_dx = 0;
         animation.total_dy = 0;

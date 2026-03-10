@@ -10,28 +10,6 @@
 
 namespace {
 
-float sanitize_scale(float value) {
-    return (std::isfinite(value) && value > 0.0f) ? value : 1.0f;
-}
-
-animation_update::GeometryContext geometry_for(const Asset& asset) {
-    animation_update::GeometryContext context{};
-    context.anchor = animation_update::detail::bottom_middle_for(asset, asset.world_xz_point());
-    context.scale = sanitize_scale(asset.smoothed_scale());
-    context.flipped = asset.flipped;
-    context.plane = animation_update::CombatPlane::XY;
-    return context;
-}
-
-animation_update::CombatantSnapshot snapshot_from_asset(const Asset& asset) {
-    animation_update::CombatantSnapshot snapshot;
-    snapshot.asset_id = asset.spawn_id.empty() ? (asset.info ? asset.info->name : std::string{}) : asset.spawn_id;
-    snapshot.asset_name = asset.info ? asset.info->name : std::string{};
-    snapshot.frame = asset.current_animation_frame();
-    snapshot.transform = geometry_for(asset);
-    return snapshot;
-}
-
 constexpr const char* kEyesAnchorName  = "eyes";
 constexpr const char* kEyesFollowerId  = "vibble_eyes";
 
@@ -252,9 +230,6 @@ void vibble_controller::process_pending_attacks(Asset& self) {
         return;
     }
 
-    // Create attacker snapshot
-    CombatantSnapshot attacker_snapshot = snapshot_from_asset(self);
-
     // Get active assets as potential targets
     const auto& active_assets = assets->getActive();
 
@@ -265,10 +240,7 @@ void vibble_controller::process_pending_attacks(Asset& self) {
             continue;
         }
 
-        CombatantSnapshot target_snapshot = snapshot_from_asset(*target);
-
-        auto attack_opt = AttackValidation::compute_attack_if_hit(
-            attacker_snapshot, target_snapshot);
+        auto attack_opt = AttackValidation::compute_attack_if_hit(self, *target);
 
         if (attack_opt.has_value()) {
             target->send_attack(*attack_opt);

@@ -41,8 +41,6 @@ class ManifestStore;
 
 enum class FrameEditorLaunchMode {
     Movement,
-    AttackGeometry,
-    HitGeometry,
     AnchorPoints
 };
 

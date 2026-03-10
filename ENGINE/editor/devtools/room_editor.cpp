@@ -47,6 +47,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <limits>
 #include <optional>
@@ -168,10 +169,13 @@ namespace {
 
 constexpr int kClipboardNudge = 16;
 constexpr float kCameraScaleEpsilon = 1e-4f;
+constexpr double kCameraProjectionEpsilon = 1e-3;
 constexpr int kCameraHeightScrollStep = 25;
 constexpr int kCameraZoomScrollStep = 5;
 constexpr float kCameraTiltDegreesPerPixel = 0.2f;
 constexpr float kCameraPanPercentPerPixel = 0.2f;
+constexpr std::int64_t kMaxSpatialCellsPerAsset = 4096;
+constexpr int kMaxScreenCoordMagnitude = 1 << 20;
 
 int floor_div(int value, int divisor) {
     if (divisor == 0) {
@@ -181,6 +185,37 @@ int floor_div(int value, int divisor) {
         return value / divisor;
     }
     return (value - divisor + 1) / divisor;
+}
+
+std::int64_t floor_div_i64(std::int64_t value, int divisor) {
+    if (divisor == 0) {
+        return 0;
+    }
+    if (value >= 0) {
+        return value / divisor;
+    }
+    return (value - divisor + 1) / divisor;
+}
+
+bool screen_rect_is_reasonable(const SDL_Rect& rect) {
+    if (rect.w <= 0 || rect.h <= 0) {
+        return false;
+    }
+    const auto abs_within_limit = [](int value) {
+        return std::abs(static_cast<long long>(value)) <= static_cast<long long>(kMaxScreenCoordMagnitude);
+    };
+    if (!abs_within_limit(rect.x) || !abs_within_limit(rect.y)) {
+        return false;
+    }
+    const std::int64_t right = static_cast<std::int64_t>(rect.x) + static_cast<std::int64_t>(rect.w);
+    const std::int64_t bottom = static_cast<std::int64_t>(rect.y) + static_cast<std::int64_t>(rect.h);
+    if (right < std::numeric_limits<int>::min() || right > std::numeric_limits<int>::max()) {
+        return false;
+    }
+    if (bottom < std::numeric_limits<int>::min() || bottom > std::numeric_limits<int>::max()) {
+        return false;
+    }
+    return true;
 }
 
 int64_t make_cell_key(int cell_x, int cell_y) {
@@ -3373,6 +3408,18 @@ bool RoomEditor::camera_state_changed(const WarpedScreenGrid& cam) const {
     if (center.x != cached_camera_center_.x || center.y != cached_camera_center_.y) {
         return true;
     }
+    const double zoom_percent = cam.get_zoom_percent();
+    if (std::fabs(zoom_percent - cached_camera_zoom_percent_) > kCameraProjectionEpsilon) {
+        return true;
+    }
+    const float pitch_deg = cam.current_pitch_degrees();
+    if (std::fabs(static_cast<double>(pitch_deg) - static_cast<double>(cached_camera_pitch_deg_)) > kCameraProjectionEpsilon) {
+        return true;
+    }
+    const double anchor_world_z = cam.current_anchor_world_z();
+    if (std::fabs(anchor_world_z - cached_camera_anchor_world_z_) > kCameraProjectionEpsilon) {
+        return true;
+    }
 
     return false;
 }
@@ -3455,7 +3502,7 @@ bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam
     const int height = std::max(1, bottom - top);
 
     out_rect = SDL_Rect{left, top, width, height};
-    return true;
+    return screen_rect_is_reasonable(out_rect);
 }
 
 bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
@@ -3526,7 +3573,7 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
     const int   top      = static_cast<int>(std::lround(center_y)) - sh;
     out_rect             = SDL_Rect{left, top, sw, sh};
     out_screen_y         = static_cast<int>(std::lround(center_y));
-    return true;
+    return screen_rect_is_reasonable(out_rect);
 }
 
 void RoomEditor::rebuild_spatial_index(const WarpedScreenGrid& cam) const {
@@ -3547,13 +3594,16 @@ void RoomEditor::rebuild_spatial_index(const WarpedScreenGrid& cam) const {
 
     cached_camera_scale_ = cam.get_scale();
     cached_camera_center_ = cam.get_screen_center();
+    cached_camera_zoom_percent_ = cam.get_zoom_percent();
+    cached_camera_pitch_deg_ = cam.current_pitch_degrees();
+    cached_camera_anchor_world_z_ = cam.current_anchor_world_z();
 
     cached_camera_state_valid_ = true;
     spatial_index_dirty_ = false;
 }
 
 void RoomEditor::insert_asset_entry(Asset* asset, const SDL_Rect& rect, int screen_y) const {
-    if (!asset || rect.w <= 0 || rect.h <= 0) {
+    if (!asset || !screen_rect_is_reasonable(rect)) {
         return;
     }
 
@@ -3561,15 +3611,39 @@ void RoomEditor::insert_asset_entry(Asset* asset, const SDL_Rect& rect, int scre
     entry.bounds = rect;
     entry.screen_y = screen_y;
 
-    const int left = floor_div(rect.x, kSpatialCellSize);
-    const int right = floor_div(rect.x + rect.w - 1, kSpatialCellSize);
-    const int top = floor_div(rect.y, kSpatialCellSize);
-    const int bottom = floor_div(rect.y + rect.h - 1, kSpatialCellSize);
+    const std::int64_t right_px = static_cast<std::int64_t>(rect.x) + static_cast<std::int64_t>(rect.w) - 1;
+    const std::int64_t bottom_px = static_cast<std::int64_t>(rect.y) + static_cast<std::int64_t>(rect.h) - 1;
+    const std::int64_t left = floor_div_i64(rect.x, kSpatialCellSize);
+    const std::int64_t right = floor_div_i64(right_px, kSpatialCellSize);
+    const std::int64_t top = floor_div_i64(rect.y, kSpatialCellSize);
+    const std::int64_t bottom = floor_div_i64(bottom_px, kSpatialCellSize);
+    if (right < left || bottom < top) {
+        return;
+    }
 
-    for (int cx = left; cx <= right; ++cx) {
-        for (int cy = top; cy <= bottom; ++cy) {
-            add_asset_to_cell(asset, cx, cy, entry.cells);
+    const std::int64_t cell_count_x = right - left + 1;
+    const std::int64_t cell_count_y = bottom - top + 1;
+    if (cell_count_x <= 0 || cell_count_y <= 0) {
+        return;
+    }
+    const std::int64_t total_cells = cell_count_x * cell_count_y;
+    if (total_cells > kMaxSpatialCellsPerAsset) {
+        return;
+    }
+
+    for (std::int64_t cx = left; cx <= right; ++cx) {
+        if (cx < std::numeric_limits<int>::min() || cx > std::numeric_limits<int>::max()) {
+            continue;
         }
+        for (std::int64_t cy = top; cy <= bottom; ++cy) {
+            if (cy < std::numeric_limits<int>::min() || cy > std::numeric_limits<int>::max()) {
+                continue;
+            }
+            add_asset_to_cell(asset, static_cast<int>(cx), static_cast<int>(cy), entry.cells);
+        }
+    }
+    if (entry.cells.empty()) {
+        return;
     }
 
     asset_bounds_cache_[asset] = std::move(entry);

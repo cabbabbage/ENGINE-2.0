@@ -503,8 +503,9 @@ private:
     mutable bool cached_camera_state_valid_ = false;
     mutable float cached_camera_scale_ = 0.0f;
     mutable SDL_Point cached_camera_center_{0, 0};
-    mutable bool cached_camera_parallax_enabled_ = false;
-    mutable bool cached_camera_realism_enabled_ = false;
+    mutable double cached_camera_zoom_percent_ = 0.0;
+    mutable float cached_camera_pitch_deg_ = 0.0f;
+    mutable double cached_camera_anchor_world_z_ = 0.0;
     mutable std::unordered_map<Asset*, AssetSpatialEntry> asset_bounds_cache_;
     mutable std::unordered_map<int64_t, std::vector<Asset*>> spatial_grid_;
 };

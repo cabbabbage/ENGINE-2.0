@@ -23,7 +23,7 @@ void spider_controller::update(const Input&) {
         return;
     }
 
-    int distance_sq = (self_->world_x() - player->world_x()) * (self_->world_x() - player->world_x()) + (self_->world_y() - player->world_y()) * (self_->world_y() - player->world_y());
+    int distance_sq = (self_->world_x() - player->world_x()) * (self_->world_x() - player->world_x()) + (self_->world_z() - player->world_z()) * (self_->world_z() - player->world_z());
 
     if (distance_sq <= 700) {
         if (self_->info && self_->info->animations.count("explosion")) {

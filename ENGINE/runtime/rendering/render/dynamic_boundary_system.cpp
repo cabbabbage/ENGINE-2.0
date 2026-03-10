@@ -139,6 +139,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                                    world::WorldGrid& grid,
                                    Assets* assets,
                                    float delta_ms) {
+    static int s_debug_frame_counter = 0;
     active_boundary_sprites_.clear();
     if (!initialized_ || !renderer_ || !asset_library_ || !assets) {
         return;
@@ -187,7 +188,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     next_static.config_revision = config_revision_;
     next_static.rooms_hash = rooms_hash;
     next_static.origin_x = grid_origin.world_x();
-    next_static.origin_y = grid_origin.world_y();
+    next_static.origin_z = grid_origin.world_z();
     next_static.origin_layer = grid_origin.resolution_layer();
     next_static.grid_resolution = grid.grid_resolution();
     next_static.spacing_multiplier = spacing_multiplier;
@@ -221,8 +222,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             auto compute_span = [&](int spacing, int& start_x, int& end_x, int& start_y, int& end_y) {
                 start_x = static_cast<int>(std::floor((min_x - static_cast<float>(grid_origin.world_x())) / spacing));
                 end_x = static_cast<int>(std::ceil((max_x - static_cast<float>(grid_origin.world_x())) / spacing));
-                start_y = static_cast<int>(std::floor((min_y - static_cast<float>(grid_origin.world_y())) / spacing));
-                end_y = static_cast<int>(std::ceil((max_y - static_cast<float>(grid_origin.world_y())) / spacing));
+                start_y = static_cast<int>(std::floor((min_y - static_cast<float>(grid_origin.world_z())) / spacing));
+                end_y = static_cast<int>(std::ceil((max_y - static_cast<float>(grid_origin.world_z())) / spacing));
             };
 
             int start_idx_x = 0;
@@ -407,11 +408,19 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     const double anchor_depth = cam.anchor_world_z();
     std::sort(active_boundary_sprites_.begin(), active_boundary_sprites_.end(),
         [anchor_depth](const BoundarySprite& a, const BoundarySprite& b) {
-            const double da = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(a.world_pos.y));
-            const double db = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(b.world_pos.y));
+            const double da = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(a.world_z));
+            const double db = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(b.world_z));
             if (da != db) return da > db;
             return a.world_pos.x < b.world_pos.x;
         });
+
+    ++s_debug_frame_counter;
+    if ((s_debug_frame_counter % 120) == 0) {
+        vibble::log::info(std::string{"[DynamicBoundarySystem] frame stats: types="} +
+                          std::to_string(boundary_types_.size()) +
+                          " static_assignments=" + std::to_string(static_assignments_.size()) +
+                          " active_sprites=" + std::to_string(active_boundary_sprites_.size()));
+    }
 }
 
 std::size_t DynamicBoundarySystem::BoundaryKeyHash::operator()(const DynamicBoundarySystem::BoundaryKey& key) const noexcept {
@@ -767,7 +776,7 @@ void DynamicBoundarySystem::ensure_region_cache_valid(const world::WorldGrid& gr
     fingerprint.rooms_hash = rooms_hash;
     const world::GridPoint origin = grid.origin();
     fingerprint.origin_x = origin.world_x();
-    fingerprint.origin_y = origin.world_y();
+    fingerprint.origin_z = origin.world_z();
     fingerprint.origin_layer = origin.resolution_layer();
     fingerprint.grid_resolution = grid.grid_resolution();
     fingerprint.spacing_multiplier = spacing_multiplier;

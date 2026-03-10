@@ -159,12 +159,14 @@ world::GridPoint bottom_middle_for(const Asset& asset, const world::GridPoint& p
     }
 
     const int offset_x = bottom.x - asset.world_x();
-    const int offset_y = bottom.y - asset.world_y();
+    const int offset_y = bottom.y - asset.world_z();
     return world::grid_math::offset(pos, offset_x, offset_y);
 }
 
 SDL_Point bottom_middle_for(const Asset& asset, SDL_Point pos) {
-    return bottom_middle_for(asset, world::grid_math::from_sdl(pos)).to_sdl_point();
+    return bottom_middle_for(asset,
+                             world::grid_math::from_sdl(pos, asset.world_y(), asset.grid_resolution))
+        .to_sdl_point();
 }
 
 SDL_Point frame_world_delta(const AnimationFrame& frame,
@@ -278,7 +280,7 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
     if (!self_) {
         return;
     }
-    SDL_Point delta{ world_checkpoint.x - self_->world_x(), world_checkpoint.y - self_->world_y() };
+    SDL_Point delta{ world_checkpoint.x - self_->world_x(), world_checkpoint.y - self_->world_z() };
     if (delta.x == 0 && delta.y == 0) {
         self_->target_reached = true;
         self_->needs_target = true;
@@ -297,7 +299,7 @@ void AnimationUpdate::auto_move(Asset* target_asset,
     if (self_) {
         self_->target_reached = false;
     }
-    SDL_Point delta{ target_asset->world_x() - self_->world_x(), target_asset->world_y() - self_->world_y() };
+    SDL_Point delta{ target_asset->world_x() - self_->world_x(), target_asset->world_z() - self_->world_z() };
     if (delta.x == 0 && delta.y == 0) {
         if (self_) {
             self_->target_reached = true;

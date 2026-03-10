@@ -99,6 +99,48 @@ TEST_CASE("WorldGrid keys stay stable across repeated requests") {
     CHECK(first_key.layer == stored.resolution_layer());
 }
 
+
+TEST_CASE("WorldGrid preserves canonical Z depth when creating points") {
+    world::WorldGrid grid;
+
+    const int world_x = 120;
+    const int world_y = 0;   // floor height
+    const int world_z = 480; // deep into the room
+    const int layer = 0;
+
+    world::GridPoint& point = world::GridPoint::from_world(world_x, world_y, world_z, layer, grid);
+    CHECK(point.world_x() == world_x);
+    CHECK(point.world_y() == world_y);
+    CHECK(point.world_z() == world_z);
+
+    const world::GridKey expected_key{world_x, world_y, world_z, layer};
+    world::GridPoint* looked_up = grid.find_grid_point(expected_key);
+    REQUIRE(looked_up != nullptr);
+    CHECK(looked_up->world_x() == world_x);
+    CHECK(looked_up->world_y() == world_y);
+    CHECK(looked_up->world_z() == world_z);
+}
+
+TEST_CASE("WorldGrid keeps depth distinct from height for sibling points") {
+    world::WorldGrid grid;
+
+    const int world_x = 48;
+    const int world_y = 5;     // elevated point
+    const int near_z  = 96;    // closer to camera
+    const int far_z   = 320;   // deeper into the scene
+    const int layer   = 1;
+
+    world::GridPoint& near_point = world::GridPoint::from_world(world_x, world_y, near_z, layer, grid);
+    world::GridPoint& far_point  = world::GridPoint::from_world(world_x, world_y, far_z, layer, grid);
+
+    CHECK(near_point.world_z() == near_z);
+    CHECK(far_point.world_z() == far_z);
+    CHECK(near_point.world_y() == world_y);
+    CHECK(far_point.world_y() == world_y);
+    CHECK(near_point.id != far_point.id);
+    CHECK(near_point.hash_key() != far_point.hash_key());
+}
+
 TEST_CASE("ManifestStore map entry round-trip honors writes") {
     FakeManifestBackend storage;
     auto loader = [&storage]() {

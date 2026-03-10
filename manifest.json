@@ -1051,7 +1051,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 53.0
+        "scale_percentage": 56.0
       },
       "start": "default",
       "tags": [],
@@ -1285,24 +1285,24 @@
               },
               "points": [
                 {
-                  "x": 17517,
+                  "x": -256,
                   "y": 0,
-                  "z": 17517
+                  "z": -256
                 },
                 {
-                  "x": 18029,
+                  "x": 256,
                   "y": 0,
-                  "z": 17517
+                  "z": -256
                 },
                 {
-                  "x": 18029,
+                  "x": 256,
                   "y": 0,
-                  "z": 18029
+                  "z": 256
                 },
                 {
-                  "x": 17517,
+                  "x": -256,
                   "y": 0,
-                  "z": 18029
+                  "z": 256
                 }
               ],
               "resolution": 3,
@@ -1314,9 +1314,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,
@@ -2302,8 +2302,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": 659,
-              "dz": -2540,
+              "dx": 488,
+              "dz": 451,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2447,8 +2447,8 @@
                 }
               ],
               "display_name": "bow_tie",
-              "dx": 263,
-              "dz": 357,
+              "dx": 758,
+              "dz": 631,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

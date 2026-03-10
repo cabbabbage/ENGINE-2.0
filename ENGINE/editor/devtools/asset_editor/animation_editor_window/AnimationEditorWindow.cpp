@@ -1748,20 +1748,24 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
         set_status_message(finalize ? "Animations saved." : "Animations updated.", finalize ? 200 : 120);
     };
 
-    const auto priority = finalize
-        ? devmode::core::DevSaveCoordinator::Priority::Immediate
-        : devmode::core::DevSaveCoordinator::Priority::Debounced;
-
     if (save_coordinator_) {
+        if (!finalize) {
+            // Keep debounced preview-state writes on the caller thread to avoid racing
+            // the mutable manifest transaction against async coordinator execution.
+            const bool committed = commit_fn();
+            if (committed) {
+                on_success();
+            }
+            return committed;
+        }
+
         save_coordinator_->enqueue_custom(devmode::core::DevSaveCoordinator::IntentKind::ManifestAsset,
                                           std::string("asset:") + manifest_asset_key_,
                                           [commit_fn](devmode::core::ManifestStore&) { return commit_fn(); },
-                                          priority,
+                                          devmode::core::DevSaveCoordinator::Priority::Immediate,
                                           "Animation manifest",
                                           on_success);
-        if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
-            save_coordinator_->flush_now("Animation save");
-        }
+        save_coordinator_->flush_now("Animation save");
         return true;
     }
 

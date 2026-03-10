@@ -22,7 +22,7 @@ SDL_Point carrie_controller::get_random_point_in_room() {
     std::uniform_int_distribution<int> dist(-4000, 4000);
     int dx = dist(rng_);
     int dy = dist(rng_);
-    return {self_->world_x() + dx, self_->world_y() + dy};
+    return {self_->world_x() + dx, self_->world_z() + dy};
 }
 
 void carrie_controller::update(const Input&) {
@@ -35,7 +35,7 @@ void carrie_controller::update(const Input&) {
         return;
     }
 
-    int distance_sq = (self_->world_x() - player->world_x()) * (self_->world_x() - player->world_x()) + (self_->world_y() - player->world_y()) * (self_->world_y() - player->world_y());
+    int distance_sq = (self_->world_x() - player->world_x()) * (self_->world_x() - player->world_x()) + (self_->world_z() - player->world_z()) * (self_->world_z() - player->world_z());
 
     if (distance_sq <= 100) {
         if (self_->needs_target) {

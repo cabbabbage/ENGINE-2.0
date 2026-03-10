@@ -9,6 +9,8 @@
 #include <functional>
 #include <iostream>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include "utils/grid.hpp"
@@ -177,9 +179,152 @@ std::vector<SDL_Point> decode_relative_points(const nlohmann::json& entry) {
         return pts;
 }
 
+int clamp_i64_to_int(std::int64_t value) {
+        if (value < static_cast<std::int64_t>(std::numeric_limits<int>::min())) {
+                return std::numeric_limits<int>::min();
+        }
+        if (value > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
+                return std::numeric_limits<int>::max();
+        }
+        return static_cast<int>(value);
+}
+
+std::pair<std::int64_t, std::int64_t> expected_relative_limits(const nlohmann::json& entry) {
+        int width = 0;
+        int height = 0;
+        if (entry.contains("origin_room") && entry["origin_room"].is_object()) {
+                const auto& origin = entry["origin_room"];
+                width = origin.value("width", 0);
+                height = origin.value("height", 0);
+        }
+        if (width <= 0) {
+                width = entry.value("origional_width", 0);
+        }
+        if (height <= 0) {
+                height = entry.value("origional_height", 0);
+        }
+        constexpr std::int64_t kMinLimit = 2048;
+        constexpr std::int64_t kMaxLimit = (1LL << 20);
+        std::int64_t limit_x = std::max<std::int64_t>(kMinLimit, static_cast<std::int64_t>(width) * 4LL);
+        std::int64_t limit_z = std::max<std::int64_t>(kMinLimit, static_cast<std::int64_t>(height) * 4LL);
+        limit_x = std::clamp(limit_x, kMinLimit, kMaxLimit);
+        limit_z = std::clamp(limit_z, kMinLimit, kMaxLimit);
+        return {limit_x, limit_z};
+}
+
+double correction_score(const std::vector<SDL_Point>& points,
+                        axis::WorldPos anchor,
+                        int multiplier,
+                        std::int64_t limit_x,
+                        std::int64_t limit_z) {
+        std::int64_t max_abs_x = 0;
+        std::int64_t max_abs_z = 0;
+        std::int64_t sum_abs_x = 0;
+        std::int64_t sum_abs_z = 0;
+        for (const auto& p : points) {
+                const std::int64_t rel_x = static_cast<std::int64_t>(p.x) -
+                                           static_cast<std::int64_t>(multiplier) * static_cast<std::int64_t>(anchor.x);
+                const std::int64_t rel_z = static_cast<std::int64_t>(p.y) -
+                                           static_cast<std::int64_t>(multiplier) * static_cast<std::int64_t>(anchor.z);
+                const std::int64_t abs_x = std::llabs(rel_x);
+                const std::int64_t abs_z = std::llabs(rel_z);
+                max_abs_x = std::max(max_abs_x, abs_x);
+                max_abs_z = std::max(max_abs_z, abs_z);
+                sum_abs_x += abs_x;
+                sum_abs_z += abs_z;
+        }
+
+        const double mean_abs =
+            static_cast<double>(sum_abs_x + sum_abs_z) / static_cast<double>(std::max<std::size_t>(points.size(), 1));
+        double score = static_cast<double>(max_abs_x + max_abs_z) + mean_abs * 0.1;
+        if (max_abs_x > limit_x) {
+                score += static_cast<double>(max_abs_x - limit_x) * 20.0;
+        }
+        if (max_abs_z > limit_z) {
+                score += static_cast<double>(max_abs_z - limit_z) * 20.0;
+        }
+        score += static_cast<double>(std::abs(multiplier)) * 128.0;
+        return score;
+}
+
+int choose_anchor_drift_multiplier(const std::vector<SDL_Point>& points,
+                                   const nlohmann::json& entry,
+                                   axis::WorldPos anchor) {
+        if (points.empty()) {
+                return 0;
+        }
+        if (anchor.x == 0 && anchor.z == 0) {
+                return 0;
+        }
+
+        double mean_x = 0.0;
+        double mean_z = 0.0;
+        for (const auto& p : points) {
+                mean_x += static_cast<double>(p.x);
+                mean_z += static_cast<double>(p.y);
+        }
+        const double inv_count = 1.0 / static_cast<double>(points.size());
+        mean_x *= inv_count;
+        mean_z *= inv_count;
+
+        std::vector<int> candidates{0};
+        auto append_guesses = [&](int anchor_component, double mean_component) {
+                if (anchor_component == 0) {
+                        return;
+                }
+                const int base = static_cast<int>(std::llround(mean_component / static_cast<double>(anchor_component)));
+                for (int delta = -2; delta <= 2; ++delta) {
+                        candidates.push_back(base + delta);
+                }
+        };
+        append_guesses(anchor.x, mean_x);
+        append_guesses(anchor.z, mean_z);
+        std::sort(candidates.begin(), candidates.end());
+        candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+
+        const auto [limit_x, limit_z] = expected_relative_limits(entry);
+        const double baseline = correction_score(points, anchor, 0, limit_x, limit_z);
+        int best_multiplier = 0;
+        double best_score = baseline;
+        for (int multiplier : candidates) {
+                const double score = correction_score(points, anchor, multiplier, limit_x, limit_z);
+                if (score < best_score) {
+                        best_score = score;
+                        best_multiplier = multiplier;
+                }
+        }
+
+        if (best_multiplier == 0) {
+                return 0;
+        }
+        const bool substantially_better =
+            (best_score <= baseline * 0.75) || ((baseline - best_score) >= 2048.0);
+        return substantially_better ? best_multiplier : 0;
+}
+
+void normalize_relative_points_for_anchor(std::vector<SDL_Point>& points,
+                                          const nlohmann::json& entry,
+                                          axis::WorldPos anchor) {
+        const int multiplier = choose_anchor_drift_multiplier(points, entry, anchor);
+        if (multiplier == 0) {
+                return;
+        }
+        const std::int64_t shift_x =
+            static_cast<std::int64_t>(multiplier) * static_cast<std::int64_t>(anchor.x);
+        const std::int64_t shift_z =
+            static_cast<std::int64_t>(multiplier) * static_cast<std::int64_t>(anchor.z);
+        for (auto& p : points) {
+                p.x = clamp_i64_to_int(static_cast<std::int64_t>(p.x) - shift_x);
+                p.y = clamp_i64_to_int(static_cast<std::int64_t>(p.y) - shift_z);
+        }
+        std::cerr << "[Room] Corrected area point anchor drift with multiplier "
+                  << multiplier << " (anchor=(" << anchor.x << "," << anchor.z << "))\n";
+}
+
 std::vector<SDL_Point> decode_points(const nlohmann::json& entry, axis::WorldPos anchor) {
         std::vector<SDL_Point> pts;
         auto rel = decode_relative_points(entry);
+        normalize_relative_points_for_anchor(rel, entry, anchor);
         pts.reserve(rel.size());
         for (const auto& point : rel) {
                 pts.push_back(SDL_Point{anchor.x + point.x, anchor.z + point.y});
@@ -191,7 +336,13 @@ nlohmann::json encode_points(const std::vector<SDL_Point>& points, axis::WorldPo
         nlohmann::json arr = nlohmann::json::array();
         arr.get_ref<nlohmann::json::array_t&>().reserve(points.size());
         for (const auto& p : points) {
-                arr.push_back({ {"x", p.x}, {"y", anchor.y}, {"z", p.y} });
+                const std::int64_t rel_x =
+                    static_cast<std::int64_t>(p.x) - static_cast<std::int64_t>(anchor.x);
+                const std::int64_t rel_z =
+                    static_cast<std::int64_t>(p.y) - static_cast<std::int64_t>(anchor.z);
+                arr.push_back({ {"x", clamp_i64_to_int(rel_x)},
+                                {"y", anchor.y},
+                                {"z", clamp_i64_to_int(rel_z)} });
         }
         return arr;
 }
@@ -530,6 +681,7 @@ void Room::load_named_areas_from_json() {
 };
 
                         if (can_scale) {
+                                RoomAreaSerialization::normalize_relative_points_for_anchor(relative_points, item, anchor.world);
                                 const double sx = static_cast<double>(current_width) / static_cast<double>(stored_width);
                                 const double sy = static_cast<double>(current_height) / static_cast<double>(stored_height);
 

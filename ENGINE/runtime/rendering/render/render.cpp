@@ -834,6 +834,7 @@ void SceneRenderer::invalidate_dynamic_boundary_system() {
 }
 
 void SceneRenderer::render() {
+    static int s_boundary_render_debug_counter = 0;
     if (!renderer_ || !assets_ || screen_width_ <= 0 || screen_height_ <= 0) {
         return;
     }
@@ -842,6 +843,7 @@ void SceneRenderer::render() {
     SDL_SetRenderDrawColor(renderer_, map_clear_color_.r, map_clear_color_.g, map_clear_color_.b, map_clear_color_.a);
     SDL_RenderClear(renderer_);
     WarpedScreenGrid& cam = assets_->getView();
+    world::WorldGrid& grid = assets_->world_grid();
     render_sky_layer(cam, assets_->depth_effects_enabled());
 
     if (!geometry_batcher_) return;
@@ -849,10 +851,102 @@ void SceneRenderer::render() {
     geometry_batcher_->clear();
 
     // 1) Ground / tiles
-    tile_renderer_->render(renderer_, cam, assets_->world_grid(), geometry_batcher_.get());
+    tile_renderer_->render(renderer_, cam, grid, geometry_batcher_.get());
 
-    // 2) Assets (depth-sorted painter’s algorithm)
+    // 2) Dynamic boundary decorations
+    const bool boundary_assets_visible = assets_->boundary_assets_visible();
+    const bool runtime_updates_enabled = assets_->should_run_runtime_updates();
+    const bool should_render_boundaries =
+        boundary_assets_visible && dynamic_boundary_system_ && dynamic_boundary_system_->is_initialized();
+    const float boundary_delta_ms =
+        runtime_updates_enabled ? static_cast<float>(assets_->frame_delta_seconds() * 1000.0) : 0.0f;
+    if (should_render_boundaries) {
+        dynamic_boundary_system_->update(cam, grid, assets_, boundary_delta_ms);
+    }
+
+    static const std::vector<DynamicBoundarySystem::BoundarySprite> kEmptyBoundarySprites;
+    const auto& boundary_sprites = should_render_boundaries
+        ? dynamic_boundary_system_->get_boundary_sprites()
+        : kEmptyBoundarySprites;
+
+    // 3) Assets + boundaries (depth-sorted painter's algorithm)
+    static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
     const double anchor_depth = cam.anchor_world_z();
+    const float boundary_vertical_offset = DynamicBoundarySystem::vertical_offset();
+    const float boundary_cull_margin = 64.0f;
+    std::size_t queued_boundary_sprites = 0;
+    float min_boundary_width = std::numeric_limits<float>::max();
+    float max_boundary_width = 0.0f;
+    float min_boundary_height = std::numeric_limits<float>::max();
+    float max_boundary_height = 0.0f;
+
+    auto queue_boundary_sprite = [&](const DynamicBoundarySystem::BoundarySprite& sprite, double depth) {
+        if (!sprite.texture ||
+            sprite.texture_w <= 0 || sprite.texture_h <= 0 ||
+            sprite.world_width <= 0.0f || sprite.world_height <= 0.0f) {
+            return;
+        }
+
+        const float world_x = sprite.world_pos.x;
+        const float world_y = sprite.world_pos.y;
+        const float world_z = static_cast<float>(sprite.world_z);
+        const float half_width = sprite.world_width * 0.5f;
+        const float height = sprite.world_height;
+
+        SDL_FPoint base_screen{};
+        if (!project_world_point(cam, world_x, world_y, world_z, base_screen)) {
+            return;
+        }
+
+        const float adjusted_y = base_screen.y + boundary_vertical_offset;
+        if (base_screen.x + half_width < -boundary_cull_margin ||
+            base_screen.x - half_width > static_cast<float>(screen_width_) + boundary_cull_margin ||
+            adjusted_y < -boundary_cull_margin ||
+            adjusted_y - height > static_cast<float>(screen_height_) + boundary_cull_margin) {
+            return;
+        }
+
+        const float padding_x = 0.5f / static_cast<float>(sprite.texture_w);
+        const float padding_y = 0.5f / static_cast<float>(sprite.texture_h);
+        const float u0 = padding_x;
+        const float u1 = 1.0f - padding_x;
+        const float v0 = padding_y;
+        const float v1 = 1.0f - padding_y;
+
+        SDL_Vertex vertices[4]{};
+        vertices[0].position = SDL_FPoint{base_screen.x - half_width, adjusted_y - height};
+        vertices[1].position = SDL_FPoint{base_screen.x + half_width, adjusted_y - height};
+        vertices[2].position = SDL_FPoint{base_screen.x + half_width, adjusted_y};
+        vertices[3].position = SDL_FPoint{base_screen.x - half_width, adjusted_y};
+        const SDL_FColor white{1.0f, 1.0f, 1.0f, 1.0f};
+        vertices[0].color = vertices[1].color = vertices[2].color = vertices[3].color = white;
+        vertices[0].tex_coord = SDL_FPoint{u0, v0};
+        vertices[1].tex_coord = SDL_FPoint{u1, v0};
+        vertices[2].tex_coord = SDL_FPoint{u1, v1};
+        vertices[3].tex_coord = SDL_FPoint{u0, v1};
+
+        SDL_SetTextureColorMod(sprite.texture, 255, 255, 255);
+        SDL_SetTextureAlphaMod(sprite.texture, 255);
+        geometry_batcher_->addQuad(sprite.texture, vertices, kQuadIndices, SDL_BLENDMODE_BLEND, depth);
+        ++queued_boundary_sprites;
+        min_boundary_width = std::min(min_boundary_width, sprite.world_width);
+        max_boundary_width = std::max(max_boundary_width, sprite.world_width);
+        min_boundary_height = std::min(min_boundary_height, sprite.world_height);
+        max_boundary_height = std::max(max_boundary_height, sprite.world_height);
+    };
+
+    auto depth_for_asset = [&](const Asset* asset) -> double {
+        if (!asset) {
+            return std::numeric_limits<double>::lowest();
+        }
+        return render_depth::depth_from_anchor(anchor_depth,
+                                               static_cast<double>(asset->world_z()),
+                                               asset->render_depth_bias());
+    };
+    auto depth_for_boundary = [&](const DynamicBoundarySystem::BoundarySprite& sprite) -> double {
+        return render_depth::depth_from_anchor(anchor_depth, static_cast<double>(sprite.world_z));
+    };
+
     std::vector<Asset*> render_list;
     render_list.reserve(assets_->getActiveRaw().size());
     for (Asset* a : assets_->getActiveRaw()) {
@@ -867,38 +961,73 @@ void SceneRenderer::render() {
         const double db = render_depth::depth_from_anchor(anchor_depth,
                                                           static_cast<double>(b->world_z()),
                                                           b->render_depth_bias());
-        return da > db; // deepest first (far → near) to satisfy batcher monotonic depth
+        return da > db; // deepest first (far -> near) to satisfy batcher monotonic depth
     });
 
-    for (Asset* asset : render_list) {
-        composite_renderer_.update(asset, 0.0f);
-        const world::GridPoint* gp = cam.grid_point_for_asset(asset);
-        const float perspective_scale =
-            (gp && std::isfinite(gp->perspective_scale) && gp->perspective_scale > 0.0f)
-                ? gp->perspective_scale
-                : 1.0f;
-        const float base_world_z = static_cast<float>(asset->world_z());
-        const double depth_bias = asset->render_depth_bias();
+    std::size_t asset_index = 0;
+    std::size_t boundary_index = 0;
+    while (asset_index < render_list.size() || boundary_index < boundary_sprites.size()) {
+        const double next_asset_depth = (asset_index < render_list.size())
+            ? depth_for_asset(render_list[asset_index])
+            : std::numeric_limits<double>::lowest();
+        const double next_boundary_depth = (boundary_index < boundary_sprites.size())
+            ? depth_for_boundary(boundary_sprites[boundary_index])
+            : std::numeric_limits<double>::lowest();
 
-        for (RenderObject& obj : asset->render_package) {
-            const float effective_world_z = base_world_z + obj.world_z_offset;
-            WarpedMesh mesh{};
-            if (!build_perspective_mesh(obj, cam, perspective_scale, effective_world_z, mesh)) {
+        if (asset_index < render_list.size() && next_asset_depth >= next_boundary_depth) {
+            Asset* asset = render_list[asset_index++];
+            if (!asset) {
                 continue;
             }
-            if (mesh.vertices.size() != 4 || mesh.indices.size() != 6) {
-                continue;
-            }
-            SDL_Vertex verts[4];
-            int indices[6];
-            for (int i = 0; i < 4; ++i) verts[i] = mesh.vertices[static_cast<std::size_t>(i)];
-            for (int i = 0; i < 6; ++i) indices[i] = mesh.indices[static_cast<std::size_t>(i)];
 
-            const double draw_depth = render_depth::depth_from_anchor(anchor_depth,
-                                                                      static_cast<double>(effective_world_z),
-                                                                      depth_bias);
-            geometry_batcher_->addQuad(obj.texture, verts, indices, obj.blend_mode, draw_depth);
+            composite_renderer_.update(asset, 0.0f);
+            const world::GridPoint* gp = cam.grid_point_for_asset(asset);
+            const float perspective_scale =
+                (gp && std::isfinite(gp->perspective_scale) && gp->perspective_scale > 0.0f)
+                    ? gp->perspective_scale
+                    : 1.0f;
+            const float base_world_z = static_cast<float>(asset->world_z());
+            const double depth_bias = asset->render_depth_bias();
+
+            for (RenderObject& obj : asset->render_package) {
+                if (!obj.texture) {
+                    continue;
+                }
+                const float effective_world_z = base_world_z + obj.world_z_offset;
+                WarpedMesh mesh{};
+                if (!build_perspective_mesh(obj, cam, perspective_scale, effective_world_z, mesh)) {
+                    continue;
+                }
+                if (mesh.vertices.size() != 4 || mesh.indices.size() != 6) {
+                    continue;
+                }
+                SDL_Vertex verts[4];
+                int indices[6];
+                for (int i = 0; i < 4; ++i) verts[i] = mesh.vertices[static_cast<std::size_t>(i)];
+                for (int i = 0; i < 6; ++i) indices[i] = mesh.indices[static_cast<std::size_t>(i)];
+
+                const double draw_depth = render_depth::depth_from_anchor(anchor_depth,
+                                                                          static_cast<double>(effective_world_z),
+                                                                          depth_bias);
+                geometry_batcher_->addQuad(obj.texture, verts, indices, obj.blend_mode, draw_depth);
+            }
+            continue;
         }
+
+        if (boundary_index < boundary_sprites.size()) {
+            const auto& sprite = boundary_sprites[boundary_index++];
+            queue_boundary_sprite(sprite, next_boundary_depth);
+            continue;
+        }
+    }
+
+    ++s_boundary_render_debug_counter;
+    if ((s_boundary_render_debug_counter % 120) == 0) {
+        vibble::log::info(std::string{"[SceneRenderer] boundary draw stats: sprites="} +
+                          std::to_string(boundary_sprites.size()) +
+                          " queued=" + std::to_string(queued_boundary_sprites) +
+                          " width=[" + std::to_string(min_boundary_width) + "," + std::to_string(max_boundary_width) + "]" +
+                          " height=[" + std::to_string(min_boundary_height) + "," + std::to_string(max_boundary_height) + "]");
     }
 
     geometry_batcher_->flush();

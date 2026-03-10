@@ -14,6 +14,9 @@
 #include <cstdint>
 
 namespace fs = std::filesystem;
+namespace {
+constexpr std::int64_t kMaxFogCellsPerFrame = 50000;
+}
 
 DynamicFogSystem::DynamicFogSystem() = default;
 
@@ -111,7 +114,10 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
         base_spacing = grid.grid_spacing_for_layer(kFogResolutionLayer);
     }
     const float spacing_multiplier = render_overlay::clamp_spacing_multiplier(config().grid_spacing_multiplier);
-    const int grid_spacing = render_overlay::scaled_spacing(base_spacing, spacing_multiplier);
+    int grid_spacing = render_overlay::scaled_spacing(base_spacing, spacing_multiplier);
+    if (grid_spacing <= 0) {
+        grid_spacing = 1;
+    }
     const float max_random_jitter = render_overlay::clamp_random_jitter(config().max_random_jitter);
 
     // Expand visible bounds to ensure coverage
@@ -132,17 +138,64 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
     }
 
     // Snap to grid alignment
-    int start_x = static_cast<int>(std::floor(visible_bounds.x / grid_spacing)) * grid_spacing;
-    int start_z = static_cast<int>(std::floor(visible_bounds.y / grid_spacing)) * grid_spacing;
-    int end_x   = static_cast<int>(std::ceil((visible_bounds.x + visible_bounds.w) / grid_spacing)) * grid_spacing;
-    int end_z   = static_cast<int>(std::ceil((visible_bounds.y + visible_bounds.h) / grid_spacing)) * grid_spacing;
+    auto compute_grid_span = [&](int spacing, int& out_start_x, int& out_end_x, int& out_start_z, int& out_end_z) {
+        out_start_x = static_cast<int>(std::floor(visible_bounds.x / spacing)) * spacing;
+        out_start_z = static_cast<int>(std::floor(visible_bounds.y / spacing)) * spacing;
+        out_end_x = static_cast<int>(std::ceil((visible_bounds.x + visible_bounds.w) / spacing)) * spacing;
+        out_end_z = static_cast<int>(std::ceil((visible_bounds.y + visible_bounds.h) / spacing)) * spacing;
+        out_start_z = std::max(out_start_z, min_world_z);
+        out_end_z = std::max(out_start_z, std::min(out_end_z, max_world_z));
+    };
+    auto estimate_cell_count = [](int spacing, int start_x, int end_x, int start_z, int end_z) -> std::int64_t {
+        if (spacing <= 0 || end_x < start_x || end_z < start_z) {
+            return 0;
+        }
+        const std::int64_t count_x = (static_cast<std::int64_t>(end_x) - static_cast<std::int64_t>(start_x)) /
+                                     static_cast<std::int64_t>(spacing) + 1;
+        const std::int64_t count_z = (static_cast<std::int64_t>(end_z) - static_cast<std::int64_t>(start_z)) /
+                                     static_cast<std::int64_t>(spacing) + 1;
+        if (count_x <= 0 || count_z <= 0) {
+            return 0;
+        }
+        return count_x * count_z;
+    };
 
-    start_z = std::max(start_z, min_world_z);
-    end_z   = std::max(start_z, std::min(end_z, max_world_z));
+    int effective_spacing = grid_spacing;
+    int start_x = 0;
+    int end_x = 0;
+    int start_z = 0;
+    int end_z = 0;
+    compute_grid_span(effective_spacing, start_x, end_x, start_z, end_z);
 
-    const int z_step = std::max(1, grid_spacing);
-    for (int world_depth = start_z; world_depth <= end_z; world_depth += z_step) {
-        for (int world_x = start_x; world_x <= end_x; world_x += grid_spacing) {
+    std::int64_t estimated_cells = estimate_cell_count(effective_spacing, start_x, end_x, start_z, end_z);
+    if (estimated_cells > kMaxFogCellsPerFrame) {
+        const double scale = std::sqrt(static_cast<double>(estimated_cells) / static_cast<double>(kMaxFogCellsPerFrame));
+        const int spacing_scale = std::max(1, static_cast<int>(std::ceil(scale)));
+        const int adjusted_spacing = effective_spacing * spacing_scale;
+        if (adjusted_spacing > effective_spacing) {
+            effective_spacing = adjusted_spacing;
+            compute_grid_span(effective_spacing, start_x, end_x, start_z, end_z);
+            estimated_cells = estimate_cell_count(effective_spacing, start_x, end_x, start_z, end_z);
+        }
+    }
+
+    if (estimated_cells <= 0) {
+        return;
+    }
+
+    const std::size_t reserve_count = static_cast<std::size_t>(
+        std::min<std::int64_t>(estimated_cells, kMaxFogCellsPerFrame));
+    active_fog_sprites_.reserve(reserve_count);
+
+    std::int64_t generated_cells = 0;
+    bool hit_cell_cap = false;
+    for (int world_depth = start_z; world_depth <= end_z; world_depth += effective_spacing) {
+        for (int world_x = start_x; world_x <= end_x; world_x += effective_spacing) {
+            if (generated_cells >= kMaxFogCellsPerFrame) {
+                hit_cell_cap = true;
+                break;
+            }
+            ++generated_cells;
             int fog_index = assign_fog_texture_for_point(world_x, world_depth, world_depth, kFogResolutionLayer);
             if (fog_index < 0 || fog_index >= static_cast<int>(fog_textures_.size())) {
                 continue;
@@ -170,6 +223,9 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
                 fog_tex_entry.texture, world_pos, screen_pos, 1.0f, static_cast<int>(std::lround(jittered_depth)),
                 fog_tex_entry.width, fog_tex_entry.height
             });
+        }
+        if (hit_cell_cap) {
+            break;
         }
     }
     // Depth-sort so render.cpp can merge fog into the interleaved draw order without copying

@@ -68,7 +68,7 @@ int WorldGrid::power_of_three(int exponent) {
 }
 
 int WorldGrid::max_resolution_layers() const {
-    return (max_resolution_layers_ > 0) ? max_resolution_layers_ : kDefaultMaxLayers;
+    return (max_resolution_layers_ >= 0) ? max_resolution_layers_ : kDefaultMaxLayers;
 }
 
 int WorldGrid::distance_for_layer(int layer) const {
@@ -88,7 +88,7 @@ WorldGrid::WorldGrid(const GridPoint& origin, int r_chunk)
     : origin_(origin)
     , r_chunk_(std::clamp(r_chunk, 0, vibble::grid::kMaxResolution))
     , grid_resolution_(r_chunk_)
-    , max_resolution_layers_(kDefaultMaxLayers) {
+    , max_resolution_layers_(r_chunk_) {
     // Map Grid ownership: all GridPoints created through ensure_point/ensure_child
     // live inside this container. Screen Grid rebuilds receive non-owning pointers
     // only; do not transfer ownership out of WorldGrid. ChunkManager remains
@@ -108,6 +108,7 @@ void WorldGrid::set_chunk_resolution(int r) {
         return;
     }
     r_chunk_ = clamped;
+    max_resolution_layers_ = clamped;
     invalidate_active_cache();
 }
 
@@ -356,7 +357,9 @@ GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, 
     const int canonical_world_x = origin_.world_x() + grid_index.x * spacing;
     const int canonical_world_z = origin_.world_z() + grid_index.z * spacing;
     const int canonical_world_y = world_y;
-    const GridKey canonical_key{canonical_world_x, canonical_world_y, canonical_world_z, resolution_layer};
+    const axis::WorldPos canonical_world{canonical_world_x, canonical_world_y, canonical_world_z};
+    // Preserve canonical axis ordering (x = right, y = up, z = forward/depth).
+    const GridKey canonical_key{canonical_world.x, canonical_world.y, canonical_world.z, resolution_layer};
 
     std::uint32_t salt = 0;
     GridId id = make_point_id(grid_index.x, grid_index.z, world_y, resolution_layer, salt);
@@ -380,9 +383,9 @@ GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, 
 
     auto [it, inserted] = points_.try_emplace(
         id,
-        canonical_world_x,
-        canonical_world_y,
-        world_y,
+        canonical_world.x,
+        canonical_world.y,
+        canonical_world.z,
         resolution_layer,
         grid_index,
         chunk_index,
@@ -819,7 +822,7 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     std::unique_ptr<Asset> owned;
     const bool xz_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_z() != new_pos.world_z());
     const bool point_changed = xz_changed ||
-                               (old_pos.world_z() != new_pos.world_z()) ||
+                               (old_pos.world_y() != new_pos.world_y()) ||
                                (old_pos.resolution_layer() != new_pos.resolution_layer());
     if (point_changed) {
         if (GridPoint* existing_point = point_for_asset(a)) {

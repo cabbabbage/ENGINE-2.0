@@ -924,7 +924,7 @@ Area Asset::get_area(const std::string& name) const {
                 return Area(name, 0);
         }
 
-        SDL_Point world_pos = pos_ ? SDL_Point{pos_->world_x(), pos_->world_y()} : SDL_Point{0, 0};
+        SDL_Point world_pos = pos_ ? SDL_Point{pos_->world_x(), pos_->world_z()} : SDL_Point{0, 0};
         return area_helpers::make_world_area(*info, *base, world_pos, flipped);
 }
 
@@ -1077,10 +1077,13 @@ void Asset::assert_unique_anchor_names_for_frame() const {
                 }
                 if (!seen.insert(anchor.name).second) {
                         const std::string asset_name = info ? info->name : std::string{"<unknown>"};
-                        vibble::log::warn("[AnchorDebug] Duplicate anchor name '{}' on asset '{}' (frame {})",
-                                          anchor.name,
-                                          asset_name,
-                                          current_frame->frame_index);
+                        vibble::log::warn("[AnchorDebug] Duplicate anchor name '" +
+                                          anchor.name +
+                                          "' on asset '" +
+                                          asset_name +
+                                          "' (frame " +
+                                          std::to_string(current_frame->frame_index) +
+                                          ")");
                         SDL_assert(!"Anchor names must be unique per asset frame");
                         break;
                 }

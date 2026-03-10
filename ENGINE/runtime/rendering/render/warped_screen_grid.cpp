@@ -638,7 +638,7 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
     runtime_camera_height_ = camera_.current_height();
     runtime_pitch_deg_ = camera_.current_pitch_deg();
     runtime_pitch_rad_ = camera_.current_pitch_rad();
-    runtime_anchor_world_z_ = camera_.state().center.y;
+    runtime_anchor_world_z_ = camera_state_cached().anchor_world_z;
     depth_enabled_   = true;
 }
 
@@ -791,16 +791,48 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     if (dev_mode && focus_override_active) {
         set_screen_center(camera_.state().focus_override);
     } else if (player) {
-        set_screen_center(SDL_Point{ player->world_x(), player->world_z() }, false);
+        // Follow the player's visual center in normal gameplay by adjusting only
+        // the camera anchor on the world X/Z plane. Keep room camera params intact.
+        const int follow_x = player->world_x();
+        double follow_z = static_cast<double>(player->world_z());
+
+        // Track point is player's vertical center in world space.
+        const float runtime_height = player->runtime_height_px();
+        const double center_height_world =
+            static_cast<double>(player->world_y()) +
+            (std::isfinite(runtime_height) && runtime_height > 0.0f
+                 ? static_cast<double>(runtime_height) * 0.5
+                 : 0.0);
+
+        // With anchor-locked projection, an elevated target can be centered by shifting
+        // only world depth (Z) by h * cot(pitch).
+        const double pitch = camera_.state().pitch_rad;
+        const double sin_pitch = std::sin(pitch);
+        const double cos_pitch = std::cos(pitch);
+        if (std::isfinite(center_height_world) &&
+            std::isfinite(sin_pitch) &&
+            std::isfinite(cos_pitch) &&
+            std::abs(sin_pitch) > 1e-4) {
+            const double depth_offset = center_height_world * (cos_pitch / sin_pitch);
+            if (std::isfinite(depth_offset)) {
+                follow_z -= depth_offset;
+            }
+        }
+
+        set_screen_center(SDL_Point{follow_x, static_cast<int>(std::lround(follow_z))}, false);
     } else if (cur && cur->room_area) {
         set_screen_center(cur->room_area->get_center());
     }
 
     camera_.tick(dt);
-    runtime_camera_height_ = camera_.current_height();
-    runtime_pitch_deg_ = camera_.current_pitch_deg();
-    runtime_pitch_rad_ = camera_.current_pitch_rad();
-    runtime_anchor_world_z_ = camera_.state().center.y;
+    const CameraState& cam_state = camera_state_cached();
+    runtime_camera_height_ = cam_state.camera_height;
+    runtime_focus_depth_ = cam_state.focus_depth;
+    runtime_anchor_world_z_ = cam_state.anchor_world_z;
+    runtime_focus_ndc_offset_ = cam_state.focus_ndc_offset;
+    runtime_pitch_rad_ = cam_state.pitch_radians;
+    runtime_pitch_deg_ = cam_state.pitch_degrees;
+    runtime_depth_offset_px_ = static_cast<float>(cam_state.reference_depth);
 }
 
 Area WarpedScreenGrid::convert_area_to_aspect(const Area& in) const {
@@ -1383,7 +1415,7 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     for (world::GridPoint* gp : grid_points) {
         if (!gp) continue;
 
-        gp->is_floor = (gp->world_z() == 0);
+        gp->is_floor = (gp->world_y() == 0);
 
         if (gp->occupants.empty()) {
             continue;

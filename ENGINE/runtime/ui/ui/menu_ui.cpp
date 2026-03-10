@@ -124,17 +124,6 @@ void MenuUI::game_loop() {
                         game_assets_->touch_last_frame_counter();
                 }
 
-                if (!menu_active_ && !dev_idle && game_assets_) {
-                        static bool opened_asset_info_once = false;
-                        if (!opened_asset_info_once) {
-                                const auto& active = game_assets_->getActive();
-                                if (!active.empty()) {
-                                        game_assets_->open_asset_info_editor_for_asset(active.front());
-                                        opened_asset_info_once = true;
-                                }
-                        }
-                }
-
                 if (menu_active_) {
                         render();
                         switch (consumeAction()) {

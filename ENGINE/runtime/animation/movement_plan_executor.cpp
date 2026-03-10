@@ -20,8 +20,8 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
         if (self && up.planner_iface_) {
             const int visited_thresh = up.planner_iface_->visit_threshold_px();
             const int visited_thresh_squared = visited_thresh * visited_thresh;
-            const world::GridPoint current = world::grid_math::from_sdl(self->world_xz_point(), self->world_z(), self->grid_resolution);
-            const world::GridPoint target  = world::grid_math::from_sdl(plan.final_dest, self->world_z(), self->grid_resolution);
+            const world::GridPoint current = world::grid_math::from_sdl(self->world_xz_point(), self->world_y(), self->grid_resolution);
+            const world::GridPoint target  = world::grid_math::from_sdl(plan.final_dest, self->world_y(), self->grid_resolution);
             const int dist_sq = animation_update::detail::distance_sq(current, target);
             if (dist_sq <= visited_thresh_squared) {
                 self->target_reached = true;
@@ -107,7 +107,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
     }
 
     if (delta.x != 0 || delta.y != 0) {
-        self->move_to_world_position(to.x, to.y);
+        self->move_to_world_position(to.x, self->world_y(), to.y);
         up.mark_progress_toward_checkpoints();
     }
 

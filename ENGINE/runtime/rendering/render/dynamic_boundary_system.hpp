@@ -149,7 +149,7 @@ private:
         std::uint64_t config_revision = 0;
         std::size_t rooms_hash = 0;
         int origin_x = 0;
-        int origin_y = 0;
+        int origin_z = 0;
         int origin_layer = 0;
         int grid_resolution = 0;
         int min_grid_x = 0;
@@ -162,7 +162,7 @@ private:
             return config_revision == other.config_revision &&
                    rooms_hash == other.rooms_hash &&
                    origin_x == other.origin_x &&
-                   origin_y == other.origin_y &&
+                   origin_z == other.origin_z &&
                    origin_layer == other.origin_layer &&
                    grid_resolution == other.grid_resolution &&
                    min_grid_x == other.min_grid_x &&
@@ -212,7 +212,7 @@ private:
         std::size_t map_info_hash = 0;
         std::size_t rooms_hash = 0;
         int origin_x = 0;
-        int origin_y = 0;
+        int origin_z = 0;
         int origin_layer = 0;
         int grid_resolution = 0;
         float spacing_multiplier = kDefaultGridSpacingMultiplier;
@@ -222,7 +222,7 @@ private:
                    map_info_hash == other.map_info_hash &&
                    rooms_hash == other.rooms_hash &&
                    origin_x == other.origin_x &&
-                   origin_y == other.origin_y &&
+                   origin_z == other.origin_z &&
                    origin_layer == other.origin_layer &&
                    grid_resolution == other.grid_resolution &&
                    spacing_multiplier == other.spacing_multiplier;

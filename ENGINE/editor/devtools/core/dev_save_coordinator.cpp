@@ -220,6 +220,10 @@ bool DevSaveCoordinator::process(bool force, const std::string& reason) {
     }
 
     processing_ = true;
+    struct ProcessingResetGuard {
+        bool& flag;
+        ~ProcessingResetGuard() { flag = false; }
+    } reset_guard{processing_};
 
     std::vector<PendingIntent> batch = std::move(intents_);
     intents_.clear();
@@ -247,13 +251,38 @@ bool DevSaveCoordinator::process(bool force, const std::string& reason) {
         }
 
         notify = notify || intent.priority == Priority::Immediate;
-        const bool applied = intent.apply ? intent.apply(*store_) : false;
+        bool applied = false;
+        if (intent.apply) {
+            try {
+                applied = intent.apply(*store_);
+            } catch (const std::exception& ex) {
+                std::cerr << "[DevSaveCoordinator] Save intent '" << intent.key
+                          << "' threw exception: " << ex.what() << "\n";
+                applied = false;
+                success = false;
+            } catch (...) {
+                std::cerr << "[DevSaveCoordinator] Save intent '" << intent.key
+                          << "' threw unknown exception\n";
+                applied = false;
+                success = false;
+            }
+        }
         success = success && applied;
         if (applied) {
             ++writes;
             ++telemetry_.writes_this_frame;
             if (intent.on_success) {
-                intent.on_success();
+                try {
+                    intent.on_success();
+                } catch (const std::exception& ex) {
+                    std::cerr << "[DevSaveCoordinator] on_success for intent '" << intent.key
+                              << "' threw exception: " << ex.what() << "\n";
+                    success = false;
+                } catch (...) {
+                    std::cerr << "[DevSaveCoordinator] on_success for intent '" << intent.key
+                              << "' threw unknown exception\n";
+                    success = false;
+                }
             }
         }
         if (!intent.label.empty()) {
@@ -262,15 +291,30 @@ bool DevSaveCoordinator::process(bool force, const std::string& reason) {
     }
 
     if (writes > 0) {
-        store_->flush();
-        ++telemetry_.flush_count;
+        try {
+            store_->flush();
+            ++telemetry_.flush_count;
+        } catch (const std::exception& ex) {
+            std::cerr << "[DevSaveCoordinator] Manifest flush threw exception: "
+                      << ex.what() << "\n";
+            success = false;
+        } catch (...) {
+            std::cerr << "[DevSaveCoordinator] Manifest flush threw unknown exception\n";
+            success = false;
+        }
     }
 
     if (notify) {
-        publish_notice(success && writes > 0, writes, labels, reason);
+        try {
+            publish_notice(success && writes > 0, writes, labels, reason);
+        } catch (const std::exception& ex) {
+            std::cerr << "[DevSaveCoordinator] publish_notice threw exception: "
+                      << ex.what() << "\n";
+        } catch (...) {
+            std::cerr << "[DevSaveCoordinator] publish_notice threw unknown exception\n";
+        }
     }
 
-    processing_ = false;
     return success;
 }
 

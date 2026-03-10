@@ -903,7 +903,6 @@ void Assets::set_input(Input* m) {
 void Assets::update(const Input& input)
 {
     const std::uint64_t now_counter = SDL_GetPerformanceCounter();
-
     if (!should_step_dev_frame(input)) {
         last_frame_dt_seconds_ = 0.0f;
         last_frame_counter_    = now_counter;
@@ -1083,7 +1082,6 @@ void Assets::update(const Input& input)
     if (dev_controls_ && dev_controls_->is_enabled()) {
         sync_dev_controls_current_room(current_room_);
         dev_controls_->update(input);
-
         dev_controls_->update_ui(input);
     }
 
@@ -1144,55 +1142,59 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         return;
     }
 
-    auto compute_depth_hint = [](const Asset* asset) -> int {
-        return asset ? asset->depth : 0;
-    };
+    constexpr std::size_t kMaxBufferEntries = 250000;
+    const bool grid_state_stale =
+        grid_dirty_ ||
+        camera_view_dirty_ ||
+        active_assets_dirty_.load(std::memory_order_acquire) ||
+        pending_initial_rebuild_;
 
     non_player_update_buffer_.clear();
-    non_player_update_buffer_.reserve(active_traversal_.size());
+    non_player_update_buffer_.reserve(
+        std::min<std::size_t>(kMaxBufferEntries,
+                              std::max(active_traversal_.size(), active_assets.size())));
     std::unordered_set<const Asset*> buffer_set;
+    buffer_set.reserve(std::min<std::size_t>(kMaxBufferEntries,
+                                             std::max(active_traversal_.size(), active_assets.size())));
 
-    for (world::GridPoint* point : active_points_) {
-        if (!point) {
-            continue;
-        }
-
-        std::vector<Asset*> point_assets;
-        point_assets.reserve(point->occupants.size());
-        for (const auto& occ : point->occupants) {
-            Asset* asset = occ.get();
-            if (!asset || asset->dead) {
+    const auto append_unique_assets = [&](const std::vector<Asset*>& source) {
+        for (Asset* asset : source) {
+            if (!asset || asset == player || asset->dead) {
                 continue;
             }
-            point_assets.push_back(asset);
-        }
-
-        if (point_assets.empty()) {
-            continue;
-        }
-
-        std::stable_sort(point_assets.begin(),
-                         point_assets.end(),
-                         [&compute_depth_hint](const Asset* a, const Asset* b) {
-                             if (!a || !b) return b != nullptr;
-                             const int depth_a = compute_depth_hint(a);
-                             const int depth_b = compute_depth_hint(b);
-                             if (depth_a != depth_b) {
-                                 return depth_a < depth_b;
-                             }
-                             return a < b;
-                         });
-
-        for (Asset* asset : point_assets) {
-            if (!asset) {
-                continue;
-            }
-
-            // Always respect traversal order; skip adding player itself to the buffer.
-            if (asset != player && buffer_set.insert(asset).second) {
+            if (buffer_set.insert(asset).second) {
                 non_player_update_buffer_.push_back(asset);
+                if (non_player_update_buffer_.size() >= kMaxBufferEntries) {
+                    break;
+                }
             }
+        }
+    };
+    const auto append_unique_traversal = [&](const std::vector<ActiveTraversalEntry>& source) {
+        for (const ActiveTraversalEntry& entry : source) {
+            Asset* asset = entry.asset;
+            if (!asset || asset == player || asset->dead) {
+                continue;
+            }
+            if (buffer_set.insert(asset).second) {
+                non_player_update_buffer_.push_back(asset);
+                if (non_player_update_buffer_.size() >= kMaxBufferEntries) {
+                    break;
+                }
+            }
+        }
+    };
 
+    if (grid_state_stale || active_traversal_.empty()) {
+        append_unique_assets(active_assets);
+    } else if (active_traversal_.size() > kMaxBufferEntries) {
+        std::cerr << "[Assets] Non-player buffer traversal exceeded cap ("
+                  << active_traversal_.size() << "); falling back to active_assets\n";
+        append_unique_assets(active_assets);
+    } else {
+        append_unique_traversal(active_traversal_);
+        if (non_player_update_buffer_.empty() && !active_assets.empty()) {
+            append_unique_assets(active_assets);
         }
     }
 

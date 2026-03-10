@@ -78,7 +78,7 @@ bool blocked_step(const world::GridPoint& from,
         bool overlap_check = animation_update::detail::should_consider_overlap(self, *other);
 
         if (overlap_check) {
-            const world::GridPoint other_bottom = animation_update::detail::bottom_middle_for(*other, world::grid_math::from_sdl(other->world_xz_point(), other->world_z(), other->grid_resolution));
+            const world::GridPoint other_bottom = animation_update::detail::bottom_middle_for(*other, world::grid_math::from_sdl(other->world_xz_point(), other->world_y(), other->grid_resolution));
             if (animation_update::detail::distance_sq(dest_bottom, other_bottom) <
                 animation_update::detail::kOverlapDistanceSq) {
                 return true;
@@ -156,15 +156,15 @@ Plan GetBestPath::operator()(const Asset& self,
     Plan plan;
     plan.sanitized_checkpoints = sanitized_checkpoints;
 
-    const int world_z = self.world_z();
+    const int world_y = self.world_y();
     const int layer   = self.grid_resolution;
     std::vector<world::GridPoint> checkpoints;
     checkpoints.reserve(sanitized_checkpoints.size());
     for (const auto& cp : sanitized_checkpoints) {
-        checkpoints.emplace_back(world::grid_math::from_sdl(cp, world_z, layer));
+        checkpoints.emplace_back(world::grid_math::from_sdl(cp, world_y, layer));
     }
 
-    world::GridPoint cursor = world::grid_math::from_sdl(self.world_xz_point(), world_z, layer);
+    world::GridPoint cursor = world::grid_math::from_sdl(self.world_xz_point(), world_y, layer);
     plan.final_dest  = cursor.to_sdl_point();
     plan.world_start = cursor.to_sdl_point();
 
@@ -189,7 +189,7 @@ Plan GetBestPath::operator()(const Asset& self,
             int sum = std::abs(delta.x) + std::abs(delta.y);
             if (sum > 0 && sum < min_sum) {
                 min_sum = sum;
-                min_stride = { descriptor.id, descriptor.path_index, world::GridPoint::make_virtual(delta.x, delta.y, 0, layer) };
+                min_stride = { descriptor.id, descriptor.path_index, world::GridPoint::make_virtual(delta.x, 0, delta.y, layer) };
             }
         }
     }
@@ -274,7 +274,7 @@ Plan GetBestPath::operator()(const Asset& self,
 
             if (!best.valid) {
                 if (min_sum != std::numeric_limits<int>::max()) {
-                    const SDL_Point delta_pt{ min_stride.delta.world_x(), min_stride.delta.world_y() };
+                    const SDL_Point delta_pt{ min_stride.delta.world_x(), min_stride.delta.world_z() };
                     world::GridPoint fallback_next = world::grid_math::offset(cursor, delta_pt);
                     const int       fallback_dist_sq = animation_update::detail::distance_sq(fallback_next, checkpoint);
                     if (fallback_dist_sq < current_dist_sq) {

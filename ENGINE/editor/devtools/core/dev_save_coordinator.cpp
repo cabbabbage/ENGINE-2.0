@@ -124,26 +124,6 @@ void DevSaveCoordinator::enqueue_manifest_asset(const std::string& asset_key,
                    std::move(on_success));
 }
 
-void DevSaveCoordinator::enqueue_map_entry(const std::string& map_id,
-                                           nlohmann::json payload,
-                                           Priority priority,
-                                           const std::string& label,
-                                           std::function<void()> on_success) {
-    if (map_id.empty()) {
-        return;
-    }
-    enqueue_custom(IntentKind::MapEntry,
-                   "map:" + map_id,
-                   [map_id, payload = std::move(payload)](ManifestStore& store) {
-                       auto guard = store.scoped_guard("DevSaveCoordinator::enqueue_map_entry");
-                       (void)guard;
-                       return store.update_map_entry(map_id, payload);
-                   },
-                   priority,
-                   label.empty() ? std::string("Map ") + map_id : label,
-                   std::move(on_success));
-}
-
 void DevSaveCoordinator::enqueue_custom(IntentKind kind,
                                         const std::string& key,
                                         std::function<bool(ManifestStore&)> apply,

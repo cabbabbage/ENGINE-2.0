@@ -51,6 +51,8 @@ std::vector<std::string> parse_string_array(const nlohmann::json& json_value) {
     return values;
 }
 
+const nlohmann::json* locate_animation_payloads(const nlohmann::json& root);
+
 float read_float_field(const nlohmann::json& data, const char* key, float fallback) {
     if (!key) {
         return fallback;
@@ -79,6 +81,72 @@ float read_float_field(const nlohmann::json& data, const char* key, float fallba
     } catch (...) {
     }
     return fallback;
+}
+
+bool read_bool_like(const nlohmann::json& value, bool fallback) {
+    try {
+        if (value.is_boolean()) {
+            return value.get<bool>();
+        }
+        if (value.is_number_integer()) {
+            return value.get<int>() != 0;
+        }
+        if (value.is_number_float()) {
+            return std::fabs(value.get<double>()) > 0.0;
+        }
+        if (value.is_string()) {
+            std::string text = value.get<std::string>();
+            std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
+                return static_cast<char>(std::tolower(ch));
+            });
+            if (text == "true" || text == "1" || text == "yes" || text == "on") {
+                return true;
+            }
+            if (text == "false" || text == "0" || text == "no" || text == "off") {
+                return false;
+            }
+        }
+    } catch (...) {
+    }
+    return fallback;
+}
+
+std::optional<bool> extract_legacy_crop_frames(const nlohmann::json& data) {
+    const nlohmann::json* payloads = locate_animation_payloads(data);
+    if (!payloads || !payloads->is_object()) {
+        return std::nullopt;
+    }
+
+    bool found_any = false;
+    bool found_true = false;
+    for (auto it = payloads->begin(); it != payloads->end(); ++it) {
+        if (!it.value().is_object()) {
+            continue;
+        }
+        auto crop_it = it.value().find("crop_frames");
+        if (crop_it == it.value().end()) {
+            continue;
+        }
+        found_any = true;
+        if (read_bool_like(*crop_it, false)) {
+            found_true = true;
+            break;
+        }
+    }
+
+    if (!found_any) {
+        return std::nullopt;
+    }
+    return found_true;
+}
+
+nlohmann::json strip_per_animation_crop_fields(nlohmann::json payload) {
+    if (!payload.is_object()) {
+        return nlohmann::json::object();
+    }
+    payload.erase("crop_frames");
+    payload.erase("crop_bounds");
+    return payload;
 }
 
 std::filesystem::path assets_root_for(const std::string& asset_name) {
@@ -633,10 +701,20 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
                         tillable = info_json_.value("tileable", false);
                 }
         }
+        if (data.contains("crop_frames")) {
+                crop_frames = read_bool_like(data.at("crop_frames"), true);
+        } else if (auto legacy_crop = extract_legacy_crop_frames(data); legacy_crop.has_value()) {
+                crop_frames = *legacy_crop;
+        } else if (info_json_.contains("crop_frames")) {
+                crop_frames = read_bool_like(info_json_.at("crop_frames"), true);
+        } else {
+                crop_frames = true;
+        }
         min_same_type_distance = data.value("min_same_type_distance", 0);
         min_distance_all = data.value("min_distance_all", 0);
         flipable = data.value("can_invert", false);
         info_json_["tillable"] = tillable;
+        info_json_["crop_frames"] = crop_frames;
         NeighborSearchRadius = std::clamp( data.value("neighbor_search_distance", NeighborSearchRadius), 20, 1000);
         info_json_["neighbor_search_distance"] = NeighborSearchRadius;
         if (info_json_.is_object()) {
@@ -657,6 +735,7 @@ nlohmann::json AssetInfo::manifest_payload() const {
         if (!payload.contains("asset_name") || !payload["asset_name"].is_string() || payload["asset_name"].get<std::string>().empty()) {
                 payload["asset_name"] = name;
         }
+        payload["crop_frames"] = crop_frames;
         return payload;
 }
 
@@ -902,6 +981,11 @@ void AssetInfo::set_tillable(bool v) {
         info_json_["tileable"] = v;
 }
 
+void AssetInfo::set_crop_frames(bool enabled) {
+        crop_frames = enabled;
+        info_json_["crop_frames"] = enabled;
+}
+
 Area* AssetInfo::find_area(const std::string& name) {
 	for (auto& na : areas) {
 		if (na.name == name) return na.area.get();
@@ -1038,7 +1122,7 @@ void AssetInfo::load_animations(const nlohmann::json& data) {
                 converted.erase("speed_factor");
                 converted.erase("fps");
             }
-            new_anim[it.key()] = std::move(converted);
+            new_anim[it.key()] = strip_per_animation_crop_fields(std::move(converted));
         }
     }
 
@@ -1292,13 +1376,14 @@ nlohmann::json AssetInfo::animation_payload(const std::string& name) const {
 bool AssetInfo::upsert_animation(const std::string& name, const nlohmann::json& payload) {
 	if (name.empty()) return false;
 	try {
+		nlohmann::json clean_payload = strip_per_animation_crop_fields(payload);
 		if (!info_json_.contains("animations") || !info_json_["animations"].is_object()) {
 			info_json_["animations"] = nlohmann::json::object();
 		}
-		info_json_["animations"][name] = payload;
+		info_json_["animations"][name] = clean_payload;
 
 		if (anims_json_.is_null() || !anims_json_.is_object()) anims_json_ = nlohmann::json::object();
-		anims_json_[name] = payload;
+		anims_json_[name] = clean_payload;
 		return true;
 	} catch (...) {
 		return false;
@@ -1413,10 +1498,13 @@ bool AssetInfo::update_animation_properties(const std::string& animation_name, c
             anims_json_ = nlohmann::json::object();
         }
 
-        nlohmann::json updated_animation = properties;
+        nlohmann::json updated_animation = strip_per_animation_crop_fields(properties);
         if (anims_json_.contains(animation_name) && anims_json_[animation_name].is_object()) {
 
             for (auto& [key, value] : anims_json_[animation_name].items()) {
+                if (key == "crop_frames" || key == "crop_bounds") {
+                    continue;
+                }
                 if (!updated_animation.contains(key)) {
                     updated_animation[key] = value;
                 }

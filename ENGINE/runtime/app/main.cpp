@@ -5,6 +5,7 @@
 #include "ui/tinyfiledialogs.h"
 #include "ui/loading_screen.hpp"
 #include "core/manifest/manifest_loader.hpp"
+#include "core/manifest/map_manifest_normalizer.hpp"
 #include "asset_loader.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "assets/asset/asset_library.hpp"
@@ -12,7 +13,6 @@
 #include "rendering/render/engine_renderer.hpp"
 #include "AssetsManager.hpp"
 #include "utils/input.hpp"
-#include "core/manifest/manifest_loader.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "utils/loading_status_notifier.hpp"
@@ -214,38 +214,24 @@ void MainApp::setup() {
                                 vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Using descriptor payload.");
                                 map_manifest_json = map_descriptor_.data;
                         } else {
-                                vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Generating default map manifest.");
-                                map_manifest_json = build_default_map_manifest(map_identifier);
+                                vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Deferring to normalization defaults.");
+                                map_manifest_json = nlohmann::json::object();
                         }
-                }
-
-                if (!map_manifest_json.is_object()) {
-                        map_manifest_json = nlohmann::json::object();
                 }
 
                 fs::path manifest_root = fs::path(manifest::manifest_path()).parent_path();
-                fs::path relative_content_root;
-                auto root_it = map_manifest_json.find("content_root");
-                if (root_it != map_manifest_json.end() && root_it->is_string()) {
-                        const std::string& value = root_it->get_ref<const std::string&>();
-                        if (!value.empty()) {
-                                relative_content_root = fs::path(value);
-                        }
+                manifest::MapManifestNormalizationResult normalized =
+                    manifest::normalize_map_manifest(std::move(map_manifest_json),
+                                                     map_identifier,
+                                                     manifest_root);
+                map_manifest_json = std::move(normalized.map_manifest);
+                const fs::path resolved_root = normalized.resolved_content_root;
+                bool manifest_updated = !manifest_entry_found || normalized.changed;
+                if (normalized.changed && !manifest_entry_found) {
+                        vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Applying normalized defaults.");
+                } else if (normalized.changed) {
+                        vibble::log::warn(std::string("[MainApp] Normalized manifest defaults for map '") + map_identifier + "'.");
                 }
-
-                bool manifest_updated = !manifest_entry_found;
-                if (relative_content_root.empty()) {
-                        relative_content_root = fs::path("content") / map_identifier;
-                        map_manifest_json["content_root"] = relative_content_root.generic_string();
-                        manifest_updated = true;
-                        vibble::log::warn(std::string("[MainApp] No content_root for map '") + map_identifier + "'. Using default '" + relative_content_root.generic_string() + "'.");
-                }
-
-                fs::path resolved_root = relative_content_root;
-                if (resolved_root.is_relative()) {
-                        resolved_root = manifest_root / resolved_root;
-                }
-                resolved_root = resolved_root.lexically_normal();
 
                 std::error_code dir_error;
                 fs::create_directories(resolved_root, dir_error);

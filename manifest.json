@@ -584,7 +584,6 @@
     "ok": {
       "animations": {
         "default": {
-          "crop_frames": true,
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -614,6 +613,7 @@
       },
       "asset_directory": "resources/assets/ok",
       "asset_name": "ok",
+      "crop_frames": true,
       "start": "default"
     },
     "purple_flower": {
@@ -863,7 +863,6 @@
               }
             ]
           ],
-          "crop_frames": false,
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -1046,6 +1045,7 @@
       "asset_name": "vibble",
       "asset_type": "player",
       "can_invert": false,
+      "crop_frames": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
@@ -1061,7 +1061,6 @@
     "vibble_eyes": {
       "animations": {
         "default": {
-          "crop_frames": true,
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -1094,6 +1093,7 @@
       "asset_name": "vibble_eyes",
       "asset_type": "object",
       "can_invert": false,
+      "crop_frames": true,
       "follower_binding": {
         "anchor_name": "eyes",
         "controller_asset_id": "vibble",

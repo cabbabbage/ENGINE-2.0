@@ -252,9 +252,6 @@ Assets::Assets(AssetLibrary& library,
     update_filtered_active_assets();
 
     quick_task_popup_ = std::make_unique<QuickTaskPopup>();
-    if (manifest_store_fallback_) {
-        quick_task_popup_->set_manifest_store(manifest_store_fallback_.get());
-    }
 
     vibble::log::info("[Assets] Constructor: Initialization complete");
 }
@@ -345,79 +342,6 @@ void Assets::snapshot_rooms_to_map_info() {
 void Assets::persist_map_info_json() {
     save_map_info_json();
     map_data_dirty_ = false;
-}
-
-bool Assets::persist_map_if_dirty(const std::string& reason) {
-    if (!map_data_dirty_) {
-        return true;
-    }
-    try {
-        persist_map_info_json();
-        std::cout << "[Assets] Map manifest persisted during exit (reason='" << reason << "')\n";
-        return true;
-    } catch (const std::exception& ex) {
-        std::cerr << "[Assets] Failed to persist map manifest during exit (reason='" << reason
-                  << "'): " << ex.what() << "\n";
-        return false;
-    } catch (...) {
-        std::cerr << "[Assets] Failed to persist map manifest during exit (reason='" << reason
-                  << "')\n";
-        return false;
-    }
-}
-
-bool Assets::save_dirty_asset_caches(const std::string& reason) {
-    SDL_Renderer* renderer_ptr = renderer();
-    bool ok = true;
-    for (const auto& entry : library_.all()) {
-        if (!entry.second) {
-            continue;
-        }
-        try {
-            entry.second->save_self_to_cache_if_dirty(renderer_ptr);
-        } catch (const std::exception& ex) {
-            std::cerr << "[Assets] Failed to save asset cache for '" << entry.first
-                      << "' during exit (reason='" << reason << "'): " << ex.what() << "\n";
-            ok = false;
-        } catch (...) {
-            std::cerr << "[Assets] Failed to save asset cache for '" << entry.first
-                      << "' during exit (reason='" << reason << "')\n";
-            ok = false;
-        }
-    }
-    return ok;
-}
-
-bool Assets::run_fallback_exit_save(const std::string& reason) {
-    const bool had_map_changes = map_data_dirty_;
-    bool ok = true;
-
-    if (!persist_map_if_dirty(reason)) {
-        ok = false;
-    }
-
-    if (!save_dirty_asset_caches(reason)) {
-        ok = false;
-    }
-
-    if (auto* store = manifest_store()) {
-        try {
-            store->flush();
-        } catch (const std::exception& ex) {
-            std::cerr << "[Assets] Manifest flush failed during exit (reason='" << reason
-                      << "'): " << ex.what() << "\n";
-            ok = false;
-        } catch (...) {
-            std::cerr << "[Assets] Manifest flush failed during exit (reason='" << reason << "')\n";
-            ok = false;
-        }
-    }
-
-    std::cout << "[Assets] Fallback exit save "
-              << (ok ? "finished" : "encountered errors")
-              << " (map_dirty_prior=" << (had_map_changes ? "true" : "false")
-              << ", reason='" << reason << "')\n";
-    return ok;
 }
 
 void Assets::hydrate_map_info_sections() {
@@ -863,6 +787,9 @@ void Assets::ensure_dev_controls() {
         dev_controls_->set_input(input);
         dev_controls_->set_map_info(&map_info_json_);
         dev_controls_->set_map_context(&map_info_json_, map_path_);
+        if (quick_task_popup_) {
+            quick_task_popup_->set_manifest_store(&dev_controls_->manifest_store());
+        }
 
         suppress_dev_renderer_ = false;
     } catch (const std::exception& ex) {
@@ -1147,11 +1074,6 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
     }
 
     constexpr std::size_t kMaxBufferEntries = 250000;
-    const bool grid_state_stale =
-        grid_dirty_ ||
-        camera_view_dirty_ ||
-        active_assets_dirty_.load(std::memory_order_acquire) ||
-        pending_initial_rebuild_;
 
     non_player_update_buffer_.clear();
     non_player_update_buffer_.reserve(
@@ -1189,7 +1111,7 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         }
     };
 
-    if (grid_state_stale || active_traversal_.empty()) {
+    if (active_traversal_.empty()) {
         append_unique_assets(active_assets);
     } else if (active_traversal_.size() > kMaxBufferEntries) {
         std::cerr << "[Assets] Non-player buffer traversal exceeded cap ("
@@ -1474,27 +1396,22 @@ bool Assets::run_exit_save_sequence(const std::string& reason) {
 
     exit_save_sequence_ran_ = true;
 
+    ensure_dev_controls();
+
     bool ok = false;
-    const bool had_dev_controls = (dev_controls_ != nullptr);
     if (dev_controls_) {
         ok = dev_controls_->run_exit_save_sequence(reason);
-    }
-
-    const bool need_fallback = !dev_controls_ || !ok;
-    if (need_fallback) {
-        ok = run_fallback_exit_save(reason) || ok;
+    } else {
+        std::cerr << "[Assets] EXIT SAVE FAILURE (reason='" << reason
+                  << "'): DevControls unavailable.\n";
     }
 
     exit_save_sequence_ok_ = ok;
 
     if (exit_save_sequence_ok_) {
-        std::cout << "[Assets] Exit save sequence complete (reason='" << reason
-                  << "', dev_path=" << (had_dev_controls ? "true" : "false")
-                  << ", fallback=" << (need_fallback ? "true" : "false") << ")\n";
+        std::cout << "[Assets] Exit save sequence complete (reason='" << reason << "')\n";
     } else {
-        std::cerr << "[Assets] EXIT SAVE FAILURE (reason='" << reason
-                  << "', dev_path=" << (had_dev_controls ? "true" : "false")
-                  << ", fallback=" << (need_fallback ? "true" : "false") << ")\n";
+        std::cerr << "[Assets] EXIT SAVE FAILURE (reason='" << reason << "')\n";
     }
 
     return exit_save_sequence_ok_;
@@ -2465,10 +2382,7 @@ devmode::core::ManifestStore* Assets::manifest_store() {
         auto& store = dev_controls_->manifest_store();
         return &store;
     }
-    if (!manifest_store_fallback_) {
-        manifest_store_fallback_ = std::make_unique<devmode::core::ManifestStore>();
-    }
-    return manifest_store_fallback_.get();
+    return nullptr;
 }
 
 const devmode::core::ManifestStore* Assets::manifest_store() const {

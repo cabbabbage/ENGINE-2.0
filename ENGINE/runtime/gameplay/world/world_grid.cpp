@@ -11,6 +11,7 @@
 
 #include "assets/asset/Asset.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
+#include "utils/integer_grid_math.hpp"
 #include "utils/log.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/chunk_manager.hpp"
@@ -18,13 +19,6 @@
 namespace world {
 
 namespace {
-
-int grid_floor_div(int numerator, int denominator) {
-    if (denominator == 0) {
-        return 0;
-    }
-    return static_cast<int>(std::floor(static_cast<double>(numerator) / denominator));
-}
 
 constexpr float kParallaxEpsilon = 1e-3f;
 constexpr int   kDefaultWorldZ   = 0;
@@ -461,8 +455,8 @@ GridPoint& WorldGrid::find_or_create_grid_point(const GridKey& key, Chunk* ownin
     const int chunk_step = 1 << r_chunk_;
     GridCoord chunk_idx{0, 0};
     if (chunk_step > 0) {
-        chunk_idx.x = grid_floor_div(world.world_x() - origin_.world_x(), chunk_step);
-        chunk_idx.z = grid_floor_div(world.world_z() - origin_.world_z(), chunk_step);
+        chunk_idx.x = vibble::math::floor_div(world.world_x() - origin_.world_x(), chunk_step);
+        chunk_idx.z = vibble::math::floor_div(world.world_z() - origin_.world_z(), chunk_step);
     }
     GridPoint& point = ensure_point(grid_idx, chunk_idx, owning_chunk, parent, key.y, key.layer);
 
@@ -712,8 +706,8 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
         prune_empty_points();
     }
 
-    const int i = grid_floor_div(world_pos.world_x() - origin_.world_x(), chunk_step);
-    const int k = grid_floor_div(world_pos.world_z() - origin_.world_z(), chunk_step);
+    const int i = vibble::math::floor_div(world_pos.world_x() - origin_.world_x(), chunk_step);
+    const int k = vibble::math::floor_div(world_pos.world_z() - origin_.world_z(), chunk_step);
     const GridCoord chunk_index{i, k};
     Chunk& chunk = chunks_.ensure(chunk_index.x, chunk_index.z, r_chunk_, origin_);
 
@@ -748,8 +742,8 @@ Chunk* WorldGrid::ensure_chunk_from_world(const GridPoint& world_px) {
     if (chunk_step <= 0) {
         return nullptr;
     }
-    const int i = grid_floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
-    const int k = grid_floor_div(world_px.world_z() - origin_.world_z(), chunk_step);
+    const int i = vibble::math::floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
+    const int k = vibble::math::floor_div(world_px.world_z() - origin_.world_z(), chunk_step);
     return get_or_create_chunk_ij(i, k);
 }
 
@@ -758,8 +752,8 @@ Chunk* WorldGrid::chunk_from_world(const GridPoint& world_px) const {
     if (chunk_step <= 0) {
         return nullptr;
     }
-    const int i = grid_floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
-    const int k = grid_floor_div(world_px.world_z() - origin_.world_z(), chunk_step);
+    const int i = vibble::math::floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
+    const int k = vibble::math::floor_div(world_px.world_z() - origin_.world_z(), chunk_step);
     return chunks_.find(i, k);
 }
 
@@ -788,10 +782,10 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     if (chunk_step <= 0) {
         return nullptr;
     }
-    const int old_i = grid_floor_div(old_pos.world_x() - origin_.world_x(), chunk_step);
-    const int old_k = grid_floor_div(old_pos.world_z() - origin_.world_z(), chunk_step);
-    const int new_i = grid_floor_div(new_pos.world_x() - origin_.world_x(), chunk_step);
-    const int new_k = grid_floor_div(new_pos.world_z() - origin_.world_z(), chunk_step);
+    const int old_i = vibble::math::floor_div(old_pos.world_x() - origin_.world_x(), chunk_step);
+    const int old_k = vibble::math::floor_div(old_pos.world_z() - origin_.world_z(), chunk_step);
+    const int new_i = vibble::math::floor_div(new_pos.world_x() - origin_.world_x(), chunk_step);
+    const int new_k = vibble::math::floor_div(new_pos.world_z() - origin_.world_z(), chunk_step);
     const GridCoord chunk_index{new_i, new_k};
 
     Chunk* previous = nullptr;
@@ -910,10 +904,10 @@ void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_
     auto& active = chunks_.active();
     const int chunk_step = 1 << r_chunk_;
     if (chunk_step > 0 && max_x >= min_x && max_z >= min_z) {
-        const int min_i = grid_floor_div(min_x - origin_.world_x(), chunk_step);
-        const int min_k = grid_floor_div(min_z - origin_.world_z(), chunk_step);
-        const int max_i = grid_floor_div(max_x - origin_.world_x(), chunk_step);
-        const int max_k = grid_floor_div(max_z - origin_.world_z(), chunk_step);
+        const int min_i = vibble::math::floor_div(min_x - origin_.world_x(), chunk_step);
+        const int min_k = vibble::math::floor_div(min_z - origin_.world_z(), chunk_step);
+        const int max_i = vibble::math::floor_div(max_x - origin_.world_x(), chunk_step);
+        const int max_k = vibble::math::floor_div(max_z - origin_.world_z(), chunk_step);
         if (max_i >= min_i && max_k >= min_k) {
             for (int i = min_i; i <= max_i; ++i) {
                 for (int k = min_k; k <= max_k; ++k) {
@@ -951,8 +945,8 @@ GridCoord WorldGrid::grid_index_from_world(const GridPoint& world_point, int lay
     if (spacing <= 0) {
         return GridCoord{0, 0};
     }
-    const int i = grid_floor_div(world_point.world_x() - origin_.world_x(), spacing);
-    const int k = grid_floor_div(world_point.world_z() - origin_.world_z(), spacing);
+    const int i = vibble::math::floor_div(world_point.world_x() - origin_.world_x(), spacing);
+    const int k = vibble::math::floor_div(world_point.world_z() - origin_.world_z(), spacing);
     return GridCoord{i, k};
 }
 

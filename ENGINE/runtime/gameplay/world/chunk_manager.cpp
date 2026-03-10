@@ -3,10 +3,9 @@
 #include <algorithm>
 
 #include "assets/asset/Asset.hpp"
+#include "utils/integer_grid_math.hpp"
 
 namespace world {
-
-int floor_div(int value, int step);
 
 std::uint64_t ChunkManager::key(int i, int j) {
     const auto hi = static_cast<std::uint32_t>(i);
@@ -43,21 +42,9 @@ Chunk* ChunkManager::find(int i, int j) const {
 
 Chunk* ChunkManager::from_world(const GridPoint& world_px, int r_chunk, const GridPoint& origin) const {
     const int step = 1 << r_chunk;
-    const int i = floor_div(world_px.world_x() - origin.world_x(), step);
-    const int k = floor_div(world_px.world_z() - origin.world_z(), step);
+    const int i = vibble::math::floor_div(world_px.world_x() - origin.world_x(), step);
+    const int k = vibble::math::floor_div(world_px.world_z() - origin.world_z(), step);
     return find(i, k);
-}
-
-int floor_div(int value, int step) {
-    if (step == 0) {
-        return 0;
-    }
-    int quotient = value / step;
-    int remainder = value % step;
-    if (remainder != 0 && ((remainder > 0) != (step > 0))) {
-        --quotient;
-    }
-    return quotient;
 }
 
 }

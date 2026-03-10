@@ -28,6 +28,7 @@
 #include "utils/area.hpp"
 #include "utils/string_utils.hpp"
 #include "utils/cache_manager.hpp"
+#include "utils/rebuild_queue.hpp"
 #include "widgets.hpp"
 #include "tag_utils.hpp"
 
@@ -83,6 +84,7 @@ class Section_BasicInfo : public DockableCollapsible {
     std::unique_ptr<DMSlider>    s_scale_pct_;
     std::unique_ptr<DMCheckbox>  c_flipable_;
     std::unique_ptr<DMCheckbox>  c_tillable_;
+    std::unique_ptr<DMCheckbox>  c_crop_frames_;
     std::unique_ptr<DMTextBox>   tb_starting_health_;
     std::unique_ptr<DMButton>    apply_btn_;
     std::vector<std::unique_ptr<Widget>> widgets_;
@@ -143,6 +145,7 @@ inline void Section_BasicInfo::build() {
         c_flipable_.reset();
     }
     c_tillable_ = std::make_unique<DMCheckbox>("Tileable (grid tiles)", info_->tillable);
+    c_crop_frames_ = std::make_unique<DMCheckbox>("Crop Frames (global)", info_->crop_frames);
 
     auto w_type = std::make_unique<DropdownWidget>(dd_type_.get());
     rows.push_back({ w_type.get() });
@@ -167,6 +170,10 @@ inline void Section_BasicInfo::build() {
     rows.push_back({ w_tillable.get() });
     widgets_.push_back(std::move(w_tillable));
 
+    auto w_crop_frames = std::make_unique<CheckboxWidget>(c_crop_frames_.get());
+    rows.push_back({ w_crop_frames.get() });
+    widgets_.push_back(std::move(w_crop_frames));
+
     if (!apply_btn_) {
         apply_btn_ = std::make_unique<DMButton>("Apply Settings", &DMStyles::AccentButton(), 180, DMButton::height());
     }
@@ -189,11 +196,13 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
         if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
         if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
+        if (c_crop_frames_ && c_crop_frames_->handle_event(e)) used = true;
     }
 
     bool changed = false;
     bool rebuild_needed = false;
     bool tile_changed = false;
+    bool crop_changed = false;
     bool render_settings_changed = false;
     bool type_changed = false;
     if (dd_type_ && !type_options_.empty()) {
@@ -236,7 +245,17 @@ inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
         rebuild_needed = true;
     }
 
+    if (c_crop_frames_ && info_->crop_frames != c_crop_frames_->value()) {
+        info_->set_crop_frames(c_crop_frames_->value());
+        changed = true;
+        crop_changed = true;
+    }
+
     if (changed) {
+        if (crop_changed && !info_->name.empty()) {
+            vibble::RebuildQueueCoordinator coordinator;
+            coordinator.request_asset(info_->name);
+        }
         auto on_success = [this, render_settings_changed, type_changed, tile_changed]() {
             if (!ui_) return;
             if (tile_changed) ui_->sync_target_tiling_state();
@@ -660,6 +679,7 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
             }
             changed |= copy_key("starting_health");
             changed |= copy_key("can_invert");
+            changed |= copy_key("crop_frames");
 
             changed |= copy_key("tileable");
             changed |= copy_key("tillable");
@@ -1881,6 +1901,8 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
     bool all_success = true;
     bool any_written = false;
     auto tags_notified = std::make_shared<bool>(false);
+    const bool basic_info_contains_crop = section_id == AssetInfoSectionId::BasicInfo &&
+                                          source.contains("crop_frames");
 
     for (const auto& name : asset_names) {
         if (name.empty()) {
@@ -1909,13 +1931,17 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
             return session.commit();
         };
 
-        auto on_success = [this, section_id, tags_notified]() {
+        auto on_success = [this, section_id, tags_notified, target_key, basic_info_contains_crop]() {
             if (section_id == AssetInfoSectionId::Tags) {
                 if (!*tags_notified) {
                     tag_utils::notify_tags_changed();
                     *tags_notified = true;
                 }
                 sync_target_tags();
+            }
+            if (basic_info_contains_crop && !target_key.empty()) {
+                vibble::RebuildQueueCoordinator coordinator;
+                coordinator.request_asset(target_key);
             }
         };
 

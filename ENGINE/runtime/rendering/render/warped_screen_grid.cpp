@@ -1545,7 +1545,6 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
             }
 
             asset_to_point_[owned.get()] = gp;
-            owned->update_scale_values();
             if (asset_in_frustum(owned.get(), gp, base_world_z)) {
                 frustum_hits.push_back(owned.get());
             }

@@ -41,9 +41,7 @@ class AnimationOptionsPanel {
     mutable SDL_Rect label_rect_{0, 0, 0, 0};
     mutable bool layout_dirty_ = true;
     std::unique_ptr<DMDropdown> speed_dropdown_;
-    std::unique_ptr<DMCheckbox> crop_checkbox_;
     float cached_speed_ = 1.0f;
-    bool cached_crop_ = false;
     std::string payload_signature_;
     bool syncing_ = false;
     std::function<void(const std::string&, const nlohmann::json&)> on_animation_properties_changed_;

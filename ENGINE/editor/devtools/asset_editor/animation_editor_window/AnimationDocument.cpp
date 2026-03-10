@@ -209,31 +209,9 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     payload["speed_multiplier"] = best_speed;
     payload.erase("speed_factor");
 
-    bool crop_frames = parse_bool_field(payload, "crop_frames", false);
-    payload["crop_frames"] = crop_frames;
-    if (crop_frames && payload.contains("crop_bounds") && payload["crop_bounds"].is_object()) {
-        const auto& bounds = payload["crop_bounds"];
-        auto read_bound = [&](const char* key) {
-            if (bounds.contains(key)) {
-                return parse_int(bounds.at(key), 0);
-            }
-            return 0;
-};
-        int top = std::max(0, read_bound("top"));
-        int left = std::max(0, read_bound("left"));
-        int right = std::max(0, read_bound("right"));
-        int bottom = std::max(0, read_bound("bottom"));
-        int width = std::max(0, read_bound("width"));
-        int height = std::max(0, read_bound("height"));
-        nlohmann::json clean_bounds = {{"top", top}, {"left", left}, {"right", right}, {"bottom", bottom}};
-        if (width > 0 && height > 0) {
-            clean_bounds["width"] = width;
-            clean_bounds["height"] = height;
-        }
-        payload["crop_bounds"] = clean_bounds;
-    } else if (!crop_frames) {
-        payload.erase("crop_bounds");
-    }
+    // Crop is now an asset-level setting and should not be persisted per animation.
+    payload.erase("crop_frames");
+    payload.erase("crop_bounds");
 
     int frames = parse_int(payload.contains("number_of_frames") ? payload["number_of_frames"] : nlohmann::json(1), 1);
     if (frames < 1) frames = 1;
@@ -566,7 +544,6 @@ void AnimationDocument::create_animation(const std::string& animation_id) {
                                                                     {"name", nullptr},
                                                                 })},
                                                 }));
-    payload["crop_frames"] = true;
     animations_[candidate] = serialize_payload(payload);
     if (!start_animation_.has_value() || start_animation_->empty()) {
         start_animation_ = candidate;
@@ -822,7 +799,6 @@ void AnimationDocument::ensure_document_initialized() {
                                                                                        {"path", "default"},
                                                                                        {"name", ""}}},
                                                        }));
-        payload["crop_frames"] = true;
         animations_["default"] = serialize_payload(payload);
         ids.push_back("default");
         start_animation_ = std::string{"default"};

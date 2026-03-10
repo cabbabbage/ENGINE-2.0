@@ -207,9 +207,6 @@ struct AnimPayload {
 
     std::vector<FrameMeta> frames_meta;
 
-    bool crop_frames_enabled = false;
-    std::optional<CropBounds> crop_bounds;
-
     float speed_multiplier = 1.0f;
     std::vector<int> out_to_src; // output index -> source index mapping
 
@@ -315,10 +312,9 @@ public:
     static std::vector<int> BuildSpeedFrameSequence(int source_frame_count, float speed_multiplier);
 
     // Crop bounds:
-    // Compute union alpha bbox across all frames if enabled.
-    // If any source frame size mismatch, return nullopt (skip cropping).
-    static std::optional<CropBounds> ComputeCropBoundsForAnimation(const std::vector<fs::path>& src_frames,
-                                                                  ILogger& log);
+    // Compute a single shared crop bound from all provided frames (asset-wide when crop is enabled).
+    static std::optional<CropBounds> ComputeCropBoundsForFrames(const std::vector<fs::path>& src_frames,
+                                                                ILogger& log);
 
     // Scale bounds using Python rounding rules.
     static CropBounds ScaleCropBounds(const CropBounds& b, float scale_factor);

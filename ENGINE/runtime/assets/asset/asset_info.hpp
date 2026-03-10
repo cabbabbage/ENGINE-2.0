@@ -57,6 +57,7 @@ class AssetInfo {
     int original_canvas_height = 0;
     bool flipable;
     bool tillable = false;
+    bool crop_frames = true;
     std::vector<std::string> tags;
     std::vector<std::string> anti_tags;
 
@@ -126,6 +127,7 @@ class AssetInfo {
     void remove_anti_tag(const std::string &tag);
     void set_passable(bool v);
     void set_tillable(bool v);
+    void set_crop_frames(bool enabled);
     Area* find_area(const std::string& name);
     void upsert_area_from_editor(const class Area& area, std::optional<NamedArea::RenderFrame> frame = std::nullopt);
     std::string pick_next_animation(const std::string& mapping_id) const;

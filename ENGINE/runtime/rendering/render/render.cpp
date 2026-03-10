@@ -1022,53 +1022,46 @@ void SceneRenderer::render() {
         max_boundary_height = std::max(max_boundary_height, sprite.world_height);
     };
 
-    auto depth_for_asset = [&](const Asset* asset) -> double {
-        if (!asset) {
+    auto depth_for_traversal = [&](const Assets::ActiveTraversalEntry& entry) -> double {
+        if (!entry.asset) {
             return std::numeric_limits<double>::lowest();
         }
+        if (std::isfinite(entry.depth_from_anchor)) {
+            return entry.depth_from_anchor;
+        }
         return render_depth::depth_from_anchor(anchor_depth,
-                                               static_cast<double>(asset->world_z()),
-                                               asset->render_depth_bias());
+                                               static_cast<double>(entry.asset->world_z()),
+                                               entry.asset->render_depth_bias());
     };
     auto depth_for_boundary = [&](const DynamicBoundarySystem::BoundarySprite& sprite) -> double {
         return render_depth::depth_from_anchor(anchor_depth, static_cast<double>(sprite.world_z));
     };
 
-    std::vector<Asset*> render_list;
-    render_list.reserve(assets_->getActiveRaw().size());
-    for (Asset* a : assets_->getActiveRaw()) {
-        if (a && !a->dead) {
-            render_list.push_back(a);
-        }
-    }
-    std::sort(render_list.begin(), render_list.end(), [&](Asset* a, Asset* b) {
-        const double da = render_depth::depth_from_anchor(anchor_depth,
-                                                          static_cast<double>(a->world_z()),
-                                                          a->render_depth_bias());
-        const double db = render_depth::depth_from_anchor(anchor_depth,
-                                                          static_cast<double>(b->world_z()),
-                                                          b->render_depth_bias());
-        return da > db; // deepest first (far -> near) to satisfy batcher monotonic depth
-    });
+    const auto& active_traversal = assets_->active_traversal();
+    std::vector<Asset*> rendered_assets_for_debug;
+    rendered_assets_for_debug.reserve(active_traversal.size());
 
-    std::size_t asset_index = 0;
+    std::size_t traversal_index = 0;
     std::size_t boundary_index = 0;
-    while (asset_index < render_list.size() || boundary_index < boundary_sprites.size()) {
-        const double next_asset_depth = (asset_index < render_list.size())
-            ? depth_for_asset(render_list[asset_index])
+    while (traversal_index < active_traversal.size() || boundary_index < boundary_sprites.size()) {
+        const double next_asset_depth = (traversal_index < active_traversal.size())
+            ? depth_for_traversal(active_traversal[traversal_index])
             : std::numeric_limits<double>::lowest();
         const double next_boundary_depth = (boundary_index < boundary_sprites.size())
             ? depth_for_boundary(boundary_sprites[boundary_index])
             : std::numeric_limits<double>::lowest();
 
-        if (asset_index < render_list.size() && next_asset_depth >= next_boundary_depth) {
-            Asset* asset = render_list[asset_index++];
-            if (!asset) {
+        if (traversal_index < active_traversal.size() && next_asset_depth >= next_boundary_depth) {
+            const Assets::ActiveTraversalEntry& traversal_entry = active_traversal[traversal_index++];
+            Asset* asset = traversal_entry.asset;
+            if (!asset || asset->dead) {
                 continue;
             }
 
+            rendered_assets_for_debug.push_back(asset);
             composite_renderer_.update(asset, 0.0f);
-            const world::GridPoint* gp = cam.grid_point_for_asset(asset);
+            const world::GridPoint* gp = traversal_entry.grid_point ? traversal_entry.grid_point
+                                                                    : cam.grid_point_for_asset(asset);
             const float perspective_scale =
                 (gp && std::isfinite(gp->perspective_scale) && gp->perspective_scale > 0.0f)
                     ? gp->perspective_scale
@@ -1120,7 +1113,7 @@ void SceneRenderer::render() {
     geometry_batcher_->flush();
 
     if (anchor_point_debug_enabled_) {
-        render_anchor_debug_markers(renderer_, screen_width_, screen_height_, render_list);
+        render_anchor_debug_markers(renderer_, screen_width_, screen_height_, rendered_assets_for_debug);
     }
 
     // Dev grid overlay is projected against the final scene output.

@@ -10,6 +10,7 @@
 #include <cctype>
 #include <stdexcept>
 #include <chrono>
+#include <filesystem>
 #include <limits>
 #include <cstdint>
 #include <cstddef>
@@ -27,6 +28,8 @@
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "core/manifest/manifest_loader.hpp"
+#include "core/manifest/map_manifest_normalizer.hpp"
 #include "utils/grid.hpp"
 #include "core/tile_builder.hpp"
 #include <nlohmann/json.hpp>
@@ -250,62 +253,10 @@ void AssetLoader::loadRooms() {
                 all_rooms_.push_back(std::move(up));
 	}
         if (rooms_.empty()) {
-                vibble::log::warn("[AssetLoader] Room generation returned no rooms; synthesizing a default spawn room.");
-                try {
-                        constexpr int kSpawnRadius = 1500;
-                        const int diameter = kSpawnRadius * 2;
-                        const int map_radius_int = map_radius_ > 0.0 ? static_cast<int>(std::lround(map_radius_)) : diameter;
-                        const int mr = std::max(diameter, map_radius_int * 2);
-                        SDL_Point center{mr / 2, mr / 2};
-
-                        if (rooms_data_) {
-                                nlohmann::json& spawn = (*rooms_data_)["spawn"];
-                                if (!spawn.is_object()) spawn = nlohmann::json::object();
-                                spawn["name"] = "spawn";
-                                spawn["geometry"] = "Circle";
-                                spawn["radius"] = kSpawnRadius;
-                                spawn["min_radius"] = kSpawnRadius;
-                                spawn["max_radius"] = kSpawnRadius;
-                                spawn["min_width"] = diameter;
-                                spawn["max_width"] = diameter;
-                                spawn["min_height"] = diameter;
-                                spawn["max_height"] = diameter;
-                                spawn["edge_smoothness"] = 2;
-                                spawn["is_spawn"] = true;
-                                spawn["is_boss"] = false;
-                                spawn["inherits_map_assets"] = false;
-                                spawn["spawn_groups"] = nlohmann::json::array();
-                        }
-                        auto area = std::make_unique<Area>("spawn", center, diameter, diameter, std::string{"Circle"}, 2, mr, mr, 3);
-                        nlohmann::json* rd_ptr = rooms_data_ ? &(*rooms_data_)["spawn"] : nullptr;
-                        auto room = std::make_unique<Room>(Room::Point{center.x, center.y},
-                                                           "room",
-                                                           "spawn",
-                                                           nullptr,
-                                                           map_id_,
-                                                           asset_library_,
-                                                           area.get(),
-                                                           rd_ptr,
-                                                           &map_assets_json,
-                                                           grid_settings,
-                                                           static_cast<double>(mr / 2),
-                                                           "rooms_data",
-                                                           &map_manifest_json_,
-                                                           manifest_store_,
-                                                           map_id_);
-                        room->layer = 0;
-                        room->room_area = std::move(area);
-                        rooms_.push_back(room.get());
-                        all_rooms_.push_back(std::move(room));
-                        vibble::log::info("[AssetLoader] Default spawn room synthesized.");
-                } catch (const std::exception& ex) {
-                        vibble::log::error(std::string("[AssetLoader] Fallback spawn synthesis failed: ") + ex.what());
-                } catch (...) {
-                        vibble::log::error("[AssetLoader] Fallback spawn synthesis failed with unknown error.");
-                }
-        } else {
-                vibble::log::info("[AssetLoader] Room generation completed successfully: " + std::to_string(rooms_.size()) + " rooms created");
+                throw std::runtime_error("[AssetLoader] Room generation produced zero rooms after manifest normalization.");
         }
+
+        vibble::log::info("[AssetLoader] Room generation completed successfully: " + std::to_string(rooms_.size()) + " rooms created");
         vibble::log::debug(std::string("[AssetLoader] loadRooms: rooms_=") + std::to_string(rooms_.size()));
 }
 
@@ -454,95 +405,20 @@ std::vector<const Area*> AssetLoader::getAllRoomAndTrailAreas() const {
 
 void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
         map_manifest_json_ = map_manifest;
-        if (!map_manifest_json_.is_object()) {
-                map_manifest_json_ = nlohmann::json::object();
-        }
-
-        ensure_map_grid_settings(map_manifest_json_);
-
-        // Ensure fog settings exist with defaults
-        {
-                auto fog_it = map_manifest_json_.find("fog_settings");
-                if (fog_it == map_manifest_json_.end() || !fog_it->is_object()) {
-                        map_manifest_json_["fog_settings"] = nlohmann::json::object();
-                        map_manifest_json_["fog_settings"]["max_random_jitter"] = 0;
-                } else {
-                        if (!fog_it->contains("max_random_jitter") || !fog_it->at("max_random_jitter").is_number()) {
-                                (*fog_it)["max_random_jitter"] = 0;
-                        }
-                }
+        const std::filesystem::path manifest_root = std::filesystem::path(manifest::manifest_path()).parent_path();
+        manifest::MapManifestNormalizationResult normalized =
+            manifest::normalize_map_manifest(std::move(map_manifest_json_),
+                                             map_id_,
+                                             manifest_root);
+        map_manifest_json_ = std::move(normalized.map_manifest);
+        if (normalized.changed) {
+                vibble::log::info(std::string("[AssetLoader] Applied map manifest normalization defaults for '") + map_id_ + "'.");
         }
 
         map_assets_data_   = &map_manifest_json_["map_assets_data"];
-        if (!map_assets_data_->is_object()) *map_assets_data_ = nlohmann::json::object();
         map_boundary_data_ = &map_manifest_json_["map_boundary_data"];
-        if (!map_boundary_data_->is_object()) *map_boundary_data_ = nlohmann::json::object();
         rooms_data_        = &map_manifest_json_["rooms_data"];
-        if (!rooms_data_->is_object()) *rooms_data_ = nlohmann::json::object();
         trails_data_       = &map_manifest_json_["trails_data"];
-        if (!trails_data_->is_object()) *trails_data_ = nlohmann::json::object();
-
-        try {
-                auto ml_it = map_manifest_json_.find("map_layers");
-                const bool missing_or_empty = (ml_it == map_manifest_json_.end()) || !ml_it->is_array() || ml_it->empty();
-                if (missing_or_empty) {
-
-                        std::string spawn_name;
-                        if (rooms_data_ && rooms_data_->is_object()) {
-                                for (auto it = rooms_data_->begin(); it != rooms_data_->end(); ++it) {
-                                        if (it.value().is_object() && it.value().value("is_spawn", false)) {
-                                                spawn_name = it.key();
-                                                break;
-                                        }
-                                }
-                                if (spawn_name.empty() && rooms_data_->contains("spawn")) {
-                                        spawn_name = "spawn";
-                                }
-                        }
-                        if (spawn_name.empty()) {
-                                spawn_name = "spawn";
-
-                                nlohmann::json& rd = *rooms_data_;
-                                nlohmann::json& spawn_entry = rd[spawn_name];
-                                if (!spawn_entry.is_object() || spawn_entry.empty()) {
-
-                                        constexpr int kSpawnRadius = 1500;
-                                        const int diameter = kSpawnRadius * 2;
-                                        spawn_entry = nlohmann::json::object();
-                                        spawn_entry["name"]                 = spawn_name;
-                                        spawn_entry["geometry"]             = "Circle";
-                                        spawn_entry["radius"]               = kSpawnRadius;
-                                        spawn_entry["min_radius"]           = kSpawnRadius;
-                                        spawn_entry["max_radius"]           = kSpawnRadius;
-                                        spawn_entry["min_width"]            = diameter;
-                                        spawn_entry["max_width"]            = diameter;
-                                        spawn_entry["min_height"]           = diameter;
-                                        spawn_entry["max_height"]           = diameter;
-                                        spawn_entry["edge_smoothness"]      = 2;
-                                        spawn_entry["is_spawn"]             = true;
-                                        spawn_entry["is_boss"]              = false;
-                                        spawn_entry["inherits_map_assets"]  = false;
-                                        spawn_entry["spawn_groups"]         = nlohmann::json::array();
-                                }
-                        }
-
-                        nlohmann::json rooms_arr = nlohmann::json::array();
-                        nlohmann::json spawn_spec;
-                        spawn_spec["name"]               = spawn_name;
-                        spawn_spec["max_instances"]      = 1;
-                        rooms_arr.push_back(std::move(spawn_spec));
-
-                        nlohmann::json inferred_layer;
-                        inferred_layer["level"]     = 0;
-                        inferred_layer["max_rooms"] = 1;
-                        inferred_layer["rooms"]     = std::move(rooms_arr);
-
-                        map_manifest_json_["map_layers"] = nlohmann::json::array({ inferred_layer });
-                        vibble::log::info(std::string("[AssetLoader] Inferred default map_layers for blank map '") + map_id_ + "'.");
-                }
-        } catch (...) {
-
-        }
 
         auto layers_it = map_manifest_json_.find("map_layers");
         map_layers::LayerRadiiResult radii_result;

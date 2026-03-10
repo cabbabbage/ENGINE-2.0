@@ -142,6 +142,10 @@ inline ordered_json BuildImageMetadataSnippet(const ordered_json& asset_meta) {
         snippet["size_settings"] = asset_meta["size_settings"];
     }
 
+    if (asset_meta.contains("crop_frames")) {
+        snippet["crop_frames"] = asset_meta["crop_frames"];
+    }
+
     const ordered_json* anims = AnimationsObject(asset_meta);
     if (anims && anims->is_object()) {
         snippet["animations"] = *anims;

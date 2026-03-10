@@ -260,9 +260,6 @@ private:
     void schedule_removal(Asset* a);
     std::vector<Asset*> collect_removal_closure(const std::vector<Asset*>& roots) const;
     std::size_t delete_assets_runtime(const std::vector<Asset*>& assets_to_delete);
-    bool run_fallback_exit_save(const std::string& reason);
-    bool persist_map_if_dirty(const std::string& reason);
-    bool save_dirty_asset_caches(const std::string& reason);
     world::GridPoint resolve_floor_world_point(SDL_Point world_pos, int resolution_layer = -1) const;
 
     bool process_removals();
@@ -330,7 +327,6 @@ private:
     bool exit_save_sequence_ok_ = true;
     std::atomic<bool> active_assets_dirty_{true};
     MapGridSettings map_grid_settings_{};
-    std::unique_ptr<devmode::core::ManifestStore> manifest_store_fallback_;
     std::optional<float> last_audio_effect_max_distance_{};
     float max_asset_height_world_ = 0.0f;
     float max_asset_width_world_  = 0.0f;

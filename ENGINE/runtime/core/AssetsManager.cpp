@@ -607,7 +607,7 @@ void Assets::notify_rooms_changed() {
 }
 
 void Assets::refresh_active_asset_lists() {
-    rebuild_active_assets_if_needed();
+    maybe_rebuild_world_grid();
 
     update_audio_camera_metrics();
     update_filtered_active_assets();
@@ -882,10 +882,6 @@ void Assets::update(const Input& input)
 
     if (quick_task_popup_) {
         quick_task_popup_->update();
-    }
-
-    if (process_removals()) {
-        mark_active_assets_dirty();
     }
 
     Room* detected_room = finder_ ? finder_->getCurrentRoom() : nullptr;
@@ -1641,8 +1637,7 @@ void Assets::track_asset_for_grid(Asset* asset) {
 }
 
 bool Assets::maybe_rebuild_world_grid() {
-    // Prevent double rebuild in same frame
-    if (frame_id_ == last_grid_rebuild_frame_ || frame_id_ == last_active_rebuild_frame_id_) {
+    if (frame_id_ == last_grid_rebuild_frame_) {
         return false;
     }
 
@@ -1662,11 +1657,19 @@ bool Assets::maybe_rebuild_world_grid() {
         std::fabs(current_scale - last_camera_scale_for_grid_) > kCameraGridEpsilon ||
         std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon;
 
-    camera_view_dirty_ = camera_view_dirty_ || camera_changed;
-    if (!grid_dirty_ && !camera_view_dirty_ && !active_dirty) {
+    const bool camera_dirty = camera_view_dirty_ || camera_changed;
+    if (!grid_dirty_ && !camera_dirty && !active_dirty) {
         return false;
     }
 
+    if (active_dirty) {
+        pending_initial_rebuild_ = false;
+        initialize_active_assets(current_center);
+        active_assets_dirty_.store(false, std::memory_order_release);
+        last_active_rebuild_frame_id_ = frame_id_;
+    }
+
+    camera_view_dirty_ = camera_dirty;
     rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
     return true;
 }
@@ -1742,26 +1745,6 @@ void Assets::rebuild_all_assets_from_grid() {
     cached_height_level_ = camera_scale;
     max_asset_dimensions_dirty_ = false;
     finalize_max_asset_dimensions(max_width, max_height);
-}
-
-bool Assets::rebuild_active_assets_if_needed() {
-    const bool dirty = active_assets_dirty_.load(std::memory_order_acquire) || pending_initial_rebuild_;
-    if (!dirty) {
-        return false;
-    }
-    if (frame_id_ == last_active_rebuild_frame_id_) {
-        return false;
-    }
-
-    const SDL_Point center_px = camera_.get_screen_center();
-    const world::GridPoint current_center = world::GridPoint::make_virtual(center_px.x, 0, center_px.y, world_grid_.max_resolution_layers());
-    const double current_scale = camera_.get_scale();
-    const double current_pitch = camera_.current_pitch_radians();
-
-    pending_initial_rebuild_ = false;
-    initialize_active_assets(current_center);
-    rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
-    return true;
 }
 
 bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const {
@@ -2102,7 +2085,7 @@ std::optional<Asset::TilingInfo> Assets::compute_tiling_for_asset(const Asset* a
         return std::nullopt;
     }
 
-    int step = map_grid_settings_.tile_spacing();
+    int step = map_grid_settings_.spacing();
 
     if (step <= 0) {
         const int raw_w = std::max(1, asset->info->original_canvas_width);
@@ -2229,7 +2212,6 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
     }
 
     world_grid_.set_grid_resolution(std::max(0, sanitized.grid_resolution));
-    world_grid_.set_chunk_resolution(std::max(0, sanitized.grid_resolution));
 
     if (resolution_changed) {
         for (Asset* asset : all) {
@@ -2254,10 +2236,6 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
         world_grid_.update_active_chunks(screen_world_rect(), 0);
         mark_grid_dirty();
     }
-}
-
-int Assets::map_grid_chunk_resolution() const {
-    return std::max(0, map_grid_settings_.grid_resolution);
 }
 
 void Assets::toggle_asset_library() {

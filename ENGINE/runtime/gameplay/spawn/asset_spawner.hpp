@@ -22,6 +22,9 @@ class AssetSpawner {
     using Point = std::pair<int, int>;
     AssetSpawner(AssetLibrary* asset_library, std::vector<Area> exclusion_zones);
     void spawn(Room& room);
+    void spawn_map_wide(std::vector<std::unique_ptr<Room>>& rooms,
+                        nlohmann::json& map_assets_json,
+                        const std::string& map_seed);
     std::vector<std::unique_ptr<Asset>> spawn_boundary_from_json(const nlohmann::json& boundary_json, const Area& spawn_area, const std::string& source_name);
     std::vector<std::unique_ptr<Asset>> extract_all_assets();
     void set_map_grid_settings(const MapGridSettings& settings) { map_grid_settings_ = settings; }

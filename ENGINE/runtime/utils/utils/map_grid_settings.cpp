@@ -83,12 +83,3 @@ int MapGridSettings::spacing() const {
     const int clamped = std::clamp(grid_resolution, kMinResolution, kMaxResolution);
     return power_of_three(clamped);
 }
-
-int MapGridSettings::chunk_size() const {
-    const int clamped = std::clamp(grid_resolution, kMinResolution, kMaxResolution);
-    return 1 << clamped;
-}
-
-int MapGridSettings::tile_spacing() const {
-    return spacing();
-}

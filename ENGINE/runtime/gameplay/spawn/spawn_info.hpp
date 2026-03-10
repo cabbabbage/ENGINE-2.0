@@ -19,6 +19,10 @@ struct SpawnCandidate {
 };
 
 struct SpawnInfo {
+    enum class ExecutionMode {
+        Standard = 0,
+        BatchGrid = 1,
+    };
 
     std::string name;
     std::string position;
@@ -40,10 +44,12 @@ struct SpawnInfo {
     int edge_inset_percent = 100;
 
     bool adjust_geometry_to_room = false;
+    ExecutionMode execution_mode = ExecutionMode::Standard;
 
     std::vector<SpawnCandidate> candidates;
 
     bool has_candidates() const { return !candidates.empty(); }
+    bool uses_batch_grid() const { return execution_mode == ExecutionMode::BatchGrid; }
 
     const SpawnCandidate* select_candidate(std::mt19937& rng) const {
         if (candidates.empty()) return nullptr;

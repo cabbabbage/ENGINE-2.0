@@ -61,7 +61,7 @@ static int reduce_tile_step(int step) {
 }
 
 static int tile_step_from_settings(const MapGridSettings& settings) {
-    return reduce_tile_step(std::max(1, settings.tile_spacing()));
+    return reduce_tile_step(std::max(1, settings.spacing()));
 }
 
 static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset,
@@ -209,7 +209,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
     if (!renderer) return;
 
     const int step       = tile_step_from_settings(settings);
-    const int chunk_step = 1 << std::clamp(grid.chunk_resolution(), 0, vibble::grid::kMaxResolution);
+    const int chunk_step = 1 << std::clamp(grid.grid_resolution(), 0, vibble::grid::kMaxResolution);
     if (chunk_step <= 0) {
         return;
     }

@@ -5,7 +5,6 @@
 #include "utils/cache_manager.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
 #include "utils/rebuild_queue.hpp"
-#include "core/manifest/manifest_loader.hpp"
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
@@ -750,52 +749,41 @@ bool AssetInfo::is_dirty() const {
 bool AssetInfo::save_self_to_manifest(devmode::core::ManifestStore* store) {
         nlohmann::json payload = manifest_payload();
 
-        bool manifest_saved = false;
+        devmode::core::ManifestStore* target_store = store;
+        if (!target_store) {
+                auto& provider = manifest_store_provider_slot();
+                if (provider) {
+                        target_store = provider();
+                }
+        }
+        if (!target_store) {
+                std::cerr << "[AssetInfo] Manifest store unavailable for '" << name << "'; cannot persist asset manifest entry.\n";
+                return false;
+        }
+
         try {
-                if (store) {
-                        auto guard = store->scoped_guard("AssetInfo::save_self_to_manifest");
-                        auto txn = store->begin_asset_transaction(name, true);
-                        if (txn) {
-                                txn.data() = payload;
-                                manifest_saved = txn.finalize();
-                        }
+                auto guard = target_store->scoped_guard("AssetInfo::save_self_to_manifest");
+                auto txn = target_store->begin_asset_transaction(name, true);
+                if (!txn) {
+                        std::cerr << "[AssetInfo] Failed to begin manifest transaction for '" << name << "'.\n";
+                        return false;
                 }
-
-                if (!manifest_saved) {
-                        auto& provider = manifest_store_provider_slot();
-                        if (provider) {
-                                if (auto* provided_store = provider()) {
-                                        auto guard = provided_store->scoped_guard("AssetInfo::save_self_to_manifest");
-                                        auto txn = provided_store->begin_asset_transaction(name, true);
-                                        if (txn) {
-                                                txn.data() = payload;
-                                                manifest_saved = txn.finalize();
-                                                provided_store->flush();
-                                        }
-                                }
-                        }
+                txn.data() = payload;
+                if (!txn.finalize()) {
+                        std::cerr << "[AssetInfo] Failed to finalize manifest transaction for '" << name << "'.\n";
+                        return false;
                 }
-
-                if (!manifest_saved) {
-                        manifest::ManifestData manifest = manifest::load_manifest();
-                        if (!manifest.raw.contains("assets") || !manifest.raw["assets"].is_object()) {
-                                manifest.raw["assets"] = nlohmann::json::object();
-                        }
-                        manifest.raw["assets"][name] = payload;
-                        manifest.assets = manifest.raw["assets"];
-                        manifest::save_manifest(manifest);
-                        manifest_saved = true;
-                }
+                target_store->flush();
         } catch (const std::exception& ex) {
                 std::cerr << "[AssetInfo] Failed to persist manifest entry for '" << name << "': " << ex.what() << "\n";
+                return false;
         } catch (...) {
                 std::cerr << "[AssetInfo] Unknown error persisting manifest entry for '" << name << "'\n";
+                return false;
         }
 
-        if (manifest_saved) {
-                info_json_ = std::move(payload);
-        }
-        return manifest_saved;
+        info_json_ = std::move(payload);
+        return true;
 }
 
 bool AssetInfo::save_self_to_cache_if_dirty(SDL_Renderer* renderer) {

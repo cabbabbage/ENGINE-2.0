@@ -81,28 +81,11 @@ int WorldGrid::grid_spacing_for_layer(int layer) const {
 WorldGrid::WorldGrid(const GridPoint& origin, int r_chunk)
     : origin_(origin)
     , r_chunk_(std::clamp(r_chunk, 0, vibble::grid::kMaxResolution))
-    , grid_resolution_(r_chunk_)
     , max_resolution_layers_(r_chunk_) {
     // Map Grid ownership: all GridPoints created through ensure_point/ensure_child
     // live inside this container. Screen Grid rebuilds receive non-owning pointers
     // only; do not transfer ownership out of WorldGrid. ChunkManager remains
     // responsible for tile containers owned by the active map.
-    invalidate_active_cache();
-}
-
-void WorldGrid::set_chunk_resolution(int r) {
-    const int clamped = std::clamp(r, 0, vibble::grid::kMaxResolution);
-    if (clamped != r) {
-        vibble::log::warn(std::string{"[WorldGrid] Requested chunk resolution "} +
-                          std::to_string(r) +
-                          " clamped to " + std::to_string(clamped) +
-                          " (max=" + std::to_string(vibble::grid::kMaxResolution) + ")");
-    }
-    if (clamped == r_chunk_) {
-        return;
-    }
-    r_chunk_ = clamped;
-    max_resolution_layers_ = clamped;
     invalidate_active_cache();
 }
 
@@ -926,17 +909,28 @@ void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_
 }
 
 int WorldGrid::default_resolution_layer() const {
-    // Finest available layer by default; grid_resolution_ is tile-only.
+    // Finest available layer by default.
     return max_resolution_layers();
 }
 
 void WorldGrid::set_grid_resolution(int r) {
     const int clamped = std::clamp(r, 0, vibble::grid::kMaxResolution);
-    grid_resolution_ = clamped;
+    if (clamped != r) {
+        vibble::log::warn(std::string{"[WorldGrid] Requested grid resolution "} +
+                          std::to_string(r) +
+                          " clamped to " + std::to_string(clamped) +
+                          " (max=" + std::to_string(vibble::grid::kMaxResolution) + ")");
+    }
+    if (clamped == r_chunk_) {
+        return;
+    }
+    r_chunk_ = clamped;
+    max_resolution_layers_ = clamped;
+    invalidate_active_cache();
 }
 
 int WorldGrid::grid_resolution() const {
-    return grid_resolution_;
+    return r_chunk_;
 }
 
 GridCoord WorldGrid::grid_index_from_world(const GridPoint& world_point, int layer_override) const {

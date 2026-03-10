@@ -216,7 +216,6 @@ public:
     void refresh_active_asset_lists();
     void refresh_filtered_active_assets();
     void mark_active_assets_dirty();
-    bool rebuild_active_assets_if_needed();
     void initialize_active_assets(const world::GridPoint& center);
     std::uint64_t dev_active_state_version() const { return dev_active_state_version_; }
 
@@ -225,7 +224,6 @@ public:
 
 
     void apply_map_grid_settings(const MapGridSettings& settings, bool persist_json = true);
-    int  map_grid_chunk_resolution() const;
     const MapGridSettings& map_grid_settings() const { return map_grid_settings_; }
 
     std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset) const;

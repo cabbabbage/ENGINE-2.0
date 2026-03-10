@@ -80,7 +80,6 @@ WindowedPlacement compute_windowed_fallback(SDL_Window* window) {
         return placement;
 }
 
-nlohmann::json build_default_map_manifest(const std::string& map_name);
 }
 
 #if defined(_WIN32)
@@ -504,173 +503,6 @@ std::optional<std::string> sanitize_map_name(const std::string& input) {
         return lowercase_identifier(trimmed);
 }
 
-nlohmann::json build_default_map_manifest(const std::string& map_name) {
-    constexpr int kSpawnRadius = 1500;
-    const int diameter = kSpawnRadius * 2;
-
-    auto spawn_id_for = [&](const std::string& suffix) {
-        std::string cleaned = map_name;
-        for (char& ch : cleaned) {
-            if (std::isspace(static_cast<unsigned char>(ch))) {
-                ch = '_';
-            }
-        }
-        return std::string("spn-") + cleaned + "-" + suffix;
-};
-
-    auto make_room_spawn_group = [&](const std::string& display_name,
-                                     const std::string& asset_name) {
-        nlohmann::json group;
-        group["display_name"] = display_name;
-        group["spawn_id"] = spawn_id_for(display_name);
-        group["position"] = "Exact";
-        group["priority"] = 0;
-        group["dx"] = 0;
-        group["dz"] = 0;
-        group["enforce_spacing"] = false;
-        group["explicit_flip"] = false;
-        group["force_flipped"] = false;
-        group["locked"] = false;
-        group["min_number"] = 1;
-        group["max_number"] = 1;
-        group["origional_height"] = diameter;
-        group["origional_width"] = diameter;
-        group["resolution"] = 6;
-        group["resolve_geometry_to_room_size"] = true;
-        group["resolve_quantity_to_room_size"] = false;
-        group["candidates"] = nlohmann::json::array({
-            nlohmann::json::object({{"name", "null"},   {"chance", 0}}),
-            nlohmann::json::object({{"name", asset_name}, {"chance", 100}})
-        });
-        return group;
-};
-
-    auto make_batch_spawn_group = [&](const std::string& suffix,
-                                      const std::string& display_name) {
-        nlohmann::json group;
-        group["display_name"] = display_name;
-        group["spawn_id"] = spawn_id_for(suffix);
-        group["position"] = "Random";
-        group["priority"] = 0;
-        group["min_number"] = 0;
-        group["max_number"] = 0;
-        group["enforce_spacing"] = false;
-        group["grid_resolution"] = 6;
-        group["jitter"] = 0;
-        group["resolution"] = 0;
-        group["resolve_geometry_to_room_size"] = false;
-        group["resolve_quantity_to_room_size"] = false;
-        group["candidates"] = nlohmann::json::array({
-            nlohmann::json::object({{"name", "null"}, {"chance", 100}})
-        });
-        return group;
-};
-
-    nlohmann::json map_info;
-
-    nlohmann::json layer;
-    layer["name"] = "layer_0";
-    layer["level"] = 0;
-    layer["min_rooms"] = 1;
-    layer["max_rooms"] = 1;
-    nlohmann::json spawn_spec;
-    spawn_spec["name"] = "spawn";
-    spawn_spec["min_instances"] = 1;
-    spawn_spec["max_instances"] = 1;
-    layer["rooms"] = nlohmann::json::array({spawn_spec});
-    map_info["map_layers"] = nlohmann::json::array({layer});
-
-    map_info["map_assets_data"] = nlohmann::json::object({
-        {"spawn_groups",
-         nlohmann::json::array({ make_batch_spawn_group("map_assets",
-                                                        "batch_map_assets") })}
-    });
-    map_info["fog_settings"] = nlohmann::json::object({
-        {"max_random_jitter", 0}
-    });
-    map_info["map_boundary_data"] = nlohmann::json::object({
-        {"inherits_map_assets", false},
-        {"candidate_selectors",
-         nlohmann::json::array({ make_batch_spawn_group("map_boundary",
-                                                        "batch_map_boundary") })}
-    });
-    map_info["trails_data"] = nlohmann::json::object({
-        {"basic", nlohmann::json::object({
-            {"name", "basic"},
-            {"display_color", nlohmann::json::array({85, 242, 143, 255})},
-            {"edge_smoothness", 2},
-            {"geometry", "Line"},
-            {"inherits_map_assets", false},
-            {"is_spawn", false},
-            {"is_boss", false},
-            {"min_width", 400},
-            {"max_width", 800},
-            {"min_height", 400},
-            {"max_height", 800},
-            {"spawn_groups", nlohmann::json::array()}
-        })}
-    });
-
-    map_info["map_layers_settings"] = nlohmann::json::object({
-        {"min_edge_distance", 200}
-    });
-
-    nlohmann::json spawn_room;
-    spawn_room["name"] = "spawn";
-    spawn_room["geometry"] = "Circle";
-    spawn_room["radius"] = kSpawnRadius;
-    spawn_room["min_radius"] = kSpawnRadius;
-    spawn_room["max_radius"] = kSpawnRadius;
-    spawn_room["min_width"] = diameter;
-    spawn_room["max_width"] = diameter;
-    spawn_room["min_height"] = diameter;
-    spawn_room["max_height"] = diameter;
-    spawn_room["edge_smoothness"] = 2;
-    spawn_room["curvyness"] = 2;
-    spawn_room["is_spawn"] = true;
-    spawn_room["is_boss"] = false;
-    spawn_room["inherits_map_assets"] = true;
-    spawn_room["display_color"] = nlohmann::json::array({120, 170, 235, 255});
-    spawn_room["areas"] = nlohmann::json::array({
-        nlohmann::json::object({
-            {"name", "spawn_center"},
-            {"type", "spawning"},
-            {"kind", "Spawn"},
-            {"resolution", 3},
-            {"points", nlohmann::json::array({
-                nlohmann::json::object({{"x", -256}, {"y", -256}}),
-                nlohmann::json::object({{"x", 256}, {"y", -256}}),
-                nlohmann::json::object({{"x", 256}, {"y", 256}}),
-                nlohmann::json::object({{"x", -256}, {"y", 256}})
-            })}
-        })
-    });
-    spawn_room["spawn_groups"] = nlohmann::json::array({
-        make_room_spawn_group("Vibble", "Vibble")
-    });
-
-    map_info["rooms_data"] = nlohmann::json::object();
-    map_info["rooms_data"]["spawn"] = std::move(spawn_room);
-    map_info["camera_settings"] = nlohmann::json::object({
-        {"render_quality_percent", 80},
-        {"smooth_motion_height", true},
-        {"base_height_px", 720.0},
-        {"min_visible_screen_ratio", 0.01}
-    });
-    map_info["map_grid_settings"] = nlohmann::json::object({
-        {"grid_resolution", 6}
-    });
-    map_info["audio"] = nlohmann::json::object({
-        {"music", nlohmann::json::object({
-            {"content_root", (fs::path("content") / map_name / "music").generic_string()},
-            {"tracks", nlohmann::json::array()}
-        })}
-    });
-    map_info["map_name"] = map_name;
-
-    return map_info;
-}
-
 std::optional<MapDescriptor> create_new_map_interactively() {
     devmode::core::ManifestStore manifest_store;
     try {
@@ -699,7 +531,7 @@ std::optional<MapDescriptor> create_new_map_interactively() {
             continue;
         }
 
-        nlohmann::json map_info = build_default_map_manifest(*sanitized);
+        nlohmann::json map_info = manifest::build_default_map_manifest(*sanitized);
 
         fs::path manifest_root;
         try {

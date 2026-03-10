@@ -30,10 +30,8 @@ public:
     WorldGrid() : WorldGrid(GridPoint::make_virtual(0, 0, 0, 0), 0) {}
     WorldGrid(const GridPoint& origin, int r_chunk);
 
-    void set_chunk_resolution(int r);
     void set_grid_resolution(int r);
     int  grid_resolution() const;
-    int  chunk_resolution() const { return r_chunk_; }
     GridPoint origin() const { return origin_; }
     void set_origin(const GridPoint& origin);
 
@@ -130,7 +128,6 @@ private:
 
     GridPoint origin_ = GridPoint::make_virtual(0, 0, 0, 0);
     int       r_chunk_ = 0;
-    int       grid_resolution_ = 0;
     int       max_resolution_layers_ = 0;
 
     ChunkManager chunks_;

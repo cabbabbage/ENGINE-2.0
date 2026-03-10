@@ -1,7 +1,6 @@
 #include "generate_rooms.hpp"
 #include "generate_trails.hpp"
 #include "gameplay/spawn/asset_spawner.hpp"
-#include "gameplay/spawn/map_wide_asset_spawner.hpp"
 #include "utils/display_color.hpp"
 #include <cmath>
 #include <algorithm>
@@ -401,8 +400,9 @@ std::vector<std::unique_ptr<Room>> GenerateRooms::build(AssetLibrary* asset_lib,
         std::cout << "[GenerateRooms] Trail generation complete. Total rooms now: " << all_rooms.size() << "\n";
         std::cout << "[GenerateRooms] Spawning map-wide assets...\n";
         {
-                MapWideAssetSpawner map_wide(asset_lib, grid_settings, map_id_, map_assets_data);
-                map_wide.spawn(all_rooms);
+                AssetSpawner map_wide_spawner(asset_lib, {});
+                map_wide_spawner.set_map_grid_settings(grid_settings);
+                map_wide_spawner.spawn_map_wide(all_rooms, map_assets_data, map_id_);
         }
         std::cout << "[GenerateRooms] Map-wide assets spawned\n";
         // NOTE: Boundary assets are now rendered dynamically via DynamicBoundarySystem

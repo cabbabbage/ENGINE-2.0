@@ -28,8 +28,6 @@
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/world_grid.hpp"
-#include "core/manifest/manifest_loader.hpp"
-#include "core/manifest/map_manifest_normalizer.hpp"
 #include "utils/grid.hpp"
 #include "core/tile_builder.hpp"
 #include <nlohmann/json.hpp>
@@ -365,8 +363,8 @@ void AssetLoader::createAssets(world::WorldGrid& grid) {
         const auto t0 = std::chrono::steady_clock::now();
 
         const int requested = std::max(0, map_grid_settings_.grid_resolution);
-        grid.set_chunk_resolution(requested);
-        vibble::log::debug(std::string("[AssetLoader] createAssets: requested r_chunk=") + std::to_string(requested));
+        grid.set_grid_resolution(requested);
+        vibble::log::debug(std::string("[AssetLoader] createAssets: requested grid_resolution=") + std::to_string(requested));
 
         auto extracted_assets = extract_all_assets();
         std::vector<Asset*> registered_assets;
@@ -404,15 +402,33 @@ std::vector<const Area*> AssetLoader::getAllRoomAndTrailAreas() const {
 }
 
 void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
-        map_manifest_json_ = map_manifest;
-        const std::filesystem::path manifest_root = std::filesystem::path(manifest::manifest_path()).parent_path();
-        manifest::MapManifestNormalizationResult normalized =
-            manifest::normalize_map_manifest(std::move(map_manifest_json_),
-                                             map_id_,
-                                             manifest_root);
-        map_manifest_json_ = std::move(normalized.map_manifest);
-        if (normalized.changed) {
-                vibble::log::info(std::string("[AssetLoader] Applied map manifest normalization defaults for '") + map_id_ + "'.");
+        if (!map_manifest.is_object()) {
+                map_manifest_json_ = nlohmann::json::object();
+                vibble::log::warn(std::string("[AssetLoader] Invalid manifest payload for '") + map_id_ + "'. Using empty object.");
+        } else {
+                map_manifest_json_ = map_manifest;
+        }
+
+        if (!map_manifest_json_.contains("map_grid_settings") ||
+            !map_manifest_json_["map_grid_settings"].is_object()) {
+                map_manifest_json_["map_grid_settings"] = nlohmann::json::object({
+                    {"grid_resolution", 0}
+                });
+        }
+        if (!map_manifest_json_.contains("map_assets_data") || !map_manifest_json_["map_assets_data"].is_object()) {
+                map_manifest_json_["map_assets_data"] = nlohmann::json::object();
+        }
+        if (!map_manifest_json_.contains("map_boundary_data") || !map_manifest_json_["map_boundary_data"].is_object()) {
+                map_manifest_json_["map_boundary_data"] = nlohmann::json::object();
+        }
+        if (!map_manifest_json_.contains("rooms_data") || !map_manifest_json_["rooms_data"].is_object()) {
+                map_manifest_json_["rooms_data"] = nlohmann::json::object();
+        }
+        if (!map_manifest_json_.contains("trails_data") || !map_manifest_json_["trails_data"].is_object()) {
+                map_manifest_json_["trails_data"] = nlohmann::json::object();
+        }
+        if (!map_manifest_json_.contains("map_layers") || !map_manifest_json_["map_layers"].is_array()) {
+                map_manifest_json_["map_layers"] = nlohmann::json::array();
         }
 
         map_assets_data_   = &map_manifest_json_["map_assets_data"];

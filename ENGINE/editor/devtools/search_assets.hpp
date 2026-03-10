@@ -9,22 +9,19 @@
 #include <nlohmann/json_fwd.hpp>
 #include <unordered_map>
 
-#include "FloatingPanelLayoutManager.hpp"
+#include "DockManager.hpp"
+#include "asset_list_view.hpp"
 
 namespace devmode::core {
 class ManifestStore;
 }
 
 class DockableCollapsible;
-class DMTextBox;
-class TextBoxWidget;
 class Input;
 class Assets;
 class AssetInfo;
 
 class SearchAssets {
-    class ResultTileWidget;
-    friend class ResultTileWidget;
 public:
     struct Result {
         std::string label;
@@ -45,7 +42,7 @@ public:
     void set_screen_dimensions(int width, int height);
     void set_floating_stack_key(std::string key);
     void set_anchor_position(int x, int y);
-    void layout_with_parent(const FloatingPanelLayoutManager::SlidingParentInfo& parent);
+    void layout_with_parent(const DockManager::SlidingParentInfo& parent);
     void open(Callback cb);
     void close();
     bool visible() const;
@@ -71,28 +68,20 @@ private:
 };
     void load_assets();
     void filter_assets();
-    void rebuild_rows();
-    void rebuild_tiles();
     void activate_result(const Result& result);
-    SDL_Texture* preview_texture_for(const Result& result) const;
-    SDL_Texture* default_frame_texture(const AssetInfo& info) const;
     static std::string to_lower(std::string s);
     void apply_position(int x, int y);
-    void ensure_visible_position(const FloatingPanelLayoutManager::SlidingParentInfo* parent = nullptr);
-    FloatingPanelLayoutManager::PanelInfo build_panel_info(bool force_layout) const;
+    void ensure_visible_position(const DockManager::SlidingParentInfo* parent = nullptr);
+    DockManager::PanelInfo build_panel_info(bool force_layout) const;
     std::unique_ptr<DockableCollapsible> panel_;
-    std::unique_ptr<DMTextBox> query_;
-    std::unique_ptr<TextBoxWidget> query_widget_;
-    std::vector<std::unique_ptr<ResultTileWidget>> tiles_;
+    AssetListView list_view_;
     Callback cb_;
     std::vector<Asset> all_;
     std::vector<Result> results_;
-    std::string last_query_;
     std::uint64_t tag_data_version_ = 0;
     devmode::core::ManifestStore* manifest_store_ = nullptr;
     std::unique_ptr<devmode::core::ManifestStore> owned_manifest_store_;
     Assets* assets_ = nullptr;
-    mutable std::unordered_map<std::string, SDL_Texture*> preview_cache_;
     int screen_w_ = 1920;
     int screen_h_ = 1080;
     SDL_Point last_known_position_{64, 64};

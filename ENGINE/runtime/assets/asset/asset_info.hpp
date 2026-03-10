@@ -18,6 +18,8 @@ namespace devmode::core {
 class ManifestStore;
 }
 
+struct SDL_Renderer;
+
 struct MappingOption {
 	std::string animation;
 	float percent;
@@ -55,6 +57,7 @@ class AssetInfo {
     int original_canvas_height = 0;
     bool flipable;
     bool tillable = false;
+    bool crop_frames = true;
     std::vector<std::string> tags;
     std::vector<std::string> anti_tags;
 
@@ -102,6 +105,10 @@ class AssetInfo {
 	public:
     void loadAnimations(SDL_Renderer* renderer);
     bool commit_manifest();
+    void mark_dirty();
+    bool is_dirty() const;
+    bool save_self_to_manifest(devmode::core::ManifestStore* store = nullptr);
+    bool save_self_to_cache_if_dirty(SDL_Renderer* renderer = nullptr);
     nlohmann::json manifest_payload() const;
     void set_asset_type(const std::string &t);
     void set_min_same_type_distance(int d);
@@ -120,6 +127,7 @@ class AssetInfo {
     void remove_anti_tag(const std::string &tag);
     void set_passable(bool v);
     void set_tillable(bool v);
+    void set_crop_frames(bool enabled);
     Area* find_area(const std::string& name);
     void upsert_area_from_editor(const class Area& area, std::optional<NamedArea::RenderFrame> frame = std::nullopt);
     std::string pick_next_animation(const std::string& mapping_id) const;
@@ -176,6 +184,7 @@ class AssetInfo {
     void rebuild_anti_tag_cache();
     std::unordered_set<std::string> tag_lookup_;
     std::unordered_set<std::string> anti_tag_lookup_;
+    bool dirty_ = false;
     friend class AnimationLoader;
     friend class PrimaryAssetCache;
 #if defined(ASSET_INFO_ENABLE_TEST_ACCESS)

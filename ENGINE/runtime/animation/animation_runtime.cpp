@@ -1,4 +1,4 @@
-﻿#include "animation_runtime.hpp"
+#include "animation_runtime.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,10 +7,10 @@
 #include <vector>
 #include <unordered_map>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/log.hpp"
-#include "assets/animation.hpp"
-#include "assets/animation_frame.hpp"
+#include "assets/asset/animation.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"
@@ -204,7 +204,7 @@ void AnimationRuntime::apply_pending_move() {
 
     const auto req = planner_iface_->consume_move_request();
     const int  resolution = effective_grid_resolution(std::nullopt);
-    const SDL_Point from{ self_->world_x(), self_->world_y() };
+    const SDL_Point from{ self_->world_x(), self_->world_z() };
     SDL_Point world_delta = convert_delta_to_world(req.delta, resolution);
     const SDL_Point to{ from.x + world_delta.x, from.y + world_delta.y };
 
@@ -233,15 +233,15 @@ void AnimationRuntime::apply_pending_move() {
         }
     }
 
-    if (final_position.x != self_->world_x() || final_position.y != self_->world_y()) {
-        self_->move_to_world_position(final_position.x, final_position.y, self_->world_z());
+    if (final_position.x != self_->world_x() || final_position.y != self_->world_z()) {
+        self_->move_to_world_position(final_position.x, self_->world_y(), final_position.y);
         suppress_root_motion_frames_ = std::max(2, suppress_root_motion_frames_);
         if (planner_iface_) {
             planner_iface_->clear_movement_plan();
         }
     }
 
-    planner_iface_->final_dest = self_->world_point();
+    planner_iface_->final_dest = self_->world_xz_point();
 
     const std::string resolved = resolve_animation(*self_, req.animation_id);
     if (self_->current_animation != resolved) {
@@ -393,9 +393,9 @@ world::GridPoint AnimationRuntime::bottom_middle(const world::GridPoint& pos) co
 }
 
 SDL_Point AnimationRuntime::bottom_middle(SDL_Point pos) const {
-    const int z = self_ ? self_->world_z() : 0;
+    const int world_y = self_ ? self_->world_y() : 0;
     const int layer = self_ ? self_->grid_resolution : 0;
-    return bottom_middle(world::grid_math::from_sdl(pos, z, layer)).to_sdl_point();
+    return bottom_middle(world::grid_math::from_sdl(pos, world_y, layer)).to_sdl_point();
 }
 
 bool AnimationRuntime::point_in_impassable(const world::GridPoint& pt, const Asset* ignored) const {
@@ -425,9 +425,9 @@ bool AnimationRuntime::point_in_impassable(const world::GridPoint& pt, const Ass
 }
 
 bool AnimationRuntime::point_in_impassable(SDL_Point pt, const Asset* ignored) const {
-    const int z = self_ ? self_->world_z() : 0;
+    const int world_y = self_ ? self_->world_y() : 0;
     const int layer = self_ ? self_->grid_resolution : 0;
-    return point_in_impassable(world::grid_math::from_sdl(pt, z, layer), ignored);
+    return point_in_impassable(world::grid_math::from_sdl(pt, world_y, layer), ignored);
 }
 
 bool AnimationRuntime::path_blocked(const world::GridPoint& from,
@@ -465,7 +465,7 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
         if (!contains_from && !contains_to && !touches_segment) {
             const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
             if (overlap_check) {
-                const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_point(), neighbor->world_z(), neighbor->grid_resolution));
+                const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_xz_point(), neighbor->world_y(), neighbor->grid_resolution));
                 overlaps = animation_update::detail::distance_sq(dest_bottom, neighbor_bottom) <
                            animation_update::detail::kOverlapDistanceSq;
             }
@@ -489,10 +489,10 @@ bool AnimationRuntime::path_blocked(SDL_Point from,
                                     SDL_Point to,
                                     const Asset* ignored,
                                     std::vector<const Asset*>* blockers) const {
-    const int z = self_ ? self_->world_z() : 0;
+    const int world_y = self_ ? self_->world_y() : 0;
     const int layer = self_ ? self_->grid_resolution : 0;
-    const world::GridPoint gp_from = world::grid_math::from_sdl(from, z, layer);
-    const world::GridPoint gp_to   = world::grid_math::from_sdl(to, z, layer);
+    const world::GridPoint gp_from = world::grid_math::from_sdl(from, world_y, layer);
+    const world::GridPoint gp_to   = world::grid_math::from_sdl(to, world_y, layer);
     return path_blocked(gp_from, gp_to, ignored, blockers);
 }
 
@@ -525,7 +525,7 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             if (!contains_from && !contains_to && !touches_segment) {
                 const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
                 if (overlap_check) {
-                    const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_point(), neighbor->world_z(), neighbor->grid_resolution));
+                    const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_xz_point(), neighbor->world_y(), neighbor->grid_resolution));
                     overlaps = animation_update::detail::distance_sq(bottom_from, neighbor_bottom) <
                                animation_update::detail::kOverlapDistanceSq;
                 }
@@ -535,7 +535,7 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             }
             SDL_Point center = area.get_center();
             push.x += bottom_from.world_x() - center.x;
-            push.y += bottom_from.world_y() - center.y;
+            push.y += bottom_from.world_z() - center.y;
             blocking_neighbors.push_back(neighbor);
             return false;
         });
@@ -553,12 +553,12 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             }
             SDL_Point center = area.get_center();
             push.x += bottom_from.world_x() - center.x;
-            push.y += bottom_from.world_y() - center.y;
+            push.y += bottom_from.world_z() - center.y;
         }
     }
     if (push.x == 0 && push.y == 0) {
         push.x = from.world_x() - to.world_x();
-        push.y = from.world_y() - to.world_y();
+        push.y = from.world_z() - to.world_z();
     }
     if (push.x == 0 && push.y == 0) {
         push.y = -1;
@@ -602,11 +602,11 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
 };
     const int max_steps = 12;
     for (SDL_Point dir : directions) {
-        world::GridPoint candidate = world::grid_math::from_sdl(self_->world_point(), self_->world_z(), self_->grid_resolution);
+        world::GridPoint candidate = world::grid_math::from_sdl(self_->world_xz_point(), self_->world_y(), self_->grid_resolution);
         bool      moved     = false;
         for (int step = 0; step < max_steps; ++step) {
             world::GridPoint next = world::grid_math::offset(candidate, dir);
-            if (next.world_x() == candidate.world_x() && next.world_y() == candidate.world_y()) continue;
+            if (next.world_x() == candidate.world_x() && next.world_z() == candidate.world_z()) continue;
             world::GridPoint bottom_next = animation_update::detail::bottom_middle_for(*self_, next);
             if (inside_disallowed(bottom_next)) break;
             candidate = std::move(next);
@@ -616,7 +616,7 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             }
         }
         if (moved) {
-            self_->move_to_world_position(candidate.world_x(), candidate.world_y(), self_->world_z());
+            self_->move_to_world_position(candidate.world_x(), self_->world_y(), candidate.world_z());
             return true;
         }
     }
@@ -626,10 +626,10 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
 bool AnimationRuntime::attempt_unstick(SDL_Point from,
                                        SDL_Point to,
                                        const std::vector<const Asset*>& blockers) {
-    const int z = self_ ? self_->world_z() : 0;
+    const int world_y = self_ ? self_->world_y() : 0;
     const int layer = self_ ? self_->grid_resolution : 0;
-    return attempt_unstick(world::grid_math::from_sdl(from, z, layer),
-                           world::grid_math::from_sdl(to, z, layer),
+    return attempt_unstick(world::grid_math::from_sdl(from, world_y, layer),
+                           world::grid_math::from_sdl(to, world_y, layer),
                            blockers);
 }
 
@@ -641,14 +641,14 @@ void AnimationRuntime::mark_progress_toward_checkpoints() {
     const int visited_sq     = visited_thresh * visited_thresh;
     while (next_checkpoint_index_ < planner_iface_->plan_.sanitized_checkpoints.size()) {
         const SDL_Point target_sdl  = planner_iface_->plan_.sanitized_checkpoints[next_checkpoint_index_];
-        const int z = self_->world_z();
+        const int world_y = self_->world_y();
         const int layer = self_->grid_resolution;
-        const world::GridPoint current = world::grid_math::from_sdl(self_->world_point(), z, layer);
-        const world::GridPoint target  = world::grid_math::from_sdl(target_sdl, z, layer);
+        const world::GridPoint current = world::grid_math::from_sdl(self_->world_xz_point(), world_y, layer);
+        const world::GridPoint target  = world::grid_math::from_sdl(target_sdl, world_y, layer);
         const int       dist_sq = animation_update::detail::distance_sq(current, target);
         bool reached = false;
         if (visited_thresh == 0) {
-            reached = (self_->world_x() == target.world_x()) && (self_->world_y() == target.world_y());
+            reached = (self_->world_x() == target.world_x()) && (self_->world_z() == target.world_z());
         } else {
             reached = dist_sq <= visited_sq;
         }
@@ -664,10 +664,10 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         return false;
     }
     mark_progress_toward_checkpoints();
-    const int z = self_->world_z();
+    const int world_y = self_->world_y();
     const int layer = self_->grid_resolution;
     const SDL_Point target_sdl = (next_checkpoint_index_ < planner_iface_->plan_.sanitized_checkpoints.size()) ? planner_iface_->plan_.sanitized_checkpoints[next_checkpoint_index_] : planner_iface_->final_dest;
-    world::GridPoint target = world::grid_math::from_sdl(target_sdl, z, layer);
+    world::GridPoint target = world::grid_math::from_sdl(target_sdl, world_y, layer);
     world::GridPoint bottom_target = animation_update::detail::bottom_middle_for(*self_, target);
     SDL_Point push{0, 0};
     std::vector<const Asset*> influencing_neighbors;
@@ -676,18 +676,18 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         Area area = neighbor->get_area("impassable");
         if (area.get_points().empty()) area = neighbor->get_area("collision_area");
         if (area.get_points().empty()) return;
-        bool relevant = area.contains_point(bottom_target.to_sdl_point()) || animation_update::detail::segment_hits_area(world::grid_math::from_sdl(self_->world_point(), z, layer), target, area);
+        bool relevant = area.contains_point(bottom_target.to_sdl_point()) || animation_update::detail::segment_hits_area(world::grid_math::from_sdl(self_->world_xz_point(), world_y, layer), target, area);
         if (!relevant) {
             const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
             if (overlap_check) {
-                const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_point(), neighbor->world_z(), neighbor->grid_resolution));
+                const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_xz_point(), neighbor->world_y(), neighbor->grid_resolution));
                 relevant = animation_update::detail::distance_sq(bottom_target, neighbor_bottom) < animation_update::detail::kOverlapDistanceSq;
             }
         }
         if (!relevant) return;
         SDL_Point center = area.get_center();
         push.x += bottom_target.world_x() - center.x;
-        push.y += bottom_target.world_y() - center.y;
+        push.y += bottom_target.world_z() - center.y;
         influencing_neighbors.push_back(neighbor);
 };
     if (!blockers.empty()) {
@@ -703,7 +703,7 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     }
     if (push.x == 0 && push.y == 0) {
         push.x = target.world_x() - self_->world_x();
-        push.y = target.world_y() - self_->world_y();
+        push.y = target.world_z() - self_->world_z();
     }
     if (push.x == 0 && push.y == 0) {
         push.y = -1;
@@ -738,7 +738,7 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         world::GridPoint candidate = target;
         for (int step = 0; step < max_steps; ++step) {
             world::GridPoint next = world::grid_math::offset(candidate, dir);
-            if (next.world_x() == candidate.world_x() && next.world_y() == candidate.world_y()) continue;
+            if (next.world_x() == candidate.world_x() && next.world_z() == candidate.world_z()) continue;
             world::GridPoint bottom_next = animation_update::detail::bottom_middle_for(*self_, next);
             if (point_in_impassable(bottom_next, self_)) break;
             candidate = std::move(next);
@@ -776,10 +776,10 @@ bool AnimationRuntime::handle_blocked_path(const world::GridPoint& from,
 bool AnimationRuntime::handle_blocked_path(SDL_Point from,
                                            SDL_Point to,
                                            const std::vector<const Asset*>& blockers) {
-    const int z = self_ ? self_->world_z() : 0;
+    const int world_y = self_ ? self_->world_y() : 0;
     const int layer = self_ ? self_->grid_resolution : 0;
-    return handle_blocked_path(world::grid_math::from_sdl(from, z, layer),
-                               world::grid_math::from_sdl(to, z, layer),
+    return handle_blocked_path(world::grid_math::from_sdl(from, world_y, layer),
+                               world::grid_math::from_sdl(to, world_y, layer),
                                blockers);
 }
 
@@ -788,7 +788,7 @@ bool AnimationRuntime::replan_to_destination() {
         return false;
     }
     const int visited_sq = planner_iface_->visited_thresh_ * planner_iface_->visited_thresh_;
-    if (visited_sq > 0 && animation_update::detail::distance_sq(self_->world_point(), planner_iface_->final_dest) <= visited_sq) {
+    if (visited_sq > 0 && animation_update::detail::distance_sq(self_->world_xz_point(), planner_iface_->final_dest) <= visited_sq) {
         return false;
     }
     mark_progress_toward_checkpoints();

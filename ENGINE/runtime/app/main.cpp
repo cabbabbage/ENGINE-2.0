@@ -1,24 +1,21 @@
 #include "main.hpp"
-#include "utils/rebuild_assets.hpp"
 #include "utils/text_style.hpp"
 #include "ui/main_menu.hpp"
 #include "ui/menu_ui.hpp"
 #include "ui/tinyfiledialogs.h"
 #include "ui/loading_screen.hpp"
 #include "core/manifest/manifest_loader.hpp"
+#include "core/manifest/map_manifest_normalizer.hpp"
 #include "asset_loader.hpp"
 #include "assets/asset/asset_types.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/engine_renderer.hpp"
 #include "AssetsManager.hpp"
-#include "input.hpp"
-#include "core/manifest/manifest_loader.hpp"
+#include "utils/input.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/core/manifest_store.hpp"
-#include "assets/asset/primary_asset_cache.hpp"
 #include "utils/loading_status_notifier.hpp"
-#include "utils/rebuild_queue.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL.h>
@@ -83,7 +80,6 @@ WindowedPlacement compute_windowed_fallback(SDL_Window* window) {
         return placement;
 }
 
-nlohmann::json build_default_map_manifest(const std::string& map_name);
 }
 
 #if defined(_WIN32)
@@ -130,15 +126,6 @@ MainApp::MainApp(MapDescriptor map,
 }
 
 MainApp::~MainApp() {
-        // Persist current asset state to primary bundles before tearing down.
-        if (asset_library_ && game_assets_ && game_assets_->is_dev_mode()) {
-                PrimaryAssetCache cache(nullptr);
-                for (const auto& entry : asset_library_->all()) {
-                        if (entry.second) {
-                                cache.save_current(*entry.second);
-                        }
-                }
-        }
         AudioEngine::instance().shutdown();
         if (overlay_texture_)  SDL_DestroyTexture(overlay_texture_);
         delete game_assets_;
@@ -207,57 +194,29 @@ void MainApp::setup() {
                         while (SDL_PollEvent(&ev)) {}
                 }
 
-                nlohmann::json map_manifest_json = nlohmann::json::object();
                 std::string content_root;
                 const std::string map_identifier = map_descriptor_.id.empty() ? map_path_ : map_descriptor_.id;
 
                 manifest::ManifestData manifest_data = manifest::load_manifest();
-                bool manifest_entry_found = false;
-                if (manifest_data.maps.is_object()) {
-                        auto map_it = manifest_data.maps.find(map_identifier);
-                        if (map_it != manifest_data.maps.end() && map_it.value().is_object()) {
-                                map_manifest_json = map_it.value();
-                                manifest_entry_found = true;
-                        }
+                const nlohmann::json* fallback_manifest =
+                        (map_descriptor_.data.is_object() && !map_descriptor_.data.empty())
+                                ? &map_descriptor_.data
+                                : nullptr;
+                manifest::MapManifestBootstrapResult bootstrap = manifest::bootstrap_map_manifest(
+                        manifest_data, map_identifier, fallback_manifest);
+                nlohmann::json map_manifest_json = std::move(bootstrap.map_manifest);
+                const fs::path resolved_root = bootstrap.resolved_content_root;
+                const bool manifest_updated = bootstrap.changed;
+                if (!bootstrap.manifest_entry_found && fallback_manifest) {
+                        vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Using descriptor payload.");
+                } else if (!bootstrap.manifest_entry_found) {
+                        vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Deferring to normalization defaults.");
                 }
-
-                if (!manifest_entry_found) {
-                        if (map_descriptor_.data.is_object() && !map_descriptor_.data.empty()) {
-                                vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Using descriptor payload.");
-                                map_manifest_json = map_descriptor_.data;
-                        } else {
-                                vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Generating default map manifest.");
-                                map_manifest_json = build_default_map_manifest(map_identifier);
-                        }
+                if (bootstrap.changed && !bootstrap.manifest_entry_found) {
+                        vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Applying normalized defaults.");
+                } else if (bootstrap.changed) {
+                        vibble::log::warn(std::string("[MainApp] Normalized manifest defaults for map '") + map_identifier + "'.");
                 }
-
-                if (!map_manifest_json.is_object()) {
-                        map_manifest_json = nlohmann::json::object();
-                }
-
-                fs::path manifest_root = fs::path(manifest::manifest_path()).parent_path();
-                fs::path relative_content_root;
-                auto root_it = map_manifest_json.find("content_root");
-                if (root_it != map_manifest_json.end() && root_it->is_string()) {
-                        const std::string& value = root_it->get_ref<const std::string&>();
-                        if (!value.empty()) {
-                                relative_content_root = fs::path(value);
-                        }
-                }
-
-                bool manifest_updated = !manifest_entry_found;
-                if (relative_content_root.empty()) {
-                        relative_content_root = fs::path("content") / map_identifier;
-                        map_manifest_json["content_root"] = relative_content_root.generic_string();
-                        manifest_updated = true;
-                        vibble::log::warn(std::string("[MainApp] No content_root for map '") + map_identifier + "'. Using default '" + relative_content_root.generic_string() + "'.");
-                }
-
-                fs::path resolved_root = relative_content_root;
-                if (resolved_root.is_relative()) {
-                        resolved_root = manifest_root / resolved_root;
-                }
-                resolved_root = resolved_root.lexically_normal();
 
                 std::error_code dir_error;
                 fs::create_directories(resolved_root, dir_error);
@@ -281,26 +240,6 @@ void MainApp::setup() {
                         } catch (const std::exception& ex) {
                                 vibble::log::warn(std::string("[MainApp] Unable to persist manifest entry for '") + map_identifier + "': " + ex.what());
                         }
-                }
-
-                render_pipeline::ScalingProfileBuildOptions scaling_options;
-                if (screen_w_ > 0 && screen_h_ > 0) {
-                        scaling_options.screen_aspect =
-                                static_cast<double>(screen_w_) / static_cast<double>(screen_h_);
-                }
-                scaling_options.asset_library = const_cast<const AssetLibrary*>(asset_library_);
-                try {
-
-                        const bool has_any_assets = asset_library_ && !asset_library_->all().empty();
-                        if (has_any_assets) {
-                                render_pipeline::BuildScalingProfiles(scaling_options);
-                        } else {
-                                vibble::log::info("[MainApp] No assets detected; skipping scaling profile build.");
-                        }
-                } catch (const std::exception& ex) {
-                        vibble::log::warn(std::string("[MainApp] Scaling profile build skipped due to error: ") + ex.what());
-                } catch (...) {
-                        vibble::log::warn("[MainApp] Scaling profile build skipped due to unknown error.");
                 }
 
                 vibble::log::info("[MainApp] Constructing AssetLoader...");
@@ -336,7 +275,7 @@ void MainApp::setup() {
 
                 int start_px = player_ptr ? player_ptr->world_x()
                                           : static_cast<int>(loader_->getMapRadius());
-                int start_py = player_ptr ? player_ptr->world_y()
+                int start_pz = player_ptr ? player_ptr->world_z()
                                           : static_cast<int>(loader_->getMapRadius());
 
                 AssetLibrary* active_library = loader_->getAssetLibrary();
@@ -345,7 +284,7 @@ void MainApp::setup() {
                 }
 
                 vibble::log::info("[MainApp] Creating Assets object...");
-                game_assets_ = new Assets( *active_library, player_ptr, loader_->getRooms(), screen_w_, screen_h_, start_px, start_py, static_cast<int>(loader_->getMapRadius() * 1.2), renderer, loader_->map_identifier(), loader_->map_manifest(), loader_->content_root(), std::move(world_grid));
+                game_assets_ = new Assets( *active_library, player_ptr, loader_->getRooms(), screen_w_, screen_h_, start_px, start_pz, static_cast<int>(loader_->getMapRadius() * 1.2), renderer, loader_->map_identifier(), loader_->map_manifest(), loader_->content_root(), std::move(world_grid));
                 vibble::log::info("[MainApp] Assets object created successfully.");
 
                 const double spawn_seconds =
@@ -564,173 +503,6 @@ std::optional<std::string> sanitize_map_name(const std::string& input) {
         return lowercase_identifier(trimmed);
 }
 
-nlohmann::json build_default_map_manifest(const std::string& map_name) {
-    constexpr int kSpawnRadius = 1500;
-    const int diameter = kSpawnRadius * 2;
-
-    auto spawn_id_for = [&](const std::string& suffix) {
-        std::string cleaned = map_name;
-        for (char& ch : cleaned) {
-            if (std::isspace(static_cast<unsigned char>(ch))) {
-                ch = '_';
-            }
-        }
-        return std::string("spn-") + cleaned + "-" + suffix;
-};
-
-    auto make_room_spawn_group = [&](const std::string& display_name,
-                                     const std::string& asset_name) {
-        nlohmann::json group;
-        group["display_name"] = display_name;
-        group["spawn_id"] = spawn_id_for(display_name);
-        group["position"] = "Exact";
-        group["priority"] = 0;
-        group["dx"] = 0;
-        group["dy"] = 0;
-        group["enforce_spacing"] = false;
-        group["explicit_flip"] = false;
-        group["force_flipped"] = false;
-        group["locked"] = false;
-        group["min_number"] = 1;
-        group["max_number"] = 1;
-        group["origional_height"] = diameter;
-        group["origional_width"] = diameter;
-        group["resolution"] = 6;
-        group["resolve_geometry_to_room_size"] = true;
-        group["resolve_quantity_to_room_size"] = false;
-        group["candidates"] = nlohmann::json::array({
-            nlohmann::json::object({{"name", "null"},   {"chance", 0}}),
-            nlohmann::json::object({{"name", asset_name}, {"chance", 100}})
-        });
-        return group;
-};
-
-    auto make_batch_spawn_group = [&](const std::string& suffix,
-                                      const std::string& display_name) {
-        nlohmann::json group;
-        group["display_name"] = display_name;
-        group["spawn_id"] = spawn_id_for(suffix);
-        group["position"] = "Random";
-        group["priority"] = 0;
-        group["min_number"] = 0;
-        group["max_number"] = 0;
-        group["enforce_spacing"] = false;
-        group["grid_resolution"] = 6;
-        group["jitter"] = 0;
-        group["resolution"] = 0;
-        group["resolve_geometry_to_room_size"] = false;
-        group["resolve_quantity_to_room_size"] = false;
-        group["candidates"] = nlohmann::json::array({
-            nlohmann::json::object({{"name", "null"}, {"chance", 100}})
-        });
-        return group;
-};
-
-    nlohmann::json map_info;
-
-    nlohmann::json layer;
-    layer["name"] = "layer_0";
-    layer["level"] = 0;
-    layer["min_rooms"] = 1;
-    layer["max_rooms"] = 1;
-    nlohmann::json spawn_spec;
-    spawn_spec["name"] = "spawn";
-    spawn_spec["min_instances"] = 1;
-    spawn_spec["max_instances"] = 1;
-    layer["rooms"] = nlohmann::json::array({spawn_spec});
-    map_info["map_layers"] = nlohmann::json::array({layer});
-
-    map_info["map_assets_data"] = nlohmann::json::object({
-        {"spawn_groups",
-         nlohmann::json::array({ make_batch_spawn_group("map_assets",
-                                                        "batch_map_assets") })}
-    });
-    map_info["fog_settings"] = nlohmann::json::object({
-        {"max_random_jitter", 0}
-    });
-    map_info["map_boundary_data"] = nlohmann::json::object({
-        {"inherits_map_assets", false},
-        {"candidate_selectors",
-         nlohmann::json::array({ make_batch_spawn_group("map_boundary",
-                                                        "batch_map_boundary") })}
-    });
-    map_info["trails_data"] = nlohmann::json::object({
-        {"basic", nlohmann::json::object({
-            {"name", "basic"},
-            {"display_color", nlohmann::json::array({85, 242, 143, 255})},
-            {"edge_smoothness", 2},
-            {"geometry", "Line"},
-            {"inherits_map_assets", false},
-            {"is_spawn", false},
-            {"is_boss", false},
-            {"min_width", 400},
-            {"max_width", 800},
-            {"min_height", 400},
-            {"max_height", 800},
-            {"spawn_groups", nlohmann::json::array()}
-        })}
-    });
-
-    map_info["map_layers_settings"] = nlohmann::json::object({
-        {"min_edge_distance", 200}
-    });
-
-    nlohmann::json spawn_room;
-    spawn_room["name"] = "spawn";
-    spawn_room["geometry"] = "Circle";
-    spawn_room["radius"] = kSpawnRadius;
-    spawn_room["min_radius"] = kSpawnRadius;
-    spawn_room["max_radius"] = kSpawnRadius;
-    spawn_room["min_width"] = diameter;
-    spawn_room["max_width"] = diameter;
-    spawn_room["min_height"] = diameter;
-    spawn_room["max_height"] = diameter;
-    spawn_room["edge_smoothness"] = 2;
-    spawn_room["curvyness"] = 2;
-    spawn_room["is_spawn"] = true;
-    spawn_room["is_boss"] = false;
-    spawn_room["inherits_map_assets"] = true;
-    spawn_room["display_color"] = nlohmann::json::array({120, 170, 235, 255});
-    spawn_room["areas"] = nlohmann::json::array({
-        nlohmann::json::object({
-            {"name", "spawn_center"},
-            {"type", "spawning"},
-            {"kind", "Spawn"},
-            {"resolution", 3},
-            {"points", nlohmann::json::array({
-                nlohmann::json::object({{"x", -256}, {"y", -256}}),
-                nlohmann::json::object({{"x", 256}, {"y", -256}}),
-                nlohmann::json::object({{"x", 256}, {"y", 256}}),
-                nlohmann::json::object({{"x", -256}, {"y", 256}})
-            })}
-        })
-    });
-    spawn_room["spawn_groups"] = nlohmann::json::array({
-        make_room_spawn_group("Vibble", "Vibble")
-    });
-
-    map_info["rooms_data"] = nlohmann::json::object();
-    map_info["rooms_data"]["spawn"] = std::move(spawn_room);
-    map_info["camera_settings"] = nlohmann::json::object({
-        {"render_quality_percent", 80},
-        {"smooth_motion_height", true},
-        {"base_height_px", 720.0},
-        {"min_visible_screen_ratio", 0.01}
-    });
-    map_info["map_grid_settings"] = nlohmann::json::object({
-        {"grid_resolution", 6}
-    });
-    map_info["audio"] = nlohmann::json::object({
-        {"music", nlohmann::json::object({
-            {"content_root", (fs::path("content") / map_name / "music").generic_string()},
-            {"tracks", nlohmann::json::array()}
-        })}
-    });
-    map_info["map_name"] = map_name;
-
-    return map_info;
-}
-
 std::optional<MapDescriptor> create_new_map_interactively() {
     devmode::core::ManifestStore manifest_store;
     try {
@@ -759,7 +531,7 @@ std::optional<MapDescriptor> create_new_map_interactively() {
             continue;
         }
 
-        nlohmann::json map_info = build_default_map_manifest(*sanitized);
+        nlohmann::json map_info = manifest::build_default_map_manifest(*sanitized);
 
         fs::path manifest_root;
         try {
@@ -829,8 +601,7 @@ std::optional<MapDescriptor> create_new_map_interactively() {
 void run(SDL_Window* window,
          EngineRenderer& engine_renderer,
          int screen_w,
-         int screen_h,
-         bool rebuild_cache) {
+         int screen_h) {
     (void)window;
 
     SDL_Renderer* renderer = engine_renderer.raw();
@@ -959,17 +730,6 @@ void run(SDL_Window* window,
         LoadingScreen loading_screen(renderer, screen_w, screen_h);
         loading_screen.init();
 
-        if (rebuild_cache) {
-            vibble::log::info("[Main] Rebuilding asset cache...");
-            RebuildAssets* rebuilder = new RebuildAssets(renderer, selected_map.id);
-            delete rebuilder;
-            vibble::log::info("[Main] Asset cache rebuild complete.");
-            vibble::log::info("[Main] Refreshing shared asset library after cache rebuild...");
-            shared_asset_library->load_all_from_resources();
-            shared_asset_library->loadAllAnimations(renderer);
-            vibble::log::info("[Main] Shared asset library refreshed.");
-        }
-
         MenuUI app(&engine_renderer, screen_w, screen_h, std::move(selected_map), &loading_screen, shared_asset_library.get(), window);
         app.init();
         if (app.wants_return_to_main_menu()) {
@@ -980,30 +740,10 @@ void run(SDL_Window* window,
 }
 
 int main(int argc, char* argv[]) {
+        (void)argc;
+        (void)argv;
         vibble::log::info("[Main] Starting game engine...");
-        const bool rebuild_cache =
-                (argc > 1 && argv[1] && std::string(argv[1]) == "-r");
-
-        vibble::RebuildQueueCoordinator rebuild_queue;
-        if (rebuild_cache) {
-                vibble::log::info("[Main] -r detected; queueing full asset rebuild.");
-                rebuild_queue.request_full_asset_rebuild();
-        }
-
-        if (!rebuild_queue.validate_manifest_cache()) {
-                vibble::log::warn("[Main] Cache validation step failed.");
-        }
-
-        if (rebuild_queue.has_pending_asset_work()) {
-        vibble::log::info("[Main] Processing queued asset rebuilds via asset_tool_cli (C++ cache generator)...");
-        if (rebuild_queue.run_asset_tool()) {
-            vibble::log::info("[Main] Asset rebuilds completed.");
-        } else {
-            vibble::log::warn("[Main] asset_tool_cli reported an error.");
-        }
-        } else {
-                vibble::log::info("[Main] No queued asset rebuilds detected.");
-        }
+        vibble::log::info("[Main] Startup uses existing asset caches; missing/stale cache entries regenerate on demand.");
 
         const SDL_InitFlags init_flags =
                 static_cast<SDL_InitFlags>(SDL_INIT_VIDEO | SDL_INIT_AUDIO);
@@ -1090,7 +830,7 @@ int main(int argc, char* argv[]) {
         }
         vibble::log::info(std::string("[Main] Screen resolution: ") + std::to_string(screen_width) + "x" + std::to_string(screen_height));
 
-        run(window, *engine_renderer, screen_width, screen_height, rebuild_cache);
+        run(window, *engine_renderer, screen_width, screen_height);
 
         engine_renderer.reset();
         SDL_DestroyWindow(window);

@@ -17,7 +17,7 @@ class Occupancy {
 public:
     struct Vertex {
         SDL_Point index{0, 0};
-        SDL_Point world{0, 0};
+        SDL_Point world{0, 0}; // World-plane coordinates (right, depth).
         bool occupied{false};
 };
 

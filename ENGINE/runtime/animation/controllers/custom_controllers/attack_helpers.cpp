@@ -1,7 +1,7 @@
 #include "attack_helpers.hpp"
 
 #include "animation/attack_validation.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -14,7 +14,7 @@ float sanitize_scale(float value) {
 
 animation_update::GeometryContext geometry_for(const Asset& asset) {
     animation_update::GeometryContext context{};
-    context.anchor = animation_update::detail::bottom_middle_for(asset, asset.world_point());
+    context.anchor = animation_update::detail::bottom_middle_for(asset, asset.world_xz_point());
     context.scale = sanitize_scale(asset.smoothed_scale());
     context.flipped = asset.flipped;
     context.plane = animation_update::CombatPlane::XY;

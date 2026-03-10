@@ -6,6 +6,15 @@
 
 namespace world { struct GridPoint; }
 
+// Lightweight 2D vector used by runtime anchor results.
+struct Vec2 {
+    float x = 0.0f;
+    float y = 0.0f;
+
+    Vec2() = default;
+    Vec2(float x_, float y_) : x(x_), y(y_) {}
+};
+
 // Canonical anchor contract:
 // - texture_x/texture_y name an integer pixel in the un-flipped source texture.
 // - The anchor refers to the *center* of that pixel: (x + 0.5, y + 0.5).
@@ -16,17 +25,17 @@ struct DisplacedAssetAnchorPoint {
     std::string name;
     int         texture_x = 0;   // Pixel coordinate on the sprite texture (X axis)
     int         texture_y = 0;   // Pixel coordinate on the sprite texture (vertical axis)
-    bool        in_front = true; // True = one pixel closer to camera than owner, false = one pixel behind
+    int         depth_offset = 0; // Signed pixel offset along camera->anchor ray from the flat texture point
 
     DisplacedAssetAnchorPoint() = default;
     DisplacedAssetAnchorPoint(std::string name_,
                               int tex_x,
                               int tex_y,
-                              bool front = true)
+                              int depth_offset_px = 0)
         : name(std::move(name_))
         , texture_x(tex_x)
         , texture_y(tex_y)
-        , in_front(front) {}
+        , depth_offset(depth_offset_px) {}
 
     bool is_valid() const {
         return !name.empty();
@@ -41,7 +50,23 @@ struct ResolvedAnchor {
     bool             has_canonical_texture_source = false;
     world::GridPoint* grid_point = nullptr;
     bool             missing = false;
-    bool             in_front = true;
+    int              depth_offset = 0;
+};
+
+// Runtime-facing anchor state used by animation, rendering, and binding helpers.
+struct AnchorPoint {
+    std::string name;
+    int frame_index = -1;
+    bool exists = false;
+    int depth_offset = 0;
+    SDL_FPoint screen_pos_2d{0.0f, 0.0f};
+    Vec2 relative_pos_2d{};
+    Vec2 world_pos_2d{};
+    int world_z = 0;
+    int resolution_layer = 0;
+
+    bool is_active() const { return exists; }
+    const Vec2& world_pos() const { return world_pos_2d; }
 };
 
 namespace anchor_points {

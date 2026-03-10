@@ -1,5 +1,5 @@
 #include "grid_point.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "gameplay/world/world_grid.hpp"
 
 #include <algorithm>
@@ -37,15 +37,13 @@ std::size_t GridKeyHash::operator()(const GridKey& key) const noexcept {
 
 GridPoint::GridPoint(const GridPoint& other)
     : id(other.id)
-    , world_x_(other.world_x_)
-    , world_y_(other.world_y_)
-    , world_z_(other.world_z_)
+    , world_pos_(other.world_pos_)
     , resolution_layer_(other.resolution_layer_)
     , parent_(other.parent_)
     , is_virtual_(other.is_virtual_)
+    , is_floor(other.is_floor)
     , region_kind(other.region_kind)
     , region_owner(other.region_owner)
-    , world(other.world)
     , grid_index(other.grid_index)
     , chunk_index(other.chunk_index)
     , chunk(other.chunk)
@@ -58,10 +56,6 @@ GridPoint::GridPoint(const GridPoint& other)
     , distance_to_camera(other.distance_to_camera)
     , tilt_radians(other.tilt_radians)
     , on_screen(other.on_screen)
-    , terrain_elevation(other.terrain_elevation)
-    , terrain_slope_x(other.terrain_slope_x)
-    , terrain_slope_y(other.terrain_slope_y)
-    , terrain_revision(other.terrain_revision)
     , screen_data_frame_updated(other.screen_data_frame_updated)
     , screen_data_valid(other.screen_data_valid)
     , last_camera_state_version_(other.last_camera_state_version_)
@@ -86,12 +80,12 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     last_camera_state_version_ = params.state_version;
 
     // Convert world position to meters
+    const axis::WorldPos canonical_world = world_position();
     const double safe_scale = std::max(1e-6, params.meters_scale);
-    const double world_z_total = static_cast<double>(world_z_) + static_cast<double>(terrain_elevation);
     const Vec3 world_meters{
-        (static_cast<double>(world_x_) - params.anchor_world_x) * safe_scale,
-        (static_cast<double>(world_y_) - params.anchor_world_y) * safe_scale,
-        world_z_total * safe_scale
+        (static_cast<double>(canonical_world.x) - params.anchor_world_x) * safe_scale,
+        (static_cast<double>(canonical_world.y) - params.anchor_world_y) * safe_scale,
+        (static_cast<double>(canonical_world.z) - params.anchor_world_z) * safe_scale
     };
 
     // Camera vectors
@@ -155,7 +149,7 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     float vert_scale = 1.0f;
     const double unit_meters = std::max(1e-6, params.meters_scale);
     const Vec3 unit_world_x{unit_meters, 0.0, 0.0};
-    const Vec3 unit_world_z{0.0, 0.0, unit_meters};
+    const Vec3 unit_world_y{0.0, unit_meters, 0.0};
 
     auto screen_distance_for_delta = [&](const Vec3& unit_world) -> std::optional<double> {
         const Vec3 delta_cam{
@@ -186,9 +180,9 @@ void GridPoint::project_to_screen(const CameraProjectionParams& params) {
     if (const auto scale_x = screen_distance_for_delta(unit_world_x)) {
         scale = *scale_x;
     }
-    if (const auto scale_z = screen_distance_for_delta(unit_world_z)) {
+    if (const auto scale_y = screen_distance_for_delta(unit_world_y)) {
         if (std::isfinite(scale) && scale > 1e-6) {
-            vert_scale = static_cast<float>(*scale_z / scale);
+            vert_scale = static_cast<float>(*scale_y / scale);
         }
     }
 
@@ -260,13 +254,10 @@ GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     distance_to_camera = other.distance_to_camera;
     tilt_radians = other.tilt_radians;
     on_screen = other.on_screen;
-    terrain_elevation = other.terrain_elevation;
-    terrain_slope_x = other.terrain_slope_x;
-    terrain_slope_y = other.terrain_slope_y;
-    terrain_revision = other.terrain_revision;
     screen_data_frame_updated = other.screen_data_frame_updated;
     screen_data_valid = other.screen_data_valid;
     last_camera_state_version_ = other.last_camera_state_version_;
+    is_floor = other.is_floor;
 
     // Transfer occupants (ownership)
     occupants = std::move(other.occupants);
@@ -292,16 +283,14 @@ GridPoint& GridPoint::operator=(GridPoint&& other) noexcept {
     other.z_child_pos_ = nullptr;
     other.children_with_assets = 0;
     other.active_child_mask = 0;
-    other.terrain_elevation = 0.0f;
-    other.terrain_slope_x = 0.0f;
-    other.terrain_slope_y = 0.0f;
-    other.terrain_revision = 0;
+    other.is_floor = false;
 
     return *this;
 }
 
 GridKey GridPoint::key() const {
-    return GridKey{world_x_, world_y_, world_z_, resolution_layer_};
+    const axis::WorldPos canonical = world_position();
+    return GridKey{canonical.x, canonical.y, canonical.z, resolution_layer_};
 }
 
 GridId GridPoint::hash_key() const {
@@ -313,20 +302,29 @@ GridId GridPoint::hash_key(const GridKey& key) {
 }
 
 GridPoint& GridPoint::from_world(int x, int y, int z, int layer, WorldGrid& grid) {
-    const GridPoint world_point = GridPoint::make_virtual(x, y, z, layer);
-    const GridKey key = grid.grid_key_from_world(world_point, z, layer);
+    return from_world(axis::WorldPos{x, y, z}, layer, grid);
+}
+
+GridPoint& GridPoint::from_world(const axis::WorldPos& pos, int layer, WorldGrid& grid) {
+    const GridPoint world_point = GridPoint::make_virtual(pos, layer);
+    const GridKey key = grid.grid_key_from_world(world_point, layer);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
-    return grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    gp.is_floor = (gp.world_y() == 0);
+    return gp;
 }
 
 GridPoint& GridPoint::from_world(const GridKey& key, WorldGrid& grid) {
-    const GridPoint world_point = GridPoint::make_virtual(key.x, key.y, key.z, key.layer);
+    const axis::WorldPos world_pos{key.x, key.y, key.z};
+    const GridPoint world_point = GridPoint::make_virtual(world_pos, key.layer);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
-    return grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    gp.is_floor = (gp.world_y() == 0);
+    return gp;
 }
 
 GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
-                                  float world_z,
+                                  float world_y_target,
                                   const CameraProjectionParams& params,
                                   WorldGrid& grid) {
     if (params.screen_width <= 0 || params.screen_height <= 0) {
@@ -340,18 +338,18 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     const double tan_fov_x = std::max(1e-6, params.tan_half_fov_x);
     const double tan_fov_y = std::max(1e-6, params.tan_half_fov_y);
 
-    // Solve for depth so that resulting world_z matches the requested world_z (ground plane assumption).
+    // Solve for depth so that resulting world_y matches the requested height (ground plane assumption).
     const Vec3 cam_pos{params.position_x, params.position_y, params.position_z};
     const Vec3 cam_forward{params.forward_x, params.forward_y, params.forward_z};
     const Vec3 cam_right{params.right_x, params.right_y, params.right_z};
     const Vec3 cam_up{params.up_x, params.up_y, params.up_z};
 
-    const double denom = cam_forward.z + ndc_x * tan_fov_x * cam_right.z + ndc_y * tan_fov_y * cam_up.z;
-    const double target_z_meters = static_cast<double>(world_z) * std::max(1e-6, params.meters_scale);
+    const double denom = cam_forward.y + ndc_x * tan_fov_x * cam_right.y + ndc_y * tan_fov_y * cam_up.y;
+    const double target_y_meters = static_cast<double>(world_y_target) * std::max(1e-6, params.meters_scale);
     if (std::abs(denom) <= 1e-9) {
         return nullptr;
     }
-    const double depth = (target_z_meters - cam_pos.z) / denom;
+    const double depth = (target_y_meters - cam_pos.y) / denom;
     if (!std::isfinite(depth) || depth <= params.near_plane || depth >= params.far_plane) {
         return nullptr;
     }
@@ -367,23 +365,23 @@ GridPoint* GridPoint::from_screen(const SDL_FPoint& screen,
     const double safe_scale = std::max(1e-6, params.meters_scale);
     const int world_x_px = static_cast<int>(std::lround(world_meters.x / safe_scale + params.anchor_world_x));
     const int world_y_px = static_cast<int>(std::lround(world_meters.y / safe_scale + params.anchor_world_y));
-    const int world_z_px = static_cast<int>(std::lround(world_z));
+    const int world_z_px = static_cast<int>(std::lround(world_meters.z / safe_scale + params.anchor_world_z));
 
-    const GridPoint world_point = GridPoint::make_virtual(world_x_px, world_y_px, world_z_px, -1);
-    const GridKey key = grid.grid_key_from_world(world_point, world_z_px, -1);
+    const GridPoint world_point = GridPoint::make_virtual(axis::WorldPos{world_x_px, world_y_px, world_z_px}, -1);
+    const GridKey key = grid.grid_key_from_world(world_point, -1);
     Chunk* owning_chunk = grid.ensure_chunk_from_world(world_point);
-    return &grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    GridPoint& gp = grid.find_or_create_grid_point(key, owning_chunk, nullptr);
+    gp.is_floor = (gp.world_y() == 0);
+    return &gp;
 }
 
-GridPoint GridPoint::make_virtual(int world_x,
-                                  int world_y,
-                                  int world_z,
+GridPoint GridPoint::make_virtual(const axis::WorldPos& world_pos,
                                   int resolution_layer) {
-    const GridKey key{world_x, world_y, world_z, resolution_layer};
+    const GridKey key{world_pos.x, world_pos.y, world_pos.z, resolution_layer};
     const GridId virtual_id = hash_key(key);
-    return GridPoint(world_x,
-                     world_y,
-                     world_z,
+    return GridPoint(world_pos.x,
+                     world_pos.y,
+                     world_pos.z,
                      resolution_layer,
                      GridCoord{0, 0},
                      GridCoord{0, 0},
@@ -393,14 +391,28 @@ GridPoint GridPoint::make_virtual(int world_x,
                      true);
 }
 
-void GridPoint::update_world_position(int new_x, int new_y, int new_z) {
-    world_x_ = new_x;
-    world_y_ = new_y;
-    world_z_ = new_z;
-    // Keep legacy 'world' field in sync
-    const_cast<GridCoord&>(world) = GridCoord{new_x, new_y};
+GridPoint GridPoint::make_virtual(int world_x,
+                                  int world_y,
+                                  int world_z,
+                                  int resolution_layer) {
+    return make_virtual(axis::WorldPos{world_x, world_y, world_z}, resolution_layer);
+}
+
+void GridPoint::update_world_position(const axis::WorldPos& new_pos) {
+    world_pos_ = new_pos;
+    is_floor = (new_pos.y == 0);
     // Invalidate screen data since position changed
     screen_data_valid = false;
+}
+
+void GridPoint::update_world_position(int new_x, int new_y, int new_z) {
+    update_world_position(axis::WorldPos{new_x, new_y, new_z});
+}
+
+void GridPoint::set_world_z(int new_z) {
+    axis::WorldPos next_pos = world_position();
+    next_pos.z = new_z;
+    update_world_position(next_pos);
 }
 
 void swap(GridPoint& a, GridPoint& b) noexcept {
@@ -417,11 +429,8 @@ void swap(GridPoint& a, GridPoint& b) noexcept {
     swap(a.tilt_radians, b.tilt_radians);
     swap(a.region_kind, b.region_kind);
     swap(a.region_owner, b.region_owner);
+    swap(a.is_floor, b.is_floor);
     swap(a.on_screen, b.on_screen);
-    swap(a.terrain_elevation, b.terrain_elevation);
-    swap(a.terrain_slope_x, b.terrain_slope_x);
-    swap(a.terrain_slope_y, b.terrain_slope_y);
-    swap(a.terrain_revision, b.terrain_revision);
     swap(a.screen_data_frame_updated, b.screen_data_frame_updated);
     swap(a.screen_data_valid, b.screen_data_valid);
     swap(a.last_camera_state_version_, b.last_camera_state_version_);
@@ -442,11 +451,13 @@ void swap(GridPoint& a, GridPoint& b) noexcept {
     swap(a.z_child_pos_, b.z_child_pos_);
 }
 
-GridBounds GridBounds::from_xywh(int x, int y, int w, int h, int world_z, int layer) {
+GridBounds GridBounds::from_xywh(int x, int z, int w, int h, int world_y, int layer) {
     const int max_x = x + std::max(0, w - 1);
-    const int max_y = y + std::max(0, h - 1);
-    GridPoint min = GridPoint::make_virtual(x, y, world_z, layer);
-    GridPoint max = GridPoint::make_virtual(max_x, max_y, world_z, layer);
+    const int max_z = z + std::max(0, h - 1);
+    const axis::WorldPos min_pos{x, world_y, z};
+    const axis::WorldPos max_pos{max_x, world_y, max_z};
+    GridPoint min = GridPoint::make_virtual(min_pos, layer);
+    GridPoint max = GridPoint::make_virtual(max_pos, layer);
     return GridBounds(min, max);
 }
 
@@ -456,31 +467,33 @@ GridBounds GridBounds::from_min_max(const GridPoint& min_pt, const GridPoint& ma
 
 bool GridBounds::contains(const GridPoint& pt) const {
     return pt.world_x() >= min.world_x() && pt.world_x() <= max.world_x() &&
-           pt.world_y() >= min.world_y() && pt.world_y() <= max.world_y();
+           pt.world_z() >= min.world_z() && pt.world_z() <= max.world_z();
 }
 
 GridBounds GridBounds::expanded(int margin) const {
     const int m = std::max(0, margin);
-    GridPoint new_min = GridPoint::make_virtual(min.world_x() - m, min.world_y() - m, min.world_z(), min.resolution_layer());
-    GridPoint new_max = GridPoint::make_virtual(max.world_x() + m, max.world_y() + m, max.world_z(), max.resolution_layer());
+    const axis::WorldPos expanded_min{min.world_x() - m, min.world_y(), min.world_z() - m};
+    const axis::WorldPos expanded_max{max.world_x() + m, max.world_y(), max.world_z() + m};
+    GridPoint new_min = GridPoint::make_virtual(expanded_min, min.resolution_layer());
+    GridPoint new_max = GridPoint::make_virtual(expanded_max, max.resolution_layer());
     return GridBounds(new_min, new_max);
 }
 
 SDL_Rect GridBounds::to_sdl_rect() const {
     return SDL_Rect{
         min.world_x(),
-        min.world_y(),
+        min.world_z(),
         std::max(0, max.world_x() - min.world_x() + 1),
-        std::max(0, max.world_y() - min.world_y() + 1)
+        std::max(0, max.world_z() - min.world_z() + 1)
     };
 }
 
 SDL_FRect GridBounds::to_sdl_frect() const {
     return SDL_FRect{
         static_cast<float>(min.world_x()),
-        static_cast<float>(min.world_y()),
+        static_cast<float>(min.world_z()),
         static_cast<float>(std::max(0, max.world_x() - min.world_x() + 1)),
-        static_cast<float>(std::max(0, max.world_y() - min.world_y() + 1))
+        static_cast<float>(std::max(0, max.world_z() - min.world_z() + 1))
     };
 }
 

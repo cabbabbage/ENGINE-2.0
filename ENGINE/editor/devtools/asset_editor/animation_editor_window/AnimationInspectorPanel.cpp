@@ -28,7 +28,7 @@
 #include "dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
 #include "devtools/widgets.hpp"
-#include "assets/animation.hpp"
+#include "assets/asset/animation.hpp"
 #include <nlohmann/json.hpp>
 
 namespace animation_editor {

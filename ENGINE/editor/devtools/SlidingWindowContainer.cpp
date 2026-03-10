@@ -11,7 +11,7 @@
 #include "font_cache.hpp"
 #include "widgets.hpp"
 #include "utils/input.hpp"
-#include "FloatingPanelLayoutManager.hpp"
+#include "DockManager.hpp"
 
 namespace {
 constexpr int kScrollbarWidth = 10;
@@ -595,7 +595,7 @@ void SlidingWindowContainer::layout(int screen_w, int screen_h) const {
         desired.y = std::clamp(desired.y, 0, max_y);
         panel_ = desired;
     } else {
-        const auto usable = FloatingPanelLayoutManager::instance().usableRect();
+        const auto usable = DockManager::instance().usableRect();
         int panel_y = usable.y;
         int panel_h = std::max(0, screen_h - usable.y);
         int panel_x = (screen_w * 2) / 3;

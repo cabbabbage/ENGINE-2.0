@@ -19,6 +19,7 @@
 #include "utils/grid.hpp"
 #include "utils/input.hpp"
 #include "devtools/dev_camera_controls.hpp"
+#include "core/axis_convention.hpp"
 
 namespace {
 
@@ -71,7 +72,8 @@ void FrameEditorSession::begin(Assets* assets,
                                const std::string& animation_id,
                                FrameEditorLaunchMode launch_mode,
                                std::function<void(const std::string&)> on_host_closed,
-                               std::function<void()> on_end_callback) {
+                               std::function<void()> on_end_callback,
+                               std::function<void()> on_save_and_update_callback) {
     if (active_) {
         end();
     }
@@ -90,6 +92,7 @@ void FrameEditorSession::begin(Assets* assets,
     launch_mode_ = launch_mode;
     on_host_closed_ = std::move(on_host_closed);
     on_end_ = std::move(on_end_callback);
+    on_save_and_update_ = std::move(on_save_and_update_callback);
     prev_asset_hidden_ = target_->is_hidden();
     target_->set_hidden(false);
 
@@ -266,6 +269,9 @@ void FrameEditorSession::save_and_update() {
         return;
     }
     active_editor_->persist_pending_changes();
+    if (on_save_and_update_) {
+        on_save_and_update_();
+    }
 }
 
 void FrameEditorSession::request_exit() {
@@ -279,7 +285,7 @@ void FrameEditorSession::frame_camera_for_editor_entry() {
     }
 
     WarpedScreenGrid& cam = assets_->getView();
-    const SDL_Point focus = target_->world_point();
+    const SDL_Point focus = target_->world_xz_point();
 
     // Establish a consistent baseline before computing scale.
     cam.set_manual_height_override(true);

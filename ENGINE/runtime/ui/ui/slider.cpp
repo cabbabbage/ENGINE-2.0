@@ -5,7 +5,6 @@
 #include <string>
 
 #include "ui/styles.hpp"
-#include "ui/widget_spacing.hpp"
 #include "utils/sdl_mouse_utils.hpp"
 #include "widget_text_renderer.hpp"
 
@@ -149,16 +148,16 @@ void Slider::draw_text(SDL_Renderer* r) const {
     WidgetTextRenderer label_renderer(labelStyle);
     WidgetTextRenderer value_renderer(valueStyle);
 
-    int label_top = rect_.y - ui_spacing::kLabelGap;
+    int label_top = rect_.y - Styles::SliderLabelGap();
     bool label_rendered = false;
 
     if (!label_.empty() && label_renderer.valid()) {
         int label_w = 0;
         int label_h = 0;
         if (label_renderer.Measure(label_, &label_w, &label_h)) {
-            label_top = rect_.y - label_h - ui_spacing::kLabelGap;
+            label_top = rect_.y - label_h - Styles::SliderLabelGap();
             label_rendered = true;
-            label_renderer.Render(r, label_, rect_.x + ui_spacing::kLabelHorizontalInset, label_top);
+            label_renderer.Render(r, label_, rect_.x + Styles::SliderLabelHorizontalInset(), label_top);
         }
     }
 
@@ -167,10 +166,10 @@ void Slider::draw_text(SDL_Renderer* r) const {
         int value_w = 0;
         int value_h = 0;
         if (value_renderer.Measure(value_text, &value_w, &value_h)) {
-            int value_y = label_rendered ? label_top : rect_.y - value_h - ui_spacing::kLabelGap;
-            int value_x = rect_.x + rect_.w - ui_spacing::kValueRightInset;
-            value_x = std::min(value_x, rect_.x + rect_.w - value_w - ui_spacing::kLabelHorizontalInset);
-            value_x = std::max(value_x, rect_.x + ui_spacing::kLabelHorizontalInset);
+            int value_y = label_rendered ? label_top : rect_.y - value_h - Styles::SliderLabelGap();
+            int value_x = rect_.x + rect_.w - Styles::SliderValueRightInset();
+            value_x = std::min(value_x, rect_.x + rect_.w - value_w - Styles::SliderLabelHorizontalInset());
+            value_x = std::max(value_x, rect_.x + Styles::SliderLabelHorizontalInset());
             value_renderer.Render(r, value_text, value_x, value_y);
         }
     }

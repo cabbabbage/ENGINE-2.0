@@ -22,7 +22,7 @@ bool TrailEditorSuite::enqueue_active_trail_save(devmode::core::DevSaveCoordinat
     if (!active_trail_) {
         return false;
     }
-    active_trail_->save_assets_json();
+    active_trail_->mark_dirty();
     if (dirty_callback_) {
         dirty_callback_(priority);
     }

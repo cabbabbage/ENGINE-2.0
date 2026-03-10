@@ -14,7 +14,7 @@
 #include <SDL3_ttf/SDL_ttf.h>
 
 #include "DockableCollapsible.hpp"
-#include "FloatingPanelLayoutManager.hpp"
+#include "DockManager.hpp"
 #include "dm_styles.hpp"
 #include "spawn_groups/spawn_group_utils.hpp"
 #include "spawn_groups/widgets/CandidateEditorPieGraphWidget.hpp"
@@ -1202,7 +1202,7 @@ void SingleSpawnGroupModal::ensure_visible_position() {
     constexpr int kPreferredWidth = 360;
     constexpr int kPreferredHeight = 420;
 
-    FloatingPanelLayoutManager::PanelInfo info;
+    DockManager::PanelInfo info;
     info.panel = panel_.get();
     info.force_layout = true;
     info.preferred_width = rect.w > 0 ? std::max(rect.w, kPreferredWidth) : kPreferredWidth;
@@ -1212,9 +1212,9 @@ void SingleSpawnGroupModal::ensure_visible_position() {
     }
     info.preferred_height = std::max(resolved_height, kPreferredHeight);
 
-    std::vector<FloatingPanelLayoutManager::PanelInfo> panels;
+    std::vector<DockManager::PanelInfo> panels;
     panels.push_back(info);
-    FloatingPanelLayoutManager::instance().layoutAll(panels);
+    DockManager::instance().layoutAll(panels);
 
     position_initialized_ = true;
 }
@@ -1321,7 +1321,7 @@ void BoundarySpawnGroupModal::ensure_visible_position() {
     constexpr int kPreferredWidth = 380;
     constexpr int kPreferredHeight = 520;
 
-    FloatingPanelLayoutManager::PanelInfo info;
+    DockManager::PanelInfo info;
     info.panel = panel_.get();
     info.force_layout = true;
     info.preferred_width = rect.w > 0 ? std::max(rect.w, kPreferredWidth) : kPreferredWidth;
@@ -1331,9 +1331,9 @@ void BoundarySpawnGroupModal::ensure_visible_position() {
     }
     info.preferred_height = std::max(resolved_height, kPreferredHeight);
 
-    std::vector<FloatingPanelLayoutManager::PanelInfo> panels;
+    std::vector<DockManager::PanelInfo> panels;
     panels.push_back(info);
-    FloatingPanelLayoutManager::instance().layoutAll(panels);
+    DockManager::instance().layoutAll(panels);
 
     position_initialized_ = true;
 }

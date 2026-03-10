@@ -34,7 +34,25 @@ public:
         std::uint64_t total_intents = 0;
     };
 
-    using NoticeSink = std::function<void(bool /*success*/, const std::string& /*message*/)>; 
+    using NoticeSink = std::function<void(bool /*success*/, const std::string& /*message*/)>;
+
+    class ScopedFlushSuppression {
+    public:
+        ScopedFlushSuppression() = default;
+        ScopedFlushSuppression(DevSaveCoordinator* coordinator, bool active)
+            : coordinator_(coordinator), active_(active) {}
+        ScopedFlushSuppression(const ScopedFlushSuppression&) = delete;
+        ScopedFlushSuppression& operator=(const ScopedFlushSuppression&) = delete;
+        ScopedFlushSuppression(ScopedFlushSuppression&& other) noexcept;
+        ScopedFlushSuppression& operator=(ScopedFlushSuppression&& other) noexcept;
+        ~ScopedFlushSuppression();
+
+    private:
+        friend class DevSaveCoordinator;
+        void release();
+        DevSaveCoordinator* coordinator_ = nullptr;
+        bool active_ = false;
+    };
 
     DevSaveCoordinator();
 
@@ -44,19 +62,13 @@ public:
     void begin_frame();
     void tick();
     void flush_now(const std::string& reason = {});
+    ScopedFlushSuppression scoped_flush_suppression();
 
     void enqueue_manifest_asset(const std::string& asset_key,
                                 nlohmann::json payload,
                                 Priority priority,
                                 const std::string& label,
                                 std::function<void()> on_success = {});
-
-    [[deprecated("Route map persistence through devmode::core::SaveManager")]]
-    void enqueue_map_entry(const std::string& map_id,
-                           nlohmann::json payload,
-                           Priority priority,
-                           const std::string& label,
-                           std::function<void()> on_success = {});
 
     void enqueue_custom(IntentKind kind,
                         const std::string& key,
@@ -97,6 +109,7 @@ private:
     std::optional<Clock::time_point> next_deadline_;
     Telemetry telemetry_;
     bool processing_ = false;
+    std::uint32_t flush_suppression_depth_ = 0;
 };
 
 }

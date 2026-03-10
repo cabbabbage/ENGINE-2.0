@@ -10,7 +10,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "utils/map_grid_settings.hpp"
@@ -61,7 +61,7 @@ static int reduce_tile_step(int step) {
 }
 
 static int tile_step_from_settings(const MapGridSettings& settings) {
-    return reduce_tile_step(std::max(1, settings.tile_spacing()));
+    return reduce_tile_step(std::max(1, settings.spacing()));
 }
 
 static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset,
@@ -82,7 +82,7 @@ static std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* as
     }
     step = std::max(1, step);
 
-    const SDL_Point world_pos{ asset->world_x(), asset->world_y() };
+    const SDL_Point world_pos{ asset->world_x(), asset->world_z() };
     const int base_w = std::max(1, asset->info->original_canvas_width);
     const int base_h = std::max(1, asset->info->original_canvas_height);
     double scale = 1.0;
@@ -142,7 +142,7 @@ static std::optional<SDL_Rect> compute_sprite_world_rect(const Asset* asset) {
 
     SDL_Rect rect{};
     rect.x = asset->world_x() - (scaled_w / 2);
-    rect.y = asset->world_y() - scaled_h;
+    rect.y = asset->world_z() - scaled_h;
     rect.w = scaled_w;
     rect.h = scaled_h;
     return rect.w > 0 && rect.h > 0 ? std::optional<SDL_Rect>(rect) : std::nullopt;
@@ -209,7 +209,7 @@ void build_grid_tiles(SDL_Renderer* renderer,
     if (!renderer) return;
 
     const int step       = tile_step_from_settings(settings);
-    const int chunk_step = 1 << std::clamp(grid.chunk_resolution(), 0, vibble::grid::kMaxResolution);
+    const int chunk_step = 1 << std::clamp(grid.grid_resolution(), 0, vibble::grid::kMaxResolution);
     if (chunk_step <= 0) {
         return;
     }

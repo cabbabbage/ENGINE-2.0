@@ -9,8 +9,10 @@
 #include <fstream>
 #include <unordered_set>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
+#include <optional>
 
 namespace fs = std::filesystem;
 
@@ -28,6 +30,26 @@ std::uint64_t fnv1a64(const void* data, std::size_t len, std::uint64_t seed = 14
 
 std::uint64_t fnv1a64(const std::string& text, std::uint64_t seed = 14695981039346656037ull) {
     return fnv1a64(text.data(), text.size(), seed);
+}
+
+void hash_file_signature(const fs::path& path, std::uint64_t& hash) {
+    std::error_code ec;
+    if (!fs::exists(path, ec) || ec) {
+        return;
+    }
+
+    hash = fnv1a64(path.generic_string(), hash);
+    const auto ftime = fs::last_write_time(path, ec);
+    if (!ec) {
+        const auto stamp = ftime.time_since_epoch().count();
+        hash = fnv1a64(&stamp, sizeof(stamp), hash);
+    }
+
+    ec.clear();
+    const auto size = fs::file_size(path, ec);
+    if (!ec) {
+        hash = fnv1a64(&size, sizeof(size), hash);
+    }
 }
 
 int count_sequential_png(const fs::path& folder) {
@@ -120,6 +142,180 @@ CacheManager::BundleFrameLayer scale_layer(const CacheManager::BundleFrameLayer&
     return layer;
 }
 
+struct UniformCropMargins {
+    int left = 0;
+    int top = 0;
+    int right = 0;
+    int bottom = 0;
+};
+
+bool compute_visible_margins(SDL_Surface* surface, UniformCropMargins& out) {
+    if (!surface || surface->w <= 0 || surface->h <= 0 || !surface->pixels) {
+        return false;
+    }
+
+    const bool locked = SDL_MUSTLOCK(surface);
+    if (locked && !SDL_LockSurface(surface)) {
+        return false;
+    }
+
+    const int width = surface->w;
+    const int height = surface->h;
+    const int pitch = surface->pitch;
+    const auto* pixels = static_cast<const std::uint8_t*>(surface->pixels);
+
+    int left = width;
+    int top = height;
+    int right = -1;
+    int bottom = -1;
+
+    for (int y = 0; y < height; ++y) {
+        const std::uint8_t* row = pixels + static_cast<std::size_t>(y) * static_cast<std::size_t>(pitch);
+        for (int x = 0; x < width; ++x) {
+            const std::uint8_t alpha = row[static_cast<std::size_t>(x) * 4u + 3u];
+            if (alpha == 0) {
+                continue;
+            }
+            if (x < left) left = x;
+            if (y < top) top = y;
+            if (x > right) right = x;
+            if (y > bottom) bottom = y;
+        }
+    }
+
+    if (locked) {
+        SDL_UnlockSurface(surface);
+    }
+
+    if (right < left || bottom < top) {
+        return false;
+    }
+
+    out.left = left;
+    out.top = top;
+    out.right = std::max(0, width - (right + 1));
+    out.bottom = std::max(0, height - (bottom + 1));
+    return true;
+}
+
+SDL_Surface* crop_surface_with_margins(SDL_Surface* surface, const UniformCropMargins& margins) {
+    if (!surface || surface->w <= 0 || surface->h <= 0) {
+        return surface;
+    }
+
+    const int src_w = surface->w;
+    const int src_h = surface->h;
+
+    const int left = std::clamp(margins.left, 0, std::max(0, src_w - 1));
+    const int top = std::clamp(margins.top, 0, std::max(0, src_h - 1));
+
+    const int max_right = std::max(0, src_w - left - 1);
+    const int max_bottom = std::max(0, src_h - top - 1);
+
+    const int right = std::clamp(margins.right, 0, max_right);
+    const int bottom = std::clamp(margins.bottom, 0, max_bottom);
+
+    const int crop_w = src_w - left - right;
+    const int crop_h = src_h - top - bottom;
+    if (crop_w <= 0 || crop_h <= 0) {
+        return surface;
+    }
+    if (left == 0 && top == 0 && crop_w == src_w && crop_h == src_h) {
+        return surface;
+    }
+
+    SDL_Surface* cropped = SDL_CreateSurface(crop_w, crop_h, SDL_PIXELFORMAT_RGBA8888);
+    if (!cropped) {
+        return surface;
+    }
+
+    SDL_Rect src_rect{left, top, crop_w, crop_h};
+    SDL_Rect dst_rect{0, 0, crop_w, crop_h};
+    if (!SDL_BlitSurface(surface, &src_rect, cropped, &dst_rect)) {
+        SDL_DestroySurface(cropped);
+        return surface;
+    }
+
+    SDL_DestroySurface(surface);
+    return cropped;
+}
+
+std::optional<UniformCropMargins> compute_uniform_crop_margins(const AssetInfo& info, const nlohmann::json& anims_json) {
+    if (!info.crop_frames || !anims_json.is_object()) {
+        return std::nullopt;
+    }
+
+    bool have_union = false;
+    UniformCropMargins union_margins{};
+
+    for (auto it = anims_json.begin(); it != anims_json.end(); ++it) {
+        if (!it.value().is_object()) {
+            continue;
+        }
+        const nlohmann::json& anim_json = it.value();
+        if (!anim_json.contains("source") || !anim_json["source"].is_object()) {
+            continue;
+        }
+
+        const auto& source = anim_json["source"];
+        const std::string kind = source.value("kind", std::string{});
+        if (kind != "folder") {
+            continue;
+        }
+
+        const fs::path folder = fs::path(info.asset_dir_path()) / source.value("path", it.key());
+        const fs::path fg_folder = folder / "foreground";
+        const fs::path bg_folder = folder / "background";
+        const int frame_count = count_sequential_png(folder);
+        if (frame_count <= 0) {
+            continue;
+        }
+
+        for (int frame_idx = 0; frame_idx < frame_count; ++frame_idx) {
+            const std::string frame_name = std::to_string(frame_idx) + ".png";
+            const std::array<fs::path, 3> layer_paths = {
+                folder / frame_name,
+                fg_folder / frame_name,
+                bg_folder / frame_name
+            };
+
+            for (const fs::path& layer_path : layer_paths) {
+                std::error_code ec;
+                if (!fs::exists(layer_path, ec) || ec) {
+                    continue;
+                }
+
+                SDL_Surface* layer_surface = load_rgba_surface(layer_path);
+                if (!layer_surface) {
+                    continue;
+                }
+
+                UniformCropMargins local{};
+                const bool has_visible = compute_visible_margins(layer_surface, local);
+                SDL_DestroySurface(layer_surface);
+                if (!has_visible) {
+                    continue;
+                }
+
+                if (!have_union) {
+                    union_margins = local;
+                    have_union = true;
+                } else {
+                    union_margins.left = std::min(union_margins.left, local.left);
+                    union_margins.top = std::min(union_margins.top, local.top);
+                    union_margins.right = std::min(union_margins.right, local.right);
+                    union_margins.bottom = std::min(union_margins.bottom, local.bottom);
+                }
+            }
+        }
+    }
+
+    if (!have_union) {
+        return std::nullopt;
+    }
+    return union_margins;
+}
+
 } // namespace
 
 PrimaryAssetCache::PrimaryAssetCache(SDL_Renderer* renderer) : renderer_(renderer) {}
@@ -140,19 +336,13 @@ std::uint64_t PrimaryAssetCache::compute_hash(const AssetInfo& info) const {
             }
             fs::path folder = fs::path(info.asset_dir_path()) / source.value("path", it.key());
             const int frame_count = count_sequential_png(folder);
-            std::error_code ec;
             for (int i = 0; i < frame_count; ++i) {
                 fs::path frame_path = folder / (std::to_string(i) + ".png");
-                if (!fs::exists(frame_path, ec) || ec) continue;
-                hash = fnv1a64(frame_path.generic_string(), hash);
-                try {
-                    auto ftime = fs::last_write_time(frame_path, ec);
-                    auto size = fs::file_size(frame_path, ec);
-                    const auto stamp = ftime.time_since_epoch().count();
-                    hash = fnv1a64(&stamp, sizeof(stamp), hash);
-                    hash = fnv1a64(&size, sizeof(size), hash);
-                } catch (...) {
-                }
+                hash_file_signature(frame_path, hash);
+
+                const std::string frame_name = std::to_string(i) + ".png";
+                hash_file_signature(folder / "foreground" / frame_name, hash);
+                hash_file_signature(folder / "background" / frame_name, hash);
             }
         }
     }
@@ -243,6 +433,7 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
     out_data.metadata_snapshot = info.info_json_;
 
     std::vector<float> variant_steps = normalized_variant_steps(info);
+    const std::optional<UniformCropMargins> uniform_crop = compute_uniform_crop_margins(info, info.anims_json_);
 
     if (info.anims_json_.is_object()) {
         for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
@@ -288,6 +479,12 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
                 }
                 if (fs::exists(bg_folder / (std::to_string(frame_idx) + ".png"))) {
                     bg_surface = load_rgba_surface(bg_folder / (std::to_string(frame_idx) + ".png"));
+                }
+
+                if (uniform_crop.has_value()) {
+                    base_surface = crop_surface_with_margins(base_surface, *uniform_crop);
+                    fg_surface = crop_surface_with_margins(fg_surface, *uniform_crop);
+                    bg_surface = crop_surface_with_margins(bg_surface, *uniform_crop);
                 }
 
                 CacheManager::BundleFrameLayer base_layer = make_layer(base_surface);
@@ -419,23 +616,52 @@ bool PrimaryAssetCache::load_or_build(AssetInfo& info,
                                       std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
                                       CacheManager::BundleData& raw_bundle) {
     const fs::path bundle_path = fs::path("cache") / info.name / "bundle.bin";
-    const std::uint64_t current_hash = compute_hash(info);
+    const std::uint64_t expected_hash = compute_hash(info);
+
+    auto try_populate = [&](const CacheManager::BundleData& bundle) {
+        out_frames.clear();
+        return populate_runtime_frames(info, bundle, out_frames);
+    };
 
     CacheManager::BundleData bundle;
-    bool loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
-    if (loaded && bundle.content_hash == current_hash) {
-        raw_bundle = bundle;
-        return populate_runtime_frames(info, bundle, out_frames);
+    const bool bundle_loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
+    if (bundle_loaded) {
+        const bool hash_matches = bundle.content_hash == expected_hash;
+        const bool populated = try_populate(bundle);
+        if (hash_matches && populated) {
+            raw_bundle = bundle;
+            return true;
+        }
+
+        if (!hash_matches) {
+            vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name + ".");
+        } else {
+            vibble::log::warn("[PrimaryAssetCache] Cached bundle for " + info.name +
+                              " could not populate runtime frames; rebuilding from source.");
+        }
+    } else {
+        vibble::log::info("[PrimaryAssetCache] Missing cached bundle for " + info.name +
+                          "; building cache from source frames.");
     }
 
-    if (!build_bundle_from_sources(info, bundle)) {
-        vibble::log::error("[PrimaryAssetCache] Failed to build bundle for " + info.name);
+    CacheManager::BundleData rebuilt;
+    if (!build_bundle_from_sources(info, rebuilt)) {
+        vibble::log::warn("[PrimaryAssetCache] Failed to build bundle cache from source for " + info.name + ".");
         return false;
     }
-    bundle.content_hash = current_hash;
-    CacheManager::save_bundle(bundle_path.generic_string(), bundle);
-    raw_bundle = bundle;
-    return populate_runtime_frames(info, bundle, out_frames);
+
+    rebuilt.content_hash = expected_hash;
+    if (!CacheManager::save_bundle(bundle_path.generic_string(), rebuilt)) {
+        vibble::log::warn("[PrimaryAssetCache] Failed to save rebuilt bundle cache for " + info.name + ".");
+    }
+
+    const bool populated = try_populate(rebuilt);
+    raw_bundle = std::move(rebuilt);
+    if (!populated) {
+        vibble::log::warn("[PrimaryAssetCache] Rebuilt bundle cache for " + info.name +
+                          " did not produce runtime frames.");
+    }
+    return populated;
 }
 
 bool PrimaryAssetCache::save_current(const AssetInfo& info) {

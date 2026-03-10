@@ -32,14 +32,28 @@ public:
         bool active = false;
 };
 
-    struct DevModeSettings {
-        bool show_grid = false;
-        bool snap_to_grid = true;
-        bool movement_debug = false;
-        bool anchor_point_debug = false;
-        bool depth_effects = true;
-        int overlay_resolution = 0;
+    enum class SettingGroup { Grid, Debug, Overlay };
+    enum class SettingControl { Toggle, Stepper };
+
+    struct SettingSchema {
+        std::string id;
+        std::string label;
+        SettingGroup group = SettingGroup::Grid;
+        SettingControl control = SettingControl::Toggle;
+        int min_value = 0;
+        int max_value = 0;
+        std::function<bool()> bool_getter;
+        std::function<void(bool)> bool_setter;
+        std::function<int()> int_getter;
+        std::function<void(int)> int_setter;
 };
+
+    static constexpr const char* kShowGridSettingId = "show_grid";
+    static constexpr const char* kSnapToGridSettingId = "snap_to_grid";
+    static constexpr const char* kMovementDebugSettingId = "movement_debug";
+    static constexpr const char* kAnchorPointDebugSettingId = "anchor_point_debug";
+    static constexpr const char* kDepthEffectsSettingId = "depth_effects";
+    static constexpr const char* kOverlayResolutionSettingId = "overlay_resolution";
 
     OtherSettingsAndControls();
     ~OtherSettingsAndControls();
@@ -52,24 +66,16 @@ public:
     void set_screen_dimensions(int width, int height);
     void set_map_info(nlohmann::json* map_info);
     void set_current_room(Room* room);
+    void set_header_title(const std::string& title);
     void set_mode_buttons(std::vector<ModeButtonConfig> buttons);
     void set_mode_changed_callback(std::function<void(const std::string&)> cb);
     void set_active_mode(const std::string& id, bool trigger_callback = false);
     void set_filters_expanded(bool expanded);
     bool filters_expanded() const { return filters_expanded_; }
-    void set_dev_mode_settings(const DevModeSettings& settings);
-    void set_dev_mode_settings_callbacks(std::function<void(bool)> on_show_grid,
-                                         std::function<void(int)> on_overlay_resolution_change,
-                                         std::function<void(bool)> on_snap_to_grid,
-                                         std::function<void(bool)> on_movement_debug,
-                                         std::function<void(bool)> on_anchor_point_debug,
-                                         std::function<void(bool)> on_depth_effects);
-    void set_show_grid_enabled(bool enabled);
-    void set_overlay_resolution_value(int resolution);
-    void set_snap_to_grid_enabled(bool enabled);
-    void set_movement_debug_enabled(bool enabled);
-    void set_anchor_point_debug_enabled(bool enabled);
-    void set_depth_effects_enabled(bool enabled);
+    void set_settings_schema(std::vector<SettingSchema> schema);
+    void refresh_setting_values();
+    void set_setting_value(const std::string& id, bool enabled);
+    void set_setting_value(const std::string& id, int value);
 
     void set_header_suppressed(bool suppressed);
     bool header_suppressed() const { return header_suppressed_; }
@@ -131,6 +137,8 @@ private:
     void persist_filters_expanded() const;
     void ensure_dev_settings_controls();
     void layout_dev_settings();
+    struct SettingWidget;
+    SettingWidget* find_setting(const std::string& id);
     FilterState& mutable_state();
     const FilterState& state() const;
     void notify_state_changed();
@@ -185,6 +193,7 @@ private:
     SDL_Rect advanced_filters_heading_rect_{0, 0, 0, 0};
     SDL_Rect grid_resolution_label_rect_{0, 0, 0, 0};
     SDL_Rect filters_rect_{0, 0, 0, 0};
+    SDL_Rect header_title_rect_{0, 0, 0, 0};
     SDL_Rect stats_rect_{0, 0, 0, 0};
     SDL_Rect stats_heading_rect_{0, 0, 0, 0};
     std::array<SDL_Rect, 4> stats_line_rects_{};
@@ -198,6 +207,8 @@ private:
         std::unique_ptr<class DMButton> button;
 };
     std::vector<ModeButtonEntry> mode_buttons_;
+    std::string header_title_;
+    std::string header_title_display_;
     std::function<void(const std::string&)> on_mode_selected_{};
     std::unique_ptr<class DMButton> filter_toggle_button_;
     std::unique_ptr<class DMButton> hide_button_;
@@ -220,19 +231,12 @@ private:
     ExtraRenderer extra_renderer_{};
     ExtraEventHandler extra_event_handler_{};
     std::unique_ptr<DMNumericStepper> grid_resolution_stepper_;
-    std::unique_ptr<DMCheckbox> overlay_grid_checkbox_;
-    std::unique_ptr<DMNumericStepper> overlay_grid_stepper_;
-    std::unique_ptr<DMCheckbox> snap_to_grid_checkbox_;
-    std::unique_ptr<DMCheckbox> movement_debug_checkbox_;
-    std::unique_ptr<DMCheckbox> anchor_point_debug_checkbox_;
-    std::unique_ptr<DMCheckbox> depth_effects_checkbox_;
-    DevModeSettings dev_mode_settings_{};
-    std::function<void(bool)> on_show_grid_toggle_;
-    std::function<void(int)> on_overlay_resolution_change_;
-    std::function<void(bool)> on_snap_to_grid_toggle_;
-    std::function<void(bool)> on_movement_debug_toggle_;
-    std::function<void(bool)> on_anchor_point_debug_toggle_;
-    std::function<void(bool)> on_depth_effects_toggle_;
+    struct SettingWidget {
+        SettingSchema schema;
+        std::unique_ptr<DMCheckbox> checkbox;
+        std::unique_ptr<DMNumericStepper> stepper;
+    };
+    std::vector<SettingWidget> settings_;
     std::function<void(int)> on_grid_resolution_changed_;
     int grid_resolution_min_ = 0;
     int grid_resolution_max_ = 0;

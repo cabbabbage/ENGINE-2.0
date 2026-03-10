@@ -19,17 +19,18 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/3_candles",
       "asset_name": "3_candles",
-      "asset_type": "Object",
+      "asset_type": "object",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 100.0
+        "scale_percentage": 71.0
       },
       "start": "default",
       "tags": [],
+      "tillable": false,
       "update_radius": 0
     },
     "attack_speed": {
@@ -374,14 +375,14 @@
       "anti_tags": [],
       "asset_directory": "resources/assets/grave_4",
       "asset_name": "grave_4",
-      "asset_type": "Object",
+      "asset_type": "object",
       "can_invert": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 13.0
+        "scale_percentage": 9.0
       },
       "start": "default",
       "tags": [],
@@ -583,7 +584,6 @@
     "ok": {
       "animations": {
         "default": {
-          "crop_frames": true,
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -613,6 +613,7 @@
       },
       "asset_directory": "resources/assets/ok",
       "asset_name": "ok",
+      "crop_frames": true,
       "start": "default"
     },
     "purple_flower": {
@@ -855,14 +856,13 @@
           "anchor_points": [
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 893,
+                "texture_y": 440
               }
             ]
           ],
-          "crop_frames": false,
           "flipped_source": false,
           "inherit_source_movement": false,
           "locked": false,
@@ -893,66 +893,66 @@
           "anchor_points": [
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 899,
+                "texture_y": 435
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 897,
+                "texture_y": 437
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 911,
+                "texture_y": 437
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 913,
+                "texture_y": 438
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 894,
+                "texture_y": 452
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 906,
+                "texture_y": 434
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 913,
+                "texture_y": 438
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 913,
+                "texture_y": 438
               }
             ]
           ],
@@ -968,66 +968,66 @@
           "anchor_points": [
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 898,
+                "texture_y": 456
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 915,
+                "texture_y": 442
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 903,
+                "texture_y": 434
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 892,
+                "texture_y": 443
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 910,
+                "texture_y": 436
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 895,
+                "texture_y": 454
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 893,
+                "texture_y": 441
               }
             ],
             [
               {
+                "depth_offset": -1,
                 "name": "eyes",
-                "texture_x": 904,
-                "texture_y": 446,
-                "in_front": true
+                "texture_x": 902,
+                "texture_y": 458
               }
             ]
           ],
@@ -1045,12 +1045,13 @@
       "asset_name": "vibble",
       "asset_type": "player",
       "can_invert": false,
+      "crop_frames": false,
       "min_distance_all": 0,
       "min_same_type_distance": 0,
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 13.0
+        "scale_percentage": 27.0
       },
       "start": "default",
       "tags": [],
@@ -1061,16 +1062,30 @@
       "animations": {
         "default": {
           "flipped_source": false,
+          "inherit_source_movement": false,
           "locked": false,
           "loop": true,
+          "movement": [
+            [
+              0,
+              0
+            ]
+          ],
+          "movement_total": {
+            "dx": 0,
+            "dy": 0,
+            "dz": 0
+          },
           "number_of_frames": 1,
+          "on_end": "default",
           "reverse_source": false,
           "rnd_start": false,
           "source": {
             "kind": "folder",
             "name": "",
             "path": "default"
-          }
+          },
+          "speed_multiplier": 1.0
         }
       },
       "anti_tags": [],
@@ -1078,6 +1093,7 @@
       "asset_name": "vibble_eyes",
       "asset_type": "object",
       "can_invert": false,
+      "crop_frames": true,
       "follower_binding": {
         "anchor_name": "eyes",
         "controller_asset_id": "vibble",
@@ -1090,7 +1106,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 14.0
+        "scale_percentage": 9.0
       },
       "start": "default",
       "tags": [],
@@ -1132,6 +1148,7 @@
   },
   "maps": {
     "Forrest": {
+      "_save_manager_version": 3,
       "audio": {
         "music": {
           "content_root": "content/Forrest/music",
@@ -1159,6 +1176,7 @@
             ],
             "display_name": "batch_map_assets",
             "enforce_spacing": false,
+            "execution_mode": "batch_grid",
             "explicit_flip": false,
             "force_flipped": false,
             "grid_resolution": 6,
@@ -1264,7 +1282,8 @@
             {
               "anchor": {
                 "x": 0,
-                "y": 0
+                "y": 0,
+                "z": 0
               },
               "anchor_relative_to_center": true,
               "kind": "Spawn",
@@ -1272,7 +1291,8 @@
               "origin_room": {
                 "anchor": {
                   "x": 2300,
-                  "y": 2300
+                  "y": 0,
+                  "z": 2300
                 },
                 "anchor_relative_to_center": true,
                 "height": 3000,
@@ -1282,33 +1302,37 @@
               "points": [
                 {
                   "x": -256,
-                  "y": -256
+                  "y": 0,
+                  "z": -256
                 },
                 {
                   "x": 256,
-                  "y": -256
+                  "y": 0,
+                  "z": -256
                 },
                 {
                   "x": 256,
-                  "y": 256
+                  "y": 0,
+                  "z": 256
                 },
                 {
                   "x": -256,
-                  "y": 256
+                  "y": 0,
+                  "z": 256
                 }
               ],
               "resolution": 3,
               "type": "spawning"
             }
           ],
-          "camera_height_px": 1000,
-          "camera_tilt_deg": 60.0,
+          "camera_height_px": 775,
+          "camera_tilt_deg": 146.0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 100,
@@ -1338,7 +1362,7 @@
               ],
               "display_name": "Vibble",
               "dx": 0,
-              "dy": 0,
+              "dz": 0,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1366,8 +1390,8 @@
                 }
               ],
               "display_name": "tailor",
-              "dx": -115,
-              "dy": -269,
+              "dx": 3258,
+              "dz": -2540,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1396,7 +1420,7 @@
               ],
               "display_name": "grave_4",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1425,7 +1449,7 @@
               ],
               "display_name": "booze_1",
               "dx": -96,
-              "dy": -164,
+              "dz": -164,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1454,7 +1478,7 @@
               ],
               "display_name": "tree",
               "dx": -800,
-              "dy": -164,
+              "dz": -164,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1483,7 +1507,7 @@
               ],
               "display_name": "booze_2",
               "dx": -460,
-              "dy": 1028,
+              "dz": 1028,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1512,7 +1536,7 @@
               ],
               "display_name": "grave_4 (Copy)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1541,7 +1565,7 @@
               ],
               "display_name": "grave_4 (Copy 2)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1570,7 +1594,7 @@
               ],
               "display_name": "grave_4 (Copy 3)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1599,7 +1623,7 @@
               ],
               "display_name": "grave_4 (Copy 4)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1628,7 +1652,7 @@
               ],
               "display_name": "grave_4 (Copy 5)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1657,7 +1681,7 @@
               ],
               "display_name": "grave_4 (Copy 6)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1686,7 +1710,7 @@
               ],
               "display_name": "grave_4 (Copy 7)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1715,7 +1739,7 @@
               ],
               "display_name": "grave_4 (Copy 8)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1744,7 +1768,7 @@
               ],
               "display_name": "grave_4 (Copy 9)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1772,8 +1796,8 @@
                 }
               ],
               "display_name": "grave_4 (Copy 10)",
-              "dx": -1274,
-              "dy": 702,
+              "dx": -1575,
+              "dz": -2540,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1802,7 +1826,7 @@
               ],
               "display_name": "grave_4 (Copy 11)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1831,7 +1855,7 @@
               ],
               "display_name": "grave_4 (Copy 12)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1860,7 +1884,7 @@
               ],
               "display_name": "grave_4 (Copy 13)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1889,7 +1913,7 @@
               ],
               "display_name": "grave_4 (Copy 14)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1918,7 +1942,7 @@
               ],
               "display_name": "grave_4 (Copy 15)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1947,7 +1971,7 @@
               ],
               "display_name": "grave_4 (Copy 16)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -1976,7 +2000,7 @@
               ],
               "display_name": "grave_4 (Copy 17)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2005,7 +2029,7 @@
               ],
               "display_name": "grave_4 (Copy 18)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2034,7 +2058,7 @@
               ],
               "display_name": "grave_4 (Copy 19)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2063,7 +2087,7 @@
               ],
               "display_name": "grave_4 (Copy 20)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2092,7 +2116,7 @@
               ],
               "display_name": "grave_4 (Copy 21)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2121,7 +2145,7 @@
               ],
               "display_name": "grave_4 (Copy 22)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2150,7 +2174,7 @@
               ],
               "display_name": "grave_4 (Copy 23)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2179,7 +2203,7 @@
               ],
               "display_name": "grave_4 (Copy 24)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2208,7 +2232,7 @@
               ],
               "display_name": "grave_4 (Copy 25)",
               "dx": -836,
-              "dy": 324,
+              "dz": 324,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2237,7 +2261,7 @@
               ],
               "display_name": "grave_4 (Copy 26)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2266,7 +2290,7 @@
               ],
               "display_name": "grave_4 (Copy 27)",
               "dx": -324,
-              "dy": -108,
+              "dz": -108,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2294,8 +2318,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": -1150,
-              "dy": 324,
+              "dx": 260,
+              "dz": 753,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2324,7 +2348,7 @@
               ],
               "display_name": "tree_darker",
               "dx": -2484,
-              "dy": -658,
+              "dz": -658,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2353,7 +2377,7 @@
               ],
               "display_name": "tree_2",
               "dx": -3102,
-              "dy": -1147,
+              "dz": -1147,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2382,7 +2406,7 @@
               ],
               "display_name": "tree_2",
               "dx": -444,
-              "dy": 249,
+              "dz": 249,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2411,7 +2435,7 @@
               ],
               "display_name": "vibble_eyes",
               "dx": -1268,
-              "dy": 340,
+              "dz": 340,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2439,8 +2463,8 @@
                 }
               ],
               "display_name": "bow_tie",
-              "dx": 263,
-              "dy": 357,
+              "dx": 758,
+              "dz": 631,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2455,34 +2479,69 @@
               "resolve_geometry_to_room_size": true,
               "resolve_quantity_to_room_size": false,
               "spawn_id": "spn-94b59227bd12"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "3_candles"
+                }
+              ],
+              "display_name": "3_candles",
+              "dx": -353,
+              "dz": 650,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 39,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-0a009cfb503c"
+            },
+            {
+              "candidates": [
+                {
+                  "chance": 0,
+                  "name": "null"
+                },
+                {
+                  "chance": 100,
+                  "name": "3_candles"
+                }
+              ],
+              "display_name": "3_candles",
+              "dx": -353,
+              "dz": 975,
+              "enforce_spacing": false,
+              "explicit_flip": false,
+              "force_flipped": false,
+              "locked": false,
+              "max_number": 1,
+              "min_number": 1,
+              "origional_height": 3480,
+              "origional_width": 3480,
+              "position": "Exact",
+              "priority": 40,
+              "resolution": 6,
+              "resolve_geometry_to_room_size": true,
+              "resolve_quantity_to_room_size": false,
+              "spawn_id": "spn-a7dc3b834be1"
             }
           ]
         }
       },
-      "terrain_settings": {
-        "blend_strength": 0.6,
-        "edge_falloff_distance_world": 360.0,
-        "enabled": true,
-        "light": {
-          "base_seed": 123456,
-          "contrast": 1.3,
-          "direction_world": [
-            -0.52,
-            -0.85
-          ],
-          "light_strength": 1.2,
-          "lock_seed_to_world": true,
-          "position_world": [
-            0.0,
-            -1200.0
-          ]
-        },
-        "max_elevation_world": 520.0,
-        "noise_variation": 1.1,
-        "resolution_density_scale": 0.85,
-        "roughness": 0.78,
-        "smoothness": 0.9
-      },
+      "schema_version": 1,
       "trails_data": {
         "basic": {
           "display_color": [
@@ -2506,5 +2565,5 @@
       }
     }
   },
-  "version": 1
+  "version": 2
 }

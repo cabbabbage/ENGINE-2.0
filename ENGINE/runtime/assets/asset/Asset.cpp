@@ -81,7 +81,8 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , static_frame(false)
 , active(false)
 , pos_(nullptr)
-, initial_world_pos_(start_pos)
+, initial_world_pos_(SDL_Point{start_pos.x, 0})
+, initial_world_z_(start_pos.y)
 , grid_resolution(vibble::grid::clamp_resolution(grid_resolution_))
 , depth(depth_)
 , spawn_id(spawn_id_)
@@ -124,6 +125,7 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 
         alpha_smoothing_.reset(hidden ? 0.0f : 1.0f);
         refresh_filter_tags();
+        initialize_anchor_registry_from_animations();
 }
 
 void Asset::refresh_filter_tags() {
@@ -161,11 +163,13 @@ Asset::Asset(const Asset& o)
     , current_animation(o.current_animation)
     , pos_(nullptr)
     , initial_world_pos_(o.initial_world_pos_)
+    , initial_world_z_(o.initial_world_z_)
     , grid_resolution(vibble::grid::clamp_resolution(o.grid_resolution))
     , active(o.active)
     , flipped(o.flipped)
     , distance_from_camera(o.distance_from_camera)
     , angle_from_camera(o.angle_from_camera)
+    , render_depth_bias_(o.render_depth_bias_)
     , depth(o.depth)
     , dead(o.dead)
     , static_frame(o.static_frame)
@@ -211,6 +215,7 @@ Asset::Asset(const Asset& o)
         alpha_smoothing_          = o.alpha_smoothing_;
         finalized_                = o.finalized_;
         refresh_filter_tags();
+        initialize_anchor_registry_from_animations();
 }
 
 Asset& Asset::operator=(const Asset& o) {
@@ -220,11 +225,14 @@ Asset& Asset::operator=(const Asset& o) {
         info                 = o.info;
         current_animation    = o.current_animation;
     pos_                 = nullptr;
+    initial_world_pos_   = o.initial_world_pos_;
+    initial_world_z_     = o.initial_world_z_;
     grid_resolution      = vibble::grid::clamp_resolution(o.grid_resolution);
 	active               = o.active;
         flipped              = o.flipped;
         distance_from_camera = o.distance_from_camera;
         angle_from_camera = o.angle_from_camera;
+        render_depth_bias_   = o.render_depth_bias_;
 	depth                = o.depth;
 	dead                 = o.dead;
 	static_frame         = o.static_frame;
@@ -244,6 +252,7 @@ Asset& Asset::operator=(const Asset& o) {
         spawn_method         = o.spawn_method;
         owning_room_name_    = o.owning_room_name_;
         controller_.reset();
+        children_.clear();
         anim_.reset();
         neighbors.reset();
         impassable_naighbors.reset();
@@ -270,9 +279,111 @@ Asset& Asset::operator=(const Asset& o) {
         composite_rect_           = {0, 0, 0, 0};
         composite_scale_          = o.composite_scale_;
         anchor_handles_.clear();
-        anchor_lookup_.clear();
+        anchor_points_.clear();
+        anchor_name_to_index_.clear();
+        anchors_initialized_ = false;
         refresh_filter_tags();
+        initialize_anchor_registry_from_animations();
         return *this;
+}
+
+void Asset::add_child(Asset* child) {
+    if (!child || child == this) {
+        return;
+    }
+    if (std::find(children_.begin(), children_.end(), child) != children_.end()) {
+        return;
+    }
+    children_.push_back(child);
+}
+
+void Asset::remove_child(Asset* child) {
+    if (!child) {
+        return;
+    }
+    auto it = std::remove(children_.begin(), children_.end(), child);
+    if (it == children_.end()) {
+        return;
+    }
+    children_.erase(it, children_.end());
+}
+
+bool Asset::has_child(const Asset* child) const {
+    return child && std::find(children_.begin(), children_.end(), child) != children_.end();
+}
+
+void Asset::initialize_anchor_registry_from_animations() {
+        if (anchors_initialized_) {
+                return;
+        }
+
+        anchor_handles_.clear();
+        anchor_points_.clear();
+        anchor_name_to_index_.clear();
+
+        if (!info) {
+                anchors_initialized_ = true;
+                return;
+        }
+
+        std::unordered_set<std::string> unique_names;
+        auto collect_from_frame = [&](const AnimationFrame* frame) {
+                if (!frame) {
+                        return;
+                }
+                for (const auto& anchor : frame->anchor_points) {
+                        if (anchor.is_valid()) {
+                                unique_names.insert(anchor.name);
+                        }
+                }
+        };
+
+        for (const auto& [anim_id, anim] : info->animations) {
+                (void)anim_id;
+                for (const AnimationFrame* frame : anim.frames) {
+                        collect_from_frame(frame);
+                }
+                const std::size_t path_count = anim.movement_path_count();
+                for (std::size_t i = 0; i < path_count; ++i) {
+                        const auto& path = anim.movement_path(i);
+                        for (const auto& frame : path) {
+                                collect_from_frame(&frame);
+                        }
+                }
+        }
+
+        if (!unique_names.empty()) {
+                std::vector<std::string> sorted_names(unique_names.begin(), unique_names.end());
+                std::sort(sorted_names.begin(), sorted_names.end());
+                anchor_handles_.reserve(sorted_names.size());
+                anchor_points_.reserve(sorted_names.size());
+                for (const auto& anchor_name : sorted_names) {
+                        AnchorHandle handle{};
+                        handle.name = anchor_name;
+                        handle.owner = this;
+                        anchor_name_to_index_[anchor_name] = anchor_handles_.size();
+                        anchor_handles_.push_back(std::move(handle));
+                        AnchorPoint point{};
+                        point.name = anchor_name;
+                        anchor_points_.push_back(std::move(point));
+                }
+        }
+
+        anchors_initialized_ = true;
+}
+
+Asset::AnchorHandle* Asset::find_anchor_handle(const std::string& name) {
+        if (!anchors_initialized_) {
+                initialize_anchor_registry_from_animations();
+        }
+        auto it = anchor_name_to_index_.find(name);
+        if (it == anchor_name_to_index_.end()) {
+                return nullptr;
+        }
+        if (it->second >= anchor_handles_.size()) {
+                return nullptr;
+        }
+        return &anchor_handles_[it->second];
 }
 
 void Asset::finalize_setup() {
@@ -280,6 +391,9 @@ void Asset::finalize_setup() {
                 return;
         }
         if (!info) return;
+        if (!anchors_initialized_) {
+                initialize_anchor_registry_from_animations();
+        }
         if (current_animation.empty() ||
         info->animations[current_animation].frames.empty())
         {
@@ -523,6 +637,8 @@ void Asset::update() {
     // Re-check anchor basis after any movement/animation/scale changes we just applied.
     const bool post_world_changed = update_anchor_basis_if_needed();
 
+    refresh_anchor_point_cache_from_frame();
+
     if (info->moving_asset && (external_world_changed || post_world_changed)) {
         update_neighbor_lists(true);
     }
@@ -542,6 +658,48 @@ void Asset::update() {
         assert(anchor_world_revision_ != anchor_debug_start_revision);
     }
 #endif
+}
+
+void Asset::refresh_anchor_point_cache_from_frame() {
+    if (!anchors_initialized_) {
+        initialize_anchor_registry_from_animations();
+    }
+
+    if (anchor_handles_.empty() || anchor_points_.empty()) {
+        return;
+    }
+
+    const SDL_Point origin_world = world_xy_point();
+    const std::size_t count = std::min(anchor_handles_.size(), anchor_points_.size());
+    for (std::size_t idx = 0; idx < count; ++idx) {
+        AnchorPoint& resolved = anchor_points_[idx];
+        const DisplacedAssetAnchorPoint* frame_anchor =
+            current_frame ? current_frame->find_anchor(resolved.name) : nullptr;
+
+        resolved.name = anchor_handles_[idx].name;
+        resolved.frame_index = current_frame ? current_frame->frame_index : -1;
+        resolved.exists = frame_anchor && frame_anchor->is_valid();
+        resolved.depth_offset = frame_anchor ? frame_anchor->depth_offset : 0;
+
+        if (!resolved.exists) {
+            resolved.relative_pos_2d = Vec2{};
+            resolved.world_pos_2d = Vec2{};
+            resolved.world_z = world_z();
+            resolved.resolution_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+            continue;
+        }
+
+        AnchorHandle& handle = anchor_handles_[idx];
+        handle.owner = this;
+        handle.update(anchor_points::GridMaterialization::None);
+
+        apply_anchor_runtime_state(resolved, handle, frame_anchor);
+        if (resolved.exists) {
+            resolved.relative_pos_2d = Vec2{
+                resolved.world_pos_2d.x - static_cast<float>(origin_world.x),
+                resolved.world_pos_2d.y - static_cast<float>(origin_world.y)};
+        }
+    }
 }
 
 std::string Asset::get_current_animation() const { return current_animation; }
@@ -706,7 +864,7 @@ void Asset::update_neighbor_lists(bool force_update) {
         impassable_naighbors = std::move(imp_child);
     }
 
-    last_neighbor_origin_ = pos_ ? SDL_Point{pos_->world.x, pos_->world.y} : SDL_Point{0, 0};
+    last_neighbor_origin_ = pos_ ? SDL_Point{pos_->world_x(), pos_->world_y()} : SDL_Point{0, 0};
     neighbor_lists_initialized_ = true;
 }
 
@@ -761,7 +919,7 @@ Area Asset::get_area(const std::string& name) const {
                 return Area(name, 0);
         }
 
-        SDL_Point world_pos = pos_ ? SDL_Point{pos_->world.x, pos_->world.y} : SDL_Point{0, 0};
+        SDL_Point world_pos = pos_ ? SDL_Point{pos_->world_x(), pos_->world_z()} : SDL_Point{0, 0};
         return area_helpers::make_world_area(*info, *base, world_pos, flipped);
 }
 
@@ -902,6 +1060,32 @@ void Asset::mark_anchors_dirty() {
         ++anchor_world_revision_;
 }
 
+void Asset::assert_unique_anchor_names_for_frame() const {
+#if !defined(NDEBUG)
+        if (!current_frame) {
+                return;
+        }
+        std::unordered_set<std::string> seen;
+        for (const auto& anchor : current_frame->anchor_points) {
+                if (!anchor.is_valid()) {
+                        continue;
+                }
+                if (!seen.insert(anchor.name).second) {
+                        const std::string asset_name = info ? info->name : std::string{"<unknown>"};
+                        vibble::log::warn("[AnchorDebug] Duplicate anchor name '" +
+                                          anchor.name +
+                                          "' on asset '" +
+                                          asset_name +
+                                          "' (frame " +
+                                          std::to_string(current_frame->frame_index) +
+                                          ")");
+                        SDL_assert(!"Anchor names must be unique per asset frame");
+                        break;
+                }
+        }
+#endif
+}
+
 Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         AnchorBasisSignature sig{};
         sig.world_x = world_x();
@@ -965,49 +1149,99 @@ bool Asset::update_anchor_basis_if_needed() {
         return world_changed;
 }
 
-Asset::AnchorHandle& Asset::get_anchor_point(const std::string& name) {
-        auto it = anchor_lookup_.find(name);
-        if (it != anchor_lookup_.end() && it->second < anchor_handles_.size()) {
-                return anchor_handles_[it->second];
+AnchorPoint* Asset::get_anchor_point(const std::string& name) {
+        auto resolved = anchor_state(name);
+        if (!resolved.has_value()) {
+                return nullptr;
         }
-
-        AnchorHandle handle;
-        handle.name  = name;
-        handle.owner = this;
-        anchor_handles_.push_back(std::move(handle));
-        anchor_lookup_[name] = anchor_handles_.size() - 1;
-        return anchor_handles_.back();
+        auto it = anchor_name_to_index_.find(name);
+        if (it == anchor_name_to_index_.end() || it->second >= anchor_points_.size()) {
+                return nullptr;
+        }
+        return &anchor_points_[it->second];
 }
 
-std::optional<ResolvedAnchor> Asset::anchor_state(const std::string& name,
-                                                  anchor_points::GridMaterialization grid_policy,
-                                                  std::optional<anchor_points::AnchorDepthPolicy> depth_policy) {
-        AnchorHandle& handle = get_anchor_point(name);
-        handle.update(grid_policy, depth_policy);
-        ResolvedAnchor resolved{};
-        resolved.world_px    = handle.world_px;
-        resolved.world_z     = handle.world_z;
-        resolved.resolution_layer = handle.resolution_layer;
-        resolved.source_texture_px = handle.source_texture_px;
-        resolved.has_canonical_texture_source = handle.has_canonical_texture_source;
-        resolved.grid_point  = handle.grid;
-        resolved.missing     = handle.missing;
-        resolved.in_front    = handle.in_front;
-        if (!resolved.has_canonical_texture_source && !resolved.missing) {
-                resolved.missing = true;
-                resolved.grid_point = nullptr;
+std::optional<std::string> Asset::anchor_name_for_index(std::size_t index) const {
+        if (index >= anchor_points_.size()) {
+                return std::nullopt;
         }
+        return anchor_points_[index].name;
+}
+
+void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
+                                     const AnchorHandle& handle,
+                                     const DisplacedAssetAnchorPoint* frame_anchor) const {
+        const bool anchor_present = frame_anchor && frame_anchor->is_valid();
+        resolved.exists = anchor_present && !handle.missing && handle.has_canonical_texture_source;
+        resolved.depth_offset = anchor_present ? frame_anchor->depth_offset : handle.depth_offset;
+
+        if (resolved.exists) {
+                resolved.world_pos_2d = Vec2{static_cast<float>(handle.world_px.x),
+                                             static_cast<float>(handle.world_px.y)};
+                const SDL_Point origin_world = world_xy_point();
+                resolved.relative_pos_2d = Vec2{
+                        resolved.world_pos_2d.x - static_cast<float>(origin_world.x),
+                        resolved.world_pos_2d.y - static_cast<float>(origin_world.y)};
+                resolved.screen_pos_2d = handle.screen_px;
+        } else {
+                resolved.world_pos_2d = Vec2{};
+                resolved.relative_pos_2d = Vec2{};
+                resolved.screen_pos_2d = SDL_FPoint{0.0f, 0.0f};
+        }
+        resolved.world_z = handle.world_z;
+        resolved.resolution_layer = handle.resolution_layer;
+}
+
+AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
+                                               anchor_points::GridMaterialization grid_policy,
+                                               const DisplacedAssetAnchorPoint* frame_anchor) {
+        assert(index < anchor_handles_.size());
+        assert(index < anchor_points_.size());
+
+#if !defined(NDEBUG)
+        assert_unique_anchor_names_for_frame();
+#endif
+
+        AnchorHandle& handle = anchor_handles_[index];
+        handle.owner = this;
+        handle.update(grid_policy);
+
+        AnchorPoint& resolved = anchor_points_[index];
+        resolved.name = handle.name;
+        resolved.frame_index = current_frame ? current_frame->frame_index : -1;
+        apply_anchor_runtime_state(resolved, handle, frame_anchor);
+
         return resolved;
 }
 
-void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
-                                 std::optional<anchor_points::AnchorDepthPolicy> depth_policy) {
+std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
+                                               anchor_points::GridMaterialization grid_policy) {
+        if (!anchors_initialized_) {
+                initialize_anchor_registry_from_animations();
+        }
+        auto it = anchor_name_to_index_.find(name);
+        if (it == anchor_name_to_index_.end() ||
+            it->second >= anchor_handles_.size() ||
+            it->second >= anchor_points_.size()) {
+                return std::nullopt;
+        }
+
+        const DisplacedAssetAnchorPoint* frame_anchor =
+                current_frame ? current_frame->find_anchor(name) : nullptr;
+
+        AnchorPoint& resolved = resolve_anchor_point_entry(it->second,
+                                                           grid_policy,
+                                                           frame_anchor);
+        return resolved;
+}
+
+void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy) {
 #if !defined(NDEBUG)
         auto& counters = anchor_update_counters();
         ++counters.calls;
 #endif
 
-        const bool cache_hit = !dirty && last_update_key_.matches(grid_policy, depth_policy);
+        const bool cache_hit = !dirty && last_update_key_.matches(grid_policy);
         if (cache_hit) {
 #if !defined(NDEBUG)
                 ++counters.cache_hits;
@@ -1018,7 +1252,7 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
 #if !defined(NDEBUG)
         ++counters.recomputes;
 #endif
-        last_update_key_.set(grid_policy, depth_policy);
+        last_update_key_.set(grid_policy);
 
         if (!owner) {
                 dirty = false;
@@ -1032,8 +1266,9 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 world_z = 0;
                 resolution_layer = 0;
                 missing = true;
-                in_front = true;
+                depth_offset = 0;
                 source_texture_px = SDL_Point{0, 0};
+                screen_px = SDL_FPoint{0.0f, 0.0f};
                 has_canonical_texture_source = false;
                 dirty = keep_dirty;
         };
@@ -1055,15 +1290,11 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
                 return;
         }
 
-        const anchor_points::AnchorDepthPolicy resolved_depth = depth_policy.value_or(
-                anchor->in_front ? anchor_points::AnchorDepthPolicy::InFront : anchor_points::AnchorDepthPolicy::Behind);
-
         anchor_points::FrameAnchorSample resolved_sample{};
         try {
                 resolved_sample = anchor_points::resolve_frame_anchor_sample(
                         *owner,
                         *anchor,
-                        resolved_depth,
                         grid_policy);
         } catch (const std::exception& ex) {
                 mark_missing(std::string("invalid anchor data: ") + ex.what());
@@ -1082,8 +1313,9 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy,
         world_z = resolved_sample.resolved.world_z;
         resolution_layer = resolved_sample.resolved.resolution_layer;
         missing = resolved_sample.resolved.missing;
-        in_front = resolved_sample.resolved.in_front;
+        depth_offset = resolved_sample.resolved.depth_offset;
         source_texture_px = resolved_sample.resolved.source_texture_px;
+        screen_px = resolved_sample.screen_px;
         has_canonical_texture_source = resolved_sample.resolved.has_canonical_texture_source;
         dirty = false;
 }
@@ -1156,6 +1388,9 @@ void Asset::move_to_world_position(int world_x,
 
     grid_resolution = resolved_layer;
     mark_anchors_dirty();
+    initial_world_pos_.x = world_x;
+    initial_world_pos_.y = world_y;
+    initial_world_z_ = world_z;
 }
 
 void Asset::set_world_z(int world_z) {
@@ -1163,4 +1398,13 @@ void Asset::set_world_z(int world_z) {
 
     // Move to same XY but different Z
     move_to_world_position(pos_->world_x(), pos_->world_y(), world_z);
+}
+
+void Asset::set_render_depth_bias(double bias) {
+    if (!std::isfinite(bias)) {
+        bias = 0.0;
+    }
+    // Allow anchored chains to stack several one-pixel offsets without clipping.
+    constexpr double kMaxBiasMagnitude = 8.0;
+    render_depth_bias_ = std::clamp(bias, -kMaxBiasMagnitude, kMaxBiasMagnitude);
 }

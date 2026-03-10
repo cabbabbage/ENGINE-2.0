@@ -9,8 +9,9 @@
 #include <string>
 #include <utility>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
+#include "utils/integer_grid_math.hpp"
 #include "utils/log.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/world/chunk_manager.hpp"
@@ -18,13 +19,6 @@
 namespace world {
 
 namespace {
-
-int grid_floor_div(int numerator, int denominator) {
-    if (denominator == 0) {
-        return 0;
-    }
-    return static_cast<int>(std::floor(static_cast<double>(numerator) / denominator));
-}
 
 constexpr float kParallaxEpsilon = 1e-3f;
 constexpr int   kDefaultWorldZ   = 0;
@@ -68,7 +62,7 @@ int WorldGrid::power_of_three(int exponent) {
 }
 
 int WorldGrid::max_resolution_layers() const {
-    return (max_resolution_layers_ > 0) ? max_resolution_layers_ : kDefaultMaxLayers;
+    return (max_resolution_layers_ >= 0) ? max_resolution_layers_ : kDefaultMaxLayers;
 }
 
 int WorldGrid::distance_for_layer(int layer) const {
@@ -87,27 +81,11 @@ int WorldGrid::grid_spacing_for_layer(int layer) const {
 WorldGrid::WorldGrid(const GridPoint& origin, int r_chunk)
     : origin_(origin)
     , r_chunk_(std::clamp(r_chunk, 0, vibble::grid::kMaxResolution))
-    , grid_resolution_(r_chunk_)
-    , max_resolution_layers_(kDefaultMaxLayers) {
+    , max_resolution_layers_(r_chunk_) {
     // Map Grid ownership: all GridPoints created through ensure_point/ensure_child
     // live inside this container. Screen Grid rebuilds receive non-owning pointers
     // only; do not transfer ownership out of WorldGrid. ChunkManager remains
     // responsible for tile containers owned by the active map.
-    invalidate_active_cache();
-}
-
-void WorldGrid::set_chunk_resolution(int r) {
-    const int clamped = std::clamp(r, 0, vibble::grid::kMaxResolution);
-    if (clamped != r) {
-        vibble::log::warn(std::string{"[WorldGrid] Requested chunk resolution "} +
-                          std::to_string(r) +
-                          " clamped to " + std::to_string(clamped) +
-                          " (max=" + std::to_string(vibble::grid::kMaxResolution) + ")");
-    }
-    if (clamped == r_chunk_) {
-        return;
-    }
-    r_chunk_ = clamped;
     invalidate_active_cache();
 }
 
@@ -134,7 +112,7 @@ ChunkManager& WorldGrid::chunks() {
     return chunks_;
 }
 
-GridId WorldGrid::make_point_id(int i, int j, int world_z, int resolution_layer, std::uint32_t salt) const {
+GridId WorldGrid::make_point_id(int grid_x, int grid_depth, int world_y, int resolution_layer, std::uint32_t salt) const {
     auto mix = [](std::uint64_t value) {
         value ^= value >> 30;
         value *= 0xbf58476d1ce4e5b9ULL;
@@ -144,9 +122,9 @@ GridId WorldGrid::make_point_id(int i, int j, int world_z, int resolution_layer,
         return value;
     };
 
-    const std::uint64_t ux = static_cast<std::uint32_t>(i);
-    const std::uint64_t uy = static_cast<std::uint32_t>(j);
-    const std::uint64_t uz = static_cast<std::uint32_t>(world_z);
+    const std::uint64_t ux = static_cast<std::uint32_t>(grid_x);
+    const std::uint64_t uy = static_cast<std::uint32_t>(grid_depth);
+    const std::uint64_t uz = static_cast<std::uint32_t>(world_y);
     const std::uint64_t ul = static_cast<std::uint32_t>(resolution_layer);
     const std::uint64_t us = static_cast<std::uint64_t>(salt);
 
@@ -160,13 +138,12 @@ GridId WorldGrid::make_point_id(int i, int j, int world_z, int resolution_layer,
     return (id == 0) ? static_cast<GridId>(1) : id;
 }
 
-GridKey WorldGrid::grid_key_from_world(const GridPoint& world, int world_z, int layer) const {
-    const int resolution_layer = (layer >= 0) ? layer : world.resolution_layer();
-    return GridKey{world.world_x(), world.world_y(), world_z, resolution_layer};
-}
-
-GridKey WorldGrid::grid_key_from_world(const GridPoint& world_point) const {
-    return GridKey{world_point.world_x(), world_point.world_y(), world_point.world_z(), world_point.resolution_layer()};
+GridKey WorldGrid::grid_key_from_world(const GridPoint& world_point, int layer) const {
+    const int resolution_layer = (layer >= 0) ? layer : world_point.resolution_layer();
+    return GridKey{world_point.world_x(),
+                   world_point.world_y(),
+                   world_point.world_z(),
+                   resolution_layer};
 }
 
 std::size_t WorldGrid::hash_key(const GridKey& key) {
@@ -244,10 +221,6 @@ Asset* WorldGrid::attach_asset(std::unique_ptr<Asset> a, int world_z, int resolu
 
 Asset* WorldGrid::create_asset_at_point(std::unique_ptr<Asset> a, int world_z, int resolution_layer) {
     return register_asset(std::move(a), world_z, resolution_layer);
-}
-
-Asset* WorldGrid::create_asset_at_point(Asset* a, int world_z, int resolution_layer) {
-    return register_asset(std::unique_ptr<Asset>(a), world_z, resolution_layer);
 }
 
 Asset* WorldGrid::remove_asset(Asset* a) {
@@ -355,15 +328,18 @@ void WorldGrid::attach_asset_to_grid_point(std::unique_ptr<Asset> owned, Asset* 
     }
 }
 
-GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent, int world_z, int resolution_layer_override) {
+GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent, int world_y, int resolution_layer_override) {
     const int resolution_layer = (resolution_layer_override >= 0) ? resolution_layer_override : default_resolution_layer();
     const int spacing = grid_spacing_for_layer(resolution_layer);
     const int canonical_world_x = origin_.world_x() + grid_index.x * spacing;
-    const int canonical_world_y = origin_.world_y() + grid_index.y * spacing;
-    const GridKey canonical_key{canonical_world_x, canonical_world_y, world_z, resolution_layer};
+    const int canonical_world_z = origin_.world_z() + grid_index.z * spacing;
+    const int canonical_world_y = world_y;
+    const axis::WorldPos canonical_world{canonical_world_x, canonical_world_y, canonical_world_z};
+    // Preserve canonical axis ordering (x = right, y = up, z = forward/depth).
+    const GridKey canonical_key{canonical_world.x, canonical_world.y, canonical_world.z, resolution_layer};
 
     std::uint32_t salt = 0;
-    GridId id = make_point_id(grid_index.x, grid_index.y, world_z, resolution_layer, salt);
+    GridId id = make_point_id(grid_index.x, grid_index.z, world_y, resolution_layer, salt);
     while (true) {
         auto existing_it = points_.find(id);
         if (existing_it == points_.end()) {
@@ -372,21 +348,21 @@ GridPoint& WorldGrid::ensure_point(GridCoord grid_index, GridCoord chunk_index, 
         const GridPoint& existing = existing_it->second;
         const bool same_identity = existing.world_x() == canonical_world_x &&
                                    existing.world_y() == canonical_world_y &&
-                                   existing.world_z() == world_z &&
+                                   existing.world_z() == canonical_world_z &&
                                    existing.resolution_layer() == resolution_layer;
         if (same_identity) {
             key_to_id_[canonical_key] = id;
             return existing_it->second;
         }
         ++salt;
-        id = make_point_id(grid_index.x, grid_index.y, world_z, resolution_layer, salt);
+        id = make_point_id(grid_index.x, grid_index.z, world_y, resolution_layer, salt);
     }
 
     auto [it, inserted] = points_.try_emplace(
         id,
-        canonical_world_x,
-        canonical_world_y,
-        world_z,
+        canonical_world.x,
+        canonical_world.y,
+        canonical_world.z,
         resolution_layer,
         grid_index,
         chunk_index,
@@ -462,10 +438,10 @@ GridPoint& WorldGrid::find_or_create_grid_point(const GridKey& key, Chunk* ownin
     const int chunk_step = 1 << r_chunk_;
     GridCoord chunk_idx{0, 0};
     if (chunk_step > 0) {
-        chunk_idx.x = grid_floor_div(world.world_x() - origin_.world_x(), chunk_step);
-        chunk_idx.y = grid_floor_div(world.world_y() - origin_.world_y(), chunk_step);
+        chunk_idx.x = vibble::math::floor_div(world.world_x() - origin_.world_x(), chunk_step);
+        chunk_idx.z = vibble::math::floor_div(world.world_z() - origin_.world_z(), chunk_step);
     }
-    GridPoint& point = ensure_point(grid_idx, chunk_idx, owning_chunk, parent, key.z, key.layer);
+    GridPoint& point = ensure_point(grid_idx, chunk_idx, owning_chunk, parent, key.y, key.layer);
 
     key_to_id_[key] = point.id;
     return point;
@@ -511,15 +487,15 @@ std::vector<PointPtr*> gather_roots(const std::unordered_map<GridId, GridPoint>&
 std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
                                                 int min_layer,
                                                 int max_layer,
-                                                int min_world_z,
-                                                int max_world_z,
+                                                int min_world_depth,
+                                                int max_world_depth,
                                                 bool skip_inactive_branches,
                                                 bool include_empty_nodes,
                                                 RegionMetrics* metrics) {
     const int safe_min_layer = std::max(0, std::min(min_layer, max_layer));
     const int safe_max_layer = std::max(safe_min_layer, max_layer);
-    const int safe_min_z = std::min(min_world_z, max_world_z);
-    const int safe_max_z = std::max(min_world_z, max_world_z);
+    const int safe_min_depth = std::min(min_world_depth, max_world_depth);
+    const int safe_max_depth = std::max(min_world_depth, max_world_depth);
 
     std::vector<GridPoint*> result;
     const std::uint64_t visit_stamp = next_traversal_stamp();
@@ -553,9 +529,9 @@ std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
         if (metrics) ++metrics->nodes_visited;
 
         const bool in_layer = node->resolution_layer() >= safe_min_layer && node->resolution_layer() <= safe_max_layer;
-        const bool in_z     = node->world_z() >= safe_min_z && node->world_z() <= safe_max_z;
+        const bool in_depth = node->world_z() >= safe_min_depth && node->world_z() <= safe_max_depth;
         const bool in_bounds = world_point_in_rect(node, world_bounds);
-        const bool include_node = in_layer && in_z && in_bounds && (include_empty_nodes || !node->occupants.empty());
+        const bool include_node = in_layer && in_depth && in_bounds && (include_empty_nodes || !node->occupants.empty());
         if (include_node) {
             result.push_back(node);
         }
@@ -574,15 +550,15 @@ std::vector<GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
 std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& world_bounds,
                                                       int min_layer,
                                                       int max_layer,
-                                                      int min_world_z,
-                                                      int max_world_z,
+                                                      int min_world_depth,
+                                                      int max_world_depth,
                                                       bool skip_inactive_branches,
                                                       bool include_empty_nodes,
                                                       RegionMetrics* metrics) const {
     const int safe_min_layer = std::max(0, std::min(min_layer, max_layer));
     const int safe_max_layer = std::max(safe_min_layer, max_layer);
-    const int safe_min_z = std::min(min_world_z, max_world_z);
-    const int safe_max_z = std::max(min_world_z, max_world_z);
+    const int safe_min_depth = std::min(min_world_depth, max_world_depth);
+    const int safe_max_depth = std::max(min_world_depth, max_world_depth);
 
     std::vector<const GridPoint*> result;
     const std::uint64_t visit_stamp = next_traversal_stamp();
@@ -616,9 +592,9 @@ std::vector<const GridPoint*> WorldGrid::query_region(const GridBounds& world_bo
         if (metrics) ++metrics->nodes_visited;
 
         const bool in_layer = node->resolution_layer() >= safe_min_layer && node->resolution_layer() <= safe_max_layer;
-        const bool in_z     = node->world_z() >= safe_min_z && node->world_z() <= safe_max_z;
+        const bool in_depth = node->world_z() >= safe_min_depth && node->world_z() <= safe_max_depth;
         const bool in_bounds = world_point_in_rect(node, world_bounds);
-        const bool include_node = in_layer && in_z && in_bounds && (include_empty_nodes || !node->occupants.empty());
+        const bool include_node = in_layer && in_depth && in_bounds && (include_empty_nodes || !node->occupants.empty());
         if (include_node) {
             result.push_back(node);
         }
@@ -702,7 +678,7 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
     const int resolved_layer = (resolution_layer >= 0) ? resolution_layer : default_resolution_layer();
     const GridPoint world_pos = world_point_for_asset(raw, resolved_layer);
     const GridCoord grid_index = grid_index_from_world(world_pos, resolved_layer);
-    const GridKey new_key = grid_key_from_world(world_pos, world_z, resolved_layer);
+    const GridKey new_key = grid_key_from_world(world_pos, resolved_layer);
 
     auto existing_key_it = asset_to_key_.find(raw);
     if (existing_key_it != asset_to_key_.end() && existing_key_it->second != new_key) {
@@ -713,10 +689,10 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
         prune_empty_points();
     }
 
-    const int i = grid_floor_div(world_pos.world_x() - origin_.world_x(), chunk_step);
-    const int j = grid_floor_div(world_pos.world_y() - origin_.world_y(), chunk_step);
-    const GridCoord chunk_index{i, j};
-    Chunk& chunk = chunks_.ensure(chunk_index.x, chunk_index.y, r_chunk_, origin_);
+    const int i = vibble::math::floor_div(world_pos.world_x() - origin_.world_x(), chunk_step);
+    const int k = vibble::math::floor_div(world_pos.world_z() - origin_.world_z(), chunk_step);
+    const GridCoord chunk_index{i, k};
+    Chunk& chunk = chunks_.ensure(chunk_index.x, chunk_index.z, r_chunk_, origin_);
 
     auto ensure_asset_in_chunk = [&]() {
         auto it = std::find(chunk.assets.begin(), chunk.assets.end(), raw);
@@ -739,13 +715,9 @@ Asset* WorldGrid::register_asset(std::unique_ptr<Asset> a, int world_z, int reso
     }
     ensure_asset_in_chunk();
 
-    GridPoint& point = ensure_point(grid_index, chunk_index, &chunk, nullptr, new_key.z, new_key.layer);
+    GridPoint& point = ensure_point(grid_index, chunk_index, &chunk, nullptr, new_key.y, new_key.layer);
     attach_asset_to_grid_point(std::move(a), raw, point);
     return raw;
-}
-
-Asset* WorldGrid::register_asset(Asset* a, int world_z, int resolution_layer) {
-    return register_asset(std::unique_ptr<Asset>(a), world_z, resolution_layer);
 }
 
 Chunk* WorldGrid::ensure_chunk_from_world(const GridPoint& world_px) {
@@ -753,9 +725,9 @@ Chunk* WorldGrid::ensure_chunk_from_world(const GridPoint& world_px) {
     if (chunk_step <= 0) {
         return nullptr;
     }
-    const int i = grid_floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
-    const int j = grid_floor_div(world_px.world_y() - origin_.world_y(), chunk_step);
-    return get_or_create_chunk_ij(i, j);
+    const int i = vibble::math::floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
+    const int k = vibble::math::floor_div(world_px.world_z() - origin_.world_z(), chunk_step);
+    return get_or_create_chunk_ij(i, k);
 }
 
 Chunk* WorldGrid::chunk_from_world(const GridPoint& world_px) const {
@@ -763,13 +735,13 @@ Chunk* WorldGrid::chunk_from_world(const GridPoint& world_px) const {
     if (chunk_step <= 0) {
         return nullptr;
     }
-    const int i = grid_floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
-    const int j = grid_floor_div(world_px.world_y() - origin_.world_y(), chunk_step);
-    return chunks_.find(i, j);
+    const int i = vibble::math::floor_div(world_px.world_x() - origin_.world_x(), chunk_step);
+    const int k = vibble::math::floor_div(world_px.world_z() - origin_.world_z(), chunk_step);
+    return chunks_.find(i, k);
 }
 
-Chunk* WorldGrid::get_or_create_chunk_ij(int i, int j) {
-    return &chunks_.ensure(i, j, r_chunk_, origin_);
+Chunk* WorldGrid::get_or_create_chunk_ij(int i, int k) {
+    return &chunks_.ensure(i, k, r_chunk_, origin_);
 }
 
 void WorldGrid::remove_from_chunk(Asset* a, Chunk* c) {
@@ -793,20 +765,20 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     if (chunk_step <= 0) {
         return nullptr;
     }
-    const int old_i = grid_floor_div(old_pos.world_x() - origin_.world_x(), chunk_step);
-    const int old_j = grid_floor_div(old_pos.world_y() - origin_.world_y(), chunk_step);
-    const int new_i = grid_floor_div(new_pos.world_x() - origin_.world_x(), chunk_step);
-    const int new_j = grid_floor_div(new_pos.world_y() - origin_.world_y(), chunk_step);
-    const GridCoord chunk_index{new_i, new_j};
+    const int old_i = vibble::math::floor_div(old_pos.world_x() - origin_.world_x(), chunk_step);
+    const int old_k = vibble::math::floor_div(old_pos.world_z() - origin_.world_z(), chunk_step);
+    const int new_i = vibble::math::floor_div(new_pos.world_x() - origin_.world_x(), chunk_step);
+    const int new_k = vibble::math::floor_div(new_pos.world_z() - origin_.world_z(), chunk_step);
+    const GridCoord chunk_index{new_i, new_k};
 
     Chunk* previous = nullptr;
     auto existing = residency_.find(a);
     if (existing != residency_.end()) {
         previous = existing->second;
     } else {
-        previous = chunks_.find(old_i, old_j);
+        previous = chunks_.find(old_i, old_k);
     }
-    Chunk& target = chunks_.ensure(new_i, new_j, r_chunk_, origin_);
+    Chunk& target = chunks_.ensure(new_i, new_k, r_chunk_, origin_);
 
     if (previous != &target) {
         if (previous) {
@@ -825,9 +797,9 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
     }
 
     std::unique_ptr<Asset> owned;
-    const bool xy_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_y() != new_pos.world_y());
-    const bool point_changed = xy_changed ||
-                               (old_pos.world_z() != new_pos.world_z()) ||
+    const bool xz_changed = (old_pos.world_x() != new_pos.world_x()) || (old_pos.world_z() != new_pos.world_z());
+    const bool point_changed = xz_changed ||
+                               (old_pos.world_y() != new_pos.world_y()) ||
                                (old_pos.resolution_layer() != new_pos.resolution_layer());
     if (point_changed) {
         if (GridPoint* existing_point = point_for_asset(a)) {
@@ -835,8 +807,8 @@ Asset* WorldGrid::move_asset(Asset* a, const GridPoint& old_pos, const GridPoint
         }
     }
 
-    const GridKey new_key = grid_key_from_world(new_pos, new_pos.world_z(), resolved_layer);
-    GridPoint& point = ensure_point(new_index, chunk_index, &target, nullptr, new_key.z, new_key.layer);
+    const GridKey new_key = grid_key_from_world(new_pos, resolved_layer);
+    GridPoint& point = ensure_point(new_index, chunk_index, &target, nullptr, new_key.y, new_key.layer);
 
     if (point_changed) {
         if (owned) {
@@ -896,16 +868,16 @@ void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_
     GridBounds expanded = camera_world.expanded(margin);
     const int min_x = std::min(expanded.min.world_x(), expanded.max.world_x());
     const int max_x = std::max(expanded.min.world_x(), expanded.max.world_x());
-    const int min_y = std::min(expanded.min.world_y(), expanded.max.world_y());
-    const int max_y = std::max(expanded.min.world_y(), expanded.max.world_y());
+    const int min_z = std::min(expanded.min.world_z(), expanded.max.world_z());
+    const int max_z = std::max(expanded.min.world_z(), expanded.max.world_z());
 
     const bool needs_update = !has_cached_camera_rect_ ||
         last_margin_px_ != margin_px ||
         last_chunk_resolution_ != r_chunk_ ||
         last_expanded_camera_.min.world_x() != min_x ||
-        last_expanded_camera_.min.world_y() != min_y ||
+        last_expanded_camera_.min.world_z() != min_z ||
         last_expanded_camera_.max.world_x() != max_x ||
-        last_expanded_camera_.max.world_y() != max_y;
+        last_expanded_camera_.max.world_z() != max_z;
 
     if (!needs_update) {
         return;
@@ -914,15 +886,15 @@ void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_
     chunks_.clear_active();
     auto& active = chunks_.active();
     const int chunk_step = 1 << r_chunk_;
-    if (chunk_step > 0 && max_x >= min_x && max_y >= min_y) {
-        const int min_i = grid_floor_div(min_x - origin_.world_x(), chunk_step);
-        const int min_j = grid_floor_div(min_y - origin_.world_y(), chunk_step);
-        const int max_i = grid_floor_div(max_x - origin_.world_x(), chunk_step);
-        const int max_j = grid_floor_div(max_y - origin_.world_y(), chunk_step);
-        if (max_i >= min_i && max_j >= min_j) {
+    if (chunk_step > 0 && max_x >= min_x && max_z >= min_z) {
+        const int min_i = vibble::math::floor_div(min_x - origin_.world_x(), chunk_step);
+        const int min_k = vibble::math::floor_div(min_z - origin_.world_z(), chunk_step);
+        const int max_i = vibble::math::floor_div(max_x - origin_.world_x(), chunk_step);
+        const int max_k = vibble::math::floor_div(max_z - origin_.world_z(), chunk_step);
+        if (max_i >= min_i && max_k >= min_k) {
             for (int i = min_i; i <= max_i; ++i) {
-                for (int j = min_j; j <= max_j; ++j) {
-                    if (Chunk* chunk = chunks_.find(i, j)) {
+                for (int k = min_k; k <= max_k; ++k) {
+                    if (Chunk* chunk = chunks_.find(i, k)) {
                         active.push_back(chunk);
                     }
                 }
@@ -937,17 +909,28 @@ void WorldGrid::update_active_chunks(const GridBounds& camera_world, int margin_
 }
 
 int WorldGrid::default_resolution_layer() const {
-    // Finest available layer by default; grid_resolution_ is tile-only.
+    // Finest available layer by default.
     return max_resolution_layers();
 }
 
 void WorldGrid::set_grid_resolution(int r) {
     const int clamped = std::clamp(r, 0, vibble::grid::kMaxResolution);
-    grid_resolution_ = clamped;
+    if (clamped != r) {
+        vibble::log::warn(std::string{"[WorldGrid] Requested grid resolution "} +
+                          std::to_string(r) +
+                          " clamped to " + std::to_string(clamped) +
+                          " (max=" + std::to_string(vibble::grid::kMaxResolution) + ")");
+    }
+    if (clamped == r_chunk_) {
+        return;
+    }
+    r_chunk_ = clamped;
+    max_resolution_layers_ = clamped;
+    invalidate_active_cache();
 }
 
 int WorldGrid::grid_resolution() const {
-    return grid_resolution_;
+    return r_chunk_;
 }
 
 GridCoord WorldGrid::grid_index_from_world(const GridPoint& world_point, int layer_override) const {
@@ -956,9 +939,9 @@ GridCoord WorldGrid::grid_index_from_world(const GridPoint& world_point, int lay
     if (spacing <= 0) {
         return GridCoord{0, 0};
     }
-    const int i = grid_floor_div(world_point.world_x() - origin_.world_x(), spacing);
-    const int j = grid_floor_div(world_point.world_y() - origin_.world_y(), spacing);
-    return GridCoord{i, j};
+    const int i = vibble::math::floor_div(world_point.world_x() - origin_.world_x(), spacing);
+    const int k = vibble::math::floor_div(world_point.world_z() - origin_.world_z(), spacing);
+    return GridCoord{i, k};
 }
 
 void WorldGrid::propagate_branch_active(GridPoint* node) {

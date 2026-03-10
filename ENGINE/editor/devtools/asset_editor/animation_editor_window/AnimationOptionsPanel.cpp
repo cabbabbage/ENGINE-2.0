@@ -71,29 +71,6 @@ float parse_speed_multiplier(const nlohmann::json& payload) {
     return 1.0f;
 }
 
-bool parse_crop_frames(const nlohmann::json& payload) {
-    try {
-        auto it = payload.find("crop_frames");
-        if (it != payload.end()) {
-            if (it->is_boolean()) {
-                return it->get<bool>();
-            }
-            if (it->is_number()) {
-                return it->get<double>() != 0.0;
-            }
-            if (it->is_string()) {
-                std::string text = it->get<std::string>();
-                std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
-                    return static_cast<char>(std::tolower(ch));
-                });
-                return text == "true" || text == "1" || text == "yes" || text == "on";
-            }
-        }
-    } catch (...) {
-    }
-    return false;
-}
-
 const std::vector<float>& speed_options_static() {
     static const std::vector<float> options{0.25f, 0.5f, 1.0f, 2.0f, 4.0f};
     return options;
@@ -186,7 +163,6 @@ void AnimationOptionsPanel::render(SDL_Renderer* renderer) const {
         render_label(renderer, "Animation Options", label_rect_.x, label_rect_.y);
     }
     if (speed_dropdown_) speed_dropdown_->render(renderer);
-    if (crop_checkbox_) crop_checkbox_->render(renderer);
 }
 
 bool AnimationOptionsPanel::handle_event(const SDL_Event& e) {
@@ -198,16 +174,6 @@ bool AnimationOptionsPanel::handle_event(const SDL_Event& e) {
         if (speed_dropdown_->handle_event(e)) {
             handled = true;
             if (!syncing_ && speed_dropdown_->selected() != before) {
-                apply_changes_from_controls();
-            }
-        }
-    }
-
-    if (crop_checkbox_) {
-        bool before = crop_checkbox_->value();
-        if (crop_checkbox_->handle_event(e)) {
-            handled = true;
-            if (!syncing_ && crop_checkbox_->value() != before) {
                 apply_changes_from_controls();
             }
         }
@@ -229,8 +195,6 @@ int AnimationOptionsPanel::preferred_height(int width) const {
     }
     int height = padding + label_height + DMSpacing::small_gap();
     height += DMDropdown::height();
-    height += DMSpacing::small_gap();
-    height += DMCheckbox::height();
     height += padding;
     return height;
 }
@@ -242,9 +206,6 @@ void AnimationOptionsPanel::set_on_animation_properties_changed(std::function<vo
 void AnimationOptionsPanel::ensure_widgets() {
     if (!speed_dropdown_) {
         speed_dropdown_ = std::make_unique<DMDropdown>("Speed Multiplier", speed_labels_static(), 2);
-    }
-    if (!crop_checkbox_) {
-        crop_checkbox_ = std::make_unique<DMCheckbox>("Crop Frames", false);
     }
 }
 
@@ -270,12 +231,7 @@ void AnimationOptionsPanel::layout_widgets() const {
     if (speed_dropdown_) {
         SDL_Rect rect{x, y, width, DMDropdown::height()};
         speed_dropdown_->set_rect(rect);
-        y += rect.h + DMSpacing::small_gap();
-    }
-
-    if (crop_checkbox_) {
-        SDL_Rect rect{x, y, width, DMCheckbox::height()};
-        crop_checkbox_->set_rect(rect);
+        y += rect.h;
     }
 }
 
@@ -296,16 +252,12 @@ void AnimationOptionsPanel::sync_from_document() {
     payload_signature_ = *payload_text;
     nlohmann::json payload = parse_payload_text(*payload_text);
     cached_speed_ = parse_speed_multiplier(payload);
-    cached_crop_ = parse_crop_frames(payload);
 
     ensure_widgets();
     syncing_ = true;
     if (speed_dropdown_) {
         int idx = find_best_speed_index(cached_speed_);
         speed_dropdown_->set_selected(idx);
-    }
-    if (crop_checkbox_) {
-        crop_checkbox_->set_value(cached_crop_);
     }
     syncing_ = false;
 }
@@ -315,10 +267,8 @@ void AnimationOptionsPanel::apply_changes_from_controls() {
         return;
     }
     float desired_speed = selected_speed();
-    bool desired_crop = crop_checkbox_ ? crop_checkbox_->value() : cached_crop_;
     const bool speed_changed = std::fabs(desired_speed - cached_speed_) > 1e-3f;
-    const bool crop_changed = desired_crop != cached_crop_;
-    if (!speed_changed && !crop_changed) {
+    if (!speed_changed) {
         return;
     }
 
@@ -327,10 +277,6 @@ void AnimationOptionsPanel::apply_changes_from_controls() {
         payload = parse_payload_text(*payload_text);
     }
     payload["speed_multiplier"] = desired_speed;
-    payload["crop_frames"] = desired_crop;
-    if (!desired_crop) {
-        payload.erase("crop_bounds");
-    }
 
     document_->replace_animation_payload(animation_id_, payload.dump());
 
@@ -338,7 +284,6 @@ void AnimationOptionsPanel::apply_changes_from_controls() {
         payload_signature_ = *updated;
         nlohmann::json normalized = parse_payload_text(*updated);
         cached_speed_ = parse_speed_multiplier(normalized);
-        cached_crop_ = parse_crop_frames(normalized);
         if (on_animation_properties_changed_) {
             on_animation_properties_changed_(animation_id_, normalized);
         }

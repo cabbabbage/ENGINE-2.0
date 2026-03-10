@@ -11,9 +11,7 @@ struct MapGridSettings {
     void clamp();
     void apply_to_json(nlohmann::json& obj) const;
 
-    int spacing() const;     // 3^grid_resolution spacing for GridPoint placement.
-    int chunk_size() const;  // Tile chunk size (power-of-two, tile-only).
-    int tile_spacing() const; // Alias for spacing when tiling assets.
+    int spacing() const; // 3^grid_resolution spacing for GridPoint placement.
 };
 
 void ensure_map_grid_settings(nlohmann::json& map_info);

@@ -1,4 +1,4 @@
-﻿#include "animation_update.hpp"
+#include "animation_update.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -11,9 +11,9 @@
 #include <utility>
 #include <vector>
 
-#include "assets/Asset.hpp"
-#include "assets/animation.hpp"
-#include "assets/animation_frame.hpp"
+#include "assets/asset/Asset.hpp"
+#include "assets/asset/animation.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "animation_runtime.hpp"
@@ -159,12 +159,14 @@ world::GridPoint bottom_middle_for(const Asset& asset, const world::GridPoint& p
     }
 
     const int offset_x = bottom.x - asset.world_x();
-    const int offset_y = bottom.y - asset.world_y();
+    const int offset_y = bottom.y - asset.world_z();
     return world::grid_math::offset(pos, offset_x, offset_y);
 }
 
 SDL_Point bottom_middle_for(const Asset& asset, SDL_Point pos) {
-    return bottom_middle_for(asset, world::grid_math::from_sdl(pos)).to_sdl_point();
+    return bottom_middle_for(asset,
+                             world::grid_math::from_sdl(pos, asset.world_y(), asset.grid_resolution))
+        .to_sdl_point();
 }
 
 SDL_Point frame_world_delta(const AnimationFrame& frame,
@@ -278,7 +280,7 @@ void AnimationUpdate::auto_move(SDL_Point world_checkpoint,
     if (!self_) {
         return;
     }
-    SDL_Point delta{ world_checkpoint.x - self_->world_x(), world_checkpoint.y - self_->world_y() };
+    SDL_Point delta{ world_checkpoint.x - self_->world_x(), world_checkpoint.y - self_->world_z() };
     if (delta.x == 0 && delta.y == 0) {
         self_->target_reached = true;
         self_->needs_target = true;
@@ -297,7 +299,7 @@ void AnimationUpdate::auto_move(Asset* target_asset,
     if (self_) {
         self_->target_reached = false;
     }
-    SDL_Point delta{ target_asset->world_x() - self_->world_x(), target_asset->world_y() - self_->world_y() };
+    SDL_Point delta{ target_asset->world_x() - self_->world_x(), target_asset->world_z() - self_->world_z() };
     if (delta.x == 0 && delta.y == 0) {
         if (self_) {
             self_->target_reached = true;
@@ -335,7 +337,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
     std::vector<SDL_Point> absolute;
     absolute.reserve(rel_checkpoints.size());
     vibble::grid::Grid& grid_service = grid();
-    SDL_Point           cursor_index = grid_service.world_to_index(self_->world_point(), resolution);
+    SDL_Point           cursor_index = grid_service.world_to_index(self_->world_xz_point(), resolution);
     for (const SDL_Point& delta : rel_checkpoints) {
         SDL_Point delta_indices = grid_service.convert_resolution(delta, 0, resolution);
         cursor_index.x += delta_indices.x;
@@ -346,7 +348,7 @@ void AnimationUpdate::auto_move(const std::vector<SDL_Point>& rel_checkpoints,
 
     plan_      = planner_(*self_, sanitizer_.sanitize(*self_, absolute, visited_thresh_), visited_thresh_, grid());
     final_dest = plan_.final_dest;
-    plan_.world_start = self_->world_point();
+    plan_.world_start = self_->world_xz_point();
     plan_.override_non_locked = override_non_locked;
     if (debug_logging) {
         std::ostringstream oss;
@@ -397,7 +399,7 @@ void AnimationUpdate::clear_movement_plan() {
     const bool debug_logging = debug_enabled_;
     plan_.strides.clear();
     plan_.sanitized_checkpoints.clear();
-    plan_.final_dest = self_ ? self_->world_point() : SDL_Point{ 0, 0 };
+    plan_.final_dest = self_ ? self_->world_xz_point() : SDL_Point{ 0, 0 };
     plan_.override_non_locked = true;
     final_dest       = plan_.final_dest;
     input_event_     = true;

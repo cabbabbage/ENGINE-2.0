@@ -1,6 +1,6 @@
 #include "find_current_room.hpp"
 #include "gameplay/map_generation/room.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/area.hpp"
 #include "utils/range_util.hpp"
 #include "utils/string_utils.hpp"
@@ -30,11 +30,11 @@ Room* CurrentRoomFinder::getCurrentRoom() const {
     }
 
     const int px = player->world_x();
-    const int py = player->world_y();
+    const int pz = player->world_z();
     auto contains_player = [&](Room* room) -> bool {
         return room &&
                room->room_area &&
-               room->room_area->contains_point(SDL_Point{px, py});
+               room->room_area->contains_point(SDL_Point{px, pz});
 };
 
     auto is_trail_room = [](Room* room) -> bool {
@@ -101,7 +101,7 @@ Room* CurrentRoomFinder::getCurrentRoom() const {
     }
 
     double best_dist = std::numeric_limits<double>::max();
-    SDL_Point player_pos{px, py};
+    SDL_Point player_pos{px, pz};
 
     for (Room* r : *rooms) {
         if (!r || !r->room_area) continue;

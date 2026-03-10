@@ -23,24 +23,21 @@
 #include <functional>
 
 #include "assets/asset/asset_info.hpp"
+#include "assets/asset/asset_types.hpp"
 #include "utils/input.hpp"
 #include "utils/area.hpp"
 #include "utils/string_utils.hpp"
 #include "utils/cache_manager.hpp"
+#include "utils/rebuild_queue.hpp"
 #include "widgets.hpp"
 #include "tag_utils.hpp"
-#include "assets/asset/primary_asset_cache.hpp"
 
 #include "DockableCollapsible.hpp"
-#include "FloatingPanelLayoutManager.hpp"
+#include "DockManager.hpp"
 #include "SlidingWindowContainer.hpp"
-#include "FloatingPanelLayoutManager.hpp"
 #include "dm_styles.hpp"
 #include "dev_mode_utils.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
-#include "asset_editor/Section_BasicInfo.hpp"
-#include "asset_editor/Section_Tags.hpp"
-#include "asset_editor/Section_Spacing.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "core/AssetsManager.hpp"
 #include "core/manifest/manifest_loader.hpp"
@@ -51,12 +48,13 @@
 #include "asset_editor/animation_editor_window/AnimationEditorWindow.hpp"
 #include "asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "core/AssetsManager.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/render.hpp"
 #include "search_assets.hpp"
 #include "draw_utils.hpp"
 #include <SDL3_ttf/SDL_ttf.h>
+#include "devtools/config/room_config/tag_editor_widget.hpp"
 #include "devtools/manifest_asset_utils.hpp"
 #include "devtools/asset_paths.hpp"
 
@@ -65,6 +63,487 @@
 namespace asset_paths = devmode::asset_paths;
 
 namespace {
+
+class Section_BasicInfo : public DockableCollapsible {
+  public:
+    Section_BasicInfo();
+    ~Section_BasicInfo() override = default;
+
+    void set_ui(AssetInfoUI* ui) { ui_ = ui; }
+
+    void build() override;
+    void layout() override { DockableCollapsible::layout(); }
+    bool handle_event(const SDL_Event& e) override;
+    void render_content(SDL_Renderer* r) const override {}
+    void render_world_overlay(SDL_Renderer* r, const WarpedScreenGrid& cam, const Asset* target, float reference_screen_height) const;
+
+  private:
+    static int find_index(const std::vector<std::string>& opts, const std::string& value);
+
+    std::unique_ptr<DMDropdown>  dd_type_;
+    std::unique_ptr<DMSlider>    s_scale_pct_;
+    std::unique_ptr<DMCheckbox>  c_flipable_;
+    std::unique_ptr<DMCheckbox>  c_tillable_;
+    std::unique_ptr<DMCheckbox>  c_crop_frames_;
+    std::unique_ptr<DMTextBox>   tb_starting_health_;
+    std::unique_ptr<DMButton>    apply_btn_;
+    std::vector<std::unique_ptr<Widget>> widgets_;
+    std::vector<std::string> type_options_;
+    AssetInfoUI* ui_ = nullptr;
+    void on_scale_slider_value_changed(int new_value);
+
+  protected:
+    std::string_view lock_settings_namespace() const override { return "asset_info"; }
+    std::string_view lock_settings_id() const override { return "basic"; }
+};
+
+inline Section_BasicInfo::Section_BasicInfo()
+    : DockableCollapsible("Basic Info", false) {}
+
+inline int Section_BasicInfo::find_index(const std::vector<std::string>& opts, const std::string& value) {
+    std::string canonical = asset_types::canonicalize(value);
+    auto it = std::find(opts.begin(), opts.end(), canonical);
+    if (it != opts.end()) {
+        return static_cast<int>(std::distance(opts.begin(), it));
+    }
+    auto fallback = std::find(opts.begin(), opts.end(), std::string(asset_types::object));
+    if (fallback != opts.end()) {
+        return static_cast<int>(std::distance(opts.begin(), fallback));
+    }
+    return 0;
+}
+
+inline void Section_BasicInfo::build() {
+    widgets_.clear();
+    DockableCollapsible::Rows rows;
+    if (!info_) {
+        auto placeholder = std::make_unique<ReadOnlyTextBoxWidget>( "", "No asset selected. Select an asset from the library or scene to view and edit its information.");
+        rows.push_back({ placeholder.get() });
+        widgets_.push_back(std::move(placeholder));
+        set_rows(rows);
+        return;
+    }
+
+    type_options_ = asset_types::all_as_strings();
+
+    const bool is_area_asset = (asset_types::canonicalize(info_->type) == std::string(asset_types::area));
+    const bool is_tiled_asset = info_->tillable;
+    if (is_area_asset) {
+        type_options_.clear();
+        type_options_.emplace_back(std::string(asset_types::area));
+    } else {
+
+        type_options_.erase(std::remove(type_options_.begin(), type_options_.end(), std::string(asset_types::area)), type_options_.end());
+    }
+    dd_type_ = std::make_unique<DMDropdown>("Type", type_options_, find_index(type_options_, info_->type));
+    int pct = std::max(0, static_cast<int>(std::lround(info_->scale_factor * 100.0f)));
+    s_scale_pct_ = std::make_unique<DMSlider>("Scale (%)", 1, 400, pct);
+    s_scale_pct_->set_on_value_changed([this](int value) { this->on_scale_slider_value_changed(value); });
+    if (!is_tiled_asset) {
+        c_flipable_  = std::make_unique<DMCheckbox>("Flipable (can invert)", info_->flipable);
+    } else {
+        c_flipable_.reset();
+    }
+    c_tillable_ = std::make_unique<DMCheckbox>("Tileable (grid tiles)", info_->tillable);
+    c_crop_frames_ = std::make_unique<DMCheckbox>("Crop Frames (global)", info_->crop_frames);
+
+    auto w_type = std::make_unique<DropdownWidget>(dd_type_.get());
+    rows.push_back({ w_type.get() });
+    widgets_.push_back(std::move(w_type));
+
+    auto w_scale = std::make_unique<SliderWidget>(s_scale_pct_.get());
+    rows.push_back({ w_scale.get() });
+    widgets_.push_back(std::move(w_scale));
+
+    tb_starting_health_ = std::make_unique<DMTextBox>("Starting Health", std::to_string(info_->starting_health));
+    auto w_health = std::make_unique<TextBoxWidget>(tb_starting_health_.get());
+    rows.push_back({ w_health.get() });
+    widgets_.push_back(std::move(w_health));
+
+    if (c_flipable_) {
+        auto w_flip = std::make_unique<CheckboxWidget>(c_flipable_.get());
+        rows.push_back({ w_flip.get() });
+        widgets_.push_back(std::move(w_flip));
+    }
+
+    auto w_tillable = std::make_unique<CheckboxWidget>(c_tillable_.get());
+    rows.push_back({ w_tillable.get() });
+    widgets_.push_back(std::move(w_tillable));
+
+    auto w_crop_frames = std::make_unique<CheckboxWidget>(c_crop_frames_.get());
+    rows.push_back({ w_crop_frames.get() });
+    widgets_.push_back(std::move(w_crop_frames));
+
+    if (!apply_btn_) {
+        apply_btn_ = std::make_unique<DMButton>("Apply Settings", &DMStyles::AccentButton(), 180, DMButton::height());
+    }
+    auto w_apply = std::make_unique<ButtonWidget>(apply_btn_.get(), [this]() {
+        if (ui_) ui_->request_apply_section(AssetInfoSectionId::BasicInfo);
+    });
+    rows.push_back({ w_apply.get() });
+    widgets_.push_back(std::move(w_apply));
+
+    set_rows(rows);
+}
+
+inline bool Section_BasicInfo::handle_event(const SDL_Event& e) {
+    bool used = DockableCollapsible::handle_event(e);
+    if (!info_) return used;
+
+    if (!used) {
+        if (dd_type_ && dd_type_->handle_event(e)) used = true;
+        if (s_scale_pct_ && s_scale_pct_->handle_event(e)) used = true;
+        if (tb_starting_health_ && tb_starting_health_->handle_event(e)) used = true;
+        if (c_flipable_ && c_flipable_->handle_event(e)) used = true;
+        if (c_tillable_ && c_tillable_->handle_event(e)) used = true;
+        if (c_crop_frames_ && c_crop_frames_->handle_event(e)) used = true;
+    }
+
+    bool changed = false;
+    bool rebuild_needed = false;
+    bool tile_changed = false;
+    bool crop_changed = false;
+    bool render_settings_changed = false;
+    bool type_changed = false;
+    if (dd_type_ && !type_options_.empty()) {
+        int idx = std::clamp(dd_type_->selected(), 0, static_cast<int>(type_options_.size()) - 1);
+        std::string selected = asset_types::canonicalize(type_options_[idx]);
+        std::string current = asset_types::canonicalize(info_->type);
+        const bool is_area_asset = (current == std::string(asset_types::area));
+        const bool selecting_area = (selected == std::string(asset_types::area));
+
+        if (!(is_area_asset && !selecting_area) && !(!is_area_asset && selecting_area) && current != selected) {
+            info_->set_asset_type(selected);
+            changed = true;
+            render_settings_changed = true;
+            type_changed = true;
+        }
+    }
+
+    if (tb_starting_health_ && !tb_starting_health_->value().empty()) {
+        try {
+            int new_health = std::stoi(tb_starting_health_->value());
+            if (info_->starting_health != new_health) {
+                info_->set_starting_health(new_health);
+                changed = true;
+            }
+        } catch (const std::exception&) {
+            // Invalid input, ignore
+        }
+    }
+
+    if (c_flipable_ && info_->flipable != c_flipable_->value()) {
+        info_->set_flipable(c_flipable_->value());
+        changed = true;
+        render_settings_changed = true;
+    }
+
+    if (c_tillable_ && info_->tillable != c_tillable_->value()) {
+        info_->set_tillable(c_tillable_->value());
+        changed = true;
+        tile_changed = true;
+        rebuild_needed = true;
+    }
+
+    if (c_crop_frames_ && info_->crop_frames != c_crop_frames_->value()) {
+        info_->set_crop_frames(c_crop_frames_->value());
+        changed = true;
+        crop_changed = true;
+    }
+
+    if (changed) {
+        if (crop_changed && !info_->name.empty()) {
+            vibble::RebuildQueueCoordinator coordinator;
+            coordinator.request_asset(info_->name);
+        }
+        auto on_success = [this, render_settings_changed, type_changed, tile_changed]() {
+            if (!ui_) return;
+            if (tile_changed) ui_->sync_target_tiling_state();
+            if (render_settings_changed) ui_->sync_target_basic_render_settings(type_changed);
+        };
+        if (ui_) {
+            ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                       "Basic info",
+                                       on_success);
+        } else {
+            on_success();
+        }
+    }
+    if (rebuild_needed) {
+        build();
+    }
+    return used || changed;
+}
+
+inline void Section_BasicInfo::render_world_overlay(SDL_Renderer* r,
+                                                    const WarpedScreenGrid& cam,
+                                                    const Asset* target,
+                                                    float reference_screen_height) const {
+    if (!is_expanded() || !target || !target->info) return;
+    (void)reference_screen_height;
+    Assets* assets = ui_ ? ui_->assets() : nullptr;
+
+    SDL_Texture* tex = target->get_current_frame();
+    int fw = target->cached_w;
+    int fh = target->cached_h;
+    if ((fw == 0 || fh == 0) && tex) {
+        float fwf = 0.0f;
+        float fhf = 0.0f;
+        if (SDL_GetTextureSize(tex, &fwf, &fhf)) {
+            fw = static_cast<int>(std::lround(fwf));
+            fh = static_cast<int>(std::lround(fhf));
+        }
+    }
+    if (fw == 0 || fh == 0) {
+        if (target->info) {
+            fw = target->info->original_canvas_width;
+            fh = target->info->original_canvas_height;
+        }
+    }
+    if (fw == 0 || fh == 0) return;
+
+    float package_scale = target->current_nearest_variant_scale * target->current_remaining_scale_adjustment;
+    if (!std::isfinite(package_scale) || package_scale <= 0.0f) {
+        package_scale = 1.0f;
+    }
+
+    int base_w = fw;
+    int base_h = fh;
+    if (target->info) {
+        if (target->info->original_canvas_width > 0) base_w = target->info->original_canvas_width;
+        if (target->info->original_canvas_height > 0) base_h = target->info->original_canvas_height;
+    }
+
+    float base_sw = static_cast<float>(base_w) * package_scale;
+    float base_sh = static_cast<float>(base_h) * package_scale;
+    if (base_sw <= 0.0f || base_sh <= 0.0f) return;
+
+    SDL_FPoint screen_pos = cam.map_to_screen(target->world_xz_point());
+    float distance_scale = 1.0f;
+    float vertical_scale = 1.0f;
+    if (auto* gp = cam.grid_point_for_asset(target)) {
+        screen_pos = gp->screen;
+        distance_scale = std::max(0.0001f, gp->perspective_scale);
+        vertical_scale = std::max(0.0001f, gp->vertical_scale);
+    }
+
+    float scaled_sw = base_sw * distance_scale;
+    float scaled_sh = base_sh * distance_scale;
+    float final_visible_h = scaled_sh * vertical_scale;
+
+    int sw = std::max(1, static_cast<int>(std::round(scaled_sw)));
+    int sh = std::max(1, static_cast<int>(std::round(final_visible_h)));
+    if (sw <= 0 || sh <= 0) return;
+
+        SDL_Point world_point{ target->world_xz_point().x, target->world_xz_point().y };
+        float center_x = screen_pos.x;
+        if (assets) {
+
+            if (!(assets->player == target)) {
+
+            }
+        }
+        const int   left     = static_cast<int>(std::lround(center_x - static_cast<float>(sw) * 0.5f));
+        const int   top      = static_cast<int>(std::lround(screen_pos.y)) - sh;
+    SDL_Rect bounds{ left, top, sw, sh };
+
+}
+
+inline void Section_BasicInfo::on_scale_slider_value_changed(int new_value) {
+    if (!info_) return;
+    info_->set_scale_percentage(static_cast<float>(new_value));
+    if (ui_) {
+        ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                   "Scale",
+                                   [this]() {
+                                       if (ui_) {
+                                           ui_->refresh_target_asset_scale();
+                                       }
+                                   });
+    }
+}
+
+class Section_Tags : public DockableCollapsible {
+  public:
+    Section_Tags() : DockableCollapsible("Tags", false) { set_visible_height(480); }
+    ~Section_Tags() override = default;
+
+    void set_ui(AssetInfoUI* ui) { ui_ = ui; }
+
+    void build() override {
+      widgets_.clear();
+      DockableCollapsible::Rows rows;
+      if (!info_) {
+        auto placeholder = std::make_unique<ReadOnlyTextBoxWidget>( "", "No asset selected. Select an asset from the library or scene to view and edit its information.");
+        rows.push_back({ placeholder.get() });
+        widgets_.push_back(std::move(placeholder));
+        set_rows(rows);
+        return;
+      }
+
+      if (!tag_editor_) {
+        tag_editor_ = std::make_unique<TagEditorWidget>();
+        tag_editor_->set_on_changed([this](const std::vector<std::string>& tags,
+                                           const std::vector<std::string>& anti_tags) {
+          if (!info_) return;
+          info_->set_tags(tags);
+          info_->set_anti_tags(anti_tags);
+          if (ui_) {
+            ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                       "Tags",
+                                       [this]() {
+                                         tag_utils::notify_tags_changed();
+                                         if (ui_) {
+                                           ui_->sync_target_tags();
+                                         }
+                                       });
+          }
+        });
+      }
+
+      tag_editor_->set_tags(info_->tags, info_->anti_tags);
+      rows.push_back({ tag_editor_.get() });
+
+      if (!apply_btn_) {
+        apply_btn_ = std::make_unique<DMButton>("Apply Settings", &DMStyles::AccentButton(), 180, DMButton::height());
+      }
+      auto w_apply = std::make_unique<ButtonWidget>(apply_btn_.get(), [this]() {
+        if (ui_) ui_->request_apply_section(AssetInfoSectionId::Tags);
+      });
+      rows.push_back({ w_apply.get() });
+      widgets_.push_back(std::move(w_apply));
+
+      set_rows(rows);
+    }
+
+    void layout() override { DockableCollapsible::layout(); }
+
+    bool handle_event(const SDL_Event& e) override {
+      return DockableCollapsible::handle_event(e);
+    }
+
+    void render_content(SDL_Renderer* ) const override {}
+
+  private:
+    std::unique_ptr<TagEditorWidget> tag_editor_;
+    std::vector<std::unique_ptr<Widget>> widgets_;
+    std::unique_ptr<DMButton> apply_btn_;
+    AssetInfoUI* ui_ = nullptr;
+
+  protected:
+    std::string_view lock_settings_namespace() const override { return "asset_info"; }
+    std::string_view lock_settings_id() const override { return "tags"; }
+};
+
+class Section_Spacing : public DockableCollapsible {
+  public:
+    Section_Spacing() : DockableCollapsible("Spacing", false) {}
+    ~Section_Spacing() override = default;
+
+    void set_ui(AssetInfoUI* ui) { ui_ = ui; }
+
+    void build() override {
+      widgets_.clear();
+      DockableCollapsible::Rows rows;
+      if (!info_) {
+        auto placeholder = std::make_unique<ReadOnlyTextBoxWidget>( "", "No asset selected. Select an asset from the library or scene to view and edit its information.");
+        rows.push_back({ placeholder.get() });
+        widgets_.push_back(std::move(placeholder));
+        set_rows(rows);
+        return;
+      }
+      s_min_same_ = std::make_unique<DMSlider>( "Min Distance From Same Type", 0, 2000, std::max(0, info_->min_same_type_distance));
+      s_min_all_  = std::make_unique<DMSlider>( "Min Distance From All Assets", 0, 2000, std::max(0, info_->min_distance_all));
+      int neighbor_distance = info_->NeighborSearchRadius > 0 ? info_->NeighborSearchRadius : 500;
+      neighbor_distance = std::clamp(neighbor_distance, 20, 1000);
+      s_neighbor_search_ = std::make_unique<DMSlider>("Neighbor Search Distance", 20, 1000, neighbor_distance);
+
+      auto w_same = std::make_unique<SliderWidget>(s_min_same_.get());
+      rows.push_back({ w_same.get() });
+      widgets_.push_back(std::move(w_same));
+
+      auto w_all = std::make_unique<SliderWidget>(s_min_all_.get());
+      rows.push_back({ w_all.get() });
+      widgets_.push_back(std::move(w_all));
+
+      auto w_neighbor = std::make_unique<SliderWidget>(s_neighbor_search_.get());
+      rows.push_back({ w_neighbor.get() });
+      widgets_.push_back(std::move(w_neighbor));
+
+      if (!apply_btn_) {
+        apply_btn_ = std::make_unique<DMButton>("Apply Settings", &DMStyles::AccentButton(), 180, DMButton::height());
+      }
+      auto w_apply = std::make_unique<ButtonWidget>(apply_btn_.get(), [this]() {
+        if (ui_) ui_->request_apply_section(AssetInfoSectionId::Spacing);
+      });
+      rows.push_back({ w_apply.get() });
+      widgets_.push_back(std::move(w_apply));
+
+      set_rows(rows);
+    }
+
+    void layout() override {
+      DockableCollapsible::layout();
+    }
+
+    bool handle_event(const SDL_Event& e) override {
+      bool used = DockableCollapsible::handle_event(e);
+      if (!info_ || !expanded_) return used;
+
+      if (!used) {
+        if (s_min_same_ && s_min_same_->handle_event(e)) used = true;
+        if (s_min_all_ && s_min_all_->handle_event(e)) used = true;
+        if (s_neighbor_search_ && s_neighbor_search_->handle_event(e)) used = true;
+      }
+
+      bool changed = false;
+
+      if (s_min_same_ && info_->min_same_type_distance != s_min_same_->value()) {
+        int v = std::max(0, s_min_same_->value());
+        info_->set_min_same_type_distance(v);
+        changed = true;
+      }
+      if (s_min_all_ && info_->min_distance_all != s_min_all_->value()) {
+        int v = std::max(0, s_min_all_->value());
+        info_->set_min_distance_all(v);
+        changed = true;
+      }
+      if (s_neighbor_search_ && info_->NeighborSearchRadius != s_neighbor_search_->value()) {
+        int v = std::clamp(s_neighbor_search_->value(), 20, 1000);
+        info_->set_neighbor_search_radius(v);
+        changed = true;
+      }
+      if (changed) {
+        auto on_success = [this]() {
+          if (ui_) {
+            ui_->sync_target_spacing_settings();
+          }
+        };
+        if (ui_) {
+          ui_->enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority::Debounced,
+                                     "Spacing",
+                                     on_success);
+        } else {
+          on_success();
+        }
+      }
+      return used || changed;
+    }
+
+    void render_content(SDL_Renderer* ) const override {}
+
+  private:
+    std::unique_ptr<DMSlider> s_min_same_;
+    std::unique_ptr<DMSlider> s_min_all_;
+    std::unique_ptr<DMSlider> s_neighbor_search_;
+    std::vector<std::unique_ptr<Widget>> widgets_;
+    std::unique_ptr<DMButton> apply_btn_;
+    AssetInfoUI* ui_ = nullptr;
+
+  protected:
+    std::string_view lock_settings_namespace() const override { return "asset_info"; }
+    std::string_view lock_settings_id() const override { return "spacing"; }
+};
 
 using vibble::strings::to_lower_copy;
 
@@ -200,6 +679,7 @@ bool copy_section_from_source(AssetInfoSectionId section_id, const nlohmann::jso
             }
             changed |= copy_key("starting_health");
             changed |= copy_key("can_invert");
+            changed |= copy_key("crop_frames");
 
             changed |= copy_key("tileable");
             changed |= copy_key("tillable");
@@ -319,7 +799,7 @@ AssetInfoUI::AssetInfoUI() {
 
     container_.set_update_function([this](const Input& input, int screen_w, int screen_h) {
 
-        SDL_Rect usable = FloatingPanelLayoutManager::instance().usableRect();
+        SDL_Rect usable = DockManager::instance().usableRect();
         if (usable.w > 0 && usable.h > 0) {
             int panel_x = screen_w - std::max(screen_w / 3, 320);
             panel_x = std::clamp(panel_x, 0, screen_w);
@@ -794,7 +1274,7 @@ void AssetInfoUI::update(const Input& input, int screen_w, int screen_h) {
     if (info_ && asset_selector_ && asset_selector_->visible()) {
         asset_selector_->update(input);
         const SDL_Rect& panel = container_.panel_rect();
-        FloatingPanelLayoutManager::SlidingParentInfo parent;
+        DockManager::SlidingParentInfo parent;
         parent.bounds = panel;
         parent.padding = DMSpacing::panel_padding();
         parent.anchor_left = true;
@@ -1062,8 +1542,10 @@ void AssetInfoUI::render_world_overlay(SDL_Renderer* r, const WarpedScreenGrid& 
 
     float reference_screen_height = compute_player_screen_height(cam);
 
-    if (basic_info_section_ && basic_info_section_->is_expanded()) {
-        basic_info_section_->render_world_overlay(r, cam, target_asset_, reference_screen_height);
+    if (auto* basic = static_cast<Section_BasicInfo*>(basic_info_section_)) {
+        if (basic->is_expanded()) {
+            basic->render_world_overlay(r, cam, target_asset_, reference_screen_height);
+        }
     }
 
 }
@@ -1160,33 +1642,6 @@ void AssetInfoUI::cancel_color_sampling(bool silent) {
     }
 }
 
-bool AssetInfoUI::persist_asset_bundle(const char* reason) {
-    if (!info_) {
-        return false;
-    }
-    try {
-        PrimaryAssetCache cache(assets_ ? assets_->renderer() : nullptr);
-        if (!cache.save_current(*info_)) {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                        "[AssetInfoUI] Failed to persist bundle for %s%s",
-                        info_->name.c_str(),
-                        reason ? reason : "");
-            return false;
-        }
-        return true;
-    } catch (const std::exception& ex) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[AssetInfoUI] Exception while persisting bundle for %s: %s",
-                    info_->name.c_str(),
-                    ex.what());
-    } catch (...) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION,
-                    "[AssetInfoUI] Unknown failure while persisting bundle for %s",
-                    info_->name.c_str());
-    }
-    return false;
-}
-
 bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Priority priority,
                                         const std::string& label,
                                         std::function<void()> on_success) {
@@ -1195,10 +1650,9 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
         return false;
     }
 
-    auto run_after_save = [this, cb = std::move(on_success)](bool bundle_already_persisted) mutable {
-        if (!bundle_already_persisted) {
-            persist_asset_bundle(" (manifest save)");
-        }
+    info_->mark_dirty();
+
+    auto run_after_save = [this, cb = std::move(on_success)]() mutable {
         if (cb) {
             cb();
             cb = nullptr;
@@ -1213,7 +1667,7 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
             std::move(payload),
             priority,
             intent_label,
-            [run_after_save]() mutable { run_after_save(false); });
+            [run_after_save]() mutable { run_after_save(); });
         if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
             save_coordinator_->flush_now(intent_label);
         }
@@ -1238,7 +1692,7 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
             return false;
         }
         if (committed) {
-            run_after_save(true);
+            run_after_save();
         }
         return committed;
     }
@@ -1254,8 +1708,7 @@ bool AssetInfoUI::enqueue_manifest_save(devmode::core::DevSaveCoordinator::Prior
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to commit manifest for '%s'", info_->name.c_str());
         return false;
     }
-    manifest_store_->flush();
-    run_after_save(false);
+    run_after_save();
     return true;
 }
 
@@ -1448,6 +1901,8 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
     bool all_success = true;
     bool any_written = false;
     auto tags_notified = std::make_shared<bool>(false);
+    const bool basic_info_contains_crop = section_id == AssetInfoSectionId::BasicInfo &&
+                                          source.contains("crop_frames");
 
     for (const auto& name : asset_names) {
         if (name.empty()) {
@@ -1476,13 +1931,17 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
             return session.commit();
         };
 
-        auto on_success = [this, section_id, tags_notified]() {
+        auto on_success = [this, section_id, tags_notified, target_key, basic_info_contains_crop]() {
             if (section_id == AssetInfoSectionId::Tags) {
                 if (!*tags_notified) {
                     tag_utils::notify_tags_changed();
                     *tags_notified = true;
                 }
                 sync_target_tags();
+            }
+            if (basic_info_contains_crop && !target_key.empty()) {
+                vibble::RebuildQueueCoordinator coordinator;
+                coordinator.request_asset(target_key);
             }
         };
 
@@ -1516,7 +1975,6 @@ bool AssetInfoUI::apply_section_to_assets(AssetInfoSectionId section_id, const s
                 tag_utils::notify_tags_changed();
                 *tags_notified = true;
             }
-            manifest_store_->flush();
         }
     }
 
@@ -1669,8 +2127,8 @@ void AssetInfoUI::rebuild_default_sections() {
 };
 
     auto basic = std::make_unique<Section_BasicInfo>();
+    basic->set_ui(this);
     basic_info_section_ = basic.get();
-    basic_info_section_->set_ui(this);
     adopt_section(basic_info_section_);
     finalize_section(basic_info_section_);
     sections_.push_back(std::move(basic));
@@ -1779,28 +2237,29 @@ void AssetInfoUI::on_animation_document_saved() {
         return;
     }
 
+    const bool reloaded = info_->reload_animations_from_disk();
+    if (!reloaded) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to reload animations for %s.", info_->name.c_str());
+    }
+
+    // Ensure both bundle-cache save and image-cache rebuild have work queued after any
+    // animation document mutation (add/remove/rename/source edits).
+    info_->mark_dirty();
+    if (!info_->name.empty()) {
+        vibble::RebuildQueueCoordinator coordinator;
+        coordinator.request_asset(info_->name);
+    }
+
     SDL_Renderer* renderer = nullptr;
     if (assets_) {
         renderer = assets_->renderer();
     }
-
     if (!renderer) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] No renderer available for animation reload");
         return;
     }
-
-    const bool reloaded = info_->reload_animations_from_disk();
     if (!reloaded) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to reload animations for %s.", info_->name.c_str());
         return;
-    }
-
-    // Rebuild and persist the bundle immediately so dev-mode edits stay the cache truth source.
-    {
-        PrimaryAssetCache cache(renderer);
-        if (!cache.save_current(*info_)) {
-            SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Bundle rebuild failed for %s; runtime cache may be stale.", info_->name.c_str());
-        }
     }
 
     info_->loadAnimations(renderer);
@@ -1880,7 +2339,6 @@ bool AssetInfoUI::duplicate_current_asset(const std::string& raw_name) {
             fs::remove_all(dst_dir, cleanup_ec);
             return false;
         }
-        manifest_store_->flush();
 
         if (assets_) {
             assets_->library().load_all_from_resources();
@@ -1946,7 +2404,6 @@ void AssetInfoUI::confirm_delete_request() {
         }
     }
 
-    bool manifest_flush_required = false;
     bool manifest_entry_removed = false;
     if (!asset_name.empty()) {
         if (manifest_store_) {
@@ -1955,7 +2412,6 @@ void AssetInfoUI::confirm_delete_request() {
             if (!manifest_entry_removed) {
                 SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to remove '%s' from manifest", asset_name.c_str());
             }
-            manifest_flush_required = remove_result.used_store || manifest_flush_required;
         } else {
             SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Manifest store unavailable; manifest not updated for '%s'", asset_name.c_str());
             manifest_entry_removed = devmode::manifest_utils::remove_manifest_asset_entry(asset_name, &std::cerr);
@@ -1985,13 +2441,6 @@ void AssetInfoUI::confirm_delete_request() {
         remove_directory_if_exists(cache_dir);
     }
 
-    if (!asset_name.empty() && manifest_store_ && manifest_entry_removed) {
-        manifest_flush_required = manifest_flush_required || manifest_store_->dirty();
-    }
-
-    if (manifest_store_ && manifest_flush_required) {
-        manifest_store_->flush();
-    }
 
     if (assets_ && !asset_name.empty()) {
         assets_->library().remove(asset_name);

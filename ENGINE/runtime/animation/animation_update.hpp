@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <optional>
 #include <string>
@@ -10,7 +10,7 @@
 #include "path_sanitizer.hpp"
 #include "get_best_path.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
-#include "assets/animation.hpp"
+#include "assets/asset/animation.hpp"
 #include "gameplay/world/grid_point.hpp"
 
 class Area;

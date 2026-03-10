@@ -11,7 +11,8 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "utils/grid.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
+#include "core/axis_convention.hpp"
 
 namespace devmode::frame_editors {
 
@@ -308,7 +309,7 @@ void Point3DEditor::sync_textboxes_from_selection() {
 
     if (tb_dz_) {
         std::string dz_str;
-        if (z_display_mode_ == ZDisplayMode::RawDelta) {
+        if (z_display_mode_ == CoordinateDisplayMode::RawDelta) {
             // Display Z as raw integer value (like dx/dy)
             const float display_z = locked_z.value_or(rel_z);
             dz_str = std::to_string(static_cast<int>(std::lround(display_z)));
@@ -373,7 +374,7 @@ void Point3DEditor::apply_textbox_changes() {
 
     if (tb_dz_ && is_axis_enabled(AdjustmentAxis::Z)) {
         float new_world_z;
-        if (z_display_mode_ == ZDisplayMode::RawDelta) {
+        if (z_display_mode_ == CoordinateDisplayMode::RawDelta) {
             // Textbox contains a raw delta value (like dx/dy)
             const float value = locked_z.value_or(parse_float(tb_dz_->value(), rel_z));
             new_world_z = anchor_z + value;
@@ -570,10 +571,10 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
         screen_pos = cam->map_to_screen_f(world_pos);
     }
 
-    // Calculate perspective scale based on world Y (depth) position
-    // In this engine, Y is depth (forward/back), Z is height
-    const float depth_y = world_pos.y;
-    const float height_z = world_z;
+    // Calculate perspective scale based on depth (Z) and height (Y).
+    // world_pos.y is the actual height axis; world_z is forward/back depth.
+    const float height_y = world_pos.y;
+    const float depth_z = world_z;
 
     // Get camera settings for realism warping
     const auto& settings = cam->get_settings();
@@ -582,10 +583,10 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
     const float depth_far = settings.depth_far_world;
 
     // Calculate perspective scale based on depth
-    // Objects further away (higher Y) should appear smaller
+    // Objects further away (larger Z) should appear smaller
     float depth_ratio = 0.5f;
     if (depth_far > depth_near) {
-        depth_ratio = std::clamp((depth_y - depth_near) / (depth_far - depth_near), 0.0f, 1.0f);
+        depth_ratio = std::clamp((depth_z - depth_near) / (depth_far - depth_near), 0.0f, 1.0f);
     }
 
     // Apply perspective scaling (further = smaller)
@@ -593,8 +594,8 @@ void Point3DEditor::render_axis_point_with_camera(SDL_Renderer* renderer,
     const float perspective_scale = 1.0f + (1.0f - depth_ratio) * 0.5f - depth_ratio * 0.3f;
     const float camera_scaled_radius = radius * std::max(0.5f, std::min(2.0f, perspective_scale));
 
-    // Also apply height-based darkening (lower Z = darker, as if in shadow)
-    const int height_darkness = static_cast<int>(std::max(0.0f, std::min(40.0f, -height_z * 0.02f)));
+    // Also apply height-based darkening (lower Y = darker, as if in shadow)
+    const int height_darkness = static_cast<int>(std::max(0.0f, std::min(40.0f, -height_y * 0.02f)));
     const int depth_darkness = static_cast<int>(std::max(0.0f, std::min(30.0f, depth_ratio * 30.0f)));
     const int total_darkness = height_darkness + depth_darkness;
 
@@ -675,10 +676,10 @@ SDL_FPoint Point3DEditor::constrain_drag_delta(const SDL_FPoint& drag_delta,
             constrained.y = 0.0f;  // Only horizontal movement (left/right)
             break;
         case AdjustmentAxis::Y:
-            constrained.x = 0.0f;  // Y is depth (forward/back in screen vertical)
+            constrained.x = 0.0f;  // Y is height (up/down) so drag vertically
             break;
         case AdjustmentAxis::Z:
-            constrained.x = 0.0f;  // Z is height (up/down in screen vertical)
+            constrained.x = 0.0f;  // Depth adjustments driven by drag along screen Y
             break;
     }
     return constrained;
@@ -711,9 +712,9 @@ SDL_Color Point3DEditor::get_axis_color(AdjustmentAxis axis) {
         case AdjustmentAxis::X:
             return SDL_Color{255, 50, 50, 255};  // Red (left/right)
         case AdjustmentAxis::Y:
-            return SDL_Color{50, 255, 50, 255};  // Green (depth - forward/back)
+            return SDL_Color{50, 255, 50, 255};  // Green (height - up/down)
         case AdjustmentAxis::Z:
-            return SDL_Color{50, 150, 255, 255};  // Blue (height - up/down)
+            return SDL_Color{50, 150, 255, 255};  // Blue (depth - forward/back)
         default:
             return SDL_Color{128, 128, 128, 255};  // Gray fallback
     }

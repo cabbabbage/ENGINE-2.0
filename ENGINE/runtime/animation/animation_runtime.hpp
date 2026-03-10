@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <cstddef>
 #include <optional>
@@ -8,7 +8,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "stride_types.hpp"
 #include "path_sanitizer.hpp"
 #include "get_best_path.hpp"

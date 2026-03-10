@@ -41,6 +41,40 @@ std::string summarize_labels(const std::vector<std::string>& labels) {
 
 DevSaveCoordinator::DevSaveCoordinator() = default;
 
+
+DevSaveCoordinator::ScopedFlushSuppression::ScopedFlushSuppression(ScopedFlushSuppression&& other) noexcept {
+    coordinator_ = other.coordinator_;
+    active_ = other.active_;
+    other.coordinator_ = nullptr;
+    other.active_ = false;
+}
+
+DevSaveCoordinator::ScopedFlushSuppression& DevSaveCoordinator::ScopedFlushSuppression::operator=(ScopedFlushSuppression&& other) noexcept {
+    if (this != &other) {
+        release();
+        coordinator_ = other.coordinator_;
+        active_ = other.active_;
+        other.coordinator_ = nullptr;
+        other.active_ = false;
+    }
+    return *this;
+}
+
+DevSaveCoordinator::ScopedFlushSuppression::~ScopedFlushSuppression() {
+    release();
+}
+
+void DevSaveCoordinator::ScopedFlushSuppression::release() {
+    if (!active_ || !coordinator_) {
+        return;
+    }
+    if (coordinator_->flush_suppression_depth_ > 0) {
+        --coordinator_->flush_suppression_depth_;
+    }
+    coordinator_ = nullptr;
+    active_ = false;
+}
+
 void DevSaveCoordinator::set_manifest_store(ManifestStore* store) {
     store_ = store;
 }
@@ -90,26 +124,6 @@ void DevSaveCoordinator::enqueue_manifest_asset(const std::string& asset_key,
                    std::move(on_success));
 }
 
-void DevSaveCoordinator::enqueue_map_entry(const std::string& map_id,
-                                           nlohmann::json payload,
-                                           Priority priority,
-                                           const std::string& label,
-                                           std::function<void()> on_success) {
-    if (map_id.empty()) {
-        return;
-    }
-    enqueue_custom(IntentKind::MapEntry,
-                   "map:" + map_id,
-                   [map_id, payload = std::move(payload)](ManifestStore& store) {
-                       auto guard = store.scoped_guard("DevSaveCoordinator::enqueue_map_entry");
-                       (void)guard;
-                       return store.update_map_entry(map_id, payload);
-                   },
-                   priority,
-                   label.empty() ? std::string("Map ") + map_id : label,
-                   std::move(on_success));
-}
-
 void DevSaveCoordinator::enqueue_custom(IntentKind kind,
                                         const std::string& key,
                                         std::function<bool(ManifestStore&)> apply,
@@ -142,7 +156,7 @@ void DevSaveCoordinator::enqueue_custom(IntentKind kind,
 
     schedule_deadline(intents_[index_[key]]);
 
-    if (priority == Priority::Immediate) {
+    if (priority == Priority::Immediate && flush_suppression_depth_ == 0) {
         flush_now(label);
     }
 }
@@ -159,7 +173,15 @@ void DevSaveCoordinator::tick() {
 }
 
 void DevSaveCoordinator::flush_now(const std::string& reason) {
+    if (flush_suppression_depth_ > 0) {
+        return;
+    }
     process(true, reason);
+}
+
+DevSaveCoordinator::ScopedFlushSuppression DevSaveCoordinator::scoped_flush_suppression() {
+    ++flush_suppression_depth_;
+    return ScopedFlushSuppression(this, true);
 }
 
 bool DevSaveCoordinator::process(bool force, const std::string& reason) {
@@ -178,6 +200,10 @@ bool DevSaveCoordinator::process(bool force, const std::string& reason) {
     }
 
     processing_ = true;
+    struct ProcessingResetGuard {
+        bool& flag;
+        ~ProcessingResetGuard() { flag = false; }
+    } reset_guard{processing_};
 
     std::vector<PendingIntent> batch = std::move(intents_);
     intents_.clear();
@@ -205,13 +231,38 @@ bool DevSaveCoordinator::process(bool force, const std::string& reason) {
         }
 
         notify = notify || intent.priority == Priority::Immediate;
-        const bool applied = intent.apply ? intent.apply(*store_) : false;
+        bool applied = false;
+        if (intent.apply) {
+            try {
+                applied = intent.apply(*store_);
+            } catch (const std::exception& ex) {
+                std::cerr << "[DevSaveCoordinator] Save intent '" << intent.key
+                          << "' threw exception: " << ex.what() << "\n";
+                applied = false;
+                success = false;
+            } catch (...) {
+                std::cerr << "[DevSaveCoordinator] Save intent '" << intent.key
+                          << "' threw unknown exception\n";
+                applied = false;
+                success = false;
+            }
+        }
         success = success && applied;
         if (applied) {
             ++writes;
             ++telemetry_.writes_this_frame;
             if (intent.on_success) {
-                intent.on_success();
+                try {
+                    intent.on_success();
+                } catch (const std::exception& ex) {
+                    std::cerr << "[DevSaveCoordinator] on_success for intent '" << intent.key
+                              << "' threw exception: " << ex.what() << "\n";
+                    success = false;
+                } catch (...) {
+                    std::cerr << "[DevSaveCoordinator] on_success for intent '" << intent.key
+                              << "' threw unknown exception\n";
+                    success = false;
+                }
             }
         }
         if (!intent.label.empty()) {
@@ -220,15 +271,30 @@ bool DevSaveCoordinator::process(bool force, const std::string& reason) {
     }
 
     if (writes > 0) {
-        store_->flush();
-        ++telemetry_.flush_count;
+        try {
+            store_->flush();
+            ++telemetry_.flush_count;
+        } catch (const std::exception& ex) {
+            std::cerr << "[DevSaveCoordinator] Manifest flush threw exception: "
+                      << ex.what() << "\n";
+            success = false;
+        } catch (...) {
+            std::cerr << "[DevSaveCoordinator] Manifest flush threw unknown exception\n";
+            success = false;
+        }
     }
 
     if (notify) {
-        publish_notice(success && writes > 0, writes, labels, reason);
+        try {
+            publish_notice(success && writes > 0, writes, labels, reason);
+        } catch (const std::exception& ex) {
+            std::cerr << "[DevSaveCoordinator] publish_notice threw exception: "
+                      << ex.what() << "\n";
+        } catch (...) {
+            std::cerr << "[DevSaveCoordinator] publish_notice threw unknown exception\n";
+        }
     }
 
-    processing_ = false;
     return success;
 }
 

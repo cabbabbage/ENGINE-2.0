@@ -123,11 +123,6 @@ class AnimationEditorWindow {
     bool rebuild_animation_from_sources(const std::shared_ptr<AssetInfo>& info, const std::string& animation_id);
     bool rebuild_animation_via_pipeline(const std::shared_ptr<AssetInfo>& info, const std::string& animation_id);
     bool rebuild_all_animations_via_pipeline(const std::shared_ptr<AssetInfo>& info);
-    bool animation_wants_crop(const std::string& animation_id) const;
-    bool has_global_crop_frames() const;
-    std::filesystem::path resolved_asset_root_path() const;
-    std::vector<std::filesystem::path> numbered_frame_paths(const std::filesystem::path& folder) const;
-    void apply_global_cropping_to_asset_sources() const;
     void refresh_inspector_animation_callback();
     std::string normalize_animation_name(std::string_view raw) const;
 

@@ -7,7 +7,7 @@
 #include <functional>
 #include <SDL3/SDL.h>
 #include "assets/asset/asset_info.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "utils/area.hpp"
 #include "spawn_info.hpp"
 

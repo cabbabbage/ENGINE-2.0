@@ -12,7 +12,7 @@
 #include <optional>
 #include <nlohmann/json.hpp>
 
-#include "assets/animation.hpp"
+#include "assets/asset/animation.hpp"
 #include "string_utils.hpp"
 
 namespace {
@@ -69,19 +69,48 @@ float parse_float(const nlohmann::json& value, float fallback) {
     return fallback;
 }
 
+std::string parse_string(const nlohmann::json& value, const std::string& fallback) {
+    if (value.is_string()) {
+        try {
+            return value.get<std::string>();
+        } catch (...) {
+            return fallback;
+        }
+    }
+    if (value.is_number_integer()) {
+        try {
+            return std::to_string(value.get<long long>());
+        } catch (...) {
+            return fallback;
+        }
+    }
+    if (value.is_number_float()) {
+        try {
+            return std::to_string(value.get<double>());
+        } catch (...) {
+            return fallback;
+        }
+    }
+    if (value.is_boolean()) {
+        return value.get<bool>() ? "true" : "false";
+    }
+    return fallback;
+}
+
 nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::json& source_payload) {
     nlohmann::json payload = source_payload.is_object() ? source_payload : nlohmann::json::object();
 
     nlohmann::json source = payload.contains("source") && payload["source"].is_object() ? payload["source"] : nlohmann::json::object();
-    std::string kind = source.value("kind", std::string{"folder"});
-    std::string path = source.value("path", kind == "folder" ? animation_id : std::string{});
+    std::string kind = parse_string(source.contains("kind") ? source["kind"] : nlohmann::json{}, std::string{"folder"});
+    std::string path = parse_string(source.contains("path") ? source["path"] : nlohmann::json{},
+                                    kind == "folder" ? animation_id : std::string{});
     nlohmann::json name_value;
     if (kind == "folder") {
 
         name_value = std::string{};
     } else {
-        if (source.contains("name") && source["name"].is_string()) {
-            name_value = source["name"].get<std::string>();
+        if (source.contains("name")) {
+            name_value = parse_string(source["name"], std::string{});
         } else {
             name_value = std::string{};
         }
@@ -103,8 +132,8 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     ensure_bool("rnd_start", false);
 
     bool derived_from_animation = (kind == "animation");
-    bool derived_reverse = payload.value("reverse_source", false);
-    bool derived_flip_x = payload.value("flipped_source", false);
+    bool derived_reverse = parse_bool_field(payload, "reverse_source", false);
+    bool derived_flip_x = parse_bool_field(payload, "flipped_source", false);
     bool derived_flip_y = false;
     bool derived_flip_movement_x = false;
     bool derived_flip_movement_y = false;
@@ -127,7 +156,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
         }
     }
 
-    bool inherit_source_movement = payload.value("inherit_source_movement", derived_from_animation);
+    bool inherit_source_movement = parse_bool_field(payload, "inherit_source_movement", derived_from_animation);
 
     payload["inherit_source_movement"] = inherit_source_movement;
 
@@ -180,31 +209,9 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     payload["speed_multiplier"] = best_speed;
     payload.erase("speed_factor");
 
-    bool crop_frames = parse_bool_field(payload, "crop_frames", false);
-    payload["crop_frames"] = crop_frames;
-    if (crop_frames && payload.contains("crop_bounds") && payload["crop_bounds"].is_object()) {
-        const auto& bounds = payload["crop_bounds"];
-        auto read_bound = [&](const char* key) {
-            if (bounds.contains(key)) {
-                return parse_int(bounds.at(key), 0);
-            }
-            return 0;
-};
-        int top = std::max(0, read_bound("top"));
-        int left = std::max(0, read_bound("left"));
-        int right = std::max(0, read_bound("right"));
-        int bottom = std::max(0, read_bound("bottom"));
-        int width = std::max(0, read_bound("width"));
-        int height = std::max(0, read_bound("height"));
-        nlohmann::json clean_bounds = {{"top", top}, {"left", left}, {"right", right}, {"bottom", bottom}};
-        if (width > 0 && height > 0) {
-            clean_bounds["width"] = width;
-            clean_bounds["height"] = height;
-        }
-        payload["crop_bounds"] = clean_bounds;
-    } else if (!crop_frames) {
-        payload.erase("crop_bounds");
-    }
+    // Crop is now an asset-level setting and should not be persisted per animation.
+    payload.erase("crop_frames");
+    payload.erase("crop_bounds");
 
     int frames = parse_int(payload.contains("number_of_frames") ? payload["number_of_frames"] : nlohmann::json(1), 1);
     if (frames < 1) frames = 1;
@@ -280,7 +287,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     if (!derived_from_animation) {
         if (payload.contains("audio") && payload["audio"].is_object()) {
             auto audio = payload["audio"];
-            std::string name = audio.value("name", std::string{});
+            std::string name = parse_string(audio.contains("name") ? audio["name"] : nlohmann::json{}, std::string{});
             int volume = std::clamp(parse_int(audio.contains("volume") ? audio["volume"] : nlohmann::json(100), 100), 0, 100);
             bool effects = parse_bool(audio.contains("effects") ? audio["effects"] : nlohmann::json(false), false);
             if (!name.empty()) {
@@ -537,7 +544,6 @@ void AnimationDocument::create_animation(const std::string& animation_id) {
                                                                     {"name", nullptr},
                                                                 })},
                                                 }));
-    payload["crop_frames"] = true;
     animations_[candidate] = serialize_payload(payload);
     if (!start_animation_.has_value() || start_animation_->empty()) {
         start_animation_ = candidate;
@@ -643,7 +649,7 @@ void AnimationDocument::rename_animation(const std::string& old_id, const std::s
 
         if (payload.contains("source") && payload["source"].is_object()) {
             nlohmann::json& src = payload["source"];
-            std::string kind = src.value("kind", std::string{"folder"});
+            std::string kind = parse_string(src.contains("kind") ? src["kind"] : nlohmann::json{}, std::string{"folder"});
             if (kind == std::string{"animation"}) {
 
                 if (src.contains("name")) {
@@ -793,7 +799,6 @@ void AnimationDocument::ensure_document_initialized() {
                                                                                        {"path", "default"},
                                                                                        {"name", ""}}},
                                                        }));
-        payload["crop_frames"] = true;
         animations_["default"] = serialize_payload(payload);
         ids.push_back("default");
         start_animation_ = std::string{"default"};

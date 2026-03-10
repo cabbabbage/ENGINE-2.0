@@ -23,6 +23,7 @@ namespace devmode::core { class ManifestStore; }
 class SpawnGroupConfig : public DockableCollapsible {
     struct Entry;
 public:
+    using DockableCollapsible::open;
     struct ChangeSummary {
         bool method_changed = false;
         bool quantity_changed = false;
@@ -37,6 +38,7 @@ public:
         std::function<void(const std::string&)> on_delete;
         std::function<void(const std::string&, size_t)> on_reorder;
         std::function<void()> on_add;
+        std::function<void(const std::string&, SDL_Point)> on_open_floating;
 };
 
     class EntryController {

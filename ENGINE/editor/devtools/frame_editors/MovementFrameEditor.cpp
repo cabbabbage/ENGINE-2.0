@@ -20,6 +20,7 @@
 #include "nlohmann/json.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/grid.hpp"
+#include "core/axis_convention.hpp"
 
 namespace devmode::frame_editors {
 
@@ -60,7 +61,7 @@ void MovementFrameEditor::begin(const FrameEditorContext& context) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
         // Movement mode uses raw delta Z values (like dx/dy), not percentages
-        point_3d_editor_->set_z_display_mode(ZDisplayMode::RawDelta);
+        point_3d_editor_->set_z_display_mode(CoordinateDisplayMode::RawDelta);
     }
     dirty_ = false;
     wants_close_ = false;
@@ -709,7 +710,7 @@ SDL_Point MovementFrameEditor::asset_anchor_world() const {
     if (!context_.target) {
         return SDL_Point{0, 0};
     }
-    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_point());
+    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_xz_point());
 }
 
 float MovementFrameEditor::base_world_z() const {

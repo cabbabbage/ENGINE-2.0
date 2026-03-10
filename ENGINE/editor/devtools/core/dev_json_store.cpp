@@ -260,6 +260,7 @@ struct DevJsonStore::Impl {
     void submit(const std::filesystem::path& path,
                 const nlohmann::json& data,
                 int indent) {
+        try {
 #ifdef DEV_MODE_DISABLE_JSON_DEBOUNCE
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -375,6 +376,11 @@ struct DevJsonStore::Impl {
         }
         cv_.notify_one();
 #endif
+        } catch (const std::exception& ex) {
+            log_error("[DevJsonStore] submit('" + path.string() + "') exception: " + ex.what());
+        } catch (...) {
+            log_error("[DevJsonStore] submit('" + path.string() + "') unknown exception");
+        }
     }
 
     void flush_all() {
@@ -390,7 +396,13 @@ struct DevJsonStore::Impl {
             }
             pending_writes_.clear();
         }
-        flush_ready(std::move(ready));
+        try {
+            flush_ready(std::move(ready));
+        } catch (const std::exception& ex) {
+            log_error(std::string("[DevJsonStore] flush_all exception: ") + ex.what());
+        } catch (...) {
+            log_error("[DevJsonStore] flush_all unknown exception");
+        }
 #endif
     }
 
@@ -453,7 +465,13 @@ struct DevJsonStore::Impl {
             }
 
             lock.unlock();
-            flush_ready(std::move(ready));
+            try {
+                flush_ready(std::move(ready));
+            } catch (const std::exception& ex) {
+                log_error(std::string("[DevJsonStore] worker flush exception: ") + ex.what());
+            } catch (...) {
+                log_error("[DevJsonStore] worker flush unknown exception");
+            }
             lock.lock();
         }
 
@@ -463,7 +481,13 @@ struct DevJsonStore::Impl {
         }
         pending_writes_.clear();
         lock.unlock();
-        flush_ready(std::move(remaining));
+        try {
+            flush_ready(std::move(remaining));
+        } catch (const std::exception& ex) {
+            log_error(std::string("[DevJsonStore] worker shutdown flush exception: ") + ex.what());
+        } catch (...) {
+            log_error("[DevJsonStore] worker shutdown flush unknown exception");
+        }
     }
 
     void flush_ready(std::vector<PendingWrite>&& writes) {

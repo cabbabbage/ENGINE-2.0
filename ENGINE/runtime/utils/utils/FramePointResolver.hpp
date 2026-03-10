@@ -23,6 +23,7 @@ class FramePointResolver {
 
 
     struct Displacement_percent_vals {
+        // Percent offsets relative to the parent's height:
         float dx_percent = 0.0f;
         float dy_percent = 0.0f;
         float dz_percent = 0.0f;
@@ -36,15 +37,23 @@ class FramePointResolver {
     // Get parent asset's height in pixels (for percent calculations)
     float parent_height_px() const;
 
-    // Get the base world Z offset of the asset
-    float base_world_z() const;
+    // Get the base world height (Y axis) of the asset
+    float base_world_height() const;
+    // Get the base world depth (Z axis) of the asset
+    float base_world_depth() const;
+    float base_world_z() const { return base_world_depth(); }
 
-    // Convert world Z coordinate to percent of parent height
+    // Convert world height coordinate to percent of parent height
     // 0.0 = on the floor, 1.0 = top of asset's vertical bounds
-    float to_percent(float world_z) const;
+    float to_percent_height(float world_height) const;
 
-    // Convert percent of parent height to world Z coordinate
-    float to_world_z(float z_percent) const;
+    // Convert percent of parent height to world height coordinate
+    float to_world_height(float height_percent) const;
+
+    float to_percent_depth(float world_depth) const;
+    float to_world_depth(float depth_percent) const;
+    float to_percent(float world_height) const { return to_percent_depth(world_height); }
+    float to_world_z(float depth_percent) const { return to_world_depth(depth_percent); }
 
     // Convert world X/Y coordinate to percent of parent height
     float to_percent_xy(float world_coord) const;

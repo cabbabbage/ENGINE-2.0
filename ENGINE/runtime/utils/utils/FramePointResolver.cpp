@@ -4,7 +4,7 @@
 #include <cmath>
 
 #include "animation/animation_update.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "utils/AnchorPointResolver.hpp"
@@ -15,7 +15,7 @@ SDL_Point FramePointResolver::anchor_world() const {
     if (!asset_) {
         return SDL_Point{0, 0};
     }
-    return animation_update::detail::bottom_middle_for(*asset_, asset_->world_point());
+    return animation_update::detail::bottom_middle_for(*asset_, asset_->world_xz_point());
 }
 
 float FramePointResolver::parent_height_px() const {
@@ -25,29 +25,54 @@ float FramePointResolver::parent_height_px() const {
     return anchor_points::anchor_height_px(*asset_);
 }
 
-float FramePointResolver::base_world_z() const {
+float FramePointResolver::base_world_height() const {
+    if (!asset_) {
+        return 0.0f;
+    }
+    return static_cast<float>(asset_->world_y());
+}
+
+float FramePointResolver::base_world_depth() const {
     if (!asset_) {
         return 0.0f;
     }
     return static_cast<float>(asset_->world_z());
 }
 
-float FramePointResolver::to_percent(float world_z) const {
+float FramePointResolver::to_percent_height(float world_height) const {
     const float height = parent_height_px();
     if (height <= 0.0f) {
         return 0.0f;
     }
-    const float base_z = base_world_z();
-    return (world_z - base_z) / height;
+    const float base_height = base_world_height();
+    return (world_height - base_height) / height;
 }
 
-float FramePointResolver::to_world_z(float z_percent) const {
+float FramePointResolver::to_world_height(float height_percent) const {
     if (!asset_) {
         return 0.0f;
     }
     const float height = parent_height_px();
-    const float base_z = base_world_z();
-    return base_z + (z_percent * height);
+    const float base_height = base_world_height();
+    return base_height + (height_percent * height);
+}
+
+float FramePointResolver::to_percent_depth(float world_depth) const {
+    const float height = parent_height_px();
+    if (height <= 0.0f) {
+        return 0.0f;
+    }
+    const float base_depth = base_world_depth();
+    return (world_depth - base_depth) / height;
+}
+
+float FramePointResolver::to_world_depth(float depth_percent) const {
+    if (!asset_) {
+        return 0.0f;
+    }
+    const float height = parent_height_px();
+    const float base_depth = base_world_depth();
+    return base_depth + (depth_percent * height);
 }
 
 float FramePointResolver::to_percent_xy(float world_coord) const {

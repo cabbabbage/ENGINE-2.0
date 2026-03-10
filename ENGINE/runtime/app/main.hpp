@@ -53,4 +53,4 @@ protected:
     int            windowed_height_  = 720;
 };
 
-void run(SDL_Window* window, EngineRenderer& renderer, int screen_w, int screen_h, bool rebuild_cache);
+void run(SDL_Window* window, EngineRenderer& renderer, int screen_w, int screen_h);

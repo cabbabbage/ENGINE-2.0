@@ -1,8 +1,7 @@
 #pragma once
 
 #include "rendering/render/warped_screen_grid.hpp"
-#include "rendering/render/terrain_runtime_state.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "core/popup_manager.hpp"
 #include <SDL3/SDL.h>
 #include <atomic>
@@ -18,8 +17,9 @@
 #include <nlohmann/json.hpp>
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/world/world_grid.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "gameplay/world/grid_point.hpp"
+#include "core/manifest/map_data.hpp"
 
 class Asset;
 class SceneRenderer;
@@ -29,7 +29,6 @@ class Room;
 class Input;
 class DevControls;
 class AssetInfo;
-class TerrainField;
 
 class QuickTaskPopup;
 namespace animation_editor {
@@ -72,7 +71,7 @@ public:
            int screen_width,
            int screen_height,
            int screen_center_x,
-           int screen_center_y,
+           int screen_center_z,
            int map_radius,
            SDL_Renderer* renderer,
            const std::string& map_id,
@@ -84,12 +83,14 @@ public:
     nlohmann::json save_current_room(std::string room_name);
     void update(const Input& input);
     void set_dev_mode(bool mode);
+    bool run_exit_save_sequence(const std::string& reason);
     void set_force_high_quality_rendering(bool enable);
     bool force_high_quality_rendering() const { return force_high_quality_rendering_; }
     void set_render_suppressed(bool suppressed);
     void set_input(Input* m);
     Input* get_input() const { return input; }
     Asset* find_asset_by_name(const std::string& name) const;
+    Asset* find_asset_by_stable_id(const std::string& id) const;
     bool contains_asset(const Asset* asset) const;
 
     const std::vector<Asset*>& get_selected_assets() const;
@@ -174,12 +175,6 @@ public:
 
     void set_dev_grid_overlay_callback(std::function<void()> cb) { dev_grid_overlay_callback_ = cb; }
 
-    void set_terrain_sources(TerrainField* field, const TerrainRuntimeState& state);
-    const TerrainRuntimeState* terrain_runtime_state() const {
-        return terrain_runtime_state_ ? &*terrain_runtime_state_ : nullptr;
-    }
-    TerrainField* terrain_field_source() const { return terrain_field_source_; }
-
     void set_editor_current_room(Room* room);
 
     Room* current_room() { return current_room_; }
@@ -188,6 +183,12 @@ public:
 
     nlohmann::json& map_info_json() { return map_info_json_; }
     const nlohmann::json& map_info_json() const { return map_info_json_; }
+    bool mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator);
+    void mark_map_data_dirty();
+    bool map_data_dirty() const { return map_data_dirty_; }
+    void clear_map_data_dirty() { map_data_dirty_ = false; }
+    // Capture the current in-memory room state (including spawn groups) into map_info_json_.
+    void snapshot_rooms_to_map_info();
     const std::string& map_path() const { return map_path_; }
     const std::string& map_id() const { return map_id_; }
     world::WorldGrid& world_grid() { return world_grid_; }
@@ -215,7 +216,6 @@ public:
     void refresh_active_asset_lists();
     void refresh_filtered_active_assets();
     void mark_active_assets_dirty();
-    bool rebuild_active_assets_if_needed();
     void initialize_active_assets(const world::GridPoint& center);
     std::uint64_t dev_active_state_version() const { return dev_active_state_version_; }
 
@@ -224,7 +224,6 @@ public:
 
 
     void apply_map_grid_settings(const MapGridSettings& settings, bool persist_json = true);
-    int  map_grid_chunk_resolution() const;
     const MapGridSettings& map_grid_settings() const { return map_grid_settings_; }
 
     std::optional<Asset::TilingInfo> compute_tiling_for_asset(const Asset* asset) const;
@@ -259,6 +258,7 @@ private:
     void schedule_removal(Asset* a);
     std::vector<Asset*> collect_removal_closure(const std::vector<Asset*>& roots) const;
     std::size_t delete_assets_runtime(const std::vector<Asset*>& assets_to_delete);
+    world::GridPoint resolve_floor_world_point(SDL_Point world_pos, int resolution_layer = -1) const;
 
     bool process_removals();
     bool apply_world_mutation_batch(WorldMutationBatch& batch);
@@ -285,8 +285,8 @@ private:
     SceneRenderer* scene = nullptr;
     int screen_width;
     int screen_height;
-    int dx = 0;
-    int dy = 0;
+    int delta_x_ = 0;
+    int delta_z_ = 0;
     std::vector<Asset*> active_assets;
     std::vector<Asset*> filtered_active_assets;
     std::unordered_set<Asset*> filtered_active_asset_membership_;
@@ -320,9 +320,11 @@ private:
     std::string map_id_;
     std::string map_path_;
     nlohmann::json map_info_json_;
+    bool map_data_dirty_ = false;
+    bool exit_save_sequence_ran_ = false;
+    bool exit_save_sequence_ok_ = true;
     std::atomic<bool> active_assets_dirty_{true};
     MapGridSettings map_grid_settings_{};
-    std::unique_ptr<devmode::core::ManifestStore> manifest_store_fallback_;
     std::optional<float> last_audio_effect_max_distance_{};
     float max_asset_height_world_ = 0.0f;
     float max_asset_width_world_  = 0.0f;
@@ -381,9 +383,6 @@ private:
     std::uint64_t dev_active_state_version_ = 1;
 
     std::function<void()> dev_grid_overlay_callback_;
-
-    TerrainField* terrain_field_source_ = nullptr; // non-owning; owned by SceneRenderer
-    std::optional<TerrainRuntimeState> terrain_runtime_state_;
 
     std::vector<class AnchorBoundAssetHelper*> binding_helpers_;
 

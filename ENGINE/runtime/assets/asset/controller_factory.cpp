@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cctype>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "animation/controllers/custom_controllers/davey_controller.hpp"
 #include "animation/controllers/custom_controllers/vibble_controller.hpp"

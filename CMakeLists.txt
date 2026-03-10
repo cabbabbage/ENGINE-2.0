@@ -3,6 +3,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(VIBBLEEngine)
 
+# Required interpreter for lint/check scripts.
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
 # ------------------------------------------
 # Build settings focused on compile speed
 # ------------------------------------------
@@ -270,6 +273,13 @@ add_executable(engine_tests
     ENGINE/runtime/utils/utils/log.cpp
     ENGINE/runtime/utils/utils/cache_manager.cpp
     ENGINE/runtime/utils/utils/loading_status_notifier.cpp
+    ENGINE/runtime/gameplay/world/grid_point.cpp
+    ENGINE/runtime/gameplay/world/world_grid.cpp
+    ENGINE/runtime/gameplay/world/chunk.cpp
+    ENGINE/runtime/gameplay/world/chunk_manager.cpp
+    ENGINE/tests/stubs/asset/Asset_world_tests_stubs.cpp
+    ENGINE/tests/test_map_data.cpp
+    ENGINE/tests/test_world_grid.cpp
   )
 
 target_include_directories(engine_tests
@@ -284,6 +294,7 @@ target_include_directories(engine_tests
 
 target_compile_definitions(engine_tests PRIVATE
     DEV_MODE_DISABLE_JSON_DEBOUNCE=1
+    ENGINE_WORLD_TESTS=1
     PROJECT_ROOT="${TEST_ROOT}"
     FRAME_EDITOR_TEST_PUBLIC_ACCESS=1
     FRAME_EDITOR_ACCESS=public
@@ -314,78 +325,6 @@ endif()
 
 if (WIN32)
     target_link_libraries(engine_tests PRIVATE Ole32 Shell32)
-endif()
-
-# ------------------------------------------
-# Isolated WorldGrid tests (lightweight target)
-# ------------------------------------------
-set(ENGINE_WORLD_TEST_SOURCES
-    ${TESTS_SOURCE_DIR}/test_main.cpp
-    ${TESTS_SOURCE_DIR}/test_terrain_determinism.cpp
-    ENGINE/runtime/gameplay/world/world_grid.cpp
-    ENGINE/runtime/gameplay/world/grid_point.cpp
-    ENGINE/runtime/gameplay/world/chunk_manager.cpp
-    ENGINE/runtime/rendering/render/terrain_runtime_state.cpp
-    ENGINE/runtime/rendering/render/terrain_field.cpp
-    ENGINE/runtime/rendering/render/warped_screen_grid.cpp
-    ENGINE/runtime/rendering/render/camera_controller.cpp
-    ENGINE/runtime/rendering/render/image_effect_settings.cpp
-    ENGINE/runtime/utils/utils/area.cpp
-    ENGINE/runtime/utils/utils/grid.cpp
-    ENGINE/runtime/utils/utils/grid_math.cpp
-    ENGINE/runtime/utils/utils/FramePointResolver.cpp
-    ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
-    ENGINE/runtime/utils/utils/log.cpp
-    ${TESTS_SOURCE_DIR}/stubs/asset/Asset_world_tests_stubs.cpp
-    ${TESTS_SOURCE_DIR}/stubs/chunk_stubs.cpp
-)
-
-set(ENGINE_WORLD_TESTS_READY TRUE)
-foreach(_world_test_src IN LISTS ENGINE_WORLD_TEST_SOURCES)
-    if (NOT EXISTS "${_world_test_src}")
-        message(STATUS "Skipping engine_world_tests: missing source ${_world_test_src}")
-        set(ENGINE_WORLD_TESTS_READY FALSE)
-        break()
-    endif()
-endforeach()
-
-if (ENGINE_WORLD_TESTS_READY)
-    add_executable(engine_world_tests
-        ${ENGINE_WORLD_TEST_SOURCES}
-    )
-
-    target_include_directories(engine_world_tests
-          PRIVATE
-              ${TESTS_SOURCE_DIR}/stubs
-              ${CMAKE_SOURCE_DIR}/ENGINE/runtime
-              ${CMAKE_SOURCE_DIR}/ENGINE/runtime/utils
-              ${CMAKE_SOURCE_DIR}/ENGINE/editor
-              ${CMAKE_SOURCE_DIR}/external
-    )
-
-    target_compile_definitions(engine_world_tests PRIVATE
-        PROJECT_ROOT="${TEST_ROOT}"
-        DOCTEST_CONFIG_NO_EXCEPTIONS_BUT_WITH_ALL_ASSERTS
-        ENGINE_WORLD_TESTS=1
-    )
-
-    # No heavy libs needed; these sources don't call into SDL functions
-    # or OpenGL, they only use SDL types.
-    target_link_libraries(engine_world_tests
-        PRIVATE
-            SDL3::SDL3
-    )
-    if (WINSDK_UM_X64_LIBDIR)
-        target_link_directories(engine_world_tests PRIVATE "${WINSDK_UM_X64_LIBDIR}")
-    endif()
-    if (WINSDK_UCRT_X64_LIBDIR)
-        target_link_directories(engine_world_tests PRIVATE "${WINSDK_UCRT_X64_LIBDIR}")
-    endif()
-    if (MSVC_LIB_DIR)
-        target_link_directories(engine_world_tests PRIVATE "${MSVC_LIB_DIR}")
-    endif()
-else()
-    message(STATUS "Skipping engine_world_tests target.")
 endif()
 
 # ------------------------------------------

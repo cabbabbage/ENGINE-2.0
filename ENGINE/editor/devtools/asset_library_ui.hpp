@@ -10,6 +10,8 @@
 #include <cstdint>
 #include <functional>
 
+#include "asset_list_view.hpp"
+
 class Input;
 class AssetInfo;
 class AssetLibrary;
@@ -17,8 +19,6 @@ class Asset;
 class Assets;
 class DockableCollapsible;
 class DMButton;
-class DMTextBox;
-class TextBoxWidget;
 class Widget;
 
 namespace devmode::core {
@@ -77,9 +77,7 @@ private:
     void mark_rows_dirty();
     void ensure_rows_layout();
     void refresh_tiles(Assets& assets);
-    bool matches_query(const AssetInfo& info, const std::string& query) const;
     bool matches_tag_query(const std::string& tag, const std::string& query) const;
-    SDL_Texture* get_default_frame_texture(const AssetInfo& info) const;
     void request_delete(const std::shared_ptr<AssetInfo>& info);
     void cancel_delete_request();
     void confirm_delete_request();
@@ -113,8 +111,8 @@ private:
     std::unique_ptr<class ButtonWidget> multi_select_button_widget_;
     std::unique_ptr<DMButton> delete_all_button_;
     std::unique_ptr<class ButtonWidget> delete_all_button_widget_;
-    std::unique_ptr<DMTextBox> search_box_;
-    std::unique_ptr<TextBoxWidget> search_widget_;
+    AssetListView asset_list_view_;
+    std::vector<std::unique_ptr<Widget>> extra_tiles_;
     std::vector<std::shared_ptr<AssetInfo>> items_;
     bool items_cached_ = false;
     bool tag_items_initialized_ = false;
@@ -123,7 +121,6 @@ private:
     bool filter_dirty_ = true;
     bool layout_rows_dirty_ = true;
 
-    struct AssetTileWidget;
     struct HashtagTileWidget;
     struct RoomAreaTileWidget;
     std::vector<std::unique_ptr<Widget>> tiles_;

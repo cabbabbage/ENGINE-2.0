@@ -5,7 +5,7 @@
 #include <iterator>
 #include <unordered_set>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/range_util.hpp"
 
 namespace {
@@ -42,7 +42,7 @@ AssetList::AssetList(const std::vector<Asset*>& source_candidates,
                      const std::vector<std::string>& bottom_bucket_tags,
                      std::function<bool(const Asset*)> eligibility_filter)
     : source_candidates_(source_candidates),
-      center_point_(center_asset ? center_asset->world_point() : SDL_Point{0, 0}),
+      center_point_(center_asset ? center_asset->world_xz_point() : SDL_Point{0, 0}),
       center_asset_(center_asset),
       search_radius_(search_radius),
       required_tags_(required_tags),
@@ -82,7 +82,7 @@ AssetList::AssetList(const AssetList& parent_list,
                      const std::vector<std::string>& bottom_bucket_tags,
                      std::function<bool(const Asset*)> eligibility_filter)
     : source_candidates_(parent_list.source_candidates_),
-      center_point_(center_asset ? center_asset->world_point() : SDL_Point{0, 0}),
+      center_point_(center_asset ? center_asset->world_xz_point() : SDL_Point{0, 0}),
       center_asset_(center_asset),
       search_radius_(search_radius),
       required_tags_(required_tags),
@@ -126,7 +126,7 @@ AssetList::AssetList(const AssetList& parent_list,
                      std::function<bool(const Asset*)> eligibility_filter,
                      bool inherit_parent_view)
     : source_candidates_(parent_list.source_candidates_),
-      center_point_(center_asset ? center_asset->world_point() : SDL_Point{0, 0}),
+      center_point_(center_asset ? center_asset->world_xz_point() : SDL_Point{0, 0}),
       center_asset_(center_asset),
       search_radius_(search_radius),
       required_tags_(required_tags),
@@ -166,7 +166,7 @@ void AssetList::set_center(SDL_Point p) {
 void AssetList::set_center(Asset* a) {
     center_asset_ = a;
     if (a) {
-        center_point_ = a->world_point();
+        center_point_ = a->world_xz_point();
     }
 }
 
@@ -275,7 +275,7 @@ std::vector<Asset*> AssetList::get_union(const AssetList& other,
 
 SDL_Point AssetList::resolve_center() const {
     if (center_asset_) {
-        return center_asset_->world_point();
+        return center_asset_->world_xz_point();
     }
     return center_point_;
 }

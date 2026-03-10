@@ -46,6 +46,7 @@ class MenuUI : public MainApp {
     SDL_Rect fitCenter(SDL_Texture* tex, int max_w, int max_h, int cx, int cy) const;
     std::string pickRandomLine(const std::filesystem::path& csv_path) const;
     void drawVignette(Uint8 alpha) const;
+    bool run_exit_save_sequence(const std::string& reason);
     void doExit();
     void doRestart();
     void doSettings();

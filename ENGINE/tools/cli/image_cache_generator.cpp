@@ -8,7 +8,7 @@
 // - Animation discovery: subdirectories, else single "default"
 // - Frame enumeration: 0.png, 1.png, ... stop at first missing
 // - Speed multiplier expansion: closest of {0.25, 0.5, 1.0, 2.0, 4.0}
-// - Crop bounds: union alpha bbox across all frames, skip if inconsistent sizes
+// - Crop bounds: one asset-wide alpha-union crop bound computed from all frames of all animations
 // - Crop scaling: int(round(bounds * scale_factor))
 // - Rebuild selection: flagged needs_rebuild frames OR missing output file(s) OR force option
 // - Output layout:
@@ -740,10 +740,36 @@ static inline float read_speed_multiplier(const ordered_json& anim_meta) {
     return closest_speed_multiplier(raw);
 }
 
-static inline bool read_crop_frames(const ordered_json& anim_meta) {
-    if (!anim_meta.is_object()) return false;
-    if (!anim_meta.contains("crop_frames")) return false;
-    return parse_bool_like(anim_meta["crop_frames"], false);
+static inline bool read_asset_crop_frames(const ordered_json& asset_meta) {
+    if (!asset_meta.is_object()) return true;
+    if (asset_meta.contains("crop_frames")) {
+        return parse_bool_like(asset_meta["crop_frames"], true);
+    }
+
+    // Legacy fallback: derive an asset-level answer from old per-animation crop flags.
+    const ordered_json* anims = AnimationsObject(asset_meta);
+    if (anims && anims->is_object()) {
+        bool found_any = false;
+        bool found_true = false;
+        for (auto it = anims->begin(); it != anims->end(); ++it) {
+            if (!it.value().is_object()) {
+                continue;
+            }
+            auto crop_it = it.value().find("crop_frames");
+            if (crop_it == it.value().end()) {
+                continue;
+            }
+            found_any = true;
+            if (parse_bool_like(*crop_it, false)) {
+                found_true = true;
+                break;
+            }
+        }
+        if (found_any) {
+            return found_true;
+        }
+    }
+    return true;
 }
 
 static EffectsParams parse_effects_block(const ordered_json& manifest, const char* block_name) {
@@ -954,6 +980,31 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
         const bool asset_meta_changed = !current_meta_hash.empty() && current_meta_hash != cached_meta_hash;
 
         const ordered_json* anim_payloads = AnimationsObject(asset.meta);
+        const bool crop_frames = read_asset_crop_frames(asset.meta);
+        std::optional<CropBounds> asset_crop_bounds;
+        if (crop_frames) {
+            std::vector<fs::path> asset_crop_probe_frames;
+            for (const auto& crop_anim_name : asset.anim_names) {
+                ordered_json crop_anim_meta = ordered_json::object();
+                if (anim_payloads && anim_payloads->is_object() &&
+                    anim_payloads->contains(crop_anim_name) && (*anim_payloads)[crop_anim_name].is_object()) {
+                    crop_anim_meta = (*anim_payloads)[crop_anim_name];
+                }
+
+                const fs::path crop_anim_dir =
+                    ResolveAnimDir(asset.source_dir, crop_anim_name, crop_anim_meta, asset.discovered_anims);
+                auto crop_frame_paths = EnumerateSourceFrames(crop_anim_dir);
+                if (crop_frame_paths.empty()) {
+                    continue;
+                }
+                asset_crop_probe_frames.insert(asset_crop_probe_frames.end(),
+                                               crop_frame_paths.begin(),
+                                               crop_frame_paths.end());
+            }
+            if (!asset_crop_probe_frames.empty()) {
+                asset_crop_bounds = ComputeCropBoundsForFrames(asset_crop_probe_frames, log);
+            }
+        }
 
         for (const auto& anim_name : asset.anim_names) {
             if (!opt.filters.matches_anim(anim_name)) continue;
@@ -979,39 +1030,12 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
             std::vector<int> flagged = queue_anim_entry ? FlaggedFrames(*queue_anim_entry) : std::vector<int>{};
             std::unordered_set<int> flagged_set(flagged.begin(), flagged.end());
 
-            bool crop_frames = read_crop_frames(anim_meta);
             float speed_mult = read_speed_multiplier(anim_meta);
             std::vector<int> frame_sequence = BuildSpeedFrameSequence(static_cast<int>(frame_paths.size()), speed_mult);
-
-            // Crop bounds computed once per animation (unscaled)
-            std::optional<CropBounds> crop_bounds;
-            if (crop_frames) {
-                crop_bounds = ComputeCropBoundsForAnimation(frame_paths, log);
-            }
 
             // For each scale, build output groups like python
             for (int pct : scale_pcts) {
                 float scale_factor = static_cast<float>(pct) / 100.0f;
-
-                int src_w0 = 0, src_h0 = 0;
-                // Use first frame size to compute target size like python (PIL uses img.size after open)
-                {
-                    std::string e2;
-                    auto img0 = LoadPngRGBA(frame_paths[0], e2);
-                    if (!img0) {
-                        log.error("Failed to load first frame for sizing: " + frame_paths[0].string() + " : " + e2);
-                        // Schedule nothing. This is a hard failure for this animation.
-                        // We will treat any load failure as global failure later.
-                        result.ok = false;
-                        result.error = "Failed loading required frame: " + frame_paths[0].string();
-                        return result;
-                    }
-                    src_w0 = img0->w;
-                    src_h0 = img0->h;
-                }
-
-                int target_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(src_w0) * scale_factor)));
-                int target_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(src_h0) * scale_factor)));
 
                 // Group output indices by source idx where rebuild needed
                 std::unordered_map<int, std::vector<int>> output_groups;
@@ -1068,8 +1092,8 @@ GenResult ImageCacheGenerator::Run(const GeneratorOptions& opt, ILogger& log) {
                 }
 
                 std::optional<CropBounds> scaled_crop;
-                if (crop_bounds) {
-                    CropBounds sc = ScaleCropBounds(*crop_bounds, scale_factor);
+                if (asset_crop_bounds) {
+                    CropBounds sc = ScaleCropBounds(*asset_crop_bounds, scale_factor);
                     scaled_crop = sc;
                 }
 
@@ -1424,14 +1448,17 @@ std::vector<int> ImageCacheGenerator::BuildSpeedFrameSequence(int source_frame_c
     return seq;
 }
 
-std::optional<CropBounds> ImageCacheGenerator::ComputeCropBoundsForAnimation(const std::vector<fs::path>& src_frames,
-                                                                            ILogger& log) {
+std::optional<CropBounds> ImageCacheGenerator::ComputeCropBoundsForFrames(const std::vector<fs::path>& src_frames,
+                                                                          ILogger& log) {
     if (src_frames.empty()) return std::nullopt;
 
-    int base_w = -1, base_h = -1;
     bool have_union = false;
-
-    int union_left = 0, union_top = 0, union_right_excl = 0, union_bottom_excl = 0;
+    int union_left = 0;
+    int union_top = 0;
+    int union_right_margin = 0;
+    int union_bottom_margin = 0;
+    int first_w = 0;
+    int first_h = 0;
 
     for (const auto& p : src_frames) {
         std::string err;
@@ -1441,11 +1468,9 @@ std::optional<CropBounds> ImageCacheGenerator::ComputeCropBoundsForAnimation(con
             return std::nullopt;
         }
         const ImageRGBA& img = *img_opt;
-
-        if (base_w < 0) { base_w = img.w; base_h = img.h; }
-        else if (img.w != base_w || img.h != base_h) {
-            log.warn("Inconsistent frame sizes detected in " + p.parent_path().string() + "; skipping crop.");
-            return std::nullopt;
+        if (first_w <= 0 || first_h <= 0) {
+            first_w = img.w;
+            first_h = img.h;
         }
 
         int left = img.w, top = img.h, right = -1, bottom = -1;
@@ -1465,39 +1490,34 @@ std::optional<CropBounds> ImageCacheGenerator::ComputeCropBoundsForAnimation(con
             continue;
         }
 
-        // right/bottom are exclusive in python bbox
-        int right_excl = right + 1;
-        int bottom_excl = bottom + 1;
+        const int right_margin = std::max(0, img.w - (right + 1));
+        const int bottom_margin = std::max(0, img.h - (bottom + 1));
 
         if (!have_union) {
             have_union = true;
             union_left = left;
             union_top = top;
-            union_right_excl = right_excl;
-            union_bottom_excl = bottom_excl;
+            union_right_margin = right_margin;
+            union_bottom_margin = bottom_margin;
         } else {
             union_left = std::min(union_left, left);
             union_top = std::min(union_top, top);
-            union_right_excl = std::max(union_right_excl, right_excl);
-            union_bottom_excl = std::max(union_bottom_excl, bottom_excl);
+            union_right_margin = std::min(union_right_margin, right_margin);
+            union_bottom_margin = std::min(union_bottom_margin, bottom_margin);
         }
     }
 
-    if (!have_union || base_w <= 0 || base_h <= 0) return std::nullopt;
-
-    int right_margin = std::max(0, base_w - union_right_excl);
-    int bottom_margin = std::max(0, base_h - union_bottom_excl);
-    int cropped_w = base_w - union_left - right_margin;
-    int cropped_h = base_h - union_top - bottom_margin;
-    if (cropped_w <= 0 || cropped_h <= 0) return std::nullopt;
+    if (!have_union || first_w <= 0 || first_h <= 0) {
+        return std::nullopt;
+    }
 
     CropBounds b;
     b.left = union_left;
     b.top = union_top;
-    b.right_margin = right_margin;
-    b.bottom_margin = bottom_margin;
-    b.src_w = base_w;
-    b.src_h = base_h;
+    b.right_margin = union_right_margin;
+    b.bottom_margin = union_bottom_margin;
+    b.src_w = first_w;
+    b.src_h = first_h;
     return b;
 }
 

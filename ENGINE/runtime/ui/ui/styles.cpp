@@ -7,6 +7,10 @@ static inline SDL_Color make_color(Uint8 r, Uint8 g, Uint8 b, Uint8 a = 255) {
     return SDL_Color{ r, g, b, a };
 }
 
+static constexpr int kSliderLabelGap = 12;
+static constexpr int kSliderLabelHorizontalInset = 8;
+static constexpr int kSliderValueRightInset = 60;
+
 static const SDL_Color kGold      = make_color(250,195, 73,255);
 static const SDL_Color kGoldDim   = make_color(180,135, 40,255);
 static const SDL_Color kTeal      = make_color( 40,110,120,255);
@@ -69,3 +73,6 @@ const LabelStyle& Styles::LabelExit()           { return kLabelExit; }
 
 const ButtonStyle& Styles::MainDecoButton()     { return kMainDecoButton; }
 const ButtonStyle& Styles::ExitDecoButton()     { return kExitDecoButton; }
+int Styles::SliderLabelGap()                     { return kSliderLabelGap; }
+int Styles::SliderLabelHorizontalInset()         { return kSliderLabelHorizontalInset; }
+int Styles::SliderValueRightInset()              { return kSliderValueRightInset; }

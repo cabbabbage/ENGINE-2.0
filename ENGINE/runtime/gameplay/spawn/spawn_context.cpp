@@ -5,9 +5,9 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <unordered_map>
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "gameplay/spawn/asset_spawn_planner.hpp"
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "utils/area.hpp"
@@ -182,8 +182,21 @@ void SpawnContext::set_map_grid_settings(const MapGridSettings& settings) {
         spawn_resolution_ = occupancy_ ? occupancy_->resolution() : vibble::grid::clamp_resolution(map_grid_settings_.grid_resolution);
 }
 
+void SpawnContext::set_floor_point_resolver(FloorPointResolver resolver) {
+        floor_point_resolver_ = std::move(resolver);
+}
+
+world::GridPoint SpawnContext::resolve_floor_point(SDL_Point pos) const {
+        if (floor_point_resolver_) {
+                return floor_point_resolver_(pos, spawn_resolution_);
+        }
+    // `pos.y` represents depth (the forward/back axis on the ground plane).
+    // Layer height is calculated separately.
+        return world::GridPoint::make_virtual(pos.x, 0, pos.y, spawn_resolution_);
+}
+
 world::GridPoint SpawnContext::to_grid_point(SDL_Point pos) const {
-        return world::GridPoint::make_virtual(pos.x, pos.y, 0, spawn_resolution_);
+        return resolve_floor_point(pos);
 }
 
 void SpawnContext::set_spacing_filter(std::unordered_set<std::string> names) {

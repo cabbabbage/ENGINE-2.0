@@ -1,6 +1,6 @@
 #include "spider_controller.hpp"
 #include "animation/controllers/custom_controllers/attack_helpers.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;
@@ -23,7 +23,7 @@ void spider_controller::update(const Input&) {
         return;
     }
 
-    int distance_sq = (self_->world_x() - player->world_x()) * (self_->world_x() - player->world_x()) + (self_->world_y() - player->world_y()) * (self_->world_y() - player->world_y());
+    int distance_sq = (self_->world_x() - player->world_x()) * (self_->world_x() - player->world_x()) + (self_->world_z() - player->world_z()) * (self_->world_z() - player->world_z());
 
     if (distance_sq <= 700) {
         if (self_->info && self_->info->animations.count("explosion")) {
@@ -31,7 +31,7 @@ void spider_controller::update(const Input&) {
         }
     }
     else if (self_->needs_target) {
-        self_->anim_->auto_move(player->world_point());
+        self_->anim_->auto_move(player->world_xz_point());
     }
 
     attack_helpers::send_attack_if_hit(self_, player);

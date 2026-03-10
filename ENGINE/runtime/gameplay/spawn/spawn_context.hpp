@@ -1,6 +1,7 @@
 #pragma once
 
 #include <memory>
+#include <functional>
 #include <optional>
 #include <random>
 #include <string>
@@ -8,7 +9,7 @@
 #include <unordered_set>
 #include <vector>
 #include <SDL3/SDL.h>
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/area.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "gameplay/spawn/check.hpp"
@@ -27,6 +28,8 @@ class AssetSpawner;
 class SpawnContext {
 
         public:
+    // Coordinates returned by spawn helpers live on the ground plane:
+    //   X => right, Y => depth (world_z). Heights are handled separately.
     using Point = SDL_Point;
     SpawnContext(std::mt19937& rng, Check& checker, std::vector<Area>& exclusion_zones, const std::unordered_map<std::string, std::shared_ptr<AssetInfo>>& asset_info_library, std::vector<std::unique_ptr<Asset>>& all, AssetLibrary* asset_library, vibble::grid::Grid& grid, vibble::grid::Occupancy* occupancy = nullptr);
     Asset* spawnAsset(const std::string& name,
@@ -63,6 +66,9 @@ class SpawnContext {
     void set_allow_partial_clip_overlap(bool allow) { allow_partial_clip_overlap_ = allow; }
 
     bool position_allowed(const Area& area, SDL_Point pos) const;
+    using FloorPointResolver = std::function<world::GridPoint(SDL_Point, int)>;
+    void set_floor_point_resolver(FloorPointResolver resolver);
+    world::GridPoint resolve_floor_point(SDL_Point pos) const;
     world::GridPoint to_grid_point(SDL_Point pos) const;
 
     void set_map_grid_settings(const MapGridSettings& settings);
@@ -96,6 +102,7 @@ class SpawnContext {
     bool allow_partial_clip_overlap_ = false;
     std::unordered_set<std::string> spacing_filter_storage_;
     const std::unordered_set<std::string>* spacing_filter_ = nullptr;
+    FloorPointResolver floor_point_resolver_{};
 
     Asset* spawnAssetInternal(const std::string& name, const std::shared_ptr<AssetInfo>& info, const Area& area, SDL_Point pos, int depth, const std::string& spawn_id, const std::string& spawn_method, const std::optional<Asset::TilingInfo>& tiling);
 };

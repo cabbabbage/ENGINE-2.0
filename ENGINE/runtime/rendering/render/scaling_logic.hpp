@@ -602,13 +602,6 @@ inline SDL_Surface* CreateScaledSurface(SDL_Surface* src, float scale) {
     return dst;
 }
 
-struct ScalingProfileBuildOptions {
-    double                screen_aspect = 16.0 / 9.0;
-    const AssetLibrary*   asset_library = nullptr;
-};
-
-bool BuildScalingProfiles(const ScalingProfileBuildOptions& options);
-
 }
 
 namespace render_pipeline::shading {

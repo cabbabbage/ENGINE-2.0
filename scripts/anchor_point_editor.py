@@ -2,6 +2,8 @@
 import argparse
 import copy
 import json
+import math
+import random
 from pathlib import Path
 import tkinter as tk
 from tkinter import messagebox
@@ -168,7 +170,7 @@ def _normalize_anchor(anchor, fallback_name=None):
         "name": name,
         "texture_x": max(0, _read_int(anchor.get("texture_x", 0), 0)),
         "texture_y": max(0, _read_int(anchor.get("texture_y", 0), 0)),
-        "in_front": bool(anchor.get("in_front", True)),
+        "depth_offset": _read_int(anchor.get("depth_offset", 0), 0),
     }
 
 
@@ -238,7 +240,7 @@ class AnchorEditorApp:
         self.anchor_name_var = tk.StringVar()
         self.anchor_x_var = tk.StringVar()
         self.anchor_y_var = tk.StringVar()
-        self.anchor_in_front_var = tk.BooleanVar(value=True)
+        self.anchor_depth_offset_var = tk.StringVar(value="0")
 
         self._build_ui()
         self._wire_traces()
@@ -286,6 +288,7 @@ class AnchorEditorApp:
         list_buttons.pack(fill="x", pady=(0, 4))
         self._styled_button(list_buttons, "Add Anchor", self._add_anchor, accent=True).pack(side="left", fill="x", expand=True)
         self._styled_button(list_buttons, "Delete Anchor", self._delete_anchor).pack(side="left", fill="x", expand=True, padx=4)
+        self._styled_button(list_buttons, "Rnd All", self._randomize_all_anchors).pack(side="left", fill="x", expand=True, padx=4)
 
         center = tk.Frame(main, bg=PALETTE["panel"])
         center.pack(side="left", fill="both", expand=True, padx=(0, 6), pady=12)
@@ -339,18 +342,7 @@ class AnchorEditorApp:
         row("Name", self.anchor_name_var)
         row("Texture X", self.anchor_x_var)
         row("Texture Y", self.anchor_y_var)
-        tk.Checkbutton(
-            right,
-            text="In Front",
-            variable=self.anchor_in_front_var,
-            command=self._on_value_change,
-            bg=PALETTE["panel"],
-            fg=PALETTE["text"],
-            selectcolor=PALETTE["panel"],
-            activebackground=PALETTE["panel"],
-            font=FONTS["body"],
-            anchor="w",
-        ).pack(anchor="w", pady=(8, 0))
+        row("Depth Offset", self.anchor_depth_offset_var)
 
     def _styled_button(self, parent, text, command, accent=False):
         return _create_styled_button(parent, text, command, accent=accent)
@@ -542,8 +534,10 @@ class AnchorEditorApp:
         self.anchor_x_var.set(str(anchor["texture_x"]))
         self.anchor_y_var.set(str(anchor["texture_y"]))
         self.loading = prev_loading
-        self._render_preview()
         self._anchor_dirty = True
+        self._render_preview()
+        self._save_manifest()
+        self._anchor_dirty = False
 
     def _on_preview_click(self, event):
         self._drag_active = False
@@ -579,6 +573,7 @@ class AnchorEditorApp:
         self.anchor_name_var.trace_add("write", lambda *_: self._on_value_change())
         self.anchor_x_var.trace_add("write", lambda *_: self._on_value_change())
         self.anchor_y_var.trace_add("write", lambda *_: self._on_value_change())
+        self.anchor_depth_offset_var.trace_add("write", lambda *_: self._on_value_change())
 
     def _unique_name_for_current_frame(self, desired_name, skip_index=None):
         frame = self.frames[self.current_frame] if self.frames else []
@@ -626,7 +621,7 @@ class AnchorEditorApp:
             self.anchor_name_var.set("")
             self.anchor_x_var.set("0")
             self.anchor_y_var.set("0")
-            self.anchor_in_front_var.set(True)
+            self.anchor_depth_offset_var.set("0")
         self._load_frame_image()
         self._render_preview()
         self.loading = False
@@ -638,7 +633,7 @@ class AnchorEditorApp:
         self.anchor_name_var.set(anchor["name"])
         self.anchor_x_var.set(str(anchor["texture_x"]))
         self.anchor_y_var.set(str(anchor["texture_y"]))
-        self.anchor_in_front_var.set(bool(anchor["in_front"]))
+        self.anchor_depth_offset_var.set(str(anchor.get("depth_offset", 0)))
 
     def _on_anchor_select(self, _event=None):
         if self.loading:
@@ -669,7 +664,7 @@ class AnchorEditorApp:
         anchor["name"] = unique_name
         anchor["texture_x"] = max(0, _read_int(self.anchor_x_var.get(), anchor.get("texture_x", 0)))
         anchor["texture_y"] = max(0, _read_int(self.anchor_y_var.get(), anchor.get("texture_y", 0)))
-        anchor["in_front"] = bool(self.anchor_in_front_var.get())
+        anchor["depth_offset"] = _read_int(self.anchor_depth_offset_var.get(), anchor.get("depth_offset", 0))
         self.anchor_list.delete(self.current_anchor)
         self.anchor_list.insert(self.current_anchor, f"{self.current_anchor + 1}. {anchor['name']}")
         self.anchor_list.selection_set(self.current_anchor)
@@ -683,7 +678,7 @@ class AnchorEditorApp:
             "name": self._unique_name_for_current_frame(f"anchor_{len(frame) + 1}"),
             "texture_x": 0,
             "texture_y": 0,
-            "in_front": True,
+            "depth_offset": 0,
         }
         frame.append(new_anchor)
         self.current_anchor = len(frame) - 1
@@ -701,6 +696,26 @@ class AnchorEditorApp:
             self.current_anchor = len(frame) - 1
         self._refresh_frame_ui()
         self._save_manifest()
+
+    def _randomize_all_anchors(self):
+        for anim_id, payload in self.animations.items():
+            if not isinstance(payload, dict):
+                continue
+            frame_count = _frame_count_with_disk(payload, self.manifest_root, self.asset, self.asset_key)
+            anchors = _normalize_anchor_points(payload, frame_count_override=frame_count)
+            for frame in anchors:
+                for anchor in frame:
+                    angle = random.uniform(0.0, 2.0 * math.pi)
+                    delta_x = int(round(12.0 * math.cos(angle)))
+                    delta_y = int(round(12.0 * math.sin(angle)))
+                    anchor["texture_x"] = max(0, anchor["texture_x"] + delta_x)
+                    anchor["texture_y"] = max(0, anchor["texture_y"] + delta_y)
+            payload["anchor_points"] = anchors
+            payload["number_of_frames"] = len(anchors)
+            if anim_id == self.animation_id:
+                self.frames = anchors
+        self._save_manifest()
+        self._refresh_frame_ui()
 
     def _prev_frame(self):
         if self.current_frame > 0:

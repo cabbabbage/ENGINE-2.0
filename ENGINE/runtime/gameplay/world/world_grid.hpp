@@ -1,5 +1,3 @@
-//TODO we need to update this
-
 #pragma once
 
 #include <cstdint>
@@ -32,17 +30,13 @@ public:
     WorldGrid() : WorldGrid(GridPoint::make_virtual(0, 0, 0, 0), 0) {}
     WorldGrid(const GridPoint& origin, int r_chunk);
 
-    void set_chunk_resolution(int r);
     void set_grid_resolution(int r);
     int  grid_resolution() const;
-    int  chunk_resolution() const { return r_chunk_; }
     GridPoint origin() const { return origin_; }
     void set_origin(const GridPoint& origin);
 
     Asset* create_asset_at_point(std::unique_ptr<Asset> a, int world_z = 0, int resolution_layer = -1);
-    Asset* create_asset_at_point(Asset* a, int world_z = 0, int resolution_layer = -1);
     Asset* register_asset(std::unique_ptr<Asset> a, int world_z = 0, int resolution_layer = -1);
-    Asset* register_asset(Asset* a, int world_z = 0, int resolution_layer = -1);
     Chunk* ensure_chunk_from_world(const GridPoint& world_px);
     Chunk* chunk_from_world(const GridPoint& world_px) const;
     Chunk* get_or_create_chunk_ij(int i, int j);
@@ -72,8 +66,7 @@ public:
     const ChunkManager& chunks() const;
     std::vector<Asset*> all_assets() const;
 
-    GridKey grid_key_from_world(const GridPoint& world, int world_z = 0, int layer = -1) const;
-    GridKey grid_key_from_world(const GridPoint& world_point) const;
+    GridKey grid_key_from_world(const GridPoint& world_point, int layer = -1) const;
     const std::unordered_map<GridId, GridPoint>& points() const { return points_; }
     std::unordered_map<GridId, GridPoint>& points() { return points_; }
     GridPoint* point_for_id(GridId id);
@@ -98,16 +91,16 @@ public:
     std::vector<GridPoint*> query_region(const GridBounds& bounds,
                                          int min_layer,
                                          int max_layer,
-                                         int min_world_z,
-                                         int max_world_z,
+                                         int min_world_depth,
+                                         int max_world_depth,
                                          bool skip_inactive_branches,
                                          bool include_empty_nodes,
                                          RegionMetrics* metrics = nullptr);
     std::vector<const GridPoint*> query_region(const GridBounds& bounds,
                                                int min_layer,
                                                int max_layer,
-                                               int min_world_z,
-                                               int max_world_z,
+                                               int min_world_depth,
+                                               int max_world_depth,
                                                bool skip_inactive_branches,
                                                bool include_empty_nodes,
                                                RegionMetrics* metrics = nullptr) const;
@@ -119,11 +112,11 @@ private:
     void remove_from_chunk(Asset* a, Chunk* c);
     void invalidate_active_cache();
     std::uint64_t next_traversal_stamp() const;
-    GridId make_point_id(int i, int j, int world_z, int resolution_layer, std::uint32_t salt = 0) const;
+    GridId make_point_id(int grid_x, int grid_depth, int world_y, int resolution_layer, std::uint32_t salt = 0) const;
     void remove_asset_from_point(Asset* a, GridPoint& point);
     std::unique_ptr<Asset> detach_asset_from_grid_point(Asset* a, GridPoint& point, bool clear_mapping);
     void attach_asset_to_grid_point(std::unique_ptr<Asset> owned, Asset* raw, GridPoint& point);
-    GridPoint& ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent = nullptr, int world_z = 0, int resolution_layer = -1);
+    GridPoint& ensure_point(GridCoord grid_index, GridCoord chunk_index, Chunk* owning_chunk, GridPoint* parent = nullptr, int world_y = 0, int resolution_layer = -1);
     void bind_asset_to_point(Asset* a, GridPoint& point);
     void propagate_branch_active(GridPoint* node);
     void propagate_branch_inactive(GridPoint* node);
@@ -135,7 +128,6 @@ private:
 
     GridPoint origin_ = GridPoint::make_virtual(0, 0, 0, 0);
     int       r_chunk_ = 0;
-    int       grid_resolution_ = 0;
     int       max_resolution_layers_ = 0;
 
     ChunkManager chunks_;

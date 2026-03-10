@@ -15,6 +15,7 @@
 #include "devtools/widgets.hpp"
 #include "devtools/frame_editors/shared/SnapUtils.hpp"
 #include "utils/FramePointResolver.hpp"
+#include "core/axis_convention.hpp"
 #include "nlohmann/json.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
@@ -60,7 +61,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
         point_3d_editor_->reset_axis(AdjustmentAxis::X);
         point_3d_editor_->set_grid_resolution(context_.snap_resolution);
         // Hit geometry uses Z as percentage of parent height
-        point_3d_editor_->set_z_display_mode(ZDisplayMode::Percentage);
+        point_3d_editor_->set_z_display_mode(CoordinateDisplayMode::Percentage);
         FramePointResolver resolver(context_.target);
         point_3d_editor_->set_parent_height(resolver.parent_height_px());
 
@@ -105,7 +106,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             float center_y_local = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
             box->center_x = resolver.to_percent_xy(center_x_local);
             box->center_y = resolver.to_percent_xy(center_y_local);
-            box->center_z = resolver.to_percent(snapped_world_z);
+            box->center_z = resolver.to_percent_depth(snapped_world_z);
 
             persist_changes();
             refresh_selection_state();
@@ -132,7 +133,7 @@ void HitGeoFrameEditor::begin(const FrameEditorContext& context) {
             float center_y_local = (static_cast<float>(anchor.y) - snapped_world.y) / scale;
             box->center_x = resolver.to_percent_xy(center_x_local);
             box->center_y = resolver.to_percent_xy(center_y_local);
-            box->center_z = resolver.to_percent(snapped_world_z);
+            box->center_z = resolver.to_percent_depth(snapped_world_z);
 
             persist_changes();
         });
@@ -684,7 +685,7 @@ SDL_Point HitGeoFrameEditor::asset_anchor_world() const {
     if (!context_.target) {
         return SDL_Point{0, 0};
     }
-    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_point());
+    return animation_update::detail::bottom_middle_for(*context_.target, context_.target->world_xz_point());
 }
 
 float HitGeoFrameEditor::asset_local_scale() const {
@@ -753,8 +754,8 @@ void HitGeoFrameEditor::refresh_selection_state() {
     const WarpedScreenGrid& cam = context_.camera ? *context_.camera : context_.assets->getView();
     SDL_FPoint screen = cam.map_to_screen_f(world);
     selection_state_->world_pos = world;
-    const float base_z = resolver.base_world_z();
-    const float world_z = resolver.to_world_z(box->center_z);
+    const float base_z = resolver.base_world_depth();
+    const float world_z = resolver.to_world_depth(box->center_z);
     selection_state_->world_z = world_z;
     selection_state_->screen_pos = round_point(screen);
     selection_state_->set_anchor_world(anchor, base_z);

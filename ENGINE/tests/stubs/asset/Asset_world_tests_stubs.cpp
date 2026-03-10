@@ -1,9 +1,22 @@
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 
 #include <utility>
 
 #if defined(ENGINE_WORLD_TESTS)
+
+// Minimal stand-in to satisfy unique_ptr destructors used by Asset during world grid tests.
+class AssetList {
+public:
+    AssetList() = default;
+    ~AssetList() = default;
+};
+
+class AnimationRuntime {
+public:
+    AnimationRuntime() = default;
+    ~AnimationRuntime() = default;
+};
 
 // Minimal, non-rendering Asset/AssetInfo implementations for engine_world_tests.
 
@@ -76,5 +89,7 @@ float Asset::smoothed_scale() const {
 
 void Asset::set_assets(Assets* a) { assets_ = a; }
 void Asset::sync_transform_to_position() {}
+void Asset::clear_grid_id() { grid_id_ = 0; }
+void Asset::mark_anchors_dirty() {}
 
 #endif // ENGINE_WORLD_TESTS

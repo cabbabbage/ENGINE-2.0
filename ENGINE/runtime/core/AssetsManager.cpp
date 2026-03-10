@@ -2,10 +2,10 @@
 #include "utils/sdl_render_conversions.hpp"
 
 #include "utils/ranged_color.hpp"
-#include "assets/initialize_assets.hpp"
+#include "assets/asset/initialize_assets.hpp"
 
 #include "find_current_room.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_utils.hpp"
 #include "assets/asset/asset_types.hpp"
@@ -15,15 +15,16 @@
 #include "devtools/depth_cue_settings.hpp"
 #include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "rendering/render/render.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
+#include "gameplay/map_generation/map_layers_geometry.hpp"
 #include "utils/area.hpp"
 #include "utils/input.hpp"
 #include "utils/range_util.hpp"
 #include "utils/map_grid_settings.hpp"
 #include "utils/quick_task_popup.hpp"
 #include "utils/log.hpp"
-#include "assets/asset/primary_asset_cache.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -77,7 +78,6 @@ int halved_render_quality_percent(int percent) {
     return std::max(kMinRenderQuality, align_render_quality_percent(halved));
 }
 
-
 struct AssetWorldBounds {
     float left = 0.0f;
     float right = 0.0f;
@@ -127,7 +127,7 @@ Assets::Assets(AssetLibrary& library,
                int screen_width_,
                int screen_height_,
                int screen_center_x,
-               int screen_center_y,
+               int screen_center_z,
                int map_radius,
                SDL_Renderer* renderer,
                const std::string& map_id,
@@ -166,7 +166,7 @@ Assets::Assets(AssetLibrary& library,
     depth_effects_enabled_ = true;
 
     vibble::log::info("[Assets] Constructor: Starting InitializeAssets initialization");
-    InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_y, map_radius);
+    InitializeAssets::initialize(*this, std::move(rooms), screen_width_, screen_height_, screen_center_x, screen_center_z, map_radius);
     vibble::log::info("[Assets] Constructor: InitializeAssets complete");
 
     finder_ = new CurrentRoomFinder(rooms_, player);
@@ -182,17 +182,21 @@ Assets::Assets(AssetLibrary& library,
 };
     Room* intro_room = current_room();
 
-    SDL_Point intro_center{screen_center_x, screen_center_y};
+    SDL_Point intro_center{screen_center_x, screen_center_z};
     if (player) {
-        intro_center = SDL_Point{player->world_x(), player->world_y()};
+        intro_center = SDL_Point{player->world_x(), player->world_z()};
     } else if (Room* room = intro_room) {
         if (room->room_area) {
-            intro_center = room->room_area->get_center();
+            const SDL_Point room_center = room->room_area->get_center();
+            intro_center = SDL_Point{
+                room_center.x + room->camera_center_dx,
+                room_center.y + room->camera_center_dz
+            };
         }
     }
     camera_.set_screen_center(intro_center);
     SDL_Point center_px = camera_.get_screen_center();
-    last_camera_center_for_grid_ = world::GridPoint::make_virtual(center_px.x, center_px.y, 0, 0);
+    last_camera_center_for_grid_ = world::GridPoint::make_virtual(center_px.x, 0, center_px.y, 0);
     last_camera_scale_for_grid_ = camera_.get_scale();
     last_camera_pitch_for_grid_ = camera_.current_pitch_radians();
     if (player) {
@@ -248,9 +252,6 @@ Assets::Assets(AssetLibrary& library,
     update_filtered_active_assets();
 
     quick_task_popup_ = std::make_unique<QuickTaskPopup>();
-    if (manifest_store_fallback_) {
-        quick_task_popup_->set_manifest_store(manifest_store_fallback_.get());
-    }
 
     vibble::log::info("[Assets] Constructor: Initialization complete");
 }
@@ -309,8 +310,38 @@ void Assets::save_map_info_json() {
     store->flush();
 }
 
+bool Assets::mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator) {
+    if (!mutator) {
+        return false;
+    }
+    manifest::MapData map_data = manifest::MapData::from_manifest_entry(map_id_, map_info_json_);
+    if (!mutator(map_data)) {
+        return false;
+    }
+    map_info_json_ = map_data.to_manifest_entry();
+    mark_map_data_dirty();
+    return true;
+}
+
+void Assets::mark_map_data_dirty() {
+    map_data_dirty_ = true;
+}
+
+void Assets::snapshot_rooms_to_map_info() {
+    if (!map_info_json_.is_object()) {
+        map_info_json_ = nlohmann::json::object();
+    }
+    for (Room* room : rooms_) {
+        if (!room) {
+            continue;
+        }
+        room->snapshot_assets_to_map_info();
+    }
+}
+
 void Assets::persist_map_info_json() {
     save_map_info_json();
+    map_data_dirty_ = false;
 }
 
 void Assets::hydrate_map_info_sections() {
@@ -397,8 +428,8 @@ void Assets::force_camera_view_refresh() {
     const SDL_Point center_px = camera_.get_screen_center();
     const world::GridPoint center_point = world::GridPoint::make_virtual(
         center_px.x,
-        center_px.y,
         0,
+        center_px.y,
         world_grid_.max_resolution_layers());
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
@@ -523,20 +554,12 @@ bool Assets::boundary_assets_visible() const {
 }
 
 Assets::~Assets() {
+    run_exit_save_sequence("assets_shutdown");
+
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
     anchor_basis_dirty_queue_.clear();
     anchor_basis_dirty_lookup_.clear();
-
-    // Persist current asset state to bundle caches on teardown (dev mode exit).
-    if (dev_mode) {
-        PrimaryAssetCache cache(renderer());
-        for (const auto& entry : library_.all()) {
-            if (entry.second) {
-                cache.save_current(*entry.second);
-            }
-        }
-    }
 
     if (input) {
         input->clear_screen_to_world_mapper();
@@ -584,7 +607,7 @@ void Assets::notify_rooms_changed() {
 }
 
 void Assets::refresh_active_asset_lists() {
-    rebuild_active_assets_if_needed();
+    maybe_rebuild_world_grid();
 
     update_audio_camera_metrics();
     update_filtered_active_assets();
@@ -622,9 +645,9 @@ void Assets::update_audio_camera_metrics() {
     auto update_audio_metrics = [&](Asset* asset) {
         if (!asset) return;
         const float dx = static_cast<float>(asset->world_x() - camera_focus.x);
-        const float dy = static_cast<float>(asset->world_y() - camera_focus.y);
-        asset->distance_from_camera = std::sqrt(dx * dx + dy * dy);
-        asset->angle_from_camera = std::atan2(dy, dx);
+        const float dz = static_cast<float>(asset->world_z() - camera_focus.y);
+        asset->distance_from_camera = std::sqrt(dx * dx + dz * dz);
+        asset->angle_from_camera = std::atan2(dz, dx);
 };
 
     if (player) {
@@ -693,7 +716,9 @@ void Assets::log_asset_movement(Asset* asset, const world::GridPoint& previous, 
     if (!asset) {
         return;
     }
-    if (previous.world_x() == current.world_x() && previous.world_y() == current.world_y()) {
+    if (previous.world_x() == current.world_x() &&
+        previous.world_y() == current.world_y() &&
+        previous.world_z() == current.world_z()) {
         return;
     }
     movement_commands_buffer_.push_back(GridMovementCommand{
@@ -762,6 +787,9 @@ void Assets::ensure_dev_controls() {
         dev_controls_->set_input(input);
         dev_controls_->set_map_info(&map_info_json_);
         dev_controls_->set_map_context(&map_info_json_, map_path_);
+        if (quick_task_popup_) {
+            quick_task_popup_->set_manifest_store(&dev_controls_->manifest_store());
+        }
 
         suppress_dev_renderer_ = false;
     } catch (const std::exception& ex) {
@@ -806,7 +834,6 @@ void Assets::set_input(Input* m) {
 void Assets::update(const Input& input)
 {
     const std::uint64_t now_counter = SDL_GetPerformanceCounter();
-
     if (!should_step_dev_frame(input)) {
         last_frame_dt_seconds_ = 0.0f;
         last_frame_counter_    = now_counter;
@@ -857,10 +884,6 @@ void Assets::update(const Input& input)
         quick_task_popup_->update();
     }
 
-    if (process_removals()) {
-        mark_active_assets_dirty();
-    }
-
     Room* detected_room = finder_ ? finder_->getCurrentRoom() : nullptr;
     Room* active_room = detected_room;
     if (dev_controls_ && dev_controls_->is_enabled()) {
@@ -869,13 +892,13 @@ void Assets::update(const Input& input)
     const bool room_changed = (current_room_ != active_room);
     current_room_ = active_room;
 
-    dx = dy = 0;
+    delta_x_ = delta_z_ = 0;
 
     // Pause runtime asset updates while in Dev Mode unless a frame editor session requires them.
     const bool runtime_updates_enabled = should_run_runtime_updates();
 
     int start_px = player ? player->world_x() : 0;
-    int start_py = player ? player->world_y() : 0;
+    int start_pz = player ? player->world_z() : 0;
 
     if (player) {
         player->active = true;
@@ -892,9 +915,9 @@ void Assets::update(const Input& input)
 
     bool player_moved = false;
     if (player) {
-        dx = player->world_x() - start_px;
-        dy = player->world_y() - start_py;
-        const bool moved_during_update = (dx != 0 || dy != 0);
+        delta_x_ = player->world_x() - start_px;
+        delta_z_ = player->world_z() - start_pz;
+        const bool moved_during_update = (delta_x_ != 0 || delta_z_ != 0);
         world::GridPoint current_player_pos = world::GridPoint::make_virtual(player->world_x(),
                                                                              player->world_y(),
                                                                              player->world_z(),
@@ -902,6 +925,7 @@ void Assets::update(const Input& input)
         const bool moved_since_last_frame =
             !last_player_pos_valid_ ||
             current_player_pos.world_x() != last_known_player_pos_.world_x() ||
+            current_player_pos.world_z() != last_known_player_pos_.world_z() ||
             current_player_pos.world_y() != last_known_player_pos_.world_y();
 
         last_known_player_pos_ = std::move(current_player_pos);
@@ -910,7 +934,7 @@ void Assets::update(const Input& input)
         player_moved = moved_during_update || moved_since_last_frame;
         if (runtime_updates_enabled && moved_during_update) {
             log_asset_movement(player,
-                               world::GridPoint::make_virtual(start_px, start_py, player->world_z(), player->grid_resolution),
+                               world::GridPoint::make_virtual(start_px, 0, start_pz, player->grid_resolution),
                                current_player_pos);
         }
     } else {
@@ -930,7 +954,9 @@ void Assets::update(const Input& input)
         if (runtime_updates_enabled) {
 
             asset->update();
-            if (previous_pos.world_x() != asset->world_x() || previous_pos.world_y() != asset->world_y()) {
+            if (previous_pos.world_x() != asset->world_x() ||
+                previous_pos.world_y() != asset->world_y() ||
+                previous_pos.world_z() != asset->world_z()) {
                 log_asset_movement(asset,
                                    previous_pos,
                                    world::GridPoint::make_virtual(asset->world_x(),
@@ -968,13 +994,6 @@ void Assets::update(const Input& input)
         grid_registration_buffer_.clear();
     }
 
-    // Update binding helpers once per frame after controller/world mutations.
-    for (auto* helper : binding_helpers_) {
-        if (helper) {
-            helper->tick_for_frame();
-        }
-    }
-
     const bool height_animation_active = false;
     const bool camera_refresh_needed = room_changed || player_moved || height_animation_active || camera_settings_dirty_;
     if (dev_controls_) {
@@ -990,7 +1009,6 @@ void Assets::update(const Input& input)
     if (dev_controls_ && dev_controls_->is_enabled()) {
         sync_dev_controls_current_room(current_room_);
         dev_controls_->update(input);
-
         dev_controls_->update_ui(input);
     }
 
@@ -1002,6 +1020,13 @@ void Assets::update(const Input& input)
     maybe_rebuild_world_grid();
 
     refresh_dirty_anchor_bases();
+
+    // Run binding follow updates after anchors are refreshed so children see latest transforms.
+    for (auto* helper : binding_helpers_) {
+        if (helper) {
+            helper->tick_for_frame();
+        }
+    }
 
     update_audio_camera_metrics();
 
@@ -1044,55 +1069,54 @@ void Assets::rebuild_non_player_update_buffer_if_needed() {
         return;
     }
 
-    auto compute_depth_hint = [](const Asset* asset) -> int {
-        return asset ? asset->depth : 0;
-    };
+    constexpr std::size_t kMaxBufferEntries = 250000;
 
     non_player_update_buffer_.clear();
-    non_player_update_buffer_.reserve(active_traversal_.size());
+    non_player_update_buffer_.reserve(
+        std::min<std::size_t>(kMaxBufferEntries,
+                              std::max(active_traversal_.size(), active_assets.size())));
     std::unordered_set<const Asset*> buffer_set;
+    buffer_set.reserve(std::min<std::size_t>(kMaxBufferEntries,
+                                             std::max(active_traversal_.size(), active_assets.size())));
 
-    for (world::GridPoint* point : active_points_) {
-        if (!point) {
-            continue;
-        }
-
-        std::vector<Asset*> point_assets;
-        point_assets.reserve(point->occupants.size());
-        for (const auto& occ : point->occupants) {
-            Asset* asset = occ.get();
-            if (!asset || asset->dead) {
+    const auto append_unique_assets = [&](const std::vector<Asset*>& source) {
+        for (Asset* asset : source) {
+            if (!asset || asset == player || asset->dead) {
                 continue;
             }
-            point_assets.push_back(asset);
-        }
-
-        if (point_assets.empty()) {
-            continue;
-        }
-
-        std::stable_sort(point_assets.begin(),
-                         point_assets.end(),
-                         [&compute_depth_hint](const Asset* a, const Asset* b) {
-                             if (!a || !b) return b != nullptr;
-                             const int depth_a = compute_depth_hint(a);
-                             const int depth_b = compute_depth_hint(b);
-                             if (depth_a != depth_b) {
-                                 return depth_a < depth_b;
-                             }
-                             return a < b;
-                         });
-
-        for (Asset* asset : point_assets) {
-            if (!asset) {
-                continue;
-            }
-
-            // Always respect traversal order; skip adding player itself to the buffer.
-            if (asset != player && buffer_set.insert(asset).second) {
+            if (buffer_set.insert(asset).second) {
                 non_player_update_buffer_.push_back(asset);
+                if (non_player_update_buffer_.size() >= kMaxBufferEntries) {
+                    break;
+                }
             }
+        }
+    };
+    const auto append_unique_traversal = [&](const std::vector<ActiveTraversalEntry>& source) {
+        for (const ActiveTraversalEntry& entry : source) {
+            Asset* asset = entry.asset;
+            if (!asset || asset == player || asset->dead) {
+                continue;
+            }
+            if (buffer_set.insert(asset).second) {
+                non_player_update_buffer_.push_back(asset);
+                if (non_player_update_buffer_.size() >= kMaxBufferEntries) {
+                    break;
+                }
+            }
+        }
+    };
 
+    if (active_traversal_.empty()) {
+        append_unique_assets(active_assets);
+    } else if (active_traversal_.size() > kMaxBufferEntries) {
+        std::cerr << "[Assets] Non-player buffer traversal exceeded cap ("
+                  << active_traversal_.size() << "); falling back to active_assets\n";
+        append_unique_assets(active_assets);
+    } else {
+        append_unique_traversal(active_traversal_);
+        if (non_player_update_buffer_.empty() && !active_assets.empty()) {
+            append_unique_assets(active_assets);
         }
     }
 
@@ -1358,6 +1382,37 @@ void Assets::set_dev_mode(bool mode) {
     log_camera_fog_state(dev_mode ? "dev-mode-enabled" : "dev-mode-disabled");
 }
 
+bool Assets::run_exit_save_sequence(const std::string& reason) {
+    if (exit_save_sequence_ran_) {
+        std::cout << "[Assets] Exit save sequence already executed; reusing result (reason='"
+                  << reason << "', success=" << (exit_save_sequence_ok_ ? "true" : "false")
+                  << ")\n";
+        return exit_save_sequence_ok_;
+    }
+
+    exit_save_sequence_ran_ = true;
+
+    ensure_dev_controls();
+
+    bool ok = false;
+    if (dev_controls_) {
+        ok = dev_controls_->run_exit_save_sequence(reason);
+    } else {
+        std::cerr << "[Assets] EXIT SAVE FAILURE (reason='" << reason
+                  << "'): DevControls unavailable.\n";
+    }
+
+    exit_save_sequence_ok_ = ok;
+
+    if (exit_save_sequence_ok_) {
+        std::cout << "[Assets] Exit save sequence complete (reason='" << reason << "')\n";
+    } else {
+        std::cerr << "[Assets] EXIT SAVE FAILURE (reason='" << reason << "')\n";
+    }
+
+    return exit_save_sequence_ok_;
+}
+
 void Assets::set_force_high_quality_rendering(bool enable) {
     if (force_high_quality_rendering_ == enable) {
         return;
@@ -1427,6 +1482,14 @@ std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
     return world_grid_.extract_asset(asset);
 }
 
+world::GridPoint Assets::resolve_floor_world_point(SDL_Point world_pos, int resolution_layer) const {
+    const int max_layer = world_grid_.max_resolution_layers();
+    const int requested_layer = (resolution_layer >= 0) ? resolution_layer : std::clamp(max_layer - map_grid_settings_.grid_resolution, 0, max_layer);
+    const int layer = std::clamp(requested_layer, 0, max_layer);
+
+    return world::GridPoint::make_virtual(world_pos.x, 0, world_pos.y, layer);
+}
+
 Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resolution_layer) {
     if (!asset) {
         return nullptr;
@@ -1436,7 +1499,10 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
     // Avoid double insertion in all vector.
     const bool already_tracked = std::find(all.begin(), all.end(), raw) != all.end();
 
-    raw = world_grid_.attach_asset(std::move(asset), world_z, resolution_layer);
+    const int resolved_layer = (resolution_layer >= 0) ? resolution_layer : world_grid_.default_resolution_layer();
+    const int resolved_z = (world_z != 0) ? world_z : resolve_floor_world_point(raw->world_xz_point(), resolved_layer).world_z();
+
+    raw = world_grid_.attach_asset(std::move(asset), resolved_z, resolved_layer);
     if (!raw) {
         return nullptr;
     }
@@ -1490,7 +1556,8 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     raw->set_camera(&camera_);
     raw->finalize_setup();
 
-    raw = world_grid_.create_asset_at_point(std::move(uptr));
+    const world::GridPoint floor_point = resolve_floor_world_point(world_pos);
+    raw = world_grid_.create_asset_at_point(std::move(uptr), floor_point.world_z(), floor_point.resolution_layer());
     all.push_back(raw);
 
     queue_asset_dimension_update(raw);
@@ -1536,7 +1603,7 @@ void Assets::rebuild_from_grid_state() {
     ++frame_id_;
     rebuild_all_assets_from_grid();
     const SDL_Point center_px = camera_.get_screen_center();
-    initialize_active_assets(world::GridPoint::make_virtual(center_px.x, center_px.y, 0, world_grid_.max_resolution_layers()));
+    initialize_active_assets(world::GridPoint::make_virtual(center_px.x, 0, center_px.y, world_grid_.max_resolution_layers()));
     refresh_filtered_active_assets();
     mark_non_player_update_buffer_dirty();
 }
@@ -1570,16 +1637,15 @@ void Assets::track_asset_for_grid(Asset* asset) {
 }
 
 bool Assets::maybe_rebuild_world_grid() {
-    // Prevent double rebuild in same frame
-    if (frame_id_ == last_grid_rebuild_frame_ || frame_id_ == last_active_rebuild_frame_id_) {
+    if (frame_id_ == last_grid_rebuild_frame_) {
         return false;
     }
 
     const SDL_Point center_px = camera_.get_screen_center();
     const world::GridPoint current_center = world::GridPoint::make_virtual(
         center_px.x,
-        center_px.y,
         0,
+        center_px.y,
         world_grid_.max_resolution_layers());
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
@@ -1587,15 +1653,23 @@ bool Assets::maybe_rebuild_world_grid() {
     const bool active_dirty = active_assets_dirty_.load(std::memory_order_acquire) || pending_initial_rebuild_;
     const bool camera_changed =
         current_center.world_x() != last_camera_center_for_grid_.world_x() ||
-        current_center.world_y() != last_camera_center_for_grid_.world_y() ||
+        current_center.world_z() != last_camera_center_for_grid_.world_z() ||
         std::fabs(current_scale - last_camera_scale_for_grid_) > kCameraGridEpsilon ||
         std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon;
 
-    camera_view_dirty_ = camera_view_dirty_ || camera_changed;
-    if (!grid_dirty_ && !camera_view_dirty_ && !active_dirty) {
+    const bool camera_dirty = camera_view_dirty_ || camera_changed;
+    if (!grid_dirty_ && !camera_dirty && !active_dirty) {
         return false;
     }
 
+    if (active_dirty) {
+        pending_initial_rebuild_ = false;
+        initialize_active_assets(current_center);
+        active_assets_dirty_.store(false, std::memory_order_release);
+        last_active_rebuild_frame_id_ = frame_id_;
+    }
+
+    camera_view_dirty_ = camera_dirty;
     rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
     return true;
 }
@@ -1606,10 +1680,7 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
     last_grid_rebuild_frame_ = frame_id_;
     camera_.rebuild_grid(world_grid_,
                          last_frame_dt_seconds_,
-                         frame_id_,
-                         terrain_field_source_,
-                         terrain_runtime_state(),
-                         &rooms_);
+                         frame_id_);
     world_grid_.update_active_chunks(screen_world_rect(), 0);
     rebuild_active_from_screen_grid();
     mark_anchor_bases_dirty_for_active_assets();
@@ -1676,26 +1747,6 @@ void Assets::rebuild_all_assets_from_grid() {
     finalize_max_asset_dimensions(max_width, max_height);
 }
 
-bool Assets::rebuild_active_assets_if_needed() {
-    const bool dirty = active_assets_dirty_.load(std::memory_order_acquire) || pending_initial_rebuild_;
-    if (!dirty) {
-        return false;
-    }
-    if (frame_id_ == last_active_rebuild_frame_id_) {
-        return false;
-    }
-
-    const SDL_Point center_px = camera_.get_screen_center();
-    const world::GridPoint current_center = world::GridPoint::make_virtual(center_px.x, center_px.y, 0, world_grid_.max_resolution_layers());
-    const double current_scale = camera_.get_scale();
-    const double current_pitch = camera_.current_pitch_radians();
-
-    pending_initial_rebuild_ = false;
-    initialize_active_assets(current_center);
-    rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
-    return true;
-}
-
 bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const {
     if (!asset || !asset->info) {
         return false;
@@ -1724,7 +1775,7 @@ bool Assets::asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rec
         SDL_FPoint top_right{};
         SDL_FPoint bottom_left{};
         SDL_FPoint bottom_right{};
-        const float base_z = 0.0f;
+        const float base_z = static_cast<float>(asset->world_z());
         const bool projected =
             camera_.project_world_point(SDL_FPoint{world_x - half_width, world_y}, base_z + height, top_left) &&
             camera_.project_world_point(SDL_FPoint{world_x + half_width, world_y}, base_z + height, top_right) &&
@@ -1767,26 +1818,25 @@ void Assets::schedule_removal(Asset* a) {
 }
 
 std::vector<Asset*> Assets::collect_removal_closure(const std::vector<Asset*>& roots) const {
-    std::unordered_set<Asset*> removal_set;
-    removal_set.reserve(roots.size());
-    for (Asset* asset : roots) {
-        if (asset) {
-            removal_set.insert(asset);
+    std::unordered_set<Asset*> visited;
+    std::vector<Asset*> ordered;
+
+    const auto enqueue_recursive = [&](auto&& self, Asset* asset) -> void {
+        if (!asset || visited.find(asset) != visited.end()) {
+            return;
         }
+        visited.insert(asset);
+        ordered.push_back(asset);
+        for (Asset* child : asset->children()) {
+            self(self, child);
+        }
+    };
+
+    visited.reserve(roots.size());
+    for (Asset* asset : roots) {
+        enqueue_recursive(enqueue_recursive, asset);
     }
 
-    std::vector<Asset*> ordered;
-    ordered.reserve(removal_set.size());
-    for (Asset* asset : roots) {
-        if (asset && removal_set.erase(asset) > 0) {
-            ordered.push_back(asset);
-        }
-    }
-    for (Asset* asset : removal_set) {
-        if (asset) {
-            ordered.push_back(asset);
-        }
-    }
     return ordered;
 }
 
@@ -1858,6 +1908,26 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     }
     if (unique_removals.empty()) {
         return 0;
+    }
+
+    // Purge anchor bindings that reference assets slated for removal (parents or children).
+    if (!binding_helpers_.empty()) {
+        for (Asset* victim : unique_removals) {
+            for (auto* helper : binding_helpers_) {
+                if (helper) {
+                    helper->purge_bindings_for_asset(victim);
+                }
+            }
+        }
+    }
+
+    for (Asset* asset : all) {
+        if (!asset || unique_removals.find(asset) != unique_removals.end()) {
+            continue;
+        }
+        for (Asset* removed : ordered_removals) {
+            asset->remove_child(removed);
+        }
     }
 
     for (Asset* asset : ordered_removals) {
@@ -2015,7 +2085,7 @@ std::optional<Asset::TilingInfo> Assets::compute_tiling_for_asset(const Asset* a
         return std::nullopt;
     }
 
-    int step = map_grid_settings_.tile_spacing();
+    int step = map_grid_settings_.spacing();
 
     if (step <= 0) {
         const int raw_w = std::max(1, asset->info->original_canvas_width);
@@ -2028,7 +2098,7 @@ std::optional<Asset::TilingInfo> Assets::compute_tiling_for_asset(const Asset* a
     }
     step = std::max(1, step);
 
-    const SDL_Point world_pos{ asset->world_x(), asset->world_y() };
+    const SDL_Point world_pos{ asset->world_x(), asset->world_z() };
     const int base_w = std::max(1, asset->info->original_canvas_width);
     const int base_h = std::max(1, asset->info->original_canvas_height);
     double scale = 1.0;
@@ -2090,6 +2160,33 @@ Asset* Assets::find_asset_by_name(const std::string& name) const {
     return nullptr;
 }
 
+Asset* Assets::find_asset_by_stable_id(const std::string& id) const {
+    if (id.empty()) {
+        return nullptr;
+    }
+    auto matches_id = [&](Asset* asset) -> bool {
+        if (!asset) {
+            return false;
+        }
+        if (!asset->spawn_id.empty() && asset->spawn_id == id) {
+            return true;
+        }
+        return asset->info && asset->info->name == id;
+    };
+
+    for (Asset* asset : active_assets) {
+        if (matches_id(asset)) {
+            return asset;
+        }
+    }
+    for (Asset* asset : all) {
+        if (matches_id(asset)) {
+            return asset;
+        }
+    }
+    return nullptr;
+}
+
 bool Assets::contains_asset(const Asset* asset) const {
     if (!asset) {
         return false;
@@ -2115,7 +2212,6 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
     }
 
     world_grid_.set_grid_resolution(std::max(0, sanitized.grid_resolution));
-    world_grid_.set_chunk_resolution(std::max(0, sanitized.grid_resolution));
 
     if (resolution_changed) {
         for (Asset* asset : all) {
@@ -2140,10 +2236,6 @@ void Assets::apply_map_grid_settings(const MapGridSettings& settings, bool persi
         world_grid_.update_active_chunks(screen_world_rect(), 0);
         mark_grid_dirty();
     }
-}
-
-int Assets::map_grid_chunk_resolution() const {
-    return std::max(0, map_grid_settings_.grid_resolution);
 }
 
 void Assets::toggle_asset_library() {
@@ -2268,10 +2360,7 @@ devmode::core::ManifestStore* Assets::manifest_store() {
         auto& store = dev_controls_->manifest_store();
         return &store;
     }
-    if (!manifest_store_fallback_) {
-        manifest_store_fallback_ = std::make_unique<devmode::core::ManifestStore>();
-    }
-    return manifest_store_fallback_.get();
+    return nullptr;
 }
 
 const devmode::core::ManifestStore* Assets::manifest_store() const {
@@ -2294,13 +2383,6 @@ void Assets::invalidate_dynamic_boundary_system() {
     if (scene) {
         scene->invalidate_dynamic_boundary_system();
     }
-}
-
-void Assets::set_terrain_sources(TerrainField* field, const TerrainRuntimeState& state) {
-    terrain_field_source_ = field;
-    terrain_runtime_state_ = state;
-    mark_grid_dirty();
-    camera_view_dirty_ = true;
 }
 
 void Assets::show_dev_notice(const std::string& message, Uint32 duration_ms) {
@@ -2342,7 +2424,7 @@ void Assets::classify_region(world::GridPoint& point) {
     point.region_kind = world::GridPoint::RegionKind::Boundary;
     point.region_owner = nullptr;
 
-    const SDL_Point pt{point.world_x(), point.world_y()};
+    const SDL_Point pt{point.world_x(), point.world_z()};
     for (Room* room : rooms_) {
         if (!room) continue;
         const bool room_is_trail = is_trail_string(room->type);
@@ -2387,7 +2469,7 @@ void Assets::rebuild_active_from_screen_grid() {
     std::unordered_set<Asset*> seen_assets;
     seen_assets.reserve(camera_.get_visible_points().size() * 2);
 
-    const double anchor_world_y = camera_.anchor_world_y();
+    const double anchor_depth = camera_.anchor_world_z();
 
     // Screen Grid traversal: use per-frame visible nodes (already filtered by region + branch masks).
     for (world::GridPoint* point : camera_.get_visible_points()) {
@@ -2426,7 +2508,7 @@ void Assets::rebuild_active_from_screen_grid() {
             active_traversal_.push_back(ActiveTraversalEntry{
                 asset,
                 point,
-                anchor_world_y - static_cast<double>(asset->world_y())
+                render_depth::depth_from_anchor(anchor_depth, static_cast<double>(asset->world_z()), asset->render_depth_bias())
             });
         }
     }

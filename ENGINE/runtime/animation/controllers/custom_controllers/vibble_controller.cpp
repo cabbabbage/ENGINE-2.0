@@ -2,7 +2,7 @@
 
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
 #include <algorithm>
@@ -16,7 +16,7 @@ float sanitize_scale(float value) {
 
 animation_update::GeometryContext geometry_for(const Asset& asset) {
     animation_update::GeometryContext context{};
-    context.anchor = animation_update::detail::bottom_middle_for(asset, asset.world_point());
+    context.anchor = animation_update::detail::bottom_middle_for(asset, asset.world_xz_point());
     context.scale = sanitize_scale(asset.smoothed_scale());
     context.flipped = asset.flipped;
     context.plane = animation_update::CombatPlane::XY;
@@ -41,7 +41,13 @@ vibble_controller::vibble_controller(Asset* player)
     : player_(player) {
     if (player_) {
         binding_helper_ = std::make_unique<AnchorBoundAssetHelper>(player_);
-        binding_helper_->bind(kEyesFollowerId, kEyesAnchorName);
+        if (Asset* eyes_child = player_->get_assets() ? player_->get_assets()->spawn_asset(kEyesFollowerId, player_->world_xz_point()) : nullptr) {
+            auto anchor = player_->anchor_state(kEyesAnchorName,
+                                                anchor_points::GridMaterialization::None);
+            if (anchor.has_value()) {
+                binding_helper_->bind_child_to_anchor(*player_, *eyes_child, anchor.value());
+            }
+        }
     }
 }
 
@@ -164,11 +170,6 @@ void vibble_controller::update(const Input& input) {
     dx_ = dy_ = 0;
     movement(input);
 
-    // Force bound children to refresh their anchor every frame in case the engine loop misses us.
-    if (binding_helper_) {
-        binding_helper_->tick_for_frame();
-    }
-
 }
 
 std::string vibble_controller::animation_for_direction(int raw_x, int raw_y) const {
@@ -277,6 +278,5 @@ void vibble_controller::process_pending_attacks(Asset& self) {
     // Process any attacks that were sent to self
     self.process_pending_attacks();
 }
-
 
 

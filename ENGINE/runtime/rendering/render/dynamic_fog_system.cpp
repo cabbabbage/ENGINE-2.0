@@ -1,29 +1,21 @@
 #include "rendering/render/dynamic_fog_system.hpp"
-#include "assets/Asset.hpp"
+#include "rendering/render/render_depth_policy.hpp"
+#include "assets/asset/Asset.hpp"
+#include "rendering/render/grid_overlay.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/world/world_grid.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "utils/log.hpp"
 
 #include <SDL3_image/SDL_image.h>
-#include <random>
 #include <cmath>
 #include <algorithm>
 #include <filesystem>
-#include <limits>
 #include <cstdint>
 
 namespace fs = std::filesystem;
-
 namespace {
-constexpr float kMinGridMultiplier = 0.25f;
-constexpr float kMaxGridMultiplier = 8.0f;
-constexpr float kMinBaseScale = 0.25f;
-constexpr float kMaxBaseScale = 12.0f;
-constexpr float kMinVerticalOffset = -300.0f;
-constexpr float kMaxVerticalOffset = 300.0f;
-constexpr float kMinRandomJitter = 0.0f;
-constexpr float kMaxRandomJitter = 500.0f;
+constexpr std::int64_t kMaxFogCellsPerFrame = 50000;
 }
 
 DynamicFogSystem::DynamicFogSystem() = default;
@@ -114,7 +106,6 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
     // Get visible world bounds from camera
     SDL_FPoint view_center = cam.get_view_center_f();
     double view_height = cam.view_height_world();
-    const auto& settings = cam.realism_settings();
 
     // Use grid-resolution aware spacing, scaled by dev-configured multiplier
     const int resolution_layer = std::clamp(grid.grid_resolution(), 0, grid.max_resolution_layers());
@@ -122,9 +113,12 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
     if (base_spacing <= 0 || base_spacing > 20000) {
         base_spacing = grid.grid_spacing_for_layer(kFogResolutionLayer);
     }
-    const float spacing_multiplier = std::clamp(config().grid_spacing_multiplier, kMinGridMultiplier, kMaxGridMultiplier);
-    const int grid_spacing = std::max(1, static_cast<int>(std::lround(static_cast<float>(base_spacing) * spacing_multiplier)));
-    const float max_random_jitter = std::clamp(config().max_random_jitter, kMinRandomJitter, kMaxRandomJitter);
+    const float spacing_multiplier = render_overlay::clamp_spacing_multiplier(config().grid_spacing_multiplier);
+    int grid_spacing = render_overlay::scaled_spacing(base_spacing, spacing_multiplier);
+    if (grid_spacing <= 0) {
+        grid_spacing = 1;
+    }
+    const float max_random_jitter = render_overlay::clamp_random_jitter(config().max_random_jitter);
 
     // Expand visible bounds to ensure coverage
     const float margin = view_height * 0.5f;
@@ -136,76 +130,117 @@ void DynamicFogSystem::update(const WarpedScreenGrid& cam, const world::WorldGri
     };
 
     // Render fog on the map floor
-    int min_world_z = 0;
-    int max_world_z = 0;
+    int min_world_z = cam.last_min_world_z();
+    int max_world_z = cam.last_max_world_z();
+    if (min_world_z > max_world_z) {
+        min_world_z = 0;
+        max_world_z = 0;
+    }
 
     // Snap to grid alignment
-    int start_x = static_cast<int>(std::floor(visible_bounds.x / grid_spacing)) * grid_spacing;
-    int start_y = static_cast<int>(std::floor(visible_bounds.y / grid_spacing)) * grid_spacing;
-    int end_x = static_cast<int>(std::ceil((visible_bounds.x + visible_bounds.w) / grid_spacing)) * grid_spacing;
-    int end_y = static_cast<int>(std::ceil((visible_bounds.y + visible_bounds.h) / grid_spacing)) * grid_spacing;
+    auto compute_grid_span = [&](int spacing, int& out_start_x, int& out_end_x, int& out_start_z, int& out_end_z) {
+        out_start_x = static_cast<int>(std::floor(visible_bounds.x / spacing)) * spacing;
+        out_start_z = static_cast<int>(std::floor(visible_bounds.y / spacing)) * spacing;
+        out_end_x = static_cast<int>(std::ceil((visible_bounds.x + visible_bounds.w) / spacing)) * spacing;
+        out_end_z = static_cast<int>(std::ceil((visible_bounds.y + visible_bounds.h) / spacing)) * spacing;
+        out_start_z = std::max(out_start_z, min_world_z);
+        out_end_z = std::max(out_start_z, std::min(out_end_z, max_world_z));
+    };
+    auto estimate_cell_count = [](int spacing, int start_x, int end_x, int start_z, int end_z) -> std::int64_t {
+        if (spacing <= 0 || end_x < start_x || end_z < start_z) {
+            return 0;
+        }
+        const std::int64_t count_x = (static_cast<std::int64_t>(end_x) - static_cast<std::int64_t>(start_x)) /
+                                     static_cast<std::int64_t>(spacing) + 1;
+        const std::int64_t count_z = (static_cast<std::int64_t>(end_z) - static_cast<std::int64_t>(start_z)) /
+                                     static_cast<std::int64_t>(spacing) + 1;
+        if (count_x <= 0 || count_z <= 0) {
+            return 0;
+        }
+        return count_x * count_z;
+    };
 
-    // Iterate over z layers (sample only 2 layers for sparse fog)
-    const int z_step = std::max(1, (max_world_z - min_world_z) / 2);
-    for (int world_z = min_world_z; world_z <= max_world_z; world_z += z_step) {
-        // Iterate over grid positions at layer 4 spacing (729 pixels)
-        for (int world_x = start_x; world_x <= end_x; world_x += grid_spacing) {
-            for (int world_y = start_y; world_y <= end_y; world_y += grid_spacing) {
-                // Assign fog texture for this grid point (memoized random assignment)
-                int fog_index = assign_fog_texture_for_point(world_x, world_y, world_z, kFogResolutionLayer);
-                if (fog_index < 0 || fog_index >= static_cast<int>(fog_textures_.size())) {
-                    continue;
-                }
+    int effective_spacing = grid_spacing;
+    int start_x = 0;
+    int end_x = 0;
+    int start_z = 0;
+    int end_z = 0;
+    compute_grid_span(effective_spacing, start_x, end_x, start_z, end_z);
 
-                const auto& fog_tex_entry = fog_textures_[fog_index];
-                if (!fog_tex_entry.texture || fog_tex_entry.width <= 0 || fog_tex_entry.height <= 0) {
-                    continue;
-                }
-
-                SDL_FPoint base_world_pos{static_cast<float>(world_x), static_cast<float>(world_y)};
-                const SDL_FPoint jitter_offset = sample_jitter_offset(world_x, world_y, world_z, kFogResolutionLayer, max_random_jitter);
-                SDL_FPoint world_pos{base_world_pos.x + jitter_offset.x, base_world_pos.y + jitter_offset.y};
-                SDL_FPoint screen_pos{};
-                if (!cam.project_world_point(world_pos, static_cast<float>(world_z), screen_pos)) {
-                    continue;
-                }
-                if (!std::isfinite(screen_pos.x) || !std::isfinite(screen_pos.y)) {
-                    continue;
-                }
-
-                active_fog_sprites_.push_back(FogSprite{
-                    fog_tex_entry.texture, world_pos, screen_pos, 1.0f, world_z,
-                    fog_tex_entry.width, fog_tex_entry.height
-                });
-            }
+    std::int64_t estimated_cells = estimate_cell_count(effective_spacing, start_x, end_x, start_z, end_z);
+    if (estimated_cells > kMaxFogCellsPerFrame) {
+        const double scale = std::sqrt(static_cast<double>(estimated_cells) / static_cast<double>(kMaxFogCellsPerFrame));
+        const int spacing_scale = std::max(1, static_cast<int>(std::ceil(scale)));
+        const int adjusted_spacing = effective_spacing * spacing_scale;
+        if (adjusted_spacing > effective_spacing) {
+            effective_spacing = adjusted_spacing;
+            compute_grid_span(effective_spacing, start_x, end_x, start_z, end_z);
+            estimated_cells = estimate_cell_count(effective_spacing, start_x, end_x, start_z, end_z);
         }
     }
 
+    if (estimated_cells <= 0) {
+        return;
+    }
+
+    const std::size_t reserve_count = static_cast<std::size_t>(
+        std::min<std::int64_t>(estimated_cells, kMaxFogCellsPerFrame));
+    active_fog_sprites_.reserve(reserve_count);
+
+    std::int64_t generated_cells = 0;
+    bool hit_cell_cap = false;
+    for (int world_depth = start_z; world_depth <= end_z; world_depth += effective_spacing) {
+        for (int world_x = start_x; world_x <= end_x; world_x += effective_spacing) {
+            if (generated_cells >= kMaxFogCellsPerFrame) {
+                hit_cell_cap = true;
+                break;
+            }
+            ++generated_cells;
+            int fog_index = assign_fog_texture_for_point(world_x, world_depth, world_depth, kFogResolutionLayer);
+            if (fog_index < 0 || fog_index >= static_cast<int>(fog_textures_.size())) {
+                continue;
+            }
+
+            const auto& fog_tex_entry = fog_textures_[fog_index];
+            if (!fog_tex_entry.texture || fog_tex_entry.width <= 0 || fog_tex_entry.height <= 0) {
+                continue;
+            }
+
+            SDL_FPoint ground_pos{static_cast<float>(world_x), 0.0f};
+            const SDL_FPoint jitter_offset = sample_jitter_offset(world_x, world_depth, world_depth, kFogResolutionLayer, max_random_jitter);
+            const float jittered_depth = static_cast<float>(world_depth) + jitter_offset.y;
+            const float jittered_x = ground_pos.x + jitter_offset.x;
+            SDL_FPoint screen_pos{};
+            if (!cam.project_world_point(SDL_FPoint{jittered_x, 0.0f}, jittered_depth, screen_pos)) {
+                continue;
+            }
+            if (!std::isfinite(screen_pos.x) || !std::isfinite(screen_pos.y)) {
+                continue;
+            }
+
+            SDL_FPoint world_pos{jittered_x, jittered_depth};
+            active_fog_sprites_.push_back(FogSprite{
+                fog_tex_entry.texture, world_pos, screen_pos, 1.0f, static_cast<int>(std::lround(jittered_depth)),
+                fog_tex_entry.width, fog_tex_entry.height
+            });
+        }
+        if (hit_cell_cap) {
+            break;
+        }
+    }
     // Depth-sort so render.cpp can merge fog into the interleaved draw order without copying
-    const double anchor_y = cam.anchor_world_y();
+    const double anchor_depth = cam.anchor_world_z();
     std::sort(active_fog_sprites_.begin(), active_fog_sprites_.end(),
-        [anchor_y](const FogSprite& a, const FogSprite& b) {
-            const double da = anchor_y - static_cast<double>(a.world_pos.y);
-            const double db = anchor_y - static_cast<double>(b.world_pos.y);
+        [anchor_depth](const FogSprite& a, const FogSprite& b) {
+            const double da = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(a.world_pos.y));
+            const double db = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(b.world_pos.y));
             if (da != db) return da > db;
             return a.world_pos.x < b.world_pos.x;
         });
 }
 
-void DynamicFogSystem::render(SDL_Renderer* renderer, const WarpedScreenGrid& cam) {
-    // Note: Fog rendering is now handled in SceneRenderer::render() with depth-sorted warped quads.
-    // This method is kept for API compatibility but is no longer used.
-}
-
 std::uint64_t DynamicFogSystem::make_grid_point_hash(int world_x, int world_y, int world_z, int layer) const {
-    // Create a simple hash from grid coordinates
-    // Combine x, y, z, layer into a single 64-bit hash
-    std::uint64_t h = 0;
-    h ^= std::hash<int>{}(world_x) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<int>{}(world_y) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<int>{}(world_z) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    h ^= std::hash<int>{}(layer) + 0x9e3779b9 + (h << 6) + (h >> 2);
-    return h;
+    return render_overlay::hash_grid_cell(world_x, world_y, world_z, layer);
 }
 
 int DynamicFogSystem::assign_fog_texture_for_point(int world_x, int world_y, int world_z, int layer) {
@@ -216,21 +251,14 @@ int DynamicFogSystem::assign_fog_texture_for_point(int world_x, int world_y, int
         return it->second;  // Already assigned
     }
 
-    // Randomly assign a fog texture
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    std::uniform_int_distribution<int> dist(0, static_cast<int>(fog_textures_.size()) - 1);
-    int fog_index = dist(gen);
+    const int fog_index = render_overlay::hashed_roll(hash, static_cast<int>(fog_textures_.size()));
 
     fog_assignments_[hash] = fog_index;
     return fog_index;
 }
 
 void DynamicFogSystem::set_grid_spacing_multiplier(float multiplier) {
-    if (!std::isfinite(multiplier)) {
-        return;
-    }
-    config().grid_spacing_multiplier = std::clamp(multiplier, kMinGridMultiplier, kMaxGridMultiplier);
+    config().grid_spacing_multiplier = render_overlay::clamp_spacing_multiplier(multiplier);
 }
 
 float DynamicFogSystem::grid_spacing_multiplier() {
@@ -238,10 +266,7 @@ float DynamicFogSystem::grid_spacing_multiplier() {
 }
 
 void DynamicFogSystem::set_base_size_scale(float scale) {
-    if (!std::isfinite(scale)) {
-        return;
-    }
-    config().base_size_scale = std::clamp(scale, kMinBaseScale, kMaxBaseScale);
+    config().base_size_scale = render_overlay::clamp_base_size_scale(scale);
 }
 
 float DynamicFogSystem::base_size_scale() {
@@ -249,10 +274,7 @@ float DynamicFogSystem::base_size_scale() {
 }
 
 void DynamicFogSystem::set_vertical_offset(float offset) {
-    if (!std::isfinite(offset)) {
-        return;
-    }
-    config().vertical_offset = std::clamp(offset, kMinVerticalOffset, kMaxVerticalOffset);
+    config().vertical_offset = render_overlay::clamp_vertical_offset(offset);
 }
 
 float DynamicFogSystem::vertical_offset() {
@@ -260,10 +282,7 @@ float DynamicFogSystem::vertical_offset() {
 }
 
 void DynamicFogSystem::set_max_random_jitter(float jitter) {
-    if (!std::isfinite(jitter)) {
-        return;
-    }
-    config().max_random_jitter = std::clamp(jitter, kMinRandomJitter, kMaxRandomJitter);
+    config().max_random_jitter = render_overlay::clamp_random_jitter(jitter);
 }
 
 float DynamicFogSystem::max_random_jitter() {
@@ -275,21 +294,7 @@ SDL_FPoint DynamicFogSystem::sample_jitter_offset(int world_x,
                                                   int world_z,
                                                   int layer,
                                                   float max_jitter) const {
-    if (max_jitter <= 0.0f) {
-        return SDL_FPoint{0.0f, 0.0f};
-    }
-    std::uint64_t state = make_grid_point_hash(world_x, world_y, world_z, layer);
-    state ^= 0x9e3779b97f4a7c15ULL;
-    auto uniform01 = [&state]() -> double {
-        state ^= state << 13;
-        state ^= state >> 7;
-        state ^= state << 17;
-        const uint32_t value = static_cast<uint32_t>(state >> 32);
-        return static_cast<double>(value) / static_cast<double>(std::numeric_limits<uint32_t>::max());
-    };
-    const double jitter_x = (uniform01() * 2.0 - 1.0) * static_cast<double>(max_jitter);
-    const double jitter_y = (uniform01() * 2.0 - 1.0) * static_cast<double>(max_jitter);
-    return SDL_FPoint{static_cast<float>(jitter_x), static_cast<float>(jitter_y)};
+    return render_overlay::jitter_from_hash(make_grid_point_hash(world_x, world_y, world_z, layer), max_jitter);
 }
 
 DynamicFogSystem::FogConfig& DynamicFogSystem::config() {

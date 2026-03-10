@@ -1,10 +1,12 @@
 #include "rendering/render/dynamic_boundary_system.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
+#include "rendering/render/grid_overlay.hpp"
 #include "gameplay/world/world_grid.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "rendering/render/scaling_logic.hpp"
-#include "assets/animation.hpp"
+#include "assets/asset/animation.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "utils/area.hpp"
@@ -15,33 +17,12 @@
 #include <cctype>
 #include <cmath>
 #include <functional>
-#include <limits>
 #include <cstdint>
 #include <tuple>
 
 namespace {
-constexpr float kMinGridMultiplier = 0.25f;
-constexpr float kMaxGridMultiplier = 8.0f;
-constexpr float kMinBaseScale = 0.25f;
-constexpr float kMaxBaseScale = 12.0f;
-constexpr float kMinVerticalOffset = -300.0f;
-constexpr float kMaxVerticalOffset = 300.0f;
-constexpr float kMinRandomJitter = 0.0f;
-constexpr float kMaxRandomJitter = 500.0f;
 constexpr float kDefaultAnimationFrameMs = 1000.0f / 24.0f;
 constexpr long long kMaxBoundaryCells = 250000;
-
-inline std::uint64_t mix_uint64(std::uint64_t seed, std::uint64_t value) {
-    seed ^= value + 0x9e3779b97f4a7c15ULL + (seed << 6) + (seed >> 2);
-    return seed;
-}
-
-inline std::uint64_t xorshift64(std::uint64_t value) {
-    value ^= value << 13;
-    value ^= value >> 7;
-    value ^= value << 17;
-    return value;
-}
 
 inline bool is_trail_string(const std::string& text) {
     if (text.size() != 5) return false;
@@ -50,33 +31,6 @@ inline bool is_trail_string(const std::string& text) {
            std::tolower(static_cast<unsigned char>(text[2])) == 'a' &&
            std::tolower(static_cast<unsigned char>(text[3])) == 'i' &&
            std::tolower(static_cast<unsigned char>(text[4])) == 'l';
-}
-
-inline int scaled_spacing(int base_spacing, float multiplier) {
-    const double scaled = static_cast<double>(base_spacing) * static_cast<double>(multiplier);
-    if (!std::isfinite(scaled) || scaled <= 0.0) {
-        return std::max(1, base_spacing);
-    }
-    const long long rounded = static_cast<long long>(std::llround(scaled));
-    if (rounded <= 0) {
-        return 1;
-    }
-    if (rounded > static_cast<long long>(std::numeric_limits<int>::max())) {
-        return std::numeric_limits<int>::max();
-    }
-    return static_cast<int>(rounded);
-}
-
-inline int spacing_for_resolution(int resolution) {
-    const int clamped = vibble::grid::clamp_resolution(resolution);
-    long long value = 1;
-    for (int i = 0; i < clamped; ++i) {
-        if (value > static_cast<long long>(std::numeric_limits<int>::max()) / 3LL) {
-            return std::numeric_limits<int>::max();
-        }
-        value *= 3LL;
-    }
-    return static_cast<int>(value);
 }
 
 inline float make_positive_scale(float value, float fallback = 1.0f) {
@@ -159,6 +113,8 @@ BoundaryScaleResult compute_boundary_asset_scale(DynamicBoundarySystem::Boundary
 
 }
 
+using render_overlay::mix_uint64;
+
 DynamicBoundarySystem::DynamicBoundarySystem() = default;
 
 DynamicBoundarySystem::~DynamicBoundarySystem() {
@@ -183,6 +139,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                                    world::WorldGrid& grid,
                                    Assets* assets,
                                    float delta_ms) {
+    static int s_debug_frame_counter = 0;
     active_boundary_sprites_.clear();
     if (!initialized_ || !renderer_ || !asset_library_ || !assets) {
         return;
@@ -222,7 +179,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     };
 
     const world::GridPoint grid_origin = grid.origin();
-    const float spacing_multiplier = std::clamp(config().grid_spacing_multiplier, kMinGridMultiplier, kMaxGridMultiplier);
+    const float spacing_multiplier = render_overlay::clamp_spacing_multiplier(config().grid_spacing_multiplier);
     const std::vector<Room*>& rooms = assets->rooms();
     const std::size_t rooms_hash = compute_rooms_topology_hash(assets);
     ensure_region_cache_valid(grid, rooms, rooms_hash, spacing_multiplier);
@@ -231,7 +188,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
     next_static.config_revision = config_revision_;
     next_static.rooms_hash = rooms_hash;
     next_static.origin_x = grid_origin.world_x();
-    next_static.origin_y = grid_origin.world_y();
+    next_static.origin_z = grid_origin.world_z();
     next_static.origin_layer = grid_origin.resolution_layer();
     next_static.grid_resolution = grid.grid_resolution();
     next_static.spacing_multiplier = spacing_multiplier;
@@ -246,18 +203,16 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         for (size_t type_idx = 0; type_idx < boundary_types_.size(); ++type_idx) {
             BoundaryType& btype = boundary_types_[type_idx];
             const int resolution_layer = vibble::grid::clamp_resolution(btype.grid_resolution);
-            const int base_spacing = spacing_for_resolution(resolution_layer);
+            const int base_spacing = render_overlay::spacing_for_resolution(resolution_layer);
             if (base_spacing <= 0) {
                 continue;
             }
-            int grid_spacing = scaled_spacing(base_spacing, spacing_multiplier);
+            int grid_spacing = render_overlay::scaled_spacing(base_spacing, spacing_multiplier);
             if (grid_spacing <= 0) {
                 continue;
             }
 
-            const float max_random_jitter = std::clamp(static_cast<float>(btype.jitter),
-                                                       kMinRandomJitter,
-                                                       kMaxRandomJitter);
+            const float max_random_jitter = render_overlay::clamp_random_jitter(static_cast<float>(btype.jitter));
 
             const float min_x = visible_bounds.x;
             const float max_x = visible_bounds.x + visible_bounds.w;
@@ -267,8 +222,8 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
             auto compute_span = [&](int spacing, int& start_x, int& end_x, int& start_y, int& end_y) {
                 start_x = static_cast<int>(std::floor((min_x - static_cast<float>(grid_origin.world_x())) / spacing));
                 end_x = static_cast<int>(std::ceil((max_x - static_cast<float>(grid_origin.world_x())) / spacing));
-                start_y = static_cast<int>(std::floor((min_y - static_cast<float>(grid_origin.world_y())) / spacing));
-                end_y = static_cast<int>(std::ceil((max_y - static_cast<float>(grid_origin.world_y())) / spacing));
+                start_y = static_cast<int>(std::floor((min_y - static_cast<float>(grid_origin.world_z())) / spacing));
+                end_y = static_cast<int>(std::ceil((max_y - static_cast<float>(grid_origin.world_z())) / spacing));
             };
 
             int start_idx_x = 0;
@@ -301,11 +256,10 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                 continue;
             }
 
-            const int world_z = 0;
             for (int ix = start_idx_x; ix <= end_idx_x; ++ix) {
                 const int world_x = grid_origin.world_x() + ix * grid_spacing;
                 for (int iy = start_idx_y; iy <= end_idx_y; ++iy) {
-                    const int world_y = grid_origin.world_y() + iy * grid_spacing;
+                    const int world_z = grid_origin.world_z() + iy * grid_spacing;
                     const BoundaryKey key = make_key(static_cast<int>(type_idx), resolution_layer, ix, iy, world_z);
                     const int candidate_idx = select_candidate_for_key(key, btype);
                     if (candidate_idx < 0 || candidate_idx >= static_cast<int>(btype.candidates.size())) {
@@ -317,16 +271,18 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                     }
 
                     const SDL_FPoint jitter = sample_jitter_offset(key, max_random_jitter);
+                    const float jittered_z = static_cast<float>(world_z) + jitter.y;
                     SDL_FPoint world_pos{
                         static_cast<float>(world_x) + jitter.x,
-                        static_cast<float>(world_y) + jitter.y
+                        0.0f
                     };
-                    const SDL_Point world_pt{static_cast<int>(std::lround(world_pos.x)), static_cast<int>(std::lround(world_pos.y))};
+                    const SDL_Point world_pt{static_cast<int>(std::lround(world_pos.x)), static_cast<int>(std::lround(jittered_z))};
                     const auto& region_entry = resolve_region_cache(world_pt, rooms);
                     if (region_entry.region_kind != RegionKind::Boundary || region_entry.blocked) {
                         continue;
                     }
-                    static_assignments_.push_back(StaticCellAssignment{key, candidate_idx, static_cast<int>(type_idx), world_pos, world_z});
+
+                    static_assignments_.push_back(StaticCellAssignment{key, candidate_idx, static_cast<int>(type_idx), world_pos, static_cast<int>(std::lround(jittered_z))});
                 }
             }
         }
@@ -352,7 +308,7 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
                                            assignment.world_z,
                                            assignment.key.resolution_layer);
         const world::GridKey virtual_key =
-            grid.grid_key_from_world(virtual_point, assignment.world_z, assignment.key.resolution_layer);
+            grid.grid_key_from_world(virtual_point, assignment.key.resolution_layer);
         if (world::GridPoint* gp = grid.find_grid_point(virtual_key)) {
             gp->region_kind = world::GridPoint::RegionKind::Boundary;
             gp->region_owner = nullptr;
@@ -449,24 +405,31 @@ void DynamicBoundarySystem::update(const WarpedScreenGrid& cam,
         active_boundary_sprites_.push_back(sprite);
     }
 
-    const double anchor_y = cam.anchor_world_y();
+    const double anchor_depth = cam.anchor_world_z();
     std::sort(active_boundary_sprites_.begin(), active_boundary_sprites_.end(),
-        [anchor_y](const BoundarySprite& a, const BoundarySprite& b) {
-            const double da = anchor_y - static_cast<double>(a.world_pos.y);
-            const double db = anchor_y - static_cast<double>(b.world_pos.y);
+        [anchor_depth](const BoundarySprite& a, const BoundarySprite& b) {
+            const double da = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(a.world_z));
+            const double db = render_depth::depth_from_anchor(anchor_depth, static_cast<double>(b.world_z));
             if (da != db) return da > db;
             return a.world_pos.x < b.world_pos.x;
         });
+
+    ++s_debug_frame_counter;
+    if ((s_debug_frame_counter % 120) == 0) {
+        vibble::log::info(std::string{"[DynamicBoundarySystem] frame stats: types="} +
+                          std::to_string(boundary_types_.size()) +
+                          " static_assignments=" + std::to_string(static_assignments_.size()) +
+                          " active_sprites=" + std::to_string(active_boundary_sprites_.size()));
+    }
 }
 
 std::size_t DynamicBoundarySystem::BoundaryKeyHash::operator()(const DynamicBoundarySystem::BoundaryKey& key) const noexcept {
-    std::uint64_t hash = 0;
-    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.group));
-    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.resolution_layer));
-    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.grid_x));
-    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.grid_y));
-    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.world_z));
-    return static_cast<std::size_t>(hash);
+    return static_cast<std::size_t>(
+        render_overlay::hash_grid_cell(key.grid_x,
+                                       key.grid_y,
+                                       key.world_z,
+                                       key.resolution_layer,
+                                       key.group));
 }
 
 DynamicBoundarySystem::BoundaryKey DynamicBoundarySystem::make_key(int group_idx, int resolution_layer, int grid_x, int grid_y, int world_z) const {
@@ -480,13 +443,12 @@ DynamicBoundarySystem::BoundaryKey DynamicBoundarySystem::make_key(int group_idx
 }
 
 std::uint64_t DynamicBoundarySystem::hash_key(const BoundaryKey& key) const {
-    std::uint64_t hash = mix_uint64(boundary_regen_seed_, 0x9e3779b97f4a7c15ULL);
-    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.group));
-    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.resolution_layer));
-    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.grid_x));
-    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.grid_y));
-    hash = mix_uint64(hash, static_cast<std::uint64_t>(key.world_z));
-    return hash;
+    return render_overlay::hash_grid_cell(key.grid_x,
+                                          key.grid_y,
+                                          key.world_z,
+                                          key.resolution_layer,
+                                          key.group,
+                                          boundary_regen_seed_);
 }
 
 int DynamicBoundarySystem::select_candidate_for_key(const BoundaryKey& key, const BoundaryType& btype) {
@@ -498,10 +460,11 @@ int DynamicBoundarySystem::select_candidate_for_key(const BoundaryKey& key, cons
         boundary_assignments_.emplace(key, -1);
         return -1;
     }
-    std::uint64_t state = hash_key(key);
-    state ^= 0x9e3779b97f4a7c15ULL;
-    state = xorshift64(state);
-    const int roll = static_cast<int>(state % static_cast<std::uint64_t>(btype.total_chance));
+    const int roll = render_overlay::hashed_roll(hash_key(key), btype.total_chance);
+    if (roll < 0) {
+        boundary_assignments_.emplace(key, -1);
+        return -1;
+    }
 
     int cumulative = 0;
     for (int idx = 0; idx < static_cast<int>(btype.candidates.size()); ++idx) {
@@ -517,17 +480,7 @@ int DynamicBoundarySystem::select_candidate_for_key(const BoundaryKey& key, cons
 }
 
 SDL_FPoint DynamicBoundarySystem::sample_jitter_offset(const BoundaryKey& key, float max_jitter) const {
-    if (max_jitter <= 0.0f) {
-        return SDL_FPoint{0.0f, 0.0f};
-    }
-    std::uint64_t state = hash_key(key);
-    state ^= 0x9e3779b97f4a7c15ULL;
-    double uniform_x = static_cast<double>(xorshift64(state) & 0xFFFFFFFFULL) / static_cast<double>(std::numeric_limits<uint32_t>::max());
-    state = xorshift64(state);
-    double uniform_y = static_cast<double>(xorshift64(state) & 0xFFFFFFFFULL) / static_cast<double>(std::numeric_limits<uint32_t>::max());
-    const double jitter_x = (uniform_x * 2.0 - 1.0) * static_cast<double>(max_jitter);
-    const double jitter_y = (uniform_y * 2.0 - 1.0) * static_cast<double>(max_jitter);
-    return SDL_FPoint{static_cast<float>(jitter_x), static_cast<float>(jitter_y)};
+    return render_overlay::jitter_from_hash(hash_key(key), max_jitter);
 }
 
 void DynamicBoundarySystem::build_candidate_frames(BoundaryCandidate& candidate) {
@@ -676,9 +629,7 @@ void DynamicBoundarySystem::parse_boundary_config(const nlohmann::json& boundary
         } catch (...) {
             jitter_px = 0;
         }
-        jitter_px = static_cast<int>(std::clamp<double>(static_cast<double>(jitter_px),
-                                                        static_cast<double>(kMinRandomJitter),
-                                                        static_cast<double>(kMaxRandomJitter)));
+        jitter_px = static_cast<int>(render_overlay::clamp_random_jitter(static_cast<float>(jitter_px)));
         type.jitter = jitter_px;
 
         int total_chance = 0;
@@ -784,10 +735,7 @@ DynamicBoundarySystem::BoundaryConfig& DynamicBoundarySystem::config() {
 }
 
 void DynamicBoundarySystem::set_grid_spacing_multiplier(float multiplier) {
-    if (!std::isfinite(multiplier)) {
-        return;
-    }
-    config().grid_spacing_multiplier = std::clamp(multiplier, kMinGridMultiplier, kMaxGridMultiplier);
+    config().grid_spacing_multiplier = render_overlay::clamp_spacing_multiplier(multiplier);
 }
 
 float DynamicBoundarySystem::grid_spacing_multiplier() {
@@ -795,10 +743,7 @@ float DynamicBoundarySystem::grid_spacing_multiplier() {
 }
 
 void DynamicBoundarySystem::set_base_size_scale(float scale) {
-    if (!std::isfinite(scale)) {
-        return;
-    }
-    config().base_size_scale = std::clamp(scale, kMinBaseScale, kMaxBaseScale);
+    config().base_size_scale = render_overlay::clamp_base_size_scale(scale);
 }
 
 float DynamicBoundarySystem::base_size_scale() {
@@ -806,10 +751,7 @@ float DynamicBoundarySystem::base_size_scale() {
 }
 
 void DynamicBoundarySystem::set_vertical_offset(float offset) {
-    if (!std::isfinite(offset)) {
-        return;
-    }
-    config().vertical_offset = std::clamp(offset, kMinVerticalOffset, kMaxVerticalOffset);
+    config().vertical_offset = render_overlay::clamp_vertical_offset(offset);
 }
 
 float DynamicBoundarySystem::vertical_offset() {
@@ -817,10 +759,7 @@ float DynamicBoundarySystem::vertical_offset() {
 }
 
 void DynamicBoundarySystem::set_max_random_jitter(float jitter) {
-    if (!std::isfinite(jitter)) {
-        return;
-    }
-    config().max_random_jitter = std::clamp(jitter, kMinRandomJitter, kMaxRandomJitter);
+    config().max_random_jitter = render_overlay::clamp_random_jitter(jitter);
 }
 
 float DynamicBoundarySystem::max_random_jitter() {
@@ -837,7 +776,7 @@ void DynamicBoundarySystem::ensure_region_cache_valid(const world::WorldGrid& gr
     fingerprint.rooms_hash = rooms_hash;
     const world::GridPoint origin = grid.origin();
     fingerprint.origin_x = origin.world_x();
-    fingerprint.origin_y = origin.world_y();
+    fingerprint.origin_z = origin.world_z();
     fingerprint.origin_layer = origin.resolution_layer();
     fingerprint.grid_resolution = grid.grid_resolution();
     fingerprint.spacing_multiplier = spacing_multiplier;

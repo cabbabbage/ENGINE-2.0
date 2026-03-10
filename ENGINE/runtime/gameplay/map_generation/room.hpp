@@ -1,9 +1,10 @@
 #pragma once
 
+#include "core/axis_convention.hpp"
 #include "utils/area.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "gameplay/spawn/asset_spawn_planner.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/map_grid_settings.hpp"
 
 #include <string>
@@ -29,15 +30,16 @@ Kind infer_kind_from_strings(const std::string& kind_value, const std::string& t
 std::string to_string(Kind kind);
 bool is_supported_kind(Kind kind);
 struct AnchorData {
-        SDL_Point world{0, 0};
-        SDL_Point relative_offset{0, 0};
-        bool      relative_to_center = false;
+        axis::WorldPos world{};
+        SDL_Point      relative_offset{0, 0};  // x ↔ X axis, y ↔ Z axis (depth)
+        int            relative_height_offset = 0;
+        bool           relative_to_center = false;
 };
 SDL_Point choose_anchor(Kind kind, SDL_Point default_anchor, const std::vector<SDL_Point>& world_points);
-std::vector<SDL_Point> decode_points(const nlohmann::json& entry, SDL_Point anchor);
+std::vector<SDL_Point> decode_points(const nlohmann::json& entry, axis::WorldPos anchor);
 std::vector<SDL_Point> decode_relative_points(const nlohmann::json& entry);
-nlohmann::json encode_points(const std::vector<SDL_Point>& points, SDL_Point anchor);
-AnchorData resolve_anchor(const nlohmann::json& entry, SDL_Point default_anchor, Kind kind);
+nlohmann::json encode_points(const std::vector<SDL_Point>& points, axis::WorldPos anchor);
+AnchorData resolve_anchor(const nlohmann::json& entry, axis::WorldPos default_anchor, Kind kind);
 void write_anchor(nlohmann::json& entry, const AnchorData& anchor, Kind kind);
 }
 
@@ -78,6 +80,8 @@ class Room {
     int camera_height_px = 1000;
     float camera_tilt_deg = 60.0f;
     int camera_zoom_percent = 0;
+    int camera_center_dx = 0;
+    int camera_center_dz = 0;
     std::string room_directory;
     std::string json_path;
     Room* parent = nullptr;
@@ -96,8 +100,9 @@ class Room {
     const nlohmann::json& assets_data() const;
     nlohmann::json build_room_payload_for_save() const;
     bool apply_room_payload_for_save(const nlohmann::json& payload) const;
+    // Update the in-memory map info JSON with the current room state without touching disk.
+    void snapshot_assets_to_map_info();
     bool has_pending_assets_save() const { return assets_save_dirty_; }
-    void save_assets_json() const;
     void mark_dirty() const { assets_save_dirty_ = true; }
     bool is_dirty() const { return assets_save_dirty_; }
     bool is_spawn_room() const;
@@ -120,7 +125,7 @@ class Room {
             std::string name;
             int width = 0;
             int height = 0;
-            SDL_Point anchor{0, 0};
+            axis::WorldPos anchor{};
             bool anchor_relative_to_center = false;
 };
         std::optional<OriginRoomMeta> origin_room;

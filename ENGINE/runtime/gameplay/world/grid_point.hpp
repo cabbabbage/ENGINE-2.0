@@ -12,6 +12,8 @@
 #include <utility>
 #include <vector>
 
+#include "core/axis_convention.hpp"
+
 class Asset;
 class Room;
 
@@ -41,7 +43,7 @@ struct GridKey {
 
 struct GridCoord {
     int x = 0;
-    int y = 0;
+    int z = 0; // ground depth index (Z axis depth)
 };
 
 struct GridKeyHash {
@@ -53,11 +55,13 @@ struct CameraProjectionParams {
     // Camera position in meters
     double position_x = 0.0, position_y = 0.0, position_z = 0.0;
     // Camera basis vectors
-    double forward_x = 0.0, forward_y = 1.0, forward_z = 0.0;
+    double forward_x = 0.0, forward_y = 0.0, forward_z = 1.0;
     double right_x = 1.0, right_y = 0.0, right_z = 0.0;
-    double up_x = 0.0, up_y = 0.0, up_z = 1.0;
-    // World anchor point (pixels)
-    double anchor_world_x = 0.0, anchor_world_y = 0.0;
+    double up_x = 0.0, up_y = 1.0, up_z = 0.0;
+    // World anchor point (pixels) on the ground plane (X/Z) plus optional height offset.
+    double anchor_world_x = 0.0; // ground-plane X anchor
+    double anchor_world_y = 0.0; // world height anchor (Y)
+    double anchor_world_z = 0.0; // ground-plane depth anchor (Z)
     // Conversion factor: world pixels to meters
     double meters_scale = 0.01;
     // Field of view tangents
@@ -81,6 +85,7 @@ struct CameraProjectionParams {
 using GridId = std::uint64_t;
 
 struct GridPoint {
+
     GridPoint() = delete;
     GridPoint(int world_x,
               int world_y,
@@ -93,13 +98,11 @@ struct GridPoint {
               GridPoint* parent_point = nullptr,
               bool is_virtual_point = false)
         : id(legacy_id)
-        , world_x_(world_x)
-        , world_y_(world_y)
-        , world_z_(world_z)
+        , world_pos_{world_x, world_y, world_z}
         , resolution_layer_(resolution_layer)
         , parent_(parent_point)
         , is_virtual_(is_virtual_point)
-        , world(GridCoord{world_x, world_y})
+        , is_floor(world_y == 0)
         , grid_index(grid_idx)
         , chunk_index(chunk_idx)
         , chunk(owning_chunk) {}
@@ -111,11 +114,13 @@ struct GridPoint {
 
     // Canonical constructors/converters
     static GridPoint& from_world(int x, int y, int z, int layer, WorldGrid& grid);
+    static GridPoint& from_world(const axis::WorldPos& pos, int layer, WorldGrid& grid);
     static GridPoint& from_world(const GridKey& key, WorldGrid& grid);
     static GridPoint* from_screen(const SDL_FPoint& screen,
-                                  float world_z,
+                                  float world_y,
                                   const CameraProjectionParams& proj,
                                   WorldGrid& grid);
+    static GridPoint make_virtual(const axis::WorldPos& world_pos, int resolution_layer = 0);
     static GridPoint make_virtual(int world_x,
                                   int world_y,
                                   int world_z = 0,
@@ -125,9 +130,10 @@ struct GridPoint {
     GridId  hash_key() const;
     static GridId hash_key(const GridKey& key);
 
-    int world_x() const { return world_x_; }
-    int world_y() const { return world_y_; }
-    int world_z() const { return world_z_; }
+    axis::WorldPos world_position() const { return world_pos_; }
+    int world_x() const { return world_pos_.x; }
+    int world_y() const { return world_pos_.y; }
+    int world_z() const { return world_pos_.z; }
     int resolution_layer() const { return resolution_layer_; }
     GridPoint* parent() const { return parent_; }
     bool is_virtual() const { return is_virtual_; }
@@ -140,10 +146,18 @@ struct GridPoint {
 
     RegionKind region_kind = RegionKind::Boundary;
     const Room* region_owner = nullptr; // Non-owning; points to Room that contains this point, if any.
+    // True when this grid point represents the ground (floor) for its XZ.
+    bool is_floor = false;
 
     // Renderer/UI boundary helpers (explicit conversions)
-    SDL_Point to_sdl_point() const { return SDL_Point{world_x_, world_y_}; }
-    SDL_FPoint to_sdl_fpoint() const { return SDL_FPoint{static_cast<float>(world_x_), static_cast<float>(world_y_)}; }
+    SDL_Point to_sdl_point() const {
+        const axis::WorldPos canonical = world_position();
+        return SDL_Point{canonical.x, canonical.z};
+    }
+    SDL_FPoint to_sdl_fpoint() const {
+        const axis::WorldPos canonical = world_position();
+        return SDL_FPoint{static_cast<float>(canonical.x), static_cast<float>(canonical.z)};
+    }
 
     enum class ChildDirection {
         XNeg = 0,
@@ -179,11 +193,7 @@ struct GridPoint {
         }
     }
 
-    // Phase 1 (3d_refactor_plan.md): canonical 3D identity is immutable and must
-    // match the legacy 2D fields until Cleanup.
-    // Legacy fields stay present for migration; avoid mutating them outside WorldGrid wiring.
     const GridId     id           = 0;
-    const GridCoord  world        = GridCoord{0, 0};
     const GridCoord  grid_index   = GridCoord{0, 0};
     GridCoord        chunk_index  = GridCoord{0, 0};
     Chunk*           chunk        = nullptr;
@@ -198,10 +208,6 @@ struct GridPoint {
     float      distance_to_camera = 0.0f;
     float      tilt_radians       = 0.0f;
     bool       on_screen          = false;
-    float      terrain_elevation  = 0.0f;
-    float      terrain_slope_x    = 0.0f;
-    float      terrain_slope_y    = 0.0f;
-    std::uint64_t terrain_revision = 0;
 
     mutable std::uint64_t screen_data_frame_updated = 0;
     mutable bool          screen_data_valid         = false;
@@ -210,19 +216,20 @@ struct GridPoint {
 
     // Smart caching: returns true if projection calculation is needed
     bool needs_projection_update(std::uint64_t current_frame,
-                                 std::uint64_t camera_version,
-                                 std::uint64_t terrain_rev) const {
+                                 std::uint64_t camera_version) const {
         return !screen_data_valid ||
                screen_data_frame_updated != current_frame ||
-               last_camera_state_version_ != camera_version ||
-               terrain_revision != terrain_rev;
+               last_camera_state_version_ != camera_version;
     }
 
     // Self-contained projection: GridPoint calculates its own screen position
     void project_to_screen(const CameraProjectionParams& params);
 
     // Update world position (controlled mutation for movement)
+    void update_world_position(const axis::WorldPos& new_pos);
     void update_world_position(int new_x, int new_y, int new_z = 0);
+    // Convenience helper to change only world Z without touching XY.
+    void set_world_z(int new_z);
 
     // Swap mutable data between points (for efficient grid reorganization)
     friend void swap(GridPoint& a, GridPoint& b) noexcept;
@@ -237,10 +244,7 @@ struct GridPoint {
         distance_to_camera = 0.0f;
         tilt_radians       = 0.0f;
         on_screen          = false;
-        terrain_elevation  = 0.0f;
-        terrain_slope_x    = 0.0f;
-        terrain_slope_y    = 0.0f;
-        terrain_revision   = 0;
+        is_floor           = (world_position().y == 0);
         screen_data_frame_updated = frame_stamp;
         screen_data_valid  = false;
     }
@@ -265,13 +269,6 @@ struct GridPoint {
     static constexpr std::uint8_t BRANCH_Y_POS = 1 << 3;
     static constexpr std::uint8_t BRANCH_Z_NEG = 1 << 4;
     static constexpr std::uint8_t BRANCH_Z_POS = 1 << 5;
-    // Legacy aliases for in-flight Phase 3/4 code paths.
-    static constexpr std::uint8_t kBranchXNeg = BRANCH_X_NEG;
-    static constexpr std::uint8_t kBranchXPos = BRANCH_X_POS;
-    static constexpr std::uint8_t kBranchYNeg = BRANCH_Y_NEG;
-    static constexpr std::uint8_t kBranchYPos = BRANCH_Y_POS;
-    static constexpr std::uint8_t kBranchZNeg = BRANCH_Z_NEG;
-    static constexpr std::uint8_t kBranchZPos = BRANCH_Z_POS;
 
     std::vector<std::unique_ptr<Asset>>& assets_here() { return occupants; }
     const std::vector<std::unique_ptr<Asset>>& assets_here() const { return occupants; }
@@ -355,11 +352,12 @@ struct GridPoint {
 
     std::string debug_identity_and_mask() const {
         // Compact identity + branch state for dev tools / logging.
+        const axis::WorldPos canonical = world_position();
         return "id=" + std::to_string(id) +
-               " world=(" + std::to_string(world_x_) + "," + std::to_string(world_y_) + "," + std::to_string(world_z_) + ")" +
+               " world=(" + std::to_string(canonical.x) + "," + std::to_string(canonical.y) + "," + std::to_string(canonical.z) + ")" +
                " layer=" + std::to_string(resolution_layer_) +
-               " grid_index=(" + std::to_string(grid_index.x) + "," + std::to_string(grid_index.y) + ")" +
-               " chunk_index=(" + std::to_string(chunk_index.x) + "," + std::to_string(chunk_index.y) + ")" +
+               " grid_index=(" + std::to_string(grid_index.x) + "," + std::to_string(grid_index.z) + ")" +
+               " chunk_index=(" + std::to_string(chunk_index.x) + "," + std::to_string(chunk_index.z) + ")" +
                (is_virtual_ ? " virtual=1" : " virtual=0") +
                " assets=" + std::to_string(occupants.size()) +
                " children_with_assets=" + std::to_string(children_with_assets) +
@@ -392,9 +390,7 @@ private:
         return out;
     }
 
-    int world_x_          = 0;
-    int world_y_          = 0;
-    int world_z_          = 0;
+    axis::WorldPos world_pos_{};
     int resolution_layer_ = 0;
     GridPoint* parent_    = nullptr;
     bool is_virtual_      = false;
@@ -420,7 +416,8 @@ struct GridBounds {
         : min(min_pt)
         , max(max_pt) {}
 
-    static GridBounds from_xywh(int x, int y, int w, int h, int world_z = 0, int layer = 0);
+    // Rectangle on the X/Z ground plane; world_y is the height (Y axis).
+    static GridBounds from_xywh(int x, int z, int w, int h, int world_y = 0, int layer = 0);
     static GridBounds from_min_max(const GridPoint& min_pt, const GridPoint& max_pt);
 
     bool contains(const GridPoint& pt) const;
@@ -435,18 +432,17 @@ namespace grid_math {
 // Lightweight helpers to keep spatial math in the GridPoint domain and avoid
 // ad-hoc SDL_Point arithmetic sprinkled across systems that aren't render UI.
 inline GridPoint from_sdl(const SDL_Point& pt,
-                          int world_z = 0,
+                          int world_y = 0,
                           int resolution_layer = 0) {
-    return GridPoint::make_virtual(pt.x, pt.y, world_z, resolution_layer);
+    // SDL y maps to world depth (Z) on the ground plane; height supplied separately.
+    return GridPoint::make_virtual(axis::WorldPos{pt.x, world_y, pt.y}, resolution_layer);
 }
 
 inline SDL_Point to_sdl(const GridPoint& gp) { return gp.to_sdl_point(); }
 
-inline GridPoint offset(const GridPoint& base, int dx, int dy) {
-    return GridPoint::make_virtual(base.world_x() + dx,
-                                   base.world_y() + dy,
-                                   base.world_z(),
-                                   base.resolution_layer());
+inline GridPoint offset(const GridPoint& base, int dx, int dz) {
+    const axis::WorldPos next_pos{base.world_x() + dx, base.world_y(), base.world_z() + dz};
+    return GridPoint::make_virtual(next_pos, base.resolution_layer());
 }
 
 inline GridPoint offset(const GridPoint& base, const SDL_Point& delta) {
@@ -455,12 +451,12 @@ inline GridPoint offset(const GridPoint& base, const SDL_Point& delta) {
 
 inline int distance_sq(const GridPoint& a, const GridPoint& b) {
     const int dx = a.world_x() - b.world_x();
-    const int dy = a.world_y() - b.world_y();
-    return dx * dx + dy * dy;
+    const int dz = a.world_z() - b.world_z();
+    return dx * dx + dz * dz;
 }
 
 inline int manhattan(const GridPoint& a, const GridPoint& b) {
-    return std::abs(a.world_x() - b.world_x()) + std::abs(a.world_y() - b.world_y());
+    return std::abs(a.world_x() - b.world_x()) + std::abs(a.world_z() - b.world_z());
 }
 } // namespace grid_math
 

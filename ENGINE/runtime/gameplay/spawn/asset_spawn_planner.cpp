@@ -7,7 +7,7 @@
 
 #include "devtools/spawn_groups/spawn_group_utils.hpp"
 #include "room_relative_size_resolver.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 AssetSpawnPlanner::AssetSpawnPlanner(const std::vector<nlohmann::json>& json_sources,
                                      const Area& area,
                                      AssetLibrary& asset_library,
@@ -105,6 +105,53 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
         std::string display_name = get_opt_str(asset, "display_name");
         if (display_name.empty()) display_name = get_opt_str(asset, "name");
         if (display_name.empty()) display_name = spawn_id;
+
+        const auto to_lower = [](std::string value) {
+            std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+                return static_cast<char>(std::tolower(c));
+            });
+            return value;
+        };
+
+        SpawnInfo::ExecutionMode execution_mode = SpawnInfo::ExecutionMode::Standard;
+        std::string execution_mode_text = get_opt_str(asset, "execution_mode");
+        if (execution_mode_text.empty()) {
+            execution_mode_text = get_opt_str(asset, "spawn_mode");
+        }
+        const std::string lowered_execution_mode = to_lower(execution_mode_text);
+        if (lowered_execution_mode == "batch_grid" || lowered_execution_mode == "batch") {
+            execution_mode = SpawnInfo::ExecutionMode::BatchGrid;
+        } else {
+            const std::string lowered_display = to_lower(display_name);
+            const std::string lowered_name = to_lower(get_opt_str(asset, "name"));
+            if (lowered_display == "batch_map_assets" || lowered_name == "batch_map_assets") {
+                execution_mode = SpawnInfo::ExecutionMode::BatchGrid;
+            }
+        }
+        if (execution_mode == SpawnInfo::ExecutionMode::BatchGrid) {
+            bool updated = false;
+            if (!entry.contains("execution_mode") ||
+                !entry["execution_mode"].is_string() ||
+                entry["execution_mode"].get<std::string>() != "batch_grid") {
+                entry["execution_mode"] = "batch_grid";
+                updated = true;
+            }
+            if (!asset.contains("execution_mode") ||
+                !asset["execution_mode"].is_string() ||
+                asset["execution_mode"].get<std::string>() != "batch_grid") {
+                asset["execution_mode"] = "batch_grid";
+                updated = true;
+            }
+            if (updated && idx < assets_provenance_.size()) {
+                const auto& ref = assets_provenance_[idx];
+                if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
+                    (*src)["execution_mode"] = "batch_grid";
+                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
+                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
+                    }
+                }
+            }
+        }
 
         std::string link_name = get_opt_str(asset, "link");
 
@@ -442,14 +489,15 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
         s.priority = priority;
         s.grid_resolution = entry.value("grid_resolution", 0);
         s.adjust_geometry_to_room = resolve_geometry;
+        s.execution_mode = execution_mode;
         if (!link_name.empty()) {
             s.link_area_name = link_name;
         }
 
         s.check_min_spacing = asset.value("enforce_spacing", false);
 
-        s.exact_offset.x = asset.value("dx", asset.value("exact_dx", 0));
-        s.exact_offset.y = asset.value("dy", asset.value("exact_dy", 0));
+        s.exact_offset.x = asset.value("dx", 0);
+        s.exact_offset.y = asset.value("dz", 0);
         if (resolve_geometry) {
             s.exact_origin_w = orig_w;
             s.exact_origin_h = orig_h;

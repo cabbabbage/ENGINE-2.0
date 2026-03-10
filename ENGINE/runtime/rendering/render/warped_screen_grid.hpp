@@ -44,13 +44,13 @@ struct CameraState {
     double screen_pan_y_px = 0.0;
     float  near_camera_max_perspective_scale = 0.0f;
     float  offscreen_fade_amount_px = 0.0f;
+    // Canonical anchors: height is separate from ground-plane depth.
+    double anchor_world_z = 0.0; // depth (Z) anchor on ground plane
 };
 
 class Asset;
 class Room;
 class CurrentRoomFinder;
-class TerrainField;
-struct TerrainRuntimeState;
 namespace world {
     class WorldGrid;
     struct GridPoint;
@@ -126,23 +126,6 @@ public:
         explicit RenderSmoothingKey(const Asset* asset, int frame = 0);
     };
 
-    struct TerrainTelemetry {
-        std::uint64_t frame_id = 0;
-        std::uint64_t terrain_revision = 0;
-        std::size_t cache_before = 0;
-        std::size_t cache_after = 0;
-        std::uint64_t cache_resets_total = 0;
-        std::size_t sampled_points = 0;
-        std::size_t neighbor_samples = 0;
-        std::size_t visible_points = 0;
-        double sample_to_visible_ratio = 0.0;
-        double allowed_ratio = 0.0;
-        bool sample_ratio_warning = false;
-        std::size_t projected_points = 0;
-        std::size_t revision_reprojects = 0;
-        std::size_t simulated_revision_failures = 0;
-    };
-
     WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_view);
     ~WarpedScreenGrid();
 
@@ -161,11 +144,16 @@ public:
     void apply_camera_settings(const nlohmann::json& data);
     nlohmann::json camera_settings_to_json() const;
 
+    // Projects a point that lies on the ground plane (x/z) to screen space.
     SDL_FPoint map_to_screen(SDL_Point world) const;
     SDL_FPoint map_to_screen_f(SDL_FPoint world) const;
+    // world.y is height (Y).
+    // world_z carries depth (Z) relative to the camera anchor.
     bool project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const;
     SDL_FPoint screen_to_map(SDL_Point screen) const;
 
+    // world.x maps to X and world.y to height (Y).
+    // world_z encodes depth (Z).
     RenderEffects compute_render_effects(SDL_Point world, float asset_screen_height, float reference_screen_height, RenderSmoothingKey smoothing_key, int world_z = 0) const;
 
     FloorDepthParams compute_floor_depth_params() const;
@@ -175,12 +163,12 @@ public:
     double current_focus_depth() const { return runtime_focus_depth_; }
     double current_focus_ndc_offset() const { return runtime_focus_ndc_offset_; }
     float current_depth_offset_px() const { return runtime_depth_offset_px_; }
-    double current_anchor_world_y() const { return runtime_anchor_world_y_; }
+    double current_anchor_world_z() const { return runtime_anchor_world_z_; }
     double current_pitch_radians() const { return runtime_pitch_rad_; }
     float current_pitch_degrees() const { return runtime_pitch_deg_; }
 
     double view_height_world() const;
-    double anchor_world_y() const;
+    double anchor_world_z() const;
     SDL_FPoint get_view_center_f() const;
     SDL_Point get_screen_center() const {
         SDL_FPoint center = camera_.state().center;
@@ -193,10 +181,7 @@ public:
     void rebuild_grid_bounds();
     void rebuild_grid(world::WorldGrid& world_grid,
                       float dt_seconds,
-                      std::uint64_t frame_id,
-                      TerrainField* terrain_field,
-                      const TerrainRuntimeState* terrain_state,
-                      const std::vector<Room*>* rooms);
+                      std::uint64_t frame_id);
     void project_to_screen(world::GridPoint& point) const;
     world::GridPoint* grid_point_for_asset(const Asset* asset);
     const world::GridPoint* grid_point_for_asset(const Asset* asset) const;
@@ -249,7 +234,6 @@ public:
     int last_min_world_z() const { return last_min_world_z_; }
     int last_max_world_z() const { return last_max_world_z_; }
     std::uint32_t last_depth_culled() const { return last_depth_culled_; }
-    const TerrainTelemetry& terrain_telemetry() const { return terrain_telemetry_; }
     void set_frustum_padding_world(float padding);
     float frustum_padding_world() const { return frustum_padding_world_; }
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
@@ -284,7 +268,7 @@ private:
 
     double runtime_camera_height_ = 0.0;
     double runtime_focus_depth_ = 0.0;
-    double runtime_anchor_world_y_ = 0.0;
+    double runtime_anchor_world_z_ = 0.0;
     double runtime_focus_ndc_offset_ = 0.0;
     double runtime_pitch_rad_ = 0.0;
     float runtime_pitch_deg_ = 0.0f;
@@ -305,7 +289,6 @@ private:
     std::uint32_t last_depth_culled_ = 0;
     int last_min_world_z_ = 0;
     int last_max_world_z_ = 0;
-    TerrainTelemetry terrain_telemetry_{};
     SDL_Rect cached_world_rect_{0, 0, 0, 0};
     GridBounds bounds_{};
     float frustum_padding_world_ = 0.0f;

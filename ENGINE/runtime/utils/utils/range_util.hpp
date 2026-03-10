@@ -27,9 +27,9 @@ class Range {
 
  private:
 
-  static bool xy(const Asset* a, double& x, double& y);
-  static bool xy(const SDL_Point& p, double& x, double& y);
+  static bool plane_coords(const Asset* a, double& right, double& depth);
+  static bool plane_coords(const SDL_Point& p, double& right, double& depth);
 
-  static bool in_range_xy(double ax, double ay, double bx, double by, int radius);
-  static double distance_xy(double ax, double ay, double bx, double by);
+  static bool in_range_plane(double left_right, double left_depth, double right_right, double right_depth, int radius);
+  static double distance_plane(double left_right, double left_depth, double right_right, double right_depth);
 };

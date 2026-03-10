@@ -3,9 +3,9 @@
 #include <vector>
 
 #include "animation_runtime.hpp"
-#include "assets/Asset.hpp"
-#include "assets/animation.hpp"
-#include "assets/animation_frame.hpp"
+#include "assets/asset/Asset.hpp"
+#include "assets/asset/animation.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "animation_update.hpp"
 #include "gameplay/world/grid_point.hpp"
 
@@ -20,8 +20,8 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
         if (self && up.planner_iface_) {
             const int visited_thresh = up.planner_iface_->visit_threshold_px();
             const int visited_thresh_squared = visited_thresh * visited_thresh;
-            const world::GridPoint current = world::grid_math::from_sdl(self->world_point(), self->world_z(), self->grid_resolution);
-            const world::GridPoint target  = world::grid_math::from_sdl(plan.final_dest, self->world_z(), self->grid_resolution);
+            const world::GridPoint current = world::grid_math::from_sdl(self->world_xz_point(), self->world_y(), self->grid_resolution);
+            const world::GridPoint target  = world::grid_math::from_sdl(plan.final_dest, self->world_y(), self->grid_resolution);
             const int dist_sq = animation_update::detail::distance_sq(current, target);
             if (dist_sq <= visited_thresh_squared) {
                 self->target_reached = true;
@@ -40,7 +40,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
     auto abort_plan = [&]() {
         plan.strides.clear();
         plan.sanitized_checkpoints.clear();
-        plan.final_dest = self->world_point();
+        plan.final_dest = self->world_xz_point();
         stride_index    = 0;
         stride_frame_counter = 0;
         up.switch_to(animation_update::detail::kDefaultAnimation, 0);
@@ -88,7 +88,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
     }
 
     AnimationFrame* frame = self->current_frame;
-    SDL_Point        from  = self->world_point();
+    SDL_Point        from  = self->world_xz_point();
     SDL_Point        delta{0, 0};
     if (!up.suppress_root_motion_active()) {
         delta = animation_update::detail::frame_world_delta(*frame, *self, up.grid());
@@ -107,7 +107,7 @@ bool MovementPlanExecutor::tick(AnimationRuntime& up, Plan& plan,
     }
 
     if (delta.x != 0 || delta.y != 0) {
-        self->move_to_world_position(to.x, to.y);
+        self->move_to_world_position(to.x, self->world_y(), to.y);
         up.mark_progress_toward_checkpoints();
     }
 

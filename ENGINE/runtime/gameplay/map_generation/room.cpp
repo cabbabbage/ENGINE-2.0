@@ -1,4 +1,5 @@
 #include "room.hpp"
+#include "core/axis_convention.hpp"
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "devtools/core/manifest_store.hpp"
@@ -8,6 +9,8 @@
 #include <functional>
 #include <iostream>
 #include <cmath>
+#include <cstdint>
+#include <limits>
 #include <optional>
 #include <string>
 #include "utils/grid.hpp"
@@ -83,18 +86,20 @@ bool is_supported_kind(Kind kind) {
 }
 
 AnchorData resolve_anchor(const nlohmann::json& entry,
-                          SDL_Point default_anchor,
+                          axis::WorldPos default_anchor,
                           Kind kind) {
         AnchorData data;
         data.world = default_anchor;
         data.relative_offset = SDL_Point{0, 0};
+        data.relative_height_offset = 0;
         data.relative_to_center = is_supported_kind(kind);
 
-        SDL_Point stored{0, 0};
+        axis::WorldPos stored{};
         bool has_anchor = false;
         if (entry.contains("anchor") && entry["anchor"].is_object()) {
-                stored.x = entry["anchor"].value("x", 0);
-                stored.y = entry["anchor"].value("y", 0);
+                stored.x = entry["anchor"].value("x", default_anchor.x);
+                stored.y = entry["anchor"].value("y", default_anchor.y);
+                stored.z = entry["anchor"].value("z", default_anchor.z);
                 has_anchor = true;
         }
 
@@ -104,22 +109,26 @@ AnchorData resolve_anchor(const nlohmann::json& entry,
                 wants_relative = entry["anchor_relative_to_center"].get<bool>();
         } else if (!has_flag && data.relative_to_center) {
 
-                stored = SDL_Point{0, 0};
+                stored = axis::WorldPos{0, 0, 0};
                 wants_relative = true;
         }
 
         if (wants_relative && data.relative_to_center) {
-                data.relative_offset = stored;
+                data.relative_offset = SDL_Point{stored.x, stored.z};
+                data.relative_height_offset = stored.y;
                 data.world.x = default_anchor.x + stored.x;
                 data.world.y = default_anchor.y + stored.y;
+                data.world.z = default_anchor.z + stored.z;
                 data.relative_to_center = true;
         } else if (has_anchor) {
                 data.world = stored;
-                data.relative_offset.x = data.world.x - default_anchor.x;
-                data.relative_offset.y = data.world.y - default_anchor.y;
+                data.relative_offset.x = stored.x - default_anchor.x;
+                data.relative_offset.y = stored.z - default_anchor.z;
+                data.relative_height_offset = stored.y - default_anchor.y;
                 data.relative_to_center = false;
         } else {
                 data.relative_offset = SDL_Point{0, 0};
+                data.relative_height_offset = 0;
                 data.world = default_anchor;
         }
 
@@ -132,13 +141,15 @@ void write_anchor(nlohmann::json& entry,
         if (is_supported_kind(kind) && anchor.relative_to_center) {
                 entry["anchor"] = nlohmann::json::object({
                         {"x", anchor.relative_offset.x},
-                        {"y", anchor.relative_offset.y}
+                        {"y", anchor.relative_height_offset},
+                        {"z", anchor.relative_offset.y}
                 });
                 entry["anchor_relative_to_center"] = true;
         } else {
                 entry["anchor"] = nlohmann::json::object({
                         {"x", anchor.world.x},
-                        {"y", anchor.world.y}
+                        {"y", anchor.world.y},
+                        {"z", anchor.world.z}
                 });
                 entry.erase("anchor_relative_to_center");
         }
@@ -162,27 +173,176 @@ std::vector<SDL_Point> decode_relative_points(const nlohmann::json& entry) {
         for (const auto& point : entry["points"]) {
                 if (!point.is_object()) continue;
                 int x = point.value("x", 0);
-                int y = point.value("y", 0);
-                pts.push_back(SDL_Point{x, y});
+                int z = point.value("z", 0);
+                pts.push_back(SDL_Point{x, z});
         }
         return pts;
 }
 
-std::vector<SDL_Point> decode_points(const nlohmann::json& entry, SDL_Point anchor) {
+int clamp_i64_to_int(std::int64_t value) {
+        if (value < static_cast<std::int64_t>(std::numeric_limits<int>::min())) {
+                return std::numeric_limits<int>::min();
+        }
+        if (value > static_cast<std::int64_t>(std::numeric_limits<int>::max())) {
+                return std::numeric_limits<int>::max();
+        }
+        return static_cast<int>(value);
+}
+
+std::pair<std::int64_t, std::int64_t> expected_relative_limits(const nlohmann::json& entry) {
+        int width = 0;
+        int height = 0;
+        if (entry.contains("origin_room") && entry["origin_room"].is_object()) {
+                const auto& origin = entry["origin_room"];
+                width = origin.value("width", 0);
+                height = origin.value("height", 0);
+        }
+        if (width <= 0) {
+                width = entry.value("origional_width", 0);
+        }
+        if (height <= 0) {
+                height = entry.value("origional_height", 0);
+        }
+        constexpr std::int64_t kMinLimit = 2048;
+        constexpr std::int64_t kMaxLimit = (1LL << 20);
+        std::int64_t limit_x = std::max<std::int64_t>(kMinLimit, static_cast<std::int64_t>(width) * 4LL);
+        std::int64_t limit_z = std::max<std::int64_t>(kMinLimit, static_cast<std::int64_t>(height) * 4LL);
+        limit_x = std::clamp(limit_x, kMinLimit, kMaxLimit);
+        limit_z = std::clamp(limit_z, kMinLimit, kMaxLimit);
+        return {limit_x, limit_z};
+}
+
+double correction_score(const std::vector<SDL_Point>& points,
+                        axis::WorldPos anchor,
+                        int multiplier,
+                        std::int64_t limit_x,
+                        std::int64_t limit_z) {
+        std::int64_t max_abs_x = 0;
+        std::int64_t max_abs_z = 0;
+        std::int64_t sum_abs_x = 0;
+        std::int64_t sum_abs_z = 0;
+        for (const auto& p : points) {
+                const std::int64_t rel_x = static_cast<std::int64_t>(p.x) -
+                                           static_cast<std::int64_t>(multiplier) * static_cast<std::int64_t>(anchor.x);
+                const std::int64_t rel_z = static_cast<std::int64_t>(p.y) -
+                                           static_cast<std::int64_t>(multiplier) * static_cast<std::int64_t>(anchor.z);
+                const std::int64_t abs_x = std::llabs(rel_x);
+                const std::int64_t abs_z = std::llabs(rel_z);
+                max_abs_x = std::max(max_abs_x, abs_x);
+                max_abs_z = std::max(max_abs_z, abs_z);
+                sum_abs_x += abs_x;
+                sum_abs_z += abs_z;
+        }
+
+        const double mean_abs =
+            static_cast<double>(sum_abs_x + sum_abs_z) / static_cast<double>(std::max<std::size_t>(points.size(), 1));
+        double score = static_cast<double>(max_abs_x + max_abs_z) + mean_abs * 0.1;
+        if (max_abs_x > limit_x) {
+                score += static_cast<double>(max_abs_x - limit_x) * 20.0;
+        }
+        if (max_abs_z > limit_z) {
+                score += static_cast<double>(max_abs_z - limit_z) * 20.0;
+        }
+        score += static_cast<double>(std::abs(multiplier)) * 128.0;
+        return score;
+}
+
+int choose_anchor_drift_multiplier(const std::vector<SDL_Point>& points,
+                                   const nlohmann::json& entry,
+                                   axis::WorldPos anchor) {
+        if (points.empty()) {
+                return 0;
+        }
+        if (anchor.x == 0 && anchor.z == 0) {
+                return 0;
+        }
+
+        double mean_x = 0.0;
+        double mean_z = 0.0;
+        for (const auto& p : points) {
+                mean_x += static_cast<double>(p.x);
+                mean_z += static_cast<double>(p.y);
+        }
+        const double inv_count = 1.0 / static_cast<double>(points.size());
+        mean_x *= inv_count;
+        mean_z *= inv_count;
+
+        std::vector<int> candidates{0};
+        auto append_guesses = [&](int anchor_component, double mean_component) {
+                if (anchor_component == 0) {
+                        return;
+                }
+                const int base = static_cast<int>(std::llround(mean_component / static_cast<double>(anchor_component)));
+                for (int delta = -2; delta <= 2; ++delta) {
+                        candidates.push_back(base + delta);
+                }
+        };
+        append_guesses(anchor.x, mean_x);
+        append_guesses(anchor.z, mean_z);
+        std::sort(candidates.begin(), candidates.end());
+        candidates.erase(std::unique(candidates.begin(), candidates.end()), candidates.end());
+
+        const auto [limit_x, limit_z] = expected_relative_limits(entry);
+        const double baseline = correction_score(points, anchor, 0, limit_x, limit_z);
+        int best_multiplier = 0;
+        double best_score = baseline;
+        for (int multiplier : candidates) {
+                const double score = correction_score(points, anchor, multiplier, limit_x, limit_z);
+                if (score < best_score) {
+                        best_score = score;
+                        best_multiplier = multiplier;
+                }
+        }
+
+        if (best_multiplier == 0) {
+                return 0;
+        }
+        const bool substantially_better =
+            (best_score <= baseline * 0.75) || ((baseline - best_score) >= 2048.0);
+        return substantially_better ? best_multiplier : 0;
+}
+
+void normalize_relative_points_for_anchor(std::vector<SDL_Point>& points,
+                                          const nlohmann::json& entry,
+                                          axis::WorldPos anchor) {
+        const int multiplier = choose_anchor_drift_multiplier(points, entry, anchor);
+        if (multiplier == 0) {
+                return;
+        }
+        const std::int64_t shift_x =
+            static_cast<std::int64_t>(multiplier) * static_cast<std::int64_t>(anchor.x);
+        const std::int64_t shift_z =
+            static_cast<std::int64_t>(multiplier) * static_cast<std::int64_t>(anchor.z);
+        for (auto& p : points) {
+                p.x = clamp_i64_to_int(static_cast<std::int64_t>(p.x) - shift_x);
+                p.y = clamp_i64_to_int(static_cast<std::int64_t>(p.y) - shift_z);
+        }
+        std::cerr << "[Room] Corrected area point anchor drift with multiplier "
+                  << multiplier << " (anchor=(" << anchor.x << "," << anchor.z << "))\n";
+}
+
+std::vector<SDL_Point> decode_points(const nlohmann::json& entry, axis::WorldPos anchor) {
         std::vector<SDL_Point> pts;
         auto rel = decode_relative_points(entry);
+        normalize_relative_points_for_anchor(rel, entry, anchor);
         pts.reserve(rel.size());
         for (const auto& point : rel) {
-                pts.push_back(SDL_Point{anchor.x + point.x, anchor.y + point.y});
+                pts.push_back(SDL_Point{anchor.x + point.x, anchor.z + point.y});
         }
         return pts;
 }
 
-nlohmann::json encode_points(const std::vector<SDL_Point>& points, SDL_Point anchor) {
+nlohmann::json encode_points(const std::vector<SDL_Point>& points, axis::WorldPos anchor) {
         nlohmann::json arr = nlohmann::json::array();
         arr.get_ref<nlohmann::json::array_t&>().reserve(points.size());
         for (const auto& p : points) {
-                arr.push_back({ {"x", p.x - anchor.x}, {"y", p.y - anchor.y} });
+                const std::int64_t rel_x =
+                    static_cast<std::int64_t>(p.x) - static_cast<std::int64_t>(anchor.x);
+                const std::int64_t rel_z =
+                    static_cast<std::int64_t>(p.y) - static_cast<std::int64_t>(anchor.z);
+                arr.push_back({ {"x", clamp_i64_to_int(rel_x)},
+                                {"y", anchor.y},
+                                {"z", clamp_i64_to_int(rel_z)} });
         }
         return arr;
 }
@@ -279,6 +439,8 @@ manifest_writer_(std::move(manifest_writer))
         camera_height_px = std::clamp(read_room_int("camera_height_px", default_camera_height), 1, 2000);
         camera_tilt_deg = std::clamp(read_room_float("camera_tilt_deg", default_camera_tilt), 0.0f, 150.0f);
         camera_zoom_percent = std::clamp(read_room_int("camera_zoom_percent", 0), 0, 100);
+        camera_center_dx = read_room_int("camera_center_dx", 0);
+        camera_center_dz = read_room_int("camera_center_dz", 0);
 
         load_named_areas_from_json();
         int map_radius_int = static_cast<int>(std::round(map_radius));
@@ -367,9 +529,7 @@ manifest_writer_(std::move(manifest_writer))
                         payload = apply_mutation(std::move(payload));
                         auto guard = manifest_store_->scoped_guard("Room::push_payload");
                         bool ok = manifest_store_->update_map_entry(manifest_map_id_, payload);
-                        if (ok) {
-                                manifest_store_->flush();
-                        } else {
+                        if (!ok) {
                                 std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
                         }
                 }
@@ -477,8 +637,13 @@ void Room::load_named_areas_from_json() {
                 if (!assets_json.is_object()) return;
                 if (!assets_json.contains("areas") || !assets_json["areas"].is_array()) return;
 
-                SDL_Point default_anchor = room_area ? room_area->get_center()
-                                                     : SDL_Point{map_origin.first, map_origin.second};
+                axis::WorldPos default_anchor{};
+                if (room_area) {
+                        auto center = room_area->get_center();
+                        default_anchor = axis::WorldPos{center.x, 0, center.y};
+                } else {
+                        default_anchor = axis::WorldPos{map_origin.first, 0, map_origin.second};
+                }
 
                 auto room_dims = current_room_dimensions();
 
@@ -518,6 +683,7 @@ void Room::load_named_areas_from_json() {
 };
 
                         if (can_scale) {
+                                RoomAreaSerialization::normalize_relative_points_for_anchor(relative_points, item, anchor.world);
                                 const double sx = static_cast<double>(current_width) / static_cast<double>(stored_width);
                                 const double sy = static_cast<double>(current_height) / static_cast<double>(stored_height);
 
@@ -525,14 +691,15 @@ void Room::load_named_areas_from_json() {
                                         anchor.relative_offset.x = scale_component(anchor.relative_offset.x, sx);
                                         anchor.relative_offset.y = scale_component(anchor.relative_offset.y, sy);
                                         anchor.world.x = default_anchor.x + anchor.relative_offset.x;
-                                        anchor.world.y = default_anchor.y + anchor.relative_offset.y;
+                                        anchor.world.z = default_anchor.z + anchor.relative_offset.y;
+                                        anchor.world.y = default_anchor.y + anchor.relative_height_offset;
                                 }
 
                                 pts.reserve(relative_points.size());
                                 for (const auto& rel : relative_points) {
                                         const int dx = scale_component(rel.x, sx);
-                                        const int dy = scale_component(rel.y, sy);
-                                        pts.push_back(SDL_Point{anchor.world.x + dx, anchor.world.y + dy});
+                                        const int dz = scale_component(rel.y, sy);
+                                        pts.push_back(SDL_Point{anchor.world.x + dx, anchor.world.z + dz});
                                 }
                                 persisted_width = current_width;
                                 persisted_height = current_height;
@@ -579,6 +746,7 @@ void Room::load_named_areas_from_json() {
                                         if (orj.contains("anchor") && orj["anchor"].is_object()) {
                                                 meta.anchor.x = orj["anchor"].value("x", 0);
                                                 meta.anchor.y = orj["anchor"].value("y", 0);
+                                                meta.anchor.z = orj["anchor"].value("z", 0);
                                         }
                                         meta.anchor_relative_to_center = orj.value("anchor_relative_to_center", false);
                                         na.origin_room = meta;
@@ -588,7 +756,11 @@ void Room::load_named_areas_from_json() {
                                         meta["name"] = room_name;
                                         meta["width"] = room_dims.first;
                                         meta["height"] = room_dims.second;
-                                        meta["anchor"] = nlohmann::json::object({ {"x", anchor.world.x}, {"y", anchor.world.y} });
+                                        meta["anchor"] = nlohmann::json::object({
+                                                {"x", anchor.world.x},
+                                                {"y", anchor.world.y},
+                                                {"z", anchor.world.z}
+                                        });
                                         meta["anchor_relative_to_center"] = anchor.relative_to_center;
                                         item["origin_room"] = meta;
                                         NamedArea::OriginRoomMeta store;
@@ -719,12 +891,22 @@ void Room::upsert_named_area(const Area& area,
                 return;
         }
 
-        SDL_Point default_anchor = room_area ? room_area->get_center()
-                                             : SDL_Point{map_origin.first, map_origin.second};
+        axis::WorldPos default_anchor{};
+        if (room_area) {
+                auto center = room_area->get_center();
+                default_anchor = axis::WorldPos{center.x, 0, center.y};
+        } else {
+                default_anchor = axis::WorldPos{map_origin.first, 0, map_origin.second};
+        }
         RoomAreaSerialization::AnchorData anchor;
-        anchor.world = RoomAreaSerialization::choose_anchor(kind, default_anchor, pts);
-        anchor.relative_offset = SDL_Point{ anchor.world.x - default_anchor.x,
-                                            anchor.world.y - default_anchor.y };
+        SDL_Point default_anchor_point{default_anchor.x, default_anchor.z};
+        SDL_Point initial_anchor = RoomAreaSerialization::choose_anchor(kind, default_anchor_point, pts);
+        anchor.world.x = initial_anchor.x;
+        anchor.world.z = initial_anchor.y;
+        anchor.world.y = default_anchor.y;
+        anchor.relative_offset = SDL_Point{anchor.world.x - default_anchor.x,
+                                           anchor.world.z - default_anchor.z};
+        anchor.relative_height_offset = 0;
         anchor.relative_to_center = RoomAreaSerialization::is_supported_kind(kind);
         if (existing_entry) {
                 anchor = RoomAreaSerialization::resolve_anchor(*existing_entry, default_anchor, kind);
@@ -768,7 +950,11 @@ void Room::upsert_named_area(const Area& area,
                 origin_meta["name"] = room_name;
                 origin_meta["width"] = std::max(0, dims.first);
                 origin_meta["height"] = std::max(0, dims.second);
-                origin_meta["anchor"] = nlohmann::json::object({ {"x", anchor.world.x}, {"y", anchor.world.y} });
+                origin_meta["anchor"] = nlohmann::json::object({
+                        {"x", anchor.world.x},
+                        {"y", anchor.world.y},
+                        {"z", anchor.world.z}
+                });
                 origin_meta["anchor_relative_to_center"] = anchor.relative_to_center;
                 entry["origin_room"] = std::move(origin_meta);
         } catch (...) {
@@ -832,7 +1018,7 @@ nlohmann::json Room::create_static_room_json(std::string name) {
                 entry["position"] = "Exact";
                 entry["enforce_spacing"] = false;
                 entry["dx"] = ax - cx;
-                entry["dy"] = ay - cy;
+                entry["dz"] = ay - cy;
                 if (width > 0) entry["origional_width"] = width;
                 if (height > 0) entry["origional_height"] = height;
                 entry["display_name"] = a->info->name;
@@ -981,6 +1167,8 @@ nlohmann::json Room::build_room_payload_for_save() const {
         const_cast<Room*>(this)->assets_json["camera_height_px"] = camera_height_px;
         const_cast<Room*>(this)->assets_json["camera_tilt_deg"] = camera_tilt_deg;
         const_cast<Room*>(this)->assets_json["camera_zoom_percent"] = camera_zoom_percent;
+        const_cast<Room*>(this)->assets_json["camera_center_dx"] = camera_center_dx;
+        const_cast<Room*>(this)->assets_json["camera_center_dz"] = camera_center_dz;
 
         nlohmann::json payload;
         if (map_info_root_) {
@@ -1002,6 +1190,26 @@ nlohmann::json Room::build_room_payload_for_save() const {
         return payload;
 }
 
+void Room::snapshot_assets_to_map_info() {
+        // Keep the in-memory manifest representation aligned with the live room state.
+        if (map_info_root_) {
+                if (!map_info_root_->is_object()) {
+                        *map_info_root_ = nlohmann::json::object();
+                }
+                nlohmann::json& section = (*map_info_root_)[data_section_];
+                if (!section.is_object()) {
+                        section = nlohmann::json::object();
+                }
+                section[room_name] = assets_json;
+                room_data_ptr_ = &section[room_name];
+                return;
+        }
+
+        if (room_data_ptr_) {
+                *room_data_ptr_ = assets_json;
+        }
+}
+
 bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
         if (!payload.is_object()) {
                 return false;
@@ -1019,9 +1227,7 @@ bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
         } else if (manifest_store_ && !manifest_map_id_.empty()) {
                 auto guard = manifest_store_->scoped_guard("Room::apply_room_payload_for_save");
                 success = manifest_store_->update_map_entry(manifest_map_id_, payload);
-                if (success) {
-                        manifest_store_->flush();
-                } else {
+                if (!success) {
                         std::cerr << "[Room] Failed to persist map entry for '" << manifest_map_id_ << "'\n";
                 }
         }
@@ -1032,20 +1238,3 @@ bool Room::apply_room_payload_for_save(const nlohmann::json& payload) const {
         return success;
 }
 
-void Room::save_assets_json() const {
-        assets_save_dirty_ = true;
-        // Keep mutations in-memory; SaveManager batch will persist map entry.
-        if (room_data_ptr_) {
-                *room_data_ptr_ = assets_json;
-        }
-        if (map_info_root_) {
-                if (!map_info_root_->is_object()) {
-                        *map_info_root_ = nlohmann::json::object();
-                }
-                nlohmann::json& section = (*map_info_root_)[data_section_];
-                if (!section.is_object()) {
-                        section = nlohmann::json::object();
-                }
-                section[room_name] = assets_json;
-        }
-}

@@ -1,59 +1,73 @@
 #ifndef ANCHOR_BOUND_ASSET_HELPER_HPP
 #define ANCHOR_BOUND_ASSET_HELPER_HPP
 
-#include <memory>
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
-#include <cstdint>
+
+#include "assets/asset/anchor_point.hpp"
 
 class Asset;
 class Assets;
 
-// A single, shared binding helper used by all custom controllers.
-// Responsibilities:
-//  - Create potential child assets during controller init (create_child).
-//  - Keep children dormant (not attached to the grid) until explicitly bound.
-//  - Bind/unbind children to controller anchors; optionally auto-unbind after N ticks.
-//  - Reactivate/deactivate updates & rendering solely through the binding lifecycle.
-//
-// API surface kept minimal and uniform to discourage ad‑hoc controller logic.
+// Runtime-owned anchor binding utility exposed to controllers through a stable API.
+// Ownership model: callers own child assets; helper only tracks, hides, and detaches them.
+// Parent/child removals are detected via Assets and purge tracked bindings automatically.
 class AnchorBoundAssetHelper {
 public:
     explicit AnchorBoundAssetHelper(Asset* controller);
     ~AnchorBoundAssetHelper();
 
-    // Public API available to controllers.
-    // Ensure children remain glued to their anchors; safe to call multiple times per frame.
+    // API used by custom controllers (stable).
     void tick_for_frame();
-
-    bool bind(const std::string& child_asset_id, const std::string& anchor_name);
-    bool bind_for_ticks(const std::string& child_asset_id, const std::string& anchor_name, int ticks);
-    void unbind(const std::string& child_asset_id);
+    bool bind_child_to_anchor(Asset& parent, Asset& child, const AnchorPoint& anchor);
+    bool bind_child_for_ticks(Asset& parent, Asset& child, const AnchorPoint& anchor, int ticks = -1);
+    void unbind_child(Asset& parent, Asset& child);
+    void purge_bindings_for_asset(const Asset* asset);
 
 private:
-    // Child creation kept internal to enforce API surface.
-    Asset* create_child(const std::string& asset_id);
-    void update();
-
-    struct ChildState {
-        std::unique_ptr<Asset> dormant; // Owning pointer when detached from grid.
-        Asset* live = nullptr;          // Raw pointer when attached to grid.
+    struct BindingRecord {
+        std::string parent_id;
+        std::string child_id;
+        Asset* parent = nullptr;
+        Asset* child = nullptr;
         std::string anchor_name;
-        int ticks_remaining = -1;       // -1 => infinite
-        bool active = false;
+        std::optional<std::size_t> anchor_index{};
+        std::optional<std::uint64_t> expiry_tick{};
+        int ticks_remaining = -1; // -1 => infinite
+        bool bound = false;
+        bool currently_active = false;
+        bool registered_with_parent = false;
+        int last_anchor_depth_offset = 0;
     };
 
-    ChildState* get_child_state(const std::string& id);
-    void ensure_hidden(Asset* child);
-    bool attach_child(const std::string& id, ChildState& state, const std::string& anchor_name);
-    void detach_child(ChildState& state);
+    bool resolve_binding_entities(BindingRecord& record);
+    std::string binding_key_for_child(const Asset& child) const;
+    std::string asset_stable_id(const Asset* asset) const;
+    std::optional<AnchorPoint> resolve_anchor(BindingRecord& record) const;
+    void teardown_binding(BindingRecord& state);
+
+    void update();
+    void apply_binding_tick(const std::string& child_id, BindingRecord& state);
+
+    void set_child_hidden_state(Asset* child, bool hidden) const;
+    void log_binding_tick(const std::string& child_id,
+                          const BindingRecord& state,
+                          bool anchor_available,
+                          int anchor_world_x,
+                          int anchor_world_y,
+                          int child_world_x,
+                          int child_world_y) const;
 
     Asset* controller_ = nullptr;
     Assets* assets_ = nullptr;
-    std::unordered_map<std::string, ChildState> children_;
+    std::unordered_map<std::string, BindingRecord> children_;
+    std::uint64_t tick_counter_ = 0;
+    bool debug_tick_logging_enabled_ = false;
 
-    friend class vibble_controller; // allow controller to pre-create children during init
-    friend class Assets;            // allow engine to drive updates each frame
+    friend class vibble_controller;
+    friend class Assets;
 };
 
 #endif

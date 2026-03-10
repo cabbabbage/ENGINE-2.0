@@ -37,7 +37,6 @@
 #include "core/manifest/manifest_loader.hpp"
 #include "PreviewProvider.hpp"
 #include "string_utils.hpp"
-#include "CroppingService.hpp"
 #include "ui/tinyfiledialogs.h"
 #include "utils/rebuild_queue.hpp"
 #ifdef _WIN32
@@ -228,23 +227,6 @@ std::string manifest_key_fallback(const AssetInfo& info) {
     } catch (...) {
     }
     return {};
-}
-
-bool looks_like_numbered_png(const std::filesystem::path& path) {
-    std::string ext = path.extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
-    if (ext != ".png") {
-        return false;
-    }
-    const std::string stem = path.stem().string();
-    if (stem.empty()) {
-        return false;
-    }
-    return std::all_of(stem.begin(), stem.end(), [](unsigned char ch) {
-        return std::isdigit(ch);
-    });
 }
 
 bool has_animation_entries(const nlohmann::json& asset_json) {
@@ -1349,127 +1331,6 @@ bool AnimationEditorWindow::handle_header_event(const SDL_Event& e) {
     return consumed;
 }
 
-bool AnimationEditorWindow::animation_wants_crop(const std::string& animation_id) const {
-    if (!document_ || animation_id.empty()) {
-        return false;
-    }
-    if (auto payload_text = document_->animation_payload(animation_id)) {
-        nlohmann::json parsed = nlohmann::json::parse(*payload_text, nullptr, false);
-        if (parsed.is_object()) {
-            auto it = parsed.find("crop_frames");
-            if (it != parsed.end()) {
-                if (it->is_boolean()) {
-                    return it->get<bool>();
-                }
-                if (it->is_number()) {
-                    return it->get<double>() != 0.0;
-                }
-                if (it->is_string()) {
-                    std::string text = it->get<std::string>();
-                    std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
-                        return static_cast<char>(std::tolower(ch));
-                    });
-                    return text == "true" || text == "1" || text == "yes" || text == "on";
-                }
-            }
-        }
-    }
-    return false;
-}
-
-bool AnimationEditorWindow::has_global_crop_frames() const {
-    if (!document_) {
-        return false;
-    }
-    for (const auto& animation_id : document_->animation_ids()) {
-        if (animation_wants_crop(animation_id)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-std::filesystem::path AnimationEditorWindow::resolved_asset_root_path() const {
-    if (!asset_root_path_.empty()) {
-        return asset_root_path_;
-    }
-    if (!document_) {
-        return {};
-    }
-    const auto& root = document_->asset_root();
-    if (!root.empty()) {
-        return root;
-    }
-    const auto& info_path = document_->info_path();
-    if (!info_path.empty()) {
-        return info_path.parent_path();
-    }
-    return {};
-}
-
-std::vector<std::filesystem::path> AnimationEditorWindow::numbered_frame_paths(const std::filesystem::path& folder) const {
-    std::vector<std::filesystem::path> frames;
-    if (folder.empty()) {
-        return frames;
-    }
-    std::error_code ec;
-    if (!std::filesystem::exists(folder, ec) || !std::filesystem::is_directory(folder, ec)) {
-        return frames;
-    }
-    for (const auto& entry : std::filesystem::directory_iterator(folder, ec)) {
-        if (ec) {
-            break;
-        }
-        if (!entry.is_regular_file(ec)) {
-            continue;
-        }
-        const auto& path = entry.path();
-        if (!looks_like_numbered_png(path)) {
-            continue;
-        }
-        frames.push_back(path);
-    }
-    std::sort(frames.begin(), frames.end(), [](const std::filesystem::path& a, const std::filesystem::path& b) {
-        auto to_int = [](const std::filesystem::path& candidate) {
-            try {
-                return std::stoi(candidate.stem().string());
-            } catch (...) {
-                return 0;
-            }
-        };
-        int a_idx = to_int(a);
-        int b_idx = to_int(b);
-        if (a_idx != b_idx) {
-            return a_idx < b_idx;
-        }
-        return a < b;
-    });
-    return frames;
-}
-
-void AnimationEditorWindow::apply_global_cropping_to_asset_sources() const {
-    if (!document_) {
-        return;
-    }
-    std::filesystem::path asset_root = resolved_asset_root_path();
-    if (asset_root.empty()) {
-        return;
-    }
-    CroppingService cropping_service;
-    for (const auto& animation_id : document_->animation_ids()) {
-        if (animation_id.empty() || !animation_wants_crop(animation_id)) {
-            continue;
-        }
-        std::filesystem::path animation_folder = asset_root / animation_id;
-        auto frames = numbered_frame_paths(animation_folder);
-        if (frames.empty()) {
-            continue;
-        }
-        cropping_service.compute_union_bounds(frames);
-        cropping_service.crop_images_with_bounds(frames);
-    }
-}
-
 void AnimationEditorWindow::set_status_message(const std::string& message, int frames) {
     status_message_ = message;
     status_timer_frames_ = std::max(frames, 0);
@@ -1748,26 +1609,29 @@ bool AnimationEditorWindow::persist_manifest_payload(const nlohmann::json& paylo
         set_status_message(finalize ? "Animations saved." : "Animations updated.", finalize ? 200 : 120);
     };
 
-    const auto priority = finalize
-        ? devmode::core::DevSaveCoordinator::Priority::Immediate
-        : devmode::core::DevSaveCoordinator::Priority::Debounced;
-
     if (save_coordinator_) {
+        if (!finalize) {
+            // Keep debounced preview-state writes on the caller thread to avoid racing
+            // the mutable manifest transaction against async coordinator execution.
+            const bool committed = commit_fn();
+            if (committed) {
+                on_success();
+            }
+            return committed;
+        }
+
         save_coordinator_->enqueue_custom(devmode::core::DevSaveCoordinator::IntentKind::ManifestAsset,
                                           std::string("asset:") + manifest_asset_key_,
                                           [commit_fn](devmode::core::ManifestStore&) { return commit_fn(); },
-                                          priority,
+                                          devmode::core::DevSaveCoordinator::Priority::Immediate,
                                           "Animation manifest",
                                           on_success);
-        if (priority == devmode::core::DevSaveCoordinator::Priority::Immediate) {
-            save_coordinator_->flush_now("Animation save");
-        }
+        save_coordinator_->flush_now("Animation save");
         return true;
     }
 
     bool committed = commit_fn();
     if (committed) {
-        manifest_store_->flush();
         on_success();
     }
     return committed;
@@ -2090,7 +1954,7 @@ void AnimationEditorWindow::add_controller() {
     std::ostringstream hpp_builder;
     hpp_builder << metadata
                 << "#pragma once\n"
-                << "#include \"assets/asset_controller.hpp\"\n"
+                << "#include \"assets/asset/asset_controller.hpp\"\n"
                 << "\n"
                 << "class Assets;\n"
                 << "class Asset;\n"
@@ -2115,8 +1979,8 @@ void AnimationEditorWindow::add_controller() {
     cpp_builder << metadata
                 << "#include \"" << key << ".hpp\"\n"
                 << "\n"
-                << "#include \"assets/Asset.hpp\"\n"
-                << "#include \"assets/animation.hpp\"\n"
+                << "#include \"assets/asset/Asset.hpp\"\n"
+                << "#include \"assets/asset/animation.hpp\"\n"
                 << "#include \"assets/asset/asset_info.hpp\"\n"
                 << "#include \"animation/animation_update.hpp\"\n"
                 << "#include \"utils/input.hpp\"\n"
@@ -2285,10 +2149,6 @@ bool AnimationEditorWindow::rebuild_all_animations_via_pipeline(const std::share
     if (!info) {
         set_status_message("No asset selected.", 180);
         return false;
-    }
-
-    if (has_global_crop_frames()) {
-        apply_global_cropping_to_asset_sources();
     }
 
     vibble::RebuildQueueCoordinator coordinator;

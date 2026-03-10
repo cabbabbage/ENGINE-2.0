@@ -7,7 +7,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "assets/animation_frame.hpp"
+#include "assets/asset/animation_frame.hpp"
 
 namespace animation_update {
 

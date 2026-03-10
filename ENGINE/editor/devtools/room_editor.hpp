@@ -135,6 +135,18 @@ private:
     void begin_area_drag_session(const std::string& area_name, const SDL_Point& world_mouse);
     void update_area_drag_session(const SDL_Point& world_mouse);
     void finalize_area_drag_session();
+    enum class GeometryHandle {
+        None,
+        Min,
+        Max,
+    };
+    Room* find_geometry_room_at_point(SDL_Point world_point) const;
+    bool geometry_room_is_trail(const Room* room) const;
+    GeometryHandle hit_test_geometry_handle(Room* room, SDL_Point world_point) const;
+    bool is_point_between_geometry_bounds(Room* room, SDL_Point world_point) const;
+    void clear_geometry_selection();
+    void mark_geometry_dirty(Room* room);
+    bool regenerate_geometry(Room* room);
     nlohmann::json* find_area_entry_json(Room* room, const std::string& area_name) const;
     void ensure_area_anchor_spawn_entry(Room* room, const std::string& area_name);
     enum class BlockingPanel {
@@ -276,14 +288,20 @@ private:
     void move_spawn_group_internal(const std::string& spawn_id, int dir);
     void reorder_spawn_group_internal(const std::string& spawn_id, size_t target_index);
     void open_spawn_group_editor_by_id(const std::string& spawn_id);
+    void open_spawn_group_floating_panel(const std::string& spawn_id, std::optional<SDL_Point> screen_anchor = std::nullopt);
     void reopen_room_configurator();
     void notify_room_assets_saved();
     bool enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority priority);
-    bool save_current_room_assets_json();
+    bool save_current_room_assets_json(devmode::core::DevSaveCoordinator::Priority priority =
+                                           devmode::core::DevSaveCoordinator::Priority::Immediate);
     bool validate_room_edit_invariants(std::string* error = nullptr);
     bool commit_room_edit_transaction(const std::function<bool()>& mutate,
                                       const std::string& action_label,
-                                      bool refresh_ui_on_success = true);
+                                      bool refresh_ui_on_success = true,
+                                      devmode::core::DevSaveCoordinator::Priority save_priority =
+                                          devmode::core::DevSaveCoordinator::Priority::Immediate);
+    void mark_map_dirty_for_spawn_groups(devmode::core::DevSaveCoordinator::Priority priority =
+                                             devmode::core::DevSaveCoordinator::Priority::Debounced);
     void copy_selected_spawn_group();
     void paste_spawn_group_from_clipboard();
     std::optional<std::string> selected_spawn_group_id() const;
@@ -425,6 +443,11 @@ private:
     int area_drag_resolution_ = 0;
     SDL_Point area_drag_start_world_{0, 0};
     SDL_Point area_drag_last_world_{0, 0};
+    Room* hovered_geometry_room_ = nullptr;
+    Room* selected_geometry_room_ = nullptr;
+    GeometryHandle geometry_drag_handle_ = GeometryHandle::None;
+    bool geometry_drag_pending_dirty_ = false;
+    Uint32 geometry_last_click_ms_ = 0;
 
     struct SpawnGroupClipboard {
         nlohmann::json entry;
@@ -480,8 +503,9 @@ private:
     mutable bool cached_camera_state_valid_ = false;
     mutable float cached_camera_scale_ = 0.0f;
     mutable SDL_Point cached_camera_center_{0, 0};
-    mutable bool cached_camera_parallax_enabled_ = false;
-    mutable bool cached_camera_realism_enabled_ = false;
+    mutable double cached_camera_zoom_percent_ = 0.0;
+    mutable float cached_camera_pitch_deg_ = 0.0f;
+    mutable double cached_camera_anchor_world_z_ = 0.0;
     mutable std::unordered_map<Asset*, AssetSpatialEntry> asset_bounds_cache_;
     mutable std::unordered_map<int64_t, std::vector<Asset*>> spatial_grid_;
 };

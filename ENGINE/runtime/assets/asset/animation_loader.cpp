@@ -228,13 +228,13 @@ DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node, bool& va
         if (!node.contains("texture_y") || !node["texture_y"].is_number_integer()) {
                 return anchor;
         }
-        if (!node.contains("in_front") || !node["in_front"].is_boolean()) {
+        if (!node.contains("depth_offset") || !node["depth_offset"].is_number_integer()) {
                 return anchor;
         }
 
         anchor.texture_x = node["texture_x"].get<int>();
         anchor.texture_y = node["texture_y"].get<int>();
-        anchor.in_front = node["in_front"].get<bool>();
+        anchor.depth_offset = node["depth_offset"].get<int>();
 
         valid = anchor.is_valid();
         return anchor;

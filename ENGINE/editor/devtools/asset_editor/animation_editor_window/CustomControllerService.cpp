@@ -247,7 +247,7 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
 
         hpp << "#ifndef " << guard << "\n";
         hpp << "#define " << guard << "\n\n";
-        hpp << "#include \"assets/asset_controller.hpp\"\n\n";
+        hpp << "#include \"assets/asset/asset_controller.hpp\"\n\n";
         hpp << "class Assets;\n";
         hpp << "class Asset;\n";
         hpp << "class Input;\n\n";
@@ -270,7 +270,7 @@ void CustomControllerService::write_controller_files(const std::filesystem::path
         }
 
         cpp << "#include \"" << base_name << ".hpp\"\n\n";
-        cpp << "#include \"assets/Asset.hpp\"\n";
+        cpp << "#include \"assets/asset/Asset.hpp\"\n";
         cpp << "#include \"core/AssetsManager.hpp\"\n";
         cpp << "#include \"map_generation/room.hpp\"\n\n";
         cpp << class_name << "::" << class_name << "(Assets* assets, Asset* self)\n";

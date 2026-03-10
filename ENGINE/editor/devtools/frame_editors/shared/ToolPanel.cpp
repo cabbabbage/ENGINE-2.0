@@ -5,8 +5,7 @@
 
 #include <SDL3/SDL.h>
 
-#include "FloatingDockableManager.hpp"
-#include "FloatingPanelLayoutManager.hpp"
+#include "DockManager.hpp"
 #include "devtools/dm_styles.hpp"
 #include "utils/input.hpp"
 
@@ -87,7 +86,7 @@ FrameToolPanel::~FrameToolPanel() {
     if (panel_) {
         panel_->set_visible(false);
         if (registered_with_manager_) {
-            FloatingDockableManager::instance().notify_panel_closed(panel_.get());
+        DockManager::instance().notify_panel_closed(panel_.get());
         }
     }
     panel_impl_ = nullptr;
@@ -120,7 +119,7 @@ void FrameToolPanel::set_work_area(SDL_Rect area) const {
 void FrameToolPanel::update(const Input& input, int screen_w, int screen_h) const {
     if (!panel_) return;
     if (!registered_with_manager_) {
-        FloatingDockableManager::instance().open_floating(
+        DockManager::instance().open_floating(
             stack_key_,            // name
             panel_.get(),          // panel
             {},                    // close callback
@@ -163,7 +162,7 @@ bool FrameToolPanel::handle_event(const SDL_Event& e) const {
         if (pointer_event && e.type == SDL_EVENT_MOUSE_BUTTON_UP &&
             e.button.button == SDL_BUTTON_LEFT) {
             dragging_empty_area_ = false;
-            FloatingPanelLayoutManager::instance().notifyPanelUserMoved(panel_.get());
+            DockManager::instance().notifyPanelUserMoved(panel_.get());
             return true;
         }
         if (pointer_event) return true;  // swallow stray events while dragging
@@ -176,7 +175,7 @@ bool FrameToolPanel::handle_event(const SDL_Event& e) const {
         dragging_empty_area_ = true;
         drag_offset_.x = pointer.x - panel_->rect().x;
         drag_offset_.y = pointer.y - panel_->rect().y;
-        FloatingDockableManager::instance().bring_to_front(panel_.get());
+        DockManager::instance().bring_to_front(panel_.get());
         return true;
     }
 

@@ -1,7 +1,6 @@
 #include "map_grid_settings.hpp"
 
 #include <algorithm>
-#include <cmath>
 #include <limits>
 
 #include <nlohmann/json.hpp>
@@ -25,18 +24,6 @@ int power_of_three(int exponent) {
     }
     return result;
 }
-
-int resolution_from_spacing(int spacing) {
-    const int clamped = std::max(1, spacing);
-    const double log_value = std::log(static_cast<double>(clamped)) / std::log(3.0);
-    return static_cast<int>(std::lround(log_value));
-}
-
-int resolution_from_chunk_size(int chunk_size) {
-    const int clamped = std::max(1, chunk_size);
-    const double log_value = std::log2(static_cast<double>(clamped));
-    return static_cast<int>(std::lround(log_value));
-}
 }
 
 MapGridSettings MapGridSettings::defaults() {
@@ -48,61 +35,13 @@ MapGridSettings MapGridSettings::from_json(const nlohmann::json* obj) {
     if (!obj || !obj->is_object()) {
         return settings;
     }
-    bool resolved = false;
+
     try {
         if (obj->contains("grid_resolution") && (*obj)["grid_resolution"].is_number_integer()) {
             settings.grid_resolution = (*obj)["grid_resolution"].get<int>();
-            resolved = true;
         }
     } catch (...) {
         settings.grid_resolution = defaults().grid_resolution;
-    }
-
-    try {
-        if (!resolved && obj->contains("resolution") && (*obj)["resolution"].is_number_integer()) {
-            settings.grid_resolution = (*obj)["resolution"].get<int>();
-            resolved = true;
-        }
-    } catch (...) {
-        if (!resolved) {
-            settings.grid_resolution = defaults().grid_resolution;
-        }
-    }
-
-    try {
-        if (!resolved && obj->contains("spacing") && (*obj)["spacing"].is_number_integer()) {
-            const int spacing = std::max(1, (*obj)["spacing"].get<int>());
-            settings.grid_resolution = resolution_from_spacing(spacing);
-            resolved = true;
-        }
-    } catch (...) {
-        if (!resolved) {
-            settings.grid_resolution = defaults().grid_resolution;
-        }
-    }
-
-    try {
-        if (!resolved && obj->contains("r_chunk") && (*obj)["r_chunk"].is_number_integer()) {
-            settings.grid_resolution = (*obj)["r_chunk"].get<int>();
-            resolved = true;
-        } else if (!resolved && obj->contains("chunk_resolution") && (*obj)["chunk_resolution"].is_number_integer()) {
-            settings.grid_resolution = (*obj)["chunk_resolution"].get<int>();
-            resolved = true;
-        } else if (!resolved) {
-            const char* size_keys[] = {"chunk_size", "chunk_size_px"};
-            for (const char* key : size_keys) {
-                if (obj->contains(key) && (*obj)[key].is_number_integer()) {
-                    const int size_px = std::max(1, (*obj)[key].get<int>());
-                    settings.grid_resolution = resolution_from_chunk_size(size_px);
-                    resolved = true;
-                    break;
-                }
-            }
-        }
-    } catch (...) {
-        if (!resolved) {
-            settings.grid_resolution = defaults().grid_resolution;
-        }
     }
 
     settings.clamp();
@@ -143,13 +82,4 @@ void ensure_map_grid_settings(nlohmann::json& map_info) {
 int MapGridSettings::spacing() const {
     const int clamped = std::clamp(grid_resolution, kMinResolution, kMaxResolution);
     return power_of_three(clamped);
-}
-
-int MapGridSettings::chunk_size() const {
-    const int clamped = std::clamp(grid_resolution, kMinResolution, kMaxResolution);
-    return 1 << clamped;
-}
-
-int MapGridSettings::tile_spacing() const {
-    return spacing();
 }

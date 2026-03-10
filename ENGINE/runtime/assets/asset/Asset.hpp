@@ -59,6 +59,7 @@ struct RenderObject {
     std::vector<SDL_Vertex> cached_vertices;
     std::vector<int> cached_indices;
     SDL_FPoint cached_position{0.0f, 0.0f};
+    float cached_world_z = 0.0f;
     float cached_scale = 0.0f;
     std::uint64_t cached_camera_state_version = 0;
     bool mesh_dirty = true;
@@ -115,8 +116,9 @@ class Asset {
     GridPoint* grid_point() const { return pos_; }
     int world_x() const { return pos_ ? pos_->world_x() : initial_world_pos_.x; }
     int world_y() const { return pos_ ? pos_->world_y() : initial_world_pos_.y; }
-    int world_z() const { return pos_ ? pos_->world_z() : 0; }
-    SDL_Point world_point() const { return SDL_Point{world_x(), world_y()}; }
+    int world_z() const { return pos_ ? pos_->world_z() : initial_world_z_; }
+    SDL_Point world_xz_point() const { return SDL_Point{world_x(), world_z()}; }
+    SDL_Point world_xy_point() const { return SDL_Point{world_x(), world_y()}; }
     int height() const {
         if (cached_h <= 0) {
             // Refresh lazily to avoid stale dimensions when textures change.
@@ -128,6 +130,8 @@ class Asset {
     void move_to_world_position(int world_x, int world_y, int world_z = 0,
                                 std::optional<int> resolution_layer_override = std::nullopt);
     void set_world_z(int world_z);
+    double render_depth_bias() const { return render_depth_bias_; }
+    void set_render_depth_bias(double bias);
 
     void update();
     SDL_Texture* get_current_frame() const;
@@ -166,6 +170,11 @@ class Asset {
     void set_camera(WarpedScreenGrid* v) { window = v; }
     void set_assets(Assets* a);
     Assets* get_assets() const { return assets_; }
+    void add_child(Asset* child);
+    void remove_child(Asset* child);
+    bool has_child(const Asset* child) const;
+    std::vector<Asset*>& children() { return children_; }
+    const std::vector<Asset*>& children() const { return children_; }
     void set_tiling_info(std::optional<TilingInfo> info);
     const std::optional<TilingInfo>& tiling_info() const { return tiling_info_; }
     const std::string& owning_room_name() const { return owning_room_name_; }
@@ -222,6 +231,7 @@ class Asset {
     bool flipped = false;
     float distance_from_camera = 0.0f;
     float angle_from_camera = 0.0f;
+    double render_depth_bias_ = 0.0;
 
 
     int depth = 0;
@@ -267,34 +277,31 @@ class Asset {
         int             world_z = 0;
         int             resolution_layer = 0;
         SDL_Point       source_texture_px{0, 0};
+        SDL_FPoint      screen_px{0.0f, 0.0f};
         bool            has_canonical_texture_source = false;
         bool            dirty = true;
         bool            missing = false;
-        bool            in_front = true;
+        int             depth_offset = 0;
         Asset*          owner = nullptr;
         struct UpdateKey {
                 anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None;
-                std::optional<anchor_points::AnchorDepthPolicy> depth_policy{};
                 bool initialized = false;
 
-                bool matches(anchor_points::GridMaterialization grid,
-                             const std::optional<anchor_points::AnchorDepthPolicy>& depth) const {
-                        return initialized && grid_policy == grid && depth_policy == depth;
+                bool matches(anchor_points::GridMaterialization grid) const {
+                        return initialized && grid_policy == grid;
                 }
 
-                void set(anchor_points::GridMaterialization grid,
-                         std::optional<anchor_points::AnchorDepthPolicy> depth) {
+                void set(anchor_points::GridMaterialization grid) {
                         grid_policy = grid;
-                        depth_policy = depth;
                         initialized = true;
                 }
         } last_update_key_;
 
-        void update(anchor_points::GridMaterialization grid_policy,
-                    std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
+        void update(anchor_points::GridMaterialization grid_policy);
     };
 
-    // A single source of truth for all inputs that influence resolved anchor world position.
+    // A single source of truth for inputs that influence resolved anchor output
+    // (world coordinates and cached screen projection).
     struct AnchorBasisSignature {
         int   world_x = 0;
         int   world_y = 0;
@@ -304,14 +311,22 @@ class Asset {
         bool  flipped = false;
         float remainder_scale = 1.0f;       // runtime scale applied to rendered frame geometry
         float perspective_scale = 1.0f;     // depth-based scaling from the grid/camera
-        float world_z_offset = 0.0f;        // vertical offset fed into anchor projection
+        float world_z_offset = 0.0f;        // render depth offset used by cached anchor screen projection
         int   resolution_layer = 0;         // grid resolution used for anchor materialization
     };
 
-    AnchorHandle& get_anchor_point(const std::string& name);
-    std::optional<ResolvedAnchor> anchor_state(const std::string& name,
-                                               anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None,
-                                               std::optional<anchor_points::AnchorDepthPolicy> depth_policy = std::nullopt);
+    AnchorPoint* get_anchor_point(const std::string& name);
+    std::optional<std::string> anchor_name_for_index(std::size_t index) const;
+    std::optional<AnchorPoint> anchor_state(const std::string& name,
+                                            anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None);
+    void assert_unique_anchor_names_for_frame() const;
+    AnchorPoint& resolve_anchor_point_entry(std::size_t index,
+                                            anchor_points::GridMaterialization grid_policy,
+                                            const DisplacedAssetAnchorPoint* frame_anchor);
+    void apply_anchor_runtime_state(AnchorPoint& resolved,
+                                    const AnchorHandle& handle,
+                                    const DisplacedAssetAnchorPoint* frame_anchor) const;
+    void refresh_anchor_point_cache_from_frame();
     void mark_anchors_dirty();
     bool update_anchor_basis_if_needed();
     AnchorBasisSignature compute_anchor_basis_signature() const;
@@ -340,11 +355,13 @@ private:
     bool merged_from_neighbors_ = false;
     GridPoint* pos_ = nullptr; // Non-owning pointer to GridPoint in WorldGrid; set by WorldGrid on registration
     SDL_Point initial_world_pos_{0, 0}; // Spawn position, used before registration with WorldGrid
+    int initial_world_z_ = 0;           // Spawn depth, used before registration with WorldGrid
     void set_flip();
 
     float frame_progress = 0.0f;
     Assets* assets_ = nullptr;
     std::unique_ptr<AssetController>   controller_;
+    std::vector<Asset*> children_;
     std::unique_ptr<AssetList> neighbors;
     std::unique_ptr<AssetList> impassable_naighbors;
 
@@ -394,8 +411,13 @@ private:
     float        world_z_offset_    = 0.0f;
     bool         mesh_dirty_        = true;
 
+    void initialize_anchor_registry_from_animations();
+    AnchorHandle* find_anchor_handle(const std::string& name);
+
     std::vector<AnchorHandle> anchor_handles_;
-    std::unordered_map<std::string, std::size_t> anchor_lookup_;
+    std::vector<AnchorPoint> anchor_points_;
+    std::unordered_map<std::string, std::size_t> anchor_name_to_index_;
+    bool anchors_initialized_ = false;
 
     std::uint64_t anchor_world_revision_ = 1;
     AnchorBasisSignature last_anchor_basis_signature_{};

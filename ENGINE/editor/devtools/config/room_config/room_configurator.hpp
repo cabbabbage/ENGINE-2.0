@@ -88,7 +88,8 @@ public:
                                    std::function<void(const std::string&)> on_delete,
                                    std::function<void(const std::string&, size_t)> on_reorder,
                                    std::function<void()> on_add,
-                                   std::function<void(const std::string&)> on_regenerate = {});
+                                   std::function<void(const std::string&)> on_regenerate = {},
+                                   std::function<void(const std::string&, SDL_Point)> on_open_floating = {});
     bool focus_spawn_group(const std::string& spawn_id);
     void set_spawn_area_open_callback(std::function<void(const std::string&, const std::string&)> cb,
                                       std::string stack_key = {});
@@ -243,6 +244,7 @@ private:
     std::function<void(const std::string&, size_t)> on_spawn_reorder_;
     std::function<void()> on_spawn_add_;
     std::function<void(const std::string&)> on_spawn_regenerate_;
+    std::function<void(const std::string&, SDL_Point)> on_spawn_open_panel_;
     std::function<void(const std::string&, const std::string&)> on_spawn_area_open_;
     std::string spawn_area_stack_key_;
     std::function<void()> on_external_spawn_change_;

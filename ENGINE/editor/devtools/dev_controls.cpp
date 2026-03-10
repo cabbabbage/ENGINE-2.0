@@ -55,7 +55,7 @@
 #include "rendering/render/render.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "assets/asset/asset_utils.hpp"
 #include "core/AssetsManager.hpp"
@@ -977,6 +977,9 @@ DevControls::DevControls(Assets* owner, int screen_w, int screen_h)
 }
 
 DevControls::~DevControls() {
+    if (assets_) {
+        assets_->set_dev_grid_overlay_callback({});
+    }
     restore_filter_hidden_assets();
     const bool exit_save_ok = run_exit_save_sequence("shutdown");
     if (!exit_save_ok) {

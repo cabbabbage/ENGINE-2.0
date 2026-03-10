@@ -1,6 +1,6 @@
 #include "warped_screen_grid.hpp"
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/area.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "core/find_current_room.hpp"
@@ -728,6 +728,16 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
     CameraParams neigh_params;
     double t = 0.0;
     const double fallback_height = std::max(1.0, static_cast<double>(settings_.base_height_px));
+    auto room_camera_center = [](const Room* room) -> SDL_Point {
+        if (!room || !room->room_area) {
+            return SDL_Point{0, 0};
+        }
+        const SDL_Point room_center = room->room_area->get_center();
+        return SDL_Point{
+            room_center.x + room->camera_center_dx,
+            room_center.y + room->camera_center_dz
+        };
+    };
 
     if (!dev_mode) {
         if (camera_.manual_height_override()) {
@@ -790,60 +800,21 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
 
     if (dev_mode && focus_override_active) {
         set_screen_center(camera_.state().focus_override);
-    } else if (player) {
-        // Normal gameplay follow: move only world X/Z anchor while preserving
-        // room camera params (height/tilt/zoom).
-        // Follow canonical grid depth. Render-only z offsets should not move
-        // the camera anchor used by anchor-point world conversion.
-        const double follow_world_z = static_cast<double>(player->world_z());
+    } else if (!dev_mode && player) {
         SDL_Point follow_center{
             player->world_x(),
-            static_cast<int>(std::lround(follow_world_z))
+            player->world_z()
         };
-
-        // First pass: hard lock to player world X/Z.
         set_screen_center(follow_center, false);
-
-        // Second pass: correct residual projection error (if any) by shifting
-        // only camera X/Z. This keeps horizon/pitch behavior unchanged.
-        const SDL_Point target_screen{
-            std::max(0, screen_width_ / 2),
-            std::max(0, screen_height_ / 2)
-        };
-        const SDL_FPoint player_world_ground{
-            static_cast<float>(player->world_x()),
-            static_cast<float>(follow_world_z)
-        };
-
-        for (int i = 0; i < 2; ++i) {
-            const SDL_FPoint player_screen = map_to_screen_f(player_world_ground);
-            if (!std::isfinite(player_screen.x) || !std::isfinite(player_screen.y)) {
-                break;
-            }
-
-            const SDL_FPoint world_at_target = screen_to_map(target_screen);
-            const SDL_Point player_screen_px{
-                static_cast<int>(std::lround(player_screen.x)),
-                static_cast<int>(std::lround(player_screen.y))
-            };
-            const SDL_FPoint world_at_player_screen = screen_to_map(player_screen_px);
-            if (!std::isfinite(world_at_target.x) || !std::isfinite(world_at_target.y) ||
-                !std::isfinite(world_at_player_screen.x) || !std::isfinite(world_at_player_screen.y)) {
-                break;
-            }
-
-            const double dx = static_cast<double>(world_at_player_screen.x) - static_cast<double>(world_at_target.x);
-            const double dz = static_cast<double>(world_at_player_screen.y) - static_cast<double>(world_at_target.y);
-            if (std::max(std::abs(dx), std::abs(dz)) < 0.5) {
-                break;
-            }
-
-            follow_center.x += static_cast<int>(std::lround(dx));
-            follow_center.y += static_cast<int>(std::lround(dz));
-            set_screen_center(follow_center, false);
-        }
     } else if (cur && cur->room_area) {
-        set_screen_center(cur->room_area->get_center());
+        // Dev/room mode default: center on active room unless an explicit
+        // focus override is active.
+        set_screen_center(room_camera_center(cur));
+    } else if (player) {
+        set_screen_center(SDL_Point{
+            player->world_x(),
+            player->world_z()
+        });
     }
 
     camera_.tick(dt);

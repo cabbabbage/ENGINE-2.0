@@ -6,7 +6,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "assets/asset/asset_utils.hpp"
@@ -1579,7 +1579,10 @@ SDL_Point RoomEditor::camera_lock_target() const {
     }
     if (current_room_ && current_room_->room_area) {
         auto c = current_room_->room_area->get_center();
-        return SDL_Point{c.x, c.y};
+        return SDL_Point{
+            c.x + current_room_->camera_center_dx,
+            c.y + current_room_->camera_center_dz
+        };
     }
     if (assets_) {
         return assets_->getView().get_screen_center();
@@ -2525,7 +2528,11 @@ void RoomEditor::focus_camera_on_room_center(bool reframe_height) {
     if (!current_room_ || !current_room_->room_area) return;
 
     WarpedScreenGrid& cam = assets_->getView();
-    const SDL_Point center = current_room_->room_area->get_center();
+    const SDL_Point room_center = current_room_->room_area->get_center();
+    const SDL_Point center{
+        room_center.x + current_room_->camera_center_dx,
+        room_center.y + current_room_->camera_center_dz
+    };
     cam.set_manual_height_override(true);
     cam.set_focus_override(center);
 
@@ -4540,7 +4547,10 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         }
     }
 
-    if (input.wasScancodePressed(SDL_SCANCODE_A)) {
+    const bool save_room_camera_shortcut =
+        input.wasScancodePressed(SDL_SCANCODE_A) ||
+        input.wasScancodePressed(SDL_SCANCODE_R);
+    if (save_room_camera_shortcut) {
         if (!current_room_ || !assets_) {
             return;
         }
@@ -4555,15 +4565,26 @@ void RoomEditor::handle_shortcuts(const Input& input) {
         const int zoom_percent = std::clamp(static_cast<int>(std::lround(params.zoom_percent)),
                                             kSavedCameraZoomMinPercent,
                                             kSavedCameraZoomMaxPercent);
+        SDL_Point room_center{0, 0};
+        if (current_room_->room_area) {
+            room_center = current_room_->room_area->get_center();
+        }
+        const SDL_Point camera_center = assets_->getView().get_screen_center();
+        const int camera_center_dx = camera_center.x - room_center.x;
+        const int camera_center_dz = camera_center.y - room_center.y;
 
         current_room_->camera_height_px = height_px;
         current_room_->camera_tilt_deg = tilt_deg;
         current_room_->camera_zoom_percent = zoom_percent;
+        current_room_->camera_center_dx = camera_center_dx;
+        current_room_->camera_center_dz = camera_center_dz;
 
         auto& room_data = current_room_->assets_data();
         room_data["camera_height_px"] = height_px;
         room_data["camera_tilt_deg"] = tilt_deg;
         room_data["camera_zoom_percent"] = zoom_percent;
+        room_data["camera_center_dx"] = camera_center_dx;
+        room_data["camera_center_dz"] = camera_center_dz;
 
         enqueue_current_room_save(devmode::core::DevSaveCoordinator::Priority::Immediate);
 

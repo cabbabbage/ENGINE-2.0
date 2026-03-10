@@ -7,7 +7,7 @@
         },
         "asset_filter": {
             "current_room": true,
-            "filters_expanded": true,
+            "filters_expanded": false,
             "fog": false,
             "initialized": true,
             "map_assets": true,
@@ -35,7 +35,7 @@
         "grid": {
             "cell_size_px": 27.0,
             "overlay": {
-                "enabled": true,
+                "enabled": false,
                 "r": 3.0
             },
             "snap": {

@@ -2,10 +2,10 @@
 #include "utils/sdl_render_conversions.hpp"
 
 #include "utils/ranged_color.hpp"
-#include "assets/initialize_assets.hpp"
+#include "assets/asset/initialize_assets.hpp"
 
 #include "find_current_room.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_utils.hpp"
 #include "assets/asset/asset_types.hpp"
@@ -187,7 +187,11 @@ Assets::Assets(AssetLibrary& library,
         intro_center = SDL_Point{player->world_x(), player->world_z()};
     } else if (Room* room = intro_room) {
         if (room->room_area) {
-            intro_center = room->room_area->get_center();
+            const SDL_Point room_center = room->room_area->get_center();
+            intro_center = SDL_Point{
+                room_center.x + room->camera_center_dx,
+                room_center.y + room->camera_center_dz
+            };
         }
     }
     camera_.set_screen_center(intro_center);

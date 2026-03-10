@@ -24,16 +24,16 @@
 
 #include <SDL3_image/SDL_image.h>
 
-#include "assets/Asset.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/Asset.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "core/AssetsManager.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include "animation/animation_update.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
-#include "assets/animation.hpp"
-#include "assets/animation_frame.hpp"
+#include "assets/asset/animation.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "utils/AnchorPointResolver.hpp"
 #include "utils/log.hpp"
 #include "gameplay/world/chunk.hpp"
@@ -415,6 +415,93 @@ bool project_world_point(const WarpedScreenGrid& cam,
         return false;
     }
     return std::isfinite(out.x) && std::isfinite(out.y);
+}
+
+bool is_debug_marker_in_bounds(const SDL_FPoint& point, int screen_width, int screen_height) {
+    if (!std::isfinite(point.x) || !std::isfinite(point.y)) {
+        return false;
+    }
+    constexpr float kMargin = 16.0f;
+    return point.x >= -kMargin &&
+           point.y >= -kMargin &&
+           point.x <= static_cast<float>(screen_width) + kMargin &&
+           point.y <= static_cast<float>(screen_height) + kMargin;
+}
+
+void draw_filled_debug_dot(SDL_Renderer* renderer,
+                           const SDL_FPoint& center,
+                           int radius_px,
+                           const SDL_Color& color) {
+    if (!renderer || radius_px <= 0) {
+        return;
+    }
+    SDL_SetRenderDrawColor(renderer, color.r, color.g, color.b, color.a);
+    const int cx = static_cast<int>(std::lround(center.x));
+    const int cy = static_cast<int>(std::lround(center.y));
+    for (int dy = -radius_px; dy <= radius_px; ++dy) {
+        const int inside = radius_px * radius_px - dy * dy;
+        if (inside < 0) {
+            continue;
+        }
+        const int dx = static_cast<int>(std::floor(std::sqrt(static_cast<float>(inside))));
+        SDL_RenderLine(renderer,
+                       static_cast<float>(cx - dx),
+                       static_cast<float>(cy + dy),
+                       static_cast<float>(cx + dx),
+                       static_cast<float>(cy + dy));
+    }
+}
+
+void render_anchor_debug_markers(SDL_Renderer* renderer,
+                                 int screen_width,
+                                 int screen_height,
+                                 const std::vector<Asset*>& assets) {
+    if (!renderer) {
+        return;
+    }
+
+    const SDL_Color kFlatColor{255, 32, 32, 220};
+    const SDL_Color kFinalColor{48, 128, 255, 255};
+    constexpr int kFlatRadiusPx = 5;
+    constexpr int kFinalRadiusPx = 3;
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    for (Asset* asset : assets) {
+        if (!asset || asset->dead || !asset->current_frame) {
+            continue;
+        }
+
+        for (const DisplacedAssetAnchorPoint& authored_anchor : asset->current_frame->anchor_points) {
+            if (!authored_anchor.is_valid()) {
+                continue;
+            }
+
+            anchor_points::FrameAnchorSample sample{};
+            try {
+                sample = anchor_points::resolve_frame_anchor_sample(
+                    *asset,
+                    authored_anchor,
+                    anchor_points::GridMaterialization::None);
+            } catch (const std::exception&) {
+                continue;
+            }
+
+            if (sample.resolved.missing) {
+                continue;
+            }
+
+            if (sample.has_flat_screen_px &&
+                is_debug_marker_in_bounds(sample.flat_screen_px, screen_width, screen_height)) {
+                draw_filled_debug_dot(renderer, sample.flat_screen_px, kFlatRadiusPx, kFlatColor);
+            }
+
+            if (sample.has_final_screen_px &&
+                is_debug_marker_in_bounds(sample.final_screen_px, screen_width, screen_height)) {
+                draw_filled_debug_dot(renderer, sample.final_screen_px, kFinalRadiusPx, kFinalColor);
+            }
+        }
+    }
 }
 
 bool build_perspective_mesh(RenderObject& obj,
@@ -1031,6 +1118,10 @@ void SceneRenderer::render() {
     }
 
     geometry_batcher_->flush();
+
+    if (anchor_point_debug_enabled_) {
+        render_anchor_debug_markers(renderer_, screen_width_, screen_height_, render_list);
+    }
 
     // Dev grid overlay is projected against the final scene output.
     if (assets_->dev_grid_overlay_callback_) {

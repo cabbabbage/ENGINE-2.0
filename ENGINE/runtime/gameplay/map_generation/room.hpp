@@ -2,9 +2,9 @@
 
 #include "core/axis_convention.hpp"
 #include "utils/area.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "gameplay/spawn/asset_spawn_planner.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/map_grid_settings.hpp"
 
 #include <string>
@@ -80,6 +80,8 @@ class Room {
     int camera_height_px = 1000;
     float camera_tilt_deg = 60.0f;
     int camera_zoom_percent = 0;
+    int camera_center_dx = 0;
+    int camera_center_dz = 0;
     std::string room_directory;
     std::string json_path;
     Room* parent = nullptr;

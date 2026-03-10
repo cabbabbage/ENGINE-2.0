@@ -240,15 +240,15 @@ SDL_Surface* crop_surface_with_margins(SDL_Surface* surface, const UniformCropMa
     return cropped;
 }
 
-std::optional<UniformCropMargins> compute_uniform_crop_margins(const AssetInfo& info) {
-    if (!info.crop_frames || !info.anims_json_.is_object()) {
+std::optional<UniformCropMargins> compute_uniform_crop_margins(const AssetInfo& info, const nlohmann::json& anims_json) {
+    if (!info.crop_frames || !anims_json.is_object()) {
         return std::nullopt;
     }
 
     bool have_union = false;
     UniformCropMargins union_margins{};
 
-    for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {
+    for (auto it = anims_json.begin(); it != anims_json.end(); ++it) {
         if (!it.value().is_object()) {
             continue;
         }
@@ -433,7 +433,7 @@ bool PrimaryAssetCache::build_bundle_from_sources(const AssetInfo& info, CacheMa
     out_data.metadata_snapshot = info.info_json_;
 
     std::vector<float> variant_steps = normalized_variant_steps(info);
-    const std::optional<UniformCropMargins> uniform_crop = compute_uniform_crop_margins(info);
+    const std::optional<UniformCropMargins> uniform_crop = compute_uniform_crop_margins(info, info.anims_json_);
 
     if (info.anims_json_.is_object()) {
         for (auto it = info.anims_json_.begin(); it != info.anims_json_.end(); ++it) {

@@ -1176,6 +1176,7 @@
             ],
             "display_name": "batch_map_assets",
             "enforce_spacing": false,
+            "execution_mode": "batch_grid",
             "explicit_flip": false,
             "force_flipped": false,
             "grid_resolution": 6,
@@ -1329,9 +1330,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 100,

@@ -427,7 +427,7 @@ manifest_writer_(std::move(manifest_writer))
         const int default_camera_height =
                 std::clamp(static_cast<int>(std::lround(read_number(map_camera_settings, "camera_height_px", 1000.0))), 1, 2000);
         const float default_camera_tilt = std::clamp(
-                static_cast<float>(read_number(map_camera_settings, "camera_tilt_deg", 60.0)), 0.0f, 150.0f);
+                static_cast<float>(read_number(map_camera_settings, "camera_tilt_deg", 60.0)), 0.0f, 360.0f);
 
         auto read_room_int = [&](const char* key, int fallback) {
                 return static_cast<int>(std::lround(read_number(&assets_json, key, static_cast<double>(fallback))));
@@ -437,7 +437,7 @@ manifest_writer_(std::move(manifest_writer))
         };
 
         camera_height_px = std::clamp(read_room_int("camera_height_px", default_camera_height), 1, 2000);
-        camera_tilt_deg = std::clamp(read_room_float("camera_tilt_deg", default_camera_tilt), 0.0f, 150.0f);
+        camera_tilt_deg = std::clamp(read_room_float("camera_tilt_deg", default_camera_tilt), 0.0f, 360.0f);
         camera_zoom_percent = std::clamp(read_room_int("camera_zoom_percent", 0), 0, 100);
         camera_center_dx = read_room_int("camera_center_dx", 0);
         camera_center_dz = read_room_int("camera_center_dz", 0);

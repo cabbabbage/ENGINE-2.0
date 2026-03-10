@@ -18,8 +18,8 @@ struct CameraParams {
 
 namespace camera_math {
     inline constexpr float kDefaultCameraTiltDeg = 60.0f;
-    // Above ~90 degrees the current projection setup can place the focus point behind the near plane.
-    inline constexpr float kMaxSupportedCameraTiltDeg = 89.0f;
+    // Normalize tilts to [0,360) so we can support full rotations without clamping.
+    inline constexpr float kMaxSupportedCameraTiltDeg = 360.0f;
 
     CameraParams sanitize_camera_params(const CameraParams& raw, double fallback_height_px);
     float sanitize_pitch_degrees(float raw_value, bool* clamped = nullptr);

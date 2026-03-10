@@ -1031,6 +1031,11 @@ void SceneRenderer::render() {
     }
 
     geometry_batcher_->flush();
+
+    // Dev grid overlay is projected against the final scene output.
+    if (assets_->dev_grid_overlay_callback_) {
+        assets_->dev_grid_overlay_callback_();
+    }
 }
 
 void SceneRenderer::render_sky_layer(const WarpedScreenGrid& cam, bool depth_effects_enabled) {

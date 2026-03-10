@@ -4895,7 +4895,7 @@ void DevControls::render_room_geometry_overlay(SDL_Renderer* renderer) {
 }
 
 void DevControls::render_grid_overlay() {
-    if (!assets_) {
+    if (!enabled_ || !assets_) {
         return;
     }
 

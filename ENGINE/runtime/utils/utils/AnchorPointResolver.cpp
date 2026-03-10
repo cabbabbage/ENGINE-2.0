@@ -31,6 +31,16 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     sample.resolved.world_z = asset.world_z();
     sample.resolved.depth_offset = anchor.depth_offset;
     sample.screen_px = SDL_FPoint{static_cast<float>(asset.world_x()), static_cast<float>(asset.world_y())};
+    sample.flat_screen_px = sample.screen_px;
+    sample.has_flat_screen_px = true;
+    sample.final_screen_px = sample.screen_px;
+    sample.has_final_screen_px = true;
+    sample.flat_relative_pixel_point = AnchorWorldPoint3{
+        static_cast<float>(sample.resolved.world_px.x),
+        static_cast<float>(sample.resolved.world_px.y),
+        static_cast<float>(sample.resolved.world_z),
+        true};
+    sample.final_anchor_point = sample.flat_relative_pixel_point;
     sample.resolved.source_texture_px = SDL_Point{anchor.texture_x, anchor.texture_y};
     sample.resolved.has_canonical_texture_source = true;
     sample.resolved.missing = false;
@@ -60,7 +70,6 @@ struct FrameDimensions {
     int final_w = 0;
     int final_h = 0;
     SDL_FlipMode flip = SDL_FLIP_NONE;
-    float world_z_offset = 0.0f;
 };
 
 struct AnchorFrameSample {
@@ -191,7 +200,6 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
     out.final_w = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_w) * remainder)));
     out.final_h = std::max(1, static_cast<int>(std::lround(static_cast<float>(frame_h) * remainder)));
     out.flip = asset.flipped ? SDL_FLIP_HORIZONTAL : SDL_FLIP_NONE;
-    out.world_z_offset = asset.world_z_offset();
     return true;
 }
 
@@ -242,79 +250,13 @@ WorldPoint3 compute_flat_relative_pixel_point(const Asset& asset,
     return flat_relative_pixel_point;
 }
 
-SDL_FPoint compute_anchor_screen_from_mesh(const Asset& asset,
-                                           const FrameDimensions& dims,
-                                           const SDL_FPoint& mesh_uv,
-                                           const WarpedScreenGrid& cam,
-                                           float perspective_scale) {
-    const float world_x = asset.smoothed_translation_x();
-    const float world_y = asset.smoothed_translation_y();
-    const float base_world_z = static_cast<float>(asset.world_z());
-    const float safe_perspective =
-        (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
-    const float world_width = static_cast<float>(dims.final_w) / safe_perspective;
-    const float world_height = static_cast<float>(dims.final_h) / safe_perspective;
-    const float half_width = world_width * 0.5f;
-
-    SDL_FPoint screen_bl{};
-    SDL_FPoint screen_br{};
-    const float base_depth = base_world_z + dims.world_z_offset;
-    cam.project_world_point(SDL_FPoint{world_x - half_width, world_y}, base_depth, screen_bl);
-    cam.project_world_point(SDL_FPoint{world_x + half_width, world_y}, base_depth, screen_br);
-
-    const float bottom_dx = screen_br.x - screen_bl.x;
-    const float bottom_dy = screen_br.y - screen_bl.y;
-    const float bottom_len = std::hypot(bottom_dx, bottom_dy);
-    if (bottom_len < 1e-5f) {
-        return screen_bl;
+bool project_world_point_to_screen(const WarpedScreenGrid& cam,
+                                   const WorldPoint3& world_point,
+                                   SDL_FPoint& screen_point) {
+    if (!cam.project_world_point(SDL_FPoint{world_point.x, world_point.y}, world_point.z, screen_point)) {
+        return false;
     }
-
-    const float aspect = (dims.frame_w > 0 && dims.frame_h > 0)
-        ? static_cast<float>(dims.frame_h) / static_cast<float>(dims.frame_w)
-        : static_cast<float>(dims.final_h) / static_cast<float>(std::max(1, dims.final_w));
-    float screen_height = bottom_len * aspect;
-    if (!std::isfinite(screen_height) || screen_height <= 0.0f) {
-        screen_height = std::abs(screen_height);
-    }
-
-    const float nx = -bottom_dy / bottom_len;
-    const float ny = bottom_dx / bottom_len;
-
-    const SDL_FPoint cand_tl_a{screen_bl.x + nx * screen_height, screen_bl.y + ny * screen_height};
-    const SDL_FPoint cand_tr_a{screen_br.x + nx * screen_height, screen_br.y + ny * screen_height};
-    const SDL_FPoint cand_tl_b{screen_bl.x - nx * screen_height, screen_bl.y - ny * screen_height};
-    const SDL_FPoint cand_tr_b{screen_br.x - nx * screen_height, screen_br.y - ny * screen_height};
-
-    const float avg_bottom_y = 0.5f * (screen_bl.y + screen_br.y);
-    const float avg_top_a = 0.5f * (cand_tl_a.y + cand_tr_a.y);
-    const float avg_top_b = 0.5f * (cand_tl_b.y + cand_tr_b.y);
-
-    SDL_FPoint screen_tl{};
-    SDL_FPoint screen_tr{};
-    if (avg_top_a <= avg_top_b) {
-        screen_tl = cand_tl_a;
-        screen_tr = cand_tr_a;
-    } else {
-        screen_tl = cand_tl_b;
-        screen_tr = cand_tr_b;
-    }
-    if ((avg_top_a < avg_bottom_y) != (avg_top_b < avg_bottom_y)) {
-        if (avg_top_a < avg_bottom_y) {
-            screen_tl = cand_tl_a;
-            screen_tr = cand_tr_a;
-        } else {
-            screen_tl = cand_tl_b;
-            screen_tr = cand_tr_b;
-        }
-    }
-
-    const SDL_FPoint top{
-        screen_tl.x + (screen_tr.x - screen_tl.x) * mesh_uv.x,
-        screen_tl.y + (screen_tr.y - screen_tl.y) * mesh_uv.x};
-    const SDL_FPoint bottom{
-        screen_bl.x + (screen_br.x - screen_bl.x) * mesh_uv.x,
-        screen_bl.y + (screen_br.y - screen_bl.y) * mesh_uv.x};
-    return SDL_FPoint{top.x + (bottom.x - top.x) * mesh_uv.y, top.y + (bottom.y - top.y) * mesh_uv.y};
+    return std::isfinite(screen_point.x) && std::isfinite(screen_point.y);
 }
 
 }  // namespace
@@ -368,6 +310,16 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.resolved.missing = true;
         return sample;
     }
+    sample.flat_relative_pixel_point = AnchorWorldPoint3{
+        flat_relative_pixel_point.x,
+        flat_relative_pixel_point.y,
+        flat_relative_pixel_point.z,
+        true};
+    sample.final_anchor_point = AnchorWorldPoint3{
+        final_anchor_point.x,
+        final_anchor_point.y,
+        final_anchor_point.z,
+        true};
 
     const int resolved_x = static_cast<int>(std::lround(final_anchor_point.x));
     const int resolved_y = static_cast<int>(std::lround(final_anchor_point.y));
@@ -388,11 +340,18 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.resolved.grid_point = grid.find_grid_point_strict(key);
     }
 
-    sample.screen_px = compute_anchor_screen_from_mesh(asset,
-                                                       dims,
-                                                       anchor_sample.uv,
-                                                       assets_owner->getView(),
-                                                       perspective_scale);
+    const WarpedScreenGrid& cam = assets_owner->getView();
+    SDL_FPoint flat_screen_px{};
+    if (project_world_point_to_screen(cam, flat_relative_pixel_point, flat_screen_px)) {
+        sample.flat_screen_px = flat_screen_px;
+        sample.has_flat_screen_px = true;
+    }
+    SDL_FPoint final_screen_px{};
+    if (project_world_point_to_screen(cam, final_anchor_point, final_screen_px)) {
+        sample.final_screen_px = final_screen_px;
+        sample.has_final_screen_px = true;
+    }
+    sample.screen_px = sample.flat_screen_px;
     return sample;
 }
 

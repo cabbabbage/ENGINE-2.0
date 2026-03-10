@@ -6,9 +6,22 @@ class Asset;
 
 namespace anchor_points {
 
+struct AnchorWorldPoint3 {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    bool valid = false;
+};
+
 struct FrameAnchorSample {
     SDL_FPoint uv{0.5f, 0.5f};
     ResolvedAnchor resolved{};
+    AnchorWorldPoint3 flat_relative_pixel_point{};
+    AnchorWorldPoint3 final_anchor_point{};
+    SDL_FPoint flat_screen_px{0.0f, 0.0f};
+    bool has_flat_screen_px = false;
+    SDL_FPoint final_screen_px{0.0f, 0.0f};
+    bool has_final_screen_px = false;
     SDL_FPoint screen_px{0.0f, 0.0f};
 };
 

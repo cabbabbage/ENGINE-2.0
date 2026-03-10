@@ -419,14 +419,52 @@ bool PrimaryAssetCache::load_or_build(AssetInfo& info,
                                       std::unordered_map<std::string, PrebuiltAnimationFrames>& out_frames,
                                       CacheManager::BundleData& raw_bundle) {
     const fs::path bundle_path = fs::path("cache") / info.name / "bundle.bin";
+    const std::uint64_t expected_hash = compute_hash(info);
+
+    auto try_populate = [&](const CacheManager::BundleData& bundle) {
+        out_frames.clear();
+        return populate_runtime_frames(info, bundle, out_frames);
+    };
+
     CacheManager::BundleData bundle;
-    if (!CacheManager::load_bundle(bundle_path.generic_string(), bundle)) {
-        vibble::log::debug("[PrimaryAssetCache] No cached bundle for " + info.name + "; skipping cache preload.");
+    const bool bundle_loaded = CacheManager::load_bundle(bundle_path.generic_string(), bundle);
+    if (bundle_loaded) {
+        const bool hash_matches = bundle.content_hash == expected_hash;
+        const bool populated = try_populate(bundle);
+        if (hash_matches && populated) {
+            raw_bundle = bundle;
+            return true;
+        }
+
+        if (!hash_matches) {
+            vibble::log::info("[PrimaryAssetCache] Rebuilding stale bundle cache for " + info.name + ".");
+        } else {
+            vibble::log::warn("[PrimaryAssetCache] Cached bundle for " + info.name +
+                              " could not populate runtime frames; rebuilding from source.");
+        }
+    } else {
+        vibble::log::info("[PrimaryAssetCache] Missing cached bundle for " + info.name +
+                          "; building cache from source frames.");
+    }
+
+    CacheManager::BundleData rebuilt;
+    if (!build_bundle_from_sources(info, rebuilt)) {
+        vibble::log::warn("[PrimaryAssetCache] Failed to build bundle cache from source for " + info.name + ".");
         return false;
     }
 
-    raw_bundle = bundle;
-    return populate_runtime_frames(info, bundle, out_frames);
+    rebuilt.content_hash = expected_hash;
+    if (!CacheManager::save_bundle(bundle_path.generic_string(), rebuilt)) {
+        vibble::log::warn("[PrimaryAssetCache] Failed to save rebuilt bundle cache for " + info.name + ".");
+    }
+
+    const bool populated = try_populate(rebuilt);
+    raw_bundle = std::move(rebuilt);
+    if (!populated) {
+        vibble::log::warn("[PrimaryAssetCache] Rebuilt bundle cache for " + info.name +
+                          " did not produce runtime frames.");
+    }
+    return populated;
 }
 
 bool PrimaryAssetCache::save_current(const AssetInfo& info) {

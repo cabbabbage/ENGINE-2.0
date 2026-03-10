@@ -195,41 +195,27 @@ void MainApp::setup() {
                         while (SDL_PollEvent(&ev)) {}
                 }
 
-                nlohmann::json map_manifest_json = nlohmann::json::object();
                 std::string content_root;
                 const std::string map_identifier = map_descriptor_.id.empty() ? map_path_ : map_descriptor_.id;
 
                 manifest::ManifestData manifest_data = manifest::load_manifest();
-                bool manifest_entry_found = false;
-                if (manifest_data.maps.is_object()) {
-                        auto map_it = manifest_data.maps.find(map_identifier);
-                        if (map_it != manifest_data.maps.end() && map_it.value().is_object()) {
-                                map_manifest_json = map_it.value();
-                                manifest_entry_found = true;
-                        }
+                const nlohmann::json* fallback_manifest =
+                        (map_descriptor_.data.is_object() && !map_descriptor_.data.empty())
+                                ? &map_descriptor_.data
+                                : nullptr;
+                manifest::MapManifestBootstrapResult bootstrap = manifest::bootstrap_map_manifest(
+                        manifest_data, map_identifier, fallback_manifest);
+                nlohmann::json map_manifest_json = std::move(bootstrap.map_manifest);
+                const fs::path resolved_root = bootstrap.resolved_content_root;
+                const bool manifest_updated = bootstrap.changed;
+                if (!bootstrap.manifest_entry_found && fallback_manifest) {
+                        vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Using descriptor payload.");
+                } else if (!bootstrap.manifest_entry_found) {
+                        vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Deferring to normalization defaults.");
                 }
-
-                if (!manifest_entry_found) {
-                        if (map_descriptor_.data.is_object() && !map_descriptor_.data.empty()) {
-                                vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Using descriptor payload.");
-                                map_manifest_json = map_descriptor_.data;
-                        } else {
-                                vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Deferring to normalization defaults.");
-                                map_manifest_json = nlohmann::json::object();
-                        }
-                }
-
-                fs::path manifest_root = fs::path(manifest::manifest_path()).parent_path();
-                manifest::MapManifestNormalizationResult normalized =
-                    manifest::normalize_map_manifest(std::move(map_manifest_json),
-                                                     map_identifier,
-                                                     manifest_root);
-                map_manifest_json = std::move(normalized.map_manifest);
-                const fs::path resolved_root = normalized.resolved_content_root;
-                bool manifest_updated = !manifest_entry_found || normalized.changed;
-                if (normalized.changed && !manifest_entry_found) {
+                if (bootstrap.changed && !bootstrap.manifest_entry_found) {
                         vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Applying normalized defaults.");
-                } else if (normalized.changed) {
+                } else if (bootstrap.changed) {
                         vibble::log::warn(std::string("[MainApp] Normalized manifest defaults for map '") + map_identifier + "'.");
                 }
 
@@ -925,7 +911,7 @@ int main(int argc, char* argv[]) {
         (void)argc;
         (void)argv;
         vibble::log::info("[Main] Starting game engine...");
-        vibble::log::info("[Main] Startup uses existing asset caches; regeneration runs on exit.");
+        vibble::log::info("[Main] Startup uses existing asset caches; missing/stale cache entries regenerate on demand.");
 
         const SDL_InitFlags init_flags =
                 static_cast<SDL_InitFlags>(SDL_INIT_VIDEO | SDL_INIT_AUDIO);

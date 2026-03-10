@@ -72,6 +72,7 @@
 #include "utils/grid.hpp"
 #include "utils/grid_occupancy.hpp"
 #include "utils/input.hpp"
+#include "utils/rebuild_queue.hpp"
 #include "utils/stb_image.h"
 #include "utils/stb_image_write.h"
 #include "utils/string_utils.hpp"
@@ -1017,22 +1018,55 @@ bool DevControls::run_exit_save_sequence(const std::string& reason) {
 
     std::cout << "[DevControls] Exit save sequence begin (reason='" << reason << "')\n";
 
+    // Force-close editor panels so pending animation-document autosaves are committed
+    // before the final save/cache flush.
+    if (room_editor_) {
+        room_editor_->close_asset_info_editor();
+    }
+
     const bool batch_saved =
         save_manager_.save_dirty(devmode::core::DevSaveCoordinator::Priority::Immediate, reason);
     save_coordinator_.flush_now(reason);
+    manifest_store_.flush();
 
     const bool has_dirty_after = save_manager_.has_dirty_saveables();
-    exit_save_sequence_ok_ = !has_dirty_after;
+    bool cache_rebuild_attempted = false;
+    bool cache_rebuild_ok = true;
+    bool cache_pending_after = false;
+
+    if (!has_dirty_after) {
+        vibble::RebuildQueueCoordinator coordinator;
+        if (coordinator.has_pending_asset_work()) {
+            cache_rebuild_attempted = true;
+            std::cout << "[DevControls] Exit save sequence running pending asset cache rebuilds.\n";
+            cache_rebuild_ok = coordinator.run_asset_tool();
+            cache_pending_after = coordinator.has_pending_asset_work();
+        }
+    }
+
+    exit_save_sequence_ok_ = !has_dirty_after && cache_rebuild_ok && !cache_pending_after;
 
     if (exit_save_sequence_ok_) {
         std::cout << "[DevControls] Exit save sequence complete (batch_saved="
-                  << (batch_saved ? "true" : "false") << ", dirty_remaining=false)\n";
+                  << (batch_saved ? "true" : "false")
+                  << ", dirty_remaining=false"
+                  << ", cache_rebuild=" << (cache_rebuild_attempted ? "ran" : "not-needed")
+                  << ")\n";
     } else {
-        std::cerr << "[DevControls] EXIT SAVE FAILURE: dirty saveables remain after exit flush (reason='"
-                  << reason << "').\n";
+        if (has_dirty_after) {
+            std::cerr << "[DevControls] EXIT SAVE FAILURE: dirty saveables remain after exit flush (reason='"
+                      << reason << "').\n";
+        } else if (!cache_rebuild_ok) {
+            std::cerr << "[DevControls] EXIT SAVE FAILURE: pending asset cache rebuild execution failed"
+                      << " (reason='" << reason << "').\n";
+        } else if (cache_pending_after) {
+            std::cerr << "[DevControls] EXIT SAVE FAILURE: pending asset cache rebuild entries remain after exit flush"
+                      << " (reason='" << reason << "').\n";
+        } else {
+            std::cerr << "[DevControls] EXIT SAVE FAILURE (reason='" << reason << "').\n";
+        }
     }
 
-    manifest_store_.flush();
     return exit_save_sequence_ok_;
 }
 

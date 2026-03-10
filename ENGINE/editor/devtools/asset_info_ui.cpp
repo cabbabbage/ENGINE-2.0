@@ -2237,23 +2237,30 @@ void AssetInfoUI::on_animation_document_saved() {
         return;
     }
 
+    const bool reloaded = info_->reload_animations_from_disk();
+    if (!reloaded) {
+        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to reload animations for %s.", info_->name.c_str());
+    }
+
+    // Ensure both bundle-cache save and image-cache rebuild have work queued after any
+    // animation document mutation (add/remove/rename/source edits).
+    info_->mark_dirty();
+    if (!info_->name.empty()) {
+        vibble::RebuildQueueCoordinator coordinator;
+        coordinator.request_asset(info_->name);
+    }
+
     SDL_Renderer* renderer = nullptr;
     if (assets_) {
         renderer = assets_->renderer();
     }
-
     if (!renderer) {
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] No renderer available for animation reload");
         return;
     }
-
-    const bool reloaded = info_->reload_animations_from_disk();
     if (!reloaded) {
-        SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "[AssetInfoUI] Failed to reload animations for %s.", info_->name.c_str());
         return;
     }
-
-    info_->mark_dirty();
 
     info_->loadAnimations(renderer);
     refresh_loaded_asset_instances();

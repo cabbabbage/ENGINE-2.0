@@ -1051,7 +1051,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 31.0
+        "scale_percentage": 27.0
       },
       "start": "default",
       "tags": [],
@@ -1329,9 +1329,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 100,
@@ -2317,8 +2317,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": 488,
-              "dz": 451,
+              "dx": 260,
+              "dz": 753,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

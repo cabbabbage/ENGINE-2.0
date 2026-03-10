@@ -2,6 +2,7 @@
 
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
+#include "animation/controllers/custom_controllers/player_direction_intent.hpp"
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
@@ -12,6 +13,27 @@ namespace {
 
 constexpr const char* kEyesAnchorName  = "eyes";
 constexpr const char* kEyesFollowerId  = "vibble_eyes";
+
+vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
+    const Asset* player,
+    int screen_x,
+    int screen_y) {
+    double camera_right_x = 0.0;
+    bool has_camera_basis = false;
+    if (player) {
+        if (const Assets* assets = player->get_assets()) {
+            const world::CameraProjectionParams params = assets->getView().projection_params();
+            camera_right_x = params.right_x;
+            has_camera_basis = (params.screen_width > 0 && params.screen_height > 0);
+        }
+    }
+
+    return vibble::player_direction::resolve_direction_intent(
+        screen_x,
+        screen_y,
+        camera_right_x,
+        has_camera_basis);
+}
 
 }
 
@@ -49,10 +71,14 @@ void vibble_controller::movement(const Input& input) {
     const bool melee = input.isScancodeDown(SDL_SCANCODE_E);
 
 
-    const int raw_x = (right ? 1 : 0) - (left ? 1 : 0);
-    const int raw_y = (down  ? 1 : 0) - (up    ? 1 : 0);
+    const int input_x = (right ? 1 : 0) - (left ? 1 : 0);
+    const int input_y = (down  ? 1 : 0) - (up    ? 1 : 0);
+    const vibble::player_direction::DirectionIntent direction_intent =
+        resolve_direction_intent_for_player(player_, input_x, input_y);
+    const int world_x = direction_intent.world_x;
+    const int world_y = direction_intent.world_y;
 
-    if (raw_x == 0 && raw_y == 0) {
+    if (world_x == 0 && world_y == 0) {
         subpixel_x_ = 0.0f;
         subpixel_y_ = 0.0f;
         player_->anim_->move(SDL_Point{ 0, 0 }, animation_update::detail::kDefaultAnimation);
@@ -75,8 +101,8 @@ void vibble_controller::movement(const Input& input) {
         speedMultiplier *= dashingPower;
     }
 
-    const float velocity_x = static_cast<float>(raw_x) * speedMultiplier * stride_count;
-    const float velocity_y = static_cast<float>(raw_y) * speedMultiplier * stride_count;
+    const float velocity_x = static_cast<float>(world_x) * speedMultiplier * stride_count;
+    const float velocity_y = static_cast<float>(world_y) * speedMultiplier * stride_count;
 
     auto consume_axis = [](float& accumulator) -> int {
         int whole = 0;
@@ -100,7 +126,9 @@ void vibble_controller::movement(const Input& input) {
     subpixel_x_ = std::clamp(subpixel_x_, -kResidualClamp, kResidualClamp);
     subpixel_y_ = std::clamp(subpixel_y_, -kResidualClamp, kResidualClamp);
 
-    std::string animation_id = animation_for_direction(raw_x, raw_y);
+    std::string animation_id = animation_for_direction(
+        direction_intent.screen_x,
+        direction_intent.screen_y);
     if (isDashing && player_->info) {
 
         const auto& animations = player_->info->animations;
@@ -150,9 +178,9 @@ void vibble_controller::update(const Input& input) {
 
 }
 
-std::string vibble_controller::animation_for_direction(int raw_x, int raw_y) const {
-    const int sign_x = (raw_x > 0) - (raw_x < 0);
-    const int sign_y = (raw_y > 0) - (raw_y < 0);
+std::string vibble_controller::animation_for_direction(int screen_x, int screen_y) const {
+    const int sign_x = (screen_x > 0) - (screen_x < 0);
+    const int sign_y = (screen_y > 0) - (screen_y < 0);
 
     if (sign_x == 0 && sign_y == 0) {
         return std::string{ animation_update::detail::kDefaultAnimation };

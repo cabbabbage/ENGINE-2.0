@@ -1332,7 +1332,7 @@
             }
           ],
           "camera_height_px": 775,
-          "camera_tilt_deg": 146.0,
+          "camera_tilt_deg": 63.0,
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
@@ -1396,8 +1396,8 @@
                 }
               ],
               "display_name": "tailor",
-              "dx": 3258,
-              "dz": -2540,
+              "dx": 893,
+              "dz": 797,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,
@@ -2324,8 +2324,8 @@
                 }
               ],
               "display_name": "vibble",
-              "dx": 260,
-              "dz": 753,
+              "dx": 261,
+              "dz": 675,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

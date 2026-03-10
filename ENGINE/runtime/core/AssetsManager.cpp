@@ -12,7 +12,7 @@
 #include "animation/animation_runtime.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
-#include "devtools/depth_cue_settings.hpp"
+#include "devtools/core/manifest_store.hpp"
 #include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "rendering/render/render.hpp"
 #include "rendering/render/render_depth_policy.hpp"
@@ -302,12 +302,13 @@ void Assets::save_map_info_json() {
         std::cerr << "[Assets] Unable to persist map manifest entry: manifest store unavailable.\n";
         return;
     }
-    auto guard = store->scoped_guard("Assets::save_map_info_json");
-    if (!store->update_map_entry(map_id_, map_info_json_)) {
+    devmode::core::ManifestStore::MapPersistOptions options;
+    options.flush = true;
+    options.guard_reason = "Assets::save_map_info_json";
+    if (!store->persist_map_entry(map_id_, map_info_json_, options)) {
         std::cerr << "[Assets] Failed to persist map manifest entry for " << map_id_ << "\n";
         return;
     }
-    store->flush();
 }
 
 bool Assets::mutate_map_data(const std::function<bool(manifest::MapData&)>& mutator) {
@@ -398,6 +399,7 @@ void Assets::on_camera_settings_changed() {
 
 void Assets::mark_camera_dirty() {
     camera_settings_dirty_ = true;
+    note_frame_rebuild_request();
 }
 
 void Assets::reload_camera_settings() {
@@ -607,7 +609,7 @@ void Assets::notify_rooms_changed() {
 }
 
 void Assets::refresh_active_asset_lists() {
-    maybe_rebuild_world_grid();
+    run_frame_rebuild_stage();
 
     update_audio_camera_metrics();
     update_filtered_active_assets();
@@ -860,6 +862,7 @@ void Assets::update(const Input& input)
     }
 
     ++frame_id_;
+    reset_frame_rebuild_stage();
     float dt = 1.0f / 60.0f;
     if (last_frame_counter_ != 0 && perf_counter_frequency_ > 0.0) {
         const double elapsed = static_cast<double>(now_counter - last_frame_counter_) / perf_counter_frequency_;
@@ -1036,7 +1039,7 @@ void Assets::update(const Input& input)
         mark_active_assets_dirty();
     }
 
-    maybe_rebuild_world_grid();
+    run_frame_rebuild_stage();
 
     refresh_dirty_anchor_bases();
     refresh_anchor_dependents_for_active_assets();
@@ -1493,6 +1496,7 @@ void Assets::mark_active_assets_dirty() {
     active_assets_dirty_.store(true, std::memory_order_release);
     needs_filtered_active_refresh_ = true;
     mark_anchor_bases_dirty_for_active_assets();
+    note_frame_rebuild_request();
 }
 
 std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
@@ -1656,6 +1660,41 @@ void Assets::track_asset_for_grid(Asset* asset) {
 
 }
 
+void Assets::reset_frame_rebuild_stage() {
+    frame_rebuild_metrics_frame_ = frame_id_;
+    frame_rebuild_request_count_ = 0;
+    frame_rebuild_execution_count_ = 0;
+    frame_rebuild_metrics_initialized_ = true;
+}
+
+void Assets::note_frame_rebuild_request() {
+    if (!frame_rebuild_metrics_initialized_ || frame_rebuild_metrics_frame_ != frame_id_) {
+        reset_frame_rebuild_stage();
+    }
+    ++frame_rebuild_request_count_;
+}
+
+bool Assets::run_frame_rebuild_stage() {
+    if (!frame_rebuild_metrics_initialized_ || frame_rebuild_metrics_frame_ != frame_id_) {
+        reset_frame_rebuild_stage();
+    }
+
+    if (frame_rebuild_execution_count_ > 0) {
+        return false;
+    }
+
+    const bool rebuilt = maybe_rebuild_world_grid();
+    if (rebuilt) {
+        ++frame_rebuild_execution_count_;
+        if (frame_rebuild_request_count_ > 1) {
+            vibble::log::debug(std::string("[Assets] Coalesced ") +
+                               std::to_string(frame_rebuild_request_count_) +
+                               " rebuild requests into one frame rebuild pass.");
+        }
+    }
+    return rebuilt;
+}
+
 bool Assets::maybe_rebuild_world_grid() {
     if (frame_id_ == last_grid_rebuild_frame_) {
         return false;
@@ -1725,6 +1764,7 @@ void Assets::untrack_asset_for_grid(Asset* asset) {
 
 void Assets::mark_grid_dirty() {
     grid_dirty_ = true;
+    note_frame_rebuild_request();
 }
 
 void Assets::register_pending_static_assets() {

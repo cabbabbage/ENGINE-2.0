@@ -231,11 +231,11 @@ void MainApp::setup() {
                         try {
                                 devmode::core::ManifestStore store;
                                 store.reload();
-                                auto guard = store.scoped_guard("MainApp::content_root_rewrite");
-                                if (!store.update_map_entry(map_identifier, map_manifest_json)) {
+                                devmode::core::ManifestStore::MapPersistOptions options;
+                                options.flush = true;
+                                options.guard_reason = "MainApp::content_root_rewrite";
+                                if (!store.persist_map_entry(map_identifier, map_manifest_json, options)) {
                                         vibble::log::warn(std::string("[MainApp] Failed to persist manifest entry for '") + map_identifier + "'.");
-                                } else {
-                                        store.flush();
                                 }
                         } catch (const std::exception& ex) {
                                 vibble::log::warn(std::string("[MainApp] Unable to persist manifest entry for '") + map_identifier + "': " + ex.what());
@@ -581,13 +581,13 @@ std::optional<MapDescriptor> create_new_map_interactively() {
             music_section["tracks"] = nlohmann::json::array();
         }
 
-        auto guard = manifest_store.scoped_guard("MainApp::create_map");
-        if (!manifest_store.update_map_entry(*sanitized, map_info)) {
+        devmode::core::ManifestStore::MapPersistOptions options;
+        options.flush = true;
+        options.guard_reason = "MainApp::create_map";
+        if (!manifest_store.persist_map_entry(*sanitized, map_info, options)) {
             tinyfd_messageBox("Error Creating Map", "Failed to update manifest for new map.", "ok", "error", 0);
             continue;
         }
-
-        manifest_store.flush();
 
         MapDescriptor descriptor;
         descriptor.id   = *sanitized;

@@ -3,6 +3,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "assets/asset/asset_library.hpp"
 #include "core/popup_manager.hpp"
+#include "utils/map_grid_settings.hpp"
 #include <SDL3/SDL.h>
 #include <atomic>
 #include <functional>
@@ -345,6 +346,10 @@ private:
     std::uint32_t frame_id_ = 0;
     std::uint32_t last_active_rebuild_frame_id_ = 0;
     std::uint32_t last_grid_rebuild_frame_ = 0;
+    std::uint32_t frame_rebuild_metrics_frame_ = 0;
+    std::uint32_t frame_rebuild_request_count_ = 0;
+    std::uint32_t frame_rebuild_execution_count_ = 0;
+    bool frame_rebuild_metrics_initialized_ = false;
 
     bool pending_initial_rebuild_ = false;
     bool logged_initial_rebuild_warning_ = false;
@@ -361,6 +366,9 @@ private:
     };
 
     void track_asset_for_grid(Asset* asset);
+    void reset_frame_rebuild_stage();
+    void note_frame_rebuild_request();
+    bool run_frame_rebuild_stage();
     bool maybe_rebuild_world_grid();
     void rebuild_world_grid_and_active_assets(const world::GridPoint& current_center,
                                               double current_scale,
@@ -420,4 +428,3 @@ private:
     std::uint64_t last_dev_active_state_version_snapshot_ = 0;
     bool dev_frame_initialized_ = false;
 };
-#include "utils/map_grid_settings.hpp"

@@ -110,35 +110,6 @@ bool read_bool_like(const nlohmann::json& value, bool fallback) {
     return fallback;
 }
 
-std::optional<bool> extract_legacy_crop_frames(const nlohmann::json& data) {
-    const nlohmann::json* payloads = locate_animation_payloads(data);
-    if (!payloads || !payloads->is_object()) {
-        return std::nullopt;
-    }
-
-    bool found_any = false;
-    bool found_true = false;
-    for (auto it = payloads->begin(); it != payloads->end(); ++it) {
-        if (!it.value().is_object()) {
-            continue;
-        }
-        auto crop_it = it.value().find("crop_frames");
-        if (crop_it == it.value().end()) {
-            continue;
-        }
-        found_any = true;
-        if (read_bool_like(*crop_it, false)) {
-            found_true = true;
-            break;
-        }
-    }
-
-    if (!found_any) {
-        return std::nullopt;
-    }
-    return found_true;
-}
-
 nlohmann::json strip_per_animation_crop_fields(nlohmann::json payload) {
     if (!payload.is_object()) {
         return nlohmann::json::object();
@@ -702,8 +673,6 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
         }
         if (data.contains("crop_frames")) {
                 crop_frames = read_bool_like(data.at("crop_frames"), true);
-        } else if (auto legacy_crop = extract_legacy_crop_frames(data); legacy_crop.has_value()) {
-                crop_frames = *legacy_crop;
         } else if (info_json_.contains("crop_frames")) {
                 crop_frames = read_bool_like(info_json_.at("crop_frames"), true);
         } else {

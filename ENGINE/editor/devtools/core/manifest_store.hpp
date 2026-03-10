@@ -148,6 +148,14 @@ public:
     const nlohmann::json& manifest_json();
     std::vector<AssetView> assets();
 
+    struct MapPersistOptions {
+        bool flush = true;
+        std::string guard_reason;
+    };
+
+    bool persist_map_entry(const std::string& map_id,
+                           const nlohmann::json& payload,
+                           MapPersistOptions options = {});
     bool update_map_entry(const std::string& map_id, const nlohmann::json& payload);
     const nlohmann::json* find_map_entry(const std::string& map_id) const;
 

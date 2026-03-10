@@ -282,6 +282,7 @@ add_executable(engine_tests
     ENGINE/tests/stubs/utils/Area_world_tests_stubs.cpp
     ENGINE/tests/test_anchor_point_resolver.cpp
     ENGINE/tests/test_map_data.cpp
+    ENGINE/tests/test_player_direction_intent.cpp
     ENGINE/tests/test_world_grid.cpp
   )
 

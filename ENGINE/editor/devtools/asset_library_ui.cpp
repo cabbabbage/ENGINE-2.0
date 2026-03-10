@@ -1101,7 +1101,6 @@ bool AssetLibraryUI::remove_tag_from_manifest_maps(const std::string& tag) {
         return false;
     }
 
-    auto guard = manifest_store_owner_->scoped_guard("AssetLibraryUI::remove_hashtag");
     for (auto it = maps_it->begin(); it != maps_it->end(); ++it) {
         nlohmann::json map_entry = *it;
         bool updated = false;
@@ -1112,7 +1111,10 @@ bool AssetLibraryUI::remove_tag_from_manifest_maps(const std::string& tag) {
             updated |= devmode::manifest_utils::remove_asset_from_spawn_groups(map_entry, tag);
         }
         if (updated) {
-            if (!manifest_store_owner_->update_map_entry(it.key(), map_entry)) {
+            devmode::core::ManifestStore::MapPersistOptions options;
+            options.flush = false;
+            options.guard_reason = "AssetLibraryUI::remove_hashtag";
+            if (!manifest_store_owner_->persist_map_entry(it.key(), map_entry, options)) {
                 std::cerr << "[AssetLibraryUI] Failed to update spawn groups for map '" << it.key() << "'\n";
             } else {
                 manifest_changed = true;
@@ -1334,14 +1336,16 @@ void AssetLibraryUI::perform_delete(const PendingDeleteInfo& pending, bool defer
             if (references_remaining) {
                 auto maps_it = manifest.find("maps");
                 if (maps_it != manifest.end() && maps_it->is_object()) {
-                    auto guard = manifest_store_owner_->scoped_guard("AssetLibraryUI::remove_asset");
                     for (auto it = maps_it->begin(); it != maps_it->end(); ++it) {
                         nlohmann::json map_entry = *it;
                         bool updated = false;
                         updated |= devmode::manifest_utils::remove_asset_from_spawn_groups(map_entry, asset_name);
                         updated |= remove_asset_from_required_children(map_entry, asset_name);
                         if (updated) {
-                            if (!manifest_store_owner_->update_map_entry(it.key(), map_entry)) {
+                            devmode::core::ManifestStore::MapPersistOptions options;
+                            options.flush = false;
+                            options.guard_reason = "AssetLibraryUI::remove_asset";
+                            if (!manifest_store_owner_->persist_map_entry(it.key(), map_entry, options)) {
                                 std::cerr << "[AssetLibraryUI] Failed to update manifest map entry '"
                                           << it.key() << "' while removing '" << asset_name << "'\n";
                             } else {

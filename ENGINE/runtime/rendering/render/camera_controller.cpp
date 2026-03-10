@@ -28,7 +28,7 @@ namespace {
 float camera_math::sanitize_pitch_degrees(float raw_value, bool* clamped) {
     if (clamped) *clamped = false;
     const float wrapped = static_cast<float>(wrap_degrees_0_360(std::isfinite(raw_value) ? raw_value : camera_math::kDefaultCameraTiltDeg));
-    const float clamped_value = std::clamp(wrapped, 0.0f, 150.0f);
+    const float clamped_value = std::clamp(wrapped, 0.0f, camera_math::kMaxSupportedCameraTiltDeg);
     if (clamped && clamped_value != raw_value) {
         *clamped = true;
     }

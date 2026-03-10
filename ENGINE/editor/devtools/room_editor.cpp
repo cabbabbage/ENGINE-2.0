@@ -66,7 +66,7 @@ namespace {
 constexpr double kPi = 3.14159265358979323846;
 constexpr int kSavedCameraHeightMinPx = 1;
 constexpr float kSavedCameraTiltMinDeg = 0.0f;
-constexpr float kSavedCameraTiltMaxDeg = 150.0f;
+constexpr float kSavedCameraTiltMaxDeg = WarpedScreenGrid::kMaxPitchDegrees;
 constexpr int kSavedCameraZoomMinPercent = 0;
 constexpr int kSavedCameraZoomMaxPercent = 100;
 constexpr float kShiftEdgePanThresholdFraction = 0.008f;

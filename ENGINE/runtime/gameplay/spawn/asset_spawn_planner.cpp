@@ -5,9 +5,38 @@
 #include <cctype>
 #include <iomanip>
 
-#include "devtools/spawn_groups/spawn_group_utils.hpp"
 #include "room_relative_size_resolver.hpp"
 #include "assets/asset/Asset.hpp"
+
+namespace {
+
+nlohmann::json& ensure_spawn_groups_array(nlohmann::json& root) {
+    if (root.is_array()) {
+        return root;
+    }
+    if (!root.is_object()) {
+        root = nlohmann::json::object();
+    }
+    if (root.contains("spawn_groups") && root["spawn_groups"].is_array()) {
+        return root["spawn_groups"];
+    }
+    root["spawn_groups"] = nlohmann::json::array();
+    return root["spawn_groups"];
+}
+
+std::string generate_spawn_id() {
+    static std::mt19937 rng(std::random_device{}());
+    static const char* hex = "0123456789abcdef";
+    std::uniform_int_distribution<int> dist(0, 15);
+    std::string id = "spn-";
+    for (int i = 0; i < 12; ++i) {
+        id.push_back(hex[dist(rng)]);
+    }
+    return id;
+}
+
+}
+
 AssetSpawnPlanner::AssetSpawnPlanner(const std::vector<nlohmann::json>& json_sources,
                                      const Area& area,
                                      AssetLibrary& asset_library,
@@ -25,7 +54,7 @@ AssetSpawnPlanner::AssetSpawnPlanner(const std::vector<nlohmann::json>& json_sou
     for (size_t si = 0; si < source_jsons_.size(); ++si) {
         try {
             nlohmann::json js = source_jsons_[si];
-            auto& groups = devmode::spawn::ensure_spawn_groups_array(js);
+            auto& groups = ensure_spawn_groups_array(js);
             if (!groups.is_array()) continue;
             for (size_t ai = 0; ai < groups.size(); ++ai) {
                 merged["spawn_groups"].push_back(groups[ai]);
@@ -66,7 +95,7 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
 
         std::string spawn_id = get_opt_str(asset, "spawn_id");
         if (spawn_id.empty()) {
-            spawn_id = devmode::spawn::generate_spawn_id();
+            spawn_id = generate_spawn_id();
             entry["spawn_id"] = spawn_id;
             asset["spawn_id"] = spawn_id;
             if (idx < assets_provenance_.size()) {

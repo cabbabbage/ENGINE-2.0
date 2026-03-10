@@ -26,7 +26,7 @@ public:
 private:
     void movement(const Input& input);
     float frame_dt() const;
-    std::string animation_for_direction(int raw_x, int raw_y) const;
+    std::string animation_for_direction(int screen_x, int screen_y) const;
     void Dash();
 
     static constexpr float kWalkSpeed        = 300.0f;

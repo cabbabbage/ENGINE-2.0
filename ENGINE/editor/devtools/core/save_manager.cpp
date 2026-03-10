@@ -240,7 +240,10 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
             }
         }
 
-        if (!store_->update_map_entry(map_id, payload)) {
+        ManifestStore::MapPersistOptions write_options;
+        write_options.flush = false;
+        write_options.guard_reason = map_write_reason(path);
+        if (!store_->persist_map_entry(map_id, payload, write_options)) {
             return false;
         }
         if (on_success) {
@@ -254,9 +257,10 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
             DevSaveCoordinator::IntentKind::MapEntry,
             "map:" + map_id,
             [map_id, payload = std::move(payload), path](ManifestStore& store) {
-                auto guard = store.scoped_guard(map_write_reason(path));
-                (void)guard;
-                return store.update_map_entry(map_id, payload);
+                ManifestStore::MapPersistOptions write_options;
+                write_options.flush = false;
+                write_options.guard_reason = map_write_reason(path);
+                return store.persist_map_entry(map_id, payload, write_options);
             },
             priority,
             label.empty() ? std::string("Map ") + map_id : label,
@@ -272,13 +276,11 @@ bool SaveManager::persist_map_entry(const std::string& map_id,
         return false;
     }
 
-    if (!store_->update_map_entry(map_id, payload)) {
+    ManifestStore::MapPersistOptions write_options;
+    write_options.flush = (priority == DevSaveCoordinator::Priority::Immediate);
+    write_options.guard_reason = map_write_reason(path);
+    if (!store_->persist_map_entry(map_id, payload, write_options)) {
         return false;
-    }
-    if (priority == DevSaveCoordinator::Priority::Immediate) {
-        auto immediate_guard = store_->scoped_guard(map_write_reason(path));
-        (void)immediate_guard;
-        store_->flush();
     }
     if (on_success) {
         on_success();

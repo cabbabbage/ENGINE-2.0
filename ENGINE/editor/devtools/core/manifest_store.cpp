@@ -323,6 +323,26 @@ std::vector<ManifestStore::AssetView> ManifestStore::assets() {
     return views;
 }
 
+bool ManifestStore::persist_map_entry(const std::string& map_id,
+                                      const nlohmann::json& payload,
+                                      MapPersistOptions options) {
+    if (map_id.empty()) {
+        return false;
+    }
+
+    const std::string reason = options.guard_reason.empty()
+        ? "ManifestStore::persist_map_entry"
+        : options.guard_reason;
+    auto guard = scoped_guard(reason);
+    if (!update_map_entry(map_id, payload)) {
+        return false;
+    }
+    if (options.flush) {
+        flush();
+    }
+    return true;
+}
+
 bool ManifestStore::update_map_entry(const std::string& map_id, const nlohmann::json& payload) {
     if (map_id.empty()) {
         return false;

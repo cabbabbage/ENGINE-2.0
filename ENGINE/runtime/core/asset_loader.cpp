@@ -381,12 +381,25 @@ void AssetLoader::createAssets(world::WorldGrid& grid) {
         }
         vibble::log::debug(std::string("[AssetLoader] Registered assets: total=") + std::to_string(registered_assets.size()));
 
-        const auto t1 = std::chrono::steady_clock::now();
-
         {
-            loader_tiles::build_grid_tiles(renderer_, grid, map_grid_settings_, registered_assets);
+            std::vector<Asset*> finalized_assets;
+            finalized_assets.reserve(registered_assets.size());
+            for (Asset* asset : registered_assets) {
+                    if (!asset) {
+                            continue;
+                    }
+                    if (!asset->is_finalized()) {
+                            vibble::log::error(std::string("[AssetLoader] createAssets: skipping unfinalized asset '") +
+                                               (asset->info ? asset->info->name : std::string{"<null>"}) +
+                                               "'. Loader lifecycle requires finalized assets before grid tile build.");
+                            continue;
+                    }
+                    finalized_assets.push_back(asset);
+            }
+            loader_tiles::build_grid_tiles(renderer_, grid, map_grid_settings_, finalized_assets);
         }
 
+        const auto t1 = std::chrono::steady_clock::now();
         vibble::log::debug(std::string("[AssetLoader] createAssets total ") + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count()) + "ms");
 }
 

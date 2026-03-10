@@ -745,30 +745,6 @@ static inline bool read_asset_crop_frames(const ordered_json& asset_meta) {
     if (asset_meta.contains("crop_frames")) {
         return parse_bool_like(asset_meta["crop_frames"], true);
     }
-
-    // Legacy fallback: derive an asset-level answer from old per-animation crop flags.
-    const ordered_json* anims = AnimationsObject(asset_meta);
-    if (anims && anims->is_object()) {
-        bool found_any = false;
-        bool found_true = false;
-        for (auto it = anims->begin(); it != anims->end(); ++it) {
-            if (!it.value().is_object()) {
-                continue;
-            }
-            auto crop_it = it.value().find("crop_frames");
-            if (crop_it == it.value().end()) {
-                continue;
-            }
-            found_any = true;
-            if (parse_bool_like(*crop_it, false)) {
-                found_true = true;
-                break;
-            }
-        }
-        if (found_any) {
-            return found_true;
-        }
-    }
     return true;
 }
 

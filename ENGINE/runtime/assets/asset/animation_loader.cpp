@@ -866,7 +866,7 @@ void AnimationLoader::load(Animation& animation,
                 } else {
                         cache_invalid_detected = true;
                         std::cerr << "[AnimationLoader] " << info.name << "::" << trigger
-                                  << " missing bundle frames; legacy cache fallback disabled.\n";
+                                  << " missing bundle frames; aborting animation load.\n";
                         flush_diagnostics();
                         return;
                 }

@@ -7,7 +7,7 @@
 #include "tag_utils.hpp"
 #include "utils/input.hpp"
 #include "dev_mode_utils.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/core/manifest_store.hpp"

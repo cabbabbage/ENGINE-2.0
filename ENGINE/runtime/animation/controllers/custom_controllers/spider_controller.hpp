@@ -1,7 +1,7 @@
 #ifndef spider_CONTROLLER_HPP
 #define spider_CONTROLLER_HPP
 
-#include "assets/asset_controller.hpp"
+#include "assets/asset/asset_controller.hpp"
 
 class Asset;
 class Assets;

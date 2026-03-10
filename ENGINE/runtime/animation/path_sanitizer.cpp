@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "animation_update.hpp"
 #include "core/asset_list.hpp"

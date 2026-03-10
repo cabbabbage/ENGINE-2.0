@@ -4,7 +4,7 @@
 #include <cmath>
 
 #include "animation/animation_update.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "utils/AnchorPointResolver.hpp"

@@ -1,7 +1,7 @@
-﻿#ifndef VIBBLE_CONTROLLER_HPP
+#ifndef VIBBLE_CONTROLLER_HPP
 #define VIBBLE_CONTROLLER_HPP
 
-#include "assets/asset_controller.hpp"
+#include "assets/asset/asset_controller.hpp"
 #include <SDL3/SDL.h>
 #include <string>
 #include <chrono>

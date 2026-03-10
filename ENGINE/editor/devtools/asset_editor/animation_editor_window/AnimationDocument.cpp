@@ -12,7 +12,7 @@
 #include <optional>
 #include <nlohmann/json.hpp>
 
-#include "assets/animation.hpp"
+#include "assets/asset/animation.hpp"
 #include "string_utils.hpp"
 
 namespace {

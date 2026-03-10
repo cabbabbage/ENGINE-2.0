@@ -1,7 +1,7 @@
 #include "asset_info.hpp"
 
 #include "asset_types.hpp"
-#include "assets/animation_loader.hpp"
+#include "assets/asset/animation_loader.hpp"
 #include "utils/cache_manager.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
 #include "utils/rebuild_queue.hpp"

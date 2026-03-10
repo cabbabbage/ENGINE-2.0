@@ -1,5 +1,5 @@
 #pragma once
-#include "assets/asset_controller.hpp"
+#include "assets/asset/asset_controller.hpp"
 
 #include <random>
 #include <SDL3/SDL.h>

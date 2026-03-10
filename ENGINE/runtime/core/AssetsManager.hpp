@@ -1,7 +1,7 @@
 #pragma once
 
 #include "rendering/render/warped_screen_grid.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "core/popup_manager.hpp"
 #include <SDL3/SDL.h>
 #include <atomic>
@@ -17,7 +17,7 @@
 #include <nlohmann/json.hpp>
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/world/world_grid.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "core/manifest/map_data.hpp"
 

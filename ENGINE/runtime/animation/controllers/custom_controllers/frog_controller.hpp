@@ -1,7 +1,7 @@
 #ifndef FROG_CONTROLLER_HPP
 #define FROG_CONTROLLER_HPP
 
-#include "assets/asset_controller.hpp"
+#include "assets/asset/asset_controller.hpp"
 
 #include <SDL3/SDL.h>
 

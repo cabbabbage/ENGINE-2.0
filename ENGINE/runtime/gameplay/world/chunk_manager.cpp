@@ -2,7 +2,7 @@
 
 #include <algorithm>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 
 namespace world {
 

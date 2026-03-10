@@ -1,5 +1,5 @@
 #pragma once
-#include "assets/asset_controller.hpp"
+#include "assets/asset/asset_controller.hpp"
 
 class Asset;
 class Input;

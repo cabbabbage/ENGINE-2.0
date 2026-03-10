@@ -1,6 +1,6 @@
 #include "default_controller.hpp"
-#include "assets/Asset.hpp"
-#include "assets/animation.hpp"
+#include "assets/asset/Asset.hpp"
+#include "assets/asset/animation.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "animation/animation_update.hpp"
 

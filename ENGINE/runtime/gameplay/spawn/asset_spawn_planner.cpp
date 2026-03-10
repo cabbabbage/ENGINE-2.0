@@ -7,7 +7,7 @@
 
 #include "devtools/spawn_groups/spawn_group_utils.hpp"
 #include "room_relative_size_resolver.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 AssetSpawnPlanner::AssetSpawnPlanner(const std::vector<nlohmann::json>& json_sources,
                                      const Area& area,
                                      AssetLibrary& asset_library,

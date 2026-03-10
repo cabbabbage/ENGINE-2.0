@@ -6,9 +6,9 @@
 #include <limits>
 #include <string>
 
-#include "assets/Asset.hpp"
-#include "assets/animation.hpp"
-#include "assets/animation_frame.hpp"
+#include "assets/asset/Asset.hpp"
+#include "assets/asset/animation.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "animation_update.hpp"

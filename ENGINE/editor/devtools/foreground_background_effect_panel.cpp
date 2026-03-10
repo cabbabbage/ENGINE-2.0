@@ -2,7 +2,7 @@
 #include "utils/sdl_render_conversions.hpp"
 
 #include "assets/asset/asset_info.hpp"
-#include "assets/animation.hpp"
+#include "assets/asset/animation.hpp"
 #include "core/AssetsManager.hpp"
 #include "core/manifest/manifest_loader.hpp"
 #include "devtools/dm_styles.hpp"

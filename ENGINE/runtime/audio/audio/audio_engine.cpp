@@ -1,7 +1,7 @@
 #include "audio/audio_engine.hpp"
 
-#include "assets/Asset.hpp"
-#include "assets/animation.hpp"
+#include "assets/asset/Asset.hpp"
+#include "assets/asset/animation.hpp"
 
 #include <SDL3/SDL.h>
 #include <algorithm>

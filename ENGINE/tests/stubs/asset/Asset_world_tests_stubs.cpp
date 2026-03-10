@@ -1,4 +1,4 @@
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 
 #include <utility>

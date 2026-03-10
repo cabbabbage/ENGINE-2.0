@@ -1,6 +1,6 @@
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/render_depth_policy.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "rendering/render/grid_overlay.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/world/world_grid.hpp"

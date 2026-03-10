@@ -3,7 +3,7 @@
 #include <cmath>
 #include <limits>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/grid.hpp"
 
 namespace {

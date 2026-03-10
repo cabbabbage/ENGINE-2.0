@@ -1,6 +1,6 @@
 #include "spider_controller.hpp"
 #include "animation/controllers/custom_controllers/attack_helpers.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 
 namespace attack_helpers = animation_update::custom_controllers::attack_helpers;

@@ -2,7 +2,7 @@
 
 #include "room.hpp"
 #include "utils/area.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "map_layers_geometry.hpp"
 #include <vector>
 #include <string>

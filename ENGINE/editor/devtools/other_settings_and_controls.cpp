@@ -4,7 +4,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset_filter_tags.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"

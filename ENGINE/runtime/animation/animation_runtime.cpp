@@ -1,4 +1,4 @@
-﻿#include "animation_runtime.hpp"
+#include "animation_runtime.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -7,10 +7,10 @@
 #include <vector>
 #include <unordered_map>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/log.hpp"
-#include "assets/animation.hpp"
-#include "assets/animation_frame.hpp"
+#include "assets/asset/animation.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"

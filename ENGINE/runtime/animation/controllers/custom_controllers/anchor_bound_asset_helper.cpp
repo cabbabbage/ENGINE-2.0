@@ -1,6 +1,6 @@
 #include "anchor_bound_asset_helper.hpp"
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/anchor_point.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/log.hpp"

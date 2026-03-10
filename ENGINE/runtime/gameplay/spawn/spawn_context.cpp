@@ -5,9 +5,9 @@
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <unordered_map>
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "gameplay/spawn/asset_spawn_planner.hpp"
 #include "gameplay/spawn/asset_spawner.hpp"
 #include "utils/area.hpp"

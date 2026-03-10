@@ -5,7 +5,7 @@
 #include <iostream>
 #include <thread>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "devtools/asset_editor/animation_editor_window/PreviewProvider.hpp"
 #include "core/manifest/manifest_loader.hpp"
 

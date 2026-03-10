@@ -13,10 +13,10 @@
 #include <cmath>
 #include "utils/input.hpp"
 #include "utils/string_utils.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_info.hpp"
-#include "assets/animation.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/animation.hpp"
+#include "assets/asset/Asset.hpp"
 #include "dm_styles.hpp"
 #include <iostream>
 #include <filesystem>

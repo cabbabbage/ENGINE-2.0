@@ -6,7 +6,7 @@
 #include "asset_loader.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "AssetsManager.hpp"
-#include "input.hpp"
+#include "utils/input.hpp"
 #include "gameplay/world/world_grid.hpp"
 
 #include <iostream>

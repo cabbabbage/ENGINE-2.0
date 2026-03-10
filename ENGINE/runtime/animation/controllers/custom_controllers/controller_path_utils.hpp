@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <SDL3/SDL.h>
 
@@ -6,7 +6,7 @@
 #include <cmath>
 #include <vector>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 
 namespace controller_paths {
 

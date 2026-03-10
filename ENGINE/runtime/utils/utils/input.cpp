@@ -1,4 +1,4 @@
-#include "input.hpp"
+#include "utils/input.hpp"
 
 #include <cmath>
 #include <utility>

@@ -1,7 +1,7 @@
-﻿#ifndef BOMB_CONTROLLER_HPP
+#ifndef BOMB_CONTROLLER_HPP
 #define BOMB_CONTROLLER_HPP
 
-#include "assets/asset_controller.hpp"
+#include "assets/asset/asset_controller.hpp"
 
 class Asset;
 class Assets;

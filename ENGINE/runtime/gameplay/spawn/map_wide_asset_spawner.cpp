@@ -12,8 +12,8 @@
 
 #include <nlohmann/json.hpp>
 
-#include "assets/Asset.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/Asset.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/spawn/asset_spawn_planner.hpp"
 #include "gameplay/spawn/check.hpp"

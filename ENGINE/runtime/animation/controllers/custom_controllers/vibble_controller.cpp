@@ -2,7 +2,7 @@
 
 #include "animation/animation_update.hpp"
 #include "animation/attack_validation.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "utils/input.hpp"
 #include <algorithm>

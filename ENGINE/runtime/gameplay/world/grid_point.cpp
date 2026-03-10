@@ -1,5 +1,5 @@
 #include "grid_point.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "gameplay/world/world_grid.hpp"
 
 #include <algorithm>

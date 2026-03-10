@@ -5,7 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/manifest/map_data.hpp"
 #include "core/manifest/manifest_loader.hpp"
 #include "devtools/core/manifest_store.hpp"

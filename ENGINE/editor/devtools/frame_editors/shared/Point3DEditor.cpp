@@ -11,7 +11,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "gameplay/world/grid_point.hpp"
 #include "utils/grid.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/axis_convention.hpp"
 
 namespace devmode::frame_editors {

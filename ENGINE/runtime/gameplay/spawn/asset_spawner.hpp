@@ -7,10 +7,10 @@
 #include <unordered_map>
 #include <nlohmann/json.hpp>
 #include "utils/area.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "assets/asset/asset_info.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "asset_spawn_planner.hpp"
 #include "check.hpp"
 #include "spawn_info.hpp"

@@ -9,8 +9,8 @@
 #include "utils/ttf_render_utils.hpp"
 #include "dev_mode_utils.hpp"
 #include "assets/asset/asset_info.hpp"
-#include "assets/asset_library.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/asset_library.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 
 #include <SDL3_ttf/SDL_ttf.h>

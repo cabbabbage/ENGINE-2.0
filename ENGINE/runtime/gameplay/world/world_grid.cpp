@@ -9,7 +9,7 @@
 #include <string>
 #include <utility>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "utils/log.hpp"
 #include "gameplay/world/chunk.hpp"

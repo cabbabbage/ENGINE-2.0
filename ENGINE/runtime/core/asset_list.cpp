@@ -5,7 +5,7 @@
 #include <iterator>
 #include <unordered_set>
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/range_util.hpp"
 
 namespace {

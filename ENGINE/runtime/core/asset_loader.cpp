@@ -16,8 +16,8 @@
 #include <string>
 #include <cstdlib>
 #include <SDL3/SDL.h>
-#include "assets/Asset.hpp"
-#include "assets/asset_library.hpp"
+#include "assets/asset/Asset.hpp"
+#include "assets/asset/asset_library.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "audio/audio_engine.hpp"
 #include "gameplay/map_generation/room.hpp"

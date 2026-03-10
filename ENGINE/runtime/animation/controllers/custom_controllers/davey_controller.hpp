@@ -1,7 +1,7 @@
 #ifndef DAVEY_CONTROLLER_HPP
 #define DAVEY_CONTROLLER_HPP
 
-#include "assets/asset_controller.hpp"
+#include "assets/asset/asset_controller.hpp"
 
 class Assets;
 class Asset;

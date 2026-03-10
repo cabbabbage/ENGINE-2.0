@@ -2,7 +2,7 @@
 #include "utils/sdl_render_conversions.hpp"
 #include "utils/ttf_render_utils.hpp"
 
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "devtools/dm_styles.hpp"
 #include "devtools/draw_utils.hpp"

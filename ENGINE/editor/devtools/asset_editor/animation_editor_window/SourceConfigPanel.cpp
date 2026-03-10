@@ -27,7 +27,7 @@
 #include "devtools/widgets.hpp"
 #include "string_utils.hpp"
 #include "utils/string_utils.hpp"
-#include "assets/animation.hpp"
+#include "assets/asset/animation.hpp"
 
 #include "utils/stb_image.h"
 #include "utils/stb_image_write.h"

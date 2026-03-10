@@ -3,9 +3,9 @@
 #include <vector>
 
 #include "animation_runtime.hpp"
-#include "assets/Asset.hpp"
-#include "assets/animation.hpp"
-#include "assets/animation_frame.hpp"
+#include "assets/asset/Asset.hpp"
+#include "assets/asset/animation.hpp"
+#include "assets/asset/animation_frame.hpp"
 #include "animation_update.hpp"
 #include "gameplay/world/grid_point.hpp"
 

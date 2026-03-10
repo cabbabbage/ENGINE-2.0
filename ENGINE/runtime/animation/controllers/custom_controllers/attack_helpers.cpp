@@ -1,7 +1,7 @@
 #include "attack_helpers.hpp"
 
 #include "animation/attack_validation.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 
 #include <algorithm>
 #include <cmath>

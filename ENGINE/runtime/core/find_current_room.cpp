@@ -1,6 +1,6 @@
 #include "find_current_room.hpp"
 #include "gameplay/map_generation/room.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "utils/area.hpp"
 #include "utils/range_util.hpp"
 #include "utils/string_utils.hpp"

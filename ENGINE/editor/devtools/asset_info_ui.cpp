@@ -47,7 +47,7 @@
 #include "asset_editor/animation_editor_window/AnimationEditorWindow.hpp"
 #include "asset_editor/animation_editor_window/AnimationDocument.hpp"
 #include "core/AssetsManager.hpp"
-#include "assets/Asset.hpp"
+#include "assets/asset/Asset.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/render.hpp"
 #include "search_assets.hpp"

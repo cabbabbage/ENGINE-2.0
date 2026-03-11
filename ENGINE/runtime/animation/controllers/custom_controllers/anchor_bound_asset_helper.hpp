@@ -1,10 +1,12 @@
 #ifndef ANCHOR_BOUND_ASSET_HELPER_HPP
 #define ANCHOR_BOUND_ASSET_HELPER_HPP
 
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include "assets/asset/anchor_point.hpp"
 
@@ -20,7 +22,7 @@ public:
     ~AnchorBoundAssetHelper();
 
     // API used by custom controllers (stable).
-    void tick_for_frame();
+    bool tick_for_frame();
     bool bind_child_to_anchor(Asset& parent, Asset& child, const AnchorPoint& anchor);
     bool bind_child_for_ticks(Asset& parent, Asset& child, const AnchorPoint& anchor, int ticks = -1);
     void unbind_child(Asset& parent, Asset& child);
@@ -32,6 +34,9 @@ private:
         std::string child_id;
         Asset* parent = nullptr;
         Asset* child = nullptr;
+        std::uintptr_t parent_instance_key = 0;
+        std::uintptr_t child_instance_key = 0;
+        std::uint64_t bind_sequence = 0;
         std::string anchor_name;
         std::optional<std::size_t> anchor_index{};
         std::optional<std::uint64_t> expiry_tick{};
@@ -43,27 +48,36 @@ private:
     };
 
     bool resolve_binding_entities(BindingRecord& record);
-    std::string binding_key_for_child(const Asset& child) const;
+    std::uintptr_t binding_key_for_child(const Asset& child) const;
     std::string asset_stable_id(const Asset* asset) const;
     std::optional<AnchorPoint> resolve_anchor(BindingRecord& record) const;
     void teardown_binding(BindingRecord& state);
+    std::vector<std::uintptr_t> build_binding_order(bool& has_cycle,
+                                                    std::size_t& cycle_nodes) const;
 
-    void update();
-    void apply_binding_tick(const std::string& child_id, BindingRecord& state);
+    bool update();
+    bool apply_binding_tick(BindingRecord& state);
 
-    void set_child_hidden_state(Asset* child, bool hidden) const;
-    void log_binding_tick(const std::string& child_id,
-                          const BindingRecord& state,
+    bool set_child_hidden_state(Asset* child, bool hidden) const;
+    void log_binding_tick(const BindingRecord& state,
                           bool anchor_available,
                           int anchor_world_x,
                           int anchor_world_y,
                           int child_world_x,
                           int child_world_y) const;
+    void log_cycle_warning(std::size_t cycle_nodes) const;
+    void log_alignment_mismatch(const BindingRecord& state,
+                                int anchor_world_x,
+                                int anchor_world_y,
+                                int anchor_world_z,
+                                int anchor_resolution_layer) const;
 
     Asset* controller_ = nullptr;
     Assets* assets_ = nullptr;
-    std::unordered_map<std::string, BindingRecord> children_;
+    std::unordered_map<std::uintptr_t, BindingRecord> children_;
     std::uint64_t tick_counter_ = 0;
+    std::uint64_t bind_sequence_counter_ = 1;
+    std::uint64_t last_cycle_warning_tick_ = 0;
     bool debug_tick_logging_enabled_ = false;
 
     friend class vibble_controller;

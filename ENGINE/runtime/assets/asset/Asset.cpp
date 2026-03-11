@@ -36,6 +36,7 @@
 #include <stdexcept>
 #include <exception>
 #include <cassert>
+#include <new>
 #include <SDL3/SDL.h>
 #include "utils/FramePointResolver.hpp"
 #include "utils/AnchorPointResolver.hpp"
@@ -80,9 +81,8 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_,
 , current_animation()
 , static_frame(false)
 , active(false)
-, pos_(nullptr)
-, initial_world_pos_(SDL_Point{start_pos.x, 0})
-, initial_world_z_(start_pos.y)
+, provisional_grid_point_(GridPoint::make_virtual(start_pos.x, 0, start_pos.y, vibble::grid::clamp_resolution(grid_resolution_)))
+, pos_(&provisional_grid_point_)
 , grid_resolution(vibble::grid::clamp_resolution(grid_resolution_))
 , depth(depth_)
 , spawn_id(spawn_id_)
@@ -137,6 +137,23 @@ void Asset::refresh_filter_tags() {
     filter_method_tag_ = asset_filters::canonicalize_spawn_method(spawn_method);
 }
 
+void Asset::set_provisional_grid_point(const world::GridPoint& point) {
+    set_provisional_grid_point(point.world_x(),
+                               point.world_y(),
+                               point.world_z(),
+                               point.resolution_layer());
+}
+
+void Asset::set_provisional_grid_point(int world_x, int world_y, int world_z, int resolution_layer) {
+    provisional_grid_point_.~GridPoint();
+    new (&provisional_grid_point_) GridPoint(
+        GridPoint::make_virtual(world_x,
+                                world_y,
+                                world_z,
+                                vibble::grid::clamp_resolution(resolution_layer)));
+    pos_ = &provisional_grid_point_;
+}
+
 void Asset::clear_downscale_cache() {
     if (last_scaled_texture_) {
         SDL_DestroyTexture(last_scaled_texture_);
@@ -161,9 +178,13 @@ Asset::~Asset() {
 Asset::Asset(const Asset& o)
     : info(o.info)
     , current_animation(o.current_animation)
-    , pos_(nullptr)
-    , initial_world_pos_(o.initial_world_pos_)
-    , initial_world_z_(o.initial_world_z_)
+    , provisional_grid_point_(o.pos_
+            ? GridPoint::make_virtual(o.pos_->world_x(),
+                                      o.pos_->world_y(),
+                                      o.pos_->world_z(),
+                                      o.pos_->resolution_layer())
+            : GridPoint::make_virtual(0, 0, 0, vibble::grid::clamp_resolution(o.grid_resolution)))
+    , pos_(&provisional_grid_point_)
     , grid_resolution(vibble::grid::clamp_resolution(o.grid_resolution))
     , active(o.active)
     , flipped(o.flipped)
@@ -224,9 +245,14 @@ Asset& Asset::operator=(const Asset& o) {
         clear_render_caches();
         info                 = o.info;
         current_animation    = o.current_animation;
-    pos_                 = nullptr;
-    initial_world_pos_   = o.initial_world_pos_;
-    initial_world_z_     = o.initial_world_z_;
+        if (o.pos_) {
+                set_provisional_grid_point(o.pos_->world_x(),
+                                           o.pos_->world_y(),
+                                           o.pos_->world_z(),
+                                           o.pos_->resolution_layer());
+        } else {
+                set_provisional_grid_point(0, 0, 0, vibble::grid::clamp_resolution(o.grid_resolution));
+        }
     grid_resolution      = vibble::grid::clamp_resolution(o.grid_resolution);
 	active               = o.active;
         flipped              = o.flipped;
@@ -575,7 +601,7 @@ void Asset::update() {
 #if !defined(NDEBUG)
     const SDL_Point anchor_debug_start_world{world_x(), world_y()};
     const int anchor_debug_start_world_z = world_z();
-    const int anchor_debug_start_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+    const int anchor_debug_start_layer = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
     const std::uint64_t anchor_debug_start_revision = anchor_world_revision_;
 #endif
 
@@ -656,7 +682,7 @@ void Asset::update() {
         anchor_debug_start_world.x != world_x() ||
         anchor_debug_start_world.y != world_y() ||
         anchor_debug_start_world_z != world_z() ||
-        anchor_debug_start_layer != (pos_ ? pos_->resolution_layer() : grid_resolution);
+        anchor_debug_start_layer != (grid_point() ? grid_point()->resolution_layer() : grid_resolution);
     if (anchor_debug_world_changed && anchor_world_revision_ == anchor_debug_start_revision) {
         vibble::log::warn("[Asset] anchor_world_revision did not advance after world transform change for asset '" +
                           (info ? info->name : std::string{"<unknown>"}) + "'");
@@ -690,7 +716,7 @@ void Asset::refresh_anchor_point_cache_from_frame() {
             resolved.relative_pos_2d = Vec2{};
             resolved.world_pos_2d = Vec2{};
             resolved.world_z = world_z();
-            resolved.resolution_layer = pos_ ? pos_->resolution_layer() : grid_resolution;
+            resolved.resolution_layer = grid_point() ? grid_point()->resolution_layer() : grid_resolution;
             continue;
         }
 
@@ -954,8 +980,8 @@ void Asset::update_neighbor_lists(bool force_update) {
     }
 
     const bool needs_rebuild = force_update || !neighbors || !neighbor_lists_initialized_ ||
-                               last_neighbor_origin_.x != (pos_ ? pos_->world_x() : 0) ||
-                               last_neighbor_origin_.y != (pos_ ? pos_->world_y() : 0);
+                               last_neighbor_origin_.x != world_x() ||
+                               last_neighbor_origin_.y != world_y();
     if (!needs_rebuild) {
         return;
     }
@@ -983,7 +1009,7 @@ void Asset::update_neighbor_lists(bool force_update) {
         impassable_naighbors = std::move(imp_child);
     }
 
-    last_neighbor_origin_ = pos_ ? SDL_Point{pos_->world_x(), pos_->world_y()} : SDL_Point{0, 0};
+    last_neighbor_origin_ = SDL_Point{world_x(), world_y()};
     neighbor_lists_initialized_ = true;
 }
 
@@ -1038,7 +1064,7 @@ Area Asset::get_area(const std::string& name) const {
                 return Area(name, 0);
         }
 
-        SDL_Point world_pos = pos_ ? SDL_Point{pos_->world_x(), pos_->world_z()} : SDL_Point{0, 0};
+        SDL_Point world_pos = SDL_Point{world_x(), world_z()};
         return area_helpers::make_world_area(*info, *base, world_pos, flipped);
 }
 
@@ -1224,14 +1250,14 @@ Asset::AnchorBasisSignature Asset::compute_anchor_basis_signature() const {
         }
         sig.remainder_scale = remainder;
 
-        const bool has_pos = (pos_ != nullptr);
-        const float perspective = (has_pos && pos_->perspective_scale > 0.0001f)
-                ? pos_->perspective_scale
+        const bool has_pos = (grid_point() != nullptr);
+        const float perspective = (has_pos && grid_point()->perspective_scale > 0.0001f)
+                ? grid_point()->perspective_scale
                 : (last_scale_perspective_input_ > 0.0001f ? last_scale_perspective_input_ : 1.0f);
         sig.perspective_scale = perspective;
 
         sig.world_z_offset = world_z_offset_;
-        sig.resolution_layer = has_pos ? pos_->resolution_layer() : grid_resolution;
+        sig.resolution_layer = has_pos ? grid_point()->resolution_layer() : grid_resolution;
         sig.camera_state_version = (assets_ ? assets_->getView().camera_state_version() : 0);
         return sig;
 }
@@ -1319,7 +1345,8 @@ void Asset::apply_anchor_runtime_state(AnchorPoint& resolved,
 
 AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
                                                anchor_points::GridMaterialization grid_policy,
-                                               const DisplacedAssetAnchorPoint* frame_anchor) {
+                                               const DisplacedAssetAnchorPoint* frame_anchor,
+                                               AnchorResolveMode resolve_mode) {
         assert(index < anchor_handles_.size());
         assert(index < anchor_points_.size());
 
@@ -1329,7 +1356,7 @@ AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
 
         AnchorHandle& handle = anchor_handles_[index];
         handle.owner = this;
-        handle.update(grid_policy);
+        handle.update(grid_policy, resolve_mode == AnchorResolveMode::ForceRecompute);
 
         AnchorPoint& resolved = anchor_points_[index];
         resolved.name = handle.name;
@@ -1340,7 +1367,8 @@ AnchorPoint& Asset::resolve_anchor_point_entry(std::size_t index,
 }
 
 std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
-                                               anchor_points::GridMaterialization grid_policy) {
+                                               anchor_points::GridMaterialization grid_policy,
+                                               AnchorResolveMode resolve_mode) {
         if (!anchors_initialized_) {
                 initialize_anchor_registry_from_animations();
         }
@@ -1356,11 +1384,12 @@ std::optional<AnchorPoint> Asset::anchor_state(const std::string& name,
 
         AnchorPoint& resolved = resolve_anchor_point_entry(it->second,
                                                            grid_policy,
-                                                           frame_anchor);
+                                                           frame_anchor,
+                                                           resolve_mode);
         return resolved;
 }
 
-void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy) {
+void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy, bool force_recompute) {
 #if !defined(NDEBUG)
         auto& counters = anchor_update_counters();
         ++counters.calls;
@@ -1368,7 +1397,7 @@ void Asset::AnchorHandle::update(anchor_points::GridMaterialization grid_policy)
 
         const std::uint64_t camera_state_version =
                 (owner && owner->assets_) ? owner->assets_->getView().camera_state_version() : 0;
-        const bool cache_hit = !dirty && last_update_key_.matches(grid_policy, camera_state_version);
+        const bool cache_hit = !force_recompute && !dirty && last_update_key_.matches(grid_policy, camera_state_version);
         if (cache_hit) {
 #if !defined(NDEBUG)
                 ++counters.cache_hits;
@@ -1473,11 +1502,11 @@ void Asset::set_composite_texture(SDL_Texture* tex) {
 }
 
 float Asset::smoothed_translation_x() const {
-    return pos_ ? static_cast<float>(pos_->world_x()) : static_cast<float>(initial_world_pos_.x);
+    return static_cast<float>(world_x());
 }
 
 float Asset::smoothed_translation_y() const {
-    return pos_ ? static_cast<float>(pos_->world_y()) : static_cast<float>(initial_world_pos_.y);
+    return static_cast<float>(world_y());
 }
 
 float Asset::smoothed_scale() const {
@@ -1499,32 +1528,25 @@ void Asset::move_to_world_position(int world_x,
     if (!assets_) return;
 
     world::WorldGrid& grid = assets_->world_grid();
+    world::GridPoint* current_point = grid.point_for_asset(this);
     const int resolved_layer = resolution_layer_override.has_value()
         ? vibble::grid::clamp_resolution(*resolution_layer_override)
-        : (pos_ ? pos_->resolution_layer() : grid_resolution);
+        : (current_point ? current_point->resolution_layer() : grid_resolution);
     world::GridPoint& target = world::GridPoint::from_world(world_x, world_y, world_z, resolved_layer, grid);
 
-    if (pos_) {
-        grid.move_asset(this, *pos_, target);
+    if (current_point) {
+        grid.move_asset(this, *current_point, target);
     } else {
-        const int start_x = world_x + 1; // force placement when no previous grid residency
-        const int start_y = world_y + 1;
-        world::GridPoint virtual_start = world::GridPoint::make_virtual(start_x, start_y, world_z, resolved_layer);
-        grid.move_asset(this, virtual_start, target);
+        set_provisional_grid_point(world_x, world_y, world_z, resolved_layer);
     }
 
     grid_resolution = resolved_layer;
     mark_anchors_dirty();
-    initial_world_pos_.x = world_x;
-    initial_world_pos_.y = world_y;
-    initial_world_z_ = world_z;
 }
 
 void Asset::set_world_z(int world_z) {
-    if (!pos_ || !assets_) return;
-
-    // Move to same XY but different Z
-    move_to_world_position(pos_->world_x(), pos_->world_y(), world_z);
+    if (!assets_) return;
+    move_to_world_position(world_x(), world_y(), world_z);
 }
 
 void Asset::set_render_depth_bias(double bias) {

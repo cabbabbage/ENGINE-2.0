@@ -87,6 +87,24 @@ void GeometryBatcher::flush() {
     // Static quad indices pattern (0,1,2, 0,2,3)
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
+    // Enforce a deterministic painter's order before emitting draw batches.
+    // This protects against upstream submit-order jitter (e.g. mixed systems
+    // or per-asset multi-quad offsets) and keeps the renderer depth-correct.
+    std::stable_sort(draw_list_.begin(), draw_list_.end(), [](const DrawItem& lhs, const DrawItem& rhs) {
+        const bool lhs_finite = std::isfinite(lhs.depth);
+        const bool rhs_finite = std::isfinite(rhs.depth);
+        if (lhs_finite != rhs_finite) {
+            return lhs_finite; // finite depths first
+        }
+        if (!lhs_finite && !rhs_finite) {
+            return false; // preserve submit order among invalid depths
+        }
+        if (lhs.depth == rhs.depth) {
+            return false; // preserve submit order for equal depths
+        }
+        return lhs.depth > rhs.depth; // descending depth
+    });
+
     vertex_buffer_.clear();
     index_buffer_.clear();
 

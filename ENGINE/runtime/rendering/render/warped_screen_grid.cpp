@@ -218,9 +218,10 @@ CameraState build_camera_state(const WarpedScreenGrid::RealismSettings& settings
         }
 
         Vec3 world_up{0.0, 1.0, 0.0};
-        Vec3 right = cross(world_up, forward);
+        // Build a right-handed camera basis where +X remains screen-right.
+        Vec3 right = cross(forward, world_up);
         right = normalize(right);
-        Vec3 up = normalize(cross(forward, right));
+        Vec3 up = normalize(cross(right, forward));
 
         const double dist_horiz = length(Vec3{ anchor.x - camera_pos.x, 0.0, anchor.z - camera_pos.z });
 

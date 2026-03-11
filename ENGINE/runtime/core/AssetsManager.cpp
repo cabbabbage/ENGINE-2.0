@@ -238,9 +238,8 @@ Assets::Assets(AssetLibrary& library,
     movement_commands_buffer_.reserve(all.size());
     grid_registration_buffer_.clear();
     grid_registration_buffer_.reserve(4);
-    anchor_basis_dirty_queue_.clear();
-    anchor_basis_dirty_queue_.reserve(all.size());
-    anchor_basis_dirty_lookup_.clear();
+    runtime_traversal_state_.clear();
+    runtime_traversal_state_.reserve(all.size());
     vibble::log::info("[Assets] Constructor: Setting up assets (" + std::to_string(all.size()) + " total)");
     for (Asset* a : all) {
         if (!a) continue;
@@ -560,8 +559,7 @@ Assets::~Assets() {
 
     movement_commands_buffer_.clear();
     grid_registration_buffer_.clear();
-    anchor_basis_dirty_queue_.clear();
-    anchor_basis_dirty_lookup_.clear();
+    runtime_traversal_state_.clear();
 
     if (input) {
         input->clear_screen_to_world_mapper();
@@ -610,8 +608,7 @@ void Assets::notify_rooms_changed() {
 
 void Assets::refresh_active_asset_lists() {
     run_frame_rebuild_stage();
-
-    update_audio_camera_metrics();
+    run_active_runtime_single_pass();
     update_filtered_active_assets();
 }
 
@@ -619,66 +616,86 @@ void Assets::mark_anchor_basis_dirty(Asset* asset) {
     if (!asset || asset->dead) {
         return;
     }
-    if (anchor_basis_dirty_lookup_.insert(asset).second) {
-        anchor_basis_dirty_queue_.push_back(asset);
-    }
+    RuntimeTraversalState& state = runtime_traversal_state_[asset];
+    state.pending_anchor_invalidation_version = next_anchor_invalidation_version();
 }
 
 void Assets::mark_anchor_bases_dirty_for_active_assets() {
-    for (Asset* asset : active_assets) {
-        mark_anchor_basis_dirty(asset);
-    }
-}
-
-void Assets::refresh_dirty_anchor_bases() {
-    for (Asset* asset : anchor_basis_dirty_queue_) {
-        if (!asset || asset->dead) {
-            continue;
-        }
-        asset->update_anchor_basis_if_needed();
-    }
-    anchor_basis_dirty_queue_.clear();
-    anchor_basis_dirty_lookup_.clear();
-}
-
-void Assets::refresh_anchor_dependents_for_active_assets() {
-    auto refresh_asset = [&](Asset* asset) {
+    const std::uint64_t version = next_anchor_invalidation_version();
+    auto mark_with_version = [&](Asset* asset) {
         if (!asset || asset->dead) {
             return;
         }
-        asset->update_anchor_basis_if_needed();
-        asset->refresh_anchor_point_cache_from_frame();
-        asset->refresh_runtime_box_cache_from_frame();
+        RuntimeTraversalState& state = runtime_traversal_state_[asset];
+        state.pending_anchor_invalidation_version = version;
     };
 
-    refresh_asset(player);
+    mark_with_version(player);
     for (Asset* asset : active_assets) {
         if (asset == player) {
             continue;
         }
-        refresh_asset(asset);
+        mark_with_version(asset);
     }
 }
 
-void Assets::update_audio_camera_metrics() {
+std::uint64_t Assets::next_anchor_invalidation_version() {
+    ++anchor_invalidation_version_counter_;
+    if (anchor_invalidation_version_counter_ == 0) {
+        ++anchor_invalidation_version_counter_;
+    }
+    return anchor_invalidation_version_counter_;
+}
 
-    SDL_Point camera_focus = camera_.get_screen_center();
-    auto update_audio_metrics = [&](Asset* asset) {
-        if (!asset) return;
+void Assets::run_active_runtime_single_pass() {
+    const SDL_Point camera_focus = camera_.get_screen_center();
+    const std::uint64_t camera_state_version = camera_.camera_state_version();
+
+    run_active_runtime_single_pass_for_asset(player, camera_focus, camera_state_version);
+    for (Asset* asset : active_assets) {
+        if (asset == player) {
+            continue;
+        }
+        run_active_runtime_single_pass_for_asset(asset, camera_focus, camera_state_version);
+    }
+
+    if (last_audio_engine_update_frame_id_ != frame_id_) {
+        AudioEngine::instance().update();
+        last_audio_engine_update_frame_id_ = frame_id_;
+    }
+}
+
+void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
+                                                      const SDL_Point& camera_focus,
+                                                      std::uint64_t camera_state_version) {
+    if (!asset || asset->dead) {
+        return;
+    }
+
+    RuntimeTraversalState& state = runtime_traversal_state_[asset];
+    const bool invalidation_pending =
+        state.pending_anchor_invalidation_version != state.processed_anchor_invalidation_version;
+    const bool anchor_revision_changed =
+        state.processed_anchor_revision != asset->anchor_world_revision_;
+    const bool camera_anchor_state_changed =
+        state.processed_camera_state_version != camera_state_version;
+
+    if (invalidation_pending || anchor_revision_changed || camera_anchor_state_changed) {
+        asset->update_anchor_basis_if_needed();
+        asset->refresh_anchor_point_cache_from_frame();
+        asset->refresh_runtime_box_cache_from_frame();
+        state.processed_anchor_invalidation_version = state.pending_anchor_invalidation_version;
+        state.processed_anchor_revision = asset->anchor_world_revision_;
+        state.processed_camera_state_version = camera_state_version;
+    }
+
+    if (state.last_audio_frame_id != frame_id_) {
         const float dx = static_cast<float>(asset->world_x() - camera_focus.x);
         const float dz = static_cast<float>(asset->world_z() - camera_focus.y);
         asset->distance_from_camera = std::sqrt(dx * dx + dz * dz);
         asset->angle_from_camera = std::atan2(dz, dx);
-};
-
-    if (player) {
-        update_audio_metrics(player);
+        state.last_audio_frame_id = frame_id_;
     }
-    for (Asset* asset : active_assets) {
-        update_audio_metrics(asset);
-    }
-
-    AudioEngine::instance().update();
 }
 
 void Assets::refresh_filtered_active_assets() {
@@ -1039,19 +1056,23 @@ void Assets::update(const Input& input)
         mark_active_assets_dirty();
     }
 
-    run_frame_rebuild_stage();
-
-    refresh_dirty_anchor_bases();
-    refresh_anchor_dependents_for_active_assets();
-
-    // Run binding follow updates after anchors are refreshed so children see latest transforms.
-    for (auto* helper : binding_helpers_) {
-        if (helper) {
-            helper->tick_for_frame();
+    // Apply anchor binding updates before traversal/depth rebuild so same-frame render uses fresh bound transforms.
+    if (!binding_helpers_.empty()) {
+        bool binding_changed = false;
+        for (auto* helper : binding_helpers_) {
+            if (!helper) {
+                continue;
+            }
+            binding_changed = helper->tick_for_frame() || binding_changed;
+        }
+        if (binding_changed) {
+            mark_active_assets_dirty();
         }
     }
 
-    update_audio_camera_metrics();
+    run_frame_rebuild_stage();
+
+    run_active_runtime_single_pass();
 
     bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
     const bool dev_controls_enabled = dev_controls_ && dev_controls_->is_enabled();
@@ -1503,7 +1524,21 @@ std::unique_ptr<Asset> Assets::extract_asset(Asset* asset) {
     if (!asset) {
         return nullptr;
     }
-    return world_grid_.extract_asset(asset);
+    const world::GridPoint detached_pos = world::GridPoint::make_virtual(
+        asset->world_x(),
+        asset->world_y(),
+        asset->world_z(),
+        asset->grid_resolution);
+
+    std::unique_ptr<Asset> extracted = world_grid_.extract_asset(asset);
+    if (!extracted) {
+        return nullptr;
+    }
+
+    extracted->set_provisional_grid_point(detached_pos);
+    extracted->cache_grid_residency(detached_pos);
+    runtime_traversal_state_.erase(extracted.get());
+    return extracted;
 }
 
 world::GridPoint Assets::resolve_floor_world_point(SDL_Point world_pos, int resolution_layer) const {
@@ -1524,11 +1559,22 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
     const bool already_tracked = std::find(all.begin(), all.end(), raw) != all.end();
 
     const int resolved_layer = (resolution_layer >= 0) ? resolution_layer : world_grid_.default_resolution_layer();
-    const int resolved_z = (world_z != 0) ? world_z : resolve_floor_world_point(raw->world_xz_point(), resolved_layer).world_z();
+    SDL_Point source_world_xz{0, 0};
+    if (world::GridPoint* point = raw->grid_point()) {
+        source_world_xz = SDL_Point{point->world_x(), point->world_z()};
+    } else if (raw->has_grid_residency_cache()) {
+        const world::GridKey cached = raw->grid_residency_cache();
+        source_world_xz = SDL_Point{cached.x, cached.z};
+        raw->set_provisional_grid_point(cached.x, cached.y, cached.z, cached.layer);
+    }
+    const int resolved_z = (world_z != 0) ? world_z : resolve_floor_world_point(source_world_xz, resolved_layer).world_z();
 
     raw = world_grid_.attach_asset(std::move(asset), resolved_z, resolved_layer);
     if (!raw) {
         return nullptr;
+    }
+    if (world::GridPoint* attached_point = world_grid_.point_for_asset(raw)) {
+        raw->cache_grid_residency(*attached_point);
     }
 
     if (!already_tracked) {
@@ -1583,6 +1629,9 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     const world::GridPoint floor_point = resolve_floor_world_point(world_pos);
     raw = world_grid_.create_asset_at_point(std::move(uptr), floor_point.world_z(), floor_point.resolution_layer());
     all.push_back(raw);
+    if (world::GridPoint* registered_point = world_grid_.point_for_asset(raw)) {
+        raw->cache_grid_residency(*registered_point);
+    }
 
     queue_asset_dimension_update(raw);
     mark_grid_dirty();
@@ -1773,6 +1822,7 @@ void Assets::register_pending_static_assets() {
 
 void Assets::rebuild_all_assets_from_grid() {
     all.clear();
+    runtime_traversal_state_.clear();
     auto collected = world_grid_.all_assets();
     std::sort(collected.begin(), collected.end(),
               [](Asset* lhs, Asset* rhs) { return lhs < rhs; });
@@ -1995,6 +2045,7 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
             continue;
         }
         remove_asset_dimension_cache(asset);
+        runtime_traversal_state_.erase(asset);
         asset->clear_grid_residency_cache();
         (void)world_grid_.remove_asset(asset);
     }
@@ -2005,8 +2056,7 @@ std::size_t Assets::delete_assets_runtime(const std::vector<Asset*>& assets_to_d
     moving_assets_for_grid_.clear();
     pending_static_grid_registration_.clear();
     active_points_.clear();
-    anchor_basis_dirty_queue_.clear();
-    anchor_basis_dirty_lookup_.clear();
+    runtime_traversal_state_.clear();
     mark_grid_dirty();
     mark_active_assets_dirty();
     mark_non_player_update_buffer_dirty();

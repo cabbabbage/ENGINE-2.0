@@ -3,11 +3,11 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
-#include <cctype>
 #include <optional>
 #include <utility>
 
 #include "AnimationDocument.hpp"
+#include "json_coercion.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -24,6 +24,7 @@ constexpr int kItemGap = 8;
 
 using animation_editor::kPanelPadding;
 using animation_editor::strings::trim_copy;
+using json_coercion::read_bool_field_like;
 
 int message_block_height(const std::vector<std::string>& lines) {
     if (lines.empty()) {
@@ -45,41 +46,6 @@ void render_message_lines(SDL_Renderer* renderer, const SDL_Rect& rect, const st
         DMFontCache::instance().draw_text(renderer, style, line, rect.x, y);
         y += line_height;
     }
-}
-
-bool parse_bool_value(const nlohmann::json& value, bool fallback) {
-    if (value.is_boolean()) {
-        return value.get<bool>();
-    }
-    if (value.is_number_integer()) {
-        return value.get<int>() != 0;
-    }
-    if (value.is_number_float()) {
-        return value.get<double>() != 0.0;
-    }
-    if (value.is_string()) {
-        std::string text = value.get<std::string>();
-        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
-            return static_cast<char>(std::tolower(ch));
-        });
-        if (text == "true" || text == "1" || text == "yes" || text == "on") {
-            return true;
-        }
-        if (text == "false" || text == "0" || text == "no" || text == "off") {
-            return false;
-        }
-    }
-    return fallback;
-}
-
-bool parse_bool_field(const nlohmann::json& payload, const char* key, bool fallback) {
-    if (!payload.is_object()) {
-        return fallback;
-    }
-    if (!payload.contains(key)) {
-        return fallback;
-    }
-    return parse_bool_value(payload.at(key), fallback);
 }
 
 }
@@ -529,14 +495,14 @@ std::optional<std::string> PlaybackSettingsPanel::fetch_payload(const AnimationD
 
 PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::payload_to_state(const nlohmann::json& payload) {
     PlaybackState state;
-    state.flipped_source = parse_bool_field(payload, "flipped_source", false);
-    state.reverse_source = parse_bool_field(payload, "reverse_source", false);
+    state.flipped_source = read_bool_field_like(payload, "flipped_source", false);
+    state.reverse_source = read_bool_field_like(payload, "reverse_source", false);
     state.flip_vertical = false;
     state.flip_movement_horizontal = false;
     state.flip_movement_vertical = false;
     state.inherit_source_movement = true;
-    state.locked         = parse_bool_field(payload, "locked", false);
-    state.random_start   = parse_bool_field(payload, "rnd_start", false);
+    state.locked         = read_bool_field_like(payload, "locked", false);
+    state.random_start   = read_bool_field_like(payload, "rnd_start", false);
     if (state.locked) {
         state.random_start = false;
     }
@@ -547,15 +513,15 @@ PlaybackSettingsPanel::PlaybackState PlaybackSettingsPanel::payload_to_state(con
         std::string kind = source.value("kind", std::string{});
         if (kind == "animation") {
             source_is_animation = true;
-            state.inherit_source_movement = parse_bool_field(payload, "inherit_source_movement", true);
+            state.inherit_source_movement = read_bool_field_like(payload, "inherit_source_movement", true);
             if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
                 const auto& modifiers = payload["derived_modifiers"];
-                state.reverse_source = parse_bool_field(modifiers, "reverse", state.reverse_source);
-                state.flipped_source = parse_bool_field(modifiers, "flipX", state.flipped_source);
-                state.flip_vertical = parse_bool_field(modifiers, "flipY", false);
+                state.reverse_source = read_bool_field_like(modifiers, "reverse", state.reverse_source);
+                state.flipped_source = read_bool_field_like(modifiers, "flipX", state.flipped_source);
+                state.flip_vertical = read_bool_field_like(modifiers, "flipY", false);
                 if (state.inherit_source_movement) {
-                    state.flip_movement_horizontal = parse_bool_field(modifiers, "flipMovementX", false);
-                    state.flip_movement_vertical = parse_bool_field(modifiers, "flipMovementY", false);
+                    state.flip_movement_horizontal = read_bool_field_like(modifiers, "flipMovementX", false);
+                    state.flip_movement_vertical = read_bool_field_like(modifiers, "flipMovementY", false);
                 } else {
                     state.flip_movement_horizontal = false;
                     state.flip_movement_vertical = false;
@@ -627,18 +593,18 @@ void PlaybackSettingsPanel::update_inherited_state(const nlohmann::json& payload
             if (derived_source_id_.empty()) {
                 derived_source_id_ = trim_copy(source.value("path", std::string{}));
             }
-            bool reverse = parse_bool_field(payload, "reverse_source", false);
-            bool flip_x = parse_bool_field(payload, "flipped_source", false);
+            bool reverse = read_bool_field_like(payload, "reverse_source", false);
+            bool flip_x = read_bool_field_like(payload, "flipped_source", false);
             bool flip_y = false;
             bool flip_movement_x = false;
             bool flip_movement_y = false;
             if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
                 const auto& modifiers = payload["derived_modifiers"];
-                reverse = parse_bool_field(modifiers, "reverse", reverse);
-                flip_x = parse_bool_field(modifiers, "flipX", flip_x);
-                flip_y = parse_bool_field(modifiers, "flipY", false);
-                flip_movement_x = parse_bool_field(modifiers, "flipMovementX", false);
-                flip_movement_y = parse_bool_field(modifiers, "flipMovementY", false);
+                reverse = read_bool_field_like(modifiers, "reverse", reverse);
+                flip_x = read_bool_field_like(modifiers, "flipX", flip_x);
+                flip_y = read_bool_field_like(modifiers, "flipY", false);
+                flip_movement_x = read_bool_field_like(modifiers, "flipMovementX", false);
+                flip_movement_y = read_bool_field_like(modifiers, "flipMovementY", false);
             }
             if (reverse) inherited_modifiers_.push_back("Reverse");
             if (flip_x) inherited_modifiers_.push_back("Flip X");

@@ -114,9 +114,18 @@ class Asset {
 
     // 3D Grid Position accessors
     GridPoint* grid_point() const { return pos_; }
-    int world_x() const { return pos_ ? pos_->world_x() : initial_world_pos_.x; }
-    int world_y() const { return pos_ ? pos_->world_y() : initial_world_pos_.y; }
-    int world_z() const { return pos_ ? pos_->world_z() : initial_world_z_; }
+    int world_x() const {
+        SDL_assert(pos_ != nullptr);
+        return pos_ ? pos_->world_x() : 0;
+    }
+    int world_y() const {
+        SDL_assert(pos_ != nullptr);
+        return pos_ ? pos_->world_y() : 0;
+    }
+    int world_z() const {
+        SDL_assert(pos_ != nullptr);
+        return pos_ ? pos_->world_z() : 0;
+    }
     SDL_Point world_xz_point() const { return SDL_Point{world_x(), world_z()}; }
     SDL_Point world_xy_point() const { return SDL_Point{world_x(), world_y()}; }
     int height() const {
@@ -324,7 +333,7 @@ class Asset {
                 }
         } last_update_key_;
 
-        void update(anchor_points::GridMaterialization grid_policy);
+        void update(anchor_points::GridMaterialization grid_policy, bool force_recompute = false);
     };
 
     // A single source of truth for inputs that influence resolved anchor output
@@ -343,14 +352,21 @@ class Asset {
         std::uint64_t camera_state_version = 0; // camera snapshot that produced cached anchor placement
     };
 
+    enum class AnchorResolveMode {
+        Cached,
+        ForceRecompute
+    };
+
     AnchorPoint* get_anchor_point(const std::string& name);
     std::optional<std::string> anchor_name_for_index(std::size_t index) const;
     std::optional<AnchorPoint> anchor_state(const std::string& name,
-                                            anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None);
+                                            anchor_points::GridMaterialization grid_policy = anchor_points::GridMaterialization::None,
+                                            AnchorResolveMode resolve_mode = AnchorResolveMode::Cached);
     void assert_unique_anchor_names_for_frame() const;
     AnchorPoint& resolve_anchor_point_entry(std::size_t index,
                                             anchor_points::GridMaterialization grid_policy,
-                                            const DisplacedAssetAnchorPoint* frame_anchor);
+                                            const DisplacedAssetAnchorPoint* frame_anchor,
+                                            AnchorResolveMode resolve_mode);
     void apply_anchor_runtime_state(AnchorPoint& resolved,
                                     const AnchorHandle& handle,
                                     const DisplacedAssetAnchorPoint* frame_anchor) const;
@@ -382,9 +398,10 @@ private:
     bool anchor_hidden_ = false;
     bool selected = false;
     bool merged_from_neighbors_ = false;
-    GridPoint* pos_ = nullptr; // Non-owning pointer to GridPoint in WorldGrid; set by WorldGrid on registration
-    SDL_Point initial_world_pos_{0, 0}; // Spawn position, used before registration with WorldGrid
-    int initial_world_z_ = 0;           // Spawn depth, used before registration with WorldGrid
+    void set_provisional_grid_point(const world::GridPoint& point);
+    void set_provisional_grid_point(int world_x, int world_y, int world_z, int resolution_layer);
+    GridPoint provisional_grid_point_ = GridPoint::make_virtual(0, 0, 0, 0);
+    GridPoint* pos_ = &provisional_grid_point_; // Non-owning pointer to active grid point; WorldGrid updates on registration.
     void set_flip();
 
     float frame_progress = 0.0f;

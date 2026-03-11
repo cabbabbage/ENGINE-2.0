@@ -126,9 +126,10 @@ void vibble_controller::movement(const Input& input) {
     subpixel_x_ = std::clamp(subpixel_x_, -kResidualClamp, kResidualClamp);
     subpixel_y_ = std::clamp(subpixel_y_, -kResidualClamp, kResidualClamp);
 
+    // Keep animation-facing/anchor selection aligned with actual world movement.
     std::string animation_id = animation_for_direction(
-        direction_intent.screen_x,
-        direction_intent.screen_y);
+        direction_intent.world_x,
+        direction_intent.world_y);
     if (isDashing && player_->info) {
 
         const auto& animations = player_->info->animations;

@@ -422,34 +422,27 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
                 map_manifest_json_ = map_manifest;
         }
 
-        if (!map_manifest_json_.contains("map_grid_settings") ||
-            !map_manifest_json_["map_grid_settings"].is_object()) {
-                map_manifest_json_["map_grid_settings"] = nlohmann::json::object({
-                    {"grid_resolution", 0}
-                });
-        }
-        if (!map_manifest_json_.contains("map_assets_data") || !map_manifest_json_["map_assets_data"].is_object()) {
-                map_manifest_json_["map_assets_data"] = nlohmann::json::object();
-        }
-        if (!map_manifest_json_.contains("map_boundary_data") || !map_manifest_json_["map_boundary_data"].is_object()) {
-                map_manifest_json_["map_boundary_data"] = nlohmann::json::object();
-        }
-        if (!map_manifest_json_.contains("rooms_data") || !map_manifest_json_["rooms_data"].is_object()) {
-                map_manifest_json_["rooms_data"] = nlohmann::json::object();
-        }
-        if (!map_manifest_json_.contains("trails_data") || !map_manifest_json_["trails_data"].is_object()) {
-                map_manifest_json_["trails_data"] = nlohmann::json::object();
-        }
-        if (!map_manifest_json_.contains("map_layers") || !map_manifest_json_["map_layers"].is_array()) {
-                map_manifest_json_["map_layers"] = nlohmann::json::array();
-        }
+        auto bind_object_section = [this](const char* key) -> nlohmann::json* {
+                auto it = map_manifest_json_.find(key);
+                if (it != map_manifest_json_.end() && it->is_object()) {
+                        return &(*it);
+                }
+                vibble::log::warn(std::string("[AssetLoader] Missing or invalid manifest section '") + key +
+                                  "' for map '" + map_id_ + "'.");
+                return nullptr;
+        };
 
-        map_assets_data_   = &map_manifest_json_["map_assets_data"];
-        map_boundary_data_ = &map_manifest_json_["map_boundary_data"];
-        rooms_data_        = &map_manifest_json_["rooms_data"];
-        trails_data_       = &map_manifest_json_["trails_data"];
+        map_assets_data_   = bind_object_section("map_assets_data");
+        map_boundary_data_ = bind_object_section("map_boundary_data");
+        rooms_data_        = bind_object_section("rooms_data");
+        trails_data_       = bind_object_section("trails_data");
 
         auto layers_it = map_manifest_json_.find("map_layers");
+        if (layers_it != map_manifest_json_.end() && !layers_it->is_array()) {
+                vibble::log::warn(std::string("[AssetLoader] Invalid 'map_layers' section for map '") + map_id_ +
+                                  "'. Expected array.");
+                layers_it = map_manifest_json_.end();
+        }
         map_layers::LayerRadiiResult radii_result;
         const nlohmann::json* rooms_data_ptr = rooms_data_;
         if (layers_it != map_manifest_json_.end()) {
@@ -472,7 +465,13 @@ void AssetLoader::load_from_manifest(const nlohmann::json& map_manifest) {
                         layer_entry["bounding_extent"] = extent_value;
                 }
         }
-        map_manifest_json_["map_layers_settings"]["min_edge_distance"] = radii_result.min_edge_distance;
+        auto layer_settings_it = map_manifest_json_.find("map_layers_settings");
+        if (layer_settings_it != map_manifest_json_.end() && layer_settings_it->is_object()) {
+                (*layer_settings_it)["min_edge_distance"] = radii_result.min_edge_distance;
+        } else {
+                vibble::log::warn(std::string("[AssetLoader] Missing or invalid 'map_layers_settings' section for map '") +
+                                  map_id_ + "'.");
+        }
         map_layers_.clear();
 
         if (layers_it != map_manifest_json_.end() && layers_it->is_array()) {

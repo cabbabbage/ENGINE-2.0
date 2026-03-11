@@ -4,6 +4,7 @@
 #include "anchor_point.hpp"
 #include "asset_info.hpp"
 #include "asset_types.hpp"
+#include "json_coercion.hpp"
 #include "surface_utils.hpp"
 #include "utils/cache_manager.hpp"
 #include "rendering/render/render.hpp"
@@ -13,7 +14,6 @@
 #include <SDL3_image/SDL_image.h>
 #include <algorithm>
 #include <cmath>
-#include <cctype>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -30,6 +30,10 @@
 namespace fs = std::filesystem;
 
 namespace {
+
+using json_coercion::read_bool_field_like;
+using json_coercion::read_int_field_like;
+using json_coercion::read_string_field_like;
 
 void resolve_inherited_movements(AssetInfo& info) {
         for (auto& [name, anim] : info.animations) {
@@ -50,62 +54,6 @@ void resolve_inherited_movements(AssetInfo& info) {
                 if (has_frames) continue;
                 anim.inherit_movement_from(it->second);
         }
-}
-
-bool json_bool(const nlohmann::json& value, bool fallback) {
-        if (value.is_boolean()) {
-                return value.get<bool>();
-        }
-        if (value.is_number_integer()) {
-                return value.get<int>() != 0;
-        }
-        if (value.is_number()) {
-                return value.get<double>() != 0.0;
-        }
-        if (value.is_string()) {
-                std::string text = value.get<std::string>();
-                std::string lowered;
-                lowered.reserve(text.size());
-                for (unsigned char ch : text) {
-                        lowered.push_back(static_cast<char>(std::tolower(ch)));
-                }
-                if (lowered == "true" || lowered == "1" || lowered == "yes" || lowered == "on") {
-                        return true;
-                }
-                if (lowered == "false" || lowered == "0" || lowered == "no" || lowered == "off") {
-                        return false;
-                }
-        }
-        return fallback;
-}
-
-int json_int(const nlohmann::json& value, int fallback) {
-        if (value.is_number_integer()) {
-                return value.get<int>();
-        }
-        if (value.is_number()) {
-                return static_cast<int>(value.get<double>());
-        }
-        if (value.is_string()) {
-                try {
-                        return std::stoi(value.get<std::string>());
-                } catch (...) {
-                }
-        }
-        return fallback;
-}
-
-float json_float(const nlohmann::json& value, float fallback) {
-        if (value.is_number()) {
-                return static_cast<float>(value.get<double>());
-        }
-        if (value.is_string()) {
-                try {
-                        return std::stof(value.get<std::string>());
-                } catch (...) {
-                }
-        }
-        return fallback;
 }
 
 std::vector<float> discover_cached_scale_steps(const fs::path& cache_folder) {
@@ -180,44 +128,13 @@ fs::path project_root_path() {
 #endif
 }
 
-float read_float(const nlohmann::json& value, float fallback = 0.0f) {
-        if (value.is_number()) {
-                try {
-                        return static_cast<float>(value.get<double>());
-                } catch (...) {}
-        }
-        if (value.is_string()) {
-                try {
-                        return std::stof(value.get<std::string>());
-                } catch (...) {}
-        }
-        return fallback;
-}
-
-int read_int(const nlohmann::json& value, int fallback = 0) {
-        if (value.is_number_integer()) {
-                try {
-                        return value.get<int>();
-                } catch (...) {}
-        } else if (value.is_number()) {
-                try {
-                        return static_cast<int>(value.get<double>());
-                } catch (...) {}
-        } else if (value.is_string()) {
-                try {
-                        return std::stoi(value.get<std::string>());
-                } catch (...) {}
-        }
-        return fallback;
-}
-
 DisplacedAssetAnchorPoint read_anchor_point(const nlohmann::json& node, bool& valid) {
         DisplacedAssetAnchorPoint anchor{};
         valid = false;
         if (!node.is_object()) {
                 return anchor;
         }
-        anchor.name = node.value("name", std::string{});
+        anchor.name = read_string_field_like(node, "name", std::string{});
         if (anchor.name.empty()) {
                 return anchor;
         }
@@ -347,8 +264,8 @@ void parse_box_corners(TBox& box, const nlohmann::json& node) {
                 animation_update::FrameBoxCorner corner{};
                 if (idx < corners.size() && corners[idx].is_object()) {
                         const auto& corner_node = corners[idx];
-                        corner.texture_x = std::max(0, read_int(corner_node.value("texture_x", 0), 0));
-                        corner.texture_y = std::max(0, read_int(corner_node.value("texture_y", 0), 0));
+                        corner.texture_x = std::max(0, read_int_field_like(corner_node, "texture_x", 0));
+                        corner.texture_y = std::max(0, read_int_field_like(corner_node, "texture_y", 0));
                 }
                 box.corners[idx] = corner;
         }
@@ -359,8 +276,8 @@ animation_update::FrameHitBox parse_hit_box(const nlohmann::json& node, std::siz
         if (!node.is_object()) {
                 return box;
         }
-        box.name = node.value("name", std::string{"hit_box_" + std::to_string(ordinal + 1)});
-        box.extrusion_amount = std::max(0, read_int(node.value("extrusion_amount", 0), 0));
+        box.name = read_string_field_like(node, "name", std::string{"hit_box_" + std::to_string(ordinal + 1)});
+        box.extrusion_amount = std::max(0, read_int_field_like(node, "extrusion_amount", 0));
         parse_box_corners(box, node);
         return box;
 }
@@ -370,9 +287,9 @@ animation_update::FrameAttackBox parse_attack_box(const nlohmann::json& node, st
         if (!node.is_object()) {
                 return box;
         }
-        box.name = node.value("name", std::string{"attack_box_" + std::to_string(ordinal + 1)});
-        box.extrusion_amount = std::max(0, read_int(node.value("extrusion_amount", 0), 0));
-        box.damage_amount = read_int(node.value("damage_amount", node.value("damage", 0)), 0);
+        box.name = read_string_field_like(node, "name", std::string{"attack_box_" + std::to_string(ordinal + 1)});
+        box.extrusion_amount = std::max(0, read_int_field_like(node, "extrusion_amount", 0));
+        box.damage_amount = read_int_field_like(node, "damage_amount", read_int_field_like(node, "damage", 0));
         parse_box_corners(box, node);
         return box;
 }
@@ -680,24 +597,15 @@ void AnimationLoader::load(Animation& animation,
         if (anim_json.contains("source")) {
                 const auto& s = anim_json["source"];
                 try {
-                        if (s.contains("kind") && s["kind"].is_string())
-                        animation.source.kind = s["kind"].get<std::string>();
-			else
-			animation.source.kind = "folder";
-		} catch (...) { animation.source.kind = "folder"; }
-		try {
-			if (s.contains("path") && s["path"].is_string())
-			animation.source.path = s["path"].get<std::string>();
-			else
-			animation.source.path.clear();
-		} catch (...) { animation.source.path.clear(); }
-		try {
-			if (s.contains("name") && s["name"].is_string())
-			animation.source.name = s["name"].get<std::string>();
-			else
-			animation.source.name.clear();
-		} catch (...) { animation.source.name.clear(); }
-	}
+                        animation.source.kind = read_string_field_like(s, "kind", std::string{"folder"});
+                } catch (...) { animation.source.kind = "folder"; }
+                try {
+                        animation.source.path = read_string_field_like(s, "path", std::string{});
+                } catch (...) { animation.source.path.clear(); }
+                try {
+                        animation.source.name = read_string_field_like(s, "name", std::string{});
+                } catch (...) { animation.source.name.clear(); }
+        }
 
         if (animation.source.kind == "animation" && !animation.source.name.empty()) {
                 auto it = info.animations.find(animation.source.name);
@@ -716,20 +624,23 @@ void AnimationLoader::load(Animation& animation,
                 info.scale_variants = animation.variant_steps_;
         }
 
-        animation.flipped_source = anim_json.value("flipped_source", false);
-        animation.flip_vertical_source = anim_json.value("flip_vertical_source", false);
-        animation.flip_movement_horizontal = anim_json.value("flip_movement_horizontal", false);
-        animation.flip_movement_vertical = anim_json.value("flip_movement_vertical", false);
-        animation.reverse_source = anim_json.value("reverse_source", false);
-        const bool inherit_source_movement = anim_json.value("inherit_source_movement", (animation.source.kind == "animation"));
+        animation.flipped_source = read_bool_field_like(anim_json, "flipped_source", false);
+        animation.flip_vertical_source = read_bool_field_like(anim_json, "flip_vertical_source", false);
+        animation.flip_movement_horizontal = read_bool_field_like(anim_json, "flip_movement_horizontal", false);
+        animation.flip_movement_vertical = read_bool_field_like(anim_json, "flip_movement_vertical", false);
+        animation.reverse_source = read_bool_field_like(anim_json, "reverse_source", false);
+        const bool inherit_source_movement =
+            read_bool_field_like(anim_json, "inherit_source_movement", (animation.source.kind == "animation"));
         if (animation.source.kind == "animation" && anim_json.contains("derived_modifiers") &&
             anim_json["derived_modifiers"].is_object()) {
                 const auto& modifiers = anim_json["derived_modifiers"];
-                animation.reverse_source = modifiers.value("reverse", animation.reverse_source);
-                animation.flipped_source = modifiers.value("flipX", animation.flipped_source);
-                animation.flip_vertical_source = modifiers.value("flipY", animation.flip_vertical_source);
-                animation.flip_movement_horizontal = modifiers.value("flipMovementX", animation.flip_movement_horizontal);
-                animation.flip_movement_vertical = modifiers.value("flipMovementY", animation.flip_movement_vertical);
+                animation.reverse_source = read_bool_field_like(modifiers, "reverse", animation.reverse_source);
+                animation.flipped_source = read_bool_field_like(modifiers, "flipX", animation.flipped_source);
+                animation.flip_vertical_source = read_bool_field_like(modifiers, "flipY", animation.flip_vertical_source);
+                animation.flip_movement_horizontal =
+                    read_bool_field_like(modifiers, "flipMovementX", animation.flip_movement_horizontal);
+                animation.flip_movement_vertical =
+                    read_bool_field_like(modifiers, "flipMovementY", animation.flip_movement_vertical);
         } else if (animation.source.kind != "animation") {
                 animation.flip_vertical_source = false;
                 animation.flip_movement_horizontal = false;
@@ -737,11 +648,11 @@ void AnimationLoader::load(Animation& animation,
         }
         animation.inherit_source_movement = (animation.source.kind == "animation") && inherit_source_movement;
 
-        animation.locked         = anim_json.value("locked", false);
-	animation.loop      = anim_json.value("loop", true);
-	animation.randomize = anim_json.value("randomize", false);
-	animation.rnd_start = anim_json.value("rnd_start", false);
-        animation.on_end_animation = anim_json.value("on_end", std::string{"default"});
+        animation.locked = read_bool_field_like(anim_json, "locked", false);
+        animation.loop = read_bool_field_like(anim_json, "loop", true);
+        animation.randomize = read_bool_field_like(anim_json, "randomize", false);
+        animation.rnd_start = read_bool_field_like(anim_json, "rnd_start", false);
+        animation.on_end_animation = read_string_field_like(anim_json, "on_end", std::string{"default"});
         animation.on_end_behavior = Animation::classify_on_end(animation.on_end_animation);
         animation.total_dx = 0;
         animation.total_dy = 0;
@@ -774,10 +685,10 @@ void AnimationLoader::load(Animation& animation,
 
                                 if (mv.is_object()) {
                                         // Movement uses integer world pixels
-                                        fm.dx = json_int(mv.value("x", 0), 0);
-                                        fm.dy = json_int(mv.value("y", 0), 0);
-                                        fm.dz = json_int(mv.value("z", 0), 0);
-                                        fm.z_resort = mv.value("resort_z", false);
+                                        fm.dx = read_int_field_like(mv, "x", 0);
+                                        fm.dy = read_int_field_like(mv, "y", 0);
+                                        fm.dz = read_int_field_like(mv, "z", 0);
+                                        fm.z_resort = read_bool_field_like(mv, "resort_z", false);
                                         if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.contains("resort_z")) specified = true;
                                         dest.push_back(std::move(fm));
                                         continue;
@@ -949,10 +860,10 @@ void AnimationLoader::load(Animation& animation,
                 return value;
 };
         if (audio_json) {
-                animation.audio_clip.volume = clamp_volume(audio_json->value("volume", animation.audio_clip.volume));
-                animation.audio_clip.effects = audio_json->value("effects", animation.audio_clip.effects);
+                animation.audio_clip.volume = clamp_volume(read_int_field_like(*audio_json, "volume", animation.audio_clip.volume));
+                animation.audio_clip.effects = read_bool_field_like(*audio_json, "effects", animation.audio_clip.effects);
                 try {
-                        std::string clip_name = audio_json->value("name", std::string{});
+                        std::string clip_name = read_string_field_like(*audio_json, "name", std::string{});
                         if (!clip_name.empty()) {
                                 animation.audio_clip.name = clip_name;
                                 std::filesystem::path clip_path = std::filesystem::path(dir_path) / (clip_name + ".wav");
@@ -969,10 +880,12 @@ void AnimationLoader::load(Animation& animation,
                         animation.audio_clip = it->second.audio_clip;
                         if (audio_json) {
                                 if (audio_json->contains("volume")) {
-                                        animation.audio_clip.volume = clamp_volume(audio_json->value("volume", animation.audio_clip.volume));
+                                        animation.audio_clip.volume =
+                                            clamp_volume(read_int_field_like(*audio_json, "volume", animation.audio_clip.volume));
                                 }
                                 if (audio_json->contains("effects")) {
-                                        animation.audio_clip.effects = audio_json->value("effects", animation.audio_clip.effects);
+                                        animation.audio_clip.effects =
+                                            read_bool_field_like(*audio_json, "effects", animation.audio_clip.effects);
                                 }
                         }
                 }

@@ -13,104 +13,31 @@
 #include <nlohmann/json.hpp>
 
 #include "assets/asset/animation.hpp"
+#include "json_coercion.hpp"
 #include "string_utils.hpp"
 
 namespace {
 
 using animation_editor::AnimationDocument;
-
-bool parse_bool(const nlohmann::json& value, bool fallback) {
-    if (value.is_boolean()) return value.get<bool>();
-    if (value.is_number_integer()) return value.get<int>() != 0;
-    if (value.is_number_float()) return value.get<double>() != 0.0;
-    if (value.is_string()) {
-        std::string text = value.get<std::string>();
-        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-        if (text == "true" || text == "1" || text == "yes" || text == "on") return true;
-        if (text == "false" || text == "0" || text == "no" || text == "off") return false;
-    }
-    return fallback;
-}
-
-bool parse_bool_field(const nlohmann::json& payload, const char* key, bool fallback) {
-    if (!payload.is_object() || !key) {
-        return fallback;
-    }
-    auto it = payload.find(key);
-    if (it == payload.end()) {
-        return fallback;
-    }
-    return parse_bool(*it, fallback);
-}
-
-int parse_int(const nlohmann::json& value, int fallback) {
-    if (value.is_number_integer()) return value.get<int>();
-    if (value.is_number()) return static_cast<int>(value.get<double>());
-    if (value.is_string()) {
-        try {
-            return std::stoi(value.get<std::string>());
-        } catch (...) {
-        }
-    }
-    return fallback;
-}
-
-float parse_float(const nlohmann::json& value, float fallback) {
-    if (value.is_number()) {
-        try {
-            return static_cast<float>(value.get<double>());
-        } catch (...) {}
-    }
-    if (value.is_string()) {
-        try {
-            return std::stof(value.get<std::string>());
-        } catch (...) {}
-    }
-    return fallback;
-}
-
-std::string parse_string(const nlohmann::json& value, const std::string& fallback) {
-    if (value.is_string()) {
-        try {
-            return value.get<std::string>();
-        } catch (...) {
-            return fallback;
-        }
-    }
-    if (value.is_number_integer()) {
-        try {
-            return std::to_string(value.get<long long>());
-        } catch (...) {
-            return fallback;
-        }
-    }
-    if (value.is_number_float()) {
-        try {
-            return std::to_string(value.get<double>());
-        } catch (...) {
-            return fallback;
-        }
-    }
-    if (value.is_boolean()) {
-        return value.get<bool>() ? "true" : "false";
-    }
-    return fallback;
-}
+using json_coercion::read_bool_field_like;
+using json_coercion::read_bool_like;
+using json_coercion::read_int_like;
+using json_coercion::read_string_like;
 
 nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::json& source_payload) {
     nlohmann::json payload = source_payload.is_object() ? source_payload : nlohmann::json::object();
 
     nlohmann::json source = payload.contains("source") && payload["source"].is_object() ? payload["source"] : nlohmann::json::object();
-    std::string kind = parse_string(source.contains("kind") ? source["kind"] : nlohmann::json{}, std::string{"folder"});
-    std::string path = parse_string(source.contains("path") ? source["path"] : nlohmann::json{},
-                                    kind == "folder" ? animation_id : std::string{});
+    std::string kind = read_string_like(source.contains("kind") ? source["kind"] : nlohmann::json{}, std::string{"folder"});
+    std::string path = read_string_like(source.contains("path") ? source["path"] : nlohmann::json{},
+                                        kind == "folder" ? animation_id : std::string{});
     nlohmann::json name_value;
     if (kind == "folder") {
 
         name_value = std::string{};
     } else {
         if (source.contains("name")) {
-            name_value = parse_string(source["name"], std::string{});
+            name_value = read_string_like(source["name"], std::string{});
         } else {
             name_value = std::string{};
         }
@@ -122,7 +49,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
 };
 
     auto ensure_bool = [&](const char* key, bool fallback) {
-        payload[key] = parse_bool(payload.contains(key) ? payload[key] : nlohmann::json(fallback), fallback);
+        payload[key] = read_bool_like(payload.contains(key) ? payload[key] : nlohmann::json(fallback), fallback);
 };
 
     ensure_bool("flipped_source", false);
@@ -132,31 +59,31 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     ensure_bool("rnd_start", false);
 
     bool derived_from_animation = (kind == "animation");
-    bool derived_reverse = parse_bool_field(payload, "reverse_source", false);
-    bool derived_flip_x = parse_bool_field(payload, "flipped_source", false);
+    bool derived_reverse = read_bool_field_like(payload, "reverse_source", false);
+    bool derived_flip_x = read_bool_field_like(payload, "flipped_source", false);
     bool derived_flip_y = false;
     bool derived_flip_movement_x = false;
     bool derived_flip_movement_y = false;
     if (payload.contains("derived_modifiers") && payload["derived_modifiers"].is_object()) {
         const auto& modifiers = payload["derived_modifiers"];
         if (modifiers.contains("reverse")) {
-            derived_reverse = parse_bool(modifiers["reverse"], derived_reverse);
+            derived_reverse = read_bool_like(modifiers["reverse"], derived_reverse);
         }
         if (modifiers.contains("flipX")) {
-            derived_flip_x = parse_bool(modifiers["flipX"], derived_flip_x);
+            derived_flip_x = read_bool_like(modifiers["flipX"], derived_flip_x);
         }
         if (modifiers.contains("flipY")) {
-            derived_flip_y = parse_bool(modifiers["flipY"], false);
+            derived_flip_y = read_bool_like(modifiers["flipY"], false);
         }
         if (modifiers.contains("flipMovementX")) {
-            derived_flip_movement_x = parse_bool(modifiers["flipMovementX"], false);
+            derived_flip_movement_x = read_bool_like(modifiers["flipMovementX"], false);
         }
         if (modifiers.contains("flipMovementY")) {
-            derived_flip_movement_y = parse_bool(modifiers["flipMovementY"], false);
+            derived_flip_movement_y = read_bool_like(modifiers["flipMovementY"], false);
         }
     }
 
-    bool inherit_source_movement = parse_bool_field(payload, "inherit_source_movement", derived_from_animation);
+    bool inherit_source_movement = read_bool_field_like(payload, "inherit_source_movement", derived_from_animation);
 
     payload["inherit_source_movement"] = inherit_source_movement;
 
@@ -213,7 +140,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     payload.erase("crop_frames");
     payload.erase("crop_bounds");
 
-    int frames = parse_int(payload.contains("number_of_frames") ? payload["number_of_frames"] : nlohmann::json(1), 1);
+    int frames = read_int_like(payload.contains("number_of_frames") ? payload["number_of_frames"] : nlohmann::json(1), 1);
     if (frames < 1) frames = 1;
     payload["number_of_frames"] = frames;
 
@@ -252,7 +179,7 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
                 const char* keys[] = {"dx", "dy", "dz"};
                 const char* key = (index >= 0 && index < 3) ? keys[index] : nullptr;
                 if (key && entry.contains(key)) {
-                    return parse_int(entry[key], 0);
+                    return read_int_like(entry[key], 0);
                 }
             }
             return 0;
@@ -287,9 +214,9 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
     if (!derived_from_animation) {
         if (payload.contains("audio") && payload["audio"].is_object()) {
             auto audio = payload["audio"];
-            std::string name = parse_string(audio.contains("name") ? audio["name"] : nlohmann::json{}, std::string{});
-            int volume = std::clamp(parse_int(audio.contains("volume") ? audio["volume"] : nlohmann::json(100), 100), 0, 100);
-            bool effects = parse_bool(audio.contains("effects") ? audio["effects"] : nlohmann::json(false), false);
+            std::string name = read_string_like(audio.contains("name") ? audio["name"] : nlohmann::json{}, std::string{});
+            int volume = std::clamp(read_int_like(audio.contains("volume") ? audio["volume"] : nlohmann::json(100), 100), 0, 100);
+            bool effects = read_bool_like(audio.contains("effects") ? audio["effects"] : nlohmann::json(false), false);
             if (!name.empty()) {
                 payload["audio"] = nlohmann::json{{"name", name}, {"volume", volume}, {"effects", effects}};
             } else {
@@ -649,7 +576,7 @@ void AnimationDocument::rename_animation(const std::string& old_id, const std::s
 
         if (payload.contains("source") && payload["source"].is_object()) {
             nlohmann::json& src = payload["source"];
-            std::string kind = parse_string(src.contains("kind") ? src["kind"] : nlohmann::json{}, std::string{"folder"});
+            std::string kind = read_string_like(src.contains("kind") ? src["kind"] : nlohmann::json{}, std::string{"folder"});
             if (kind == std::string{"animation"}) {
 
                 if (src.contains("name")) {

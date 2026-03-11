@@ -1,6 +1,7 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 
+#include <new>
 #include <utility>
 
 #if defined(ENGINE_WORLD_TESTS)
@@ -60,8 +61,11 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_in,
              int grid_resolution_in)
     : info(std::move(info_in))
     , current_animation()
-    , pos_(nullptr)
-    , initial_world_pos_(start_pos)
+    , provisional_grid_point_(GridPoint::make_virtual(start_pos.x,
+                                                      0,
+                                                      start_pos.y,
+                                                      vibble::grid::clamp_resolution(grid_resolution_in)))
+    , pos_(&provisional_grid_point_)
     , grid_resolution(vibble::grid::clamp_resolution(grid_resolution_in))
     , depth(depth_in)
     , spawn_id(spawn_id_in)
@@ -76,11 +80,11 @@ Asset::Asset(std::shared_ptr<AssetInfo> info_in,
 Asset::~Asset() = default;
 
 float Asset::smoothed_translation_x() const {
-    return pos_ ? static_cast<float>(pos_->world_x()) : static_cast<float>(initial_world_pos_.x);
+    return pos_ ? static_cast<float>(pos_->world_x()) : 0.0f;
 }
 
 float Asset::smoothed_translation_y() const {
-    return pos_ ? static_cast<float>(pos_->world_y()) : static_cast<float>(initial_world_pos_.y);
+    return pos_ ? static_cast<float>(pos_->world_y()) : 0.0f;
 }
 
 float Asset::smoothed_scale() const {
@@ -95,5 +99,27 @@ void Asset::set_assets(Assets* a) { assets_ = a; }
 void Asset::sync_transform_to_position() {}
 void Asset::clear_grid_id() { grid_id_ = 0; }
 void Asset::mark_anchors_dirty() {}
+
+void Asset::set_provisional_grid_point(const world::GridPoint& point) {
+    set_provisional_grid_point(point.world_x(),
+                               point.world_y(),
+                               point.world_z(),
+                               point.resolution_layer());
+}
+
+void Asset::set_provisional_grid_point(int world_x, int world_y, int world_z, int resolution_layer) {
+    provisional_grid_point_.~GridPoint();
+    new (&provisional_grid_point_) GridPoint(
+        GridPoint::make_virtual(world_x,
+                                world_y,
+                                world_z,
+                                vibble::grid::clamp_resolution(resolution_layer)));
+    pos_ = &provisional_grid_point_;
+}
+
+void Asset::cache_grid_residency(const world::GridPoint& point) {
+    has_cached_grid_residency_ = true;
+    cached_grid_residency_ = point.key();
+}
 
 #endif // ENGINE_WORLD_TESTS

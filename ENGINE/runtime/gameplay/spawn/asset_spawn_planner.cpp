@@ -7,35 +7,7 @@
 
 #include "room_relative_size_resolver.hpp"
 #include "assets/asset/Asset.hpp"
-
-namespace {
-
-nlohmann::json& ensure_spawn_groups_array(nlohmann::json& root) {
-    if (root.is_array()) {
-        return root;
-    }
-    if (!root.is_object()) {
-        root = nlohmann::json::object();
-    }
-    if (root.contains("spawn_groups") && root["spawn_groups"].is_array()) {
-        return root["spawn_groups"];
-    }
-    root["spawn_groups"] = nlohmann::json::array();
-    return root["spawn_groups"];
-}
-
-std::string generate_spawn_id() {
-    static std::mt19937 rng(std::random_device{}());
-    static const char* hex = "0123456789abcdef";
-    std::uniform_int_distribution<int> dist(0, 15);
-    std::string id = "spn-";
-    for (int i = 0; i < 12; ++i) {
-        id.push_back(hex[dist(rng)]);
-    }
-    return id;
-}
-
-}
+#include "spawn_group_codec.hpp"
 
 AssetSpawnPlanner::AssetSpawnPlanner(const std::vector<nlohmann::json>& json_sources,
                                      const Area& area,
@@ -54,7 +26,7 @@ AssetSpawnPlanner::AssetSpawnPlanner(const std::vector<nlohmann::json>& json_sou
     for (size_t si = 0; si < source_jsons_.size(); ++si) {
         try {
             nlohmann::json js = source_jsons_[si];
-            auto& groups = ensure_spawn_groups_array(js);
+            auto& groups = vibble::spawn_group_codec::ensure_spawn_groups_array(js);
             if (!groups.is_array()) continue;
             for (size_t ai = 0; ai < groups.size(); ++ai) {
                 merged["spawn_groups"].push_back(groups[ai]);
@@ -88,30 +60,45 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
         return (j.contains(k) && j[k].is_string()) ? j[k].get<std::string>() : std::string{};
 };
 
+    auto mark_source_changed = [&](const SourceRef& ref) {
+        if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
+            source_changed_[static_cast<size_t>(ref.source_index)] = true;
+        }
+    };
+
     for (size_t idx = 0; idx < root_json_["spawn_groups"].size(); ++idx) {
         auto& entry = root_json_["spawn_groups"][idx];
         if (!entry.is_object()) continue;
-        nlohmann::json asset = entry;
 
-        std::string spawn_id = get_opt_str(asset, "spawn_id");
-        if (spawn_id.empty()) {
-            spawn_id = generate_spawn_id();
-            entry["spawn_id"] = spawn_id;
-            asset["spawn_id"] = spawn_id;
-            if (idx < assets_provenance_.size()) {
-                const auto& ref = assets_provenance_[idx];
-                if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
-                    (*src)["spawn_id"] = spawn_id;
-                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
-                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
-                    }
-                }
+        std::string fallback_display_name = get_opt_str(entry, "display_name");
+        if (fallback_display_name.empty()) {
+            fallback_display_name = get_opt_str(entry, "name");
+        }
+        if (fallback_display_name.empty()) {
+            fallback_display_name = "Spawn";
+        }
+
+        vibble::spawn_group_codec::EntryDefaults defaults{};
+        defaults.display_name = fallback_display_name;
+        const std::string fallback_candidate_name = get_opt_str(entry, "name");
+        defaults.default_candidate.name = fallback_candidate_name.empty() ? std::string("null") : fallback_candidate_name;
+        defaults.default_candidate.chance = fallback_candidate_name.empty() ? 0.0 : 100.0;
+
+        if (vibble::spawn_group_codec::ensure_spawn_group_entry_defaults(entry, defaults) &&
+            idx < assets_provenance_.size()) {
+            const auto& ref = assets_provenance_[idx];
+            if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
+                *src = entry;
+                mark_source_changed(ref);
             }
         }
 
+        nlohmann::json asset = entry;
+        std::string spawn_id = get_opt_str(asset, "spawn_id");
+
         int priority = -1;
-        if (asset.contains("priority") && asset["priority"].is_number_integer()) {
-            priority = asset["priority"].get<int>();
+        if (asset.contains("priority")) {
+            priority = vibble::spawn_group_codec::read_int_field(asset, "priority", -1);
         }
         if (priority < 0) {
             priority = static_cast<int>(idx);
@@ -120,16 +107,12 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
                 const auto& ref = assets_provenance_[idx];
                 if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
                     (*src)["priority"] = priority;
-                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
-                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
-                    }
+                    mark_source_changed(ref);
                 }
             }
         }
 
-        std::string position = get_opt_str(asset, "position");
-        if (position.empty()) position = "Random";
-        if (position == "Exact Position") position = "Exact";
+        std::string position = vibble::spawn_group_codec::normalize_method_from_entry(asset);
 
         std::string display_name = get_opt_str(asset, "display_name");
         if (display_name.empty()) display_name = get_opt_str(asset, "name");
@@ -175,9 +158,7 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
                 const auto& ref = assets_provenance_[idx];
                 if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
                     (*src)["execution_mode"] = "batch_grid";
-                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
-                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
-                    }
+                    mark_source_changed(ref);
                 }
             }
         }
@@ -185,61 +166,24 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
         std::string link_name = get_opt_str(asset, "link");
 
         const bool force_single_quantity = (position == "Exact");
-
-        auto read_bool = [](const nlohmann::json& j, const char* key, bool fallback) {
-            if (!j.is_object() || !j.contains(key)) return fallback;
-            const auto& value = j.at(key);
-            if (value.is_boolean()) return value.get<bool>();
-            if (value.is_number_integer()) return value.get<int>() != 0;
-            if (value.is_string()) {
-                std::string text = value.get<std::string>();
-                std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-                if (text == "true" || text == "1" || text == "yes") return true;
-                if (text == "false" || text == "0" || text == "no") return false;
-            }
-            return fallback;
-};
-
-        auto ensure_bool_field = [&](const char* key, bool value) {
-            bool updated = false;
-            if (!entry.contains(key) || !entry[key].is_boolean() || entry[key].get<bool>() != value) {
-                entry[key] = value;
-                updated = true;
-            }
-            if (!asset.contains(key) || !asset[key].is_boolean() || asset[key].get<bool>() != value) {
-                asset[key] = value;
-                updated = true;
-            }
-            if (updated && idx < assets_provenance_.size()) {
-                const auto& ref = assets_provenance_[idx];
-                if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
-                    (*src)[key] = value;
-                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
-                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
-                    }
-                }
-            }
-};
-
-        const bool default_geometry = (position == "Exact" || position == "Perimeter");
-        const bool resolve_geometry = read_bool(asset, "resolve_geometry_to_room_size", default_geometry);
-        const bool resolve_quantity = read_bool(asset, "resolve_quantity_to_room_size", false);
-
-        ensure_bool_field("resolve_geometry_to_room_size", resolve_geometry);
-        ensure_bool_field("resolve_quantity_to_room_size", resolve_quantity);
+        const bool default_geometry = vibble::spawn_group_codec::uses_geometry_resolution_by_default(position);
+        const bool resolve_geometry =
+            vibble::spawn_group_codec::read_bool_field(asset, "resolve_geometry_to_room_size", default_geometry);
+        const bool resolve_quantity =
+            vibble::spawn_group_codec::read_bool_field(asset, "resolve_quantity_to_room_size", false);
 
         auto [minx, miny, maxx, maxy] = area.get_bounds();
         const int curr_w = std::max(1, maxx - minx);
         const int curr_h = std::max(1, maxy - miny);
 
-        int min_num = asset.value("min_number", 1);
-        int max_num = asset.value("max_number", min_num);
+        int min_num = vibble::spawn_group_codec::read_int_field(asset, "min_number", 1);
+        int max_num = vibble::spawn_group_codec::read_int_field(asset, "max_number", min_num);
         if (min_num < 0) min_num = 0;
         if (max_num < 0) max_num = 0;
         if (max_num < min_num) std::swap(max_num, min_num);
 
-        int orig_w = asset.value("origional_width", curr_w);
-        int orig_h = asset.value("origional_height", curr_h);
+        int orig_w = vibble::spawn_group_codec::read_int_field(asset, "origional_width", curr_w);
+        int orig_h = vibble::spawn_group_codec::read_int_field(asset, "origional_height", curr_h);
 
         const bool need_orig = default_geometry || resolve_geometry || resolve_quantity;
         if (need_orig) {
@@ -250,7 +194,7 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
                 orig_w = curr_w;
                 set_wh = true;
             } else {
-                orig_w = asset["origional_width"].get<int>();
+                orig_w = vibble::spawn_group_codec::read_int_field(asset, "origional_width", curr_w);
             }
             if (!asset.contains("origional_height") || !asset["origional_height"].is_number_integer()) {
                 entry["origional_height"] = curr_h;
@@ -258,16 +202,14 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
                 orig_h = curr_h;
                 set_wh = true;
             } else {
-                orig_h = asset["origional_height"].get<int>();
+                orig_h = vibble::spawn_group_codec::read_int_field(asset, "origional_height", curr_h);
             }
             if (set_wh && idx < assets_provenance_.size()) {
                 const auto& ref = assets_provenance_[idx];
                 if (auto* src = get_source_entry(ref.source_index, ref.entry_index, ref.key)) {
                     (*src)["origional_width"] = entry["origional_width"];
                     (*src)["origional_height"] = entry["origional_height"];
-                    if (ref.source_index >= 0 && static_cast<size_t>(ref.source_index) < source_changed_.size()) {
-                        source_changed_[static_cast<size_t>(ref.source_index)] = true;
-                    }
+                    mark_source_changed(ref);
                 }
             }
         }
@@ -284,32 +226,15 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
             quantity = 1;
         }
 
-        bool explicit_flip = false;
-        bool force_flipped = false;
-        try {
-            const auto it_exp = asset.find("explicit_flip");
-            if (it_exp != asset.end()) {
-                if (it_exp->is_boolean()) explicit_flip = it_exp->get<bool>();
-                else if (it_exp->is_number_integer()) explicit_flip = it_exp->get<int>() != 0;
-            }
-            const auto it_force = asset.find("force_flipped");
-            if (it_force != asset.end()) {
-                if (it_force->is_boolean()) force_flipped = it_force->get<bool>();
-                else if (it_force->is_number_integer()) force_flipped = it_force->get<int>() != 0;
-            }
-        } catch (...) {}
+        const bool explicit_flip =
+            vibble::spawn_group_codec::read_bool_field(asset, "explicit_flip", false);
+        const bool force_flipped =
+            vibble::spawn_group_codec::read_bool_field(asset, "force_flipped", false);
         Asset::SetFlipOverrideForSpawnId(spawn_id, explicit_flip, force_flipped);
 
         std::vector<nlohmann::json> cand_jsons;
         if (asset.contains("candidates") && asset["candidates"].is_array()) {
             for (const auto& c : asset["candidates"]) cand_jsons.push_back(c);
-        } else {
-            nlohmann::json fallback;
-            if (asset.contains("name") && asset["name"].is_string()) {
-                fallback["name"] = asset["name"].get<std::string>();
-            }
-            fallback["chance"] = 100;
-            cand_jsons.push_back(std::move(fallback));
         }
         if (cand_jsons.empty()) continue;
 
@@ -327,13 +252,8 @@ void AssetSpawnPlanner::parse_asset_spawns(const Area& area) {
 };
 
         auto extract_chance = [](const nlohmann::json& c) -> double {
-            if (!c.contains("chance")) return 0.0;
-            const auto& chance = c["chance"];
-            if (chance.is_number()) {
-                return chance.get<double>();
-            }
-            return 0.0;
-};
+            return vibble::spawn_group_codec::read_candidate_chance(c, 0.0);
+        };
 
         auto sanitize_key = [](std::string value) {
             auto not_space = [](unsigned char ch) { return !std::isspace(ch); };

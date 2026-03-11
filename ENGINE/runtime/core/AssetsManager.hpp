@@ -336,8 +336,16 @@ private:
     std::unordered_map<Asset*, AssetDimensionCache> asset_dimension_cache_;
     std::vector<Asset*> asset_dimension_update_queue_;
     std::unordered_set<Asset*> asset_dimension_update_lookup_;
-    std::vector<Asset*> anchor_basis_dirty_queue_;
-    std::unordered_set<Asset*> anchor_basis_dirty_lookup_;
+    struct RuntimeTraversalState {
+        std::uint64_t pending_anchor_invalidation_version = 0;
+        std::uint64_t processed_anchor_invalidation_version = 0;
+        std::uint64_t processed_anchor_revision = 0;
+        std::uint64_t processed_camera_state_version = 0;
+        std::uint32_t last_audio_frame_id = 0;
+    };
+    std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;
+    std::uint64_t anchor_invalidation_version_counter_ = 1;
+    std::uint32_t last_audio_engine_update_frame_id_ = 0;
     Asset* max_asset_width_holder_ = nullptr;
     Asset* max_asset_height_holder_ = nullptr;
     std::vector<Asset*> visible_candidate_buffer_;
@@ -395,8 +403,11 @@ private:
     void rebuild_non_player_update_buffer_if_needed();
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
-    void refresh_dirty_anchor_bases();
-    void refresh_anchor_dependents_for_active_assets();
+    std::uint64_t next_anchor_invalidation_version();
+    void run_active_runtime_single_pass();
+    void run_active_runtime_single_pass_for_asset(Asset* asset,
+                                                  const SDL_Point& camera_focus,
+                                                  std::uint64_t camera_state_version);
     void update_active_assets(const world::GridPoint& center);
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();
@@ -409,7 +420,6 @@ private:
     world::GridBounds screen_world_rect() const;
     int audio_effect_max_distance_world() const;
 
-    void update_audio_camera_metrics();
     void mark_non_player_update_buffer_dirty() {
         non_player_update_buffer_dirty_.store(true, std::memory_order_release);
     }

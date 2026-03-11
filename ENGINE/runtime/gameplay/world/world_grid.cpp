@@ -294,7 +294,8 @@ std::unique_ptr<Asset> WorldGrid::detach_asset_from_grid_point(Asset* a, GridPoi
     if (clear_mapping) {
         asset_to_key_.erase(a);
     }
-    a->pos_ = nullptr;
+    a->set_provisional_grid_point(point);
+    a->cache_grid_residency(point);
     a->clear_grid_id();
     SDL_assert(point.occupants.empty() || point.has_assets_or_active_children());
     const bool has_after = point.has_assets_or_active_children();

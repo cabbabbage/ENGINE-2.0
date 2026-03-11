@@ -198,21 +198,12 @@ void MainApp::setup() {
                 const std::string map_identifier = map_descriptor_.id.empty() ? map_path_ : map_descriptor_.id;
 
                 manifest::ManifestData manifest_data = manifest::load_manifest();
-                const nlohmann::json* fallback_manifest =
-                        (map_descriptor_.data.is_object() && !map_descriptor_.data.empty())
-                                ? &map_descriptor_.data
-                                : nullptr;
                 manifest::MapManifestBootstrapResult bootstrap = manifest::bootstrap_map_manifest(
-                        manifest_data, map_identifier, fallback_manifest);
+                        manifest_data, map_identifier);
                 nlohmann::json map_manifest_json = std::move(bootstrap.map_manifest);
                 const fs::path resolved_root = bootstrap.resolved_content_root;
                 const bool manifest_updated = bootstrap.changed;
-                if (!bootstrap.manifest_entry_found && fallback_manifest) {
-                        vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Using descriptor payload.");
-                } else if (!bootstrap.manifest_entry_found) {
-                        vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Deferring to normalization defaults.");
-                }
-                if (bootstrap.changed && !bootstrap.manifest_entry_found) {
+                if (!bootstrap.manifest_entry_found) {
                         vibble::log::warn(std::string("[MainApp] Map '") + map_identifier + "' missing from manifest. Applying normalized defaults.");
                 } else if (bootstrap.changed) {
                         vibble::log::warn(std::string("[MainApp] Normalized manifest defaults for map '") + map_identifier + "'.");

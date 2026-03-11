@@ -18,6 +18,7 @@
 
 #include "devtools/dev_camera_controls.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "assets/asset/anchor_point.hpp"
 #include "utils/input.hpp"
 
 class Asset;
@@ -36,6 +37,7 @@ class Occupancy;
 class Grid;
 }
 class DMButton;
+class RoomAnchorToolsPanel;
 class DevFooterBar;
 class DevControls;
 
@@ -319,6 +321,34 @@ private:
     bool asset_matches_selection_filter(const Asset* asset) const;
     void cycle_selection_filter();
     void reset_selection_filter();
+    void ensure_anchor_editor_widgets();
+    void update_anchor_editor_layout();
+    bool should_show_anchor_mode_toggle() const;
+    bool anchor_mode_active() const;
+    Asset* selected_anchor_mode_asset() const;
+    void toggle_anchor_edit_mode();
+    bool enter_anchor_edit_mode();
+    void exit_anchor_edit_mode(bool flush_immediately);
+    void validate_anchor_edit_target();
+    bool is_anchor_ui_blocking_point(int x, int y) const;
+    void navigate_anchor_animation(int delta);
+    void navigate_anchor_frame(int delta);
+    bool apply_anchor_animation_and_frame(const std::string& animation_id, int frame_index);
+    std::vector<std::string> anchor_mode_animation_names() const;
+    int resolve_anchor_mode_frame_index() const;
+    void refresh_anchor_mode_handles();
+    void sync_anchor_tools_panel();
+    void ensure_anchor_selection_valid();
+    int find_anchor_handle_at_point(SDL_Point screen_point, int radius_px) const;
+    bool handle_anchor_mode_mouse_input(const Input& input);
+    bool mutate_anchor_current_frame(const std::function<bool(std::vector<DisplacedAssetAnchorPoint>&)>& mutator,
+                                     devmode::core::DevSaveCoordinator::Priority priority);
+    bool persist_anchor_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
+    bool update_anchor_depth(const std::string& anchor_name, int delta);
+    bool drag_anchor_to_screen(const std::string& anchor_name, SDL_Point screen_point);
+    bool add_anchor_in_current_frame();
+    bool rename_selected_anchor_in_current_frame(const std::string& desired_name);
+    bool delete_selected_anchor_in_current_frame();
 
     struct AssetSpatialEntry {
         SDL_Rect bounds{0, 0, 0, 0};
@@ -362,12 +392,51 @@ private:
         Boundary,        // Boundary assets only
         Anchored,        // Assets following another asset's anchor point
     };
+
+    enum class EditorMode {
+        Normal,
+        AnchorEdit,
+    };
+
     SelectionFilter selection_filter_ = SelectionFilter::Normal;
+    EditorMode editor_mode_ = EditorMode::Normal;
     bool shift_was_down_last_frame_ = false;
     bool shift_space_was_down_last_frame_ = false;
 
     std::unique_ptr<AssetLibraryUI> library_ui_;
     std::unique_ptr<AssetInfoUI> info_ui_;
+    std::unique_ptr<RoomAnchorToolsPanel> anchor_tools_panel_;
+    std::unique_ptr<DMButton> anchor_mode_toggle_button_;
+    std::unique_ptr<DMButton> anchor_anim_prev_button_;
+    std::unique_ptr<DMButton> anchor_anim_next_button_;
+    std::unique_ptr<DMButton> anchor_frame_prev_button_;
+    std::unique_ptr<DMButton> anchor_frame_next_button_;
+
+    struct AnchorHandleSample {
+        std::string name;
+        int texture_x = 0;
+        int texture_y = 0;
+        int depth_offset = 0;
+        SDL_FPoint flat_screen_px{0.0f, 0.0f};
+        bool has_flat_screen_px = false;
+        SDL_FPoint final_screen_px{0.0f, 0.0f};
+        bool has_final_screen_px = false;
+    };
+
+    struct AnchorEditState {
+        Asset* target_asset = nullptr;
+        std::string animation_id;
+        int frame_index = 0;
+        std::string selected_anchor_name;
+        std::string hovered_anchor_name;
+        std::string dragging_anchor_name;
+        bool dragging = false;
+        bool had_static_frame_before = false;
+        bool static_frame_before = false;
+        bool dirty_since_last_flush = false;
+        std::vector<AnchorHandleSample> handles;
+    };
+    AnchorEditState anchor_edit_;
 
     std::unique_ptr<RoomConfigurator> room_cfg_ui_;
     SDL_Rect room_config_bounds_{0, 0, 0, 0};

@@ -30,12 +30,12 @@ TEST_CASE("Direction intent uses camera right sign for world horizontal mapping"
     check_intent(camera_right_negative, 1, -1, -1, -1);
 }
 
-TEST_CASE("Direction intent fallback keeps legacy horizontal inversion without camera basis") {
+TEST_CASE("Direction intent fallback keeps canonical horizontal mapping without camera basis") {
     const DirectionIntent fallback = resolve_direction_intent(-1, 1, 0.0, false);
-    check_intent(fallback, -1, 1, 1, 1);
+    check_intent(fallback, -1, 1, -1, 1);
 
     const DirectionIntent near_zero_basis = resolve_direction_intent(-1, 1, 0.0, true);
-    check_intent(near_zero_basis, -1, 1, 1, 1);
+    check_intent(near_zero_basis, -1, 1, -1, 1);
 }
 
 TEST_CASE("Direction intent normalizes raw axis magnitudes to signed intent") {

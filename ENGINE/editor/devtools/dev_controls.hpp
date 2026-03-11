@@ -108,9 +108,7 @@ public:
     [[nodiscard]] devmode::core::DevSaveCoordinator& save_coordinator();
     [[nodiscard]] const devmode::core::DevSaveCoordinator& save_coordinator() const;
     void mark_map_dirty(devmode::core::DevSaveCoordinator::Priority priority =
-                            devmode::core::DevSaveCoordinator::Priority::Debounced,
-                    devmode::core::SaveManager::MapWritePath path =
-                        devmode::core::SaveManager::MapWritePath::Default);
+                            devmode::core::DevSaveCoordinator::Priority::Debounced);
 
     void toggle_room_config();
     void close_room_config();
@@ -337,8 +335,7 @@ private:
     void ensure_boundary_assets_modal_open();
 
 
-    bool persist_map_info_to_disk(devmode::core::SaveManager::MapWritePath path =
-                                 devmode::core::SaveManager::MapWritePath::Default);
+    bool persist_map_info_to_disk();
 
     Assets* assets_ = nullptr;
     Input* input_ = nullptr;
@@ -382,8 +379,6 @@ private:
     bool exit_save_sequence_ran_ = false;
     bool exit_save_sequence_ok_ = true;
     bool map_dirty_ = false;
-    devmode::core::SaveManager::MapWritePath map_write_path_ =
-        devmode::core::SaveManager::MapWritePath::Default;
     OtherSettingsAndControls other_settings_;
     std::vector<OtherSettingsAndControls::SettingSchema> global_settings_schema_;
 

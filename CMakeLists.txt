@@ -267,11 +267,13 @@ add_executable(engine_tests
     ENGINE/editor/devtools/tag_utils.cpp
     ENGINE/editor/devtools/draw_utils.cpp
     ENGINE/editor/devtools/font_cache.cpp
+    ENGINE/editor/devtools/room_anchor_mode_utils.cpp
     ENGINE/editor/devtools/widgets.cpp
     ENGINE/editor/devtools/frame_editors/shared/Point3DEditor.cpp
     ENGINE/runtime/core/manifest/manifest_loader.cpp
     ENGINE/runtime/utils/utils/log.cpp
     ENGINE/runtime/utils/utils/cache_manager.cpp
+    ENGINE/runtime/utils/utils/map_grid_settings.cpp
     ENGINE/runtime/utils/utils/loading_status_notifier.cpp
     ENGINE/runtime/utils/utils/AnchorPointResolver.cpp
     ENGINE/runtime/gameplay/world/grid_point.cpp
@@ -280,9 +282,12 @@ add_executable(engine_tests
     ENGINE/runtime/gameplay/world/chunk_manager.cpp
     ENGINE/tests/stubs/asset/Asset_world_tests_stubs.cpp
     ENGINE/tests/stubs/utils/Area_world_tests_stubs.cpp
+    ENGINE/tests/test_anchor_binding_order.cpp
     ENGINE/tests/test_anchor_point_resolver.cpp
     ENGINE/tests/test_map_data.cpp
     ENGINE/tests/test_player_direction_intent.cpp
+    ENGINE/tests/test_room_anchor_mode_utils.cpp
+    ENGINE/tests/test_spawn_group_codec.cpp
     ENGINE/tests/test_world_grid.cpp
   )
 

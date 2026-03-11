@@ -25,8 +25,8 @@ inline int horizontal_world_sign_from_camera_right(double camera_right_x,
         return (camera_right_x > 0.0) ? 1 : -1;
     }
 
-    // Preserve legacy fallback behavior when camera basis is unavailable.
-    return -1;
+    // Keep canonical controls when camera basis is temporarily unavailable.
+    return 1;
 }
 
 inline DirectionIntent resolve_direction_intent(int screen_x,

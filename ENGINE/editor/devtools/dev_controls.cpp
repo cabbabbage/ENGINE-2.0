@@ -3026,8 +3026,7 @@ void DevControls::handle_sdl_event(const SDL_Event& event) {
         }
     }
 
-    if (!(frame_editor_session_ && frame_editor_session_->is_active()) && can_route_room_editor &&
-        (camera_panel_->is_visible() || keyboard_like_event)) {
+    if (!(frame_editor_session_ && frame_editor_session_->is_active()) && can_route_room_editor) {
         const bool handled = room_editor_ && room_editor_->handle_sdl_event(event);
         if (handled && input_) {
             const bool pointer_inside_room_ui = pointer_relevant && room_editor_ && room_editor_->is_room_ui_blocking_point(pointer.x, pointer.y);

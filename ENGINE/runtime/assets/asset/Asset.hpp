@@ -141,6 +141,16 @@ class Asset {
         }
         return cached_h;
     }
+    int width() const {
+        if (cached_w <= 0) {
+            // Refresh lazily to avoid stale dimensions when textures change.
+            const_cast<Asset*>(this)->refresh_cached_dimensions();
+        }
+        return cached_w;
+    }
+    float runtime_scale_remainder() const;
+    float runtime_resolved_scale() const;
+    float runtime_width_px() const;
     float runtime_height_px() const;
     void move_to_world_position(int world_x, int world_y, int world_z = 0,
                                 std::optional<int> resolution_layer_override = std::nullopt);

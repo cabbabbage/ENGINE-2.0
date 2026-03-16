@@ -3910,16 +3910,19 @@ bool RoomEditor::compute_asset_screen_bounds(const WarpedScreenGrid& cam,
     }
     if (fw <= 0 || fh <= 0) return false;
 
-    float base_scale = 1.0f;
-    if (asset->info && std::isfinite(asset->info->scale_factor) && asset->info->scale_factor >= 0.0f) {
-        base_scale = asset->info->scale_factor;
+    const float runtime_width = asset->runtime_width_px();
+    const float runtime_height = asset->runtime_height_px();
+    const float fallback_runtime_scale = asset->runtime_resolved_scale();
+
+    float scaled_fw = runtime_width;
+    float scaled_fh = runtime_height;
+    if (!(scaled_fw > 0.0f) || !(scaled_fh > 0.0f)) {
+        scaled_fw = static_cast<float>(fw) * fallback_runtime_scale;
+        scaled_fh = static_cast<float>(fh) * fallback_runtime_scale;
     }
 
-    const float scaled_fw = static_cast<float>(fw) * base_scale;
-    const float scaled_fh = static_cast<float>(fh) * base_scale;
-
     const float screen_width = scaled_fw * gp->perspective_scale;
-    const float screen_height = screen_width * gp->vertical_scale;
+    const float screen_height = scaled_fh * gp->perspective_scale * gp->vertical_scale;
     if (!std::isfinite(screen_width) || !std::isfinite(screen_height) ||
         screen_width <= 0.0f || screen_height <= 0.0f) {
         return false;

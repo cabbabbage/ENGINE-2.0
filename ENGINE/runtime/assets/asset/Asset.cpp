@@ -1139,16 +1139,42 @@ void Asset::refresh_frame_texture_bindings() {
         mark_anchors_dirty();
 }
 
+float Asset::runtime_scale_remainder() const {
+        float remainder = last_scale_usage_.remainder_scale;
+        if (!std::isfinite(remainder) || remainder <= 0.0f) {
+                remainder = current_remaining_scale_adjustment;
+        }
+        if (!std::isfinite(remainder) || remainder <= 0.0f) {
+                remainder = 1.0f;
+        }
+        return remainder;
+}
+
+float Asset::runtime_resolved_scale() const {
+        float texture_scale = last_scale_usage_.texture_scale;
+        if (!std::isfinite(texture_scale) || texture_scale <= 0.0f) {
+                texture_scale = current_nearest_variant_scale;
+        }
+        if (!std::isfinite(texture_scale) || texture_scale <= 0.0f) {
+                texture_scale = 1.0f;
+        }
+        return texture_scale * runtime_scale_remainder();
+}
+
+float Asset::runtime_width_px() const {
+        const float base_width = static_cast<float>(width());
+        if (!(base_width > 0.0f)) {
+                return 0.0f;
+        }
+        return base_width * runtime_scale_remainder();
+}
+
 float Asset::runtime_height_px() const {
         const float base_height = static_cast<float>(height());
         if (!(base_height > 0.0f)) {
                 return 0.0f;
         }
-        float remainder = last_scale_usage_.remainder_scale;
-        if (!std::isfinite(remainder) || remainder <= 0.0f) {
-                remainder = 1.0f;
-        }
-        return base_height * remainder;
+        return base_height * runtime_scale_remainder();
 }
 
 void Asset::on_scale_factor_changed() {

@@ -33,6 +33,7 @@
 #include "room_overlay_renderer.hpp"
 #include "animation/animation_update.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
+#include "rendering/render/render_object_projection.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "core/axis_convention.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -117,66 +118,13 @@ SDL_Point grid_point_for_screen(const WarpedScreenGrid& cam, SDL_Point screen_po
     };
 }
 
-bool is_finite_screen_point(const SDL_FPoint& point) {
-    return std::isfinite(point.x) && std::isfinite(point.y);
-}
-
 bool build_render_object_projection(const WarpedScreenGrid& cam,
                                     const RenderObject& obj,
                                     float perspective_scale,
                                     float world_z,
                                     render_projection::ProjectedSpriteFrame& out_projection) {
-    out_projection = render_projection::ProjectedSpriteFrame{};
-    if (!obj.texture || obj.screen_rect.w <= 0 || obj.screen_rect.h <= 0) {
-        return false;
-    }
-
-    const float safe_perspective =
-        (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
-    const float final_width_px = static_cast<float>(obj.screen_rect.w);
-    const float final_height_px = static_cast<float>(obj.screen_rect.h);
-    if (!(std::isfinite(final_width_px) && std::isfinite(final_height_px) &&
-          final_width_px > 0.0f && final_height_px > 0.0f)) {
-        return false;
-    }
-
-    int frame_w = obj.texture_w;
-    int frame_h = obj.texture_h;
-    if (obj.has_src_rect && obj.src_rect.w > 0 && obj.src_rect.h > 0) {
-        frame_w = obj.src_rect.w;
-        frame_h = obj.src_rect.h;
-    }
-
-    if (frame_w <= 0 || frame_h <= 0) {
-        float tex_w = 0.0f;
-        float tex_h = 0.0f;
-        if (!SDL_GetTextureSize(obj.texture, &tex_w, &tex_h)) {
-            return false;
-        }
-        frame_w = std::max(1, static_cast<int>(std::lround(tex_w)));
-        frame_h = std::max(1, static_cast<int>(std::lround(tex_h)));
-    }
-
-    render_projection::SpriteProjectionInput projection_input{};
-    projection_input.world_x = static_cast<float>(obj.screen_rect.x);
-    projection_input.world_y = static_cast<float>(obj.screen_rect.y);
-    projection_input.world_z = world_z;
-    projection_input.perspective_scale = safe_perspective;
-    projection_input.frame_width_px = std::max(1, frame_w);
-    projection_input.frame_height_px = std::max(1, frame_h);
-    projection_input.final_width_px = std::max(1, static_cast<int>(std::lround(final_width_px)));
-    projection_input.final_height_px = std::max(1, static_cast<int>(std::lround(final_height_px)));
-    projection_input.flip = obj.flip;
-
-    if (!render_projection::build_projected_sprite_frame(cam, projection_input, out_projection) ||
-        !out_projection.valid) {
-        return false;
-    }
-
-    return is_finite_screen_point(out_projection.screen_tl) &&
-           is_finite_screen_point(out_projection.screen_tr) &&
-           is_finite_screen_point(out_projection.screen_br) &&
-           is_finite_screen_point(out_projection.screen_bl);
+    return render_projection::build_render_object_projected_frame(
+        cam, obj, perspective_scale, world_z, out_projection);
 }
 
 void render_grid_point_marker(SDL_Renderer* renderer, const WarpedScreenGrid& cam, SDL_Point world_pt, SDL_Color color, int radius_px = 3) {

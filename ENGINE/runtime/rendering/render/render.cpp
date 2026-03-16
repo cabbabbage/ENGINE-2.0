@@ -31,6 +31,7 @@
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
 #include "rendering/render/projected_sprite_frame.hpp"
+#include "rendering/render/render_object_projection.hpp"
 #include "animation/animation_update.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "assets/asset/animation.hpp"
@@ -544,16 +545,11 @@ bool build_perspective_mesh(RenderObject& obj,
     if (rect.w <= 0 || rect.h <= 0) {
         return false;
     }
-    const float world_x = static_cast<float>(rect.x);
-    const float world_y = static_cast<float>(rect.y);
-    const SDL_FPoint current_position{world_x, world_y};
+    const SDL_FPoint current_position{static_cast<float>(rect.x), static_cast<float>(rect.y)};
 
     // Render package dimensions are perspective-inclusive; pass them through unchanged
     // so projected frame construction uses a single consistent contract.
-    const float safe_perspective =
-        (std::isfinite(perspective_scale) && perspective_scale > 0.0f)
-            ? perspective_scale
-            : 1.0f;
+    const float safe_perspective = render_projection::sanitize_perspective_scale(perspective_scale);
     const float current_scale = safe_perspective;
     const std::uint64_t current_camera_version = cam.camera_state_version();
     constexpr float kScaleMatchEpsilon = 1e-4f;
@@ -570,12 +566,9 @@ bool build_perspective_mesh(RenderObject& obj,
         mesh.valid = true;
         return true;
     }
-    const float final_width_px = static_cast<float>(rect.w);
-    const float final_height_px = static_cast<float>(rect.h);
-    const float base_z = base_world_z;
-    if (!(std::isfinite(world_x) && std::isfinite(world_y) &&
-          std::isfinite(final_width_px) && std::isfinite(final_height_px) &&
-          final_width_px > 0.0f && final_height_px > 0.0f)) {
+    render_projection::SpriteProjectionInput projection_input{};
+    if (!render_projection::assemble_render_object_projection_input(
+            obj, safe_perspective, base_world_z, projection_input)) {
         return false;
     }
 
@@ -652,17 +645,6 @@ bool build_perspective_mesh(RenderObject& obj,
         std::swap(v0, v1);
     }
 
-    render_projection::SpriteProjectionInput projection_input{};
-    projection_input.world_x = world_x;
-    projection_input.world_y = world_y;
-    projection_input.world_z = base_z;
-    projection_input.perspective_scale = safe_perspective;
-    projection_input.frame_width_px = tex_w;
-    projection_input.frame_height_px = tex_h;
-    projection_input.final_width_px = std::max(1, static_cast<int>(std::lround(final_width_px)));
-    projection_input.final_height_px = std::max(1, static_cast<int>(std::lround(final_height_px)));
-    projection_input.flip = obj.flip;
-
     render_projection::ProjectedSpriteFrame projection{};
     if (!render_projection::build_projected_sprite_frame(cam, projection_input, projection)) {
         return false;
@@ -700,7 +682,7 @@ bool build_perspective_mesh(RenderObject& obj,
     obj.cached_vertices = mesh.vertices;
     obj.cached_indices = mesh.indices;
     obj.cached_position = current_position;
-    obj.cached_world_z = base_z;
+    obj.cached_world_z = base_world_z;
     obj.cached_scale = current_scale;
     obj.cached_camera_state_version = current_camera_version;
     obj.cached_mesh_texture = obj.texture;

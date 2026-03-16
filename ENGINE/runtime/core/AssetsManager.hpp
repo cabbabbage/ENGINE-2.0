@@ -429,6 +429,7 @@ private:
     bool follower_binding_candidates_dirty_ = true;
 
     void rebuild_non_player_update_buffer_if_needed();
+    void refresh_visible_asset_scaling_only();
     void mark_follower_binding_candidates_dirty();
     void rebuild_follower_binding_candidates_if_needed();
     void reconcile_manifest_follower_bindings();

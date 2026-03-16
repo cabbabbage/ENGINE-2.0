@@ -941,6 +941,7 @@ void Assets::update(const Input& input)
 {
     const std::uint64_t now_counter = SDL_GetPerformanceCounter();
     if (!should_step_dev_frame(input)) {
+        refresh_visible_asset_scaling_only();
         last_frame_dt_seconds_ = 0.0f;
         last_frame_counter_    = now_counter;
         return;
@@ -1180,6 +1181,21 @@ void Assets::update(const Input& input)
     last_camera_state_version_for_dev_ = camera_.camera_state_version();
     last_dev_active_state_version_snapshot_ = dev_active_state_version_;
     dev_frame_initialized_ = true;
+}
+
+void Assets::refresh_visible_asset_scaling_only() {
+    if (player && player->info) {
+        player->update_scale_values();
+    }
+
+    rebuild_non_player_update_buffer_if_needed();
+
+    for (Asset* asset : non_player_update_buffer_) {
+        if (!asset || !asset->info) {
+            continue;
+        }
+        asset->update_scale_values();
+    }
 }
 
 void Assets::rebuild_non_player_update_buffer_if_needed() {

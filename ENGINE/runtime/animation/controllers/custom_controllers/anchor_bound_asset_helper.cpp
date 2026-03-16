@@ -8,8 +8,10 @@
 
 #include <SDL3/SDL.h>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <limits>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
@@ -45,15 +47,47 @@ int asset_resolution_layer(const Asset* asset) {
     return asset->grid_resolution;
 }
 
+std::string normalize_policy_string(const std::optional<std::string>& raw) {
+    if (!raw.has_value()) {
+        return {};
+    }
+    std::string normalized = *raw;
+    for (char& ch : normalized) {
+        ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return normalized;
+}
+
 } // namespace
 
 AnchorBoundAssetHelper::AnchorBoundAssetHelper(Asset* controller)
+    : AnchorBoundAssetHelper(controller ? controller->get_assets() : nullptr, controller) {}
+
+AnchorBoundAssetHelper::AnchorBoundAssetHelper(Assets* assets_owner, Asset* controller)
     : controller_(controller)
-    , assets_(controller ? controller->get_assets() : nullptr)
+    , assets_(assets_owner ? assets_owner : (controller ? controller->get_assets() : nullptr))
     , debug_tick_logging_enabled_(read_binding_debug_toggle()) {
     if (assets_) {
         assets_->register_binding_helper(this);
     }
+}
+
+AnchorBoundAssetHelper::DepthPolicy
+AnchorBoundAssetHelper::parse_depth_policy(const std::optional<std::string>& raw) {
+    const std::string normalized = normalize_policy_string(raw);
+    if (normalized == "match_owner") {
+        return DepthPolicy::MatchOwner;
+    }
+    return DepthPolicy::AnchorDerived;
+}
+
+AnchorBoundAssetHelper::LayerPolicy
+AnchorBoundAssetHelper::parse_layer_policy(const std::optional<std::string>& raw) {
+    const std::string normalized = normalize_policy_string(raw);
+    if (normalized == "match_controller_asset") {
+        return LayerPolicy::MatchControllerAsset;
+    }
+    return LayerPolicy::AnchorDerived;
 }
 
 AnchorBoundAssetHelper::~AnchorBoundAssetHelper() {
@@ -110,6 +144,16 @@ std::optional<AnchorPoint> AnchorBoundAssetHelper::resolve_anchor(BindingRecord&
                                        Asset::AnchorResolveMode::ForceRecompute);
 }
 
+std::optional<AnchorPoint> AnchorBoundAssetHelper::resolve_child_anchor(BindingRecord& record) const {
+    if (!record.child || record.child_anchor_name.empty()) {
+        return std::nullopt;
+    }
+
+    return record.child->anchor_state(record.child_anchor_name,
+                                      anchor_points::GridMaterialization::None,
+                                      Asset::AnchorResolveMode::ForceRecompute);
+}
+
 void AnchorBoundAssetHelper::teardown_binding(BindingRecord& state) {
     if (state.parent && state.child) {
         if (state.registered_with_parent || state.parent->has_child(state.child)) {
@@ -126,6 +170,9 @@ void AnchorBoundAssetHelper::teardown_binding(BindingRecord& state) {
     state.expiry_tick = std::nullopt;
     state.anchor_index = std::nullopt;
     state.anchor_name.clear();
+    state.child_anchor_name.clear();
+    state.depth_policy = DepthPolicy::AnchorDerived;
+    state.layer_policy = LayerPolicy::AnchorDerived;
     state.registered_with_parent = false;
 }
 
@@ -153,38 +200,87 @@ void AnchorBoundAssetHelper::purge_bindings_for_asset(const Asset* asset) {
     }
 }
 
-bool AnchorBoundAssetHelper::bind_child_to_anchor(Asset& parent, Asset& child, const AnchorPoint& anchor) {
-    return bind_child_for_ticks(parent, child, anchor, -1);
+bool AnchorBoundAssetHelper::bind_child_to_anchor(Asset& parent,
+                                                   Asset& child,
+                                                   const AnchorPoint& anchor,
+                                                   const std::string& child_anchor_name) {
+    return bind_child_to_anchor_names(parent,
+                                      child,
+                                      anchor.name,
+                                      child_anchor_name,
+                                      std::nullopt,
+                                      std::nullopt,
+                                      -1);
 }
 
 bool AnchorBoundAssetHelper::bind_child_for_ticks(Asset& parent,
                                                   Asset& child,
                                                   const AnchorPoint& anchor,
-                                                  int ticks) {
+                                                  int ticks,
+                                                  const std::string& child_anchor_name) {
+    return bind_child_to_anchor_names(parent,
+                                      child,
+                                      anchor.name,
+                                      child_anchor_name,
+                                      std::nullopt,
+                                      std::nullopt,
+                                      ticks);
+}
+
+bool AnchorBoundAssetHelper::bind_child_to_anchor_names(Asset& parent,
+                                                        Asset& child,
+                                                        const std::string& parent_anchor_name,
+                                                        const std::string& child_anchor_name,
+                                                        std::optional<std::string> depth_policy,
+                                                        std::optional<std::string> layer_policy,
+                                                        int ticks) {
     const std::uintptr_t key = binding_key_for_child(child);
     BindingRecord& state = children_[key];
+    const std::string desired_anchor_name = parent_anchor_name;
+    const std::string desired_child_anchor_name = child_anchor_name;
+    const DepthPolicy desired_depth_policy = parse_depth_policy(depth_policy);
+    const LayerPolicy desired_layer_policy = parse_layer_policy(layer_policy);
+    const bool same_binding =
+        state.bound &&
+        state.parent == &parent &&
+        state.child == &child &&
+        state.anchor_name == desired_anchor_name &&
+        state.child_anchor_name == desired_child_anchor_name &&
+        state.depth_policy == desired_depth_policy &&
+        state.layer_policy == desired_layer_policy &&
+        state.ticks_remaining == ticks;
+
     state.parent = &parent;
     state.parent_id = asset_stable_id(&parent);
     state.parent_instance_key = reinterpret_cast<std::uintptr_t>(&parent);
     state.child = &child;
     state.child_id = asset_stable_id(&child);
     state.child_instance_key = key;
-    state.bind_sequence = bind_sequence_counter_++;
-    state.anchor_name = anchor.name;
+    if (!same_binding) {
+        state.bind_sequence = bind_sequence_counter_++;
+    }
+    state.anchor_name = desired_anchor_name;
     state.anchor_index = std::nullopt;
     state.ticks_remaining = ticks;
     state.expiry_tick =
         (ticks > 0) ? std::optional<std::uint64_t>(tick_counter_ + static_cast<std::uint64_t>(ticks))
                     : std::nullopt;
     state.bound = true;
-    state.currently_active = false;
-    state.last_anchor_depth_offset = anchor.depth_offset;
+    if (!same_binding) {
+        state.currently_active = false;
+    }
+    state.child_anchor_name = desired_child_anchor_name;
+    state.depth_policy = desired_depth_policy;
+    state.layer_policy = desired_layer_policy;
 
     parent.add_child(&child);
     state.registered_with_parent = true;
     child.set_render_depth_bias(0.0);
 
-    const bool changed = apply_binding_tick(state);
+    bool changed = !same_binding;
+    if (!same_binding) {
+        changed = apply_binding_tick(state) || changed;
+    }
     if (changed && assets_) {
         assets_->mark_active_assets_dirty();
     }
@@ -209,6 +305,16 @@ void AnchorBoundAssetHelper::unbind_child(Asset& parent, Asset& child) {
             return;
         }
     }
+}
+
+void AnchorBoundAssetHelper::unbind_child(Asset& child) {
+    const std::uintptr_t key = binding_key_for_child(child);
+    auto it = children_.find(key);
+    if (it == children_.end()) {
+        return;
+    }
+    teardown_binding(it->second);
+    children_.erase(it);
 }
 
 bool AnchorBoundAssetHelper::resolve_binding_entities(BindingRecord& record) {
@@ -387,21 +493,91 @@ bool AnchorBoundAssetHelper::apply_binding_tick(BindingRecord& state) {
         return changed;
     }
 
+    if (state.child_anchor_name.empty()) {
+        changed = set_child_hidden_state(state.child, true) || changed;
+        if (state.child->render_depth_bias() != 0.0) {
+            state.child->set_render_depth_bias(0.0);
+            changed = true;
+        }
+        if (state.currently_active) {
+            changed = true;
+        }
+        state.currently_active = false;
+
+        log_binding_tick(state,
+                         false,
+                         state.parent->world_x(),
+                         state.parent->world_y(),
+                         state.child->world_x(),
+                         state.child->world_y());
+        return changed;
+    }
+
     const AnchorPoint& anchor = *resolved;
     state.last_anchor_depth_offset = anchor.depth_offset;
     const int anchor_world_x = static_cast<int>(std::lround(anchor.world_pos_2d.x));
     const int anchor_world_y = static_cast<int>(std::lround(anchor.world_pos_2d.y));
-    const int anchor_world_z = anchor.world_z;
-    const int anchor_layer = anchor.resolution_layer;
+    int target_anchor_world_z = anchor.world_z;
+    int target_anchor_layer = anchor.resolution_layer;
+    if (state.depth_policy == DepthPolicy::MatchOwner) {
+        target_anchor_world_z = state.parent->world_z();
+    }
+    if (state.layer_policy == LayerPolicy::MatchControllerAsset) {
+        target_anchor_layer = asset_resolution_layer(state.parent);
+    }
+
+    auto child_anchor = resolve_child_anchor(state);
+    const bool child_anchor_available = child_anchor.has_value() && child_anchor->is_active();
+    if (!child_anchor_available) {
+        changed = set_child_hidden_state(state.child, true) || changed;
+        if (state.child->render_depth_bias() != 0.0) {
+            state.child->set_render_depth_bias(0.0);
+            changed = true;
+        }
+        if (state.currently_active) {
+            changed = true;
+        }
+        state.currently_active = false;
+
+        log_binding_tick(state,
+                         false,
+                         anchor_world_x,
+                         anchor_world_y,
+                         state.child->world_x(),
+                         state.child->world_y());
+        return changed;
+    }
+
+    const int child_anchor_world_x = static_cast<int>(std::lround(child_anchor->world_pos_2d.x));
+    const int child_anchor_world_y = static_cast<int>(std::lround(child_anchor->world_pos_2d.y));
+    const int child_anchor_world_z = child_anchor->world_z;
+    const int child_anchor_layer = child_anchor->resolution_layer;
+    const int child_origin_world_x = state.child->world_x();
+    const int child_origin_world_y = state.child->world_y();
+    const int child_origin_world_z = state.child->world_z();
+    const int child_origin_layer = asset_resolution_layer(state.child);
+    const int child_anchor_offset_x = child_anchor_world_x - child_origin_world_x;
+    const int child_anchor_offset_y = child_anchor_world_y - child_origin_world_y;
+    const int child_anchor_offset_z = child_anchor_world_z - child_origin_world_z;
+    const int child_anchor_layer_offset = child_anchor_layer - child_origin_layer;
+
+    // Solve translation by enforcing child_anchor_world == parent_anchor_world.
+    const int expected_child_world_x = anchor_world_x - child_anchor_offset_x;
+    const int expected_child_world_y = anchor_world_y - child_anchor_offset_y;
+    const int expected_child_world_z = target_anchor_world_z - child_anchor_offset_z;
+    const int expected_child_layer = target_anchor_layer - child_anchor_layer_offset;
 
     const bool need_move =
-        state.child->world_x() != anchor_world_x ||
-        state.child->world_y() != anchor_world_y ||
-        state.child->world_z() != anchor_world_z ||
-        asset_resolution_layer(state.child) != anchor_layer;
+        state.child->world_x() != expected_child_world_x ||
+        state.child->world_y() != expected_child_world_y ||
+        state.child->world_z() != expected_child_world_z ||
+        asset_resolution_layer(state.child) != expected_child_layer;
 
     if (need_move) {
-        state.child->move_to_world_position(anchor_world_x, anchor_world_y, anchor_world_z, anchor_layer);
+        state.child->move_to_world_position(expected_child_world_x,
+                                            expected_child_world_y,
+                                            expected_child_world_z,
+                                            expected_child_layer);
         changed = true;
     }
 
@@ -413,11 +589,15 @@ bool AnchorBoundAssetHelper::apply_binding_tick(BindingRecord& state) {
     state.currently_active = true;
 
 #if !defined(NDEBUG)
-    if (state.child->world_x() != anchor_world_x ||
-        state.child->world_y() != anchor_world_y ||
-        state.child->world_z() != anchor_world_z ||
-        asset_resolution_layer(state.child) != anchor_layer) {
-        log_alignment_mismatch(state, anchor_world_x, anchor_world_y, anchor_world_z, anchor_layer);
+    if (state.child->world_x() != expected_child_world_x ||
+        state.child->world_y() != expected_child_world_y ||
+        state.child->world_z() != expected_child_world_z ||
+        asset_resolution_layer(state.child) != expected_child_layer) {
+        log_alignment_mismatch(state,
+                               expected_child_world_x,
+                               expected_child_world_y,
+                               expected_child_world_z,
+                               expected_child_layer);
     }
 #endif
 
@@ -485,10 +665,10 @@ void AnchorBoundAssetHelper::log_cycle_warning(std::size_t cycle_nodes) const {
 }
 
 void AnchorBoundAssetHelper::log_alignment_mismatch(const BindingRecord& state,
-                                                    int anchor_world_x,
-                                                    int anchor_world_y,
-                                                    int anchor_world_z,
-                                                    int anchor_resolution_layer) const {
+                                                    int expected_world_x,
+                                                    int expected_world_y,
+                                                    int expected_world_z,
+                                                    int expected_resolution_layer) const {
     if (!state.child || !state.parent) {
         return;
     }
@@ -498,10 +678,10 @@ void AnchorBoundAssetHelper::log_alignment_mismatch(const BindingRecord& state,
                       " child_id=" + state.child_id +
                       " anchor=" + state.anchor_name +
                       " frame=" + std::to_string(tick_counter_) +
-                      " expected=(" + std::to_string(anchor_world_x) + "," +
-                      std::to_string(anchor_world_y) + "," +
-                      std::to_string(anchor_world_z) + "," +
-                      std::to_string(anchor_resolution_layer) + ")" +
+                      " expected=(" + std::to_string(expected_world_x) + "," +
+                      std::to_string(expected_world_y) + "," +
+                      std::to_string(expected_world_z) + "," +
+                      std::to_string(expected_resolution_layer) + ")" +
                       " actual=(" + std::to_string(state.child->world_x()) + "," +
                       std::to_string(state.child->world_y()) + "," +
                       std::to_string(state.child->world_z()) + "," +

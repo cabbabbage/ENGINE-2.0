@@ -5,10 +5,6 @@
 #include <SDL3/SDL.h>
 #include <string>
 #include <chrono>
-#include <thread>
-#include <memory>
-
-#include "anchor_bound_asset_helper.hpp"
 
 class Asset;
 class Input;
@@ -33,7 +29,6 @@ private:
     static constexpr float kSprintMultiplier = 2.0f;
 
     Asset* player_ = nullptr;
-    std::unique_ptr<AnchorBoundAssetHelper> binding_helper_;
     int    dx_ = 0;
     int    dy_ = 0;
 

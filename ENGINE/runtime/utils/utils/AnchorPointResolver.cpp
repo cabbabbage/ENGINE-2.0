@@ -10,6 +10,7 @@
 #include "assets/asset/Asset.hpp"
 #include "core/AssetsManager.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 
 namespace {
@@ -181,7 +182,7 @@ struct FrameDimensions {
 };
 
 struct AnchorFrameSample {
-    SDL_FPoint uv{0.5f, 0.5f};
+    SDL_Point scaled_px{0, 0};
     SDL_Point source_px{0, 0};
 };
 
@@ -333,8 +334,7 @@ bool gather_frame_dimensions(const Asset& asset, FrameDimensions& out) {
 AnchorFrameSample compute_anchor_frame_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               const FrameDimensions& dims) {
-    // Anchors in authored data are canonical texture pixels. If runtime is using a scaled
-    // variant, map that canonical pixel into the active variant before UV conversion.
+    // Anchors are authored in canonical texture space. Map to the active runtime variant first.
     const float variant_scale = (std::isfinite(asset.current_nearest_variant_scale) &&
                                  asset.current_nearest_variant_scale > 0.0f)
                                     ? asset.current_nearest_variant_scale
@@ -355,162 +355,7 @@ AnchorFrameSample compute_anchor_frame_sample(const Asset& asset,
         scaled_px.y = std::clamp(scaled_px.y, 0, dims.frame_h - 1);
     }
 
-    const SDL_FPoint uv = anchor_points::anchor_pixel_to_uv(scaled_px, dims.frame_w, dims.frame_h, dims.flip);
-    return AnchorFrameSample{uv, SDL_Point{anchor.texture_x, anchor.texture_y}};
-}
-
-bool compute_anchor_screen_from_mesh(const Asset& asset,
-                                     const FrameDimensions& dims,
-                                     const SDL_FPoint& mesh_uv,
-                                     const WarpedScreenGrid& cam,
-                                     float perspective_scale,
-                                     SDL_FPoint& out_screen_px) {
-    const float world_x = asset.smoothed_translation_x();
-    const float world_y = asset.smoothed_translation_y();
-    const float base_world_z = static_cast<float>(asset.world_z());
-    const float safe_perspective =
-        (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
-    const float world_width = static_cast<float>(dims.final_w) / safe_perspective;
-    const float half_width = world_width * 0.5f;
-
-    SDL_FPoint screen_bl{};
-    SDL_FPoint screen_br{};
-    const float render_depth = base_world_z + dims.world_z_offset;
-    if (!cam.project_world_point(SDL_FPoint{world_x - half_width, world_y}, render_depth, screen_bl) ||
-        !cam.project_world_point(SDL_FPoint{world_x + half_width, world_y}, render_depth, screen_br) ||
-        !std::isfinite(screen_bl.x) || !std::isfinite(screen_bl.y) ||
-        !std::isfinite(screen_br.x) || !std::isfinite(screen_br.y)) {
-        return false;
-    }
-
-    const float bottom_dx = screen_br.x - screen_bl.x;
-    const float bottom_dy = screen_br.y - screen_bl.y;
-    const float bottom_len = std::hypot(bottom_dx, bottom_dy);
-    if (bottom_len < 1e-5f) {
-        return false;
-    }
-
-    const float aspect = (dims.frame_w > 0 && dims.frame_h > 0)
-        ? static_cast<float>(dims.frame_h) / static_cast<float>(dims.frame_w)
-        : static_cast<float>(dims.final_h) / static_cast<float>(std::max(1, dims.final_w));
-    float screen_height = bottom_len * aspect;
-    if (!std::isfinite(screen_height) || screen_height <= 0.0f) {
-        return false;
-    }
-
-    const float nx = -bottom_dy / bottom_len;
-    const float ny = bottom_dx / bottom_len;
-
-    const SDL_FPoint cand_tl_a{screen_bl.x + nx * screen_height, screen_bl.y + ny * screen_height};
-    const SDL_FPoint cand_tr_a{screen_br.x + nx * screen_height, screen_br.y + ny * screen_height};
-    const SDL_FPoint cand_tl_b{screen_bl.x - nx * screen_height, screen_bl.y - ny * screen_height};
-    const SDL_FPoint cand_tr_b{screen_br.x - nx * screen_height, screen_br.y - ny * screen_height};
-
-    const float avg_bottom_y = 0.5f * (screen_bl.y + screen_br.y);
-    const float avg_top_a = 0.5f * (cand_tl_a.y + cand_tr_a.y);
-    const float avg_top_b = 0.5f * (cand_tl_b.y + cand_tr_b.y);
-
-    SDL_FPoint screen_tl{};
-    SDL_FPoint screen_tr{};
-    if (avg_top_a <= avg_top_b) {
-        screen_tl = cand_tl_a;
-        screen_tr = cand_tr_a;
-    } else {
-        screen_tl = cand_tl_b;
-        screen_tr = cand_tr_b;
-    }
-    if ((avg_top_a < avg_bottom_y) != (avg_top_b < avg_bottom_y)) {
-        if (avg_top_a < avg_bottom_y) {
-            screen_tl = cand_tl_a;
-            screen_tr = cand_tr_a;
-        } else {
-            screen_tl = cand_tl_b;
-            screen_tr = cand_tr_b;
-        }
-    }
-
-    const SDL_FPoint top{
-        screen_tl.x + (screen_tr.x - screen_tl.x) * mesh_uv.x,
-        screen_tl.y + (screen_tr.y - screen_tl.y) * mesh_uv.x};
-    const SDL_FPoint bottom{
-        screen_bl.x + (screen_br.x - screen_bl.x) * mesh_uv.x,
-        screen_bl.y + (screen_br.y - screen_bl.y) * mesh_uv.x};
-    out_screen_px = SDL_FPoint{
-        top.x + (bottom.x - top.x) * mesh_uv.y,
-        top.y + (bottom.y - top.y) * mesh_uv.y};
-    return std::isfinite(out_screen_px.x) && std::isfinite(out_screen_px.y);
-}
-
-std::pair<double, double> screen_to_ndc_point(const world::CameraProjectionParams& params,
-                                              double screen_x,
-                                              double screen_y) {
-    const double safe_w = static_cast<double>(std::max(1, params.screen_width));
-    const double safe_h = static_cast<double>(std::max(1, params.screen_height));
-    const double ndc_x_scaled = (screen_x / safe_w) * 2.0 - 1.0;
-    const double ndc_y_scaled = 1.0 - ((screen_y - params.screen_pan_y_px) / safe_h) * 2.0;
-    const double inv_zoom = (params.screen_zoom > 0.0 && std::isfinite(params.screen_zoom))
-        ? (1.0 / params.screen_zoom)
-        : 1.0;
-    return std::pair<double, double>{ndc_x_scaled * inv_zoom, ndc_y_scaled * inv_zoom};
-}
-
-bool screen_to_world_on_depth_plane(const world::CameraProjectionParams& params,
-                                    const SDL_FPoint& screen_point,
-                                    float target_world_z,
-                                    WorldPoint3& out_world_point) {
-    const double safe_scale = std::max(1e-6, params.meters_scale);
-    if (!std::isfinite(safe_scale)) {
-        return false;
-    }
-
-    const auto [ndc_x, ndc_y] = screen_to_ndc_point(
-        params,
-        static_cast<double>(screen_point.x),
-        static_cast<double>(screen_point.y));
-    if (!std::isfinite(ndc_x) || !std::isfinite(ndc_y)) {
-        return false;
-    }
-
-    const double dir_x = params.forward_x + params.right_x * (ndc_x * params.tan_half_fov_x) + params.up_x * (ndc_y * params.tan_half_fov_y);
-    const double dir_y = params.forward_y + params.right_y * (ndc_x * params.tan_half_fov_x) + params.up_y * (ndc_y * params.tan_half_fov_y);
-    const double dir_z = params.forward_z + params.right_z * (ndc_x * params.tan_half_fov_x) + params.up_z * (ndc_y * params.tan_half_fov_y);
-    const double dir_len = std::sqrt(dir_x * dir_x + dir_y * dir_y + dir_z * dir_z);
-    if (!std::isfinite(dir_len) || dir_len <= 1e-8) {
-        return false;
-    }
-    const double inv_dir_len = 1.0 / dir_len;
-    const double ray_dir_x = dir_x * inv_dir_len;
-    const double ray_dir_y = dir_y * inv_dir_len;
-    const double ray_dir_z = dir_z * inv_dir_len;
-
-    if (std::abs(ray_dir_z) <= 1e-8) {
-        return false;
-    }
-
-    const double target_z_meters = (static_cast<double>(target_world_z) - params.anchor_world_z) * safe_scale;
-    const double t = (target_z_meters - params.position_z) / ray_dir_z;
-    if (!std::isfinite(t) || t <= 0.0) {
-        return false;
-    }
-
-    const double hit_x_m = params.position_x + ray_dir_x * t;
-    const double hit_y_m = params.position_y + ray_dir_y * t;
-
-    out_world_point.x = static_cast<float>(hit_x_m / safe_scale + params.anchor_world_x);
-    out_world_point.y = static_cast<float>(hit_y_m / safe_scale + params.anchor_world_y);
-    out_world_point.z = target_world_z;
-    return std::isfinite(out_world_point.x) &&
-           std::isfinite(out_world_point.y) &&
-           std::isfinite(out_world_point.z);
-}
-
-bool project_world_point_to_screen(const WarpedScreenGrid& cam,
-                                   const WorldPoint3& world_point,
-                                   SDL_FPoint& screen_point) {
-    if (!cam.project_world_point(SDL_FPoint{world_point.x, world_point.y}, world_point.z, screen_point)) {
-        return false;
-    }
-    return std::isfinite(screen_point.x) && std::isfinite(screen_point.y);
+    return AnchorFrameSample{scaled_px, SDL_Point{anchor.texture_x, anchor.texture_y}};
 }
 
 }  // namespace
@@ -645,29 +490,40 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     assert_anchor_is_canonical_texture_pixel(anchor);
 
     const AnchorFrameSample anchor_sample = compute_anchor_frame_sample(asset, anchor, dims);
-    sample.uv = anchor_sample.uv;
 
     const world::GridPoint* owner_gp = asset.grid_point();
     const float perspective_scale = owner_gp ? std::max(0.0001f, owner_gp->perspective_scale) : 1.0f;
     const int resolution_layer = owner_gp ? owner_gp->resolution_layer() : asset.grid_resolution;
 
     const WarpedScreenGrid& cam = assets_owner->getView();
-    SDL_FPoint flat_texture_screen_px{};
-    if (!compute_anchor_screen_from_mesh(asset,
-                                         dims,
-                                         anchor_sample.uv,
-                                         cam,
-                                         perspective_scale,
-                                         flat_texture_screen_px)) {
+    render_projection::SpriteProjectionInput projection_input{};
+    projection_input.world_x = asset.smoothed_translation_x();
+    projection_input.world_y = asset.smoothed_translation_y();
+    projection_input.world_z = static_cast<float>(asset.world_z()) + dims.world_z_offset;
+    projection_input.perspective_scale = perspective_scale;
+    projection_input.frame_width_px = dims.frame_w;
+    projection_input.frame_height_px = dims.frame_h;
+    projection_input.final_width_px = dims.final_w;
+    projection_input.final_height_px = dims.final_h;
+    projection_input.flip = dims.flip;
+
+    render_projection::ProjectedSpriteFrame projected_frame{};
+    if (!render_projection::build_projected_sprite_frame(cam, projection_input, projected_frame)) {
         sample.resolved.missing = true;
         return sample;
     }
 
-    WorldPoint3 flat_relative_pixel_point{};
-    if (!screen_to_world_on_depth_plane(cam.projection_params(),
-                                        flat_texture_screen_px,
-                                        static_cast<float>(asset.world_z()),
-                                        flat_relative_pixel_point)) {
+    sample.uv = projected_frame.anchor_uv_from_texture_pixel(anchor_sample.scaled_px);
+    const SDL_FPoint flat_texture_screen_px = projected_frame.sample_screen_from_uv(sample.uv);
+    if (!std::isfinite(flat_texture_screen_px.x) || !std::isfinite(flat_texture_screen_px.y)) {
+        sample.resolved.missing = true;
+        return sample;
+    }
+
+    render_projection::WorldPoint3 flat_relative_pixel_point{};
+    if (!cam.screen_to_world_on_depth_plane(flat_texture_screen_px,
+                                            static_cast<float>(asset.world_z()),
+                                            flat_relative_pixel_point)) {
         sample.resolved.missing = true;
         return sample;
     }
@@ -686,10 +542,11 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
         sample.resolved.missing = true;
         return sample;
     }
-    WorldPoint3 final_anchor_point{
+    render_projection::WorldPoint3 final_anchor_point{
         sample.final_anchor_point.x,
         sample.final_anchor_point.y,
-        sample.final_anchor_point.z};
+        sample.final_anchor_point.z,
+        true};
 
     const int resolved_x = static_cast<int>(std::lround(final_anchor_point.x));
     const int resolved_y = static_cast<int>(std::lround(final_anchor_point.y));
@@ -711,7 +568,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     }
 
     SDL_FPoint final_screen_px{};
-    if (project_world_point_to_screen(cam, final_anchor_point, final_screen_px)) {
+    if (render_projection::project_world_to_screen(cam, final_anchor_point, final_screen_px)) {
         sample.final_screen_px = final_screen_px;
         sample.has_final_screen_px = true;
     }

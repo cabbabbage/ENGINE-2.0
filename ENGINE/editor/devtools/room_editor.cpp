@@ -32,6 +32,7 @@
 #include "dm_styles.hpp"
 #include "room_overlay_renderer.hpp"
 #include "animation/animation_update.hpp"
+#include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/warped_screen_grid.hpp"
 #include "core/axis_convention.hpp"
 #include "gameplay/map_generation/room.hpp"
@@ -114,6 +115,68 @@ SDL_Point grid_point_for_screen(const WarpedScreenGrid& cam, SDL_Point screen_po
         static_cast<int>(std::lround(world_f.x)),
         static_cast<int>(std::lround(world_f.y))
     };
+}
+
+bool is_finite_screen_point(const SDL_FPoint& point) {
+    return std::isfinite(point.x) && std::isfinite(point.y);
+}
+
+bool build_render_object_projection(const WarpedScreenGrid& cam,
+                                    const RenderObject& obj,
+                                    float perspective_scale,
+                                    float world_z,
+                                    render_projection::ProjectedSpriteFrame& out_projection) {
+    out_projection = render_projection::ProjectedSpriteFrame{};
+    if (!obj.texture || obj.screen_rect.w <= 0 || obj.screen_rect.h <= 0) {
+        return false;
+    }
+
+    const float safe_perspective =
+        (std::isfinite(perspective_scale) && perspective_scale > 0.0f) ? perspective_scale : 1.0f;
+    const float final_width_px = static_cast<float>(obj.screen_rect.w);
+    const float final_height_px = static_cast<float>(obj.screen_rect.h);
+    if (!(std::isfinite(final_width_px) && std::isfinite(final_height_px) &&
+          final_width_px > 0.0f && final_height_px > 0.0f)) {
+        return false;
+    }
+
+    int frame_w = obj.texture_w;
+    int frame_h = obj.texture_h;
+    if (obj.has_src_rect && obj.src_rect.w > 0 && obj.src_rect.h > 0) {
+        frame_w = obj.src_rect.w;
+        frame_h = obj.src_rect.h;
+    }
+
+    if (frame_w <= 0 || frame_h <= 0) {
+        float tex_w = 0.0f;
+        float tex_h = 0.0f;
+        if (!SDL_GetTextureSize(obj.texture, &tex_w, &tex_h)) {
+            return false;
+        }
+        frame_w = std::max(1, static_cast<int>(std::lround(tex_w)));
+        frame_h = std::max(1, static_cast<int>(std::lround(tex_h)));
+    }
+
+    render_projection::SpriteProjectionInput projection_input{};
+    projection_input.world_x = static_cast<float>(obj.screen_rect.x);
+    projection_input.world_y = static_cast<float>(obj.screen_rect.y);
+    projection_input.world_z = world_z;
+    projection_input.perspective_scale = safe_perspective;
+    projection_input.frame_width_px = std::max(1, frame_w);
+    projection_input.frame_height_px = std::max(1, frame_h);
+    projection_input.final_width_px = std::max(1, static_cast<int>(std::lround(final_width_px)));
+    projection_input.final_height_px = std::max(1, static_cast<int>(std::lround(final_height_px)));
+    projection_input.flip = obj.flip;
+
+    if (!render_projection::build_projected_sprite_frame(cam, projection_input, out_projection) ||
+        !out_projection.valid) {
+        return false;
+    }
+
+    return is_finite_screen_point(out_projection.screen_tl) &&
+           is_finite_screen_point(out_projection.screen_tr) &&
+           is_finite_screen_point(out_projection.screen_br) &&
+           is_finite_screen_point(out_projection.screen_bl);
 }
 
 void render_grid_point_marker(SDL_Renderer* renderer, const WarpedScreenGrid& cam, SDL_Point world_pt, SDL_Color color, int radius_px = 3) {
@@ -1173,6 +1236,7 @@ void RoomEditor::set_enabled(bool enabled, bool preserve_camera_state) {
             cam->set_manual_height_override(false);
             cam->set_manual_zoom_override(false);
             cam->clear_focus_override();
+            cam->clear_tilt_override();
         }
         if (library_ui_) library_ui_->close();
         if (info_ui_) info_ui_->close();
@@ -2982,22 +3046,64 @@ Asset* RoomEditor::selected_asset_within_interaction_radius(SDL_Point screen_poi
     }
 
     const WarpedScreenGrid& cam = assets_->getView();
+    ensure_spatial_index(cam);
     constexpr int kInteractionRadiusPx = 24;
     const int kInteractionRadius2 = kInteractionRadiusPx * kInteractionRadiusPx;
 
     Asset* best = nullptr;
     int best_dist2 = std::numeric_limits<int>::max();
+    int best_area = std::numeric_limits<int>::max();
+    int best_screen_y = std::numeric_limits<int>::max();
     for (Asset* asset : selected_assets_) {
         if (!asset || asset->dead) continue;
-        SDL_Point gp = grid_point_for_asset(asset);
-        SDL_FPoint screen_f = cam.map_to_screen(gp);
-        if (!std::isfinite(screen_f.x) || !std::isfinite(screen_f.y)) continue;
-        int dx = static_cast<int>(std::lround(screen_f.x)) - screen_point.x;
-        int dy = static_cast<int>(std::lround(screen_f.y)) - screen_point.y;
-        int dist2 = dx * dx + dy * dy;
-        if (dist2 <= kInteractionRadius2 && dist2 < best_dist2) {
+        SDL_Rect bounds{0, 0, 0, 0};
+        int screen_y = 0;
+        bool have_bounds = false;
+
+        auto bounds_it = asset_bounds_cache_.find(asset);
+        if (bounds_it != asset_bounds_cache_.end()) {
+            bounds = bounds_it->second.bounds;
+            screen_y = bounds_it->second.screen_y;
+            have_bounds = screen_rect_is_reasonable(bounds);
+        }
+        if (!have_bounds) {
+            have_bounds = compute_asset_screen_bounds(cam, asset, bounds, screen_y);
+        }
+
+        int dist2 = std::numeric_limits<int>::max();
+        int area = std::numeric_limits<int>::max();
+        if (have_bounds) {
+            const int min_x = bounds.x;
+            const int max_x = bounds.x + bounds.w - 1;
+            const int min_y = bounds.y;
+            const int max_y = bounds.y + bounds.h - 1;
+            const int closest_x = std::clamp(screen_point.x, min_x, max_x);
+            const int closest_y = std::clamp(screen_point.y, min_y, max_y);
+            const int dx = closest_x - screen_point.x;
+            const int dy = closest_y - screen_point.y;
+            dist2 = dx * dx + dy * dy;
+            area = bounds.w * bounds.h;
+        } else {
+            SDL_Point gp = grid_point_for_asset(asset);
+            SDL_FPoint screen_f = cam.map_to_screen(gp);
+            if (!std::isfinite(screen_f.x) || !std::isfinite(screen_f.y)) {
+                continue;
+            }
+            const int dx = static_cast<int>(std::lround(screen_f.x)) - screen_point.x;
+            const int dy = static_cast<int>(std::lround(screen_f.y)) - screen_point.y;
+            dist2 = dx * dx + dy * dy;
+            screen_y = static_cast<int>(std::lround(screen_f.y));
+        }
+
+        const bool is_better =
+            dist2 < best_dist2 ||
+            (dist2 == best_dist2 && screen_y < best_screen_y) ||
+            (dist2 == best_dist2 && screen_y == best_screen_y && area < best_area);
+        if (dist2 <= kInteractionRadius2 && is_better) {
             best = asset;
             best_dist2 = dist2;
+            best_screen_y = screen_y;
+            best_area = area;
         }
     }
 
@@ -3037,7 +3143,7 @@ bool RoomEditor::handle_camera_settings_mouse_controls(const Input& input) {
     const int scroll_y = input.getScrollY();
     if (scroll_y != 0) {
         const int ticks = std::abs(scroll_y);
-        const int direction = (scroll_y < 0) ? 1 : -1;
+        const int direction = (scroll_y > 0) ? 1 : -1;
         if (shift_down) {
             adjustment.zoom_delta_percent = direction * kCameraZoomScrollStep * ticks;
         } else {
@@ -3680,19 +3786,51 @@ bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam
     SDL_FPoint base_screen{};
     bool have_bounds = false;
     const float base_depth = static_cast<float>(asset->world_z());
+    const auto* gp = cam.grid_point_for_asset(asset);
+    const float perspective_scale =
+        (gp && std::isfinite(gp->perspective_scale) && gp->perspective_scale > 0.0f)
+            ? gp->perspective_scale
+            : 1.0f;
 
     for (const auto& obj : asset->render_package) {
         if (obj.screen_rect.w <= 0 || obj.screen_rect.h <= 0) {
             continue;
         }
-        SDL_FPoint world_point{ static_cast<float>(obj.screen_rect.x), static_cast<float>(obj.screen_rect.y) };
-        if (!cam.project_world_point(world_point, base_depth + obj.world_z_offset, base_screen)) {
+
+        const float object_world_z = base_depth + obj.world_z_offset;
+        render_projection::ProjectedSpriteFrame projection{};
+        if (build_render_object_projection(cam, obj, perspective_scale, object_world_z, projection)) {
+            const float obj_min_x = std::min(std::min(projection.screen_tl.x, projection.screen_tr.x),
+                                             std::min(projection.screen_bl.x, projection.screen_br.x));
+            const float obj_max_x = std::max(std::max(projection.screen_tl.x, projection.screen_tr.x),
+                                             std::max(projection.screen_bl.x, projection.screen_br.x));
+            const float obj_min_y = std::min(std::min(projection.screen_tl.y, projection.screen_tr.y),
+                                             std::min(projection.screen_bl.y, projection.screen_br.y));
+            const float obj_max_y = std::max(std::max(projection.screen_tl.y, projection.screen_tr.y),
+                                             std::max(projection.screen_bl.y, projection.screen_br.y));
+            if (std::isfinite(obj_min_x) && std::isfinite(obj_max_x) &&
+                std::isfinite(obj_min_y) && std::isfinite(obj_max_y) &&
+                obj_max_x > obj_min_x && obj_max_y > obj_min_y) {
+                min_x = std::min(min_x, obj_min_x);
+                min_y = std::min(min_y, obj_min_y);
+                max_x = std::max(max_x, obj_max_x);
+                max_y = std::max(max_y, obj_max_y);
+                have_bounds = true;
+                continue;
+            }
+        }
+
+        SDL_FPoint world_point{
+            static_cast<float>(obj.screen_rect.x),
+            static_cast<float>(obj.screen_rect.y)
+        };
+        if (!cam.project_world_point(world_point, object_world_z, base_screen)) {
             continue;
         }
         const float half_width = static_cast<float>(obj.screen_rect.w) * 0.5f;
         const float height = static_cast<float>(obj.screen_rect.h);
-
-        if (!std::isfinite(base_screen.x) || !std::isfinite(base_screen.y)) {
+        if (!std::isfinite(base_screen.x) || !std::isfinite(base_screen.y) ||
+            !std::isfinite(half_width) || !std::isfinite(height)) {
             continue;
         }
 
@@ -3700,8 +3838,8 @@ bool RoomEditor::compute_asset_render_package_bounds(const WarpedScreenGrid& cam
         const float right = base_screen.x + half_width;
         const float top = base_screen.y - height;
         const float bottom = base_screen.y;
-
-        if (!std::isfinite(left) || !std::isfinite(right) || !std::isfinite(top) || !std::isfinite(bottom)) {
+        if (!std::isfinite(left) || !std::isfinite(right) ||
+            !std::isfinite(top) || !std::isfinite(bottom)) {
             continue;
         }
 
@@ -5235,19 +5373,55 @@ bool RoomEditor::drag_anchor_to_screen(const std::string& anchor_name, SDL_Point
             int best_x = tex_x;
             int best_y = tex_y;
             float best_dist_sq = std::numeric_limits<float>::max();
-            constexpr int kSearchRadius = 6;
-            for (int dy = -kSearchRadius; dy <= kSearchRadius; ++dy) {
-                for (int dx = -kSearchRadius; dx <= kSearchRadius; ++dx) {
-                    const int candidate_x = std::clamp(tex_x + dx, 0, frame_dims.x - 1);
-                    const int candidate_y = std::clamp(tex_y + dy, 0, frame_dims.y - 1);
-                    const SDL_FPoint screen = sample_screen(candidate_x, candidate_y);
-                    const float diff_x = screen.x - static_cast<float>(screen_point.x);
-                    const float diff_y = screen.y - static_cast<float>(screen_point.y);
-                    const float dist_sq = diff_x * diff_x + diff_y * diff_y;
-                    if (dist_sq < best_dist_sq) {
-                        best_dist_sq = dist_sq;
-                        best_x = candidate_x;
-                        best_y = candidate_y;
+            auto consider_candidate = [&](int candidate_x, int candidate_y) {
+                candidate_x = std::clamp(candidate_x, 0, frame_dims.x - 1);
+                candidate_y = std::clamp(candidate_y, 0, frame_dims.y - 1);
+                const SDL_FPoint screen = sample_screen(candidate_x, candidate_y);
+                const float diff_x = screen.x - static_cast<float>(screen_point.x);
+                const float diff_y = screen.y - static_cast<float>(screen_point.y);
+                const float dist_sq = diff_x * diff_x + diff_y * diff_y;
+                if (dist_sq < best_dist_sq) {
+                    best_dist_sq = dist_sq;
+                    best_x = candidate_x;
+                    best_y = candidate_y;
+                }
+            };
+
+            constexpr int kLocalSearchRadius = 6;
+            for (int dy = -kLocalSearchRadius; dy <= kLocalSearchRadius; ++dy) {
+                for (int dx = -kLocalSearchRadius; dx <= kLocalSearchRadius; ++dx) {
+                    consider_candidate(tex_x + dx, tex_y + dy);
+                }
+            }
+
+            // Keep the dragged point tightly linked to the cursor even when movement between
+            // frames is large by widening the texture-space search adaptively.
+            constexpr float kCursorSnapToleranceSq = 0.75f * 0.75f;
+            if (best_dist_sq > kCursorSnapToleranceSq) {
+                const SDL_FPoint base = sample_screen(tex_x, tex_y);
+                const SDL_FPoint plus_x = sample_screen(std::min(frame_dims.x - 1, tex_x + 1), tex_y);
+                const SDL_FPoint plus_y = sample_screen(tex_x, std::min(frame_dims.y - 1, tex_y + 1));
+                const float step_px_x = std::max(0.001f, std::hypot(plus_x.x - base.x, plus_x.y - base.y));
+                const float step_px_y = std::max(0.001f, std::hypot(plus_y.x - base.x, plus_y.y - base.y));
+                const float err_px_x = std::fabs(static_cast<float>(screen_point.x) - base.x);
+                const float err_px_y = std::fabs(static_cast<float>(screen_point.y) - base.y);
+                const int max_search_radius = std::max(frame_dims.x, frame_dims.y);
+                const int adaptive_radius = std::clamp(
+                    static_cast<int>(std::ceil(std::max(err_px_x / step_px_x, err_px_y / step_px_y))) + 2,
+                    kLocalSearchRadius,
+                    max_search_radius);
+
+                const int coarse_step = std::max(1, adaptive_radius / 12);
+                for (int dy = -adaptive_radius; dy <= adaptive_radius; dy += coarse_step) {
+                    for (int dx = -adaptive_radius; dx <= adaptive_radius; dx += coarse_step) {
+                        consider_candidate(tex_x + dx, tex_y + dy);
+                    }
+                }
+
+                const int refine_radius = std::max(kLocalSearchRadius, coarse_step * 2);
+                for (int dy = -refine_radius; dy <= refine_radius; ++dy) {
+                    for (int dx = -refine_radius; dx <= refine_radius; ++dx) {
+                        consider_candidate(best_x + dx, best_y + dy);
                     }
                 }
             }
@@ -5539,10 +5713,6 @@ void RoomEditor::validate_anchor_edit_target() {
         exit_anchor_edit_mode(true);
         return;
     }
-    if (!asset_belongs_to_room(target)) {
-        exit_anchor_edit_mode(true);
-        return;
-    }
     if (selected_assets_.empty() || selected_assets_.front() != target) {
         // Anchor mode is bound to a concrete target asset. UI clicks (including the toggle button)
         // can transiently disturb room selection, so recover selection instead of forcing mode exit.
@@ -5551,13 +5721,6 @@ void RoomEditor::validate_anchor_edit_target() {
         hovered_asset_ = target;
         sync_spawn_group_panel_with_selection();
         mark_highlight_dirty();
-    }
-    if (active_assets_) {
-        auto it = std::find(active_assets_->begin(), active_assets_->end(), target);
-        if (it == active_assets_->end()) {
-            exit_anchor_edit_mode(true);
-            return;
-        }
     }
 
     auto anim_it = target->info->animations.find(anchor_edit_.animation_id);
@@ -7976,10 +8139,34 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
     const int target_alpha = static_cast<int>(std::lround(static_cast<float>(base_alpha) * 0.8f));
     overlay_color.a = static_cast<Uint8>(std::clamp(target_alpha, 0, 255));
     const float base_depth = static_cast<float>(asset->world_z());
+    const auto* gp = cam.grid_point_for_asset(asset);
+    const float perspective_scale =
+        (gp && std::isfinite(gp->perspective_scale) && gp->perspective_scale > 0.0f)
+            ? gp->perspective_scale
+            : 1.0f;
 
     auto project_render_object_rect = [&](const RenderObject& obj, SDL_FRect& out_rect) -> bool {
         if (obj.screen_rect.w <= 0 || obj.screen_rect.h <= 0) {
             return false;
+        }
+
+        const float object_world_z = base_depth + obj.world_z_offset;
+        render_projection::ProjectedSpriteFrame projection{};
+        if (build_render_object_projection(cam, obj, perspective_scale, object_world_z, projection)) {
+            const float min_x = std::min(std::min(projection.screen_tl.x, projection.screen_tr.x),
+                                         std::min(projection.screen_bl.x, projection.screen_br.x));
+            const float max_x = std::max(std::max(projection.screen_tl.x, projection.screen_tr.x),
+                                         std::max(projection.screen_bl.x, projection.screen_br.x));
+            const float min_y = std::min(std::min(projection.screen_tl.y, projection.screen_tr.y),
+                                         std::min(projection.screen_bl.y, projection.screen_br.y));
+            const float max_y = std::max(std::max(projection.screen_tl.y, projection.screen_tr.y),
+                                         std::max(projection.screen_bl.y, projection.screen_br.y));
+            if (std::isfinite(min_x) && std::isfinite(max_x) &&
+                std::isfinite(min_y) && std::isfinite(max_y) &&
+                max_x > min_x && max_y > min_y) {
+                out_rect = SDL_FRect{min_x, min_y, max_x - min_x, max_y - min_y};
+                return true;
+            }
         }
 
         SDL_FPoint base_screen{};
@@ -7987,7 +8174,7 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
             static_cast<float>(obj.screen_rect.x),
             static_cast<float>(obj.screen_rect.y)
         };
-        if (!cam.project_world_point(world_point, base_depth + obj.world_z_offset, base_screen)) {
+        if (!cam.project_world_point(world_point, object_world_z, base_screen)) {
             return false;
         }
         if (!std::isfinite(base_screen.x) || !std::isfinite(base_screen.y)) {
@@ -8038,7 +8225,7 @@ void RoomEditor::render_asset_outline(SDL_Renderer* renderer, Asset* asset, cons
         SDL_SetTextureAlphaMod(texture, overlay_color.a);
 
         bool ok = false;
-        if (src_obj && !src_obj->cached_vertices.empty() && !src_obj->mesh_dirty) {
+        if (src_obj && src_obj->has_cached_mesh && !src_obj->mesh_dirty) {
             std::vector<SDL_Vertex> overlay_vertices;
             overlay_vertices.reserve(src_obj->cached_vertices.size());
             for (const auto& vert : src_obj->cached_vertices) {

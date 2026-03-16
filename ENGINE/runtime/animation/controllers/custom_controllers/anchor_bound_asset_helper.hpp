@@ -19,16 +19,42 @@ class Assets;
 class AnchorBoundAssetHelper {
 public:
     explicit AnchorBoundAssetHelper(Asset* controller);
+    AnchorBoundAssetHelper(Assets* assets_owner, Asset* controller = nullptr);
     ~AnchorBoundAssetHelper();
 
     // API used by custom controllers (stable).
     bool tick_for_frame();
-    bool bind_child_to_anchor(Asset& parent, Asset& child, const AnchorPoint& anchor);
-    bool bind_child_for_ticks(Asset& parent, Asset& child, const AnchorPoint& anchor, int ticks = -1);
+    bool bind_child_to_anchor_names(Asset& parent,
+                                    Asset& child,
+                                    const std::string& parent_anchor_name,
+                                    const std::string& child_anchor_name,
+                                    std::optional<std::string> depth_policy = std::nullopt,
+                                    std::optional<std::string> layer_policy = std::nullopt,
+                                    int ticks = -1);
+    bool bind_child_to_anchor(Asset& parent,
+                              Asset& child,
+                              const AnchorPoint& anchor,
+                              const std::string& child_anchor_name = std::string{});
+    bool bind_child_for_ticks(Asset& parent,
+                              Asset& child,
+                              const AnchorPoint& anchor,
+                              int ticks = -1,
+                              const std::string& child_anchor_name = std::string{});
     void unbind_child(Asset& parent, Asset& child);
+    void unbind_child(Asset& child);
     void purge_bindings_for_asset(const Asset* asset);
 
 private:
+    enum class DepthPolicy {
+        AnchorDerived,
+        MatchOwner
+    };
+
+    enum class LayerPolicy {
+        AnchorDerived,
+        MatchControllerAsset
+    };
+
     struct BindingRecord {
         std::string parent_id;
         std::string child_id;
@@ -45,12 +71,19 @@ private:
         bool currently_active = false;
         bool registered_with_parent = false;
         int last_anchor_depth_offset = 0;
+        std::string child_anchor_name;
+        DepthPolicy depth_policy = DepthPolicy::AnchorDerived;
+        LayerPolicy layer_policy = LayerPolicy::AnchorDerived;
     };
+
+    static DepthPolicy parse_depth_policy(const std::optional<std::string>& raw);
+    static LayerPolicy parse_layer_policy(const std::optional<std::string>& raw);
 
     bool resolve_binding_entities(BindingRecord& record);
     std::uintptr_t binding_key_for_child(const Asset& child) const;
     std::string asset_stable_id(const Asset* asset) const;
     std::optional<AnchorPoint> resolve_anchor(BindingRecord& record) const;
+    std::optional<AnchorPoint> resolve_child_anchor(BindingRecord& record) const;
     void teardown_binding(BindingRecord& state);
     std::vector<std::uintptr_t> build_binding_order(bool& has_cycle,
                                                     std::size_t& cycle_nodes) const;
@@ -67,10 +100,10 @@ private:
                           int child_world_y) const;
     void log_cycle_warning(std::size_t cycle_nodes) const;
     void log_alignment_mismatch(const BindingRecord& state,
-                                int anchor_world_x,
-                                int anchor_world_y,
-                                int anchor_world_z,
-                                int anchor_resolution_layer) const;
+                                int expected_world_x,
+                                int expected_world_y,
+                                int expected_world_z,
+                                int expected_resolution_layer) const;
 
     Asset* controller_ = nullptr;
     Assets* assets_ = nullptr;

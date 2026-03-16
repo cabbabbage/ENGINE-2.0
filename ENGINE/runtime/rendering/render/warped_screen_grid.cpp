@@ -6,6 +6,7 @@
 #include "core/find_current_room.hpp"
 #include "utils/log.hpp"
 #include "gameplay/world/world_grid.hpp"
+#include "rendering/render/render_depth_policy.hpp"
 
 #include <algorithm>
 #include <array>
@@ -645,6 +646,11 @@ WarpedScreenGrid::WarpedScreenGrid(int screen_width, int screen_height, const Ar
 
 WarpedScreenGrid::~WarpedScreenGrid() = default;
 
+std::uint64_t WarpedScreenGrid::camera_state_version() const {
+    (void)camera_state_cached();
+    return camera_state_version_;
+}
+
 void WarpedScreenGrid::set_frustum_padding_world(float padding) {
     frustum_padding_world_ = std::max(0.0f, padding);
 }
@@ -665,22 +671,75 @@ void WarpedScreenGrid::set_realism_settings(const RealismSettings& settings) {
 }
 
 void WarpedScreenGrid::set_screen_center(SDL_Point p, bool snap_immediately) {
+    const SDL_FPoint before_center = camera_.state().center;
     camera_.set_screen_center(p, snap_immediately);
-    invalidate_camera_cache();
+    const SDL_FPoint after_center = camera_.state().center;
+    const bool center_changed =
+        std::fabs(after_center.x - before_center.x) > 1e-4f ||
+        std::fabs(after_center.y - before_center.y) > 1e-4f;
+    if (center_changed) {
+        invalidate_camera_cache();
+    }
 }
 
 const CameraState& WarpedScreenGrid::camera_state_cached() const {
-    if (cached_camera_state_dirty_ || !cached_camera_state_) {
+    const CameraController::State& controller_state = camera_.state();
+    const CameraParams sanitized_params =
+        camera_math::sanitize_camera_params(controller_state.params, settings_.base_height_px);
+    auto quantize = [](double value) -> std::int64_t {
+        if (!std::isfinite(value)) {
+            return 0;
+        }
+        return static_cast<std::int64_t>(std::llround(value * 1000.0));
+    };
+
+    ProjectionFingerprint fingerprint{};
+    fingerprint.center_x_q = quantize(static_cast<double>(controller_state.center.x));
+    fingerprint.center_y_q = quantize(static_cast<double>(controller_state.center.y));
+    fingerprint.height_px_q = quantize(sanitized_params.height_px);
+    fingerprint.tilt_deg_q = quantize(sanitized_params.tilt_deg);
+    fingerprint.zoom_percent_q = quantize(sanitized_params.zoom_percent);
+    fingerprint.pan_y_px_q = quantize(0.0);
+    fingerprint.aspect_q = quantize(aspect_);
+    fingerprint.meters_per_100_q = quantize(settings_.meters_per_100_world_px);
+    fingerprint.near_camera_scale_q = quantize(settings_.near_camera_max_perspective_scale);
+    fingerprint.offscreen_fade_q = quantize(settings_.offscreen_fade_amount_px);
+    fingerprint.depth_near_q = quantize(settings_.depth_near_world);
+    fingerprint.depth_far_q = quantize(settings_.depth_far_world);
+    fingerprint.screen_width = screen_width_;
+    fingerprint.screen_height = screen_height_;
+    fingerprint.lock_anchor_to_center = lock_anchor_to_screen_center_;
+    fingerprint.depth_enabled = depth_enabled_;
+    fingerprint.has_tilt_override = tilt_override_deg_.has_value();
+    fingerprint.tilt_override_q = quantize(tilt_override_deg_.value_or(camera_math::kDefaultCameraTiltDeg));
+
+    const bool fingerprint_changed =
+        !last_projection_fingerprint_.has_value() ||
+        !(last_projection_fingerprint_.value() == fingerprint);
+
+    if (cached_camera_state_dirty_ || !cached_camera_state_ || fingerprint_changed) {
         cached_camera_state_ = std::make_unique<CameraState>(build_camera_state(
-            settings_, aspect_, screen_width_, screen_height_, camera_.state().center, camera_.state().params, lock_anchor_to_screen_center_));
+            settings_,
+            aspect_,
+            screen_width_,
+            screen_height_,
+            controller_state.center,
+            controller_state.params,
+            lock_anchor_to_screen_center_));
         cached_camera_state_dirty_ = false;
+        last_projection_fingerprint_ = fingerprint;
+        if (fingerprint_changed) {
+            ++camera_state_version_;
+            if (camera_state_version_ == 0) {
+                ++camera_state_version_;
+            }
+        }
     }
     return *cached_camera_state_;
 }
 
 void WarpedScreenGrid::invalidate_camera_cache() {
     cached_camera_state_dirty_ = true;
-    ++camera_state_version_;
 }
 
 
@@ -720,7 +779,6 @@ void WarpedScreenGrid::update_camera_height(Room* cur,
                          float dt,
                          bool dev_mode)
 {
-    invalidate_camera_cache();
     // Keep the anchor unlocked in both modes so the projection math stays consistent.
     // Lock to screen center so depth parallax remains visible on ground plane.
     lock_anchor_to_screen_center_ = true;
@@ -951,6 +1009,24 @@ bool WarpedScreenGrid::project_world_point(SDL_FPoint world, float world_z, SDL_
     return true;
 }
 
+bool WarpedScreenGrid::build_camera_ray_from_screen(const SDL_FPoint& screen_point,
+                                                     render_projection::CameraRay& out_ray) const {
+    return render_projection::build_camera_ray_from_screen(projection_params(), screen_point, out_ray);
+}
+
+bool WarpedScreenGrid::screen_to_world_on_depth_plane(const SDL_FPoint& screen_point,
+                                                      float world_z,
+                                                      render_projection::WorldPoint3& out_world_point) const {
+    render_projection::CameraRay ray{};
+    if (!build_camera_ray_from_screen(screen_point, ray)) {
+        return false;
+    }
+    return render_projection::intersect_camera_ray_on_world_z(projection_params(),
+                                                              ray,
+                                                              world_z,
+                                                              out_world_point);
+}
+
 SDL_FPoint WarpedScreenGrid::screen_to_map(SDL_Point screen) const {
     const CameraState& cam = camera_state_cached();
     if (!cam.valid) {
@@ -1129,6 +1205,7 @@ void WarpedScreenGrid::clear_grid_state() {
     warped_points_.clear();
     visible_assets_.clear();
     visible_points_.clear();
+    visible_traversal_entries_.clear();
     active_chunks_.clear();
     asset_to_point_.clear();
     cached_world_rect_ = SDL_Rect{0, 0, 0, 0};
@@ -1215,12 +1292,14 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     warped_points_.reserve(grid_points.size());
     visible_points_.reserve(grid_points.size());
     visible_assets_.reserve(grid_points.size());
+    visible_traversal_entries_.reserve(grid_points.size() * 2);
 
     const ScreenBounds virtual_bounds = expanded_screen_bounds(screen_width_, screen_height_);
     const float virtual_w = virtual_bounds.right - virtual_bounds.left;
     const float virtual_h = virtual_bounds.bottom - virtual_bounds.top;
 
     const CameraState& cam_state = camera_state_cached();
+    const double anchor_depth = cam_state.anchor_world_z;
     runtime_camera_height_ = cam_state.camera_height;
     runtime_focus_depth_ = cam_state.focus_depth;
     runtime_anchor_world_z_ = cam_state.anchor_world_z;
@@ -1557,6 +1636,17 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
         if (!frustum_hits.empty()) {
             visible_points_.push_back(gp);
             visible_assets_.insert(visible_assets_.end(), frustum_hits.begin(), frustum_hits.end());
+            for (Asset* visible_asset : frustum_hits) {
+                if (!visible_asset) {
+                    continue;
+                }
+                visible_traversal_entries_.push_back(VisibleTraversalEntry{
+                    visible_asset,
+                    gp,
+                    render_depth::depth_from_anchor(anchor_depth,
+                                                    static_cast<double>(visible_asset->world_z()),
+                                                    visible_asset->render_depth_bias())});
+            }
         }
         if (gp->chunk) active_chunks_.push_back(gp->chunk);
     }
@@ -1564,6 +1654,15 @@ void WarpedScreenGrid::rebuild_grid(world::WorldGrid& world_grid,
     if (!active_chunks_.empty()) {
         std::sort(active_chunks_.begin(), active_chunks_.end());
         active_chunks_.erase(std::unique(active_chunks_.begin(), active_chunks_.end()), active_chunks_.end());
+    }
+
+    if (!visible_traversal_entries_.empty()) {
+        std::stable_sort(
+            visible_traversal_entries_.begin(),
+            visible_traversal_entries_.end(),
+            [](const VisibleTraversalEntry& lhs, const VisibleTraversalEntry& rhs) {
+                return lhs.depth_from_anchor > rhs.depth_from_anchor;
+            });
     }
 
     rebuild_grid_bounds();
@@ -1714,7 +1813,6 @@ std::optional<float> WarpedScreenGrid::tilt_override() const {
 }
 
 void WarpedScreenGrid::update() {
-    invalidate_camera_cache();
     camera_.tick(0.0f);
     const CameraState& cam = camera_state_cached();
     runtime_camera_height_ = cam.camera_height;

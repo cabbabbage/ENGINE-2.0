@@ -31,7 +31,9 @@ void DevCameraControls::handle_input(WarpedScreenGrid& cam,
     if (wheel_y != 0) {
         if (ctrl_down && !pan_blocked) {
             const int ticks = std::abs(wheel_y);
-            const double direction = (wheel_y < 0) ? 1.0 : -1.0;
+            // SDL wheel up is positive. Keep controls consistent with editor docs:
+            // up increases zoom/height (camera farther), down decreases.
+            const double direction = (wheel_y > 0) ? 1.0 : -1.0;
             const double delta = direction * kZoomStepPercent * static_cast<double>(ticks);
             const double base_zoom = std::clamp(cam.get_zoom_percent(), kMinZoomPercent, kMaxZoomPercent);
             const double target_zoom = std::clamp(base_zoom + delta, kMinZoomPercent, kMaxZoomPercent);
@@ -41,7 +43,7 @@ void DevCameraControls::handle_input(WarpedScreenGrid& cam,
         } else {
             const double step = (height_scale_factor_ > 0.0) ? height_scale_factor_ : 1.0;
             const int ticks = std::abs(wheel_y);
-            const bool height_increase = (wheel_y < 0);
+            const bool height_increase = (wheel_y > 0);
             const double mag = std::pow(step, ticks);
             const double eff = height_increase ? mag : (1.0 / mag);
 

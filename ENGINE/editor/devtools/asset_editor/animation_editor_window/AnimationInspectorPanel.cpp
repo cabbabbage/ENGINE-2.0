@@ -24,6 +24,7 @@
 #include "PreviewProvider.hpp"
 #include "PreviewTimeline.hpp"
 #include "SourceConfigPanel.hpp"
+#include "json_coercion.hpp"
 #include "string_utils.hpp"
 #include "dm_styles.hpp"
 #include "devtools/draw_utils.hpp"
@@ -165,67 +166,6 @@ bool is_pointer_event(const SDL_Event& e) {
         default:
             return false;
     }
-}
-
-bool parse_bool_value(const nlohmann::json& value, bool fallback) {
-    if (value.is_boolean()) {
-        return value.get<bool>();
-    }
-    if (value.is_number_integer()) {
-        return value.get<int>() != 0;
-    }
-    if (value.is_number_float()) {
-        return value.get<double>() != 0.0;
-    }
-    if (value.is_string()) {
-        std::string text = value.get<std::string>();
-        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
-            return static_cast<char>(std::tolower(ch));
-        });
-        if (text == "true" || text == "1" || text == "yes" || text == "on") {
-            return true;
-        }
-        if (text == "false" || text == "0" || text == "no" || text == "off") {
-            return false;
-        }
-    }
-    return fallback;
-}
-
-bool parse_bool_field(const nlohmann::json& payload, const char* key, bool fallback) {
-    if (!payload.is_object()) {
-        return fallback;
-    }
-    if (!payload.contains(key)) {
-        return fallback;
-    }
-    return parse_bool_value(payload.at(key), fallback);
-}
-
-int parse_int_value(const nlohmann::json& value, int fallback) {
-    if (value.is_number_integer()) {
-        return value.get<int>();
-    }
-    if (value.is_number()) {
-        return static_cast<int>(value.get<double>());
-    }
-    if (value.is_string()) {
-        try {
-            return std::stoi(value.get<std::string>());
-        } catch (...) {
-        }
-    }
-    return fallback;
-}
-
-int parse_int_field(const nlohmann::json& payload, const char* key, int fallback) {
-    if (!payload.is_object()) {
-        return fallback;
-    }
-    if (!payload.contains(key)) {
-        return fallback;
-    }
-    return parse_int_value(payload.at(key), fallback);
 }
 
 void draw_section_header(SDL_Renderer* renderer,
@@ -1478,7 +1418,7 @@ void AnimationInspectorPanel::refresh_preview_metadata() const {
     }
 
     if (payload.contains("number_of_frames")) {
-        self->frame_count_ = parse_int_field(payload, "number_of_frames", 1);
+        self->frame_count_ = json_coercion::read_int_field_like(payload, "number_of_frames", 1);
         if (self->frame_count_ <= 0) self->frame_count_ = 1;
     }
     if (self->frame_count_ != previous_frame_count) {

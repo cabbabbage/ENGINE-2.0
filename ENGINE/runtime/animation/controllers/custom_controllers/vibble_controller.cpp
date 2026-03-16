@@ -11,9 +11,6 @@
 
 namespace {
 
-constexpr const char* kEyesAnchorName  = "eyes";
-constexpr const char* kEyesFollowerId  = "vibble_eyes";
-
 vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
     const Asset* player,
     int screen_x,
@@ -38,18 +35,7 @@ vibble::player_direction::DirectionIntent resolve_direction_intent_for_player(
 }
 
 vibble_controller::vibble_controller(Asset* player)
-    : player_(player) {
-    if (player_) {
-        binding_helper_ = std::make_unique<AnchorBoundAssetHelper>(player_);
-        if (Asset* eyes_child = player_->get_assets() ? player_->get_assets()->spawn_asset(kEyesFollowerId, player_->world_xz_point()) : nullptr) {
-            auto anchor = player_->anchor_state(kEyesAnchorName,
-                                                anchor_points::GridMaterialization::None);
-            if (anchor.has_value()) {
-                binding_helper_->bind_child_to_anchor(*player_, *eyes_child, anchor.value());
-            }
-        }
-    }
-}
+    : player_(player) {}
 
 
 vibble_controller::~vibble_controller() = default;

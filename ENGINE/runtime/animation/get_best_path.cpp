@@ -13,49 +13,28 @@
 #include "assets/asset/asset_types.hpp"
 #include "animation_update.hpp"
 #include "core/AssetsManager.hpp"
-#include "core/asset_list.hpp"
 #include "utils/area.hpp"
 #include "gameplay/world/grid_point.hpp"
 
 namespace {
-struct CollisionEntry {
-    const Asset* asset = nullptr;
-    Area         area{ "impassable" };
-};
+using CollisionEntryRef = const Assets::FrameCollisionEntry*;
 
-std::vector<CollisionEntry> gather_collision_entries(const Asset& self) {
-    std::vector<CollisionEntry> entries;
-    const AssetList* list = self.get_impassable_naighbors();
-    if (!list) {
+std::vector<CollisionEntryRef> gather_collision_entries(const Asset& self) {
+    std::vector<CollisionEntryRef> entries;
+    const Assets* assets = self.get_assets();
+    if (!assets) {
         return entries;
     }
-
-    std::vector<Asset*> neighbors;
-    list->full_list(neighbors);
-    entries.reserve(neighbors.size());
-
-    for (Asset* neighbor : neighbors) {
-        if (!neighbor || neighbor == &self || !neighbor->info) {
-            continue;
-        }
-
-        Area area = neighbor->get_area("impassable");
-        if (area.get_points().empty()) {
-            area = neighbor->get_area("collision_area");
-        }
-        if (area.get_points().empty()) {
-            continue;
-        }
-
-        entries.push_back(CollisionEntry{ neighbor, std::move(area) });
-    }
-
+    const int search_radius = (self.info && self.info->NeighborSearchRadius > 0)
+        ? self.info->NeighborSearchRadius
+        : 0;
+    assets->query_impassable_entries(self, search_radius, entries);
     return entries;
 }
 
 bool blocked_step(const world::GridPoint& from,
                   const world::GridPoint& to,
-                  const std::vector<CollisionEntry>& collisions,
+                  const std::vector<CollisionEntryRef>& collisions,
                   const Asset& self,
                   const Assets* assets_owner) {
     const world::GridPoint start_bottom = animation_update::detail::bottom_middle_for(self, from);
@@ -65,21 +44,23 @@ bool blocked_step(const world::GridPoint& from,
         return true;
     }
 
-    for (const CollisionEntry& entry : collisions) {
-        const Asset* other = entry.asset;
+    for (const CollisionEntryRef entry : collisions) {
+        if (!entry) {
+            continue;
+        }
+        const Asset* other = entry->asset;
         if (!other || other == &self || !other->info) {
             continue;
         }
 
-        if (animation_update::detail::segment_hits_area(from, to, entry.area)) {
+        if (animation_update::detail::segment_hits_area(from, to, entry->area)) {
             return true;
         }
 
         bool overlap_check = animation_update::detail::should_consider_overlap(self, *other);
 
         if (overlap_check) {
-            const world::GridPoint other_bottom = animation_update::detail::bottom_middle_for(*other, world::grid_math::from_sdl(other->world_xz_point(), other->world_y(), other->grid_resolution));
-            if (animation_update::detail::distance_sq(dest_bottom, other_bottom) <
+            if (animation_update::detail::distance_sq(dest_bottom, entry->bottom_middle) <
                 animation_update::detail::kOverlapDistanceSq) {
                 return true;
             }

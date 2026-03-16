@@ -30,6 +30,7 @@
 #include "rendering/render/warped_screen_grid.hpp"
 #include "rendering/render/dynamic_fog_system.hpp"
 #include "rendering/render/dynamic_boundary_system.hpp"
+#include "rendering/render/projected_sprite_frame.hpp"
 #include "animation/animation_update.hpp"
 #include "gameplay/world/tiling/grid_tile.hpp"
 #include "assets/asset/animation.hpp"
@@ -87,10 +88,7 @@ void GeometryBatcher::flush() {
     // Static quad indices pattern (0,1,2, 0,2,3)
     static constexpr int kQuadIndices[6] = {0, 1, 2, 0, 2, 3};
 
-    // Enforce a deterministic painter's order before emitting draw batches.
-    // This protects against upstream submit-order jitter (e.g. mixed systems
-    // or per-asset multi-quad offsets) and keeps the renderer depth-correct.
-    std::stable_sort(draw_list_.begin(), draw_list_.end(), [](const DrawItem& lhs, const DrawItem& rhs) {
+    auto depth_precedes = [](const DrawItem& lhs, const DrawItem& rhs) {
         const bool lhs_finite = std::isfinite(lhs.depth);
         const bool rhs_finite = std::isfinite(rhs.depth);
         if (lhs_finite != rhs_finite) {
@@ -103,7 +101,20 @@ void GeometryBatcher::flush() {
             return false; // preserve submit order for equal depths
         }
         return lhs.depth > rhs.depth; // descending depth
-    });
+    };
+
+    bool needs_sort = false;
+    for (std::size_t i = 1; i < draw_list_.size(); ++i) {
+        const DrawItem& previous = draw_list_[i - 1];
+        const DrawItem& current = draw_list_[i];
+        if (depth_precedes(current, previous)) {
+            needs_sort = true;
+            break;
+        }
+    }
+    if (needs_sort) {
+        std::stable_sort(draw_list_.begin(), draw_list_.end(), depth_precedes);
+    }
 
     vertex_buffer_.clear();
     index_buffer_.clear();
@@ -308,9 +319,6 @@ void GridTileRenderer::render(SDL_Renderer* renderer, const WarpedScreenGrid& ca
         }
     }
 
-    if (batcher) {
-        batcher->flush();
-    }
 }
 
 namespace {
@@ -328,8 +336,9 @@ inline float smoothstep(float edge0, float edge1, float x) {
 }
 
 struct WarpedMesh {
-    std::vector<SDL_Vertex> vertices;
-    std::vector<int> indices;
+    std::array<SDL_Vertex, 4> vertices{};
+    std::array<int, 6> indices{0, 1, 2, 0, 2, 3};
+    bool valid = false;
 };
 
 constexpr float kQuadEpsilon = 1e-5f;
@@ -539,8 +548,8 @@ bool build_perspective_mesh(RenderObject& obj,
     const float world_y = static_cast<float>(rect.y);
     const SDL_FPoint current_position{world_x, world_y};
 
-    // Render package dimensions already include the per-grid-point perspective scale;
-    // strip it off so the projection step is the sole place that applies perspective.
+    // Render package dimensions are perspective-inclusive; pass them through unchanged
+    // so projected frame construction uses a single consistent contract.
     const float safe_perspective =
         (std::isfinite(perspective_scale) && perspective_scale > 0.0f)
             ? perspective_scale
@@ -549,8 +558,8 @@ bool build_perspective_mesh(RenderObject& obj,
     const std::uint64_t current_camera_version = cam.camera_state_version();
     constexpr float kScaleMatchEpsilon = 1e-4f;
     if (!obj.mesh_dirty &&
-        obj.cached_vertices.size() == 4 &&
-        obj.cached_indices.size() == 6 &&
+        obj.has_cached_mesh &&
+        obj.cached_mesh_texture == obj.texture &&
         std::fabs(obj.cached_scale - current_scale) < kScaleMatchEpsilon &&
         std::fabs(obj.cached_world_z - base_world_z) < kScaleMatchEpsilon &&
         obj.cached_position.x == current_position.x &&
@@ -558,26 +567,43 @@ bool build_perspective_mesh(RenderObject& obj,
         obj.cached_camera_state_version == current_camera_version) {
         mesh.vertices = obj.cached_vertices;
         mesh.indices = obj.cached_indices;
+        mesh.valid = true;
         return true;
     }
-    const float world_width = static_cast<float>(rect.w) / safe_perspective;
-    const float world_height = static_cast<float>(rect.h) / safe_perspective;
-    const float half_width = world_width * 0.5f;
-    const float height = world_height;
+    const float final_width_px = static_cast<float>(rect.w);
+    const float final_height_px = static_cast<float>(rect.h);
     const float base_z = base_world_z;
-    if (!(std::isfinite(world_x) && std::isfinite(world_y) && std::isfinite(half_width) && std::isfinite(height))) {
+    if (!(std::isfinite(world_x) && std::isfinite(world_y) &&
+          std::isfinite(final_width_px) && std::isfinite(final_height_px) &&
+          final_width_px > 0.0f && final_height_px > 0.0f)) {
         return false;
     }
 
-    int atlas_w = 0;
-    int atlas_h = 0;
-    float atlas_wf = 0.0f;
-    float atlas_hf = 0.0f;
-    if (!SDL_GetTextureSize(obj.texture, &atlas_wf, &atlas_hf)) {
-        return false;
+    if (obj.dimension_cache_texture != obj.texture) {
+        obj.dimension_cache_texture = obj.texture;
+        obj.has_atlas_size = false;
+        obj.has_texture_size = false;
+        obj.has_cached_mesh = false;
     }
-    atlas_w = static_cast<int>(std::lround(atlas_wf));
-    atlas_h = static_cast<int>(std::lround(atlas_hf));
+
+    if (!obj.has_atlas_size) {
+        float atlas_wf = 0.0f;
+        float atlas_hf = 0.0f;
+        if (!SDL_GetTextureSize(obj.texture, &atlas_wf, &atlas_hf)) {
+            return false;
+        }
+        obj.atlas_w = static_cast<int>(std::lround(atlas_wf));
+        obj.atlas_h = static_cast<int>(std::lround(atlas_hf));
+        obj.has_atlas_size = true;
+        if (!obj.has_texture_size) {
+            obj.texture_w = obj.atlas_w;
+            obj.texture_h = obj.atlas_h;
+            obj.has_texture_size = (obj.texture_w > 0 && obj.texture_h > 0);
+        }
+    }
+
+    const int atlas_w = obj.atlas_w;
+    const int atlas_h = obj.atlas_h;
     if (atlas_w <= 0 || atlas_h <= 0) {
         return false;
     }
@@ -587,6 +613,9 @@ bool build_perspective_mesh(RenderObject& obj,
     if (!obj.has_texture_size) {
         tex_w = atlas_w;
         tex_h = atlas_h;
+        obj.texture_w = tex_w;
+        obj.texture_h = tex_h;
+        obj.has_texture_size = (tex_w > 0 && tex_h > 0);
     }
     if (tex_w <= 0 || tex_h <= 0) {
         return false;
@@ -623,73 +652,21 @@ bool build_perspective_mesh(RenderObject& obj,
         std::swap(v0, v1);
     }
 
-    // Anchor the quad to the real-world bottom corners. Build a perfect rectangle whose
-    // width is the bottom edge and whose height preserves the source aspect ratio.
-    SDL_FPoint screen_bl{};
-    SDL_FPoint screen_br{};
-    if (!project_world_point(cam, world_x - half_width, world_y, base_z, screen_bl) ||
-        !project_world_point(cam, world_x + half_width, world_y, base_z, screen_br)) {
+    render_projection::SpriteProjectionInput projection_input{};
+    projection_input.world_x = world_x;
+    projection_input.world_y = world_y;
+    projection_input.world_z = base_z;
+    projection_input.perspective_scale = safe_perspective;
+    projection_input.frame_width_px = tex_w;
+    projection_input.frame_height_px = tex_h;
+    projection_input.final_width_px = std::max(1, static_cast<int>(std::lround(final_width_px)));
+    projection_input.final_height_px = std::max(1, static_cast<int>(std::lround(final_height_px)));
+    projection_input.flip = obj.flip;
+
+    render_projection::ProjectedSpriteFrame projection{};
+    if (!render_projection::build_projected_sprite_frame(cam, projection_input, projection)) {
         return false;
     }
-
-    const float bottom_dx = screen_br.x - screen_bl.x;
-    const float bottom_dy = screen_br.y - screen_bl.y;
-    const float bottom_len = std::hypot(bottom_dx, bottom_dy);
-    if (bottom_len < 1e-5f) {
-        return false; // degenerate projection
-    }
-
-    const float aspect = (tex_w > 0 && tex_h > 0)
-        ? static_cast<float>(tex_h) / static_cast<float>(tex_w)
-        : (rect.w != 0 ? static_cast<float>(rect.h) / static_cast<float>(rect.w) : 1.0f);
-    float screen_height = bottom_len * aspect;
-    if (!std::isfinite(screen_height) || screen_height <= 0.0f) {
-        screen_height = std::abs(screen_height);
-        if (screen_height <= 0.0f) {
-            screen_height = world_height; // fallback to unwarped height if projection misbehaves
-        }
-    }
-
-    // Perpendicular unit vector to the bottom edge
-    const float nx = -bottom_dy / bottom_len;
-    const float ny =  bottom_dx / bottom_len;
-
-    // Two candidate orientations; pick the one that places the top above the bottom in screen space.
-    const SDL_FPoint cand_tl_a{screen_bl.x + nx * screen_height, screen_bl.y + ny * screen_height};
-    const SDL_FPoint cand_tr_a{screen_br.x + nx * screen_height, screen_br.y + ny * screen_height};
-    const SDL_FPoint cand_tl_b{screen_bl.x - nx * screen_height, screen_bl.y - ny * screen_height};
-    const SDL_FPoint cand_tr_b{screen_br.x - nx * screen_height, screen_br.y - ny * screen_height};
-
-    const float avg_bottom_y = 0.5f * (screen_bl.y + screen_br.y);
-    const float avg_top_a = 0.5f * (cand_tl_a.y + cand_tr_a.y);
-    const float avg_top_b = 0.5f * (cand_tl_b.y + cand_tr_b.y);
-
-    bool a_is_above = avg_top_a < avg_bottom_y;
-    bool b_is_above = avg_top_b < avg_bottom_y;
-
-    SDL_FPoint screen_tl{};
-    SDL_FPoint screen_tr{};
-    if (a_is_above && (!b_is_above || avg_top_a <= avg_top_b)) {
-        screen_tl = cand_tl_a;
-        screen_tr = cand_tr_a;
-    } else if (b_is_above && (!a_is_above || avg_top_b <= avg_top_a)) {
-        screen_tl = cand_tl_b;
-        screen_tr = cand_tr_b;
-    } else {
-        // Neither is above; choose the one closer to being above (smaller avg y).
-        if (avg_top_a <= avg_top_b) {
-            screen_tl = cand_tl_a;
-            screen_tr = cand_tr_a;
-        } else {
-            screen_tl = cand_tl_b;
-            screen_tr = cand_tr_b;
-        }
-    }
-
-    mesh.vertices.clear();
-    mesh.indices.clear();
-    mesh.vertices.reserve(4);
-    mesh.indices.reserve(6);
 
     const SDL_FColor vertex_color{
         obj.color_mod.r / 255.0f,
@@ -698,37 +675,36 @@ bool build_perspective_mesh(RenderObject& obj,
         obj.color_mod.a / 255.0f};
 
     SDL_Vertex vtx_tl{};
-    vtx_tl.position = screen_tl;
+    vtx_tl.position = projection.screen_tl;
     vtx_tl.color = vertex_color;
     vtx_tl.tex_coord = SDL_FPoint{u0, v0};
 
     SDL_Vertex vtx_tr{};
-    vtx_tr.position = screen_tr;
+    vtx_tr.position = projection.screen_tr;
     vtx_tr.color = vertex_color;
     vtx_tr.tex_coord = SDL_FPoint{u1, v0};
 
     SDL_Vertex vtx_br{};
-    vtx_br.position = screen_br;
+    vtx_br.position = projection.screen_br;
     vtx_br.color = vertex_color;
     vtx_br.tex_coord = SDL_FPoint{u1, v1};
 
     SDL_Vertex vtx_bl{};
-    vtx_bl.position = screen_bl;
+    vtx_bl.position = projection.screen_bl;
     vtx_bl.color = vertex_color;
     vtx_bl.tex_coord = SDL_FPoint{u0, v1};
 
-    mesh.vertices.push_back(vtx_tl);
-    mesh.vertices.push_back(vtx_tr);
-    mesh.vertices.push_back(vtx_br);
-    mesh.vertices.push_back(vtx_bl);
-
+    mesh.vertices = {vtx_tl, vtx_tr, vtx_br, vtx_bl};
     mesh.indices = {0, 1, 2, 0, 2, 3};
+    mesh.valid = true;
     obj.cached_vertices = mesh.vertices;
     obj.cached_indices = mesh.indices;
     obj.cached_position = current_position;
     obj.cached_world_z = base_z;
     obj.cached_scale = current_scale;
     obj.cached_camera_state_version = current_camera_version;
+    obj.cached_mesh_texture = obj.texture;
+    obj.has_cached_mesh = true;
     obj.mesh_dirty = false;
 
     return true;
@@ -1096,18 +1072,17 @@ void SceneRenderer::render() {
                 if (!build_perspective_mesh(obj, cam, perspective_scale, effective_world_z, mesh)) {
                     continue;
                 }
-                if (mesh.vertices.size() != 4 || mesh.indices.size() != 6) {
+                if (!mesh.valid) {
                     continue;
                 }
-                SDL_Vertex verts[4];
-                int indices[6];
-                for (int i = 0; i < 4; ++i) verts[i] = mesh.vertices[static_cast<std::size_t>(i)];
-                for (int i = 0; i < 6; ++i) indices[i] = mesh.indices[static_cast<std::size_t>(i)];
-
                 const double draw_depth = render_depth::depth_from_anchor(anchor_depth,
                                                                           static_cast<double>(effective_world_z),
                                                                           depth_bias);
-                geometry_batcher_->addQuad(obj.texture, verts, indices, obj.blend_mode, draw_depth);
+                geometry_batcher_->addQuad(obj.texture,
+                                           mesh.vertices.data(),
+                                           mesh.indices.data(),
+                                           obj.blend_mode,
+                                           draw_depth);
             }
             continue;
         }

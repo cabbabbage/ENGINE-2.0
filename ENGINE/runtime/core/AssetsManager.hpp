@@ -11,6 +11,7 @@
 #include <mutex>
 #include <optional>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -30,6 +31,7 @@ class Room;
 class Input;
 class DevControls;
 class AssetInfo;
+class AnchorBoundAssetHelper;
 
 class QuickTaskPopup;
 namespace animation_editor {
@@ -105,11 +107,21 @@ public:
         world::GridPoint* grid_point = nullptr;
         double depth_from_anchor = 0.0;
     };
+    struct FrameCollisionEntry {
+        const Asset* asset = nullptr;
+        Area area{"impassable"};
+        world::GridPoint bottom_middle = world::GridPoint::make_virtual(0, 0, 0, 0);
+    };
     const std::vector<ActiveTraversalEntry>& active_traversal() const { return active_traversal_; }
+    const std::vector<FrameCollisionEntry>& frame_collision_entries() const { return frame_collision_entries_; }
     const std::vector<Asset*>& getActiveRaw() const { return active_assets; }
     std::vector<Asset*>& mutable_filtered_active_assets() { return filtered_active_assets; }
     WarpedScreenGrid& getView() { return camera_; }
     const WarpedScreenGrid& getView() const { return camera_; }
+    void query_impassable_entries(const Asset& self,
+                                  int search_radius,
+                                  std::vector<const FrameCollisionEntry*>& out) const;
+    void mark_collision_context_dirty() { frame_collision_context_dirty_ = true; }
 
     float frame_delta_seconds() const { return last_frame_dt_seconds_; }
     std::uint32_t frame_id() const { return frame_id_; }
@@ -220,6 +232,7 @@ public:
 
     // Region tagging
     void classify_region(world::GridPoint& point);
+    void clear_region_classification_cache();
 
 
     void apply_map_grid_settings(const MapGridSettings& settings, bool persist_json = true);
@@ -306,6 +319,15 @@ private:
     world::WorldGrid world_grid_{};
     std::vector<world::GridPoint*> active_points_;
     std::vector<ActiveTraversalEntry> active_traversal_;
+    struct RegionClassificationCacheEntry {
+        world::GridPoint::RegionKind kind = world::GridPoint::RegionKind::Boundary;
+        const Room* owner = nullptr;
+        std::size_t rooms_generation = 0;
+    };
+    std::unordered_map<world::GridKey, RegionClassificationCacheEntry, world::GridKeyHash> region_classification_cache_;
+    mutable std::vector<FrameCollisionEntry> frame_collision_entries_;
+    mutable std::uint32_t frame_collision_context_frame_id_ = 0;
+    mutable bool frame_collision_context_dirty_ = true;
     std::vector<Asset*> removal_queue;
     std::mutex removal_queue_mutex_;
     std::vector<Asset*> non_player_update_buffer_;
@@ -341,6 +363,7 @@ private:
         std::uint64_t processed_anchor_invalidation_version = 0;
         std::uint64_t processed_anchor_revision = 0;
         std::uint64_t processed_camera_state_version = 0;
+        int processed_frame_index = std::numeric_limits<int>::min();
         std::uint32_t last_audio_frame_id = 0;
     };
     std::unordered_map<Asset*, RuntimeTraversalState> runtime_traversal_state_;
@@ -366,6 +389,7 @@ private:
     world::GridPoint last_camera_center_for_grid_ = world::GridPoint::make_virtual(0, 0, 0, 0);
     double last_camera_scale_for_grid_ = 0.0;
     double last_camera_pitch_for_grid_ = 0.0;
+    std::uint64_t last_camera_projection_state_version_for_grid_ = 0;
 
     struct GridMovementCommand {
         Asset* asset = nullptr;
@@ -380,7 +404,8 @@ private:
     bool maybe_rebuild_world_grid();
     void rebuild_world_grid_and_active_assets(const world::GridPoint& current_center,
                                               double current_scale,
-                                              double current_pitch);
+                                              double current_pitch,
+                                              std::uint64_t current_projection_version);
     void mark_grid_dirty();
     void untrack_asset_for_grid(Asset* asset);
     void register_pending_static_assets();
@@ -399,15 +424,22 @@ private:
     std::function<void()> dev_grid_overlay_callback_;
 
     std::vector<class AnchorBoundAssetHelper*> binding_helpers_;
+    std::unique_ptr<AnchorBoundAssetHelper> follower_binding_helper_;
+    std::vector<Asset*> follower_binding_candidates_;
+    bool follower_binding_candidates_dirty_ = true;
 
     void rebuild_non_player_update_buffer_if_needed();
+    void mark_follower_binding_candidates_dirty();
+    void rebuild_follower_binding_candidates_if_needed();
+    void reconcile_manifest_follower_bindings();
     void mark_anchor_basis_dirty(Asset* asset);
     void mark_anchor_bases_dirty_for_active_assets();
     std::uint64_t next_anchor_invalidation_version();
-    void run_active_runtime_single_pass();
+    void run_active_runtime_single_pass(bool include_audio_update = true);
     void run_active_runtime_single_pass_for_asset(Asset* asset,
                                                   const SDL_Point& camera_focus,
                                                   std::uint64_t camera_state_version);
+    void rebuild_frame_collision_context() const;
     void update_active_assets(const world::GridPoint& center);
     bool asset_bounds_in_screen_space(const Asset* asset, SDL_FRect& out_rect) const;
     void update_max_asset_dimensions();

@@ -9,13 +9,13 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_utils.hpp"
 #include "assets/asset/asset_types.hpp"
+#include "animation/animation_update.hpp"
 #include "animation/animation_runtime.hpp"
 #include "audio/audio_engine.hpp"
 #include "devtools/dev_controls.hpp"
 #include "devtools/core/manifest_store.hpp"
 #include "animation/controllers/custom_controllers/anchor_bound_asset_helper.hpp"
 #include "rendering/render/render.hpp"
-#include "rendering/render/render_depth_policy.hpp"
 #include "gameplay/world/chunk.hpp"
 #include "gameplay/map_generation/room.hpp"
 #include "gameplay/map_generation/map_layers_geometry.hpp"
@@ -53,30 +53,7 @@
 
 namespace {
 
-constexpr int kQualityOptions[] = {100, 75, 50, 25, 10};
-constexpr int kMinRenderQuality = kQualityOptions[sizeof(kQualityOptions) / sizeof(kQualityOptions[0]) - 1];
 constexpr std::size_t kNonPlayerParallelThreshold = 4;
-
-int align_render_quality_percent(int percent) {
-    int best = kQualityOptions[0];
-    int best_diff = std::abs(percent - best);
-    for (int option : kQualityOptions) {
-        const int diff = std::abs(percent - option);
-        if (diff < best_diff) {
-            best_diff = diff;
-            best = option;
-        }
-    }
-    return best;
-}
-
-int halved_render_quality_percent(int percent) {
-    if (percent <= kMinRenderQuality) {
-        return kMinRenderQuality;
-    }
-    const int halved = static_cast<int>(std::lround(percent * 0.5));
-    return std::max(kMinRenderQuality, align_render_quality_percent(halved));
-}
 
 struct AssetWorldBounds {
     float left = 0.0f;
@@ -199,6 +176,7 @@ Assets::Assets(AssetLibrary& library,
     last_camera_center_for_grid_ = world::GridPoint::make_virtual(center_px.x, 0, center_px.y, 0);
     last_camera_scale_for_grid_ = camera_.get_scale();
     last_camera_pitch_for_grid_ = camera_.current_pitch_radians();
+    last_camera_projection_state_version_for_grid_ = camera_.camera_state_version();
     if (player) {
         last_known_player_pos_ = world::GridPoint::make_virtual(player->world_x(), player->world_y(), player->world_z(), player->grid_resolution);
         last_player_pos_valid_ = true;
@@ -246,6 +224,10 @@ Assets::Assets(AssetLibrary& library,
         a->set_assets(this);
     }
     vibble::log::info("[Assets] Constructor: Asset finalization complete");
+
+    // Engine-wide follower binding helper (manifest-driven, not controller-specific).
+    follower_binding_helper_ = std::make_unique<AnchorBoundAssetHelper>(this);
+
     register_pending_static_assets();
 
     update_filtered_active_assets();
@@ -324,6 +306,7 @@ bool Assets::mutate_map_data(const std::function<bool(manifest::MapData&)>& muta
 }
 
 void Assets::mark_map_data_dirty() {
+    mark_follower_binding_candidates_dirty();
     map_data_dirty_ = true;
 }
 
@@ -440,7 +423,11 @@ void Assets::force_camera_view_refresh() {
         last_active_rebuild_frame_id_ = static_cast<std::uint32_t>(~frame_id_);
     }
 
-    rebuild_world_grid_and_active_assets(center_point, current_scale, current_pitch);
+    const std::uint64_t current_projection_version = camera_.camera_state_version();
+    rebuild_world_grid_and_active_assets(center_point,
+                                         current_scale,
+                                         current_pitch,
+                                         current_projection_version);
     pending_initial_rebuild_ = false;
     active_assets_dirty_.store(false, std::memory_order_release);
     last_active_rebuild_frame_id_ = frame_id_;
@@ -452,22 +439,13 @@ int Assets::saved_render_quality_percent() const {
 }
 
 int Assets::effective_render_quality_percent() const {
-    int percent = saved_render_quality_percent();
-    if (dev_mode && !force_high_quality_rendering_) {
-        percent = halved_render_quality_percent(percent);
-    }
-    return percent;
+    return saved_render_quality_percent();
 }
 
 void Assets::apply_camera_runtime_settings() {
     const int effective_percent = effective_render_quality_percent();
     const float quality_cap = static_cast<float>(effective_percent) / 100.0f;
     render_pipeline::ScalingLogic::SetQualityCap(quality_cap);
-    if (scene) {
-        const bool low_quality = (effective_percent < 100) && !force_high_quality_rendering_;
-
-    }
-
 }
 
 void Assets::log_camera_fog_state(const char* label) const {
@@ -598,6 +576,7 @@ const std::vector<Room*>& Assets::rooms() const {
 
 void Assets::notify_rooms_changed() {
     ++rooms_generation_;
+    clear_region_classification_cache();
     if (finder_) {
         finder_->setRooms(rooms_);
     }
@@ -639,6 +618,10 @@ void Assets::mark_anchor_bases_dirty_for_active_assets() {
     }
 }
 
+void Assets::clear_region_classification_cache() {
+    region_classification_cache_.clear();
+}
+
 std::uint64_t Assets::next_anchor_invalidation_version() {
     ++anchor_invalidation_version_counter_;
     if (anchor_invalidation_version_counter_ == 0) {
@@ -647,7 +630,7 @@ std::uint64_t Assets::next_anchor_invalidation_version() {
     return anchor_invalidation_version_counter_;
 }
 
-void Assets::run_active_runtime_single_pass() {
+void Assets::run_active_runtime_single_pass(bool include_audio_update) {
     const SDL_Point camera_focus = camera_.get_screen_center();
     const std::uint64_t camera_state_version = camera_.camera_state_version();
 
@@ -659,7 +642,7 @@ void Assets::run_active_runtime_single_pass() {
         run_active_runtime_single_pass_for_asset(asset, camera_focus, camera_state_version);
     }
 
-    if (last_audio_engine_update_frame_id_ != frame_id_) {
+    if (include_audio_update && last_audio_engine_update_frame_id_ != frame_id_) {
         AudioEngine::instance().update();
         last_audio_engine_update_frame_id_ = frame_id_;
     }
@@ -679,14 +662,17 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         state.processed_anchor_revision != asset->anchor_world_revision_;
     const bool camera_anchor_state_changed =
         state.processed_camera_state_version != camera_state_version;
+    const int current_frame_index = asset->current_frame ? asset->current_frame->frame_index : -1;
+    const bool frame_index_changed = state.processed_frame_index != current_frame_index;
 
-    if (invalidation_pending || anchor_revision_changed || camera_anchor_state_changed) {
+    if (invalidation_pending || anchor_revision_changed || camera_anchor_state_changed || frame_index_changed) {
         asset->update_anchor_basis_if_needed();
         asset->refresh_anchor_point_cache_from_frame();
         asset->refresh_runtime_box_cache_from_frame();
         state.processed_anchor_invalidation_version = state.pending_anchor_invalidation_version;
         state.processed_anchor_revision = asset->anchor_world_revision_;
         state.processed_camera_state_version = camera_state_version;
+        state.processed_frame_index = current_frame_index;
     }
 
     if (state.last_audio_frame_id != frame_id_) {
@@ -695,6 +681,88 @@ void Assets::run_active_runtime_single_pass_for_asset(Asset* asset,
         asset->distance_from_camera = std::sqrt(dx * dx + dz * dz);
         asset->angle_from_camera = std::atan2(dz, dx);
         state.last_audio_frame_id = frame_id_;
+    }
+}
+
+void Assets::rebuild_frame_collision_context() const {
+    if (!frame_collision_context_dirty_ && frame_collision_context_frame_id_ == frame_id_) {
+        return;
+    }
+
+    frame_collision_entries_.clear();
+    frame_collision_entries_.reserve(active_assets.size());
+
+    for (Asset* asset : active_assets) {
+        if (!asset || asset->dead || !asset->info) {
+            continue;
+        }
+
+        const std::string canonical_type = asset_types::canonicalize(asset->info->type);
+        const bool impassable =
+            canonical_type == asset_types::boundary ||
+            canonical_type == asset_types::enemy ||
+            canonical_type == asset_types::npc ||
+            asset->info->moving_asset ||
+            !asset->info->passable;
+        if (!impassable || canonical_type == asset_types::player) {
+            continue;
+        }
+
+        Area collision = asset->get_area("impassable");
+        if (collision.get_points().empty()) {
+            collision = asset->get_area("collision_area");
+        }
+        if (collision.get_points().empty()) {
+            continue;
+        }
+
+        const world::GridPoint center = world::grid_math::from_sdl(
+            asset->world_xz_point(),
+            asset->world_y(),
+            asset->grid_resolution);
+        const world::GridPoint bottom_middle =
+            animation_update::detail::bottom_middle_for(*asset, center);
+
+        frame_collision_entries_.push_back(FrameCollisionEntry{
+            asset,
+            std::move(collision),
+            bottom_middle
+        });
+    }
+
+    frame_collision_context_frame_id_ = frame_id_;
+    frame_collision_context_dirty_ = false;
+}
+
+void Assets::query_impassable_entries(const Asset& self,
+                                      int search_radius,
+                                      std::vector<const FrameCollisionEntry*>& out) const {
+    rebuild_frame_collision_context();
+
+    out.clear();
+    if (frame_collision_entries_.empty()) {
+        return;
+    }
+
+    const int radius = std::max(0, search_radius);
+    const std::int64_t radius_sq = static_cast<std::int64_t>(radius) * static_cast<std::int64_t>(radius);
+    const SDL_Point self_center = self.world_xz_point();
+
+    out.reserve(frame_collision_entries_.size());
+    for (const FrameCollisionEntry& entry : frame_collision_entries_) {
+        if (!entry.asset || entry.asset == &self || !entry.asset->info) {
+            continue;
+        }
+        if (radius > 0) {
+            const SDL_Point candidate = entry.asset->world_xz_point();
+            const std::int64_t dx = static_cast<std::int64_t>(candidate.x) - static_cast<std::int64_t>(self_center.x);
+            const std::int64_t dy = static_cast<std::int64_t>(candidate.y) - static_cast<std::int64_t>(self_center.y);
+            const std::int64_t dist_sq = dx * dx + dy * dy;
+            if (dist_sq > radius_sq) {
+                continue;
+            }
+        }
+        out.push_back(&entry);
     }
 }
 
@@ -1056,7 +1124,13 @@ void Assets::update(const Input& input)
         mark_active_assets_dirty();
     }
 
-    // Apply anchor binding updates before traversal/depth rebuild so same-frame render uses fresh bound transforms.
+    // Pass 1: refresh traversal from movement/controller updates.
+    run_frame_rebuild_stage();
+
+    // Keep manifest-driven follower bindings generic and engine-wide.
+    reconcile_manifest_follower_bindings();
+
+    // Pass 2: solve follower constraints against the fresh parent/child anchor cache.
     if (!binding_helpers_.empty()) {
         bool binding_changed = false;
         for (auto* helper : binding_helpers_) {
@@ -1070,8 +1144,8 @@ void Assets::update(const Input& input)
         }
     }
 
+    // Pass 2: rebuild traversal after attachment movement, then refresh anchors/runtime caches once.
     run_frame_rebuild_stage();
-
     run_active_runtime_single_pass();
 
     bool needs_filtered_active_refresh = needs_filtered_active_refresh_;
@@ -1499,6 +1573,7 @@ void Assets::initialize_active_assets(const world::GridPoint& ) {
     filtered_active_assets_filter_version_ = 0;
 
     mark_non_player_update_buffer_dirty();
+    mark_collision_context_dirty();
     needs_filtered_active_refresh_ = true;
     ++active_assets_generation_;
     if (active_assets_generation_ == 0) {
@@ -1516,6 +1591,7 @@ void Assets::touch_dev_active_state_version() {
 void Assets::mark_active_assets_dirty() {
     active_assets_dirty_.store(true, std::memory_order_release);
     needs_filtered_active_refresh_ = true;
+    mark_collision_context_dirty();
     mark_anchor_bases_dirty_for_active_assets();
     note_frame_rebuild_request();
 }
@@ -1579,6 +1655,7 @@ Asset* Assets::attach_asset(std::unique_ptr<Asset> asset, int world_z, int resol
 
     if (!already_tracked) {
         all.push_back(raw);
+        mark_follower_binding_candidates_dirty();
     }
 
     queue_asset_dimension_update(raw);
@@ -1602,6 +1679,93 @@ void Assets::unregister_binding_helper(AnchorBoundAssetHelper* helper) {
     auto it = std::remove(binding_helpers_.begin(), binding_helpers_.end(), helper);
     binding_helpers_.erase(it, binding_helpers_.end());
 }
+
+void Assets::mark_follower_binding_candidates_dirty() {
+    follower_binding_candidates_dirty_ = true;
+}
+
+void Assets::rebuild_follower_binding_candidates_if_needed() {
+    if (!follower_binding_candidates_dirty_) {
+        return;
+    }
+
+    follower_binding_candidates_.clear();
+    follower_binding_candidates_.reserve(all.size());
+    for (Asset* asset : all) {
+        if (!asset || !asset->info) {
+            continue;
+        }
+        if (!asset->info->follower_binding.has_value()) {
+            continue;
+        }
+        follower_binding_candidates_.push_back(asset);
+    }
+    follower_binding_candidates_dirty_ = false;
+}
+
+void Assets::reconcile_manifest_follower_bindings() {
+    if (!follower_binding_helper_) {
+        return;
+    }
+    rebuild_follower_binding_candidates_if_needed();
+
+    auto set_follower_hidden = [](Asset* follower, bool hidden) {
+        if (!follower) {
+            return;
+        }
+        follower->set_hidden(hidden);
+        follower->set_anchor_hidden(hidden);
+        follower->active = !hidden;
+    };
+
+    bool needs_candidate_refresh = false;
+    for (Asset* child : follower_binding_candidates_) {
+        if (!child || !child->info) {
+            continue;
+        }
+
+        if (!child->info->follower_binding.has_value()) {
+            follower_binding_helper_->unbind_child(*child);
+            needs_candidate_refresh = true;
+            continue;
+        }
+
+        const auto& spec = *child->info->follower_binding;
+        const bool has_required_parent_anchor = !spec.anchor_name.empty();
+        const bool has_required_child_anchor = !spec.follower_anchor_name.empty();
+        if (!has_required_parent_anchor || !has_required_child_anchor) {
+            follower_binding_helper_->unbind_child(*child);
+            set_follower_hidden(child, true);
+            continue;
+        }
+
+        if (spec.controller_asset_id.empty()) {
+            follower_binding_helper_->unbind_child(*child);
+            set_follower_hidden(child, true);
+            continue;
+        }
+
+        Asset* parent = find_asset_by_stable_id(spec.controller_asset_id);
+        if (!parent || parent == child) {
+            follower_binding_helper_->unbind_child(*child);
+            set_follower_hidden(child, true);
+            continue;
+        }
+
+        follower_binding_helper_->bind_child_to_anchor_names(
+            *parent,
+            *child,
+            spec.anchor_name,
+            spec.follower_anchor_name,
+            spec.depth_policy,
+            spec.layer_policy,
+            -1);
+    }
+    if (needs_candidate_refresh) {
+        mark_follower_binding_candidates_dirty();
+    }
+}
+
 Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
 
     std::shared_ptr<AssetInfo> info = library_.get(name);
@@ -1629,6 +1793,7 @@ Asset* Assets::spawn_asset(const std::string& name, SDL_Point world_pos) {
     const world::GridPoint floor_point = resolve_floor_world_point(world_pos);
     raw = world_grid_.create_asset_at_point(std::move(uptr), floor_point.world_z(), floor_point.resolution_layer());
     all.push_back(raw);
+    mark_follower_binding_candidates_dirty();
     if (world::GridPoint* registered_point = world_grid_.point_for_asset(raw)) {
         raw->cache_grid_residency(*registered_point);
     }
@@ -1728,17 +1893,18 @@ bool Assets::run_frame_rebuild_stage() {
         reset_frame_rebuild_stage();
     }
 
-    if (frame_rebuild_execution_count_ > 0) {
+    if (frame_rebuild_execution_count_ > 0 &&
+        frame_rebuild_execution_count_ >= frame_rebuild_request_count_) {
         return false;
     }
 
     const bool rebuilt = maybe_rebuild_world_grid();
     if (rebuilt) {
         ++frame_rebuild_execution_count_;
-        if (frame_rebuild_request_count_ > 1) {
+        if (frame_rebuild_request_count_ > 1 && frame_rebuild_execution_count_ == 1) {
             vibble::log::debug(std::string("[Assets] Coalesced ") +
                                std::to_string(frame_rebuild_request_count_) +
-                               " rebuild requests into one frame rebuild pass.");
+                               " rebuild requests into frame rebuild passes.");
         }
     }
     return rebuilt;
@@ -1757,13 +1923,15 @@ bool Assets::maybe_rebuild_world_grid() {
         world_grid_.max_resolution_layers());
     const double current_scale = camera_.get_scale();
     const double current_pitch = camera_.current_pitch_radians();
+    const std::uint64_t current_projection_version = camera_.camera_state_version();
     constexpr double kCameraGridEpsilon = 1e-4;
     const bool active_dirty = active_assets_dirty_.load(std::memory_order_acquire) || pending_initial_rebuild_;
     const bool camera_changed =
         current_center.world_x() != last_camera_center_for_grid_.world_x() ||
         current_center.world_z() != last_camera_center_for_grid_.world_z() ||
         std::fabs(current_scale - last_camera_scale_for_grid_) > kCameraGridEpsilon ||
-        std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon;
+        std::fabs(current_pitch - last_camera_pitch_for_grid_) > kCameraGridEpsilon ||
+        current_projection_version != last_camera_projection_state_version_for_grid_;
 
     const bool camera_dirty = camera_view_dirty_ || camera_changed;
     if (!grid_dirty_ && !camera_dirty && !active_dirty) {
@@ -1778,13 +1946,17 @@ bool Assets::maybe_rebuild_world_grid() {
     }
 
     camera_view_dirty_ = camera_dirty;
-    rebuild_world_grid_and_active_assets(current_center, current_scale, current_pitch);
+    rebuild_world_grid_and_active_assets(current_center,
+                                         current_scale,
+                                         current_pitch,
+                                         current_projection_version);
     return true;
 }
 
 void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& current_center,
                                                   double current_scale,
-                                                  double current_pitch) {
+                                                  double current_pitch,
+                                                  std::uint64_t current_projection_version) {
     last_grid_rebuild_frame_ = frame_id_;
     camera_.rebuild_grid(world_grid_,
                          last_frame_dt_seconds_,
@@ -1802,6 +1974,7 @@ void Assets::rebuild_world_grid_and_active_assets(const world::GridPoint& curren
         current_center.resolution_layer());
     last_camera_scale_for_grid_ = current_scale;
     last_camera_pitch_for_grid_ = current_pitch;
+    last_camera_projection_state_version_for_grid_ = current_projection_version;
 }
 
 void Assets::untrack_asset_for_grid(Asset* asset) {
@@ -1823,6 +1996,8 @@ void Assets::register_pending_static_assets() {
 void Assets::rebuild_all_assets_from_grid() {
     all.clear();
     runtime_traversal_state_.clear();
+    frame_collision_entries_.clear();
+    frame_collision_context_dirty_ = true;
     auto collected = world_grid_.all_assets();
     std::sort(collected.begin(), collected.end(),
               [](Asset* lhs, Asset* rhs) { return lhs < rhs; });
@@ -1852,6 +2027,7 @@ void Assets::rebuild_all_assets_from_grid() {
             }
         }
     }
+    mark_follower_binding_candidates_dirty();
     cached_height_level_ = camera_scale;
     max_asset_dimensions_dirty_ = false;
     finalize_max_asset_dimensions(max_width, max_height);
@@ -2531,6 +2707,15 @@ inline bool is_trail_string(const std::string& text) {
 }
 
 void Assets::classify_region(world::GridPoint& point) {
+    const world::GridKey point_key = point.key();
+    auto cached_it = region_classification_cache_.find(point_key);
+    if (cached_it != region_classification_cache_.end() &&
+        cached_it->second.rooms_generation == rooms_generation_) {
+        point.region_kind = cached_it->second.kind;
+        point.region_owner = cached_it->second.owner;
+        return;
+    }
+
     point.region_kind = world::GridPoint::RegionKind::Boundary;
     point.region_owner = nullptr;
 
@@ -2542,6 +2727,10 @@ void Assets::classify_region(world::GridPoint& point) {
             point.region_kind = room_is_trail ? world::GridPoint::RegionKind::Trail
                                               : world::GridPoint::RegionKind::Room;
             point.region_owner = room;
+            region_classification_cache_[point_key] = RegionClassificationCacheEntry{
+                point.region_kind,
+                point.region_owner,
+                rooms_generation_};
             return;
         }
         // Named areas that are marked as trail
@@ -2554,12 +2743,21 @@ void Assets::classify_region(world::GridPoint& point) {
                 if (named.area->contains_point(pt)) {
                     point.region_kind = world::GridPoint::RegionKind::Trail;
                     point.region_owner = room;
+                    region_classification_cache_[point_key] = RegionClassificationCacheEntry{
+                        point.region_kind,
+                        point.region_owner,
+                        rooms_generation_};
                     return;
                 }
             } catch (...) {
             }
         }
     }
+
+    region_classification_cache_[point_key] = RegionClassificationCacheEntry{
+        point.region_kind,
+        point.region_owner,
+        rooms_generation_};
 }
 void Assets::rebuild_active_from_screen_grid() {
     const std::uint32_t current_frame_id = frame_id_;
@@ -2573,62 +2771,50 @@ void Assets::rebuild_active_from_screen_grid() {
     active_points_.clear();
     active_traversal_.clear();
     active_assets.clear();
-    active_assets.reserve(camera_.get_visible_points().size() * 4);
+
+    const auto& visible_traversal = camera_.visible_traversal_entries();
+    active_assets.reserve(visible_traversal.size());
+    active_traversal_.reserve(visible_traversal.size());
     visible_candidate_buffer_.clear();
-    visible_candidate_buffer_.reserve(camera_.get_visible_points().size() * 2);
+    visible_candidate_buffer_.reserve(visible_traversal.size());
+
     std::unordered_set<Asset*> seen_assets;
-    seen_assets.reserve(camera_.get_visible_points().size() * 2);
+    seen_assets.reserve(visible_traversal.size() * 2);
+    std::unordered_set<world::GridPoint*> seen_points;
+    seen_points.reserve(visible_traversal.size());
 
-    const double anchor_depth = camera_.anchor_world_z();
+    for (const WarpedScreenGrid::VisibleTraversalEntry& source_entry : visible_traversal) {
+        world::GridPoint* point = source_entry.grid_point;
+        if (point && point->on_screen && seen_points.insert(point).second) {
+            classify_region(*point);
+            active_points_.push_back(point);
+        }
 
-    // Screen Grid traversal: use per-frame visible nodes (already filtered by region + branch masks).
-    for (world::GridPoint* point : camera_.get_visible_points()) {
-        if (!point || !point->on_screen) {
+        Asset* asset = source_entry.asset;
+        if (!asset || asset->dead) {
             continue;
         }
-        const float point_alpha = point->horizon_fade_alpha * point->near_camera_fade_alpha;
-        if (!std::isfinite(point_alpha)) {
+        if (!seen_assets.insert(asset).second) {
             continue;
         }
-        if (!point->has_assets_or_active_children()) {
-            continue;
+
+        const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
+        if (!was_active) {
+            active_changed = true;
         }
-        classify_region(*point);
-        active_points_.push_back(point);
-        for (const auto& occ : point->occupants) {
-            Asset* asset = occ.get();
-            if (!asset || asset->dead) {
-                continue;
-            }
-            if (!seen_assets.insert(asset).second) {
-                continue; // already handled this frame
-            }
 
-            const bool was_active = asset->last_active_frame_id == previous_active_frame_id;
-            if (!was_active) {
-                active_changed = true;
-            }
+        asset->last_active_frame_id = current_frame_id;
+        asset->last_visible_frame_id = current_frame_id;
+        asset->active = true;
 
-            asset->last_active_frame_id = current_frame_id;
-            asset->last_visible_frame_id = current_frame_id;
-            asset->active = true;
-
-            active_assets.push_back(asset);
-            mark_anchor_basis_dirty(asset);
-            active_traversal_.push_back(ActiveTraversalEntry{
-                asset,
-                point,
-                render_depth::depth_from_anchor(anchor_depth, static_cast<double>(asset->world_z()), asset->render_depth_bias())
-            });
-        }
-    }
-    // Depth-sort traversal so rendering can interleave with fog/boundary sprites in a single pass.
-    std::stable_sort(
-        active_traversal_.begin(),
-        active_traversal_.end(),
-        [](const ActiveTraversalEntry& a, const ActiveTraversalEntry& b) {
-            return a.depth_from_anchor > b.depth_from_anchor;
+        active_assets.push_back(asset);
+        mark_anchor_basis_dirty(asset);
+        active_traversal_.push_back(ActiveTraversalEntry{
+            asset,
+            point,
+            source_entry.depth_from_anchor
         });
+    }
 
     // Deactivate assets no longer visible this frame.
     for (Asset* asset : previous_active) {
@@ -2652,6 +2838,8 @@ void Assets::rebuild_active_from_screen_grid() {
         mark_non_player_update_buffer_dirty();
         needs_filtered_active_refresh_ = true;
     }
+
+    mark_collision_context_dirty();
 
     // Update scale values for ALL active assets after grid rebuild
     // to ensure scales reflect current perspective (fixes single-frame asset scaling)

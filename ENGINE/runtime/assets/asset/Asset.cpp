@@ -221,6 +221,7 @@ Asset::Asset(const Asset& o)
     , last_scale_base_input_(o.last_scale_base_input_)
     , last_scale_perspective_input_(o.last_scale_perspective_input_)
     , last_scale_camera_input_(o.last_scale_camera_input_)
+    , last_scale_quality_cap_input_(o.last_scale_quality_cap_input_)
     , grid_id_(o.grid_id_)
     , composite_texture_(nullptr)
     , composite_dirty_(true)
@@ -295,6 +296,7 @@ Asset& Asset::operator=(const Asset& o) {
         last_scale_base_input_    = o.last_scale_base_input_;
         last_scale_perspective_input_ = o.last_scale_perspective_input_;
         last_scale_camera_input_  = o.last_scale_camera_input_;
+        last_scale_quality_cap_input_ = o.last_scale_quality_cap_input_;
         cached_grid_residency_    = o.cached_grid_residency_;
         has_cached_grid_residency_ = o.has_cached_grid_residency_;
         alpha_smoothing_          = o.alpha_smoothing_;
@@ -499,13 +501,18 @@ void Asset::update_scale_values() {
     } else if (window) {
         camera_scale = static_cast<float>(std::max(0.0001, window->get_scale()));
     }
+    float quality_cap = render_pipeline::ScalingLogic::QualityCap();
+    if (!std::isfinite(quality_cap) || quality_cap <= 0.0f) {
+        quality_cap = 1.0f;
+    }
 
     const float prospective_scale = base_scale * perspective_scale;
     constexpr float kScaleEpsilon = 1e-4f;
     if (std::fabs(prospective_scale - current_scale) < kScaleEpsilon &&
         std::fabs(base_scale - last_scale_base_input_) < kScaleEpsilon &&
         std::fabs(perspective_scale - last_scale_perspective_input_) < kScaleEpsilon &&
-        std::fabs(camera_scale - last_scale_camera_input_) < kScaleEpsilon) {
+        std::fabs(camera_scale - last_scale_camera_input_) < kScaleEpsilon &&
+        std::fabs(quality_cap - last_scale_quality_cap_input_) < kScaleEpsilon) {
         return;
     }
 
@@ -513,6 +520,7 @@ void Asset::update_scale_values() {
     last_scale_base_input_ = base_scale;
     last_scale_perspective_input_ = perspective_scale;
     last_scale_camera_input_ = camera_scale;
+    last_scale_quality_cap_input_ = quality_cap;
 
     float desired_variant_scale = current_scale / camera_scale;
     if (!std::isfinite(desired_variant_scale) || desired_variant_scale <= 0.0f) {
@@ -553,6 +561,8 @@ void Asset::update_scale_values() {
     last_scale_usage_.remainder_scale = current_remaining_scale_adjustment;
     last_scale_usage_.variant_index = current_variant_index;
 
+    // Variant/remainder changes alter package dimensions and source texture selection.
+    mark_composite_dirty();
     mark_anchors_dirty();
     mark_mesh_dirty();
 }
@@ -667,11 +677,8 @@ void Asset::update() {
     // Re-check anchor basis after any movement/animation/scale changes we just applied.
     const bool post_world_changed = update_anchor_basis_if_needed();
 
-    refresh_anchor_point_cache_from_frame();
-    refresh_runtime_box_cache_from_frame();
-
-    if (info->moving_asset && (external_world_changed || post_world_changed)) {
-        update_neighbor_lists(true);
+    if (assets_ && (external_world_changed || post_world_changed)) {
+        assets_->mark_collision_context_dirty();
     }
 
     const float alpha_target = hidden ? 0.0f : 1.0f;
@@ -1542,6 +1549,7 @@ void Asset::move_to_world_position(int world_x,
 
     grid_resolution = resolved_layer;
     mark_anchors_dirty();
+    assets_->mark_collision_context_dirty();
 }
 
 void Asset::set_world_z(int world_z) {

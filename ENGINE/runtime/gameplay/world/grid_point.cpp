@@ -35,6 +35,26 @@ std::size_t GridKeyHash::operator()(const GridKey& key) const noexcept {
     return ((h1 ^ (h2 << 1)) >> 1) ^ (h3 << 1) ^ (h4 << 3);
 }
 
+GridPoint::GridPoint(int world_x,
+                     int world_y,
+                     int world_z,
+                     int resolution_layer,
+                     GridCoord grid_idx,
+                     GridCoord chunk_idx,
+                     GridId legacy_id,
+                     Chunk* owning_chunk,
+                     GridPoint* parent_point,
+                     bool is_virtual_point)
+    : id(legacy_id)
+    , world_pos_{world_x, world_y, world_z}
+    , resolution_layer_(resolution_layer)
+    , parent_(parent_point)
+    , is_virtual_(is_virtual_point)
+    , is_floor(world_y == 0)
+    , grid_index(grid_idx)
+    , chunk_index(chunk_idx)
+    , chunk(owning_chunk) {}
+
 GridPoint::GridPoint(const GridPoint& other)
     : id(other.id)
     , world_pos_(other.world_pos_)
@@ -73,6 +93,24 @@ GridPoint::GridPoint(const GridPoint& other)
     // Note: occupants vector is intentionally left empty
     // Virtual points (used in GridBounds) don't have assets
     // Real points with assets should use move semantics, not copy
+}
+
+GridPoint::GridPoint(GridPoint&&) noexcept = default;
+
+GridPoint::~GridPoint() = default;
+
+std::string GridPoint::debug_identity_and_mask() const {
+    // Compact identity + branch state for dev tools / logging.
+    const axis::WorldPos canonical = world_position();
+    return "id=" + std::to_string(id) +
+           " world=(" + std::to_string(canonical.x) + "," + std::to_string(canonical.y) + "," + std::to_string(canonical.z) + ")" +
+           " layer=" + std::to_string(resolution_layer_) +
+           " grid_index=(" + std::to_string(grid_index.x) + "," + std::to_string(grid_index.z) + ")" +
+           " chunk_index=(" + std::to_string(chunk_index.x) + "," + std::to_string(chunk_index.z) + ")" +
+           (is_virtual_ ? " virtual=1" : " virtual=0") +
+           " assets=" + std::to_string(occupants.size()) +
+           " children_with_assets=" + std::to_string(children_with_assets) +
+           " mask=0x" + to_hex(active_child_mask);
 }
 
 void GridPoint::project_to_screen(const CameraProjectionParams& params) {

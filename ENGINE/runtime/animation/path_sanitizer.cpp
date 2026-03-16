@@ -6,44 +6,30 @@
 #include "assets/asset/Asset.hpp"
 #include "assets/asset/asset_info.hpp"
 #include "animation_update.hpp"
-#include "core/asset_list.hpp"
+#include "core/AssetsManager.hpp"
 #include "utils/area.hpp"
 
-struct CollisionArea {
-    const Asset* asset = nullptr;
-    Area         area{ "impassable" };
-};
+using CollisionAreaRef = const Assets::FrameCollisionEntry*;
 
-static std::vector<CollisionArea> gather_collision_areas(const Asset& self) {
-    std::vector<CollisionArea> result;
-    const AssetList* list = self.get_impassable_naighbors();
-    if (!list) {
+static std::vector<CollisionAreaRef> gather_collision_areas(const Asset& self) {
+    std::vector<CollisionAreaRef> result;
+    const Assets* assets = self.get_assets();
+    if (!assets) {
         return result;
     }
-
-    std::vector<Asset*> neighbors;
-    list->full_list(neighbors);
-    result.reserve(neighbors.size());
-
-    for (Asset* neighbor : neighbors) {
-        if (!neighbor || neighbor == &self || !neighbor->info) {
-            continue;
-        }
-        Area collision = neighbor->get_area("impassable");
-        if (collision.get_points().empty()) {
-            collision = neighbor->get_area("collision_area");
-        }
-        if (collision.get_points().empty()) {
-            continue;
-        }
-        result.push_back(CollisionArea{ neighbor, std::move(collision) });
-    }
+    const int search_radius = (self.info && self.info->NeighborSearchRadius > 0)
+        ? self.info->NeighborSearchRadius
+        : 0;
+    assets->query_impassable_entries(self, search_radius, result);
     return result;
 }
 
-static bool segment_hits_any(SDL_Point from, SDL_Point to, const std::vector<CollisionArea>& areas) {
-    for (const auto& entry : areas) {
-        if (animation_update::detail::segment_hits_area(from, to, entry.area)) {
+static bool segment_hits_any(SDL_Point from, SDL_Point to, const std::vector<CollisionAreaRef>& areas) {
+    for (const CollisionAreaRef entry : areas) {
+        if (!entry) {
+            continue;
+        }
+        if (animation_update::detail::segment_hits_area(from, to, entry->area)) {
             return true;
         }
     }
@@ -73,7 +59,7 @@ static SDL_Point nudge_outside(SDL_Point pt, const Area& area) {
 
 static SDL_Point walk_back_to_perimeter(SDL_Point start,
                                  SDL_Point target,
-                                 const std::vector<CollisionArea>& areas) {
+                                 const std::vector<CollisionAreaRef>& areas) {
     const int steps = std::max(std::abs(target.x - start.x), std::abs(target.y - start.y));
     if (steps == 0) {
         return target;
@@ -88,8 +74,11 @@ static SDL_Point walk_back_to_perimeter(SDL_Point start,
                              static_cast<int>(std::round(start.y + step_y * i)) };
 
         bool inside = false;
-        for (const auto& entry : areas) {
-            if (entry.area.contains_point(candidate)) {
+        for (const CollisionAreaRef entry : areas) {
+            if (!entry) {
+                continue;
+            }
+            if (entry->area.contains_point(candidate)) {
                 inside = true;
                 break;
             }
@@ -124,9 +113,12 @@ std::vector<SDL_Point> PathSanitizer::sanitize(const Asset& self,
         }
 
         SDL_Point candidate = checkpoint;
-        for (const auto& entry : collision_areas) {
-            if (entry.area.contains_point(candidate)) {
-                candidate = nudge_outside(candidate, entry.area);
+        for (const CollisionAreaRef entry : collision_areas) {
+            if (!entry) {
+                continue;
+            }
+            if (entry->area.contains_point(candidate)) {
+                candidate = nudge_outside(candidate, entry->area);
             }
         }
 

@@ -2,6 +2,7 @@
 
 #include "rendering/render/camera_controller.hpp"
 #include "rendering/render/image_effect_settings.hpp"
+#include "rendering/render/projected_sprite_frame.hpp"
 #include "utils/area.hpp"
 #include <SDL3/SDL.h>
 #include <cstdint>
@@ -126,6 +127,12 @@ public:
         explicit RenderSmoothingKey(const Asset* asset, int frame = 0);
     };
 
+    struct VisibleTraversalEntry {
+        Asset* asset = nullptr;
+        world::GridPoint* grid_point = nullptr;
+        double depth_from_anchor = 0.0;
+    };
+
     WarpedScreenGrid(int screen_width, int screen_height, const Area& starting_view);
     ~WarpedScreenGrid();
 
@@ -150,6 +157,11 @@ public:
     // world.y is height (Y).
     // world_z carries depth (Z) relative to the camera anchor.
     bool project_world_point(SDL_FPoint world, float world_z, SDL_FPoint& out) const;
+    bool build_camera_ray_from_screen(const SDL_FPoint& screen_point,
+                                      render_projection::CameraRay& out_ray) const;
+    bool screen_to_world_on_depth_plane(const SDL_FPoint& screen_point,
+                                        float world_z,
+                                        render_projection::WorldPoint3& out_world_point) const;
     SDL_FPoint screen_to_map(SDL_Point screen) const;
 
     // world.x maps to X and world.y to height (Y).
@@ -239,9 +251,53 @@ public:
     world::GridPoint* pick_nearest_point(SDL_Point screen_pt, float max_distance_px = 32.0f);
     Area convert_area_to_aspect(const Area& in) const;
     const CameraController::State& camera_state() const { return camera_.state(); }
-    std::uint64_t camera_state_version() const { return camera_state_version_; }
+    std::uint64_t camera_state_version() const;
+    std::uint64_t projection_state_version() const { return camera_state_version(); }
+    const std::vector<VisibleTraversalEntry>& visible_traversal_entries() const { return visible_traversal_entries_; }
 
 private:
+    struct ProjectionFingerprint {
+        std::int64_t center_x_q = 0;
+        std::int64_t center_y_q = 0;
+        std::int64_t height_px_q = 0;
+        std::int64_t tilt_deg_q = 0;
+        std::int64_t zoom_percent_q = 0;
+        std::int64_t pan_y_px_q = 0;
+        std::int64_t aspect_q = 0;
+        std::int64_t meters_per_100_q = 0;
+        std::int64_t near_camera_scale_q = 0;
+        std::int64_t offscreen_fade_q = 0;
+        std::int64_t depth_near_q = 0;
+        std::int64_t depth_far_q = 0;
+        int screen_width = 0;
+        int screen_height = 0;
+        bool lock_anchor_to_center = false;
+        bool depth_enabled = true;
+        bool has_tilt_override = false;
+        std::int64_t tilt_override_q = 0;
+
+        bool operator==(const ProjectionFingerprint& other) const noexcept {
+            return center_x_q == other.center_x_q &&
+                   center_y_q == other.center_y_q &&
+                   height_px_q == other.height_px_q &&
+                   tilt_deg_q == other.tilt_deg_q &&
+                   zoom_percent_q == other.zoom_percent_q &&
+                   pan_y_px_q == other.pan_y_px_q &&
+                   aspect_q == other.aspect_q &&
+                   meters_per_100_q == other.meters_per_100_q &&
+                   near_camera_scale_q == other.near_camera_scale_q &&
+                   offscreen_fade_q == other.offscreen_fade_q &&
+                   depth_near_q == other.depth_near_q &&
+                   depth_far_q == other.depth_far_q &&
+                   screen_width == other.screen_width &&
+                   screen_height == other.screen_height &&
+                   lock_anchor_to_center == other.lock_anchor_to_center &&
+                   depth_enabled == other.depth_enabled &&
+                   has_tilt_override == other.has_tilt_override &&
+                   tilt_override_q == other.tilt_override_q;
+        }
+    };
+
     const CameraState& camera_state_cached() const;
     void invalidate_camera_cache();
 
@@ -276,14 +332,16 @@ private:
 
     mutable std::unique_ptr<CameraState> cached_camera_state_;
     mutable bool cached_camera_state_dirty_ = true;
+    mutable std::optional<ProjectionFingerprint> last_projection_fingerprint_{};
 
     std::vector<world::GridPoint*> warped_points_;
     std::vector<Asset*> visible_assets_;
     std::vector<world::GridPoint*> visible_points_;
+    std::vector<VisibleTraversalEntry> visible_traversal_entries_;
     std::vector<world::Chunk*> active_chunks_;
     std::unordered_map<const Asset*, world::GridPoint*> asset_to_point_;
     std::uint64_t frame_counter_ = 0;
-    std::uint64_t camera_state_version_ = 0;
+    mutable std::uint64_t camera_state_version_ = 0;
     std::uint32_t last_nodes_visited_ = 0;
     std::uint32_t last_branches_skipped_ = 0;
     std::uint32_t last_depth_culled_ = 0;

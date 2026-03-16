@@ -856,10 +856,10 @@
           "anchor_points": [
             [
               {
-                "depth_offset": 1,
+                "depth_offset": -130,
                 "name": "eyes",
-                "texture_x": 894,
-                "texture_y": 457
+                "texture_x": 478,
+                "texture_y": 266
               }
             ]
           ],
@@ -1097,7 +1097,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 26.0
+        "scale_percentage": 29.0
       },
       "start": "default",
       "tags": [],
@@ -1376,9 +1376,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,

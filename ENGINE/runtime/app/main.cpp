@@ -325,8 +325,13 @@ void MainApp::game_loop() {
 
         while (!quit) {
                 const Uint64 frame_begin = SDL_GetPerformanceCounter();
+                SDL_Renderer* renderer = raw_renderer();
 
                 while (SDL_PollEvent(&e)) {
+                        if (renderer) {
+                                // Keep event coordinates aligned with renderer-space hit testing (DPI/scaling aware).
+                                SDL_ConvertEventToRenderCoordinates(renderer, &e);
+                        }
                         handle_global_shortcuts(e);
                         if (e.type == SDL_EVENT_QUIT) {
                                 quit = true;
@@ -665,6 +670,10 @@ void run(SDL_Window* window,
             bool choosing = true;
             while (choosing) {
                 while (SDL_PollEvent(&e)) {
+                    if (renderer) {
+                        // Keep menu pointer input in renderer-space coordinates.
+                        SDL_ConvertEventToRenderCoordinates(renderer, &e);
+                    }
                     if (e.type == SDL_EVENT_QUIT) {
                         quit_requested = true;
                         choosing = false;

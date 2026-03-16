@@ -56,12 +56,18 @@ struct RenderObject {
     float world_z_offset = 0.0f;
     bool has_src_rect = false;
     SDL_Rect src_rect{0, 0, 0, 0};
-    std::vector<SDL_Vertex> cached_vertices;
-    std::vector<int> cached_indices;
+    int atlas_w = 0;
+    int atlas_h = 0;
+    bool has_atlas_size = false;
+    SDL_Texture* dimension_cache_texture = nullptr;
+    std::array<SDL_Vertex, 4> cached_vertices{};
+    std::array<int, 6> cached_indices{0, 1, 2, 0, 2, 3};
     SDL_FPoint cached_position{0.0f, 0.0f};
     float cached_world_z = 0.0f;
     float cached_scale = 0.0f;
     std::uint64_t cached_camera_state_version = 0;
+    SDL_Texture* cached_mesh_texture = nullptr;
+    bool has_cached_mesh = false;
     bool mesh_dirty = true;
 };
 
@@ -270,6 +276,7 @@ class Asset {
     float last_scale_base_input_ = -1.0f;
     float last_scale_perspective_input_ = -1.0f;
     float last_scale_camera_input_ = -1.0f;
+    float last_scale_quality_cap_input_ = -1.0f;
 
     void update_scale_values();
     SDL_Texture* get_current_variant_texture() const;

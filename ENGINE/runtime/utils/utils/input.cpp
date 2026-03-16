@@ -43,8 +43,16 @@ void Input::handleEvent(const SDL_Event& e) {
     }
 
     case SDL_EVENT_MOUSE_WHEEL:
-        scrollX_ += e.wheel.integer_x;
-        scrollY_ += e.wheel.integer_y;
+        {
+            int wheel_x = e.wheel.integer_x;
+            int wheel_y = e.wheel.integer_y;
+            if (e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+                wheel_x = -wheel_x;
+                wheel_y = -wheel_y;
+            }
+            scrollX_ += wheel_x;
+            scrollY_ += wheel_y;
+        }
         scroll_dirty_ = true;
         break;
 

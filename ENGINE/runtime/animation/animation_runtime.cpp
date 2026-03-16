@@ -14,7 +14,6 @@
 #include "assets/asset/asset_info.hpp"
 #include "assets/asset/asset_types.hpp"
 #include "core/AssetsManager.hpp"
-#include "core/asset_list.hpp"
 #include "movement_plan_executor.hpp"
 #include "path_sanitizer.hpp"
 #include "get_best_path.hpp"
@@ -28,28 +27,24 @@
 namespace {
 template <typename Fn>
 bool visit_impassable_neighbors(const Asset& asset, Fn&& fn) {
-    const AssetList* list = asset.get_impassable_naighbors();
-    if (!list) {
+    const Assets* assets = asset.get_assets();
+    if (!assets) {
         return false;
     }
 
-    const auto visit_bucket = [&](const std::vector<Asset*>& bucket) {
-        for (Asset* neighbor : bucket) {
-            if (fn(neighbor)) {
-                return true;
-            }
+    std::vector<const Assets::FrameCollisionEntry*> entries;
+    const int search_radius = (asset.info && asset.info->NeighborSearchRadius > 0)
+        ? asset.info->NeighborSearchRadius
+        : 0;
+    assets->query_impassable_entries(asset, search_radius, entries);
+
+    for (const Assets::FrameCollisionEntry* entry : entries) {
+        if (!entry) {
+            continue;
         }
-        return false;
-};
-
-    if (visit_bucket(list->top_unsorted())) {
-        return true;
-    }
-    if (visit_bucket(list->middle_sorted())) {
-        return true;
-    }
-    if (visit_bucket(list->bottom_unsorted())) {
-        return true;
+        if (fn(entry->asset, entry->area, entry->bottom_middle)) {
+            return true;
+        }
     }
 
     return false;
@@ -406,18 +401,13 @@ bool AnimationRuntime::point_in_impassable(const world::GridPoint& pt, const Ass
     if (!animation_update::detail::bottom_point_inside_playable_area(assets, pt)) {
         return true;
     }
-    return visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
+    return visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                                  const Area& area,
+                                                  const world::GridPoint&) {
         if (!neighbor || neighbor == self_ || neighbor == ignored || !neighbor->info) {
             return false;
         }
         if (neighbor->info->type == asset_types::player) {
-            return false;
-        }
-        Area area = neighbor->get_area("impassable");
-        if (area.get_points().empty()) {
-            area = neighbor->get_area("collision_area");
-        }
-        if (area.get_points().empty()) {
             return false;
         }
         return area.contains_point(pt.to_sdl_point());
@@ -444,18 +434,13 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
         return true;
     }
     bool blocked = false;
-    visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
+    visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                           const Area& area,
+                                           const world::GridPoint& neighbor_bottom) {
         if (!neighbor || neighbor == self_ || neighbor == ignored || !neighbor->info) {
             return false;
         }
         if (neighbor->info->type == asset_types::player) {
-            return false;
-        }
-        Area area = neighbor->get_area("impassable");
-        if (area.get_points().empty()) {
-            area = neighbor->get_area("collision_area");
-        }
-        if (area.get_points().empty()) {
             return false;
         }
         const bool contains_from = area.contains_point(bottom_from.to_sdl_point());
@@ -465,7 +450,6 @@ bool AnimationRuntime::path_blocked(const world::GridPoint& from,
         if (!contains_from && !contains_to && !touches_segment) {
             const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
             if (overlap_check) {
-                const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_xz_point(), neighbor->world_y(), neighbor->grid_resolution));
                 overlaps = animation_update::detail::distance_sq(dest_bottom, neighbor_bottom) <
                            animation_update::detail::kOverlapDistanceSq;
             }
@@ -507,15 +491,10 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
     SDL_Point push{0, 0};
     std::vector<const Asset*> blocking_neighbors = blockers;
     if (blocking_neighbors.empty()) {
-        visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint& neighbor_bottom) {
             if (!neighbor || neighbor == self_ || !neighbor->info) {
-                return false;
-            }
-            Area area = neighbor->get_area("impassable");
-            if (area.get_points().empty()) {
-                area = neighbor->get_area("collision_area");
-            }
-            if (area.get_points().empty()) {
                 return false;
             }
             const bool contains_from = area.contains_point(bottom_from.to_sdl_point());
@@ -525,7 +504,6 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             if (!contains_from && !contains_to && !touches_segment) {
                 const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
                 if (overlap_check) {
-                    const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_xz_point(), neighbor->world_y(), neighbor->grid_resolution));
                     overlaps = animation_update::detail::distance_sq(bottom_from, neighbor_bottom) <
                                animation_update::detail::kOverlapDistanceSq;
                 }
@@ -540,21 +518,21 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             return false;
         });
     } else {
-        for (const Asset* neighbor : blocking_neighbors) {
+        std::unordered_set<const Asset*> blocker_lookup(blocking_neighbors.begin(), blocking_neighbors.end());
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint&) {
             if (!neighbor || neighbor == self_ || !neighbor->info) {
-                continue;
+                return false;
             }
-            Area area = neighbor->get_area("impassable");
-            if (area.get_points().empty()) {
-                area = neighbor->get_area("collision_area");
+            if (blocker_lookup.find(neighbor) == blocker_lookup.end()) {
+                return false;
             }
-            if (area.get_points().empty()) {
-                continue;
-            }
-            SDL_Point center = area.get_center();
+            const SDL_Point center = area.get_center();
             push.x += bottom_from.world_x() - center.x;
             push.y += bottom_from.world_z() - center.y;
-        }
+            return false;
+        });
     }
     if (push.x == 0 && push.y == 0) {
         push.x = from.world_x() - to.world_x();
@@ -572,11 +550,10 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
         if (!animation_update::detail::bottom_point_inside_playable_area(assets, bottom)) {
             return true;
         }
-        visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint&) {
             if (!neighbor || neighbor == self_ || !neighbor->info) return false;
-            Area area = neighbor->get_area("impassable");
-            if (area.get_points().empty()) area = neighbor->get_area("collision_area");
-            if (area.get_points().empty()) return false;
             if (!area.contains_point(bottom.to_sdl_point())) return false;
             const auto it = std::find(blocking_neighbors.begin(), blocking_neighbors.end(), neighbor);
             if (it == blocking_neighbors.end()) { blocked = true; return true; }
@@ -590,11 +567,10 @@ bool AnimationRuntime::attempt_unstick(const world::GridPoint& from,
             return false;
         }
         bool inside = false;
-        visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint&) {
             if (!neighbor || neighbor == self_ || !neighbor->info) return false;
-            Area area = neighbor->get_area("impassable");
-            if (area.get_points().empty()) area = neighbor->get_area("collision_area");
-            if (area.get_points().empty()) return false;
             if (area.contains_point(bottom.to_sdl_point())) { inside = true; return true; }
             return false;
         });
@@ -669,18 +645,18 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
     const SDL_Point target_sdl = (next_checkpoint_index_ < planner_iface_->plan_.sanitized_checkpoints.size()) ? planner_iface_->plan_.sanitized_checkpoints[next_checkpoint_index_] : planner_iface_->final_dest;
     world::GridPoint target = world::grid_math::from_sdl(target_sdl, world_y, layer);
     world::GridPoint bottom_target = animation_update::detail::bottom_middle_for(*self_, target);
+    const world::GridPoint start_point = world::grid_math::from_sdl(self_->world_xz_point(), world_y, layer);
     SDL_Point push{0, 0};
     std::vector<const Asset*> influencing_neighbors;
-    auto consider_neighbor = [&](const Asset* neighbor) {
+    auto consider_neighbor = [&](const Asset* neighbor,
+                                 const Area& area,
+                                 const world::GridPoint& neighbor_bottom) {
         if (!neighbor || neighbor == self_ || !neighbor->info) return;
-        Area area = neighbor->get_area("impassable");
-        if (area.get_points().empty()) area = neighbor->get_area("collision_area");
-        if (area.get_points().empty()) return;
-        bool relevant = area.contains_point(bottom_target.to_sdl_point()) || animation_update::detail::segment_hits_area(world::grid_math::from_sdl(self_->world_xz_point(), world_y, layer), target, area);
+        bool relevant = area.contains_point(bottom_target.to_sdl_point()) ||
+                        animation_update::detail::segment_hits_area(start_point, target, area);
         if (!relevant) {
             const bool overlap_check = animation_update::detail::should_consider_overlap(*self_, *neighbor);
             if (overlap_check) {
-                const world::GridPoint neighbor_bottom = animation_update::detail::bottom_middle_for(*neighbor, world::grid_math::from_sdl(neighbor->world_xz_point(), neighbor->world_y(), neighbor->grid_resolution));
                 relevant = animation_update::detail::distance_sq(bottom_target, neighbor_bottom) < animation_update::detail::kOverlapDistanceSq;
             }
         }
@@ -691,13 +667,22 @@ bool AnimationRuntime::adjust_next_checkpoint(const std::vector<const Asset*>& b
         influencing_neighbors.push_back(neighbor);
 };
     if (!blockers.empty()) {
-        for (const Asset* neighbor : blockers) {
-            consider_neighbor(neighbor);
-        }
+        std::unordered_set<const Asset*> blocker_lookup(blockers.begin(), blockers.end());
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint& neighbor_bottom) {
+            if (!neighbor || blocker_lookup.find(neighbor) == blocker_lookup.end()) {
+                return false;
+            }
+            consider_neighbor(neighbor, area, neighbor_bottom);
+            return false;
+        });
     }
     if (influencing_neighbors.empty()) {
-        visit_impassable_neighbors(*self_, [&](Asset* neighbor) {
-            consider_neighbor(neighbor);
+        visit_impassable_neighbors(*self_, [&](const Asset* neighbor,
+                                               const Area& area,
+                                               const world::GridPoint& neighbor_bottom) {
+            consider_neighbor(neighbor, area, neighbor_bottom);
             return false;
         });
     }

@@ -1571,14 +1571,32 @@ void DevControls::set_enabled(bool enabled) {
 
         const char* msg = "[DevControls] preparing enable flow";
         std::cout << msg << "\n";
+        struct CameraPoseSnapshot {
+            bool valid = false;
+            SDL_Point center{0, 0};
+            double height_px = 1.0;
+            double zoom_percent = 0.0;
+            float pitch_deg = camera_math::kDefaultCameraTiltDeg;
+            bool has_focus_override = false;
+            SDL_Point focus_override{0, 0};
+            bool manual_height_override = false;
+            bool manual_zoom_override = false;
+        };
+
         WarpedScreenGrid* camera_ptr = assets_ ? &assets_->getView() : nullptr;
-        SDL_Point preserved_center{0, 0};
-        float preserved_scale = 1.0f;
-        bool should_restore_camera = false;
+        CameraPoseSnapshot preserved_camera{};
         if (camera_ptr) {
-            preserved_center = camera_ptr->get_screen_center();
-            preserved_scale = camera_ptr->get_scale();
-            should_restore_camera = true;
+            preserved_camera.valid = true;
+            preserved_camera.center = camera_ptr->get_screen_center();
+            preserved_camera.height_px = std::max(1.0, static_cast<double>(camera_ptr->get_scale()));
+            preserved_camera.zoom_percent = camera_ptr->get_zoom_percent();
+            preserved_camera.pitch_deg = camera_ptr->current_pitch_degrees();
+            preserved_camera.has_focus_override = camera_ptr->has_focus_override();
+            if (preserved_camera.has_focus_override) {
+                preserved_camera.focus_override = camera_ptr->get_focus_override_point();
+            }
+            preserved_camera.manual_height_override = camera_ptr->is_manual_height_override();
+            preserved_camera.manual_zoom_override = camera_ptr->is_manual_zoom_override();
         }
         const bool camera_was_visible = camera_panel_ && camera_panel_->is_visible();
         close_all_floating_panels();
@@ -1600,11 +1618,21 @@ void DevControls::set_enabled(bool enabled) {
             map_mode_ui_->set_map_mode_active(false);
             map_mode_ui_->set_header_mode(MapModeUI::HeaderMode::Room);
         }
-        if (should_restore_camera && camera_ptr) {
+        if (preserved_camera.valid && camera_ptr) {
+            camera_ptr->set_scale(preserved_camera.height_px);
+            camera_ptr->set_zoom_percent(preserved_camera.zoom_percent);
+            camera_ptr->set_tilt_override(preserved_camera.pitch_deg);
+            if (preserved_camera.has_focus_override) {
+                camera_ptr->set_focus_override(preserved_camera.focus_override);
+            } else {
+                camera_ptr->clear_focus_override();
+            }
+            camera_ptr->set_screen_center(preserved_camera.center);
+            camera_ptr->set_manual_height_override(preserved_camera.manual_height_override);
+            camera_ptr->set_manual_zoom_override(preserved_camera.manual_zoom_override);
+            // Preserve the exact camera pose on dev entry.
             camera_ptr->set_manual_height_override(true);
-            camera_ptr->set_focus_override(preserved_center);
-            camera_ptr->set_screen_center(preserved_center);
-            camera_ptr->set_scale(preserved_scale);
+            camera_ptr->set_manual_zoom_override(true);
             camera_ptr->update();
         }
         if (camera_was_visible && camera_panel_) {
@@ -1615,6 +1643,7 @@ void DevControls::set_enabled(bool enabled) {
     } else {
         const char* msg_disable = "[DevControls] preparing disable flow";
         std::cout << msg_disable << "\n";
+        WarpedScreenGrid* camera_ptr = assets_ ? &assets_->getView() : nullptr;
         grid_overlay_enabled_ = false;
         other_settings_.set_setting_value(OtherSettingsAndControls::kShowGridSettingId, false);
         if (map_mode_ui_) {
@@ -1634,6 +1663,9 @@ void DevControls::set_enabled(bool enabled) {
         dev_selected_room_ = nullptr;
         if (room_editor_) {
             room_editor_->set_enabled(false);
+        }
+        if (camera_ptr) {
+            camera_ptr->clear_tilt_override();
         }
         close_camera_panel();
         restore_filter_hidden_assets();

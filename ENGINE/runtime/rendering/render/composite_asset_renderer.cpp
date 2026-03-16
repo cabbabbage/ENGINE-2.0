@@ -55,6 +55,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                   std::optional<SDL_Point> center = std::nullopt,
                                   SDL_FlipMode flip = SDL_FLIP_NONE,
                                   std::optional<SDL_Point> texture_size = std::nullopt,
+                                  std::optional<SDL_Point> atlas_size = std::nullopt,
                                   float world_z_offset = 0.0f,
                                   std::optional<SDL_Rect> src_rect = std::nullopt) {
         if (!tex) return;
@@ -88,6 +89,12 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
             obj.texture_w = texture_size->x;
             obj.texture_h = texture_size->y;
             obj.has_texture_size = (obj.texture_w > 0 && obj.texture_h > 0);
+        }
+        if (atlas_size.has_value()) {
+            obj.atlas_w = atlas_size->x;
+            obj.atlas_h = atlas_size->y;
+            obj.has_atlas_size = (obj.atlas_w > 0 && obj.atlas_h > 0);
+            obj.dimension_cache_texture = tex;
         }
         obj.world_z_offset = world_z_offset;
         if (src_rect.has_value()) {
@@ -174,6 +181,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                           std::nullopt,
                           base_flip,
                           SDL_Point{frame_w, frame_h},
+                          SDL_Point{texture_w, texture_h},
                           asset->world_z_offset(),
                           has_src_rect ? std::optional<SDL_Rect>(src_rect) : std::nullopt);
 
@@ -229,6 +237,7 @@ void CompositeAssetRenderer::regenerate_package(Asset* asset,
                                   0.0,
                                   std::nullopt,
                                   base_flip,
+                                  SDL_Point{overlay_tex_w, overlay_tex_h},
                                   SDL_Point{overlay_tex_w, overlay_tex_h},
                                   asset->world_z_offset());
             }

@@ -96,19 +96,11 @@ struct GridPoint {
               GridId legacy_id,
               Chunk* owning_chunk,
               GridPoint* parent_point = nullptr,
-              bool is_virtual_point = false)
-        : id(legacy_id)
-        , world_pos_{world_x, world_y, world_z}
-        , resolution_layer_(resolution_layer)
-        , parent_(parent_point)
-        , is_virtual_(is_virtual_point)
-        , is_floor(world_y == 0)
-        , grid_index(grid_idx)
-        , chunk_index(chunk_idx)
-        , chunk(owning_chunk) {}
+              bool is_virtual_point = false);
 
     GridPoint(const GridPoint& other);
-    GridPoint(GridPoint&&) = default;
+    ~GridPoint();
+    GridPoint(GridPoint&&) noexcept;
     GridPoint& operator=(const GridPoint&) = delete;
     GridPoint& operator=(GridPoint&& other) noexcept;
 
@@ -350,19 +342,7 @@ struct GridPoint {
         return !occupants.empty() || children_with_assets > 0 || active_child_mask != 0;
     }
 
-    std::string debug_identity_and_mask() const {
-        // Compact identity + branch state for dev tools / logging.
-        const axis::WorldPos canonical = world_position();
-        return "id=" + std::to_string(id) +
-               " world=(" + std::to_string(canonical.x) + "," + std::to_string(canonical.y) + "," + std::to_string(canonical.z) + ")" +
-               " layer=" + std::to_string(resolution_layer_) +
-               " grid_index=(" + std::to_string(grid_index.x) + "," + std::to_string(grid_index.z) + ")" +
-               " chunk_index=(" + std::to_string(chunk_index.x) + "," + std::to_string(chunk_index.z) + ")" +
-               (is_virtual_ ? " virtual=1" : " virtual=0") +
-               " assets=" + std::to_string(occupants.size()) +
-               " children_with_assets=" + std::to_string(children_with_assets) +
-               " mask=0x" + to_hex(active_child_mask);
-    }
+    std::string debug_identity_and_mask() const;
 
     std::vector<std::unique_ptr<Asset>> occupants;
     int children_with_assets = 0;       // Count of direct children marked active (assets or active sub-branches).

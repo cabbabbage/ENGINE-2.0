@@ -5,6 +5,7 @@
 #include "utils/cache_manager.hpp"
 #include "assets/asset/primary_asset_cache.hpp"
 #include "utils/rebuild_queue.hpp"
+#include "json_coercion.hpp"
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
@@ -51,64 +52,6 @@ std::vector<std::string> parse_string_array(const nlohmann::json& json_value) {
 }
 
 const nlohmann::json* locate_animation_payloads(const nlohmann::json& root);
-
-float read_float_field(const nlohmann::json& data, const char* key, float fallback) {
-    if (!key) {
-        return fallback;
-    }
-    try {
-        auto it = data.find(key);
-        if (it == data.end()) {
-            return fallback;
-        }
-        if (it->is_number_float() || it->is_number_integer()) {
-            return static_cast<float>(it->get<double>());
-        }
-        if (it->is_string()) {
-            const std::string text = it->get<std::string>();
-            if (!text.empty()) {
-                try {
-                    size_t consumed = 0;
-                    float parsed = std::stof(text, &consumed);
-                    if (consumed > 0) {
-                        return parsed;
-                    }
-                } catch (...) {
-                }
-            }
-        }
-    } catch (...) {
-    }
-    return fallback;
-}
-
-bool read_bool_like(const nlohmann::json& value, bool fallback) {
-    try {
-        if (value.is_boolean()) {
-            return value.get<bool>();
-        }
-        if (value.is_number_integer()) {
-            return value.get<int>() != 0;
-        }
-        if (value.is_number_float()) {
-            return std::fabs(value.get<double>()) > 0.0;
-        }
-        if (value.is_string()) {
-            std::string text = value.get<std::string>();
-            std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
-                return static_cast<char>(std::tolower(ch));
-            });
-            if (text == "true" || text == "1" || text == "yes" || text == "on") {
-                return true;
-            }
-            if (text == "false" || text == "0" || text == "no" || text == "off") {
-                return false;
-            }
-        }
-    } catch (...) {
-    }
-    return fallback;
-}
 
 nlohmann::json strip_per_animation_crop_fields(nlohmann::json payload) {
     if (!payload.is_object()) {
@@ -672,9 +615,9 @@ void AssetInfo::load_base_properties(const nlohmann::json &data) {
                 }
         }
         if (data.contains("crop_frames")) {
-                crop_frames = read_bool_like(data.at("crop_frames"), true);
+                crop_frames = json_coercion::read_bool_like(data.at("crop_frames"), true);
         } else if (info_json_.contains("crop_frames")) {
-                crop_frames = read_bool_like(info_json_.at("crop_frames"), true);
+                crop_frames = json_coercion::read_bool_like(info_json_.at("crop_frames"), true);
         } else {
                 crop_frames = true;
         }
@@ -1196,7 +1139,7 @@ void AssetInfo::initialize_from_json(const nlohmann::json& source) {
                         if (binding.contains("layer_policy") && binding["layer_policy"].is_string()) {
                                 spec.layer_policy = binding["layer_policy"].get<std::string>();
                         }
-                        follower_binding = spec.is_valid() ? std::optional<FollowerBindingSpec>(std::move(spec)) : std::nullopt;
+                        follower_binding = std::optional<FollowerBindingSpec>(std::move(spec));
                 } else {
                         follower_binding.reset();
                 }

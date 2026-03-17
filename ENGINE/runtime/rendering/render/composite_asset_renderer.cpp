@@ -26,7 +26,9 @@ void CompositeAssetRenderer::update(Asset* asset,
         package_scale = 1.0f;
     }
 
-    if (std::abs(asset->composite_scale_ - package_scale) > 0.001f) {
+    // Keep package regeneration sensitivity close to runtime scale epsilon so
+    // camera-driven size adjustments stay visually in sync.
+    if (std::abs(asset->composite_scale_ - package_scale) > 0.0001f) {
         asset->mark_composite_dirty();
     }
 

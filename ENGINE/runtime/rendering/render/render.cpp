@@ -1035,6 +1035,9 @@ void SceneRenderer::render() {
             }
 
             rendered_assets_for_debug.push_back(asset);
+            // Re-evaluate scale using the latest camera/grid state right before
+            // package generation so normal assets track camera scaling in-frame.
+            asset->update_scale_values();
             composite_renderer_.update(asset, 0.0f);
             const world::GridPoint* gp = traversal_entry.grid_point ? traversal_entry.grid_point
                                                                     : cam.grid_point_for_asset(asset);

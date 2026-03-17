@@ -475,22 +475,25 @@ void Asset::update_scale_values() {
 
     float perspective_scale = 1.0f;
     const char* perspective_source = "default";
-    // Try multiple sources for perspective scale to handle movement transitions
-    if (pos_ && pos_->perspective_scale > 0.0001f) {
-        // Primary: use current GridPoint directly
-        perspective_scale = pos_->perspective_scale;
-        perspective_source = "grid-point";
-    } else if (window) {
+    // Prefer the live camera grid sample used by rendering to avoid stale per-asset
+    // grid-point values during movement/camera transitions.
+    if (window) {
         if (auto* gp = window->grid_point_for_asset(this)) {
             perspective_scale = std::max(0.0001f, gp->perspective_scale);
             perspective_source = "window-grid";
+        } else if (pos_ && pos_->perspective_scale > 0.0001f) {
+            perspective_scale = pos_->perspective_scale;
+            perspective_source = "grid-point";
         } else if (last_scale_perspective_input_ > 0.0001f) {
-            // Use cached value from last frame during movement transition
+            // Use cached value from last frame during movement transition.
             perspective_scale = last_scale_perspective_input_;
             perspective_source = "cached-last-frame";
         }
+    } else if (pos_ && pos_->perspective_scale > 0.0001f) {
+        perspective_scale = pos_->perspective_scale;
+        perspective_source = "grid-point";
     } else if (last_scale_perspective_input_ > 0.0001f) {
-        // Absolute fallback: use last known value
+        // Absolute fallback: use last known value.
         perspective_scale = last_scale_perspective_input_;
         perspective_source = "cached-last-frame";
     }

@@ -3000,10 +3000,12 @@ void RoomEditor::open_animation_editor_for_asset(const std::shared_ptr<AssetInfo
     }
 }
 
-void RoomEditor::open_asset_info_editor_for_asset(Asset* asset) {
+void RoomEditor::open_asset_info_editor_for_asset(Asset* asset, bool focus_camera) {
     if (!asset || !asset->info) return;
     std::cout << "Opening AssetInfoUI for asset: " << asset->info->name << std::endl;
-    focus_camera_on_asset(asset, 0.8);
+    if (focus_camera) {
+        focus_camera_on_asset(asset, 0.8);
+    }
     open_asset_info_editor(asset->info);
     if (info_ui_) info_ui_->set_target_asset(asset);
 }
@@ -5126,7 +5128,7 @@ void RoomEditor::handle_click(const Input& input) {
         if (target) {
             map_assets_panel_requested_by_shift_click_ = shift_modifier;
             select_asset_or_group(target);
-            open_asset_info_editor_for_asset(target);
+            open_asset_info_editor_for_asset(target, false);
             return;
         }
 

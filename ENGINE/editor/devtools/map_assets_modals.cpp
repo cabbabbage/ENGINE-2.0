@@ -630,14 +630,20 @@ private:
         return nullptr;
     }
 
-    int resolve_unique_resolution(int desired, const std::unordered_set<int>& used) const {
+    int resolve_unique_resolution(int desired, const std::unordered_set<int>& used, int current) const {
         const int clamped = vibble::grid::clamp_resolution(desired);
         if (used.find(clamped) == used.end()) return clamped;
+        const bool prefer_down = clamped < current;
         for (int offset = 1; offset <= vibble::grid::kMaxResolution; ++offset) {
             int up = clamped + offset;
-            if (up <= vibble::grid::kMaxResolution && used.find(up) == used.end()) return up;
             int down = clamped - offset;
-            if (down >= 0 && used.find(down) == used.end()) return down;
+            if (prefer_down) {
+                if (down >= 0 && used.find(down) == used.end()) return down;
+                if (up <= vibble::grid::kMaxResolution && used.find(up) == used.end()) return up;
+            } else {
+                if (up <= vibble::grid::kMaxResolution && used.find(up) == used.end()) return up;
+                if (down >= 0 && used.find(down) == used.end()) return down;
+            }
         }
         return clamped;
     }
@@ -685,7 +691,7 @@ private:
         for (auto& entry : selectors) {
             if (!entry.is_object()) continue;
             int grid_resolution = entry.value("grid_resolution", 5);
-            int unique = resolve_unique_resolution(grid_resolution, used);
+            int unique = resolve_unique_resolution(grid_resolution, used, grid_resolution);
             if (unique != grid_resolution) {
                 entry["grid_resolution"] = unique;
                 changed = true;
@@ -830,7 +836,8 @@ private:
             if (!existing.is_object()) continue;
             used.insert(existing.value("grid_resolution", 5));
         }
-        int resolution = resolve_unique_resolution(entry.value("grid_resolution", 5), used);
+        const int desired_resolution = entry.value("grid_resolution", 5);
+        int resolution = resolve_unique_resolution(desired_resolution, used, desired_resolution);
         entry["grid_resolution"] = resolution;
         entry["jitter"] = 0;
 
@@ -868,7 +875,7 @@ private:
             used.insert(other.value("grid_resolution", 5));
         }
 
-        int resolved = resolve_unique_resolution(desired, used);
+        int resolved = resolve_unique_resolution(desired, used, current);
         (*entry)["grid_resolution"] = resolved;
         notify_save(false);
 

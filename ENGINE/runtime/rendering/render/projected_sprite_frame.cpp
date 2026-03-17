@@ -53,15 +53,22 @@ SDL_FPoint ProjectedSpriteFrame::anchor_uv_from_texture_pixel(SDL_Point texture_
 }
 
 SDL_FPoint ProjectedSpriteFrame::sample_screen_from_uv(SDL_FPoint uv) const {
-    const SDL_FPoint top{
-        screen_tl.x + (screen_tr.x - screen_tl.x) * uv.x,
-        screen_tl.y + (screen_tr.y - screen_tl.y) * uv.x};
-    const SDL_FPoint bottom{
-        screen_bl.x + (screen_br.x - screen_bl.x) * uv.x,
-        screen_bl.y + (screen_br.y - screen_bl.y) * uv.x};
+    // Match SDL_RenderGeometry's fixed triangle split: (TL,TR,BR) and (TL,BR,BL).
+    if (uv.x >= uv.y) {
+        const float w_tl = 1.0f - uv.x;
+        const float w_tr = uv.x - uv.y;
+        const float w_br = uv.y;
+        return SDL_FPoint{
+            screen_tl.x * w_tl + screen_tr.x * w_tr + screen_br.x * w_br,
+            screen_tl.y * w_tl + screen_tr.y * w_tr + screen_br.y * w_br};
+    }
+
+    const float w_tl = 1.0f - uv.y;
+    const float w_bl = uv.y - uv.x;
+    const float w_br = uv.x;
     return SDL_FPoint{
-        top.x + (bottom.x - top.x) * uv.y,
-        top.y + (bottom.y - top.y) * uv.y};
+        screen_tl.x * w_tl + screen_bl.x * w_bl + screen_br.x * w_br,
+        screen_tl.y * w_tl + screen_bl.y * w_bl + screen_br.y * w_br};
 }
 
 bool build_projected_sprite_frame(const WarpedScreenGrid& cam,

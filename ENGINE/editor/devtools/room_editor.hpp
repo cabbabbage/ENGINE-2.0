@@ -99,7 +99,7 @@ public:
 
     void open_asset_info_editor(const std::shared_ptr<AssetInfo>& info);
     void open_animation_editor_for_asset(const std::shared_ptr<AssetInfo>& info);
-    void open_asset_info_editor_for_asset(Asset* asset);
+    void open_asset_info_editor_for_asset(Asset* asset, bool focus_camera = true);
     void close_asset_info_editor();
     bool is_asset_info_editor_open() const;
     bool has_active_modal() const;

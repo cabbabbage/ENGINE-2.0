@@ -3,6 +3,7 @@
 #include <limits>
 
 #include "assets/asset/Asset.hpp"
+#include "rendering/render/projected_sprite_frame.hpp"
 #include "rendering/render/render_object_projection.hpp"
 
 namespace {
@@ -88,4 +89,32 @@ TEST_CASE("render object projection input: boundary exclusion / invalid dimensio
         obj, 1.0f, 0.0f, input);
 
     CHECK_FALSE(ok);
+}
+
+TEST_CASE("projected sprite frame UV sampling follows render triangle split") {
+    render_projection::ProjectedSpriteFrame frame{};
+    frame.screen_tl = SDL_FPoint{10.0f, 20.0f};
+    frame.screen_tr = SDL_FPoint{70.0f, 25.0f};
+    frame.screen_br = SDL_FPoint{90.0f, 90.0f};
+    frame.screen_bl = SDL_FPoint{5.0f, 80.0f};
+
+    const SDL_FPoint upper = frame.sample_screen_from_uv(SDL_FPoint{0.8f, 0.3f}); // u >= v => TL/TR/BR
+    CHECK(upper.x == doctest::Approx(64.0f).epsilon(1e-6));
+    CHECK(upper.y == doctest::Approx(43.5f).epsilon(1e-6));
+
+    const SDL_FPoint lower = frame.sample_screen_from_uv(SDL_FPoint{0.25f, 0.7f}); // v > u => TL/BR/BL
+    CHECK(lower.x == doctest::Approx(27.75f).epsilon(1e-6));
+    CHECK(lower.y == doctest::Approx(64.5f).epsilon(1e-6));
+}
+
+TEST_CASE("projected sprite frame UV sampling stays continuous on diagonal") {
+    render_projection::ProjectedSpriteFrame frame{};
+    frame.screen_tl = SDL_FPoint{10.0f, 20.0f};
+    frame.screen_tr = SDL_FPoint{70.0f, 25.0f};
+    frame.screen_br = SDL_FPoint{90.0f, 90.0f};
+    frame.screen_bl = SDL_FPoint{5.0f, 80.0f};
+
+    const SDL_FPoint diagonal = frame.sample_screen_from_uv(SDL_FPoint{0.4f, 0.4f});
+    CHECK(diagonal.x == doctest::Approx(42.0f).epsilon(1e-6));
+    CHECK(diagonal.y == doctest::Approx(48.0f).epsilon(1e-6));
 }

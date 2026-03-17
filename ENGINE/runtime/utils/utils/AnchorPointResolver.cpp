@@ -126,8 +126,9 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
                                               const DisplacedAssetAnchorPoint& anchor,
                                               GridMaterialization) {
     FrameAnchorSample sample{};
+    const float flat_world_z = static_cast<float>(asset.world_z()) + asset.world_z_offset();
     sample.resolved.world_px = asset.world_xy_point();
-    sample.resolved.world_z = asset.world_z();
+    sample.resolved.world_z = static_cast<int>(std::lround(flat_world_z));
     sample.resolved.depth_offset = anchor.depth_offset;
     sample.screen_px = SDL_FPoint{static_cast<float>(asset.world_x()), static_cast<float>(asset.world_y())};
     sample.flat_screen_px = sample.screen_px;
@@ -137,7 +138,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
     sample.flat_relative_pixel_point = AnchorWorldPoint3{
         static_cast<float>(sample.resolved.world_px.x),
         static_cast<float>(sample.resolved.world_px.y),
-        static_cast<float>(sample.resolved.world_z),
+        flat_world_z,
         true};
     sample.final_anchor_point = sample.flat_relative_pixel_point;
     displace_along_camera_to_point_ray(asset,
@@ -507,7 +508,7 @@ FrameAnchorSample resolve_frame_anchor_sample(const Asset& asset,
 
     render_projection::WorldPoint3 flat_relative_pixel_point{};
     if (!cam.screen_to_world_on_depth_plane(flat_texture_screen_px,
-                                            static_cast<float>(asset.world_z()),
+                                            projection_input.world_z,
                                             flat_relative_pixel_point)) {
         sample.resolved.missing = true;
         return sample;

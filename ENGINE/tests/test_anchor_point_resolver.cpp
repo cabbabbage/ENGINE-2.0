@@ -107,3 +107,24 @@ TEST_CASE("Anchor UV conversion preserves off-frame coordinates") {
     CHECK(flipped_uv.x == doctest::Approx(1.0f - uv.x).epsilon(1e-6));
     CHECK(flipped_uv.y == doctest::Approx(uv.y).epsilon(1e-6));
 }
+
+TEST_CASE("Flat anchor depth plane includes asset world z offset") {
+    Asset asset = make_test_asset(25, 50);
+    asset.set_world_z_offset(6.0f);
+
+    DisplacedAssetAnchorPoint anchor{};
+    anchor.name = "offset_test";
+    anchor.texture_x = 4;
+    anchor.texture_y = 7;
+    anchor.depth_offset = 0;
+
+    const auto sample = anchor_points::resolve_frame_anchor_sample(
+        asset,
+        anchor,
+        anchor_points::GridMaterialization::None);
+
+    REQUIRE_FALSE(sample.resolved.missing);
+    REQUIRE(sample.flat_relative_pixel_point.valid);
+    CHECK(sample.flat_relative_pixel_point.z == doctest::Approx(6.0f).epsilon(1e-6));
+    CHECK(sample.resolved.world_z == 6);
+}

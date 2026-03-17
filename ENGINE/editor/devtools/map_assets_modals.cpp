@@ -3,10 +3,12 @@
 #include "utils/ttf_render_utils.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 #include <unordered_set>
@@ -50,6 +52,44 @@ double read_candidate_weight(const json& candidate) {
         return static_cast<double>(candidate.get<int>());
     }
     return 0.0;
+}
+
+constexpr std::string_view kNullCandidateName = "null";
+
+bool is_null_candidate_name(std::string_view name) {
+    if (name.size() != kNullCandidateName.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < name.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(name[i])) != kNullCandidateName[i]) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool ensure_null_candidate_entry(json& entry) {
+    if (!entry.is_object()) return false;
+    auto it = entry.find("candidates");
+    if (it == entry.end() || !it->is_array()) {
+        entry["candidates"] = json::array();
+        it = entry.find("candidates");
+    }
+    if (it == entry.end() || !it->is_array()) {
+        return false;
+    }
+    for (const auto& candidate : *it) {
+        if (candidate.is_object()) {
+            if (is_null_candidate_name(candidate.value("name", std::string{}))) {
+                return false;
+            }
+        }
+    }
+    json null_candidate = json::object();
+    null_candidate["name"] = std::string{kNullCandidateName};
+    null_candidate["chance"] = 0;
+    it->push_back(std::move(null_candidate));
+    return true;
 }
 
 class LabelWidget : public Widget {
@@ -671,6 +711,7 @@ private:
                 changed = true;
             }
             changed = devmode::spawn::ensure_spawn_group_entry_defaults(entry, default_display_name_) || changed;
+            if (ensure_null_candidate_entry(entry)) changed = true;
             int grid_resolution = entry.value("grid_resolution", 5);
             grid_resolution = vibble::grid::clamp_resolution(grid_resolution);
             if (!entry.contains("grid_resolution") || !entry["grid_resolution"].is_number_integer() ||
@@ -798,6 +839,7 @@ private:
             });
             // Single regen button at panel level; keep per-group regen disabled.
             group.pie_widget->set_on_regenerate({});
+            ensure_null_candidate_entry(entry);
             group.pie_widget->set_candidates_from_json(entry);
             rows.push_back({group.pie_widget.get()});
 
@@ -821,6 +863,7 @@ private:
             if (!group.pie_widget) continue;
             json* entry = find_group_by_spawn_id(group.spawn_id);
             if (!entry) continue;
+            ensure_null_candidate_entry(*entry);
             group.pie_widget->set_candidates_from_json(*entry);
         }
     }
@@ -830,6 +873,7 @@ private:
         auto& selectors = ensure_candidate_selectors();
         json entry = json::object();
         devmode::spawn::ensure_spawn_group_entry_defaults(entry, default_display_name_);
+        ensure_null_candidate_entry(entry);
 
         std::unordered_set<int> used;
         for (const auto& existing : selectors) {

@@ -5,10 +5,12 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <iomanip>
 #include <numeric>
 #include <sstream>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -30,6 +32,20 @@ constexpr double kArrowKeyDelta = 0.5;
 
 double clamp_positive(double value) {
     return value < 0.0 ? 0.0 : value;
+}
+
+constexpr std::string_view kNullCandidateName = "null";
+
+bool is_null_candidate_name(std::string_view name) {
+    if (name.size() != kNullCandidateName.size()) {
+        return false;
+    }
+    for (size_t i = 0; i < name.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(name[i])) != kNullCandidateName[i]) {
+            return false;
+        }
+    }
+    return true;
 }
 }
 
@@ -185,7 +201,7 @@ bool CandidateEditorPieGraphWidget::handle_event(const SDL_Event& e) {
         if (target_index >= 0) {
             hovered_index_ = target_index;
             if (e.button.clicks >= 2) {
-                if (on_delete_) {
+                if (!is_null_candidate_name(candidates_[target_index].name) && on_delete_) {
                     flush_pending_adjustment();
                     on_delete_(target_index);
                 }

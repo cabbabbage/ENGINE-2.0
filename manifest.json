@@ -1482,7 +1482,7 @@
       "neighbor_search_distance": 500,
       "render_radius": 0,
       "size_settings": {
-        "scale_percentage": 62.0
+        "scale_percentage": 32.0
       },
       "start": "default",
       "tags": [],
@@ -1645,7 +1645,7 @@
             "enforce_spacing": false,
             "explicit_flip": false,
             "force_flipped": false,
-            "grid_resolution": 6,
+            "grid_resolution": 4,
             "jitter": 79,
             "locked": false,
             "max_number": 1,
@@ -1763,9 +1763,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            242,
             36,
-            242,
-            242,
+            36,
             255
           ],
           "edge_smoothness": 100,
@@ -2124,8 +2124,8 @@
                 }
               ],
               "display_name": "grave_4 (Copy 6)",
-              "dx": -324,
-              "dz": -108,
+              "dx": -520,
+              "dz": 166,
               "enforce_spacing": false,
               "explicit_flip": false,
               "force_flipped": false,

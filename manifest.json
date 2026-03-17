@@ -1637,8 +1637,12 @@
                 "name": "tree_2"
               },
               {
-                "chance": 25,
+                "chance": 24,
                 "name": "tree_darker"
+              },
+              {
+                "chance": 43,
+                "name": "null"
               }
             ],
             "display_name": "batch_map_boundary",
@@ -1763,9 +1767,9 @@
           "camera_zoom_percent": 0,
           "curvyness": 2,
           "display_color": [
+            36,
             242,
-            36,
-            36,
+            242,
             255
           ],
           "edge_smoothness": 100,

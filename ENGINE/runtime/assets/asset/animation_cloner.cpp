@@ -179,8 +179,8 @@ bool AnimationCloner::Clone(const Animation& source,
 
             if (src_frame) {
                 dst_frame.dx       = opts.flip_movement_horizontal ? -src_frame->dx : src_frame->dx;
-                dst_frame.dy       = opts.flip_movement_vertical   ? -src_frame->dy : src_frame->dy;
-                dst_frame.dz       = src_frame->dz;
+                dst_frame.dy       = src_frame->dy;
+                dst_frame.dz       = opts.flip_movement_vertical   ? -src_frame->dz : src_frame->dz;
                 dst_frame.z_resort = src_frame->z_resort;
                 dst_frame.rgb      = src_frame->rgb;
             } else {

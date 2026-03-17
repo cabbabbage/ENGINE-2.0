@@ -57,6 +57,7 @@ class MovementSummaryWidget {
     std::array<bool, 2> mode_button_pressed_{{false, false}};
     float total_dx_ = 0.0f;
     float total_dy_ = 0.0f;
+    float total_dz_ = 0.0f;
     std::string totals_signature_;
     bool show_button_ = true;
     bool button_is_go_to_ = false;

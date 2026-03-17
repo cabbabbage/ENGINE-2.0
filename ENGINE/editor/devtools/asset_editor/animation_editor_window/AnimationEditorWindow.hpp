@@ -108,7 +108,7 @@ class AnimationEditorWindow {
     std::optional<int> parse_defaults_distance_per_frame() const;
     bool copy_frames_to_animation_folder(const std::string& animation_id,
                                          const std::vector<std::filesystem::path>& frames);
-    nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id, int frame_count, int dx, int depth_dy) const;
+    nlohmann::json build_file_sourced_movement_payload(const std::string& animation_id, int frame_count, int dx, int depth_dz) const;
     nlohmann::json build_derived_movement_payload(const std::string& animation_id,
                                                   const std::string& source_animation_id,
                                                   int frame_count,

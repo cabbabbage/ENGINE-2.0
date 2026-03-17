@@ -19,8 +19,9 @@
 #include "devtools/dev_camera_controls.hpp"
 #include "devtools/animation_source_navigation.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
-#include "devtools/frame_editors/shared/FrameEditState.hpp"
+#include "devtools/room_movement_payload.hpp"
 #include "assets/asset/anchor_point.hpp"
+#include "animation/combat_geometry.hpp"
 #include "utils/input.hpp"
 
 class Asset;
@@ -41,6 +42,7 @@ class Grid;
 class BottomNavigationPanel;
 class RoomAnchorToolsPanel;
 class RoomMovementToolsPanel;
+class RoomBoxToolsPanel;
 class DevFooterBar;
 class DevControls;
 
@@ -449,12 +451,16 @@ private:
         Normal,
         AnchorEdit,
         MovementEdit,
+        HitBoxEdit,
+        AttackBoxEdit,
     };
 
     enum class AssetEditorSubview {
         AssetInfo,
         Anchor,
         Movement,
+        Hitbox,
+        AttackBox,
     };
 
     SelectionFilter selection_filter_ = SelectionFilter::Normal;
@@ -466,6 +472,8 @@ private:
     std::unique_ptr<AssetInfoUI> info_ui_;
     std::unique_ptr<RoomAnchorToolsPanel> anchor_tools_panel_;
     std::unique_ptr<RoomMovementToolsPanel> movement_tools_panel_;
+    std::unique_ptr<RoomBoxToolsPanel> hitbox_tools_panel_;
+    std::unique_ptr<RoomBoxToolsPanel> attack_box_tools_panel_;
     std::unique_ptr<BottomNavigationPanel> anchor_navigation_panel_;
 
     struct AnchorHandleSample {
@@ -506,11 +514,27 @@ private:
         bool dirty_since_last_flush = false;
         bool smooth_enabled = false;
         bool curve_enabled = false;
-        std::vector<devmode::frame_editors::MovementFrame> frames;
+        std::vector<devmode::room_movement_payload::MovementFrame> frames;
         std::vector<SDL_FPoint> rel_positions;
         std::vector<float> rel_positions_z;
     };
     MovementEditState movement_edit_;
+
+    struct BoxEditState {
+        Asset* target_asset = nullptr;
+        std::string animation_id;
+        int frame_index = 0;
+        int selected_box_index = -1;
+        int selected_corner_index = 0;
+        int hovered_box_index = -1;
+        int hovered_corner_index = -1;
+        bool dragging_corner = false;
+        bool had_static_frame_before = false;
+        bool static_frame_before = false;
+        bool dirty_since_last_flush = false;
+    };
+    BoxEditState hitbox_edit_;
+    BoxEditState attack_box_edit_;
 
     struct AssetEditorTransitionState {
         bool active = false;

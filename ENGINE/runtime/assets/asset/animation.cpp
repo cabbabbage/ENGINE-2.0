@@ -529,7 +529,7 @@ void Animation::inherit_movement_from(const Animation& source) {
     if (flip_movement_vertical) {
         for (auto& path : movement_paths_) {
             for (auto& frame : path) {
-                frame.dy = -frame.dy;
+                frame.dz = -frame.dz;
             }
         }
     }

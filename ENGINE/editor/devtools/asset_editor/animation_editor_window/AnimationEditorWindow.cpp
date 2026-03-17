@@ -240,21 +240,21 @@ std::vector<std::filesystem::path> normalize_sequence_paths(const std::vector<st
     return normalized;
 }
 
-nlohmann::json build_movement_sequence(int frame_count, int dx, int depth_dy) {
+nlohmann::json build_movement_sequence(int frame_count, int dx, int depth_dz) {
     nlohmann::json movement = nlohmann::json::array();
     const int safe_frames = std::max(frame_count, 1);
     movement.get_ref<nlohmann::json::array_t&>().reserve(static_cast<std::size_t>(safe_frames));
     for (int i = 0; i < safe_frames; ++i) {
         const bool first = (i == 0);
         const int frame_dx = first ? 0 : dx;
-        const int frame_dy = first ? 0 : depth_dy;
+        const int frame_dz = first ? 0 : depth_dz;
         movement.push_back(nlohmann::json::object({
             {"x", frame_dx},
-            {"y", frame_dy},
-            {"z", 0},
+            {"y", 0},
+            {"z", frame_dz},
             {"dx", frame_dx},
-            {"dy", frame_dy},
-            {"dz", 0},
+            {"dy", 0},
+            {"dz", frame_dz},
         }));
     }
     return movement;
@@ -1720,7 +1720,7 @@ bool AnimationEditorWindow::copy_frames_to_animation_folder(const std::string& a
 nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const std::string& animation_id,
                                                                           int frame_count,
                                                                           int dx,
-                                                                          int depth_dy) const {
+                                                                          int depth_dz) const {
     nlohmann::json payload = nlohmann::json::object();
     payload["source"] = nlohmann::json::object({
         {"kind", "folder"},
@@ -1729,7 +1729,7 @@ nlohmann::json AnimationEditorWindow::build_file_sourced_movement_payload(const 
     });
     payload["number_of_frames"] = std::max(frame_count, 1);
     payload["inherit_source_movement"] = false;
-    payload["movement"] = build_movement_sequence(frame_count, dx, depth_dy);
+    payload["movement"] = build_movement_sequence(frame_count, dx, depth_dz);
     payload["loop"] = true;
     payload["locked"] = false;
     payload["reverse_source"] = false;
@@ -1842,13 +1842,13 @@ void AnimationEditorWindow::handle_create_defaults() {
     bool ok = true;
     std::vector<std::string> created_ids;
 
-    auto create_file_based = [&](const std::string& id, int dx, int depth_dy) {
+    auto create_file_based = [&](const std::string& id, int dx, int depth_dz) {
         if (!ok) return;
         if (!copy_frames_to_animation_folder(id, base_frames)) {
             ok = false;
             return;
         }
-        nlohmann::json payload = build_file_sourced_movement_payload(id, frame_count, dx, depth_dy);
+        nlohmann::json payload = build_file_sourced_movement_payload(id, frame_count, dx, depth_dz);
         if (!create_or_replace_animation_payload(id, payload)) {
             ok = false;
             return;

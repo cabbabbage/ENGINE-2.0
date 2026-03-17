@@ -25,6 +25,7 @@ namespace animation_editor {
 struct ResolvedMovement {
     float total_dx = 0.0f;
     float total_dy = 0.0f;
+    float total_dz = 0.0f;
     bool derived = false;
     std::string source_id;
     std::vector<std::string> modifiers;

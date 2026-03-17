@@ -680,19 +680,88 @@ void AnimationLoader::load(Animation& animation,
                 bool specified = false;
                 if (!seq.is_array()) return specified;
                 auto clamp = [](int v) { return (v < 0) ? 0 : (v > 255 ? 255 : v); };
+                auto read_int_like = [](const nlohmann::json& node, const char* key, int fallback) -> int {
+                        if (!node.is_object() || !node.contains(key)) {
+                                return fallback;
+                        }
+                        return read_int_field_like(node, key, fallback);
+                };
+                auto is_legacy_object_depth_in_y = [&](const nlohmann::json& node, int parsed_height, int parsed_depth) -> bool {
+                        if (!node.is_object()) {
+                                return false;
+                        }
+                        const bool has_height_key = node.contains("dy") || node.contains("y");
+                        const bool has_depth_key = node.contains("dz") || node.contains("z");
+                        if (!has_height_key) {
+                                return false;
+                        }
+                        if (!has_depth_key) {
+                                return true;
+                        }
+
+                        const bool has_xy_object_keys = node.contains("x") || node.contains("y") || node.contains("z");
+                        const bool has_dxyz_keys = node.contains("dx") || node.contains("dy") || node.contains("dz");
+                        if (has_xy_object_keys && has_dxyz_keys && parsed_depth == 0 && parsed_height != 0) {
+                                return true;
+                        }
+                        return false;
+                };
+
                 for (const auto& mv : seq) {
                         AnimationFrame fm;
 
-                                if (mv.is_object()) {
-                                        // Movement uses integer world pixels
-                                        fm.dx = read_int_field_like(mv, "x", 0);
-                                        fm.dy = read_int_field_like(mv, "y", 0);
-                                        fm.dz = read_int_field_like(mv, "z", 0);
-                                        fm.z_resort = read_bool_field_like(mv, "resort_z", false);
-                                        if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.contains("resort_z")) specified = true;
-                                        dest.push_back(std::move(fm));
-                                        continue;
+                        if (mv.is_object()) {
+                                // Canonical axes: X/Z are floor movement, Y is height.
+                                const int dx = mv.contains("dx") ? read_int_like(mv, "dx", 0) : read_int_like(mv, "x", 0);
+                                int height_y = mv.contains("dy") ? read_int_like(mv, "dy", 0) : read_int_like(mv, "y", 0);
+                                int depth_z = mv.contains("dz") ? read_int_like(mv, "dz", 0) : read_int_like(mv, "z", 0);
+
+                                if (is_legacy_object_depth_in_y(mv, height_y, depth_z)) {
+                                        depth_z = height_y;
+                                        height_y = 0;
                                 }
+
+                                fm.dx = dx;
+                                fm.dy = height_y;
+                                fm.dz = depth_z;
+                                fm.z_resort = read_bool_field_like(mv, "resort_z", false);
+                                if (fm.dx != 0 || fm.dy != 0 || fm.dz != 0 || mv.contains("resort_z")) specified = true;
+                                dest.push_back(std::move(fm));
+                                continue;
+                        }
+
+                        if (mv.is_array()) {
+                                bool has_numeric_depth = false;
+                                bool has_numeric_height = false;
+                                int parsed_depth = 0;
+                                int parsed_height = 0;
+                                if (!mv.empty() && mv[0].is_number()) {
+                                        try { fm.dx = mv[0].get<int>(); } catch (...) { fm.dx = static_cast<int>(std::lround(mv[0].get<double>())); }
+                                }
+                                if (mv.size() > 1 && mv[1].is_number()) {
+                                        has_numeric_height = true;
+                                        try { parsed_height = mv[1].get<int>(); } catch (...) { parsed_height = static_cast<int>(std::lround(mv[1].get<double>())); }
+                                }
+                                if (mv.size() > 2 && mv[2].is_number()) {
+                                        has_numeric_depth = true;
+                                        try { parsed_depth = mv[2].get<int>(); } catch (...) { parsed_depth = static_cast<int>(std::lround(mv[2].get<double>())); }
+                                }
+
+                                // Legacy arrays used [dx, depth]. Canonical arrays are [dx, y(height), z(depth)].
+                                if (has_numeric_depth) {
+                                        fm.dy = parsed_height;
+                                        fm.dz = parsed_depth;
+                                } else if (has_numeric_height) {
+                                        fm.dy = 0;
+                                        fm.dz = parsed_height;
+                                }
+
+                                if (mv.size() > 2 && mv[2].is_boolean()) {
+                                        fm.z_resort = mv[2].get<bool>();
+                                } else if (mv.size() > 3 && mv[3].is_boolean()) {
+                                        fm.z_resort = mv[3].get<bool>();
+                                }
+                        }
 
                         for (const auto& node : mv) {
                                 if (!node.is_array()) continue;
@@ -823,7 +892,7 @@ void AnimationLoader::load(Animation& animation,
                 if (animation.flip_movement_vertical) {
                         for (auto& path : paths) {
                                 for (auto& frame : path) {
-                                        frame.dy = -frame.dy;
+                                        frame.dz = -frame.dz;
                                 }
                         }
                 }

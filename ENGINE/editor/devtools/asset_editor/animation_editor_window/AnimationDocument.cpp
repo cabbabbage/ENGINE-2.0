@@ -136,6 +136,14 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
 
         auto read_component = [](const nlohmann::json& entry, int index) -> int {
             if (entry.is_array()) {
+                // Canonical arrays are [dx, y(height), z(depth)].
+                // Legacy arrays may only include [dx, depth].
+                if (index == 2 && entry.size() == 2 && entry[1].is_number()) {
+                    return read_int_like(entry[1], 0);
+                }
+                if (index == 1 && entry.size() == 2 && entry[1].is_number()) {
+                    return 0;
+                }
                 if (index < static_cast<int>(entry.size()) && entry[index].is_number()) {
                     try {
                         return entry[index].get<int>();
@@ -149,10 +157,24 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
                 return 0;
             }
             if (entry.is_object()) {
-                const char* keys[] = {"dx", "dy", "dz"};
-                const char* key = (index >= 0 && index < 3) ? keys[index] : nullptr;
-                if (key && entry.contains(key)) {
-                    return read_int_like(entry[key], 0);
+                if (index == 0) {
+                    if (entry.contains("dx")) return read_int_like(entry["dx"], 0);
+                    if (entry.contains("x")) return read_int_like(entry["x"], 0);
+                    return 0;
+                }
+                if (index == 1) {
+                    if (entry.contains("dy")) return read_int_like(entry["dy"], 0);
+                    if (entry.contains("y")) return read_int_like(entry["y"], 0);
+                    return 0;
+                }
+                if (index == 2) {
+                    if (entry.contains("dz")) return read_int_like(entry["dz"], 0);
+                    if (entry.contains("z")) return read_int_like(entry["z"], 0);
+                    // Legacy object movement used `dy/y` for floor depth.
+                    if (!entry.contains("dz") && !entry.contains("z")) {
+                        if (entry.contains("dy")) return read_int_like(entry["dy"], 0);
+                        if (entry.contains("y")) return read_int_like(entry["y"], 0);
+                    }
                 }
             }
             return 0;

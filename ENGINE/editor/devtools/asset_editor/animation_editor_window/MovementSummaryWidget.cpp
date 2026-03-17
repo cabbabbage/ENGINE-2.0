@@ -78,16 +78,38 @@ void render_summary_label(SDL_Renderer* renderer, const std::string& text, int x
 
 float read_movement_component(const nlohmann::json& entry, int index) {
     if (entry.is_array()) {
+        // Canonical arrays are [dx, y(height), z(depth)].
+        // Legacy arrays may have [dx, depth].
+        if (index == 2 && entry.size() == 2 && entry[1].is_number()) {
+            return entry[1].get<float>();
+        }
+        if (index == 1 && entry.size() == 2 && entry[1].is_number()) {
+            return 0.0f;
+        }
         if (index < static_cast<int>(entry.size()) && entry[index].is_number()) {
             return entry[index].get<float>();
         }
         return 0.0f;
     }
     if (entry.is_object()) {
-        const char* keys[] = {"dx", "dy"};
-        const char* key = (index == 0) ? keys[0] : keys[1];
-        if (entry.contains(key) && entry[key].is_number()) {
-            return entry[key].get<float>();
+        if (index == 0) {
+            if (entry.contains("dx") && entry["dx"].is_number()) return entry["dx"].get<float>();
+            if (entry.contains("x") && entry["x"].is_number()) return entry["x"].get<float>();
+            return 0.0f;
+        }
+        if (index == 1) {
+            if (entry.contains("dy") && entry["dy"].is_number()) return entry["dy"].get<float>();
+            if (entry.contains("y") && entry["y"].is_number()) return entry["y"].get<float>();
+            return 0.0f;
+        }
+        if (index == 2) {
+            if (entry.contains("dz") && entry["dz"].is_number()) return entry["dz"].get<float>();
+            if (entry.contains("z") && entry["z"].is_number()) return entry["z"].get<float>();
+            if (!entry.contains("dz") && !entry.contains("z")) {
+                // Legacy object movement stored depth in y/dy.
+                if (entry.contains("dy") && entry["dy"].is_number()) return entry["dy"].get<float>();
+                if (entry.contains("y") && entry["y"].is_number()) return entry["y"].get<float>();
+            }
         }
     }
     return 0.0f;

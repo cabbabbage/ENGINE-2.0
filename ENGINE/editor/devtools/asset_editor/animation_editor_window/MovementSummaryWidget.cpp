@@ -98,11 +98,33 @@ float read_movement_component(const nlohmann::json& entry, int index) {
             return 0.0f;
         }
         if (index == 1) {
+            const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+            const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+            const float legacy_height = entry.contains("dy") && entry["dy"].is_number()
+                ? entry["dy"].get<float>()
+                : (entry.contains("y") && entry["y"].is_number() ? entry["y"].get<float>() : 0.0f);
+            const float explicit_depth = entry.contains("dz") && entry["dz"].is_number()
+                ? entry["dz"].get<float>()
+                : (entry.contains("z") && entry["z"].is_number() ? entry["z"].get<float>() : 0.0f);
+            if (has_xy_keys && has_dxyz_keys && std::abs(explicit_depth) < 1e-5f && std::abs(legacy_height) > 1e-5f) {
+                return 0.0f;
+            }
             if (entry.contains("dy") && entry["dy"].is_number()) return entry["dy"].get<float>();
             if (entry.contains("y") && entry["y"].is_number()) return entry["y"].get<float>();
             return 0.0f;
         }
         if (index == 2) {
+            const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+            const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+            const float legacy_depth = entry.contains("dy") && entry["dy"].is_number()
+                ? entry["dy"].get<float>()
+                : (entry.contains("y") && entry["y"].is_number() ? entry["y"].get<float>() : 0.0f);
+            const float explicit_depth = entry.contains("dz") && entry["dz"].is_number()
+                ? entry["dz"].get<float>()
+                : (entry.contains("z") && entry["z"].is_number() ? entry["z"].get<float>() : 0.0f);
+            if (has_xy_keys && has_dxyz_keys && std::abs(explicit_depth) < 1e-5f && std::abs(legacy_depth) > 1e-5f) {
+                return legacy_depth;
+            }
             if (entry.contains("dz") && entry["dz"].is_number()) return entry["dz"].get<float>();
             if (entry.contains("z") && entry["z"].is_number()) return entry["z"].get<float>();
             if (!entry.contains("dz") && !entry.contains("z")) {
@@ -176,12 +198,13 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
         ResolvedMovement nested = resolve_movement(document, reference, depth + 1);
         result.total_dx = nested.total_dx;
         result.total_dy = nested.total_dy;
+        result.total_dz = nested.total_dz;
         result.signature = payload_signature + "|child{" + nested.signature + "}";
         result.derived = true;
         result.source_id = reference;
 
         if (flip_movement_x) result.total_dx = -result.total_dx;
-        if (flip_movement_y) result.total_dy = -result.total_dy;
+        if (flip_movement_y) result.total_dz = -result.total_dz;
         if (reverse) result.modifiers.push_back("Reverse");
         if (flip_x) result.modifiers.push_back("Flip X");
         if (flip_y) result.modifiers.push_back("Flip Y");
@@ -205,13 +228,16 @@ ResolvedMovement resolve_movement(const AnimationDocument* document, const std::
 
     float dx = 0.0f;
     float dy = 0.0f;
+    float dz = 0.0f;
     for (size_t i = 1; i < movement.size(); ++i) {
         const nlohmann::json& entry = movement[i];
         dx += read_movement_component(entry, 0);
         dy += read_movement_component(entry, 1);
+        dz += read_movement_component(entry, 2);
     }
     result.total_dx = dx;
     result.total_dy = dy;
+    result.total_dz = dz;
     result.signature = payload_signature + "|movement";
     return result;
 }
@@ -305,7 +331,7 @@ int MovementSummaryWidget::preferred_height(int) const {
     const int padding = kPanelPadding;
     const int label_height = DMStyles::Label().font_size + DMSpacing::small_gap();
     int height = padding;
-    int text_lines = derived_from_animation_ ? static_cast<int>(inherited_message_lines_.empty() ? 1 : inherited_message_lines_.size()) : 2;
+    int text_lines = derived_from_animation_ ? static_cast<int>(inherited_message_lines_.empty() ? 1 : inherited_message_lines_.size()) : 3;
     height += label_height * std::max(1, text_lines);
     if (show_button_) {
         height += DMSpacing::small_gap();
@@ -350,7 +376,9 @@ void MovementSummaryWidget::render(SDL_Renderer* renderer) const {
     } else {
         render_summary_label(renderer, "Total X: " + std::to_string(static_cast<int>(std::lround(total_dx_))), text_x, text_y, text_color);
         text_y += label_stride;
-        render_summary_label(renderer, "Total Y: " + std::to_string(static_cast<int>(std::lround(total_dy_))), text_x, text_y, text_color);
+        render_summary_label(renderer, "Total Z (Depth): " + std::to_string(static_cast<int>(std::lround(total_dz_))), text_x, text_y, text_color);
+        text_y += label_stride;
+        render_summary_label(renderer, "Total Y (Height): " + std::to_string(static_cast<int>(std::lround(total_dy_))), text_x, text_y, text_color);
         text_y += label_stride;
     }
 
@@ -499,6 +527,7 @@ void MovementSummaryWidget::refresh_totals() {
 void MovementSummaryWidget::apply_resolved_totals(const ResolvedMovement& resolved) {
     total_dx_ = resolved.total_dx;
     total_dy_ = resolved.total_dy;
+    total_dz_ = resolved.total_dz;
     derived_from_animation_ = resolved.derived;
     inherited_source_id_ = resolved.source_id;
     inherited_message_lines_.clear();
@@ -520,7 +549,9 @@ void MovementSummaryWidget::apply_resolved_totals(const ResolvedMovement& resolv
             inherited_message_lines_.push_back("Modifiers: (none).");
         }
         inherited_message_lines_.push_back("Edit the source animation to change it.");
-        inherited_message_lines_.push_back("Totals X: " + std::to_string(static_cast<int>(std::lround(total_dx_))) + ", Y: " + std::to_string(static_cast<int>(std::lround(total_dy_))) + ".");
+        inherited_message_lines_.push_back("Totals X: " + std::to_string(static_cast<int>(std::lround(total_dx_))) +
+                                           ", Z: " + std::to_string(static_cast<int>(std::lround(total_dz_))) +
+                                           ", Y: " + std::to_string(static_cast<int>(std::lround(total_dy_))) + ".");
         show_button_ = go_to_source_callback_ && !inherited_source_id_.empty();
         button_is_go_to_ = show_button_;
     } else {

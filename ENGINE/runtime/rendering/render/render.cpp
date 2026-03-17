@@ -532,6 +532,121 @@ void render_anchor_debug_markers(SDL_Renderer* renderer,
     }
 }
 
+bool project_floor_debug_point(const WarpedScreenGrid& cam, SDL_Point world_xz, SDL_FPoint& out) {
+    SDL_FPoint projected{};
+    if (!cam.project_world_point(SDL_FPoint{static_cast<float>(world_xz.x), 0.0f},
+                                 static_cast<float>(world_xz.y),
+                                 projected)) {
+        return false;
+    }
+    if (!std::isfinite(projected.x) || !std::isfinite(projected.y)) {
+        return false;
+    }
+    projected.y = cam.warp_floor_screen_y(0.0f, projected.y);
+    if (!std::isfinite(projected.y)) {
+        return false;
+    }
+    out = projected;
+    return true;
+}
+
+void render_movement_debug_paths(SDL_Renderer* renderer,
+                                 const WarpedScreenGrid& cam,
+                                 int screen_width,
+                                 int screen_height,
+                                 const std::vector<Asset*>& assets) {
+    if (!renderer) {
+        return;
+    }
+
+    constexpr SDL_Color kLineColor{48, 200, 255, 220};
+    constexpr SDL_Color kStartColor{64, 255, 128, 230};
+    constexpr SDL_Color kCheckpointColor{255, 214, 64, 220};
+    constexpr SDL_Color kFinalColor{255, 96, 96, 240};
+    constexpr int kStartRadius = 3;
+    constexpr int kCheckpointRadius = 2;
+    constexpr int kFinalRadius = 3;
+
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+
+    for (Asset* asset : assets) {
+        if (!asset || asset->dead || !asset->anim_) {
+            continue;
+        }
+
+        const Plan* plan = asset->anim_->current_plan();
+        if (!plan) {
+            continue;
+        }
+
+        const SDL_Point start_world = asset->world_xz_point();
+        const bool has_checkpoints = !plan->sanitized_checkpoints.empty();
+        const bool has_strides = !plan->strides.empty();
+        const bool has_separate_dest = (plan->final_dest.x != start_world.x || plan->final_dest.y != start_world.y);
+        if (!has_checkpoints && !has_strides && !has_separate_dest) {
+            continue;
+        }
+
+        std::vector<SDL_Point> world_points;
+        world_points.reserve(2 + plan->sanitized_checkpoints.size());
+        world_points.push_back(start_world);
+        for (const SDL_Point& checkpoint : plan->sanitized_checkpoints) {
+            if (world_points.empty() ||
+                checkpoint.x != world_points.back().x ||
+                checkpoint.y != world_points.back().y) {
+                world_points.push_back(checkpoint);
+            }
+        }
+        if (world_points.empty() ||
+            plan->final_dest.x != world_points.back().x ||
+            plan->final_dest.y != world_points.back().y) {
+            world_points.push_back(plan->final_dest);
+        }
+
+        std::vector<SDL_FPoint> projected_points;
+        projected_points.resize(world_points.size(), SDL_FPoint{0.0f, 0.0f});
+        std::vector<bool> point_visible;
+        point_visible.resize(world_points.size(), false);
+        for (std::size_t i = 0; i < world_points.size(); ++i) {
+            SDL_FPoint screen{};
+            if (project_floor_debug_point(cam, world_points[i], screen) &&
+                is_debug_marker_in_bounds(screen, screen_width, screen_height)) {
+                projected_points[i] = screen;
+                point_visible[i] = true;
+            }
+        }
+
+        SDL_SetRenderDrawColor(renderer, kLineColor.r, kLineColor.g, kLineColor.b, kLineColor.a);
+        for (std::size_t i = 1; i < projected_points.size(); ++i) {
+            if (!point_visible[i - 1] || !point_visible[i]) {
+                continue;
+            }
+            SDL_RenderLine(renderer,
+                           projected_points[i - 1].x,
+                           projected_points[i - 1].y,
+                           projected_points[i].x,
+                           projected_points[i].y);
+        }
+
+        if (!projected_points.empty() && point_visible[0]) {
+            draw_filled_debug_dot(renderer, projected_points[0], kStartRadius, kStartColor);
+        }
+
+        if (projected_points.size() > 2) {
+            for (std::size_t i = 1; i + 1 < projected_points.size(); ++i) {
+                if (!point_visible[i]) {
+                    continue;
+                }
+                draw_filled_debug_dot(renderer, projected_points[i], kCheckpointRadius, kCheckpointColor);
+            }
+        }
+
+        if (projected_points.size() > 1 && point_visible.back()) {
+            draw_filled_debug_dot(renderer, projected_points.back(), kFinalRadius, kFinalColor);
+        }
+    }
+}
+
 bool build_perspective_mesh(RenderObject& obj,
                             const WarpedScreenGrid& cam,
                             float perspective_scale,
@@ -1089,6 +1204,10 @@ void SceneRenderer::render() {
     }
 
     geometry_batcher_->flush();
+
+    if (debug_auto_paths_ && movement_debug_visible_) {
+        render_movement_debug_paths(renderer_, cam, screen_width_, screen_height_, rendered_assets_for_debug);
+    }
 
     if (anchor_point_debug_enabled_) {
         render_anchor_debug_markers(renderer_, screen_width_, screen_height_, rendered_assets_for_debug);

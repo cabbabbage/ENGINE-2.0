@@ -163,11 +163,33 @@ nlohmann::json coerce_payload(const std::string& animation_id, const nlohmann::j
                     return 0;
                 }
                 if (index == 1) {
+                    const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+                    const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+                    const int legacy_height = entry.contains("dy")
+                        ? read_int_like(entry["dy"], 0)
+                        : (entry.contains("y") ? read_int_like(entry["y"], 0) : 0);
+                    const int explicit_depth = entry.contains("dz")
+                        ? read_int_like(entry["dz"], 0)
+                        : (entry.contains("z") ? read_int_like(entry["z"], 0) : 0);
+                    if (has_xy_keys && has_dxyz_keys && explicit_depth == 0 && legacy_height != 0) {
+                        return 0;
+                    }
                     if (entry.contains("dy")) return read_int_like(entry["dy"], 0);
                     if (entry.contains("y")) return read_int_like(entry["y"], 0);
                     return 0;
                 }
                 if (index == 2) {
+                    const bool has_xy_keys = entry.contains("x") || entry.contains("y") || entry.contains("z");
+                    const bool has_dxyz_keys = entry.contains("dx") || entry.contains("dy") || entry.contains("dz");
+                    const int legacy_depth = entry.contains("dy")
+                        ? read_int_like(entry["dy"], 0)
+                        : (entry.contains("y") ? read_int_like(entry["y"], 0) : 0);
+                    const int explicit_depth = entry.contains("dz")
+                        ? read_int_like(entry["dz"], 0)
+                        : (entry.contains("z") ? read_int_like(entry["z"], 0) : 0);
+                    if (has_xy_keys && has_dxyz_keys && explicit_depth == 0 && legacy_depth != 0) {
+                        return legacy_depth;
+                    }
                     if (entry.contains("dz")) return read_int_like(entry["dz"], 0);
                     if (entry.contains("z")) return read_int_like(entry["z"], 0);
                     // Legacy object movement used `dy/y` for floor depth.

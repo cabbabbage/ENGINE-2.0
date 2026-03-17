@@ -19,6 +19,7 @@
 #include "devtools/dev_camera_controls.hpp"
 #include "devtools/animation_source_navigation.hpp"
 #include "devtools/core/dev_save_coordinator.hpp"
+#include "devtools/room_box_tools_panel.hpp"
 #include "devtools/room_movement_payload.hpp"
 #include "assets/asset/anchor_point.hpp"
 #include "animation/combat_geometry.hpp"
@@ -42,7 +43,6 @@ class Grid;
 class BottomNavigationPanel;
 class RoomAnchorToolsPanel;
 class RoomMovementToolsPanel;
-class RoomBoxToolsPanel;
 class DevFooterBar;
 class DevControls;
 
@@ -333,10 +333,14 @@ private:
     void reset_selection_filter();
     void ensure_anchor_editor_widgets();
     void ensure_movement_editor_widgets();
+    void ensure_hitbox_editor_widgets();
+    void ensure_attack_box_editor_widgets();
     void update_asset_editor_layout();
     bool should_show_asset_editor_navigation() const;
     bool anchor_mode_active() const;
     bool movement_mode_active() const;
+    bool hitbox_mode_active() const;
+    bool attack_box_mode_active() const;
     Asset* selected_anchor_mode_asset() const;
     AssetEditorSubview next_asset_editor_subview(AssetEditorSubview subview) const;
     void cycle_asset_editor_subview();
@@ -350,22 +354,42 @@ private:
     void exit_anchor_edit_mode(bool flush_immediately);
     bool enter_movement_edit_mode();
     void exit_movement_edit_mode(bool persist_changes);
+    bool enter_hitbox_edit_mode();
+    void exit_hitbox_edit_mode(bool persist_changes);
+    bool enter_attack_box_edit_mode();
+    void exit_attack_box_edit_mode(bool persist_changes);
     void validate_anchor_edit_target();
     void validate_movement_edit_target();
+    void validate_hitbox_edit_target();
+    void validate_attack_box_edit_target();
     bool is_anchor_ui_blocking_point(int x, int y) const;
     bool is_movement_ui_blocking_point(int x, int y) const;
+    bool is_hitbox_ui_blocking_point(int x, int y) const;
+    bool is_attack_box_ui_blocking_point(int x, int y) const;
     void navigate_anchor_animation(int delta);
     void navigate_anchor_frame(int delta);
     void navigate_movement_animation(int delta);
     void navigate_movement_frame(int delta);
+    void navigate_hitbox_animation(int delta);
+    void navigate_hitbox_frame(int delta);
+    void navigate_attack_box_animation(int delta);
+    void navigate_attack_box_frame(int delta);
     bool apply_anchor_animation_and_frame(const std::string& animation_id, int frame_index);
     bool apply_movement_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool apply_hitbox_animation_and_frame(const std::string& animation_id, int frame_index);
+    bool apply_attack_box_animation_and_frame(const std::string& animation_id, int frame_index);
     std::vector<std::string> anchor_mode_animation_names() const;
     std::vector<std::string> movement_mode_animation_names() const;
+    std::vector<std::string> hitbox_mode_animation_names() const;
+    std::vector<std::string> attack_box_mode_animation_names() const;
     int resolve_anchor_mode_frame_index() const;
     int resolve_movement_mode_frame_index() const;
+    int resolve_hitbox_mode_frame_index() const;
+    int resolve_attack_box_mode_frame_index() const;
     void refresh_anchor_mode_handles();
     void sync_anchor_tools_panel();
+    void sync_hitbox_tools_panel();
+    void sync_attack_box_tools_panel();
     void ensure_anchor_selection_valid();
     void rebuild_movement_rel_positions();
     void rebuild_movement_frames_from_positions();
@@ -401,6 +425,24 @@ private:
     bool add_anchor_in_current_frame();
     bool rename_selected_anchor_in_current_frame(const std::string& desired_name);
     bool delete_selected_anchor_in_current_frame();
+    int find_hitbox_corner_at_screen_point(SDL_Point screen_point, int radius_px, int& out_corner_index) const;
+    int find_attack_box_corner_at_screen_point(SDL_Point screen_point, int radius_px, int& out_corner_index) const;
+    bool handle_hitbox_mode_mouse_input(const Input& input);
+    bool handle_attack_box_mode_mouse_input(const Input& input);
+    bool mutate_hitbox_current_frame(const std::function<bool(std::vector<animation_update::FrameHitBox>&)>& mutator,
+                                     devmode::core::DevSaveCoordinator::Priority priority);
+    bool mutate_attack_box_current_frame(const std::function<bool(std::vector<animation_update::FrameAttackBox>&)>& mutator,
+                                         devmode::core::DevSaveCoordinator::Priority priority);
+    bool persist_hitbox_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
+    bool persist_attack_box_current_frame(devmode::core::DevSaveCoordinator::Priority priority, bool flush_now);
+    bool drag_hitbox_corner_to_screen(int box_index, int corner_index, SDL_Point screen_point);
+    bool drag_attack_box_corner_to_screen(int box_index, int corner_index, SDL_Point screen_point);
+    bool add_hitbox_in_current_frame();
+    bool add_attack_box_in_current_frame();
+    bool delete_selected_hitbox_in_current_frame();
+    bool delete_selected_attack_box_in_current_frame();
+    bool apply_hitbox_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
+    bool apply_attack_box_panel_detail_update(const RoomBoxToolsPanel::DetailValues& values);
 
     struct AssetSpatialEntry {
         SDL_Rect bounds{0, 0, 0, 0};

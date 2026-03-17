@@ -4421,7 +4421,8 @@ void DevControls::update_movement_debug_visibility() {
     if (!assets_) {
         return;
     }
-    assets_->set_movement_debug_visible(false);
+    const bool visible = enabled_ && movement_debug_enabled_;
+    assets_->set_movement_debug_visible(visible);
 }
 
 void DevControls::restore_filter_hidden_assets() const {

@@ -55,16 +55,13 @@ nlohmann::json normalize_box_frame_array(const nlohmann::json& payload,
     return value;
 }
 
-template <typename TBox>
-nlohmann::json serialize_boxes(const std::vector<TBox>& boxes, bool include_damage) {
+nlohmann::json serialize_hit_boxes(const std::vector<animation_update::FrameHitBox>& boxes) {
     nlohmann::json serialized = nlohmann::json::array();
-    serialized.reserve(boxes.size());
     for (const auto& box : boxes) {
         nlohmann::json node = nlohmann::json::object();
         node["name"] = box.name;
         node["extrusion_amount"] = std::max(0, box.extrusion_amount);
         nlohmann::json corners = nlohmann::json::array();
-        corners.reserve(4);
         for (std::size_t corner_index = 0; corner_index < 4; ++corner_index) {
             const auto& corner = box.corners[corner_index];
             corners.push_back(nlohmann::json::object({
@@ -73,9 +70,27 @@ nlohmann::json serialize_boxes(const std::vector<TBox>& boxes, bool include_dama
             }));
         }
         node["corners"] = std::move(corners);
-        if (include_damage) {
-            node["damage_amount"] = box.damage_amount;
+        serialized.push_back(std::move(node));
+    }
+    return serialized;
+}
+
+nlohmann::json serialize_attack_boxes(const std::vector<animation_update::FrameAttackBox>& boxes) {
+    nlohmann::json serialized = nlohmann::json::array();
+    for (const auto& box : boxes) {
+        nlohmann::json node = nlohmann::json::object();
+        node["name"] = box.name;
+        node["extrusion_amount"] = std::max(0, box.extrusion_amount);
+        node["damage_amount"] = box.damage_amount;
+        nlohmann::json corners = nlohmann::json::array();
+        for (std::size_t corner_index = 0; corner_index < 4; ++corner_index) {
+            const auto& corner = box.corners[corner_index];
+            corners.push_back(nlohmann::json::object({
+                {"texture_x", std::max(0, corner.texture_x)},
+                {"texture_y", std::max(0, corner.texture_y)},
+            }));
         }
+        node["corners"] = std::move(corners);
         serialized.push_back(std::move(node));
     }
     return serialized;
@@ -180,7 +195,7 @@ bool write_hit_box_frame_to_payload(nlohmann::json& animation_payload,
                                       "hit_boxes",
                                       frame_count,
                                       frame_index,
-                                      serialize_boxes(boxes, false));
+                                      serialize_hit_boxes(boxes));
 }
 
 bool write_attack_box_frame_to_payload(nlohmann::json& animation_payload,
@@ -191,8 +206,7 @@ bool write_attack_box_frame_to_payload(nlohmann::json& animation_payload,
                                       "attack_boxes",
                                       frame_count,
                                       frame_index,
-                                      serialize_boxes(boxes, true));
+                                      serialize_attack_boxes(boxes));
 }
 
 }  // namespace devmode::room_box_payload
-
